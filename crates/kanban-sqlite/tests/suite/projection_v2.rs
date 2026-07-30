@@ -1,13 +1,16 @@
-use std::{collections::BTreeMap, sync::Mutex};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Mutex,
+};
 
 use crate::common::*;
 
 use kanban_local::DerivedStoreWriteGuard;
 use kanban_sqlite::api::lifecycle::begin_database_replace;
 use kanban_sqlite::api::provider::{
-    ProjectionArtifactEvidence, ProjectionBatch, ProjectionBatchReceipt, ProjectionPublishReceipt,
-    ProjectionSnapshot, ProjectionStoreBackend, ProjectionStoreDescriptor,
-    begin_projection_generation, prepare_projection_snapshot_with,
+    ProjectionArtifactEvidence, ProjectionBatch, ProjectionBatchReceipt, ProjectionCorpusMetadata,
+    ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreBackend,
+    ProjectionStoreDescriptor, begin_projection_generation, prepare_projection_snapshot_with,
     publish_projection_generation_with, reconcile_projection_generation_with,
     recover_projection_generation_with, run_projection_batch_with,
 };
@@ -34,6 +37,7 @@ struct FakeProjectionStoreState {
     prepared: Option<ProjectionArtifactEvidence>,
     active: Option<ProjectionArtifactEvidence>,
     generations: BTreeMap<String, ProjectionArtifactEvidence>,
+    published_generations: BTreeSet<String>,
     quarantined: BTreeMap<String, ProjectionArtifactEvidence>,
     max_fence_epoch: i64,
     bad_snapshot_evidence: bool,
@@ -41,6 +45,10 @@ struct FakeProjectionStoreState {
     fail_after_publish_once: bool,
     active_inspect_failure: Option<FakeInspectFailure>,
     generation_inspect_failure: Option<(String, FakeInspectFailure)>,
+    corrupt_publication_marker: Option<String>,
+    publication_validation_failure: Option<String>,
+    active_contents_validation_failure: bool,
+    repair_calls: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -56,6 +64,7 @@ impl FakeProjectionStore {
                 store_name: store_name.to_owned(),
                 provider: "fake".to_owned(),
                 provider_fingerprint: "fake-v1".to_owned(),
+                corpus: fake_corpus_for_store(store_name),
             },
             state: Mutex::new(FakeProjectionStoreState::default()),
         }
@@ -67,6 +76,24 @@ impl FakeProjectionStore {
                 store_name: STORE.to_owned(),
                 provider: provider.to_owned(),
                 provider_fingerprint: provider_fingerprint.to_owned(),
+                corpus: None,
+            },
+            state: Mutex::new(FakeProjectionStoreState::default()),
+        }
+    }
+
+    fn with_corpus(
+        store_name: &str,
+        provider: &str,
+        provider_fingerprint: &str,
+        corpus: Option<ProjectionCorpusMetadata>,
+    ) -> Self {
+        Self {
+            descriptor: ProjectionStoreDescriptor {
+                store_name: store_name.to_owned(),
+                provider: provider.to_owned(),
+                provider_fingerprint: provider_fingerprint.to_owned(),
+                corpus,
             },
             state: Mutex::new(FakeProjectionStoreState::default()),
         }
@@ -134,6 +161,60 @@ impl FakeProjectionStore {
         let mut state = self.state.lock().expect("fake lock");
         state.active_inspect_failure = None;
         state.generation_inspect_failure = None;
+    }
+
+    fn install_unexpected_active(&self, generation: &str) -> ProjectionArtifactEvidence {
+        let mut state = self.state.lock().expect("fake lock");
+        let mut evidence = state
+            .prepared
+            .clone()
+            .expect("prepared fake generation for unexpected active");
+        evidence.manifest.generation = generation.to_owned();
+        evidence.fingerprint = format!("sha256:{generation}:{}", evidence.manifest.snapshot_cursor);
+        evidence.manifest.fingerprint = Some(evidence.fingerprint.clone());
+        state
+            .generations
+            .insert(generation.to_owned(), evidence.clone());
+        state.published_generations.insert(generation.to_owned());
+        state.active = Some(evidence.clone());
+        evidence
+    }
+
+    fn corrupt_publication_marker(&self, generation: &str) {
+        let mut state = self.state.lock().expect("fake lock");
+        state.corrupt_publication_marker = Some(generation.to_owned());
+        state.published_generations.remove(generation);
+        if state
+            .active
+            .as_ref()
+            .is_some_and(|active| active.manifest.generation == generation)
+        {
+            let fallback = state
+                .published_generations
+                .iter()
+                .filter_map(|generation| state.generations.get(generation))
+                .max_by_key(|evidence| evidence.manifest.fence_epoch)
+                .cloned();
+            state.active = fallback;
+        }
+    }
+
+    fn fail_publication_validation(&self, generation: &str) {
+        self.state
+            .lock()
+            .expect("fake lock")
+            .publication_validation_failure = Some(generation.to_owned());
+    }
+
+    fn fail_active_contents_validation(&self) {
+        self.state
+            .lock()
+            .expect("fake lock")
+            .active_contents_validation_failure = true;
+    }
+
+    fn repair_calls(&self) -> usize {
+        self.state.lock().expect("fake lock").repair_calls
     }
 
     fn quarantined_generation(&self, generation: &str) -> Option<ProjectionArtifactEvidence> {
@@ -231,6 +312,15 @@ impl ProjectionStoreBackend for FakeProjectionStore {
         prepared: &ProjectionArtifactEvidence,
     ) -> kanban_core::Result<ProjectionPublishReceipt> {
         let mut state = self.state.lock().expect("fake lock");
+        if state
+            .corrupt_publication_marker
+            .as_deref()
+            .is_some_and(|generation| generation != prepared.manifest.generation)
+        {
+            return Err(KanbanError::Storage(
+                "publish candidate does not own the corrupt marker".to_owned(),
+            ));
+        }
         if state.active.as_ref() != expected_active {
             return Err(KanbanError::Conflict(
                 "active generation CAS mismatch".to_owned(),
@@ -244,11 +334,17 @@ impl ProjectionStoreBackend for FakeProjectionStore {
         if prepared.manifest.fence_epoch < state.max_fence_epoch {
             return Err(KanbanError::Conflict("stale store fence".to_owned()));
         }
+        if state.corrupt_publication_marker.is_some() {
+            state.corrupt_publication_marker = None;
+        }
         state.max_fence_epoch = prepared.manifest.fence_epoch;
         let retained_previous = state.active.clone();
         state
             .generations
             .insert(prepared.manifest.generation.clone(), prepared.clone());
+        state
+            .published_generations
+            .insert(prepared.manifest.generation.clone());
         state.active = Some(prepared.clone());
         if state.fail_after_publish_once {
             state.fail_after_publish_once = false;
@@ -264,6 +360,11 @@ impl ProjectionStoreBackend for FakeProjectionStore {
 
     fn inspect_active(&self) -> kanban_core::Result<Option<ProjectionArtifactEvidence>> {
         let state = self.state.lock().expect("fake lock");
+        if state.corrupt_publication_marker.is_some() {
+            return Err(KanbanError::Storage(
+                "corrupt publication marker".to_owned(),
+            ));
+        }
         if state.active.is_some() {
             match state.active_inspect_failure {
                 Some(FakeInspectFailure::BindingMismatch) => {
@@ -302,6 +403,81 @@ impl ProjectionStoreBackend for FakeProjectionStore {
         Ok(state.generations.get(generation).cloned())
     }
 
+    fn validate_generation_publication(
+        &self,
+        expected: &ProjectionArtifactEvidence,
+    ) -> kanban_core::Result<()> {
+        let state = self.state.lock().expect("fake lock");
+        if state.corrupt_publication_marker.as_deref()
+            == Some(expected.manifest.generation.as_str())
+        {
+            return Err(KanbanError::Storage(
+                "corrupt publication marker".to_owned(),
+            ));
+        }
+        if state.publication_validation_failure.as_deref()
+            == Some(expected.manifest.generation.as_str())
+        {
+            return Err(KanbanError::Storage(
+                "corrupt auxiliary publication state".to_owned(),
+            ));
+        }
+        match state.generations.get(&expected.manifest.generation) {
+            Some(actual) if actual == expected => Ok(()),
+            Some(_) => Err(KanbanError::Storage(
+                "fake generation evidence mismatch".to_owned(),
+            )),
+            None => Err(KanbanError::Storage(
+                "fake generation is missing".to_owned(),
+            )),
+        }
+    }
+
+    fn repair_generation_publication(
+        &self,
+        expected: &ProjectionArtifactEvidence,
+    ) -> kanban_core::Result<()> {
+        let mut state = self.state.lock().expect("fake lock");
+        state.repair_calls += 1;
+        if state
+            .corrupt_publication_marker
+            .as_deref()
+            .is_some_and(|generation| generation != expected.manifest.generation)
+        {
+            return Err(KanbanError::Storage(
+                "publication repair candidate does not own the corrupt marker".to_owned(),
+            ));
+        }
+        if state.generations.get(&expected.manifest.generation) != Some(expected) {
+            return Err(KanbanError::Storage(
+                "publication repair candidate evidence mismatch".to_owned(),
+            ));
+        }
+        state.corrupt_publication_marker = None;
+        state
+            .published_generations
+            .insert(expected.manifest.generation.clone());
+        state.active = Some(expected.clone());
+        Ok(())
+    }
+
+    fn validate_active_contents(
+        &self,
+        _active: &ProjectionArtifactEvidence,
+    ) -> kanban_core::Result<()> {
+        if self
+            .state
+            .lock()
+            .expect("fake lock")
+            .active_contents_validation_failure
+        {
+            return Err(KanbanError::Storage(
+                "active contents include a newer canonical mutation".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
     fn quarantine_generation(&self, generation: &str) -> kanban_core::Result<()> {
         let mut state = self.state.lock().expect("fake lock");
         let evidence = state
@@ -336,10 +512,34 @@ impl ProjectionStoreBackend for FakeProjectionStore {
             state.prepared = None;
         }
         if let Some(evidence) = evidence {
+            state.published_generations.remove(generation);
             state.quarantined.insert(generation.to_owned(), evidence);
+        }
+        if state.active.is_none() {
+            let fallback = state
+                .published_generations
+                .iter()
+                .filter_map(|generation| state.generations.get(generation))
+                .max_by_key(|evidence| evidence.manifest.fence_epoch)
+                .cloned();
+            state.active = fallback;
         }
         Ok(())
     }
+}
+
+fn fake_corpus_for_store(store_name: &str) -> Option<ProjectionCorpusMetadata> {
+    let corpus_schema = match store_name {
+        "lancedb_chunks" => "task-chunks-v2",
+        "lancedb_label_atoms" => "label-atoms-v2",
+        _ => return None,
+    };
+    Some(ProjectionCorpusMetadata {
+        corpus_schema: corpus_schema.to_owned(),
+        corpus_fingerprint: format!("{corpus_schema}:fake-v1"),
+        embedding_model: "fake-embedding-v1".to_owned(),
+        embedding_dimensions: 3,
+    })
 }
 
 fn fake_snapshot_coverage(snapshot: &ProjectionSnapshot) -> (i64, String) {
@@ -391,6 +591,181 @@ fn init_seeds_stable_database_identity_and_explicit_bootstrap_health() -> anyhow
             && store.lifecycle_status == "bootstrap_required"
             && store.fallback_reason.as_deref() == Some("generation_rebuild_required")
     }));
+    Ok(())
+}
+
+#[test]
+fn generation_descriptors_fail_closed_on_store_corpus_contract() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_corpus_descriptor_contract")?;
+    init_database(&temp.path, "tester")?;
+
+    let chunks_without_corpus =
+        FakeProjectionStore::with_corpus("lancedb_chunks", "fake", "fake-v1", None);
+    let chunks_lease =
+        acquire_projection_lease(&temp.path, "lancedb_chunks", "chunks-owner", 10_000)?;
+    let error = result_err(begin_projection_generation(
+        &temp.path,
+        "lancedb_chunks",
+        "chunks-owner",
+        &chunks_lease.lease_token,
+        &chunks_without_corpus,
+    ))?;
+    assert!(error.to_string().contains("corpus binding"));
+
+    let tantivy_with_corpus = FakeProjectionStore::with_corpus(
+        STORE,
+        "fake",
+        "fake-v1",
+        fake_corpus_for_store("lancedb_chunks"),
+    );
+    let tantivy_lease = acquire_projection_lease(&temp.path, STORE, "tantivy-owner", 10_000)?;
+    let error = result_err(begin_projection_generation(
+        &temp.path,
+        STORE,
+        "tantivy-owner",
+        &tantivy_lease.lease_token,
+        &tantivy_with_corpus,
+    ))?;
+    assert!(error.to_string().contains("unexpected corpus binding"));
+    Ok(())
+}
+
+#[test]
+fn lance_store_corpus_bindings_are_independent_and_durable() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_independent_corpus_bindings")?;
+    init_database(&temp.path, "tester")?;
+    let chunks = FakeProjectionStore::for_store("lancedb_chunks");
+    let labels = FakeProjectionStore::for_store("lancedb_label_atoms");
+    let chunks_lease =
+        acquire_projection_lease(&temp.path, "lancedb_chunks", "chunks-owner", 20_000)?;
+    let labels_lease =
+        acquire_projection_lease(&temp.path, "lancedb_label_atoms", "labels-owner", 20_000)?;
+
+    let chunks_manifest = begin_projection_generation(
+        &temp.path,
+        "lancedb_chunks",
+        "chunks-owner",
+        &chunks_lease.lease_token,
+        &chunks,
+    )?;
+    let labels_manifest = begin_projection_generation(
+        &temp.path,
+        "lancedb_label_atoms",
+        "labels-owner",
+        &labels_lease.lease_token,
+        &labels,
+    )?;
+
+    assert_eq!(
+        chunks_manifest.corpus,
+        fake_corpus_for_store("lancedb_chunks")
+    );
+    assert_eq!(
+        labels_manifest.corpus,
+        fake_corpus_for_store("lancedb_label_atoms")
+    );
+    assert_ne!(chunks_manifest.corpus, labels_manifest.corpus);
+    let status = projection_status(&temp.path)?;
+    let chunks_status = status
+        .stores
+        .iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .expect("chunks projection state");
+    let labels_status = status
+        .stores
+        .iter()
+        .find(|store| store.store_name == "lancedb_label_atoms")
+        .expect("label atom projection state");
+    assert_eq!(chunks_status.building_corpus, chunks_manifest.corpus);
+    assert_eq!(labels_status.building_corpus, labels_manifest.corpus);
+    Ok(())
+}
+
+#[test]
+fn lance_corpus_binding_rotates_with_active_and_previous_generations() -> anyhow::Result<()> {
+    const CHUNKS: &str = "lancedb_chunks";
+    let temp = TempDb::new("projection_v2_corpus_generation_rotation")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::for_store(CHUNKS);
+    let lease = acquire_projection_lease(&temp.path, CHUNKS, "owner", 20_000)?;
+
+    let first =
+        begin_projection_generation(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+
+    let second =
+        begin_projection_generation(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == CHUNKS)
+        .expect("chunks projection state");
+    assert_eq!(
+        store.active_generation.as_deref(),
+        Some(second.generation.as_str())
+    );
+    assert_eq!(
+        store.previous_generation.as_deref(),
+        Some(first.generation.as_str())
+    );
+    assert_eq!(store.active_corpus, second.corpus);
+    assert_eq!(store.previous_corpus, first.corpus);
+    assert_eq!(store.building_corpus, None);
+    Ok(())
+}
+
+#[test]
+fn lance_prepare_batch_and_publish_revalidate_the_corpus_binding() -> anyhow::Result<()> {
+    const CHUNKS: &str = "lancedb_chunks";
+    let temp = TempDb::new("projection_v2_corpus_operation_binding")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::for_store(CHUNKS);
+    let wrong_backend = FakeProjectionStore::with_corpus(
+        CHUNKS,
+        "fake",
+        "fake-v1",
+        Some(ProjectionCorpusMetadata {
+            corpus_schema: "task-chunks-v2".to_owned(),
+            corpus_fingerprint: "task-chunks-v2:fake-v2".to_owned(),
+            embedding_model: "fake-embedding-v2".to_owned(),
+            embedding_dimensions: 4,
+        }),
+    );
+    let lease = acquire_projection_lease(&temp.path, CHUNKS, "owner", 20_000)?;
+    begin_projection_generation(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+
+    let error = result_err(prepare_projection_snapshot_with(
+        &temp.path,
+        CHUNKS,
+        "owner",
+        &lease.lease_token,
+        &wrong_backend,
+    ))?;
+    assert!(error.to_string().contains("corpus binding"));
+
+    prepare_projection_snapshot_with(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+    let error = result_err(run_projection_batch_with(
+        &temp.path,
+        CHUNKS,
+        "owner",
+        &lease.lease_token,
+        1_000,
+        10,
+        &wrong_backend,
+    ))?;
+    assert!(error.to_string().contains("corpus binding"));
+    let error = result_err(publish_projection_generation_with(
+        &temp.path,
+        CHUNKS,
+        "owner",
+        &lease.lease_token,
+        &wrong_backend,
+    ))?;
+    assert!(error.to_string().contains("corpus binding"));
     Ok(())
 }
 
@@ -1050,7 +1425,288 @@ fn building_generation_ack_does_not_clean_legacy_health_before_publish() -> anyh
 }
 
 #[test]
-fn publish_keeps_previous_and_reconciles_crash_after_pointer_swap() -> anyhow::Result<()> {
+fn publish_accepts_a_post_snapshot_mutation_after_its_delivery_is_applied() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_publish_post_snapshot_mutation")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let generation =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("created after snapshot preparation"),
+    )?;
+    run_projection_batch_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        1_000,
+        10,
+        &backend,
+    )?;
+    backend.fail_active_contents_validation();
+
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("tantivy state");
+    assert_eq!(
+        store.active_generation.as_deref(),
+        Some(generation.generation.as_str())
+    );
+    assert_eq!(store.building_generation, None);
+    Ok(())
+}
+
+#[test]
+fn publish_recovers_the_exact_prepared_marker_through_expected_active_cas() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_publish_repairs_prepared_marker")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let prepared =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.corrupt_publication_marker(&prepared.generation);
+
+    let active = publish_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+
+    assert_eq!(active.manifest.generation, prepared.generation);
+    assert_eq!(backend.repair_calls(), 0);
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("tantivy state");
+    assert_eq!(
+        store.active_generation.as_deref(),
+        Some(prepared.generation.as_str())
+    );
+    assert_eq!(store.building_generation, None);
+    Ok(())
+}
+
+#[test]
+fn publish_fails_closed_when_a_different_generations_marker_is_corrupt() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_publish_rejects_other_marker")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.corrupt_publication_marker(&first.generation);
+
+    let error = result_err(publish_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(
+        error
+            .to_string()
+            .contains("does not own the corrupt marker")
+    );
+    assert_eq!(backend.repair_calls(), 0);
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("tantivy state");
+    assert_eq!(
+        store.active_generation.as_deref(),
+        Some(first.generation.as_str())
+    );
+    assert_eq!(
+        store.building_generation.as_deref(),
+        Some(second.generation.as_str())
+    );
+    Ok(())
+}
+
+#[test]
+fn transient_active_inspection_never_calls_candidate_repair_or_confirms_sqlite()
+-> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_transient_inspect_no_candidate_repair")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.fail_active_inspection(FakeInspectFailure::TransientStorage);
+
+    let error = result_err(publish_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(error.to_string().contains("transient physical inspection"));
+    assert_eq!(backend.repair_calls(), 0);
+    assert_sqlite_active_and_building(&temp.path, &first.generation, &second.generation)?;
+    Ok(())
+}
+
+#[test]
+fn publish_rejects_unexpected_x_when_the_prepared_b_marker_is_corrupt() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_publish_expected_predecessor_cas")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.install_unexpected_active("gen_unexpected_publish_x");
+    backend.corrupt_publication_marker(&second.generation);
+
+    let error = result_err(publish_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(error.to_string().contains("active generation CAS mismatch"));
+    assert_eq!(backend.repair_calls(), 0);
+    assert_sqlite_active_and_building(&temp.path, &first.generation, &second.generation)?;
+    Ok(())
+}
+
+#[test]
+fn reconcile_rejects_unexpected_x_when_the_prepared_b_marker_is_corrupt() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_reconcile_expected_predecessor_cas")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.install_unexpected_active("gen_unexpected_reconcile_x");
+    backend.corrupt_publication_marker(&second.generation);
+
+    let error = result_err(reconcile_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(error.to_string().contains("active generation CAS mismatch"));
+    assert_eq!(backend.repair_calls(), 0);
+    assert_sqlite_active_and_building(&temp.path, &first.generation, &second.generation)?;
+    Ok(())
+}
+
+#[test]
+fn recovery_rejects_unexpected_x_when_the_prepared_b_marker_is_corrupt() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_recovery_expected_predecessor_cas")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.install_unexpected_active("gen_unexpected_recovery_x");
+    backend.corrupt_publication_marker(&second.generation);
+
+    let error = result_err(recover_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(error.to_string().contains("active generation CAS mismatch"));
+    assert_eq!(backend.repair_calls(), 0);
+    assert_sqlite_active_and_building(&temp.path, &first.generation, &second.generation)?;
+    Ok(())
+}
+
+#[test]
+fn recovery_fails_closed_without_quarantining_an_unexpected_valid_x() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_recovery_rejects_valid_unexpected_x")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let unexpected = backend.install_unexpected_active("gen_unexpected_valid_recovery_x");
+
+    let error = result_err(recover_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(
+        error
+            .to_string()
+            .contains("unexpected physical predecessor")
+    );
+    assert_eq!(backend.repair_calls(), 0);
+    assert_eq!(
+        backend.quarantined_generation(&unexpected.manifest.generation),
+        None,
+        "unexpected valid physical generations require operator attribution"
+    );
+    assert_sqlite_active_and_building(&temp.path, &first.generation, &second.generation)?;
+    Ok(())
+}
+
+#[test]
+fn publish_keeps_previous_and_reconciles_a_corrupt_marker_after_pointer_swap() -> anyhow::Result<()>
+{
     let temp = TempDb::new("projection_v2_publish_reconcile")?;
     init_database(&temp.path, "tester")?;
     let backend = FakeProjectionStore::default();
@@ -1091,6 +1747,7 @@ fn publish_keeps_previous_and_reconciles_crash_after_pointer_swap() -> anyhow::R
         [STORE],
     )?;
     let takeover = acquire_projection_lease(&temp.path, STORE, "recovery-owner", 20_000)?;
+    backend.corrupt_publication_marker(&second.generation);
     reconcile_projection_generation_with(
         &temp.path,
         STORE,
@@ -1098,6 +1755,7 @@ fn publish_keeps_previous_and_reconciles_crash_after_pointer_swap() -> anyhow::R
         &takeover.lease_token,
         &backend,
     )?;
+    assert_eq!(backend.repair_calls(), 0);
 
     let status = projection_status(&temp.path)?;
     let store = status
@@ -1118,6 +1776,229 @@ fn publish_keeps_previous_and_reconciles_crash_after_pointer_swap() -> anyhow::R
         "previous physical generation must remain readable"
     );
     assert_eq!(store.control_plane, "v2");
+    Ok(())
+}
+
+#[test]
+fn recovery_recovers_the_exact_prepared_marker_through_expected_active_cas() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_recovery_repairs_prepared_marker")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.corrupt_publication_marker(&second.generation);
+
+    let recovered = recover_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+
+    assert_eq!(recovered.manifest.generation, second.generation);
+    assert_eq!(backend.repair_calls(), 0);
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("tantivy state");
+    assert_eq!(
+        store.active_generation.as_deref(),
+        Some(second.generation.as_str())
+    );
+    assert_eq!(
+        store.previous_generation.as_deref(),
+        Some(first.generation.as_str())
+    );
+    assert_eq!(store.building_generation, None);
+    Ok(())
+}
+
+#[test]
+fn recovery_repairs_corrupt_logical_a_before_publishing_prepared_b() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_recovery_repairs_logical_a_first")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.corrupt_publication_marker(&first.generation);
+
+    let recovered = recover_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
+
+    assert_eq!(recovered.manifest.generation, second.generation);
+    assert_eq!(backend.repair_calls(), 1);
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("tantivy state");
+    assert_eq!(
+        store.active_generation.as_deref(),
+        Some(second.generation.as_str())
+    );
+    assert_eq!(
+        store.previous_generation.as_deref(),
+        Some(first.generation.as_str())
+    );
+    assert_eq!(store.building_generation, None);
+    Ok(())
+}
+
+#[test]
+fn recovery_fails_closed_on_a_corrupt_third_generation_before_publishing_b() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_recovery_rejects_corrupt_third")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let unexpected = backend.install_unexpected_active("gen_corrupt_recovery_x");
+    backend.corrupt_publication_marker(&unexpected.manifest.generation);
+
+    let error = result_err(recover_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(
+        error
+            .to_string()
+            .contains("does not own the corrupt marker")
+    );
+    assert_eq!(backend.repair_calls(), 0);
+    assert_sqlite_active_and_building(&temp.path, &first.generation, &second.generation)?;
+    Ok(())
+}
+
+#[test]
+fn corrupt_candidate_publication_state_cannot_be_confirmed_after_pointer_swap() -> anyhow::Result<()>
+{
+    let temp = TempDb::new("projection_v2_rejects_corrupt_candidate_publication")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.fail_after_publish_once();
+    let crash = result_err(publish_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+    assert!(crash.to_string().contains("pointer swap"));
+    backend.fail_publication_validation(&second.generation);
+
+    let error = result_err(publish_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(error.to_string().contains("auxiliary publication state"));
+    assert_eq!(backend.repair_calls(), 0);
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("tantivy state");
+    assert_eq!(
+        store.active_generation.as_deref(),
+        Some(first.generation.as_str())
+    );
+    assert_eq!(
+        store.building_generation.as_deref(),
+        Some(second.generation.as_str())
+    );
+    Ok(())
+}
+
+#[test]
+fn corrupt_previous_publication_state_cannot_be_confirmed_after_pointer_swap() -> anyhow::Result<()>
+{
+    let temp = TempDb::new("projection_v2_rejects_corrupt_previous_publication")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.fail_after_publish_once();
+    let crash = result_err(publish_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+    assert!(crash.to_string().contains("pointer swap"));
+    backend.fail_publication_validation(&first.generation);
+
+    let error = result_err(reconcile_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(error.to_string().contains("auxiliary publication state"));
+    assert_eq!(backend.repair_calls(), 0);
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("tantivy state");
+    assert_eq!(
+        store.active_generation.as_deref(),
+        Some(first.generation.as_str())
+    );
+    assert_eq!(
+        store.building_generation.as_deref(),
+        Some(second.generation.as_str())
+    );
     Ok(())
 }
 
@@ -1403,6 +2284,24 @@ fn seed_delivery(path: &Path, outbox_id: i64) -> anyhow::Result<()> {
          ) VALUES(?1,NULL,'tantivy',?2,'upsert','{}','pending',0,NULL,1,1)",
         params![outbox_id, format!("kb://board/{board_id}")],
     )?;
+    Ok(())
+}
+
+fn assert_sqlite_active_and_building(
+    path: &Path,
+    active_generation: &str,
+    building_generation: &str,
+) -> anyhow::Result<()> {
+    let store = projection_status(path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("tantivy state");
+    assert_eq!(store.active_generation.as_deref(), Some(active_generation));
+    assert_eq!(
+        store.building_generation.as_deref(),
+        Some(building_generation)
+    );
     Ok(())
 }
 

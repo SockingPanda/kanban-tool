@@ -77,7 +77,7 @@ fn init_upgrades_v26_with_singleton_maintenance_owner_idempotently() -> anyhow::
         [],
         |row| row.get(0),
     )?;
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     assert_eq!(migration_count, 1);
     assert_eq!(owner_rows, 1);
     Ok(())
@@ -119,9 +119,601 @@ fn init_upgrades_v27_owner_with_runtime_identity_and_invalidates_unknown_lease()
         [],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
     )?;
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     assert_eq!(migration_count, 1);
     assert_eq!(owner_row, (None, None, "[]".to_owned(), None));
+    Ok(())
+}
+
+#[test]
+fn init_upgrades_v29_without_fabricating_lance_corpus_evidence() -> anyhow::Result<()> {
+    let temp = TempDb::new("init_upgrades_v29_projection_corpus_binding")?;
+    init_database(&temp.path, "first")?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute_batch(
+        "DROP TRIGGER projection_active_corpus_after_generation_reset;
+         DROP TRIGGER projection_previous_corpus_after_generation_reset;
+         DROP TRIGGER projection_building_corpus_after_generation_reset;
+         DROP TRIGGER projection_active_corpus_generation_guard;
+         DROP TRIGGER projection_previous_corpus_generation_guard;
+         DROP TRIGGER projection_building_corpus_generation_guard;
+         DROP TRIGGER projection_corpus_generation_insert_guard;
+         ALTER TABLE projection_store_state DROP COLUMN active_embedding_dimensions;
+         ALTER TABLE projection_store_state DROP COLUMN active_embedding_model;
+         ALTER TABLE projection_store_state DROP COLUMN active_corpus_fingerprint;
+         ALTER TABLE projection_store_state DROP COLUMN active_corpus_schema;
+         ALTER TABLE projection_store_state DROP COLUMN previous_embedding_dimensions;
+         ALTER TABLE projection_store_state DROP COLUMN previous_embedding_model;
+         ALTER TABLE projection_store_state DROP COLUMN previous_corpus_fingerprint;
+         ALTER TABLE projection_store_state DROP COLUMN previous_corpus_schema;
+         ALTER TABLE projection_store_state DROP COLUMN building_embedding_dimensions;
+         ALTER TABLE projection_store_state DROP COLUMN building_embedding_model;
+         ALTER TABLE projection_store_state DROP COLUMN building_corpus_fingerprint;
+         ALTER TABLE projection_store_state DROP COLUMN building_corpus_schema;
+         DELETE FROM schema_migrations WHERE version=30;
+         PRAGMA user_version=29;
+         UPDATE projection_store_state
+         SET control_plane='v2',
+             active_generation='gen_v29_lance',
+             active_fingerprint='sha256:v29',
+             active_fence_epoch=7,
+             active_snapshot_cursor=0,
+             active_provider='legacy-lance-provider',
+             active_provider_fingerprint='legacy-provider-fingerprint',
+             active_canonical_count=0,
+             active_canonical_digest='fnv64:v29-canonical',
+             active_delivery_count=0,
+             active_delivery_digest='fnv64:v29-delivery',
+             previous_generation='gen_v29_previous',
+             previous_fingerprint='sha256:v29-previous',
+             previous_fence_epoch=6,
+             previous_snapshot_cursor=0,
+             previous_provider='legacy-lance-provider',
+             previous_provider_fingerprint='legacy-provider-fingerprint',
+             previous_canonical_count=0,
+             previous_canonical_digest='fnv64:v29-previous-canonical',
+             previous_delivery_count=0,
+             previous_delivery_digest='fnv64:v29-previous-delivery',
+             building_generation='gen_v29_building',
+             building_fingerprint='sha256:v29-building',
+             building_fence_epoch=8,
+             building_provider='legacy-lance-provider',
+             building_provider_fingerprint='legacy-provider-fingerprint',
+             building_canonical_count=0,
+             building_canonical_digest='fnv64:v29-building-canonical',
+             building_delivery_count=0,
+             building_delivery_digest='fnv64:v29-building-delivery',
+             building_phase='prepared',
+             lifecycle_status='ready'
+         WHERE store_name='lancedb_chunks';",
+    )?;
+    drop(conn);
+
+    init_database(&temp.path, "upgrade")?;
+    init_database(&temp.path, "idempotent")?;
+
+    let conn = connect_file(&temp.path)?;
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    let migration_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM schema_migrations
+         WHERE version=30 AND name='030_projection_corpus_bindings'
+           AND checksum GLOB 'fnv64:*'",
+        [],
+        |row| row.get(0),
+    )?;
+    let legacy_binding: (Option<String>, Option<String>, Option<String>, i64) = conn.query_row(
+        "SELECT active_generation,previous_generation,building_generation,
+                (active_corpus_schema IS NULL
+                 AND active_corpus_fingerprint IS NULL
+                 AND active_embedding_model IS NULL
+                 AND active_embedding_dimensions IS NULL
+                 AND previous_corpus_schema IS NULL
+                 AND previous_corpus_fingerprint IS NULL
+                 AND previous_embedding_model IS NULL
+                 AND previous_embedding_dimensions IS NULL
+                 AND building_corpus_schema IS NULL
+                 AND building_corpus_fingerprint IS NULL
+                 AND building_embedding_model IS NULL
+                 AND building_embedding_dimensions IS NULL)
+         FROM projection_store_state WHERE store_name='lancedb_chunks'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+    assert_eq!(user_version, 30);
+    assert_eq!(migration_count, 1);
+    assert_eq!(
+        legacy_binding,
+        (
+            Some("gen_v29_lance".to_owned()),
+            Some("gen_v29_previous".to_owned()),
+            Some("gen_v29_building".to_owned()),
+            1,
+        )
+    );
+    drop(conn);
+
+    let report = doctor_database(&temp.path)?;
+    assert!(report.consistency_issues.iter().any(|issue| {
+        issue.code == "projection_corpus_binding_invalid" && issue.severity == "error"
+    }));
+
+    let conn = connect_file(&temp.path)?;
+    for phase in ["active", "previous", "building"] {
+        let exact_carry = conn.execute(
+            &format!(
+                "UPDATE projection_store_state
+                 SET {phase}_generation={phase}_generation,
+                     {phase}_corpus_schema=NULL,
+                     {phase}_corpus_fingerprint=NULL,
+                     {phase}_embedding_model=NULL,
+                     {phase}_embedding_dimensions=NULL
+                 WHERE store_name='lancedb_chunks'"
+            ),
+            [],
+        )?;
+        assert_eq!(exact_carry, 1, "{phase} legacy generation carry");
+
+        let bind_in_place = conn.execute(
+            &format!(
+                "UPDATE projection_store_state
+                 SET {phase}_corpus_schema='task-chunks-v2',
+                     {phase}_corpus_fingerprint='corpus:fabricated-{phase}',
+                     {phase}_embedding_model='fabricated-model',
+                     {phase}_embedding_dimensions=3
+                 WHERE store_name='lancedb_chunks'"
+            ),
+            [],
+        );
+        assert!(
+            bind_in_place.is_err(),
+            "{phase} legacy generation must not accept a fabricated corpus binding"
+        );
+
+        let replace_and_bind = conn.execute(
+            &format!(
+                "UPDATE projection_store_state
+                 SET {phase}_generation='gen_v30_fabricated_{phase}',
+                     {phase}_corpus_schema='task-chunks-v2',
+                     {phase}_corpus_fingerprint='corpus:fabricated-replacement-{phase}',
+                     {phase}_embedding_model='fabricated-model',
+                     {phase}_embedding_dimensions=3
+                 WHERE store_name='lancedb_chunks'"
+            ),
+            [],
+        );
+        assert!(
+            replace_and_bind.is_err(),
+            "{phase} legacy generation must not be replaced while fabricating corpus evidence"
+        );
+
+        let replace_unbound = conn.execute(
+            &format!(
+                "UPDATE projection_store_state
+                 SET {phase}_generation='gen_v30_unbound_{phase}'
+                 WHERE store_name='lancedb_chunks'"
+            ),
+            [],
+        );
+        assert!(
+            replace_unbound.is_err(),
+            "{phase} legacy generation identity must remain immutable while unbound"
+        );
+
+        reset_projection_phase_without_corpus_columns(&conn, phase)?;
+        let cleared: (Option<String>, i64) = conn.query_row(
+            &format!(
+                "SELECT {phase}_generation,
+                        ({phase}_corpus_schema IS NULL
+                         AND {phase}_corpus_fingerprint IS NULL
+                         AND {phase}_embedding_model IS NULL
+                         AND {phase}_embedding_dimensions IS NULL)
+                 FROM projection_store_state WHERE store_name='lancedb_chunks'"
+            ),
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        assert_eq!(cleared, (None, 1), "{phase} legacy generation clear");
+    }
+    Ok(())
+}
+
+#[test]
+fn projection_corpus_schema_checks_and_generation_reset_triggers_fail_closed() -> anyhow::Result<()>
+{
+    let temp = TempDb::new("projection_corpus_schema_contract")?;
+    init_database(&temp.path, "tester")?;
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("preserve canonical projection work"),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    conn.pragma_update(None, "recursive_triggers", true)?;
+
+    let partial = conn.execute(
+        "UPDATE projection_store_state
+         SET active_corpus_schema='task-chunks-v2'
+         WHERE store_name='lancedb_chunks'",
+        [],
+    );
+    assert!(partial.is_err(), "partial Lance binding must fail CHECK");
+    let unexpected = conn.execute(
+        "UPDATE projection_store_state
+         SET active_corpus_schema='task-chunks-v2',
+             active_corpus_fingerprint='corpus:unexpected',
+             active_embedding_model='model',
+             active_embedding_dimensions=3
+         WHERE store_name='tantivy_tasks'",
+        [],
+    );
+    assert!(
+        unexpected.is_err(),
+        "non-Lance stores must reject corpus binding"
+    );
+    for phase in ["active", "previous", "building"] {
+        let new_unbound_generation = conn.execute(
+            &set_projection_phase_generation_without_corpus_sql(phase),
+            [],
+        );
+        assert!(
+            new_unbound_generation.is_err(),
+            "v30 must not create an unbound {phase} Lance generation"
+        );
+        let orphan_corpus = conn.execute(
+            &set_projection_phase_corpus_without_generation_sql(phase),
+            [],
+        );
+        assert!(
+            orphan_corpus.is_err(),
+            "v30 must not create a {phase} Lance corpus binding without a generation"
+        );
+
+        conn.execute_batch(
+            "SAVEPOINT projection_corpus_insert_guard;
+             DELETE FROM projection_store_state WHERE store_name='lancedb_chunks';",
+        )?;
+        let direct_insert = conn.execute(unbound_projection_insert_sql(phase), []);
+        conn.execute_batch(
+            "ROLLBACK TO projection_corpus_insert_guard;
+             RELEASE projection_corpus_insert_guard;",
+        )?;
+        let error = direct_insert
+            .expect_err("direct Lance generation insert without corpus binding must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("inserted LanceDB generation and corpus binding must match"),
+            "{phase} insert failed for the wrong reason: {error}"
+        );
+
+        conn.execute_batch(
+            "SAVEPOINT projection_corpus_insert_guard;
+             DELETE FROM projection_store_state WHERE store_name='lancedb_chunks';",
+        )?;
+        let direct_insert = conn.execute(orphan_corpus_projection_insert_sql(phase), []);
+        conn.execute_batch(
+            "ROLLBACK TO projection_corpus_insert_guard;
+             RELEASE projection_corpus_insert_guard;",
+        )?;
+        let error =
+            direct_insert.expect_err("direct Lance corpus insert without generation must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("inserted LanceDB generation and corpus binding must match"),
+            "{phase} orphan corpus insert failed for the wrong reason: {error}"
+        );
+    }
+
+    let canonical_before: (i64, i64, i64) = conn.query_row(
+        "SELECT
+           (SELECT COUNT(*) FROM index_outbox),
+           (SELECT COUNT(*) FROM projection_deliveries),
+           (SELECT COALESCE(SUM(attempts),0) FROM projection_deliveries)",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    type ClearedProjectionCorpusPhase = (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<i64>,
+    );
+    for phase in ["active", "previous", "building"] {
+        seed_projection_phase_with_corpus(&conn, phase)?;
+        reset_projection_phase_without_corpus_columns(&conn, phase)?;
+        let cleared: ClearedProjectionCorpusPhase = conn.query_row(
+            &format!(
+                "SELECT {phase}_generation,
+                        {phase}_corpus_schema,{phase}_corpus_fingerprint,
+                        {phase}_embedding_model,{phase}_embedding_dimensions
+                 FROM projection_store_state WHERE store_name='lancedb_chunks'"
+            ),
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )?;
+        assert_eq!(
+            cleared,
+            (None, None, None, None, None),
+            "{phase} recursive reset left generation or corpus evidence"
+        );
+    }
+    let canonical_after: (i64, i64, i64) = conn.query_row(
+        "SELECT
+           (SELECT COUNT(*) FROM index_outbox),
+           (SELECT COUNT(*) FROM projection_deliveries),
+           (SELECT COALESCE(SUM(attempts),0) FROM projection_deliveries)",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(
+        canonical_after, canonical_before,
+        "corpus cleanup must not modify outbox or delivery control-plane state"
+    );
+
+    seed_projection_phase_with_corpus(&conn, "active")?;
+    let erase_bound_generation = conn.execute(
+        "UPDATE projection_store_state
+         SET active_corpus_schema=NULL,
+             active_corpus_fingerprint=NULL,
+             active_embedding_model=NULL,
+             active_embedding_dimensions=NULL
+         WHERE store_name='lancedb_chunks'",
+        [],
+    );
+    assert!(
+        erase_bound_generation.is_err(),
+        "v30 must not erase a complete binding from an active Lance generation"
+    );
+    reset_projection_phase_without_corpus_columns(&conn, "active")?;
+
+    conn.pragma_update(None, "ignore_check_constraints", true)?;
+    conn.execute(
+        "UPDATE projection_store_state
+         SET active_corpus_schema='task-chunks-v2',
+             active_corpus_fingerprint='corpus:unexpected',
+             active_embedding_model='unexpected',
+             active_embedding_dimensions=3
+         WHERE store_name='tantivy_tasks'",
+        [],
+    )?;
+    let report = doctor_database(&temp.path)?;
+    assert!(report.consistency_issues.iter().any(|issue| {
+        issue.code == "projection_corpus_binding_invalid" && issue.severity == "error"
+    }));
+    conn.execute(
+        "UPDATE projection_store_state
+         SET active_corpus_schema=NULL,
+             active_corpus_fingerprint=NULL,
+             active_embedding_model=NULL,
+             active_embedding_dimensions=NULL
+         WHERE store_name='tantivy_tasks'",
+        [],
+    )?;
+    conn.pragma_update(None, "ignore_check_constraints", false)?;
+    Ok(())
+}
+
+fn seed_projection_phase_with_corpus(conn: &Connection, phase: &str) -> anyhow::Result<()> {
+    let sql = match phase {
+        "active" | "previous" => format!(
+            "UPDATE projection_store_state
+             SET {phase}_generation='gen_{phase}_corpus',
+                 {phase}_fingerprint='sha256:{phase}',
+                 {phase}_fence_epoch=11,
+                 {phase}_snapshot_cursor=0,
+                 {phase}_provider='fake-lance',
+                 {phase}_provider_fingerprint='fake-provider-v1',
+                 {phase}_canonical_count=0,
+                 {phase}_canonical_digest='fnv64:{phase}-canonical',
+                 {phase}_delivery_count=0,
+                 {phase}_delivery_digest='fnv64:{phase}-delivery',
+                 {phase}_corpus_schema='task-chunks-v2',
+                 {phase}_corpus_fingerprint='corpus:{phase}',
+                 {phase}_embedding_model='fake-embedding-v1',
+                 {phase}_embedding_dimensions=3
+             WHERE store_name='lancedb_chunks'"
+        ),
+        "building" => format!(
+            "UPDATE projection_store_state
+             SET building_generation='gen_{phase}_corpus',
+                 building_fingerprint='sha256:{phase}',
+                 building_fence_epoch=11,
+                 building_provider='fake-lance',
+                 building_provider_fingerprint='fake-provider-v1',
+                 building_canonical_count=0,
+                 building_canonical_digest='fnv64:{phase}-canonical',
+                 building_delivery_count=0,
+                 building_delivery_digest='fnv64:{phase}-delivery',
+                 building_phase='prepared',
+                 building_corpus_schema='task-chunks-v2',
+                 building_corpus_fingerprint='corpus:{phase}',
+                 building_embedding_model='fake-embedding-v1',
+                 building_embedding_dimensions=3
+             WHERE store_name='lancedb_chunks'"
+        ),
+        _ => unreachable!("fixed projection phase"),
+    };
+    conn.execute(&sql, [])?;
+    Ok(())
+}
+
+fn set_projection_phase_generation_without_corpus_sql(phase: &str) -> String {
+    match phase {
+        "active" | "previous" => format!(
+            "UPDATE projection_store_state
+             SET {phase}_generation='gen_unbound_{phase}_v30',
+                 {phase}_fingerprint='sha256:unbound-{phase}',
+                 {phase}_fence_epoch=1,
+                 {phase}_snapshot_cursor=0,
+                 {phase}_provider='fake-lance',
+                 {phase}_provider_fingerprint='fake-provider-v1',
+                 {phase}_canonical_count=0,
+                 {phase}_canonical_digest='fnv64:unbound-{phase}-canonical',
+                 {phase}_delivery_count=0,
+                 {phase}_delivery_digest='fnv64:unbound-{phase}-delivery'
+             WHERE store_name='lancedb_chunks'"
+        ),
+        "building" => "UPDATE projection_store_state
+             SET building_generation='gen_unbound_building_v30',
+                 building_fingerprint='sha256:unbound-building',
+                 building_fence_epoch=1,
+                 building_provider='fake-lance',
+                 building_provider_fingerprint='fake-provider-v1',
+                 building_canonical_count=0,
+                 building_canonical_digest='fnv64:unbound-building-canonical',
+                 building_delivery_count=0,
+                 building_delivery_digest='fnv64:unbound-building-delivery',
+                 building_phase='prepared'
+             WHERE store_name='lancedb_chunks'"
+            .to_owned(),
+        _ => unreachable!("fixed projection phase"),
+    }
+}
+
+fn set_projection_phase_corpus_without_generation_sql(phase: &str) -> String {
+    format!(
+        "UPDATE projection_store_state
+         SET {phase}_corpus_schema='task-chunks-v2',
+             {phase}_corpus_fingerprint='corpus:orphan-{phase}',
+             {phase}_embedding_model='fake-embedding-v1',
+             {phase}_embedding_dimensions=3
+         WHERE store_name='lancedb_chunks'"
+    )
+}
+
+fn unbound_projection_insert_sql(phase: &str) -> &'static str {
+    match phase {
+        "active" => {
+            "INSERT INTO projection_store_state(
+               store_name,database_instance_id,protocol_version,schema_version,
+               active_generation,active_fingerprint,active_fence_epoch,active_snapshot_cursor,
+               active_provider,active_provider_fingerprint,
+               active_canonical_count,active_canonical_digest,
+               active_delivery_count,active_delivery_digest,updated_at
+             )
+             SELECT 'lancedb_chunks',database_instance_id,2,1,
+                    'gen_insert_active','sha256:active',1,0,
+                    'fake-lance','fake-provider-v1',
+                    0,'fnv64:active-canonical',0,'fnv64:active-delivery',1
+             FROM projection_database WHERE singleton=1"
+        }
+        "previous" => {
+            "INSERT INTO projection_store_state(
+               store_name,database_instance_id,protocol_version,schema_version,
+               previous_generation,previous_fingerprint,previous_fence_epoch,
+               previous_snapshot_cursor,previous_provider,previous_provider_fingerprint,
+               previous_canonical_count,previous_canonical_digest,
+               previous_delivery_count,previous_delivery_digest,updated_at
+             )
+             SELECT 'lancedb_chunks',database_instance_id,2,1,
+                    'gen_insert_previous','sha256:previous',1,0,
+                    'fake-lance','fake-provider-v1',
+                    0,'fnv64:previous-canonical',0,'fnv64:previous-delivery',1
+             FROM projection_database WHERE singleton=1"
+        }
+        "building" => {
+            "INSERT INTO projection_store_state(
+               store_name,database_instance_id,protocol_version,schema_version,
+               building_generation,building_fingerprint,building_fence_epoch,
+               building_provider,building_provider_fingerprint,
+               building_canonical_count,building_canonical_digest,
+               building_delivery_count,building_delivery_digest,building_phase,updated_at
+             )
+             SELECT 'lancedb_chunks',database_instance_id,2,1,
+                    'gen_insert_building','sha256:building',1,
+                    'fake-lance','fake-provider-v1',
+                    0,'fnv64:building-canonical',0,'fnv64:building-delivery','prepared',1
+             FROM projection_database WHERE singleton=1"
+        }
+        _ => unreachable!("fixed projection phase"),
+    }
+}
+
+fn orphan_corpus_projection_insert_sql(phase: &str) -> &'static str {
+    match phase {
+        "active" => {
+            "INSERT INTO projection_store_state(
+               store_name,database_instance_id,protocol_version,schema_version,
+               active_corpus_schema,active_corpus_fingerprint,
+               active_embedding_model,active_embedding_dimensions,updated_at
+             )
+             SELECT 'lancedb_chunks',database_instance_id,2,1,
+                    'task-chunks-v2','corpus:insert-active',
+                    'fake-embedding-v1',3,1
+             FROM projection_database WHERE singleton=1"
+        }
+        "previous" => {
+            "INSERT INTO projection_store_state(
+               store_name,database_instance_id,protocol_version,schema_version,
+               previous_corpus_schema,previous_corpus_fingerprint,
+               previous_embedding_model,previous_embedding_dimensions,updated_at
+             )
+             SELECT 'lancedb_chunks',database_instance_id,2,1,
+                    'task-chunks-v2','corpus:insert-previous',
+                    'fake-embedding-v1',3,1
+             FROM projection_database WHERE singleton=1"
+        }
+        "building" => {
+            "INSERT INTO projection_store_state(
+               store_name,database_instance_id,protocol_version,schema_version,
+               building_corpus_schema,building_corpus_fingerprint,
+               building_embedding_model,building_embedding_dimensions,updated_at
+             )
+             SELECT 'lancedb_chunks',database_instance_id,2,1,
+                    'task-chunks-v2','corpus:insert-building',
+                    'fake-embedding-v1',3,1
+             FROM projection_database WHERE singleton=1"
+        }
+        _ => unreachable!("fixed projection phase"),
+    }
+}
+
+fn reset_projection_phase_without_corpus_columns(
+    conn: &Connection,
+    phase: &str,
+) -> anyhow::Result<()> {
+    let sql = match phase {
+        "active" | "previous" => format!(
+            "UPDATE projection_store_state
+             SET {phase}_generation=NULL,
+                 {phase}_fingerprint=NULL,
+                 {phase}_fence_epoch=NULL,
+                 {phase}_snapshot_cursor=NULL,
+                 {phase}_provider=NULL,
+                 {phase}_provider_fingerprint=NULL,
+                 {phase}_canonical_count=NULL,
+                 {phase}_canonical_digest=NULL,
+                 {phase}_delivery_count=NULL,
+                 {phase}_delivery_digest=NULL
+             WHERE store_name='lancedb_chunks'"
+        ),
+        "building" => "UPDATE projection_store_state
+             SET building_generation=NULL,
+                 building_fingerprint=NULL,
+                 building_fence_epoch=NULL,
+                 building_provider=NULL,
+                 building_provider_fingerprint=NULL,
+                 building_canonical_count=NULL,
+                 building_canonical_digest=NULL,
+                 building_delivery_count=NULL,
+                 building_delivery_digest=NULL,
+                 building_phase=NULL
+             WHERE store_name='lancedb_chunks'"
+            .to_owned(),
+        _ => unreachable!("fixed projection phase"),
+    };
+    conn.execute(&sql, [])?;
     Ok(())
 }
 
@@ -209,7 +801,7 @@ fn init_records_and_enforces_migration_checksum() -> anyhow::Result<()> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     assert_eq!(name, "001_initial");
     assert!(checksum.starts_with("fnv64:"), "checksum: {checksum}");
 
@@ -235,7 +827,7 @@ fn init_creates_knowledge_substrate_tables_and_seeds() -> anyhow::Result<()> {
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     for table in [
         "entities",
         "relation_predicates",
@@ -304,7 +896,7 @@ fn init_upgrades_v1_database_and_backfills_task_entities() -> anyhow::Result<()>
 
     let conn = Connection::open(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     let task_entity_title: String = conn.query_row(
         "SELECT title FROM entities WHERE uri='kb://task/t_test'",
         [],
@@ -331,7 +923,7 @@ fn init_v17_rebuilds_key_relationship_tables_without_losing_rows() -> anyhow::Re
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     assert_eq!(v17_relationship_counts(&conn)?, before_counts);
     assert_eq!(
         task_label_board_for(&conn, &fixture.task_id, &fixture.label_id)?,
@@ -361,7 +953,7 @@ fn init_v18_adds_root_action_atom_effects_table_to_v17_database() -> anyhow::Res
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     let table_exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_ontology_action_atom_effects'",
         [],
@@ -422,7 +1014,7 @@ fn init_v19_adds_validation_requirement_and_backfills_v18_actions() -> anyhow::R
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     let column_exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM pragma_table_info('label_ontology_actions') WHERE name='validation_requirement'",
         [],
@@ -528,7 +1120,7 @@ fn init_v20_hardens_task_history_tables_without_losing_rows() -> anyhow::Result<
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     assert_eq!(v20_task_history_counts(&conn)?, before_counts);
     let fk_errors = foreign_key_check_rows(&conn)?;
     assert!(fk_errors.is_empty(), "{fk_errors:#?}");
@@ -665,7 +1257,7 @@ fn init_v21_hardens_ontology_links_without_losing_rows() -> anyhow::Result<()> {
 
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     assert_eq!(v21_ontology_link_counts(&conn)?, before_counts);
     let fk_errors = foreign_key_check_rows(&conn)?;
     assert!(fk_errors.is_empty(), "{fk_errors:#?}");

@@ -159,8 +159,8 @@ fn doctor_reports_missing_knowledge_substrate_tables_unhealthy() -> anyhow::Resu
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(29));
-        assert_eq!(report.user_version, 29);
+        assert_eq!(report.migration_version, Some(30));
+        assert_eq!(report.user_version, 30);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -177,8 +177,8 @@ fn doctor_reports_missing_signal_ledger_tables_unhealthy() -> anyhow::Result<()>
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(29));
-        assert_eq!(report.user_version, 29);
+        assert_eq!(report.migration_version, Some(30));
+        assert_eq!(report.user_version, 30);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.consistency_errors, 1);
         assert!(report.consistency_issues.iter().any(|issue| {
@@ -206,8 +206,8 @@ fn doctor_ontology_reports_missing_v12_tables_unhealthy() -> anyhow::Result<()> 
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(29));
-        assert_eq!(report.user_version, 29);
+        assert_eq!(report.migration_version, Some(30));
+        assert_eq!(report.user_version, 30);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
         assert_eq!(report.ontology_ledger_errors, 1);
         assert!(report.ontology_ledger_issues.iter().any(|issue| {
@@ -785,6 +785,111 @@ fn jsonl_import_accepts_legal_foundation_relationship_round_trip() -> anyhow::Re
     assert_eq!(
         superseded_by.as_deref(),
         Some("sig_cross_board_replacement")
+    );
+    Ok(())
+}
+
+#[test]
+fn jsonl_import_reset_leaves_no_orphan_projection_corpus_binding() -> anyhow::Result<()> {
+    let source = TempDb::new("jsonl_import_projection_corpus_source")?;
+    init_database(&source.path, "tester")?;
+    create_task(
+        &source.path,
+        "default",
+        "tester",
+        CreateTask::ready("portable canonical task"),
+    )?;
+    let export_path = source.dir.join("projection-corpus-reset.jsonl");
+    export_jsonl(&source.path, "default", &export_path)?;
+
+    let target = TempDb::new("jsonl_import_projection_corpus_target")?;
+    init_database(&target.path, "tester")?;
+    let conn = connect_file(&target.path)?;
+    conn.execute_batch(
+        "UPDATE projection_store_state
+         SET control_plane='v2',
+             active_generation='gen_import_active',
+             active_fingerprint='sha256:active',
+             active_fence_epoch=3,
+             active_snapshot_cursor=0,
+             active_provider='fake-lance',
+             active_provider_fingerprint='fake-provider-v1',
+             active_canonical_count=0,
+             active_canonical_digest='fnv64:active-canonical',
+             active_delivery_count=0,
+             active_delivery_digest='fnv64:active-delivery',
+             active_corpus_schema='task-chunks-v2',
+             active_corpus_fingerprint='corpus:active',
+             active_embedding_model='fake-embedding-v1',
+             active_embedding_dimensions=3,
+             previous_generation='gen_import_previous',
+             previous_fingerprint='sha256:previous',
+             previous_fence_epoch=2,
+             previous_snapshot_cursor=0,
+             previous_provider='fake-lance',
+             previous_provider_fingerprint='fake-provider-v1',
+             previous_canonical_count=0,
+             previous_canonical_digest='fnv64:previous-canonical',
+             previous_delivery_count=0,
+             previous_delivery_digest='fnv64:previous-delivery',
+             previous_corpus_schema='task-chunks-v2',
+             previous_corpus_fingerprint='corpus:previous',
+             previous_embedding_model='fake-embedding-v1',
+             previous_embedding_dimensions=3,
+             building_generation='gen_import_building',
+             building_fingerprint='sha256:building',
+             building_fence_epoch=4,
+             building_provider='fake-lance',
+             building_provider_fingerprint='fake-provider-v1',
+             building_canonical_count=0,
+             building_canonical_digest='fnv64:building-canonical',
+             building_delivery_count=0,
+             building_delivery_digest='fnv64:building-delivery',
+             building_phase='prepared',
+             building_corpus_schema='task-chunks-v2',
+             building_corpus_fingerprint='corpus:building',
+             building_embedding_model='fake-embedding-v1',
+             building_embedding_dimensions=3
+         WHERE store_name='lancedb_chunks';",
+    )?;
+    drop(conn);
+
+    import_jsonl(&target.path, &export_path, true)?;
+
+    let conn = connect_file(&target.path)?;
+    let state: (String, Option<String>, Option<String>, Option<String>, i64) = conn.query_row(
+        "SELECT control_plane,active_generation,previous_generation,building_generation,
+                (active_corpus_schema IS NULL
+                 AND active_corpus_fingerprint IS NULL
+                 AND active_embedding_model IS NULL
+                 AND active_embedding_dimensions IS NULL
+                 AND previous_corpus_schema IS NULL
+                 AND previous_corpus_fingerprint IS NULL
+                 AND previous_embedding_model IS NULL
+                 AND previous_embedding_dimensions IS NULL
+                 AND building_corpus_schema IS NULL
+                 AND building_corpus_fingerprint IS NULL
+                 AND building_embedding_model IS NULL
+                 AND building_embedding_dimensions IS NULL)
+         FROM projection_store_state WHERE store_name='lancedb_chunks'",
+        [],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        },
+    )?;
+    assert_eq!(state, ("legacy".to_owned(), None, None, None, 1));
+    let report = doctor_database(&target.path)?;
+    assert!(
+        !report
+            .consistency_issues
+            .iter()
+            .any(|issue| { issue.code == "projection_corpus_binding_invalid" })
     );
     Ok(())
 }

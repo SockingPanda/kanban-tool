@@ -178,6 +178,7 @@ impl OxigraphProjectionStore {
         self.validate_managed_ancestors(true)?;
         if snapshot.manifest.store_name != OXIGRAPH_RELATIONS_STORE
             || snapshot.manifest.database_instance_id != self.database_instance_id
+            || snapshot.manifest.corpus.is_some()
         {
             return Err(KanbanError::Conflict(
                 "Oxigraph projection received a different store or database manifest".to_owned(),
@@ -234,6 +235,7 @@ impl ProjectionStoreBackend for OxigraphProjectionStore {
             store_name: OXIGRAPH_RELATIONS_STORE.to_owned(),
             provider: OXIGRAPH_PROJECTION_PROVIDER.to_owned(),
             provider_fingerprint: OXIGRAPH_PROJECTION_PROVIDER_FINGERPRINT.to_owned(),
+            corpus: None,
         })
     }
 
@@ -249,6 +251,11 @@ impl ProjectionStoreBackend for OxigraphProjectionStore {
         if batch.database_instance_id != self.database_instance_id {
             return Err(KanbanError::Conflict(
                 "Oxigraph batch belongs to another database".to_owned(),
+            ));
+        }
+        if batch.corpus.is_some() {
+            return Err(KanbanError::Conflict(
+                "Oxigraph batch has an unexpected corpus binding".to_owned(),
             ));
         }
         let path = self.checked_generation_path(&batch.target_generation)?;
@@ -687,6 +694,7 @@ fn validate_evidence(evidence: &ProjectionArtifactEvidence, generation: &str) ->
     if manifest.store_name != OXIGRAPH_RELATIONS_STORE
         || manifest.provider != OXIGRAPH_PROJECTION_PROVIDER
         || manifest.provider_fingerprint != OXIGRAPH_PROJECTION_PROVIDER_FINGERPRINT
+        || manifest.corpus.is_some()
         || manifest.generation != generation
         || manifest.fingerprint.as_deref() != Some(evidence.fingerprint.as_str())
         || evidence.fingerprint.trim().is_empty()
@@ -964,6 +972,7 @@ mod tests {
                 snapshot_cursor: 11,
                 provider: OXIGRAPH_PROJECTION_PROVIDER.to_owned(),
                 provider_fingerprint: OXIGRAPH_PROJECTION_PROVIDER_FINGERPRINT.to_owned(),
+                corpus: None,
                 canonical_item_count: 1,
                 canonical_digest: "fnv64:canonical".to_owned(),
                 delivery_item_count: 1,
@@ -991,6 +1000,27 @@ mod tests {
                 content_hash: "fnv64:record".to_owned(),
             }],
         }
+    }
+
+    #[test]
+    fn non_lance_projection_rejects_corpus_binding() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store(&temp);
+        let mut snapshot = snapshot("gen_unexpected_corpus");
+        snapshot.manifest.corpus = Some(crate::service::ProjectionCorpusMetadata {
+            corpus_schema: "task-chunks-v2".to_owned(),
+            corpus_fingerprint: "corpus:unexpected".to_owned(),
+            embedding_model: "unexpected".to_owned(),
+            embedding_dimensions: 3,
+        });
+
+        let error = store.prepare_snapshot(&snapshot).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("different store or database manifest")
+        );
+        assert!(!store.generation_path("gen_unexpected_corpus").exists());
     }
 
     #[test]
@@ -1122,6 +1152,7 @@ mod tests {
             schema_version: evidence.manifest.schema_version,
             provider: OXIGRAPH_PROJECTION_PROVIDER.to_owned(),
             provider_fingerprint: OXIGRAPH_PROJECTION_PROVIDER_FINGERPRINT.to_owned(),
+            corpus: None,
             owner: "owner".to_owned(),
             lease_token: "please".to_owned(),
             fence_epoch: evidence.manifest.fence_epoch,

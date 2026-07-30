@@ -25,14 +25,17 @@ use super::oxigraph_projection::OxigraphProjectionStore;
 #[cfg(feature = "tantivy-backend")]
 use super::tantivy_projection::TantivyProjectionStore;
 use super::{
-    ProjectionRuntimeAvailability, ProjectionStatus, projection_status, storage, with_immediate_tx,
+    ProjectionCorpusMetadata, ProjectionRuntimeAvailability, ProjectionStatus,
+    ProjectionStoreDescriptor, ProjectionStoreStatus, projection_status, storage,
+    with_immediate_tx,
 };
 use super::{
     ProjectionStoreBackend, abort_incompatible_projection_generation, abort_projection_generation,
     acquire_projection_lease, begin_projection_generation, prepare_projection_snapshot_with,
     publish_projection_generation_with, reconcile_projection_generation_with,
-    recover_projection_generation_with, release_projection_lease, renew_projection_lease,
-    run_projection_batch_with, validate_backend_for_target, validate_physical_active_artifact_with,
+    recover_incompatible_projection_bindings, recover_projection_generation_with,
+    release_projection_lease, renew_projection_lease, run_projection_batch_with,
+    validate_backend_for_target, validate_physical_active_artifact_with,
     validate_physical_previous_artifact_with,
 };
 
@@ -421,14 +424,16 @@ fn enrich_lancedb_physical_health(
                 store.last_error = Some(format!(
                     "{display_name} projection helper is unavailable: {error}"
                 ));
-                store.fallback_reason = Some(
-                    match failure {
-                        LanceDbProjectionFailureClass::Provider => "provider_unavailable",
-                        LanceDbProjectionFailureClass::Backend
-                        | LanceDbProjectionFailureClass::Delivery => "helper_unavailable",
-                    }
-                    .to_owned(),
-                );
+                if store.fallback_reason.as_deref() != Some("corpus_binding_upgrade_required") {
+                    store.fallback_reason = Some(
+                        match failure {
+                            LanceDbProjectionFailureClass::Provider => "provider_unavailable",
+                            LanceDbProjectionFailureClass::Backend
+                            | LanceDbProjectionFailureClass::Delivery => "helper_unavailable",
+                        }
+                        .to_owned(),
+                    );
+                }
             }
             return Ok(());
         }
@@ -512,7 +517,9 @@ fn enrich_physical_health(
     if let Err(error) = physical {
         store.lifecycle_status = "error".to_owned();
         store.last_error = Some(error.to_string());
-        store.fallback_reason = Some("physical_generation_unavailable".to_owned());
+        if store.fallback_reason.as_deref() != Some("corpus_binding_upgrade_required") {
+            store.fallback_reason = Some("physical_generation_unavailable".to_owned());
+        }
     }
     Ok(())
 }
@@ -899,8 +906,33 @@ fn run_projection_store_operation(
     force_rebuild: bool,
 ) -> MaintenanceStoreAttempt<MaintenanceStoreRun> {
     let mut action = "idle".to_owned();
-    let status =
+    let initial_status =
         maintenance_status(&session.db_path).map_err(MaintenanceStoreAttemptError::Fatal)?;
+    if initial_status
+        .stores
+        .iter()
+        .all(|store| store.store_name != store_name)
+    {
+        return Err(MaintenanceStoreAttemptError::Fatal(KanbanError::Storage(
+            format!("{display_name} projection state is missing"),
+        )));
+    }
+    let incompatible_binding_reset = recover_incompatible_projection_bindings(
+        &session.db_path,
+        store_name,
+        &session.owner,
+        lease_token,
+        backend,
+    )
+    .map_err(|error| MaintenanceStoreAttemptError::Store {
+        kind: classify_store_failure(store_name, &error, MaintenanceStoreFailureKind::Backend),
+        error,
+    })?;
+    let status = if incompatible_binding_reset {
+        maintenance_status(&session.db_path).map_err(MaintenanceStoreAttemptError::Fatal)?
+    } else {
+        initial_status
+    };
     let store = status
         .stores
         .iter()
@@ -910,8 +942,10 @@ fn run_projection_store_operation(
                 "{display_name} projection state is missing"
             )))
         })?;
-    let physical_rebuild =
-        store.fallback_reason.as_deref() == Some("physical_generation_unavailable");
+    let physical_rebuild = matches!(
+        store.fallback_reason.as_deref(),
+        Some("physical_generation_unavailable" | "corpus_binding_upgrade_required")
+    ) || incompatible_binding_reset;
     if force_rebuild
         || physical_rebuild
         || store.active_generation.is_none()
@@ -929,6 +963,50 @@ fn run_projection_store_operation(
                 kind: MaintenanceStoreFailureKind::Provider,
                 error,
             })?;
+        }
+        let rebuilding =
+            projection_status(&session.db_path).map_err(MaintenanceStoreAttemptError::Fatal)?;
+        let store = rebuilding
+            .stores
+            .iter()
+            .find(|store| store.store_name == store_name)
+            .ok_or_else(|| {
+                MaintenanceStoreAttemptError::Fatal(KanbanError::Storage(format!(
+                    "{display_name} projection state is missing"
+                )))
+            })?;
+        if store.building_generation.is_some() {
+            let descriptor =
+                backend
+                    .descriptor()
+                    .map_err(|error| MaintenanceStoreAttemptError::Store {
+                        kind: MaintenanceStoreFailureKind::Backend,
+                        error,
+                    })?;
+            if !building_binding_matches_descriptor(store, &descriptor) {
+                abort_incompatible_projection_generation(
+                    &session.db_path,
+                    store_name,
+                    &session.owner,
+                    lease_token,
+                    backend,
+                )
+                .map_err(|error| MaintenanceStoreAttemptError::Store {
+                    kind: MaintenanceStoreFailureKind::Backend,
+                    error,
+                })?;
+                begin_projection_generation(
+                    &session.db_path,
+                    store_name,
+                    &session.owner,
+                    lease_token,
+                    backend,
+                )
+                .map_err(|error| MaintenanceStoreAttemptError::Store {
+                    kind: MaintenanceStoreFailureKind::Provider,
+                    error,
+                })?;
+            }
         }
         let rebuilding =
             projection_status(&session.db_path).map_err(MaintenanceStoreAttemptError::Fatal)?;
@@ -983,10 +1061,8 @@ fn run_projection_store_operation(
                             error,
                         }
                     })?;
-                    let backend_still_matches_building = descriptor.store_name == store_name
-                        && store.building_provider.as_deref() == Some(descriptor.provider.as_str())
-                        && store.building_provider_fingerprint.as_deref()
-                            == Some(descriptor.provider_fingerprint.as_str());
+                    let backend_still_matches_building =
+                        building_binding_matches_descriptor(store, &descriptor);
                     let abort = if backend_still_matches_building {
                         abort_projection_generation(
                             &session.db_path,
@@ -1065,7 +1141,7 @@ fn run_projection_store_operation(
                     .and_then(|active| active.as_ref()),
             )
             .is_some_and(|(building, active)| active.manifest.generation == building);
-        if physical_rebuild {
+        if physical_rebuild && !incompatible_binding_reset {
             if building_is_physically_active {
                 reconcile_projection_generation_with(
                     &session.db_path,
@@ -1162,6 +1238,33 @@ fn run_projection_store_operation(
         processed,
     )
     .map_err(MaintenanceStoreAttemptError::Fatal)
+}
+
+fn building_binding_matches_descriptor(
+    store: &ProjectionStoreStatus,
+    descriptor: &ProjectionStoreDescriptor,
+) -> bool {
+    store.building_generation.is_some()
+        && projection_binding_matches_descriptor(
+            &store.store_name,
+            store.building_provider.as_deref(),
+            store.building_provider_fingerprint.as_deref(),
+            store.building_corpus.as_ref(),
+            descriptor,
+        )
+}
+
+fn projection_binding_matches_descriptor(
+    store_name: &str,
+    provider: Option<&str>,
+    provider_fingerprint: Option<&str>,
+    corpus: Option<&ProjectionCorpusMetadata>,
+    descriptor: &ProjectionStoreDescriptor,
+) -> bool {
+    descriptor.store_name == store_name
+        && provider == Some(descriptor.provider.as_str())
+        && provider_fingerprint == Some(descriptor.provider_fingerprint.as_str())
+        && corpus == descriptor.corpus.as_ref()
 }
 
 #[derive(Clone)]
@@ -1473,6 +1576,1419 @@ mod target_validation_tests {
             TargetValidationDisposition::Rebuild
         );
     }
+
+    #[test]
+    fn missing_lance_corpus_never_defaults_to_the_current_descriptor() {
+        let descriptor = ProjectionStoreDescriptor {
+            store_name: LANCEDB_CHUNKS_STORE.to_owned(),
+            provider: "fake".to_owned(),
+            provider_fingerprint: "fake-v1".to_owned(),
+            corpus: Some(ProjectionCorpusMetadata {
+                corpus_schema: "task-chunks-v2".to_owned(),
+                corpus_fingerprint: "task-chunks-v2:fake-v1".to_owned(),
+                embedding_model: "fake-model".to_owned(),
+                embedding_dimensions: 3,
+            }),
+        };
+
+        assert!(!projection_binding_matches_descriptor(
+            LANCEDB_CHUNKS_STORE,
+            Some("fake"),
+            Some("fake-v1"),
+            None,
+            &descriptor,
+        ));
+        assert!(projection_binding_matches_descriptor(
+            LANCEDB_CHUNKS_STORE,
+            Some("fake"),
+            Some("fake-v1"),
+            descriptor.corpus.as_ref(),
+            &descriptor,
+        ));
+    }
+}
+
+#[cfg(test)]
+mod legacy_binding_recovery_tests {
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        io::ErrorKind,
+        path::{Path, PathBuf},
+        sync::{Arc, Mutex, mpsc},
+        thread,
+        time::Duration,
+    };
+
+    use kanban_local::DerivedStoreWriteGuard;
+    use tempfile::{TempDir, tempdir};
+
+    use super::*;
+    use crate::{
+        db::connect_file,
+        init::init_database,
+        service::{
+            CreateTask, ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
+            ProjectionBatchReceipt, ProjectionPublishReceipt, ProjectionSnapshot, create_task,
+        },
+    };
+
+    const STORE: &str = LANCEDB_CHUNKS_STORE;
+    const ACTIVE: &str = "gen_v29_lance_active";
+    const PREVIOUS: &str = "gen_v29_lance_previous";
+    const BUILDING: &str = "gen_v29_lance_building";
+
+    #[derive(Default)]
+    struct RecoveryBackendState {
+        generations: BTreeMap<String, ProjectionArtifactEvidence>,
+        active: Option<ProjectionArtifactEvidence>,
+        prepared: Option<ProjectionArtifactEvidence>,
+        quarantined: BTreeMap<String, ProjectionArtifactEvidence>,
+        quarantine_attempts: Vec<String>,
+        before_active_inspect: Option<Box<dyn FnOnce() + Send>>,
+        promote_after_active_quarantine: Option<String>,
+    }
+
+    struct RecoveryBackend {
+        descriptor: ProjectionStoreDescriptor,
+        state: Mutex<RecoveryBackendState>,
+    }
+
+    impl RecoveryBackend {
+        fn empty() -> Self {
+            Self {
+                descriptor: current_descriptor(),
+                state: Mutex::new(RecoveryBackendState::default()),
+            }
+        }
+
+        fn from_legacy_sqlite(
+            path: &Path,
+            active: bool,
+            previous: bool,
+            building: bool,
+        ) -> anyhow::Result<Self> {
+            let backend = Self::empty();
+            let mut state = backend.state.lock().expect("recovery backend lock");
+            if active {
+                let evidence = legacy_evidence(path, ACTIVE, 7)?;
+                state
+                    .generations
+                    .insert(ACTIVE.to_owned(), evidence.clone());
+                state.active = Some(evidence);
+            }
+            if previous {
+                state
+                    .generations
+                    .insert(PREVIOUS.to_owned(), legacy_evidence(path, PREVIOUS, 6)?);
+            }
+            if building {
+                let evidence = legacy_evidence(path, BUILDING, 8)?;
+                state
+                    .generations
+                    .insert(BUILDING.to_owned(), evidence.clone());
+                state.prepared = Some(evidence);
+            }
+            drop(state);
+            Ok(backend)
+        }
+
+        fn install_unknown_active(&self, path: &Path, generation: &str) -> anyhow::Result<()> {
+            let evidence = evidence_for_descriptor(path, generation, 99, &self.descriptor)?;
+            let mut state = self.state.lock().expect("recovery backend lock");
+            state
+                .generations
+                .insert(generation.to_owned(), evidence.clone());
+            state.active = Some(evidence);
+            Ok(())
+        }
+
+        fn bind_active_to_current_descriptor(&self, path: &Path) -> anyhow::Result<()> {
+            let evidence = evidence_for_descriptor(path, ACTIVE, 7, &self.descriptor)?;
+            let mut state = self.state.lock().expect("recovery backend lock");
+            state
+                .generations
+                .insert(ACTIVE.to_owned(), evidence.clone());
+            state.active = Some(evidence);
+            Ok(())
+        }
+
+        fn bind_previous_to_current_descriptor(&self, path: &Path) -> anyhow::Result<()> {
+            let evidence = evidence_for_descriptor(path, PREVIOUS, 6, &self.descriptor)?;
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .generations
+                .insert(PREVIOUS.to_owned(), evidence);
+            Ok(())
+        }
+
+        fn prequarantine(&self, generation: &str) {
+            self.quarantine_generation(generation)
+                .expect("prequarantine legacy generation");
+        }
+
+        fn promote_after_active_quarantine(&self, generation: &str) {
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .promote_after_active_quarantine = Some(generation.to_owned());
+        }
+
+        fn set_before_active_inspect(&self, hook: impl FnOnce() + Send + 'static) {
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .before_active_inspect = Some(Box::new(hook));
+        }
+
+        fn quarantined_ids(&self) -> BTreeSet<String> {
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .quarantined
+                .keys()
+                .cloned()
+                .collect()
+        }
+
+        fn quarantine_attempts(&self) -> Vec<String> {
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .quarantine_attempts
+                .clone()
+        }
+    }
+
+    impl ProjectionStoreBackend for RecoveryBackend {
+        fn descriptor(&self) -> Result<ProjectionStoreDescriptor> {
+            Ok(self.descriptor.clone())
+        }
+
+        fn prepare_snapshot(
+            &self,
+            snapshot: &ProjectionSnapshot,
+        ) -> Result<ProjectionArtifactEvidence> {
+            let fingerprint = format!("fake:{}", snapshot.manifest.generation);
+            let mut manifest = snapshot.manifest.clone();
+            manifest.fingerprint = Some(fingerprint.clone());
+            let evidence = ProjectionArtifactEvidence {
+                manifest,
+                fingerprint,
+            };
+            let mut state = self.state.lock().expect("recovery backend lock");
+            state
+                .generations
+                .insert(evidence.manifest.generation.clone(), evidence.clone());
+            state.prepared = Some(evidence.clone());
+            Ok(evidence)
+        }
+
+        fn apply_batch(&self, batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt> {
+            Ok(ProjectionBatchReceipt {
+                store_name: batch.store_name.clone(),
+                database_instance_id: batch.database_instance_id.clone(),
+                protocol_version: batch.protocol_version,
+                schema_version: batch.schema_version,
+                provider: batch.provider.clone(),
+                provider_fingerprint: batch.provider_fingerprint.clone(),
+                target_generation: batch.target_generation.clone(),
+                lease_token: batch.lease_token.clone(),
+                fence_epoch: batch.fence_epoch,
+                claim_token: batch.claim_token.clone(),
+                applied_item_count: batch.items.len(),
+            })
+        }
+
+        fn publish_generation(
+            &self,
+            expected_active: Option<&ProjectionArtifactEvidence>,
+            prepared: &ProjectionArtifactEvidence,
+        ) -> Result<ProjectionPublishReceipt> {
+            let mut state = self.state.lock().expect("recovery backend lock");
+            if state.active.as_ref() != expected_active {
+                return Err(KanbanError::Conflict(
+                    "recovery fake active CAS mismatch".to_owned(),
+                ));
+            }
+            if state.prepared.as_ref() != Some(prepared) {
+                return Err(KanbanError::Conflict(
+                    "recovery fake prepared evidence mismatch".to_owned(),
+                ));
+            }
+            let retained_previous = state.active.clone();
+            state.active = Some(prepared.clone());
+            state
+                .generations
+                .insert(prepared.manifest.generation.clone(), prepared.clone());
+            Ok(ProjectionPublishReceipt {
+                active: prepared.clone(),
+                retained_previous,
+            })
+        }
+
+        fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>> {
+            let (active, hook) = {
+                let mut state = self.state.lock().expect("recovery backend lock");
+                (state.active.clone(), state.before_active_inspect.take())
+            };
+            if let Some(hook) = hook {
+                hook();
+            }
+            Ok(active)
+        }
+
+        fn inspect_generation(
+            &self,
+            generation: &str,
+        ) -> Result<Option<ProjectionArtifactEvidence>> {
+            Ok(self
+                .state
+                .lock()
+                .expect("recovery backend lock")
+                .generations
+                .get(generation)
+                .cloned())
+        }
+
+        fn validate_generation_publication(
+            &self,
+            expected: &ProjectionArtifactEvidence,
+        ) -> Result<()> {
+            match self.inspect_generation(&expected.manifest.generation)? {
+                Some(actual) if actual == *expected => Ok(()),
+                _ => Err(KanbanError::Storage(
+                    "recovery fake generation is not published".to_owned(),
+                )),
+            }
+        }
+
+        fn quarantine_generation(&self, generation: &str) -> Result<()> {
+            let mut state = self.state.lock().expect("recovery backend lock");
+            state.quarantine_attempts.push(generation.to_owned());
+            let evidence = state.generations.remove(generation).or_else(|| {
+                state
+                    .prepared
+                    .as_ref()
+                    .filter(|prepared| prepared.manifest.generation == generation)
+                    .cloned()
+            });
+            let removed_active = state
+                .active
+                .as_ref()
+                .is_some_and(|active| active.manifest.generation == generation);
+            if removed_active {
+                state.active = None;
+            }
+            if state
+                .prepared
+                .as_ref()
+                .is_some_and(|prepared| prepared.manifest.generation == generation)
+            {
+                state.prepared = None;
+            }
+            if let Some(evidence) = evidence {
+                state.quarantined.insert(generation.to_owned(), evidence);
+            }
+            if removed_active && let Some(promoted) = state.promote_after_active_quarantine.clone()
+            {
+                state.active = state.generations.get(&promoted).cloned();
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn v29_active_and_previous_without_building_converge_to_a_bound_generation()
+    -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, false)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, false)?;
+
+        run_store_to_completion(&path, &backend)?;
+
+        let store = lance_store_status(&path)?;
+        assert!(store.building_generation.is_none());
+        assert!(store.previous_generation.is_none());
+        assert_ne!(store.active_generation.as_deref(), Some(ACTIVE));
+        assert_eq!(store.active_corpus, current_descriptor().corpus);
+        assert_eq!(
+            backend.quarantined_ids(),
+            BTreeSet::from([ACTIVE.to_owned(), PREVIOUS.to_owned()])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn v29_building_and_historical_generations_converge_to_a_bound_generation() -> anyhow::Result<()>
+    {
+        let (_temp, path) = v29_lance_fixture(true, true, true)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
+
+        run_store_to_completion(&path, &backend)?;
+
+        let store = lance_store_status(&path)?;
+        assert!(store.building_generation.is_none());
+        assert!(store.previous_generation.is_none());
+        assert_ne!(store.active_generation.as_deref(), Some(ACTIVE));
+        assert_ne!(store.active_generation.as_deref(), Some(BUILDING));
+        assert_eq!(store.active_corpus, current_descriptor().corpus);
+        assert_eq!(
+            backend.quarantined_ids(),
+            BTreeSet::from([ACTIVE.to_owned(), PREVIOUS.to_owned(), BUILDING.to_owned()])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn compatible_building_does_not_mask_incompatible_historical_bindings() -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, false)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, false)?;
+        let mut session = MaintenanceSession::start(
+            &path,
+            "legacy-binding-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease = acquire_projection_lease(
+            &path,
+            STORE,
+            "legacy-binding-owner",
+            session.options.lease_ttl_ms,
+        )?;
+        let compatible_building = begin_projection_generation(
+            &path,
+            STORE,
+            "legacy-binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?
+        .generation;
+
+        run_projection_store_operation(
+            &mut session,
+            STORE,
+            "LanceDB task chunks",
+            &lease.lease_token,
+            &backend,
+            false,
+        )
+        .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+        assert!(
+            backend.quarantine_attempts().contains(&compatible_building),
+            "a compatible building created over unbound history must be discarded and rebuilt"
+        );
+        let store = lance_store_status(&path)?;
+        assert_ne!(
+            store.active_generation.as_deref(),
+            Some(compatible_building.as_str())
+        );
+        assert_eq!(store.active_corpus, current_descriptor().corpus);
+        release_projection_lease(&path, STORE, "legacy-binding-owner", &lease.lease_token)?;
+        session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn aliased_generation_ids_fail_before_any_physical_mutation() -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture_with_building_id(true, true, true, PREVIOUS)?;
+        let backend = RecoveryBackend::empty();
+        let lease = acquire_projection_lease(&path, STORE, "alias-owner", 20_000)?;
+        let before = sqlite_recovery_control_snapshot(&path)?;
+
+        let error = recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "alias-owner",
+            &lease.lease_token,
+            &backend,
+        )
+        .expect_err("aliased generation identities must fail closed");
+
+        assert!(error.to_string().contains("alias"));
+        assert!(backend.quarantine_attempts().is_empty());
+        assert_eq!(sqlite_recovery_control_snapshot(&path)?, before);
+        Ok(())
+    }
+
+    #[test]
+    fn lease_heartbeat_renewal_during_slow_quarantine_does_not_break_snapshot_cas()
+    -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, false)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, false)?;
+        backend.set_before_active_inspect(|| {
+            thread::sleep(Duration::from_millis(450));
+        });
+        let options = MaintenanceRunOptions {
+            lease_ttl_ms: 300,
+            claim_ttl_ms: 100,
+            batch_size: 25,
+        };
+        let mut session = MaintenanceSession::start(
+            &path,
+            "heartbeat-recovery-owner",
+            MaintenanceMode::Once,
+            options,
+        )?;
+
+        let run =
+            run_projection_store_once(&mut session, STORE, "LanceDB task chunks", &backend, false)?;
+
+        assert!(matches!(
+            run.result,
+            MaintenanceStoreResult::Succeeded { .. }
+        ));
+        let store = lance_store_status(&path)?;
+        assert_eq!(store.active_corpus, current_descriptor().corpus);
+        assert!(store.building_generation.is_none());
+        session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn busy_helper_mutation_lock_makes_no_sql_change_and_retry_is_idempotent() -> anyhow::Result<()>
+    {
+        let (_temp, path) = v29_lance_fixture(true, true, true)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
+        let lease = acquire_projection_lease(&path, STORE, "busy-helper-owner", 20_000)?;
+        let helper_guard =
+            DerivedStoreWriteGuard::acquire(&path, &format!("{STORE}-projection-helper"))?;
+        let before = sqlite_recovery_control_snapshot(&path)?;
+
+        recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "busy-helper-owner",
+            &lease.lease_token,
+            &backend,
+        )
+        .expect_err("busy helper mutation lock must defer SQLite recovery");
+
+        assert_eq!(sqlite_recovery_control_snapshot(&path)?, before);
+        drop(helper_guard);
+        assert!(recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "busy-helper-owner",
+            &lease.lease_token,
+            &backend,
+        )?);
+        Ok(())
+    }
+
+    #[test]
+    fn late_helper_writer_cannot_cross_the_final_sqlite_cas_fence() -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, false)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, false)?;
+        let lease = acquire_projection_lease(&path, STORE, "late-writer-owner", 20_000)?;
+        let (attempted_tx, attempted_rx) = mpsc::channel();
+        let (observed_tx, observed_rx) = mpsc::channel();
+        let writer_path = path.clone();
+        backend.set_before_active_inspect(move || {
+            thread::spawn(move || {
+                let deadline = std::time::Instant::now() + Duration::from_secs(5);
+                let mut reported_block = false;
+                loop {
+                    match DerivedStoreWriteGuard::acquire(
+                        &writer_path,
+                        &format!("{STORE}-projection-helper"),
+                    ) {
+                        Ok(_guard) => {
+                            observed_tx
+                                .send(sqlite_generation_ids(&writer_path).expect("writer readback"))
+                                .expect("writer observation receiver");
+                            return;
+                        }
+                        Err(error)
+                            if error.kind() == ErrorKind::WouldBlock
+                                && std::time::Instant::now() < deadline =>
+                        {
+                            if !reported_block {
+                                attempted_tx.send(()).expect("writer attempt receiver");
+                                reported_block = true;
+                            }
+                            thread::sleep(Duration::from_millis(2));
+                        }
+                        Err(error) => panic!("late helper writer lock failed: {error}"),
+                    }
+                }
+            });
+            attempted_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("late helper writer must block behind recovery");
+        });
+
+        assert!(recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "late-writer-owner",
+            &lease.lease_token,
+            &backend,
+        )?);
+
+        assert_eq!(
+            observed_rx.recv_timeout(Duration::from_secs(2))?,
+            (None, None, None),
+            "the queued helper writer may acquire only after SQLite commits the recovery CAS"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn physical_quarantine_is_idempotent_after_a_partial_crash() -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, true)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
+        backend.prequarantine(BUILDING);
+        backend.prequarantine(ACTIVE);
+        let lease = acquire_projection_lease(&path, STORE, "retry-owner", 20_000)?;
+
+        assert!(recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "retry-owner",
+            &lease.lease_token,
+            &backend,
+        )?);
+
+        let store = lance_store_status(&path)?;
+        assert!(store.active_generation.is_none());
+        assert!(store.previous_generation.is_none());
+        assert!(store.building_generation.is_none());
+        assert_eq!(store.last_success_at, None);
+        assert!(backend.inspect_generation(ACTIVE)?.is_none());
+        assert!(backend.inspect_generation(PREVIOUS)?.is_none());
+        assert!(backend.inspect_generation(BUILDING)?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn incompatible_previous_is_removed_without_discarding_a_compatible_active()
+    -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, false)?;
+        bind_phase_to_current_corpus(&path, "active")?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, false)?;
+        backend.bind_active_to_current_descriptor(&path)?;
+        let lease = acquire_projection_lease(&path, STORE, "previous-owner", 20_000)?;
+
+        assert!(recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "previous-owner",
+            &lease.lease_token,
+            &backend,
+        )?);
+
+        let store = lance_store_status(&path)?;
+        assert_eq!(store.active_generation.as_deref(), Some(ACTIVE));
+        assert_eq!(store.active_corpus, current_descriptor().corpus);
+        assert!(store.previous_generation.is_none());
+        assert_eq!(store.last_success_at, Some(4_242));
+        assert_eq!(
+            backend
+                .inspect_active()?
+                .map(|active| active.manifest.generation),
+            Some(ACTIVE.to_owned())
+        );
+        assert_eq!(
+            backend.quarantined_ids(),
+            BTreeSet::from([PREVIOUS.to_owned()])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn retained_previous_requires_exact_physical_readback_before_sqlite_recovery()
+    -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, true)?;
+        replace_legacy_phase_with_bound_generation(&path, "active")?;
+        replace_legacy_phase_with_bound_generation(&path, "previous")?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
+        backend.bind_active_to_current_descriptor(&path)?;
+        let lease = acquire_projection_lease(&path, STORE, "retained-previous-owner", 20_000)?;
+        let before = sqlite_recovery_control_snapshot(&path)?;
+
+        recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "retained-previous-owner",
+            &lease.lease_token,
+            &backend,
+        )
+        .expect_err("mismatched retained previous evidence must fail closed");
+
+        assert_eq!(sqlite_recovery_control_snapshot(&path)?, before);
+        backend.bind_previous_to_current_descriptor(&path)?;
+        assert!(recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "retained-previous-owner",
+            &lease.lease_token,
+            &backend,
+        )?);
+        assert_eq!(
+            sqlite_generation_ids(&path)?,
+            (Some(ACTIVE.to_owned()), Some(PREVIOUS.to_owned()), None)
+        );
+        assert_eq!(
+            backend.quarantined_ids(),
+            BTreeSet::from([BUILDING.to_owned()])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unattributed_physical_active_fails_closed_without_clearing_sqlite() -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, true)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
+        backend.install_unknown_active(&path, "gen_unattributed_x")?;
+        let lease = acquire_projection_lease(&path, STORE, "unknown-owner", 20_000)?;
+
+        let error = recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "unknown-owner",
+            &lease.lease_token,
+            &backend,
+        )
+        .expect_err("unattributed physical active generation must fail closed");
+
+        assert!(error.to_string().contains("unattributed"));
+        assert!(
+            !backend
+                .quarantine_attempts()
+                .iter()
+                .any(|generation| generation == "gen_unattributed_x")
+        );
+        assert!(backend.inspect_generation("gen_unattributed_x")?.is_some());
+        assert_eq!(
+            sqlite_generation_ids(&path)?,
+            (
+                Some(ACTIVE.to_owned()),
+                Some(PREVIOUS.to_owned()),
+                Some(BUILDING.to_owned())
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn active_quarantine_may_promote_previous_but_final_readback_still_converges()
+    -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, false)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, false)?;
+        backend.promote_after_active_quarantine(PREVIOUS);
+        let lease = acquire_projection_lease(&path, STORE, "promotion-owner", 20_000)?;
+
+        assert!(recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "promotion-owner",
+            &lease.lease_token,
+            &backend,
+        )?);
+
+        assert_eq!(backend.inspect_active()?, None);
+        assert_eq!(sqlite_generation_ids(&path)?, (None, None, None));
+        assert_eq!(
+            backend.quarantined_ids(),
+            BTreeSet::from([ACTIVE.to_owned(), PREVIOUS.to_owned()])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn binding_control_or_lease_race_after_quarantine_preserves_the_exact_raced_snapshot()
+    -> anyhow::Result<()> {
+        for (case, mutation) in [
+            (
+                "token",
+                "UPDATE projection_store_state
+                 SET lease_token='raced-lease-token'
+                 WHERE store_name='lancedb_chunks'",
+            ),
+            (
+                "fence",
+                "UPDATE projection_store_state
+                 SET fence_epoch=fence_epoch+1
+                 WHERE store_name='lancedb_chunks'",
+            ),
+            (
+                "previous_corpus",
+                "UPDATE projection_store_state
+                 SET previous_corpus_schema='task-chunks-v2',
+                     previous_corpus_fingerprint='raced-previous-corpus',
+                     previous_embedding_model='raced-previous-model',
+                     previous_embedding_dimensions=7
+                 WHERE store_name='lancedb_chunks'",
+            ),
+            (
+                "building_corpus",
+                "UPDATE projection_store_state
+                 SET building_corpus_schema='task-chunks-v2',
+                     building_corpus_fingerprint='raced-building-corpus',
+                     building_embedding_model='raced-building-model',
+                     building_embedding_dimensions=7
+                 WHERE store_name='lancedb_chunks'",
+            ),
+            (
+                "control",
+                "UPDATE projection_store_state
+                 SET control_plane='legacy'
+                 WHERE store_name='lancedb_chunks'",
+            ),
+        ] {
+            let (_temp, path) = v29_lance_fixture(true, true, true)?;
+            if case == "previous_corpus" {
+                replace_legacy_phase_with_bound_generation(&path, "previous")?;
+            } else if case == "building_corpus" {
+                replace_legacy_phase_with_bound_generation(&path, "building")?;
+            }
+            let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
+            let lease = acquire_projection_lease(&path, STORE, "race-owner", 20_000)?;
+            let race_path = path.clone();
+            let raced_snapshot = Arc::new(Mutex::new(None));
+            let hook_snapshot = Arc::clone(&raced_snapshot);
+            backend.set_before_active_inspect(move || {
+                connect_file(&race_path)
+                    .and_then(|conn| {
+                        conn.execute_batch(mutation)
+                            .map_err(|error| KanbanError::Storage(error.to_string()))
+                    })
+                    .expect("inject recovery race");
+                *hook_snapshot.lock().expect("raced snapshot lock") =
+                    Some(sqlite_recovery_control_snapshot(&race_path).expect("raced snapshot"));
+            });
+
+            recover_incompatible_projection_bindings(
+                &path,
+                STORE,
+                "race-owner",
+                &lease.lease_token,
+                &backend,
+            )
+            .unwrap_err();
+
+            assert_eq!(
+                sqlite_recovery_control_snapshot(&path)?,
+                raced_snapshot
+                    .lock()
+                    .expect("raced snapshot lock")
+                    .take()
+                    .expect("hook captured raced snapshot"),
+                "{case}: recovery must not modify any field after detecting the race"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_recomputes_checkpoint_without_touching_outbox_or_legacy_watermark()
+    -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, true)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
+        let before = canonical_control_plane_snapshot(&path)?;
+        assert!(before.delivery_count > 0);
+        assert!(before.checkpoint_cursor > 0);
+        let lease = acquire_projection_lease(&path, STORE, "control-owner", 20_000)?;
+
+        assert!(recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            "control-owner",
+            &lease.lease_token,
+            &backend,
+        )?);
+
+        let after = canonical_control_plane_snapshot(&path)?;
+        assert_eq!(after.outbox, before.outbox);
+        assert_eq!(after.derived_store, before.derived_store);
+        assert_eq!(after.delivery_count, before.delivery_count);
+        assert_eq!(after.pending_deliveries, after.delivery_count);
+        assert_eq!(after.published_deliveries, 0);
+        assert_eq!(after.claimed_deliveries, 0);
+        assert_eq!(after.checkpoint_cursor, 0);
+        assert_eq!(
+            after.legacy_checkpoint_cursor,
+            before.legacy_checkpoint_cursor
+        );
+        assert_eq!(after.delivery_controls, before.delivery_controls);
+        Ok(())
+    }
+
+    #[test]
+    fn corpus_upgrade_reason_survives_physical_health_failure_for_every_legacy_phase()
+    -> anyhow::Result<()> {
+        for (case, active, previous, building) in [
+            ("active", true, false, false),
+            ("previous", true, true, false),
+            ("building", false, false, true),
+        ] {
+            let (_temp, path) = v29_lance_fixture(active, previous, building)?;
+            if case == "previous" {
+                bind_phase_to_current_corpus(&path, "active")?;
+            }
+            let mut status = projection_status(&path)?;
+            let before = status
+                .stores
+                .iter()
+                .find(|store| store.store_name == STORE)
+                .expect("Lance status");
+            assert_eq!(
+                before.fallback_reason.as_deref(),
+                Some("corpus_binding_upgrade_required"),
+                "{case}"
+            );
+
+            enrich_physical_health(
+                &path,
+                &mut status,
+                STORE,
+                "LanceDB task chunks",
+                &RecoveryBackend::empty(),
+            )?;
+
+            let after = status
+                .stores
+                .iter()
+                .find(|store| store.store_name == STORE)
+                .expect("Lance status");
+            assert_eq!(
+                after.fallback_reason.as_deref(),
+                Some("corpus_binding_upgrade_required"),
+                "{case}: physical health must not erase the actionable upgrade reason"
+            );
+        }
+        Ok(())
+    }
+
+    fn bind_phase_to_current_corpus(path: &Path, phase: &str) -> anyhow::Result<()> {
+        replace_legacy_phase_with_bound_generation(path, phase)
+    }
+
+    fn replace_legacy_phase_with_bound_generation(path: &Path, phase: &str) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            matches!(phase, "active" | "previous" | "building"),
+            "unsupported projection phase {phase}"
+        );
+        let corpus = current_descriptor().corpus.expect("Lance corpus binding");
+        let mut conn = connect_file(path)?;
+        let snapshot_select = if phase == "building" {
+            "NULL".to_owned()
+        } else {
+            format!("{phase}_snapshot_cursor")
+        };
+        let phase_select = if phase == "building" {
+            "building_phase".to_owned()
+        } else {
+            "NULL".to_owned()
+        };
+        let generation = conn.query_row(
+            &format!(
+                "SELECT {phase}_generation,{phase}_fingerprint,{phase}_fence_epoch,
+                        {snapshot_select},{phase}_provider,{phase}_provider_fingerprint,
+                        {phase}_canonical_count,{phase}_canonical_digest,
+                        {phase}_delivery_count,{phase}_delivery_digest,{phase_select}
+                 FROM projection_store_state WHERE store_name=?1"
+            ),
+            [STORE],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, i64>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, i64>(8)?,
+                    row.get::<_, String>(9)?,
+                    row.get::<_, Option<String>>(10)?,
+                ))
+            },
+        )?;
+        let tx = conn.transaction()?;
+        if phase == "building" {
+            tx.execute(
+                "UPDATE projection_store_state
+                 SET building_generation=NULL,building_fingerprint=NULL,
+                     building_fence_epoch=NULL,building_provider=NULL,
+                     building_provider_fingerprint=NULL,
+                     building_canonical_count=NULL,building_canonical_digest=NULL,
+                     building_delivery_count=NULL,building_delivery_digest=NULL,
+                     building_phase=NULL,building_corpus_schema=NULL,
+                     building_corpus_fingerprint=NULL,building_embedding_model=NULL,
+                     building_embedding_dimensions=NULL
+                 WHERE store_name=?1",
+                [STORE],
+            )?;
+            tx.execute(
+                "UPDATE projection_store_state
+                 SET building_generation=?1,building_fingerprint=?2,
+                     building_fence_epoch=?3,building_provider=?4,
+                     building_provider_fingerprint=?5,
+                     building_canonical_count=?6,building_canonical_digest=?7,
+                     building_delivery_count=?8,building_delivery_digest=?9,
+                     building_phase=?10,building_corpus_schema=?11,
+                     building_corpus_fingerprint=?12,building_embedding_model=?13,
+                     building_embedding_dimensions=?14
+                 WHERE store_name=?15",
+                rusqlite::params![
+                    generation.0,
+                    generation.1,
+                    generation.2,
+                    generation.4,
+                    generation.5,
+                    generation.6,
+                    generation.7,
+                    generation.8,
+                    generation.9,
+                    generation.10,
+                    corpus.corpus_schema,
+                    corpus.corpus_fingerprint,
+                    corpus.embedding_model,
+                    i64::try_from(corpus.embedding_dimensions)?,
+                    STORE
+                ],
+            )?;
+        } else {
+            tx.execute(
+                &format!(
+                    "UPDATE projection_store_state
+                     SET {phase}_generation=NULL,{phase}_fingerprint=NULL,
+                         {phase}_fence_epoch=NULL,{phase}_snapshot_cursor=NULL,
+                         {phase}_provider=NULL,{phase}_provider_fingerprint=NULL,
+                         {phase}_canonical_count=NULL,{phase}_canonical_digest=NULL,
+                         {phase}_delivery_count=NULL,{phase}_delivery_digest=NULL,
+                         {phase}_corpus_schema=NULL,{phase}_corpus_fingerprint=NULL,
+                         {phase}_embedding_model=NULL,{phase}_embedding_dimensions=NULL
+                     WHERE store_name=?1"
+                ),
+                [STORE],
+            )?;
+            tx.execute(
+                &format!(
+                    "UPDATE projection_store_state
+                     SET {phase}_generation=?1,{phase}_fingerprint=?2,
+                         {phase}_fence_epoch=?3,{phase}_snapshot_cursor=?4,
+                         {phase}_provider=?5,{phase}_provider_fingerprint=?6,
+                         {phase}_canonical_count=?7,{phase}_canonical_digest=?8,
+                         {phase}_delivery_count=?9,{phase}_delivery_digest=?10,
+                         {phase}_corpus_schema=?11,{phase}_corpus_fingerprint=?12,
+                         {phase}_embedding_model=?13,{phase}_embedding_dimensions=?14
+                     WHERE store_name=?15"
+                ),
+                rusqlite::params![
+                    generation.0,
+                    generation.1,
+                    generation.2,
+                    generation.3,
+                    generation.4,
+                    generation.5,
+                    generation.6,
+                    generation.7,
+                    generation.8,
+                    generation.9,
+                    corpus.corpus_schema,
+                    corpus.corpus_fingerprint,
+                    corpus.embedding_model,
+                    i64::try_from(corpus.embedding_dimensions)?,
+                    STORE
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    fn run_store_to_completion(path: &Path, backend: &RecoveryBackend) -> anyhow::Result<()> {
+        let mut session = MaintenanceSession::start(
+            path,
+            "legacy-binding-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease = acquire_projection_lease(
+            path,
+            STORE,
+            "legacy-binding-owner",
+            session.options.lease_ttl_ms,
+        )?;
+        let run = run_projection_store_operation(
+            &mut session,
+            STORE,
+            "LanceDB task chunks",
+            &lease.lease_token,
+            backend,
+            false,
+        )
+        .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+        assert!(matches!(
+            run.result,
+            MaintenanceStoreResult::Succeeded { .. }
+        ));
+        release_projection_lease(path, STORE, "legacy-binding-owner", &lease.lease_token)?;
+        session.finish()?;
+        Ok(())
+    }
+
+    fn current_descriptor() -> ProjectionStoreDescriptor {
+        ProjectionStoreDescriptor {
+            store_name: STORE.to_owned(),
+            provider: "fake-lance".to_owned(),
+            provider_fingerprint: "fake-lance-v2".to_owned(),
+            corpus: Some(ProjectionCorpusMetadata {
+                corpus_schema: "task-chunks-v2".to_owned(),
+                corpus_fingerprint: "task-chunks-v2:fake-corpus-v2".to_owned(),
+                embedding_model: "fake-embedding-v2".to_owned(),
+                embedding_dimensions: 3,
+            }),
+        }
+    }
+
+    fn legacy_evidence(
+        path: &Path,
+        generation: &str,
+        fence_epoch: i64,
+    ) -> anyhow::Result<ProjectionArtifactEvidence> {
+        evidence(
+            path,
+            generation,
+            fence_epoch,
+            "fake-lance",
+            "fake-lance-v2",
+            None,
+        )
+    }
+
+    fn evidence_for_descriptor(
+        path: &Path,
+        generation: &str,
+        fence_epoch: i64,
+        descriptor: &ProjectionStoreDescriptor,
+    ) -> anyhow::Result<ProjectionArtifactEvidence> {
+        evidence(
+            path,
+            generation,
+            fence_epoch,
+            &descriptor.provider,
+            &descriptor.provider_fingerprint,
+            descriptor.corpus.clone(),
+        )
+    }
+
+    fn evidence(
+        path: &Path,
+        generation: &str,
+        fence_epoch: i64,
+        provider: &str,
+        provider_fingerprint: &str,
+        corpus: Option<ProjectionCorpusMetadata>,
+    ) -> anyhow::Result<ProjectionArtifactEvidence> {
+        let conn = connect_file(path)?;
+        let (database_instance_id, protocol_version, schema_version): (String, i64, i64) = conn
+            .query_row(
+                "SELECT database_instance_id,protocol_version,schema_version
+                 FROM projection_store_state WHERE store_name=?1",
+                [STORE],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )?;
+        let fingerprint = format!("fake:{generation}");
+        Ok(ProjectionArtifactEvidence {
+            manifest: ProjectionArtifactManifest {
+                store_name: STORE.to_owned(),
+                database_instance_id,
+                protocol_version,
+                schema_version,
+                generation: generation.to_owned(),
+                fence_epoch,
+                snapshot_cursor: 0,
+                provider: provider.to_owned(),
+                provider_fingerprint: provider_fingerprint.to_owned(),
+                corpus,
+                canonical_item_count: 0,
+                canonical_digest: format!("canonical:{generation}"),
+                delivery_item_count: 0,
+                delivery_digest: format!("delivery:{generation}"),
+                fingerprint: Some(fingerprint.clone()),
+            },
+            fingerprint,
+        })
+    }
+
+    fn v29_lance_fixture(
+        active: bool,
+        previous: bool,
+        building: bool,
+    ) -> anyhow::Result<(TempDir, PathBuf)> {
+        v29_lance_fixture_with_building_id(active, previous, building, BUILDING)
+    }
+
+    fn v29_lance_fixture_with_building_id(
+        active: bool,
+        previous: bool,
+        building: bool,
+        building_generation: &str,
+    ) -> anyhow::Result<(TempDir, PathBuf)> {
+        let temp = tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "tester")?;
+        create_task(
+            &path,
+            "default",
+            "tester",
+            CreateTask::ready("legacy Lance corpus binding"),
+        )?;
+        let conn = connect_file(&path)?;
+        conn.execute_batch(
+            "DROP TRIGGER projection_active_corpus_after_generation_reset;
+             DROP TRIGGER projection_previous_corpus_after_generation_reset;
+             DROP TRIGGER projection_building_corpus_after_generation_reset;
+             DROP TRIGGER projection_active_corpus_generation_guard;
+             DROP TRIGGER projection_previous_corpus_generation_guard;
+             DROP TRIGGER projection_building_corpus_generation_guard;
+             DROP TRIGGER projection_corpus_generation_insert_guard;
+             ALTER TABLE projection_store_state DROP COLUMN active_embedding_dimensions;
+             ALTER TABLE projection_store_state DROP COLUMN active_embedding_model;
+             ALTER TABLE projection_store_state DROP COLUMN active_corpus_fingerprint;
+             ALTER TABLE projection_store_state DROP COLUMN active_corpus_schema;
+             ALTER TABLE projection_store_state DROP COLUMN previous_embedding_dimensions;
+             ALTER TABLE projection_store_state DROP COLUMN previous_embedding_model;
+             ALTER TABLE projection_store_state DROP COLUMN previous_corpus_fingerprint;
+             ALTER TABLE projection_store_state DROP COLUMN previous_corpus_schema;
+             ALTER TABLE projection_store_state DROP COLUMN building_embedding_dimensions;
+             ALTER TABLE projection_store_state DROP COLUMN building_embedding_model;
+             ALTER TABLE projection_store_state DROP COLUMN building_corpus_fingerprint;
+             ALTER TABLE projection_store_state DROP COLUMN building_corpus_schema;
+             DELETE FROM schema_migrations WHERE version=30;
+             PRAGMA user_version=29;",
+        )?;
+        seed_v29_slot(&conn, "active", active, ACTIVE, 7)?;
+        seed_v29_slot(&conn, "previous", previous, PREVIOUS, 6)?;
+        seed_v29_slot(&conn, "building", building, building_generation, 8)?;
+        conn.execute(
+            "UPDATE projection_store_state
+             SET control_plane='v2',lifecycle_status='ready',
+                 legacy_checkpoint_cursor=777,last_success_at=4242
+             WHERE store_name=?1",
+            [STORE],
+        )?;
+        if active {
+            conn.execute(
+                "UPDATE projection_deliveries
+                 SET status='done',published_generation=?1,
+                     attempts=4,next_attempt_at=9876543210,
+                     last_error='preserve legacy delivery diagnostic',
+                     claim_owner=NULL,claim_token=NULL,claim_lease_token=NULL,
+                     claim_fence_epoch=NULL,claim_generation=NULL,claim_expires_at=NULL
+                 WHERE store_name=?2",
+                rusqlite::params![ACTIVE, STORE],
+            )?;
+            conn.execute(
+                "UPDATE projection_store_state
+                 SET checkpoint_cursor=(
+                   SELECT COALESCE(MAX(cursor),0)
+                   FROM projection_deliveries WHERE store_name=?1
+                 )
+                 WHERE store_name=?1",
+                [STORE],
+            )?;
+        }
+        drop(conn);
+        init_database(&path, "upgrade")?;
+        Ok((temp, path))
+    }
+
+    fn seed_v29_slot(
+        conn: &rusqlite::Connection,
+        phase: &str,
+        present: bool,
+        generation: &str,
+        fence_epoch: i64,
+    ) -> anyhow::Result<()> {
+        let snapshot_column = if phase == "building" {
+            String::new()
+        } else {
+            format!(",{phase}_snapshot_cursor=0")
+        };
+        let building_phase = if phase == "building" {
+            ",building_phase='prepared'"
+        } else {
+            ""
+        };
+        if present {
+            conn.execute(
+                &format!(
+                    "UPDATE projection_store_state
+                     SET {phase}_generation=?1,{phase}_fingerprint=?2,
+                         {phase}_fence_epoch=?3{snapshot_column},
+                         {phase}_provider='fake-lance',
+                         {phase}_provider_fingerprint='fake-lance-v2',
+                         {phase}_canonical_count=0,
+                         {phase}_canonical_digest=?4,
+                         {phase}_delivery_count=0,
+                         {phase}_delivery_digest=?5
+                         {building_phase}
+                     WHERE store_name=?6"
+                ),
+                rusqlite::params![
+                    generation,
+                    format!("fake:{generation}"),
+                    fence_epoch,
+                    format!("canonical:{generation}"),
+                    format!("delivery:{generation}"),
+                    STORE
+                ],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn lance_store_status(path: &Path) -> anyhow::Result<ProjectionStoreStatus> {
+        projection_status(path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == STORE)
+            .ok_or_else(|| anyhow::anyhow!("Lance store status is missing"))
+    }
+
+    fn sqlite_generation_ids(
+        path: &Path,
+    ) -> anyhow::Result<(Option<String>, Option<String>, Option<String>)> {
+        Ok(connect_file(path)?.query_row(
+            "SELECT active_generation,previous_generation,building_generation
+             FROM projection_store_state WHERE store_name=?1",
+            [STORE],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?)
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct SqliteRecoveryControlSnapshot {
+        store_state: Vec<String>,
+        deliveries: Vec<Vec<String>>,
+    }
+
+    fn sqlite_recovery_control_snapshot(
+        path: &Path,
+    ) -> anyhow::Result<SqliteRecoveryControlSnapshot> {
+        let conn = connect_file(path)?;
+        let mut state_statement =
+            conn.prepare("SELECT * FROM projection_store_state WHERE store_name=?1")?;
+        let state_column_count = state_statement.column_count();
+        let store_state = state_statement
+            .query_row([STORE], |row| sqlite_row_snapshot(row, state_column_count))?;
+
+        let mut delivery_statement =
+            conn.prepare("SELECT * FROM projection_deliveries WHERE store_name=?1 ORDER BY id")?;
+        let delivery_column_count = delivery_statement.column_count();
+        let deliveries = delivery_statement
+            .query_map([STORE], |row| {
+                sqlite_row_snapshot(row, delivery_column_count)
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(SqliteRecoveryControlSnapshot {
+            store_state,
+            deliveries,
+        })
+    }
+
+    fn sqlite_row_snapshot(
+        row: &rusqlite::Row<'_>,
+        column_count: usize,
+    ) -> rusqlite::Result<Vec<String>> {
+        use rusqlite::types::ValueRef;
+
+        (0..column_count)
+            .map(|index| {
+                Ok(match row.get_ref(index)? {
+                    ValueRef::Null => "null".to_owned(),
+                    ValueRef::Integer(value) => format!("integer:{value}"),
+                    ValueRef::Real(value) => format!("real:{value:?}"),
+                    ValueRef::Text(value) => {
+                        format!("text:{}", String::from_utf8_lossy(value))
+                    }
+                    ValueRef::Blob(value) => format!("blob:{value:?}"),
+                })
+            })
+            .collect()
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct CanonicalControlPlaneSnapshot {
+        outbox: Vec<(i64, String, Option<String>, i64)>,
+        derived_store: (i64, Option<i64>, Option<i64>, Option<String>, i64),
+        delivery_count: i64,
+        pending_deliveries: i64,
+        published_deliveries: i64,
+        claimed_deliveries: i64,
+        checkpoint_cursor: i64,
+        legacy_checkpoint_cursor: i64,
+        delivery_controls: Vec<(i64, i64, i64, Option<String>)>,
+    }
+
+    fn canonical_control_plane_snapshot(
+        path: &Path,
+    ) -> anyhow::Result<CanonicalControlPlaneSnapshot> {
+        let conn = connect_file(path)?;
+        let mut statement =
+            conn.prepare("SELECT id,status,last_error,updated_at FROM index_outbox ORDER BY id")?;
+        let outbox = statement
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let derived_store = conn.query_row(
+            "SELECT dirty,last_event_id,last_sync_at,last_error,updated_at
+             FROM derived_store_state WHERE store_name=?1",
+            [STORE],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )?;
+        let (delivery_count, pending_deliveries, published_deliveries, claimed_deliveries) = conn
+            .query_row(
+            "SELECT COUNT(*),
+                    SUM(status='pending'),
+                    SUM(published_generation IS NOT NULL),
+                    SUM(claim_token IS NOT NULL)
+             FROM projection_deliveries WHERE store_name=?1",
+            [STORE],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+        let (checkpoint_cursor, legacy_checkpoint_cursor) = conn.query_row(
+            "SELECT checkpoint_cursor,legacy_checkpoint_cursor
+             FROM projection_store_state WHERE store_name=?1",
+            [STORE],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let mut delivery_control_statement = conn.prepare(
+            "SELECT id,attempts,next_attempt_at,last_error
+             FROM projection_deliveries WHERE store_name=?1 ORDER BY id",
+        )?;
+        let delivery_controls = delivery_control_statement
+            .query_map([STORE], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(CanonicalControlPlaneSnapshot {
+            outbox,
+            derived_store,
+            delivery_count,
+            pending_deliveries,
+            published_deliveries,
+            claimed_deliveries,
+            checkpoint_cursor,
+            legacy_checkpoint_cursor,
+            delivery_controls,
+        })
+    }
 }
 
 #[cfg(all(test, feature = "tantivy-backend"))]
@@ -1640,6 +3156,7 @@ mod tests {
         evidence.manifest.store_name == descriptor.store_name
             && evidence.manifest.provider == descriptor.provider
             && evidence.manifest.provider_fingerprint == descriptor.provider_fingerprint
+            && evidence.manifest.corpus == descriptor.corpus
     }
 
     fn quarantined_generation_path(generation_path: &Path) -> anyhow::Result<PathBuf> {

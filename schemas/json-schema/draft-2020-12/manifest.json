@@ -51,7 +51,7 @@
       "invalid_fixture": "schemas/fixtures/cli/maintenance-status-output.v2.invalid.json",
       "path": "cli/maintenance-status-output.v2.schema.json",
       "schema_fixture": "schemas/fixtures/cli/maintenance-status-output.v2.valid.json",
-      "sha256": "sha256:40e944790c801b2747f3aad3c95d0b4b7aab8f6c71de87595bd88b61bc947ae5",
+      "sha256": "sha256:0a1baac4e34590180b81068ae0b00027a37122da96ae226c035ee17674a5744e",
       "strictness": "deny_unknown_fields"
     },
     {

@@ -10,6 +10,8 @@ use super::{storage, with_immediate_tx};
 
 pub const PROJECTION_PROTOCOL_VERSION: i64 = 2;
 const MAX_PROJECTION_BATCH: usize = 1_000;
+const LANCEDB_CHUNKS_STORE: &str = "lancedb_chunks";
+const LANCEDB_LABEL_ATOMS_STORE: &str = "lancedb_label_atoms";
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionLease {
@@ -34,6 +36,14 @@ impl fmt::Debug for ProjectionLease {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectionCorpusMetadata {
+    pub corpus_schema: String,
+    pub corpus_fingerprint: String,
+    pub embedding_model: String,
+    pub embedding_dimensions: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionArtifactManifest {
     pub store_name: String,
     pub database_instance_id: String,
@@ -44,6 +54,7 @@ pub struct ProjectionArtifactManifest {
     pub snapshot_cursor: i64,
     pub provider: String,
     pub provider_fingerprint: String,
+    pub corpus: Option<ProjectionCorpusMetadata>,
     pub canonical_item_count: i64,
     pub canonical_digest: String,
     pub delivery_item_count: i64,
@@ -93,6 +104,7 @@ pub struct ProjectionBatch {
     pub schema_version: i64,
     pub provider: String,
     pub provider_fingerprint: String,
+    pub corpus: Option<ProjectionCorpusMetadata>,
     pub owner: String,
     pub lease_token: String,
     pub fence_epoch: i64,
@@ -112,6 +124,7 @@ impl fmt::Debug for ProjectionBatch {
             .field("schema_version", &self.schema_version)
             .field("provider", &self.provider)
             .field("provider_fingerprint", &self.provider_fingerprint)
+            .field("corpus", &self.corpus)
             .field("owner", &self.owner)
             .field("lease_token", &"[REDACTED]")
             .field("fence_epoch", &self.fence_epoch)
@@ -162,6 +175,7 @@ pub struct ProjectionStoreDescriptor {
     pub store_name: String,
     pub provider: String,
     pub provider_fingerprint: String,
+    pub corpus: Option<ProjectionCorpusMetadata>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -250,14 +264,17 @@ pub struct ProjectionStoreStatus {
     pub active_fence_epoch: Option<i64>,
     pub active_provider: Option<String>,
     pub active_provider_fingerprint: Option<String>,
+    pub active_corpus: Option<ProjectionCorpusMetadata>,
     pub previous_generation: Option<String>,
     pub previous_fingerprint: Option<String>,
     pub previous_fence_epoch: Option<i64>,
+    pub previous_corpus: Option<ProjectionCorpusMetadata>,
     pub building_generation: Option<String>,
     pub building_fingerprint: Option<String>,
     pub building_fence_epoch: Option<i64>,
     pub building_provider: Option<String>,
     pub building_provider_fingerprint: Option<String>,
+    pub building_corpus: Option<ProjectionCorpusMetadata>,
     pub building_phase: Option<String>,
     pub snapshot_cursor: i64,
     pub checkpoint_cursor: i64,
@@ -379,6 +396,12 @@ pub fn projection_status(path: impl AsRef<Path>) -> Result<ProjectionStatus> {
                  )),\
                  s.active_provider,s.active_provider_fingerprint,\
                  s.building_provider,s.building_provider_fingerprint,\
+                 s.active_corpus_schema,s.active_corpus_fingerprint,\
+                 s.active_embedding_model,s.active_embedding_dimensions,\
+                 s.previous_corpus_schema,s.previous_corpus_fingerprint,\
+                 s.previous_embedding_model,s.previous_embedding_dimensions,\
+                 s.building_corpus_schema,s.building_corpus_fingerprint,\
+                 s.building_embedding_model,s.building_embedding_dimensions,\
                  s.updated_at \
              FROM projection_store_state s \
              LEFT JOIN projection_deliveries d ON d.store_name=s.store_name \
@@ -520,6 +543,17 @@ pub fn begin_projection_generation(
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let descriptor = backend.descriptor()?;
     validate_store_descriptor(store_name, &descriptor)?;
+    let descriptor_corpus_dimensions = descriptor
+        .corpus
+        .as_ref()
+        .map(|corpus| {
+            i64::try_from(corpus.embedding_dimensions).map_err(|_| {
+                KanbanError::InvalidInput(format!(
+                    "projection backend corpus dimensions exceed SQLite range for store {store_name}"
+                ))
+            })
+        })
+        .transpose()?;
     let now = SystemClock.now_ms();
     let conn = connect_file(path)?;
     with_immediate_tx(&conn, || {
@@ -575,16 +609,31 @@ pub fn begin_projection_generation(
             "UPDATE projection_store_state \
              SET building_generation=?1,building_fingerprint=NULL,building_fence_epoch=?2,\
                  building_provider=?3,building_provider_fingerprint=?4,\
-                 building_canonical_count=?5,building_canonical_digest=?6,\
-                 building_delivery_count=?7,building_delivery_digest=?8,\
-                 building_phase='snapshotting',snapshot_cursor=?9,\
-                 control_plane='v2',lifecycle_status='rebuilding',last_error=NULL,updated_at=?10 \
-             WHERE store_name=?11",
+                 building_corpus_schema=?5,building_corpus_fingerprint=?6,\
+                 building_embedding_model=?7,building_embedding_dimensions=?8,\
+                 building_canonical_count=?9,building_canonical_digest=?10,\
+                 building_delivery_count=?11,building_delivery_digest=?12,\
+                 building_phase='snapshotting',snapshot_cursor=?13,\
+                 control_plane='v2',lifecycle_status='rebuilding',last_error=NULL,updated_at=?14 \
+             WHERE store_name=?15",
             params![
                 generation,
                 lease.fence_epoch,
                 descriptor.provider,
                 descriptor.provider_fingerprint,
+                descriptor
+                    .corpus
+                    .as_ref()
+                    .map(|corpus| corpus.corpus_schema.as_str()),
+                descriptor
+                    .corpus
+                    .as_ref()
+                    .map(|corpus| corpus.corpus_fingerprint.as_str()),
+                descriptor
+                    .corpus
+                    .as_ref()
+                    .map(|corpus| corpus.embedding_model.as_str()),
+                descriptor_corpus_dimensions,
                 canonical_item_count,
                 canonical_digest,
                 delivery_item_count,
@@ -605,6 +654,7 @@ pub fn begin_projection_generation(
             snapshot_cursor,
             provider: descriptor.provider,
             provider_fingerprint: descriptor.provider_fingerprint,
+            corpus: descriptor.corpus,
             canonical_item_count,
             canonical_digest,
             delivery_item_count,
@@ -746,14 +796,232 @@ pub(crate) fn abort_incompatible_projection_generation(
     lease_token: &str,
     backend: &(impl ProjectionStoreBackend + ?Sized),
 ) -> Result<()> {
-    abort_projection_generation_with_binding(
+    if recover_incompatible_projection_bindings(
         path.as_ref(),
         store_name,
         owner,
         lease_token,
         backend,
-        AbortBinding::Incompatible,
-    )
+    )? {
+        Ok(())
+    } else {
+        abort_projection_generation_with_binding(
+            path.as_ref(),
+            store_name,
+            owner,
+            lease_token,
+            backend,
+            AbortBinding::Incompatible,
+        )
+    }
+}
+
+pub(crate) fn recover_incompatible_projection_bindings(
+    path: impl AsRef<Path>,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+) -> Result<bool> {
+    let path = path.as_ref();
+    let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
+    let descriptor = backend.descriptor()?;
+    validate_store_descriptor(store_name, &descriptor)?;
+    let now = SystemClock.now_ms();
+    let conn = connect_file(path)?;
+    let snapshot =
+        projection_binding_recovery_snapshot(&conn, store_name, owner, lease_token, now)?;
+    snapshot.validate_shape(store_name)?;
+
+    let active_incompatible = snapshot.active.binding_is_incompatible(&descriptor);
+    let previous_incompatible = snapshot.previous.binding_is_incompatible(&descriptor);
+    let building_incompatible = snapshot.building.binding_is_incompatible(&descriptor);
+    if !active_incompatible && !previous_incompatible && !building_incompatible {
+        return Ok(false);
+    }
+
+    // A building generation created before legacy history was attributed cannot
+    // be carried across the recovery boundary, even if its own descriptor is
+    // current. If active is discarded, previous must also be discarded so a
+    // physical backend cannot silently promote it as a new active generation.
+    let reset_active = active_incompatible;
+    let reset_previous = reset_active || previous_incompatible;
+    let reset_building = snapshot.building.generation.is_some();
+    let mut generations_to_quarantine = Vec::new();
+    if reset_building {
+        push_unique_generation(
+            &mut generations_to_quarantine,
+            snapshot.building.generation.as_deref(),
+        );
+    }
+    if reset_active {
+        push_unique_generation(
+            &mut generations_to_quarantine,
+            snapshot.active.generation.as_deref(),
+        );
+    }
+    if reset_previous {
+        push_unique_generation(
+            &mut generations_to_quarantine,
+            snapshot.previous.generation.as_deref(),
+        );
+    }
+
+    for generation in &generations_to_quarantine {
+        backend.quarantine_generation(generation)?;
+    }
+
+    // Lance helpers mutate generation directories under a separate process
+    // lock. Acquire that exact lock after the idempotent quarantine calls and
+    // hold it across every physical readback and the SQLite CAS commit so a
+    // queued helper cannot republish stale generation state between them.
+    let _helper_write_guard =
+        if matches!(store_name, LANCEDB_CHUNKS_STORE | LANCEDB_LABEL_ATOMS_STORE) {
+            Some(crate::db::acquire_derived_store_write_guard(
+                path,
+                &format!("{store_name}-projection-helper"),
+            )?)
+        } else {
+            None
+        };
+
+    for generation in &generations_to_quarantine {
+        if backend.inspect_generation(generation)?.is_some() {
+            return Err(KanbanError::Storage(format!(
+                "incompatible projection generation {generation} remained addressable after quarantine"
+            )));
+        }
+    }
+
+    let retained_active = if reset_active {
+        None
+    } else {
+        snapshot.active.evidence(
+            store_name,
+            "active",
+            &snapshot.lease.database_instance_id,
+            snapshot.lease.protocol_version,
+            snapshot.lease.schema_version,
+        )?
+    };
+    let retained_previous = if reset_previous {
+        None
+    } else {
+        snapshot.previous.evidence(
+            store_name,
+            "previous",
+            &snapshot.lease.database_instance_id,
+            snapshot.lease.protocol_version,
+            snapshot.lease.schema_version,
+        )?
+    };
+    validate_retained_recovery_generation(backend, retained_active.as_ref(), "active")?;
+    validate_retained_recovery_generation(backend, retained_previous.as_ref(), "previous")?;
+    match backend.inspect_active() {
+        Ok(actual) if actual.as_ref() == retained_active.as_ref() => {}
+        Ok(Some(actual)) => {
+            return Err(KanbanError::Conflict(format!(
+                "projection backend exposes unattributed active generation {} during incompatible binding recovery",
+                actual.manifest.generation
+            )));
+        }
+        Ok(None) => {
+            return Err(KanbanError::Conflict(format!(
+                "projection backend lost the retained compatible active generation during incompatible binding recovery for {store_name}"
+            )));
+        }
+        Err(error) => {
+            return Err(KanbanError::Conflict(format!(
+                "projection backend active generation is unattributed during incompatible binding recovery for {store_name}: {error}"
+            )));
+        }
+    }
+
+    let tx_now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        let current =
+            projection_binding_recovery_snapshot(&conn, store_name, owner, lease_token, tx_now)?;
+        if !snapshot.matches_after_lease_heartbeat(&current) {
+            return Err(stale_generation(store_name));
+        }
+        conn.execute(
+            "UPDATE projection_deliveries
+             SET status='pending',published_generation=NULL,
+                 claim_owner=NULL,claim_token=NULL,claim_lease_token=NULL,
+                 claim_fence_epoch=NULL,claim_generation=NULL,claim_expires_at=NULL,
+                 updated_at=?1
+             WHERE store_name=?2",
+            params![tx_now, store_name],
+        )
+        .map_err(storage)?;
+        recompute_checkpoint(&conn, store_name, tx_now)?;
+        let changed = conn
+            .execute(
+                "UPDATE projection_store_state
+                 SET building_generation=CASE WHEN ?3 THEN NULL ELSE building_generation END,
+                     building_fingerprint=CASE WHEN ?3 THEN NULL ELSE building_fingerprint END,
+                     building_fence_epoch=CASE WHEN ?3 THEN NULL ELSE building_fence_epoch END,
+                     building_provider=CASE WHEN ?3 THEN NULL ELSE building_provider END,
+                     building_provider_fingerprint=CASE WHEN ?3 THEN NULL ELSE building_provider_fingerprint END,
+                     building_corpus_schema=CASE WHEN ?3 THEN NULL ELSE building_corpus_schema END,
+                     building_corpus_fingerprint=CASE WHEN ?3 THEN NULL ELSE building_corpus_fingerprint END,
+                     building_embedding_model=CASE WHEN ?3 THEN NULL ELSE building_embedding_model END,
+                     building_embedding_dimensions=CASE WHEN ?3 THEN NULL ELSE building_embedding_dimensions END,
+                     building_canonical_count=CASE WHEN ?3 THEN NULL ELSE building_canonical_count END,
+                     building_canonical_digest=CASE WHEN ?3 THEN NULL ELSE building_canonical_digest END,
+                     building_delivery_count=CASE WHEN ?3 THEN NULL ELSE building_delivery_count END,
+                     building_delivery_digest=CASE WHEN ?3 THEN NULL ELSE building_delivery_digest END,
+                     building_phase=CASE WHEN ?3 THEN NULL ELSE building_phase END,
+                     active_generation=CASE WHEN ?4 THEN NULL ELSE active_generation END,
+                     active_fingerprint=CASE WHEN ?4 THEN NULL ELSE active_fingerprint END,
+                     active_fence_epoch=CASE WHEN ?4 THEN NULL ELSE active_fence_epoch END,
+                     active_snapshot_cursor=CASE WHEN ?4 THEN NULL ELSE active_snapshot_cursor END,
+                     active_provider=CASE WHEN ?4 THEN NULL ELSE active_provider END,
+                     active_provider_fingerprint=CASE WHEN ?4 THEN NULL ELSE active_provider_fingerprint END,
+                     active_corpus_schema=CASE WHEN ?4 THEN NULL ELSE active_corpus_schema END,
+                     active_corpus_fingerprint=CASE WHEN ?4 THEN NULL ELSE active_corpus_fingerprint END,
+                     active_embedding_model=CASE WHEN ?4 THEN NULL ELSE active_embedding_model END,
+                     active_embedding_dimensions=CASE WHEN ?4 THEN NULL ELSE active_embedding_dimensions END,
+                     active_canonical_count=CASE WHEN ?4 THEN NULL ELSE active_canonical_count END,
+                     active_canonical_digest=CASE WHEN ?4 THEN NULL ELSE active_canonical_digest END,
+                     active_delivery_count=CASE WHEN ?4 THEN NULL ELSE active_delivery_count END,
+                     active_delivery_digest=CASE WHEN ?4 THEN NULL ELSE active_delivery_digest END,
+                     previous_generation=CASE WHEN ?5 THEN NULL ELSE previous_generation END,
+                     previous_fingerprint=CASE WHEN ?5 THEN NULL ELSE previous_fingerprint END,
+                     previous_fence_epoch=CASE WHEN ?5 THEN NULL ELSE previous_fence_epoch END,
+                     previous_snapshot_cursor=CASE WHEN ?5 THEN NULL ELSE previous_snapshot_cursor END,
+                     previous_provider=CASE WHEN ?5 THEN NULL ELSE previous_provider END,
+                     previous_provider_fingerprint=CASE WHEN ?5 THEN NULL ELSE previous_provider_fingerprint END,
+                     previous_corpus_schema=CASE WHEN ?5 THEN NULL ELSE previous_corpus_schema END,
+                     previous_corpus_fingerprint=CASE WHEN ?5 THEN NULL ELSE previous_corpus_fingerprint END,
+                     previous_embedding_model=CASE WHEN ?5 THEN NULL ELSE previous_embedding_model END,
+                     previous_embedding_dimensions=CASE WHEN ?5 THEN NULL ELSE previous_embedding_dimensions END,
+                     previous_canonical_count=CASE WHEN ?5 THEN NULL ELSE previous_canonical_count END,
+                     previous_canonical_digest=CASE WHEN ?5 THEN NULL ELSE previous_canonical_digest END,
+                     previous_delivery_count=CASE WHEN ?5 THEN NULL ELSE previous_delivery_count END,
+                     previous_delivery_digest=CASE WHEN ?5 THEN NULL ELSE previous_delivery_digest END,
+                     lifecycle_status=CASE
+                       WHEN ?4 OR active_generation IS NULL THEN 'bootstrap_required'
+                       ELSE 'ready'
+                     END,
+                     last_success_at=CASE WHEN ?4 THEN NULL ELSE last_success_at END,
+                     last_error=NULL,updated_at=?1
+                 WHERE store_name=?2",
+                params![
+                    tx_now,
+                    store_name,
+                    reset_building,
+                    reset_active,
+                    reset_previous
+                ],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(stale_generation(store_name));
+        }
+        Ok(())
+    })?;
+    Ok(true)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -790,6 +1058,7 @@ fn abort_projection_generation_with_binding(
                 store_name,
                 &manifest.provider,
                 &manifest.provider_fingerprint,
+                manifest.corpus.as_ref(),
                 &descriptor,
             )
             .is_ok()
@@ -806,6 +1075,7 @@ fn abort_projection_generation_with_binding(
                     store_name,
                     &evidence.manifest.provider,
                     &evidence.manifest.provider_fingerprint,
+                    evidence.manifest.corpus.as_ref(),
                     &descriptor,
                 )
                 .is_err()
@@ -816,6 +1086,7 @@ fn abort_projection_generation_with_binding(
                         store_name,
                         &evidence.manifest.provider,
                         &evidence.manifest.provider_fingerprint,
+                        evidence.manifest.corpus.as_ref(),
                         &descriptor,
                     )
                     .is_err()
@@ -932,7 +1203,7 @@ fn abort_projection_generation_with_binding(
                  SET status='pending',published_generation=NULL,
                      claim_owner=NULL,claim_token=NULL,claim_lease_token=NULL,
                      claim_fence_epoch=NULL,claim_generation=NULL,claim_expires_at=NULL,
-                     last_error='provider generation reset before rebuild',updated_at=?1
+                     last_error='backend binding generation reset before rebuild',updated_at=?1
                  WHERE store_name=?2",
                 params![now, store_name],
             )
@@ -956,6 +1227,8 @@ fn abort_projection_generation_with_binding(
             "UPDATE projection_store_state
              SET building_generation=NULL,building_fingerprint=NULL,building_fence_epoch=NULL,
                  building_provider=NULL,building_provider_fingerprint=NULL,
+                 building_corpus_schema=NULL,building_corpus_fingerprint=NULL,
+                 building_embedding_model=NULL,building_embedding_dimensions=NULL,
                  building_canonical_count=NULL,building_canonical_digest=NULL,
                  building_delivery_count=NULL,building_delivery_digest=NULL,
                  building_phase=NULL,
@@ -965,6 +1238,10 @@ fn abort_projection_generation_with_binding(
                  active_snapshot_cursor=CASE WHEN ?4 THEN NULL ELSE active_snapshot_cursor END,
                  active_provider=CASE WHEN ?4 THEN NULL ELSE active_provider END,
                  active_provider_fingerprint=CASE WHEN ?4 THEN NULL ELSE active_provider_fingerprint END,
+                 active_corpus_schema=CASE WHEN ?4 THEN NULL ELSE active_corpus_schema END,
+                 active_corpus_fingerprint=CASE WHEN ?4 THEN NULL ELSE active_corpus_fingerprint END,
+                 active_embedding_model=CASE WHEN ?4 THEN NULL ELSE active_embedding_model END,
+                 active_embedding_dimensions=CASE WHEN ?4 THEN NULL ELSE active_embedding_dimensions END,
                  active_canonical_count=CASE WHEN ?4 THEN NULL ELSE active_canonical_count END,
                  active_canonical_digest=CASE WHEN ?4 THEN NULL ELSE active_canonical_digest END,
                  active_delivery_count=CASE WHEN ?4 THEN NULL ELSE active_delivery_count END,
@@ -975,6 +1252,10 @@ fn abort_projection_generation_with_binding(
                  previous_snapshot_cursor=CASE WHEN ?5 THEN NULL ELSE previous_snapshot_cursor END,
                  previous_provider=CASE WHEN ?5 THEN NULL ELSE previous_provider END,
                  previous_provider_fingerprint=CASE WHEN ?5 THEN NULL ELSE previous_provider_fingerprint END,
+                 previous_corpus_schema=CASE WHEN ?5 THEN NULL ELSE previous_corpus_schema END,
+                 previous_corpus_fingerprint=CASE WHEN ?5 THEN NULL ELSE previous_corpus_fingerprint END,
+                 previous_embedding_model=CASE WHEN ?5 THEN NULL ELSE previous_embedding_model END,
+                 previous_embedding_dimensions=CASE WHEN ?5 THEN NULL ELSE previous_embedding_dimensions END,
                  previous_canonical_count=CASE WHEN ?5 THEN NULL ELSE previous_canonical_count END,
                  previous_canonical_digest=CASE WHEN ?5 THEN NULL ELSE previous_canonical_digest END,
                  previous_delivery_count=CASE WHEN ?5 THEN NULL ELSE previous_delivery_count END,
@@ -1040,31 +1321,21 @@ pub fn publish_projection_generation_with(
     let prepared = prepared_manifest(path, store_name, owner, lease_token)?;
     validate_backend_binding(backend, &prepared.manifest)?;
     let expected_active = active_artifact(path, store_name)?;
-    let operation = (|| {
-        let receipt = match backend.inspect_active()? {
-            Some(active) if same_artifact(&prepared, &active) => ProjectionPublishReceipt {
+    let operation: Result<ProjectionArtifactEvidence> = (|| {
+        let receipt = match backend.inspect_active() {
+            Ok(Some(active)) if same_artifact(&prepared, &active) => ProjectionPublishReceipt {
                 active,
                 retained_previous: inspect_expected_previous(backend, expected_active.as_ref())?,
             },
-            _ => backend.publish_generation(expected_active.as_ref(), &prepared)?,
+            Ok(_) | Err(_) => backend.publish_generation(expected_active.as_ref(), &prepared)?,
         };
-        validate_artifact_evidence(&prepared.manifest, &receipt.active)?;
-        if receipt.retained_previous != expected_active {
-            return Err(KanbanError::Storage(format!(
-                "projection store did not retain the previous physical generation for {store_name}"
-            )));
-        }
-        let active = backend.inspect_active()?.ok_or_else(|| {
-            KanbanError::Storage(format!(
-                "projection store did not expose active generation for {store_name}"
-            ))
-        })?;
-        if !same_artifact(&receipt.active, &active) {
-            return Err(KanbanError::Storage(format!(
-                "projection active generation readback mismatch for {store_name}"
-            )));
-        }
-        inspect_expected_previous(backend, expected_active.as_ref())?;
+        let active = validate_publish_receipt(
+            backend,
+            store_name,
+            &prepared,
+            expected_active.as_ref(),
+            receipt,
+        )?;
         confirm_published_generation(
             path,
             store_name,
@@ -1102,7 +1373,13 @@ pub fn recover_projection_generation_with(
         let expected_retained =
             match backend.inspect_generation(&missing_active.manifest.generation) {
                 Ok(Some(actual)) if same_artifact(&actual, &missing_active) => {
-                    backend.repair_generation_publication(&missing_active)?;
+                    if backend
+                        .validate_generation_publication(&missing_active)
+                        .is_err()
+                    {
+                        backend.repair_generation_publication(&missing_active)?;
+                        backend.validate_generation_publication(&missing_active)?;
+                    }
                     Some(missing_active.clone())
                 }
                 Ok(Some(_)) | Err(KanbanError::Conflict(_)) => {
@@ -1112,63 +1389,71 @@ pub fn recover_projection_generation_with(
                 Ok(None) => expected_previous,
                 Err(error) => return Err(error),
             };
-        let mut physical_active = backend.inspect_active()?;
-        for _ in 0..1_024 {
-            let Some(active) = physical_active.as_ref() else {
-                break;
-            };
-            if expected_retained
-                .as_ref()
-                .is_some_and(|previous| same_artifact(previous, active))
-            {
-                break;
+        inspect_expected_previous(backend, expected_retained.as_ref())?;
+        let physical_active = match backend.inspect_active() {
+            Ok(Some(active)) if same_artifact(&prepared, &active) => {
+                let receipt = ProjectionPublishReceipt {
+                    active,
+                    retained_previous: expected_retained.clone(),
+                };
+                let active = validate_publish_receipt(
+                    backend,
+                    store_name,
+                    &prepared,
+                    expected_retained.as_ref(),
+                    receipt,
+                )?;
+                confirm_published_generation(
+                    path,
+                    store_name,
+                    owner,
+                    lease_token,
+                    &active,
+                    expected_retained.as_ref(),
+                )?;
+                return Ok(active);
             }
-            let quarantined = active.clone();
-            backend.quarantine_generation(&quarantined.manifest.generation)?;
-            physical_active = backend.inspect_active()?;
-            if physical_active
-                .as_ref()
-                .is_some_and(|current| same_artifact(current, &quarantined))
-            {
-                return Err(KanbanError::Storage(format!(
-                    "projection backend did not quarantine unexpected generation {}",
-                    quarantined.manifest.generation
-                )));
+            Ok(active) => active,
+            Err(_) => {
+                let receipt = backend.publish_generation(expected_retained.as_ref(), &prepared)?;
+                let active = validate_publish_receipt(
+                    backend,
+                    store_name,
+                    &prepared,
+                    expected_retained.as_ref(),
+                    receipt,
+                )?;
+                confirm_published_generation(
+                    path,
+                    store_name,
+                    owner,
+                    lease_token,
+                    &active,
+                    expected_retained.as_ref(),
+                )?;
+                return Ok(active);
             }
-        }
-        if physical_active
-            .as_ref()
-            .is_some_and(|active| expected_retained.as_ref() != Some(active))
-        {
+        };
+        if physical_active != expected_retained {
             return Err(KanbanError::Conflict(format!(
-                "projection recovery found too many unexpected physical generations for {store_name}"
+                "projection recovery found an unexpected physical predecessor for {store_name}"
             )));
         }
-        let receipt = backend.publish_generation(physical_active.as_ref(), &prepared)?;
-        validate_artifact_evidence(&prepared.manifest, &receipt.active)?;
-        if receipt.retained_previous != physical_active {
-            return Err(KanbanError::Storage(format!(
-                "projection recovery did not retain the readable previous generation for {store_name}"
-            )));
-        }
-        let active = backend.inspect_active()?.ok_or_else(|| {
-            KanbanError::Storage(format!(
-                "projection recovery did not expose active generation for {store_name}"
-            ))
-        })?;
-        if !same_artifact(&receipt.active, &active) {
-            return Err(KanbanError::Storage(format!(
-                "projection recovery active generation readback mismatch for {store_name}"
-            )));
-        }
-        inspect_expected_previous(backend, physical_active.as_ref())?;
+        let receipt = backend.publish_generation(expected_retained.as_ref(), &prepared)?;
+        let active = validate_publish_receipt(
+            backend,
+            store_name,
+            &prepared,
+            expected_retained.as_ref(),
+            receipt,
+        )?;
         confirm_published_generation(
             path,
             store_name,
             owner,
             lease_token,
             &active,
-            physical_active.as_ref(),
+            expected_retained.as_ref(),
         )?;
         Ok(active)
     })();
@@ -1202,18 +1487,31 @@ pub fn reconcile_projection_generation_with(
     let prepared = prepared_manifest(path, store_name, owner, lease_token)?;
     validate_backend_binding(backend, &prepared.manifest)?;
     let operation = (|| {
-        let active = backend.inspect_active()?.ok_or_else(|| {
-            KanbanError::Conflict(format!(
-                "projection store has no published generation to reconcile for {store_name}"
-            ))
-        })?;
-        if !same_artifact(&prepared, &active) {
-            return Err(KanbanError::Conflict(format!(
-                "projection store generation does not match SQLite building state for {store_name}"
-            )));
-        }
         let expected_previous = active_artifact(path, store_name)?;
-        inspect_expected_previous(backend, expected_previous.as_ref())?;
+        let receipt = match backend.inspect_active() {
+            Ok(Some(active)) if same_artifact(&prepared, &active) => ProjectionPublishReceipt {
+                active,
+                retained_previous: expected_previous.clone(),
+            },
+            Ok(Some(_)) => {
+                return Err(KanbanError::Conflict(format!(
+                    "projection store generation does not match SQLite building state for {store_name}"
+                )));
+            }
+            Ok(None) => {
+                return Err(KanbanError::Conflict(format!(
+                    "projection store has no published generation to reconcile for {store_name}"
+                )));
+            }
+            Err(_) => backend.publish_generation(expected_previous.as_ref(), &prepared)?,
+        };
+        let active = validate_publish_receipt(
+            backend,
+            store_name,
+            &prepared,
+            expected_previous.as_ref(),
+            receipt,
+        )?;
         confirm_published_generation(
             path,
             store_name,
@@ -1248,7 +1546,7 @@ fn claim_projection_batch(
     let claim_expires_at = checked_expiry(now, claim_ttl_ms, "projection claim")?;
     let claim_token = new_typed_id("pclaim");
     let conn = connect_file(path.as_ref())?;
-    let (lease, target_generation, provider, provider_fingerprint, items) =
+    let (lease, target_generation, provider, provider_fingerprint, corpus, items) =
         with_immediate_tx(&conn, || {
             let lease = current_lease(&conn, store_name, owner, lease_token, now)?;
             if claim_expires_at > lease.lease_expires_at {
@@ -1266,7 +1564,7 @@ fn claim_projection_batch(
                 params![now, store_name],
             )
             .map_err(storage)?;
-            let (target_generation, provider, provider_fingerprint) =
+            let (target_generation, provider, provider_fingerprint, corpus) =
                 target_generation_for_claim(&conn, store_name)?;
             let mut statement = conn
                 .prepare(
@@ -1322,6 +1620,7 @@ fn claim_projection_batch(
                 target_generation,
                 provider,
                 provider_fingerprint,
+                corpus,
                 claimed,
             ))
         })?;
@@ -1332,6 +1631,7 @@ fn claim_projection_batch(
         schema_version: lease.schema_version,
         provider,
         provider_fingerprint,
+        corpus,
         owner: owner.to_owned(),
         lease_token: lease_token.to_owned(),
         fence_epoch: lease.fence_epoch,
@@ -1522,6 +1822,15 @@ fn confirm_published_generation(
             )));
         }
         let previous = retained_previous.map(|evidence| &evidence.manifest);
+        let previous_corpus = previous.and_then(|manifest| manifest.corpus.as_ref());
+        let previous_embedding_dimensions = previous_corpus
+            .map(|corpus| i64::try_from(corpus.embedding_dimensions))
+            .transpose()
+            .map_err(|_| {
+                KanbanError::Storage(format!(
+                    "projection previous corpus dimensions exceed SQLite range for store {store_name}"
+                ))
+            })?;
         let changed = conn
             .execute(
                 "UPDATE projection_store_state \
@@ -1530,19 +1839,28 @@ fn confirm_published_generation(
                      previous_provider=?10,previous_provider_fingerprint=?11,\
                      previous_canonical_count=?12,previous_canonical_digest=?13,\
                      previous_delivery_count=?14,previous_delivery_digest=?15,\
+                     previous_corpus_schema=?16,previous_corpus_fingerprint=?17,\
+                     previous_embedding_model=?18,previous_embedding_dimensions=?19,\
                      active_generation=building_generation,\
                      active_fingerprint=building_fingerprint,\
                      active_fence_epoch=building_fence_epoch,\
                      active_snapshot_cursor=snapshot_cursor,\
                      active_provider=building_provider,\
                      active_provider_fingerprint=building_provider_fingerprint,\
+                     active_corpus_schema=building_corpus_schema,\
+                     active_corpus_fingerprint=building_corpus_fingerprint,\
+                     active_embedding_model=building_embedding_model,\
+                     active_embedding_dimensions=building_embedding_dimensions,\
                      active_canonical_count=building_canonical_count,\
                      active_canonical_digest=building_canonical_digest,\
                      active_delivery_count=building_delivery_count,\
                      active_delivery_digest=building_delivery_digest,\
                      building_generation=NULL,building_fingerprint=NULL,\
                      building_fence_epoch=NULL,building_provider=NULL,\
-                     building_provider_fingerprint=NULL,building_canonical_count=NULL,\
+                     building_provider_fingerprint=NULL,\
+                     building_corpus_schema=NULL,building_corpus_fingerprint=NULL,\
+                     building_embedding_model=NULL,building_embedding_dimensions=NULL,\
+                     building_canonical_count=NULL,\
                      building_canonical_digest=NULL,building_delivery_count=NULL,\
                      building_delivery_digest=NULL,building_phase=NULL,\
                      control_plane='v2',lifecycle_status='ready',\
@@ -1566,6 +1884,10 @@ fn confirm_published_generation(
                     previous.map(|manifest| manifest.canonical_digest.as_str()),
                     previous.map(|manifest| manifest.delivery_item_count),
                     previous.map(|manifest| manifest.delivery_digest.as_str()),
+                    previous_corpus.map(|corpus| corpus.corpus_schema.as_str()),
+                    previous_corpus.map(|corpus| corpus.corpus_fingerprint.as_str()),
+                    previous_corpus.map(|corpus| corpus.embedding_model.as_str()),
+                    previous_embedding_dimensions,
                 ],
             )
             .map_err(storage)?;
@@ -1578,7 +1900,7 @@ fn confirm_published_generation(
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct CurrentLease {
     database_instance_id: String,
     protocol_version: i64,
@@ -1616,6 +1938,403 @@ fn current_lease(
     .ok_or_else(|| projection_lease_conflict(store_name))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProjectionBindingRecoverySnapshot {
+    lease: CurrentLease,
+    active: ProjectionGenerationBindingSnapshot,
+    previous: ProjectionGenerationBindingSnapshot,
+    building: ProjectionGenerationBindingSnapshot,
+    control_plane: String,
+    snapshot_cursor: i64,
+    checkpoint_cursor: i64,
+    legacy_checkpoint_cursor: i64,
+    lifecycle_status: String,
+    last_success_at: Option<i64>,
+    last_error: Option<String>,
+    updated_at: i64,
+}
+
+impl ProjectionBindingRecoverySnapshot {
+    fn validate_shape(&self, store_name: &str) -> Result<()> {
+        self.active.validate_shape(store_name, "active", true)?;
+        self.previous.validate_shape(store_name, "previous", true)?;
+        self.building
+            .validate_shape(store_name, "building", false)?;
+        let generations = [
+            ("active", self.active.generation.as_deref()),
+            ("previous", self.previous.generation.as_deref()),
+            ("building", self.building.generation.as_deref()),
+        ];
+        for (index, (left_phase, left_generation)) in generations.iter().enumerate() {
+            for (right_phase, right_generation) in generations.iter().skip(index + 1) {
+                if let (Some(left_generation), Some(right_generation)) =
+                    (*left_generation, *right_generation)
+                    && left_generation == right_generation
+                {
+                    return Err(KanbanError::Storage(format!(
+                        "projection store {store_name} aliases {left_phase} and {right_phase} to generation {left_generation}"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn matches_after_lease_heartbeat(&self, current: &Self) -> bool {
+        let mut expected = self.clone();
+        let mut current = current.clone();
+        expected.lease.lease_expires_at = 0;
+        current.lease.lease_expires_at = 0;
+        expected.updated_at = 0;
+        current.updated_at = 0;
+        expected == current
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProjectionGenerationBindingSnapshot {
+    generation: Option<String>,
+    fingerprint: Option<String>,
+    fence_epoch: Option<i64>,
+    snapshot_cursor: Option<i64>,
+    provider: Option<String>,
+    provider_fingerprint: Option<String>,
+    canonical_count: Option<i64>,
+    canonical_digest: Option<String>,
+    delivery_count: Option<i64>,
+    delivery_digest: Option<String>,
+    corpus_schema: Option<String>,
+    corpus_fingerprint: Option<String>,
+    embedding_model: Option<String>,
+    embedding_dimensions: Option<i64>,
+    phase: Option<String>,
+}
+
+impl ProjectionGenerationBindingSnapshot {
+    fn binding_is_incompatible(&self, descriptor: &ProjectionStoreDescriptor) -> bool {
+        self.generation.is_some()
+            && (self.provider.as_deref() != Some(descriptor.provider.as_str())
+                || self.provider_fingerprint.as_deref()
+                    != Some(descriptor.provider_fingerprint.as_str())
+                || !self.corpus_matches_descriptor(descriptor.corpus.as_ref()))
+    }
+
+    fn corpus_matches_descriptor(&self, expected: Option<&ProjectionCorpusMetadata>) -> bool {
+        match expected {
+            Some(expected) => {
+                self.corpus_schema.as_deref() == Some(expected.corpus_schema.as_str())
+                    && self.corpus_fingerprint.as_deref()
+                        == Some(expected.corpus_fingerprint.as_str())
+                    && self.embedding_model.as_deref() == Some(expected.embedding_model.as_str())
+                    && self.embedding_dimensions
+                        == i64::try_from(expected.embedding_dimensions).ok()
+            }
+            None => {
+                self.corpus_schema.is_none()
+                    && self.corpus_fingerprint.is_none()
+                    && self.embedding_model.is_none()
+                    && self.embedding_dimensions.is_none()
+            }
+        }
+    }
+
+    fn validate_shape(
+        &self,
+        store_name: &str,
+        phase: &str,
+        requires_snapshot_cursor: bool,
+    ) -> Result<()> {
+        if self.generation.is_none() {
+            if self.fingerprint.is_some()
+                || self.fence_epoch.is_some()
+                || self.snapshot_cursor.is_some()
+                || self.provider.is_some()
+                || self.provider_fingerprint.is_some()
+                || self.canonical_count.is_some()
+                || self.canonical_digest.is_some()
+                || self.delivery_count.is_some()
+                || self.delivery_digest.is_some()
+                || self.corpus_schema.is_some()
+                || self.corpus_fingerprint.is_some()
+                || self.embedding_model.is_some()
+                || self.embedding_dimensions.is_some()
+                || self.phase.is_some()
+            {
+                return Err(KanbanError::Storage(format!(
+                    "projection store {store_name} has orphan {phase} generation metadata"
+                )));
+            }
+            return Ok(());
+        }
+        let prepared_or_published =
+            phase != "building" || self.phase.as_deref() != Some("snapshotting");
+        if (prepared_or_published && self.fingerprint.is_none())
+            || self.fence_epoch.is_none()
+            || (requires_snapshot_cursor && self.snapshot_cursor.is_none())
+            || self.provider.is_none()
+            || self.provider_fingerprint.is_none()
+            || self.canonical_count.is_none()
+            || self.canonical_digest.is_none()
+            || self.delivery_count.is_none()
+            || self.delivery_digest.is_none()
+            || (phase == "building" && self.phase.is_none())
+        {
+            return Err(KanbanError::Storage(format!(
+                "projection store {store_name} has incomplete {phase} generation evidence"
+            )));
+        }
+        let corpus_fields = [
+            self.corpus_schema.is_some(),
+            self.corpus_fingerprint.is_some(),
+            self.embedding_model.is_some(),
+            self.embedding_dimensions.is_some(),
+        ];
+        if corpus_fields.iter().any(|present| *present)
+            && !corpus_fields.iter().all(|present| *present)
+        {
+            return Err(KanbanError::Storage(format!(
+                "projection store {store_name} has incomplete {phase} corpus binding"
+            )));
+        }
+        Ok(())
+    }
+
+    fn evidence(
+        &self,
+        store_name: &str,
+        phase: &str,
+        database_instance_id: &str,
+        protocol_version: i64,
+        schema_version: i64,
+    ) -> Result<Option<ProjectionArtifactEvidence>> {
+        let Some(generation) = &self.generation else {
+            return Ok(None);
+        };
+        let fingerprint = required_artifact_field(
+            self.fingerprint.clone(),
+            store_name,
+            &format!("recovery {phase}_fingerprint"),
+        )?;
+        let embedding_dimensions = self
+            .embedding_dimensions
+            .map(|dimensions| {
+                usize::try_from(dimensions).map_err(|_| {
+                    KanbanError::Storage(format!(
+                        "projection store {store_name} has invalid recovery {phase} embedding dimensions"
+                    ))
+                })
+            })
+            .transpose()?;
+        let corpus = projection_corpus_from_values(
+            self.corpus_schema.clone(),
+            self.corpus_fingerprint.clone(),
+            self.embedding_model.clone(),
+            self.embedding_dimensions,
+            store_name,
+            &format!("recovery {phase}"),
+        )?;
+        if corpus.as_ref().map(|corpus| corpus.embedding_dimensions) != embedding_dimensions {
+            return Err(KanbanError::Storage(format!(
+                "projection store {store_name} has inconsistent recovery {phase} corpus binding"
+            )));
+        }
+        Ok(Some(ProjectionArtifactEvidence {
+            manifest: ProjectionArtifactManifest {
+                store_name: store_name.to_owned(),
+                database_instance_id: database_instance_id.to_owned(),
+                protocol_version,
+                schema_version,
+                generation: generation.clone(),
+                fence_epoch: required_artifact_field(
+                    self.fence_epoch,
+                    store_name,
+                    &format!("recovery {phase}_fence_epoch"),
+                )?,
+                snapshot_cursor: required_artifact_field(
+                    self.snapshot_cursor,
+                    store_name,
+                    &format!("recovery {phase}_snapshot_cursor"),
+                )?,
+                provider: required_artifact_field(
+                    self.provider.clone(),
+                    store_name,
+                    &format!("recovery {phase}_provider"),
+                )?,
+                provider_fingerprint: required_artifact_field(
+                    self.provider_fingerprint.clone(),
+                    store_name,
+                    &format!("recovery {phase}_provider_fingerprint"),
+                )?,
+                corpus,
+                canonical_item_count: required_artifact_field(
+                    self.canonical_count,
+                    store_name,
+                    &format!("recovery {phase}_canonical_count"),
+                )?,
+                canonical_digest: required_artifact_field(
+                    self.canonical_digest.clone(),
+                    store_name,
+                    &format!("recovery {phase}_canonical_digest"),
+                )?,
+                delivery_item_count: required_artifact_field(
+                    self.delivery_count,
+                    store_name,
+                    &format!("recovery {phase}_delivery_count"),
+                )?,
+                delivery_digest: required_artifact_field(
+                    self.delivery_digest.clone(),
+                    store_name,
+                    &format!("recovery {phase}_delivery_digest"),
+                )?,
+                fingerprint: Some(fingerprint.clone()),
+            },
+            fingerprint,
+        }))
+    }
+}
+
+fn projection_binding_recovery_snapshot(
+    conn: &Connection,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    now: i64,
+) -> Result<ProjectionBindingRecoverySnapshot> {
+    conn.query_row(
+        "SELECT database_instance_id,protocol_version,schema_version,fence_epoch,lease_expires_at,
+                active_generation,active_fingerprint,active_fence_epoch,active_snapshot_cursor,
+                active_provider,active_provider_fingerprint,
+                active_canonical_count,active_canonical_digest,
+                active_delivery_count,active_delivery_digest,
+                active_corpus_schema,active_corpus_fingerprint,
+                active_embedding_model,active_embedding_dimensions,
+                previous_generation,previous_fingerprint,previous_fence_epoch,
+                previous_snapshot_cursor,previous_provider,previous_provider_fingerprint,
+                previous_canonical_count,previous_canonical_digest,
+                previous_delivery_count,previous_delivery_digest,
+                previous_corpus_schema,previous_corpus_fingerprint,
+                previous_embedding_model,previous_embedding_dimensions,
+                building_generation,building_fingerprint,building_fence_epoch,
+                building_provider,building_provider_fingerprint,
+                building_canonical_count,building_canonical_digest,
+                building_delivery_count,building_delivery_digest,
+                building_corpus_schema,building_corpus_fingerprint,
+                building_embedding_model,building_embedding_dimensions,building_phase,
+                control_plane,snapshot_cursor,checkpoint_cursor,legacy_checkpoint_cursor,
+                lifecycle_status,last_success_at,last_error,updated_at
+         FROM projection_store_state
+         WHERE store_name=?1 AND lease_owner=?2 AND lease_token=?3
+           AND lease_expires_at>?4",
+        params![store_name, owner, lease_token, now],
+        |row| {
+            Ok(ProjectionBindingRecoverySnapshot {
+                lease: CurrentLease {
+                    database_instance_id: row.get(0)?,
+                    protocol_version: row.get(1)?,
+                    schema_version: row.get(2)?,
+                    fence_epoch: row.get(3)?,
+                    lease_expires_at: row.get(4)?,
+                },
+                active: ProjectionGenerationBindingSnapshot {
+                    generation: row.get(5)?,
+                    fingerprint: row.get(6)?,
+                    fence_epoch: row.get(7)?,
+                    snapshot_cursor: row.get(8)?,
+                    provider: row.get(9)?,
+                    provider_fingerprint: row.get(10)?,
+                    canonical_count: row.get(11)?,
+                    canonical_digest: row.get(12)?,
+                    delivery_count: row.get(13)?,
+                    delivery_digest: row.get(14)?,
+                    corpus_schema: row.get(15)?,
+                    corpus_fingerprint: row.get(16)?,
+                    embedding_model: row.get(17)?,
+                    embedding_dimensions: row.get(18)?,
+                    phase: None,
+                },
+                previous: ProjectionGenerationBindingSnapshot {
+                    generation: row.get(19)?,
+                    fingerprint: row.get(20)?,
+                    fence_epoch: row.get(21)?,
+                    snapshot_cursor: row.get(22)?,
+                    provider: row.get(23)?,
+                    provider_fingerprint: row.get(24)?,
+                    canonical_count: row.get(25)?,
+                    canonical_digest: row.get(26)?,
+                    delivery_count: row.get(27)?,
+                    delivery_digest: row.get(28)?,
+                    corpus_schema: row.get(29)?,
+                    corpus_fingerprint: row.get(30)?,
+                    embedding_model: row.get(31)?,
+                    embedding_dimensions: row.get(32)?,
+                    phase: None,
+                },
+                building: ProjectionGenerationBindingSnapshot {
+                    generation: row.get(33)?,
+                    fingerprint: row.get(34)?,
+                    fence_epoch: row.get(35)?,
+                    snapshot_cursor: None,
+                    provider: row.get(36)?,
+                    provider_fingerprint: row.get(37)?,
+                    canonical_count: row.get(38)?,
+                    canonical_digest: row.get(39)?,
+                    delivery_count: row.get(40)?,
+                    delivery_digest: row.get(41)?,
+                    corpus_schema: row.get(42)?,
+                    corpus_fingerprint: row.get(43)?,
+                    embedding_model: row.get(44)?,
+                    embedding_dimensions: row.get(45)?,
+                    phase: row.get(46)?,
+                },
+                control_plane: row.get(47)?,
+                snapshot_cursor: row.get(48)?,
+                checkpoint_cursor: row.get(49)?,
+                legacy_checkpoint_cursor: row.get(50)?,
+                lifecycle_status: row.get(51)?,
+                last_success_at: row.get(52)?,
+                last_error: row.get(53)?,
+                updated_at: row.get(54)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(storage)?
+    .ok_or_else(|| projection_lease_conflict(store_name))
+}
+
+fn push_unique_generation(generations: &mut Vec<String>, generation: Option<&str>) {
+    if let Some(generation) = generation
+        && !generations.iter().any(|existing| existing == generation)
+    {
+        generations.push(generation.to_owned());
+    }
+}
+
+fn validate_retained_recovery_generation(
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+    expected: Option<&ProjectionArtifactEvidence>,
+    phase: &str,
+) -> Result<()> {
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    let generation = &expected.manifest.generation;
+    match backend.inspect_generation(generation)? {
+        Some(actual) if actual == *expected => {}
+        Some(_) => {
+            return Err(KanbanError::Conflict(format!(
+                "projection backend {phase} generation {generation} changed during incompatible binding recovery"
+            )));
+        }
+        None => {
+            return Err(KanbanError::Conflict(format!(
+                "projection backend lost retained {phase} generation {generation} during incompatible binding recovery"
+            )));
+        }
+    }
+    backend.validate_generation_publication(expected)
+}
+
 fn require_current_lease(
     conn: &Connection,
     store_name: &str,
@@ -1639,7 +2358,10 @@ fn building_manifest(
         "SELECT building_generation,building_fence_epoch,snapshot_cursor,\
                 building_provider,building_provider_fingerprint,\
                 building_canonical_count,building_canonical_digest,\
-                building_delivery_count,building_delivery_digest,building_fingerprint \
+                building_delivery_count,building_delivery_digest,\
+                building_corpus_schema,building_corpus_fingerprint,\
+                building_embedding_model,building_embedding_dimensions,\
+                building_fingerprint \
          FROM projection_store_state WHERE store_name=?1",
         [store_name],
         |row| {
@@ -1657,7 +2379,8 @@ fn building_manifest(
                 canonical_digest: row.get(6)?,
                 delivery_item_count: row.get(7)?,
                 delivery_digest: row.get(8)?,
-                fingerprint: row.get(9)?,
+                corpus: projection_corpus_from_row(row, 9, store_name, "building")?,
+                fingerprint: row.get(13)?,
             })
         },
     )
@@ -1693,7 +2416,9 @@ pub(crate) fn active_artifact(
                 active_generation,active_fence_epoch,active_snapshot_cursor,
                 active_provider,active_provider_fingerprint,
                 active_canonical_count,active_canonical_digest,
-                active_delivery_count,active_delivery_digest,active_fingerprint
+                active_delivery_count,active_delivery_digest,
+                active_corpus_schema,active_corpus_fingerprint,
+                active_embedding_model,active_embedding_dimensions,active_fingerprint
          FROM projection_store_state WHERE store_name=?1",
             [store_name],
             |row| {
@@ -1711,6 +2436,10 @@ pub(crate) fn active_artifact(
                     row.get::<_, Option<i64>>(10)?,
                     row.get::<_, Option<String>>(11)?,
                     row.get::<_, Option<String>>(12)?,
+                    row.get::<_, Option<String>>(13)?,
+                    row.get::<_, Option<String>>(14)?,
+                    row.get::<_, Option<i64>>(15)?,
+                    row.get::<_, Option<String>>(16)?,
                 ))
             },
         )
@@ -1728,6 +2457,10 @@ pub(crate) fn active_artifact(
         canonical_digest,
         delivery_item_count,
         delivery_digest,
+        corpus_schema,
+        corpus_fingerprint,
+        embedding_model,
+        embedding_dimensions,
         fingerprint,
     ) = row;
     let Some(generation) = generation else {
@@ -1771,6 +2504,14 @@ pub(crate) fn active_artifact(
             store_name,
             "active_delivery_digest",
         )?,
+        corpus: projection_corpus_from_values(
+            corpus_schema,
+            corpus_fingerprint,
+            embedding_model,
+            embedding_dimensions,
+            store_name,
+            "active",
+        )?,
         fingerprint: fingerprint.clone(),
     };
     Ok(Some(ProjectionArtifactEvidence {
@@ -1787,7 +2528,9 @@ fn previous_artifact(path: &Path, store_name: &str) -> Result<Option<ProjectionA
                     previous_generation,previous_fence_epoch,previous_snapshot_cursor,
                     previous_provider,previous_provider_fingerprint,
                     previous_canonical_count,previous_canonical_digest,
-                    previous_delivery_count,previous_delivery_digest,previous_fingerprint
+                    previous_delivery_count,previous_delivery_digest,
+                    previous_corpus_schema,previous_corpus_fingerprint,
+                    previous_embedding_model,previous_embedding_dimensions,previous_fingerprint
              FROM projection_store_state WHERE store_name=?1",
             [store_name],
             |row| {
@@ -1805,6 +2548,10 @@ fn previous_artifact(path: &Path, store_name: &str) -> Result<Option<ProjectionA
                     row.get::<_, Option<i64>>(10)?,
                     row.get::<_, Option<String>>(11)?,
                     row.get::<_, Option<String>>(12)?,
+                    row.get::<_, Option<String>>(13)?,
+                    row.get::<_, Option<String>>(14)?,
+                    row.get::<_, Option<i64>>(15)?,
+                    row.get::<_, Option<String>>(16)?,
                 ))
             },
         )
@@ -1822,6 +2569,10 @@ fn previous_artifact(path: &Path, store_name: &str) -> Result<Option<ProjectionA
         canonical_digest,
         delivery_item_count,
         delivery_digest,
+        corpus_schema,
+        corpus_fingerprint,
+        embedding_model,
+        embedding_dimensions,
         fingerprint,
     ) = row;
     let Some(generation) = generation else {
@@ -1865,6 +2616,14 @@ fn previous_artifact(path: &Path, store_name: &str) -> Result<Option<ProjectionA
             store_name,
             "previous_delivery_digest",
         )?,
+        corpus: projection_corpus_from_values(
+            corpus_schema,
+            corpus_fingerprint,
+            embedding_model,
+            embedding_dimensions,
+            store_name,
+            "previous",
+        )?,
         fingerprint: fingerprint.clone(),
     };
     Ok(Some(ProjectionArtifactEvidence {
@@ -1879,6 +2638,75 @@ fn required_artifact_field<T>(value: Option<T>, store_name: &str, field: &str) -
             "projection store {store_name} has incomplete {field}"
         ))
     })
+}
+
+fn projection_corpus_from_row(
+    row: &rusqlite::Row<'_>,
+    start: usize,
+    store_name: &str,
+    phase: &str,
+) -> rusqlite::Result<Option<ProjectionCorpusMetadata>> {
+    projection_corpus_from_values(
+        row.get(start)?,
+        row.get(start + 1)?,
+        row.get(start + 2)?,
+        row.get(start + 3)?,
+        store_name,
+        phase,
+    )
+    .map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            start,
+            rusqlite::types::Type::Null,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                error.to_string(),
+            )),
+        )
+    })
+}
+
+fn projection_corpus_from_values(
+    corpus_schema: Option<String>,
+    corpus_fingerprint: Option<String>,
+    embedding_model: Option<String>,
+    embedding_dimensions: Option<i64>,
+    store_name: &str,
+    phase: &str,
+) -> Result<Option<ProjectionCorpusMetadata>> {
+    match (
+        corpus_schema,
+        corpus_fingerprint,
+        embedding_model,
+        embedding_dimensions,
+    ) {
+        (None, None, None, None) => Ok(None),
+        (
+            Some(corpus_schema),
+            Some(corpus_fingerprint),
+            Some(embedding_model),
+            Some(dimensions),
+        ) if !corpus_schema.trim().is_empty()
+            && !corpus_fingerprint.trim().is_empty()
+            && !embedding_model.trim().is_empty()
+            && dimensions > 0 =>
+        {
+            let embedding_dimensions = usize::try_from(dimensions).map_err(|_| {
+                KanbanError::Storage(format!(
+                    "projection store {store_name} has invalid {phase} embedding dimensions"
+                ))
+            })?;
+            Ok(Some(ProjectionCorpusMetadata {
+                corpus_schema,
+                corpus_fingerprint,
+                embedding_model,
+                embedding_dimensions,
+            }))
+        }
+        _ => Err(KanbanError::Storage(format!(
+            "projection store {store_name} has incomplete {phase} corpus binding"
+        ))),
+    }
 }
 
 fn inspect_expected_previous(
@@ -1902,28 +2730,40 @@ fn inspect_expected_previous(
             expected.manifest.generation
         )));
     }
+    backend.validate_generation_publication(expected)?;
     Ok(Some(actual))
 }
 
 fn target_generation_for_claim(
     conn: &Connection,
     store_name: &str,
-) -> Result<(String, String, String)> {
+) -> Result<(String, String, String, Option<ProjectionCorpusMetadata>)> {
     struct GenerationCandidates {
         active: Option<String>,
         active_provider: Option<String>,
         active_provider_fingerprint: Option<String>,
+        active_corpus_schema: Option<String>,
+        active_corpus_fingerprint: Option<String>,
+        active_embedding_model: Option<String>,
+        active_embedding_dimensions: Option<i64>,
         building: Option<String>,
         building_provider: Option<String>,
         building_provider_fingerprint: Option<String>,
+        building_corpus_schema: Option<String>,
+        building_corpus_fingerprint: Option<String>,
+        building_embedding_model: Option<String>,
+        building_embedding_dimensions: Option<i64>,
         phase: Option<String>,
     }
 
     let candidates = conn
         .query_row(
             "SELECT active_generation,active_provider,active_provider_fingerprint,
+                    active_corpus_schema,active_corpus_fingerprint,
+                    active_embedding_model,active_embedding_dimensions,
                     building_generation,building_provider,building_provider_fingerprint,
-                    building_phase \
+                    building_corpus_schema,building_corpus_fingerprint,
+                    building_embedding_model,building_embedding_dimensions,building_phase \
              FROM projection_store_state WHERE store_name=?1",
             [store_name],
             |row| {
@@ -1931,14 +2771,38 @@ fn target_generation_for_claim(
                     active: row.get(0)?,
                     active_provider: row.get(1)?,
                     active_provider_fingerprint: row.get(2)?,
-                    building: row.get(3)?,
-                    building_provider: row.get(4)?,
-                    building_provider_fingerprint: row.get(5)?,
-                    phase: row.get(6)?,
+                    active_corpus_schema: row.get(3)?,
+                    active_corpus_fingerprint: row.get(4)?,
+                    active_embedding_model: row.get(5)?,
+                    active_embedding_dimensions: row.get(6)?,
+                    building: row.get(7)?,
+                    building_provider: row.get(8)?,
+                    building_provider_fingerprint: row.get(9)?,
+                    building_corpus_schema: row.get(10)?,
+                    building_corpus_fingerprint: row.get(11)?,
+                    building_embedding_model: row.get(12)?,
+                    building_embedding_dimensions: row.get(13)?,
+                    phase: row.get(14)?,
                 })
             },
         )
         .map_err(storage)?;
+    let active_corpus = projection_corpus_from_values(
+        candidates.active_corpus_schema,
+        candidates.active_corpus_fingerprint,
+        candidates.active_embedding_model,
+        candidates.active_embedding_dimensions,
+        store_name,
+        "active",
+    )?;
+    let building_corpus = projection_corpus_from_values(
+        candidates.building_corpus_schema,
+        candidates.building_corpus_fingerprint,
+        candidates.building_embedding_model,
+        candidates.building_embedding_dimensions,
+        store_name,
+        "building",
+    )?;
     match (
         candidates.building,
         candidates.phase.as_deref(),
@@ -1956,6 +2820,7 @@ fn target_generation_for_claim(
                 store_name,
                 "building_provider_fingerprint",
             )?,
+            building_corpus,
         )),
         (Some(_), Some("snapshotting"), _) => Err(KanbanError::Conflict(format!(
             "projection snapshot is still building for store {store_name}"
@@ -1968,6 +2833,7 @@ fn target_generation_for_claim(
                 store_name,
                 "active_provider_fingerprint",
             )?,
+            active_corpus,
         )),
         _ => Err(KanbanError::Conflict(format!(
             "projection store {store_name} requires a generation rebuild"
@@ -1987,6 +2853,35 @@ fn validate_store_descriptor(
             "projection backend descriptor does not match store {store_name}"
         )));
     }
+    let expected_corpus_schema = match store_name {
+        LANCEDB_CHUNKS_STORE => Some("task-chunks-v2"),
+        LANCEDB_LABEL_ATOMS_STORE => Some("label-atoms-v2"),
+        _ => None,
+    };
+    match (expected_corpus_schema, descriptor.corpus.as_ref()) {
+        (Some(_), None) => {
+            return Err(KanbanError::InvalidInput(format!(
+                "projection backend is missing the required corpus binding for store {store_name}"
+            )));
+        }
+        (Some(expected_schema), Some(corpus))
+            if corpus.corpus_schema != expected_schema
+                || corpus.corpus_fingerprint.trim().is_empty()
+                || corpus.embedding_model.trim().is_empty()
+                || corpus.embedding_dimensions == 0
+                || i64::try_from(corpus.embedding_dimensions).is_err() =>
+        {
+            return Err(KanbanError::InvalidInput(format!(
+                "projection backend corpus binding is invalid for store {store_name}"
+            )));
+        }
+        (None, Some(_)) => {
+            return Err(KanbanError::InvalidInput(format!(
+                "projection backend has an unexpected corpus binding for store {store_name}"
+            )));
+        }
+        _ => {}
+    }
     Ok(())
 }
 
@@ -2000,6 +2895,7 @@ fn validate_backend_binding(
         &manifest.store_name,
         &manifest.provider,
         &manifest.provider_fingerprint,
+        manifest.corpus.as_ref(),
         &descriptor,
     )
 }
@@ -2014,9 +2910,15 @@ pub(crate) fn validate_backend_for_target(
     let descriptor = backend.descriptor()?;
     validate_store_descriptor(store_name, &descriptor)?;
     let conn = connect_file(path)?;
-    let (target_generation, provider, provider_fingerprint) =
+    let (target_generation, provider, provider_fingerprint, corpus) =
         target_generation_for_claim(&conn, store_name)?;
-    validate_descriptor_binding(store_name, &provider, &provider_fingerprint, &descriptor)?;
+    validate_descriptor_binding(
+        store_name,
+        &provider,
+        &provider_fingerprint,
+        corpus.as_ref(),
+        &descriptor,
+    )?;
     let expected = match active_artifact(path, store_name)? {
         Some(active) if active.manifest.generation == target_generation => active,
         _ => prepared_manifest(path, store_name, owner, lease_token)?,
@@ -2045,6 +2947,7 @@ fn validate_descriptor_binding(
     store_name: &str,
     expected_provider: &str,
     expected_provider_fingerprint: &str,
+    expected_corpus: Option<&ProjectionCorpusMetadata>,
     descriptor: &ProjectionStoreDescriptor,
 ) -> Result<()> {
     if descriptor.provider != expected_provider
@@ -2052,6 +2955,11 @@ fn validate_descriptor_binding(
     {
         return Err(KanbanError::Conflict(format!(
             "projection backend provider binding does not match generation for store {store_name}"
+        )));
+    }
+    if descriptor.corpus.as_ref() != expected_corpus {
+        return Err(KanbanError::Conflict(format!(
+            "projection backend corpus binding does not match generation for store {store_name}"
         )));
     }
     Ok(())
@@ -2374,6 +3282,7 @@ fn validate_artifact_evidence(
         || evidence.manifest.snapshot_cursor != expected.snapshot_cursor
         || evidence.manifest.provider != expected.provider
         || evidence.manifest.provider_fingerprint != expected.provider_fingerprint
+        || evidence.manifest.corpus != expected.corpus
         || evidence.manifest.canonical_item_count != expected.canonical_item_count
         || evidence.manifest.canonical_digest != expected.canonical_digest
         || evidence.manifest.delivery_item_count != expected.delivery_item_count
@@ -2413,6 +3322,34 @@ fn same_artifact(
     actual: &ProjectionArtifactEvidence,
 ) -> bool {
     expected == actual
+}
+
+fn validate_publish_receipt(
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+    store_name: &str,
+    prepared: &ProjectionArtifactEvidence,
+    expected_previous: Option<&ProjectionArtifactEvidence>,
+    receipt: ProjectionPublishReceipt,
+) -> Result<ProjectionArtifactEvidence> {
+    validate_artifact_evidence(&prepared.manifest, &receipt.active)?;
+    if receipt.retained_previous.as_ref() != expected_previous {
+        return Err(KanbanError::Storage(format!(
+            "projection store did not retain the expected previous physical generation for {store_name}"
+        )));
+    }
+    let active = backend.inspect_active()?.ok_or_else(|| {
+        KanbanError::Storage(format!(
+            "projection store did not expose active generation for {store_name}"
+        ))
+    })?;
+    if !same_artifact(&receipt.active, &active) {
+        return Err(KanbanError::Storage(format!(
+            "projection active generation readback mismatch for {store_name}"
+        )));
+    }
+    backend.validate_generation_publication(&active)?;
+    inspect_expected_previous(backend, expected_previous)?;
+    Ok(active)
 }
 
 pub(crate) fn validate_physical_active_artifact_with(
@@ -2605,15 +3542,41 @@ fn projection_status_from_row(
     row: &rusqlite::Row<'_>,
     now: i64,
 ) -> rusqlite::Result<ProjectionStoreStatus> {
+    let store_name: String = row.get(0)?;
     let active_generation: Option<String> = row.get(5)?;
+    let previous_generation: Option<String> = row.get(8)?;
     let building_generation: Option<String> = row.get(11)?;
+    let active_corpus = projection_corpus_from_row(row, 33, &store_name, "active")?;
+    let previous_corpus = projection_corpus_from_row(row, 37, &store_name, "previous")?;
+    let building_corpus = projection_corpus_from_row(row, 41, &store_name, "building")?;
     let pending: i64 = row.get(22)?;
     let running: i64 = row.get(23)?;
     let failed: i64 = row.get(24)?;
     let legacy_done: i64 = row.get(25)?;
     let oldest_pending_at: Option<i64> = row.get(26)?;
     let last_error: Option<String> = row.get(28)?;
-    let lifecycle_status = if last_error.is_some() || failed > 0 {
+    let is_lance_store = matches!(
+        store_name.as_str(),
+        LANCEDB_CHUNKS_STORE | LANCEDB_LABEL_ATOMS_STORE
+    );
+    let corpus_binding_invalid = if is_lance_store {
+        !generation_corpus_binding_is_valid(
+            &store_name,
+            active_generation.as_deref(),
+            active_corpus.as_ref(),
+        ) || !generation_corpus_binding_is_valid(
+            &store_name,
+            previous_generation.as_deref(),
+            previous_corpus.as_ref(),
+        ) || !generation_corpus_binding_is_valid(
+            &store_name,
+            building_generation.as_deref(),
+            building_corpus.as_ref(),
+        )
+    } else {
+        active_corpus.is_some() || previous_corpus.is_some() || building_corpus.is_some()
+    };
+    let lifecycle_status = if corpus_binding_invalid || last_error.is_some() || failed > 0 {
         "error"
     } else if building_generation.is_some() {
         "rebuilding"
@@ -2622,7 +3585,11 @@ fn projection_status_from_row(
     } else {
         "ready"
     };
-    let fallback_reason = if last_error.is_some() || failed > 0 {
+    let fallback_reason = if corpus_binding_invalid && is_lance_store {
+        Some("corpus_binding_upgrade_required".to_owned())
+    } else if corpus_binding_invalid {
+        Some("corpus_binding_invalid".to_owned())
+    } else if last_error.is_some() || failed > 0 {
         Some("derived_store_error".to_owned())
     } else if active_generation.is_none() {
         Some("generation_rebuild_required".to_owned())
@@ -2634,7 +3601,7 @@ fn projection_status_from_row(
         None
     };
     Ok(ProjectionStoreStatus {
-        store_name: row.get(0)?,
+        store_name,
         database_instance_id: row.get(1)?,
         protocol_version: row.get(2)?,
         schema_version: row.get(3)?,
@@ -2644,14 +3611,17 @@ fn projection_status_from_row(
         active_fence_epoch: row.get(7)?,
         active_provider: row.get(29)?,
         active_provider_fingerprint: row.get(30)?,
-        previous_generation: row.get(8)?,
+        active_corpus,
+        previous_generation,
         previous_fingerprint: row.get(9)?,
         previous_fence_epoch: row.get(10)?,
+        previous_corpus,
         building_generation,
         building_fingerprint: row.get(12)?,
         building_fence_epoch: row.get(13)?,
         building_provider: row.get(31)?,
         building_provider_fingerprint: row.get(32)?,
+        building_corpus,
         building_phase: row.get(14)?,
         snapshot_cursor: row.get(15)?,
         checkpoint_cursor: row.get(16)?,
@@ -2669,8 +3639,30 @@ fn projection_status_from_row(
         last_success_at: row.get(27)?,
         last_error,
         fallback_reason,
-        updated_at: row.get(33)?,
+        updated_at: row.get(45)?,
     })
+}
+
+fn generation_corpus_binding_is_valid(
+    store_name: &str,
+    generation: Option<&str>,
+    corpus: Option<&ProjectionCorpusMetadata>,
+) -> bool {
+    match (generation, corpus) {
+        (None, None) => true,
+        (Some(_), Some(corpus)) => {
+            corpus.corpus_schema
+                == match store_name {
+                    LANCEDB_CHUNKS_STORE => "task-chunks-v2",
+                    LANCEDB_LABEL_ATOMS_STORE => "label-atoms-v2",
+                    _ => return false,
+                }
+                && !corpus.corpus_fingerprint.trim().is_empty()
+                && !corpus.embedding_model.trim().is_empty()
+                && corpus.embedding_dimensions > 0
+        }
+        _ => false,
+    }
 }
 
 fn projection_delivery_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectionDelivery> {
@@ -2717,4 +3709,102 @@ fn stale_generation(store_name: &str) -> KanbanError {
     KanbanError::Conflict(format!(
         "projection generation is stale for store {store_name}"
     ))
+}
+
+#[cfg(test)]
+mod read_only_publication_validation_tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+    use crate::init::init_database;
+
+    struct CorruptMarkerBackend {
+        generation: ProjectionArtifactEvidence,
+        repair_calls: AtomicUsize,
+    }
+
+    impl ProjectionStoreBackend for CorruptMarkerBackend {
+        fn descriptor(&self) -> Result<ProjectionStoreDescriptor> {
+            unreachable!("read-only validation does not inspect the descriptor")
+        }
+
+        fn prepare_snapshot(
+            &self,
+            _snapshot: &ProjectionSnapshot,
+        ) -> Result<ProjectionArtifactEvidence> {
+            unreachable!("read-only validation does not prepare snapshots")
+        }
+
+        fn apply_batch(&self, _batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt> {
+            unreachable!("read-only validation does not apply batches")
+        }
+
+        fn publish_generation(
+            &self,
+            _expected_active: Option<&ProjectionArtifactEvidence>,
+            _prepared: &ProjectionArtifactEvidence,
+        ) -> Result<ProjectionPublishReceipt> {
+            unreachable!("read-only validation does not publish generations")
+        }
+
+        fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>> {
+            Err(KanbanError::Storage(
+                "corrupt publication marker".to_owned(),
+            ))
+        }
+
+        fn inspect_generation(
+            &self,
+            generation: &str,
+        ) -> Result<Option<ProjectionArtifactEvidence>> {
+            Ok((generation == self.generation.manifest.generation)
+                .then_some(self.generation.clone()))
+        }
+
+        fn repair_generation_publication(
+            &self,
+            _expected: &ProjectionArtifactEvidence,
+        ) -> Result<()> {
+            self.repair_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn read_only_active_validation_never_repairs_a_corrupt_publication_marker() -> anyhow::Result<()>
+    {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        connect_file(&path)?.execute(
+            "UPDATE projection_store_state
+             SET active_generation='gen_read_only',
+                 active_fingerprint='fingerprint-read-only',
+                 active_fence_epoch=1,
+                 active_snapshot_cursor=0,
+                 active_provider='fake',
+                 active_provider_fingerprint='fake-v1',
+                 active_canonical_count=0,
+                 active_canonical_digest='fnv64:0000000000000000',
+                 active_delivery_count=0,
+                 active_delivery_digest='fnv64:0000000000000000',
+                 control_plane='v2',
+                 lifecycle_status='ready'
+             WHERE store_name='tantivy_tasks'",
+            [],
+        )?;
+        let generation =
+            active_artifact(&path, "tantivy_tasks")?.expect("active SQLite generation");
+        let backend = CorruptMarkerBackend {
+            generation,
+            repair_calls: AtomicUsize::new(0),
+        };
+
+        let error =
+            validate_physical_active_artifact_with(&path, "tantivy_tasks", &backend).unwrap_err();
+
+        assert!(error.to_string().contains("corrupt publication marker"));
+        assert_eq!(backend.repair_calls.load(Ordering::SeqCst), 0);
+        Ok(())
+    }
 }

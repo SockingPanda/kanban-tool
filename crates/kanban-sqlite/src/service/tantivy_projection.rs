@@ -183,6 +183,7 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
             store_name: TANTIVY_TASKS_STORE.to_owned(),
             provider: TANTIVY_PROJECTION_PROVIDER.to_owned(),
             provider_fingerprint: TANTIVY_PROJECTION_PROVIDER_FINGERPRINT.to_owned(),
+            corpus: None,
         })
     }
 
@@ -193,6 +194,7 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
         self.validate_managed_ancestors(true)?;
         if snapshot.manifest.store_name != TANTIVY_TASKS_STORE
             || snapshot.manifest.database_instance_id != self.database_instance_id
+            || snapshot.manifest.corpus.is_some()
         {
             return Err(KanbanError::Conflict(
                 "Tantivy projection received a different store or database manifest".to_owned(),
@@ -265,6 +267,11 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
         if batch.database_instance_id != self.database_instance_id {
             return Err(KanbanError::Conflict(
                 "Tantivy batch belongs to another database".to_owned(),
+            ));
+        }
+        if batch.corpus.is_some() {
+            return Err(KanbanError::Conflict(
+                "Tantivy batch has an unexpected corpus binding".to_owned(),
             ));
         }
         let generation_path = self.checked_generation_path(&batch.target_generation)?;
@@ -546,6 +553,11 @@ fn metadata_from_evidence(
             "Tantivy projection fingerprint cannot be empty".to_owned(),
         ));
     }
+    if evidence.manifest.corpus.is_some() {
+        return Err(KanbanError::Conflict(
+            "Tantivy projection has an unexpected corpus binding".to_owned(),
+        ));
+    }
     Ok(TantivyTaskProjectionMetadata {
         database_instance_id: evidence.manifest.database_instance_id.clone(),
         protocol_version: evidence.manifest.protocol_version,
@@ -576,6 +588,7 @@ fn evidence_from_metadata(metadata: TantivyTaskProjectionMetadata) -> Projection
             snapshot_cursor: metadata.snapshot_cursor,
             provider: metadata.provider,
             provider_fingerprint: metadata.provider_fingerprint,
+            corpus: None,
             canonical_item_count: metadata.canonical_item_count,
             canonical_digest: metadata.canonical_digest,
             delivery_item_count: metadata.delivery_item_count,
@@ -692,6 +705,7 @@ mod tests {
                 snapshot_cursor: 11,
                 provider: TANTIVY_PROJECTION_PROVIDER.to_owned(),
                 provider_fingerprint: TANTIVY_PROJECTION_PROVIDER_FINGERPRINT.to_owned(),
+                corpus: None,
                 canonical_item_count: 1,
                 canonical_digest: "fnv64:canonical".to_owned(),
                 delivery_item_count: 1,
@@ -705,6 +719,27 @@ mod tests {
                 content_hash: "fnv64:record".to_owned(),
             }],
         }
+    }
+
+    #[test]
+    fn non_lance_projection_rejects_corpus_binding() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store(&temp);
+        let mut snapshot = snapshot("gen_unexpected_corpus");
+        snapshot.manifest.corpus = Some(crate::service::ProjectionCorpusMetadata {
+            corpus_schema: "task-chunks-v2".to_owned(),
+            corpus_fingerprint: "corpus:unexpected".to_owned(),
+            embedding_model: "unexpected".to_owned(),
+            embedding_dimensions: 3,
+        });
+
+        let error = store.prepare_snapshot(&snapshot).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("different store or database manifest")
+        );
+        assert!(!store.generation_path("gen_unexpected_corpus").exists());
     }
 
     #[test]

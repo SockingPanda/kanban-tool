@@ -947,6 +947,132 @@ fn doctor_projection_issues(conn: &Connection) -> Result<Vec<DoctorIssue>> {
             Vec::new(),
         ));
     }
+    let corpus_columns_present: bool = conn
+        .query_row(
+            "SELECT COUNT(*)=12
+             FROM pragma_table_info('projection_store_state')
+             WHERE name IN (
+               'active_corpus_schema','active_corpus_fingerprint',
+               'active_embedding_model','active_embedding_dimensions',
+               'previous_corpus_schema','previous_corpus_fingerprint',
+               'previous_embedding_model','previous_embedding_dimensions',
+               'building_corpus_schema','building_corpus_fingerprint',
+               'building_embedding_model','building_embedding_dimensions'
+             )",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if corpus_columns_present {
+        let corpus_binding_invalid_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM projection_store_state
+                 WHERE (
+                   store_name IN ('lancedb_chunks','lancedb_label_atoms')
+                   AND (
+                     NOT (
+                       (
+                         active_generation IS NULL
+                         AND active_corpus_schema IS NULL
+                         AND active_corpus_fingerprint IS NULL
+                         AND active_embedding_model IS NULL
+                         AND active_embedding_dimensions IS NULL
+                       )
+                       OR (
+                         active_generation IS NOT NULL
+                         AND active_corpus_schema IS NOT NULL
+                         AND active_corpus_schema=CASE store_name
+                           WHEN 'lancedb_chunks' THEN 'task-chunks-v2'
+                           ELSE 'label-atoms-v2'
+                         END
+                         AND active_corpus_fingerprint IS NOT NULL
+                         AND length(trim(active_corpus_fingerprint))>0
+                         AND active_embedding_model IS NOT NULL
+                         AND length(trim(active_embedding_model))>0
+                         AND active_embedding_dimensions IS NOT NULL
+                         AND active_embedding_dimensions>0
+                       )
+                     )
+                     OR NOT (
+                       (
+                         previous_generation IS NULL
+                         AND previous_corpus_schema IS NULL
+                         AND previous_corpus_fingerprint IS NULL
+                         AND previous_embedding_model IS NULL
+                         AND previous_embedding_dimensions IS NULL
+                       )
+                       OR (
+                         previous_generation IS NOT NULL
+                         AND previous_corpus_schema IS NOT NULL
+                         AND previous_corpus_schema=CASE store_name
+                           WHEN 'lancedb_chunks' THEN 'task-chunks-v2'
+                           ELSE 'label-atoms-v2'
+                         END
+                         AND previous_corpus_fingerprint IS NOT NULL
+                         AND length(trim(previous_corpus_fingerprint))>0
+                         AND previous_embedding_model IS NOT NULL
+                         AND length(trim(previous_embedding_model))>0
+                         AND previous_embedding_dimensions IS NOT NULL
+                         AND previous_embedding_dimensions>0
+                       )
+                     )
+                     OR NOT (
+                       (
+                         building_generation IS NULL
+                         AND building_corpus_schema IS NULL
+                         AND building_corpus_fingerprint IS NULL
+                         AND building_embedding_model IS NULL
+                         AND building_embedding_dimensions IS NULL
+                       )
+                       OR (
+                         building_generation IS NOT NULL
+                         AND building_corpus_schema IS NOT NULL
+                         AND building_corpus_schema=CASE store_name
+                           WHEN 'lancedb_chunks' THEN 'task-chunks-v2'
+                           ELSE 'label-atoms-v2'
+                         END
+                         AND building_corpus_fingerprint IS NOT NULL
+                         AND length(trim(building_corpus_fingerprint))>0
+                         AND building_embedding_model IS NOT NULL
+                         AND length(trim(building_embedding_model))>0
+                         AND building_embedding_dimensions IS NOT NULL
+                         AND building_embedding_dimensions>0
+                       )
+                     )
+                   )
+                 )
+                 OR (
+                   store_name NOT IN ('lancedb_chunks','lancedb_label_atoms')
+                   AND (
+                     active_corpus_schema IS NOT NULL
+                     OR active_corpus_fingerprint IS NOT NULL
+                     OR active_embedding_model IS NOT NULL
+                     OR active_embedding_dimensions IS NOT NULL
+                     OR previous_corpus_schema IS NOT NULL
+                     OR previous_corpus_fingerprint IS NOT NULL
+                     OR previous_embedding_model IS NOT NULL
+                     OR previous_embedding_dimensions IS NOT NULL
+                     OR building_corpus_schema IS NOT NULL
+                     OR building_corpus_fingerprint IS NOT NULL
+                     OR building_embedding_model IS NOT NULL
+                     OR building_embedding_dimensions IS NOT NULL
+                   )
+                 )",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(storage)?;
+        if corpus_binding_invalid_count != 0 {
+            issues.push(doctor_issue(
+                "error",
+                "projection_corpus_binding_invalid",
+                format!(
+                    "{corpus_binding_invalid_count} projection store(s) have a missing, incomplete, or unexpected corpus/model/dimension binding"
+                ),
+                Vec::new(),
+            ));
+        }
+    }
     Ok(issues)
 }
 

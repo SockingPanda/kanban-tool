@@ -9,6 +9,7 @@ use kanban_contract::{
     ProjectionArtifactEvidence as WireProjectionArtifactEvidence,
     ProjectionArtifactManifest as WireProjectionArtifactManifest,
     ProjectionBatch as WireProjectionBatch, ProjectionBatchReceipt as WireProjectionBatchReceipt,
+    ProjectionCorpusMetadata as WireProjectionCorpusMetadata,
     ProjectionDelivery as WireProjectionDelivery,
     ProjectionDeliveryAction as WireProjectionDeliveryAction,
     ProjectionPublishReceipt as WireProjectionPublishReceipt,
@@ -39,8 +40,8 @@ use kanban_vector::{
 
 use super::{
     ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
-    ProjectionBatchReceipt, ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreBackend,
-    ProjectionStoreDescriptor,
+    ProjectionBatchReceipt, ProjectionCorpusMetadata, ProjectionPublishReceipt, ProjectionSnapshot,
+    ProjectionStoreBackend, ProjectionStoreDescriptor,
 };
 
 const VECTOR_PROJECTION_HELPER: &str = "kanban-vector-lancedb";
@@ -785,6 +786,7 @@ impl LanceDbProjectionStore {
                 snapshot_cursor: manifest.snapshot_cursor,
                 provider: manifest.provider,
                 provider_fingerprint: manifest.provider_fingerprint,
+                corpus: manifest.corpus.map(local_corpus_metadata),
                 canonical_item_count: manifest.canonical_item_count,
                 canonical_digest: manifest.canonical_digest,
                 delivery_item_count: manifest.delivery_item_count,
@@ -800,6 +802,7 @@ impl LanceDbProjectionStore {
         action: &str,
         manifest: &ProjectionArtifactManifest,
     ) -> Result<WireProjectionArtifactManifest> {
+        let corpus = manifest.corpus.as_ref().map(wire_corpus_metadata);
         if manifest.store_name != self.store_descriptor.store_name
             || !manifest.database_instance_id.starts_with("db_")
             || manifest.protocol_version != VECTOR_PROJECTION_PROTOCOL_VERSION
@@ -809,6 +812,7 @@ impl LanceDbProjectionStore {
             || manifest.snapshot_cursor < 0
             || manifest.provider != self.store_descriptor.provider
             || manifest.provider_fingerprint != self.store_descriptor.provider_fingerprint
+            || corpus != self.store_descriptor.corpus
             || manifest.canonical_item_count < 0
             || manifest.canonical_digest.trim().is_empty()
             || manifest.delivery_item_count < 0
@@ -828,7 +832,7 @@ impl LanceDbProjectionStore {
             snapshot_cursor: manifest.snapshot_cursor,
             provider: manifest.provider.clone(),
             provider_fingerprint: manifest.provider_fingerprint.clone(),
-            corpus: self.store_descriptor.corpus.clone(),
+            corpus,
             canonical_item_count: manifest.canonical_item_count,
             canonical_digest: manifest.canonical_digest.clone(),
             delivery_item_count: manifest.delivery_item_count,
@@ -840,12 +844,14 @@ impl LanceDbProjectionStore {
     }
 
     fn wire_batch(&self, batch: &ProjectionBatch) -> Result<WireProjectionBatch> {
+        let corpus = batch.corpus.as_ref().map(wire_corpus_metadata);
         if batch.store_name != self.store_descriptor.store_name
             || !batch.database_instance_id.starts_with("db_")
             || batch.protocol_version != VECTOR_PROJECTION_PROTOCOL_VERSION
             || batch.schema_version != self.store_descriptor.schema_version
             || batch.provider != self.store_descriptor.provider
             || batch.provider_fingerprint != self.store_descriptor.provider_fingerprint
+            || corpus != self.store_descriptor.corpus
             || batch.owner.trim().is_empty()
             || batch.lease_token.trim().is_empty()
             || batch.fence_epoch < 0
@@ -925,6 +931,11 @@ impl ProjectionStoreBackend for LanceDbProjectionStore {
             store_name: self.store_descriptor.store_name.clone(),
             provider: self.store_descriptor.provider.clone(),
             provider_fingerprint: self.store_descriptor.provider_fingerprint.clone(),
+            corpus: self
+                .store_descriptor
+                .corpus
+                .clone()
+                .map(local_corpus_metadata),
         })
     }
 
@@ -1010,6 +1021,24 @@ impl ProjectionStoreBackend for LanceDbProjectionStore {
     fn abort_generation(&self, generation: &str) -> Result<()> {
         let delivery_digest = self.generation_delivery_digest(generation)?;
         self.abort_wire_generation(generation, &delivery_digest)
+    }
+}
+
+fn local_corpus_metadata(corpus: WireProjectionCorpusMetadata) -> ProjectionCorpusMetadata {
+    ProjectionCorpusMetadata {
+        corpus_schema: corpus.corpus_schema,
+        corpus_fingerprint: corpus.corpus_fingerprint,
+        embedding_model: corpus.embedding_model,
+        embedding_dimensions: corpus.embedding_dimensions,
+    }
+}
+
+fn wire_corpus_metadata(corpus: &ProjectionCorpusMetadata) -> WireProjectionCorpusMetadata {
+    WireProjectionCorpusMetadata {
+        corpus_schema: corpus.corpus_schema.clone(),
+        corpus_fingerprint: corpus.corpus_fingerprint.clone(),
+        embedding_model: corpus.embedding_model.clone(),
+        embedding_dimensions: corpus.embedding_dimensions,
     }
 }
 
@@ -1613,7 +1642,7 @@ mod tests {
     }
 
     #[test]
-    fn local_evidence_round_trip_injects_corpus_without_persisting_wire_details() {
+    fn local_evidence_round_trip_preserves_durable_corpus_details() {
         let descriptor = helper_descriptor(LANCEDB_CHUNKS_STORE, TASK_CHUNKS_CORPUS_SCHEMA);
         let store_descriptor = descriptor.supported_stores[0].clone();
         let backend = LanceDbProjectionStore {
@@ -1636,6 +1665,11 @@ mod tests {
                 snapshot_cursor: 2,
                 provider: backend.store_descriptor.provider.clone(),
                 provider_fingerprint: backend.store_descriptor.provider_fingerprint.clone(),
+                corpus: backend
+                    .store_descriptor
+                    .corpus
+                    .clone()
+                    .map(local_corpus_metadata),
                 canonical_item_count: 3,
                 canonical_digest: "canonical:fixture".to_owned(),
                 delivery_item_count: 4,
@@ -1676,6 +1710,7 @@ mod tests {
             schema_version: DERIVED_STORE_SCHEMA_VERSION,
             provider: store_descriptor.provider,
             provider_fingerprint: store_descriptor.provider_fingerprint,
+            corpus: store_descriptor.corpus.map(local_corpus_metadata),
             owner: "owner".to_owned(),
             lease_token: "lease-secret".to_owned(),
             fence_epoch: 4,

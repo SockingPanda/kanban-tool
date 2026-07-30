@@ -1957,6 +1957,12 @@ owner 和全部 store 状态。owner 包含实际编译的 `capabilities[]` 与
 backend 时使用 `unavailable` + `backend_unavailable`；活动 owner 未声明该 store
 capability 时使用 `unverified` + `maintenance_owner_capability_unverified`。因此
 `doctor --strict-derived` 不会把 feature-limited owner 误判为全部派生层健康。
+store 的 `active_corpus`、`previous_corpus`、`building_corpus` 都是必需但可为
+`null` 的字段；非空值包含 `corpus_schema`、`corpus_fingerprint`、
+`embedding_model` 和 `embedding_dimensions`。LanceDB generation 必须与对应的完整
+corpus binding 同时存在；从 v29 升级而来、只有 generation 而没有历史 corpus 证据的
+行不会被迁移伪造绑定，并会报告 `corpus_binding_upgrade_required`，直到受控重建发布
+带完整绑定的新 generation。
 continuous `maintenance run` 只有在当前运行制品声明全部 projection store capability
 时才会领取 singleton lease；feature-limited 制品返回 `invalid_input`，且不得留下 owner
 或 lease。`run --once` 与定向 `rebuild` 仍可用于该制品实际编译的 store。
@@ -1978,7 +1984,7 @@ artifact 已移除，不提供新旧输出双轨。
 检查：
 
 - 数据库文件存在。
-- 迁移完整；当前已提交的迁移版本（`schema user_version`）为 29。
+- 迁移完整；当前已提交的迁移版本（`schema user_version`）为 30。
 - `PRAGMA integrity_check`。
 - 孤立的活动运行记录。
 - `running` 任务是否缺少领取。

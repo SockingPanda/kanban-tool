@@ -1065,6 +1065,22 @@ failure 会留下新的 pending delivery，provider failure 即使没有旧 deli
 可恢复 work。迁移时已有的 dirty board 会逐板 backfill，不清空错误、旧 outbox 或
 watermark。
 
+Migration 030 为 `active`、`previous`、`building` 三个 generation 阶段分别增加
+`corpus_schema`、`corpus_fingerprint`、`embedding_model` 和
+`embedding_dimensions`。对 v30 新写入或改变的 LanceDB 状态，每个阶段都强制
+“generation 与完整 corpus binding 同时存在或同时为空”；`lancedb_chunks` 只接受
+`task-chunks-v2`，`lancedb_label_atoms` 只接受 `label-atoms-v2`，Tantivy 与
+Oxigraph 不允许携带这些字段。generation 被旧恢复路径清空时，触发器只清理同阶段的
+corpus 字段，不改 `index_outbox`、delivery、checkpoint、watermark 或 dirty 证据。
+
+v29 可能已经保存 LanceDB generation，却从未持久化 corpus/model/dimension 证据。
+Migration 030 有意保留这种“generation 非空、corpus 全空”的既有行，既不猜测模型，
+也不根据当前配置补写历史 fingerprint；运行时和 `doctor` 会把它标为
+`corpus_binding_upgrade_required`。恢复必须取得 maintenance owner 和 store lease，
+从 canonical SQLite 构建带完整 binding 的新 generation，经过 provider、coverage、
+fence、物理发布与 previous-generation 保留门禁后再确认 SQLite；不能手工补证据、
+伪造 watermark、清空 outbox 或把旧物理 generation 当作已验证制品。
+
 Projection v2 的 snapshot 流程先固定 cursor，并按 store 从 canonical SQLite 读取完整、
 稳定排序且强制携带 board scope 的 corpus：task search/chunk 投影包含 task 及其 comments、
 runs、events；graph 投影包含 relation；label atom 投影包含 atom。每条 record 具有稳定

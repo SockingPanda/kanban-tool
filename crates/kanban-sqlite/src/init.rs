@@ -62,7 +62,9 @@ const PROJECTION_MAINTENANCE_RUNTIME_IDENTITY_MIGRATION: &str =
     include_str!("../../../migrations/028_projection_maintenance_runtime_identity.sql");
 const PROJECTION_LABEL_ATOM_DELIVERIES_MIGRATION: &str =
     include_str!("../../../migrations/029_projection_label_atom_deliveries.sql");
-const LATEST_MIGRATION_VERSION: i64 = 29;
+const PROJECTION_CORPUS_BINDINGS_MIGRATION: &str =
+    include_str!("../../../migrations/030_projection_corpus_bindings.sql");
+const LATEST_MIGRATION_VERSION: i64 = 30;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -221,6 +223,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 29,
         name: "029_projection_label_atom_deliveries",
         sql: PROJECTION_LABEL_ATOM_DELIVERIES_MIGRATION,
+    },
+    Migration {
+        version: 30,
+        name: "030_projection_corpus_bindings",
+        sql: PROJECTION_CORPUS_BINDINGS_MIGRATION,
     },
 ];
 
@@ -810,8 +817,20 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "checkpoint_cursor",
                 "legacy_checkpoint_cursor",
                 "snapshot_cursor",
+                "active_corpus_schema",
+                "active_corpus_fingerprint",
+                "active_embedding_model",
+                "active_embedding_dimensions",
+                "previous_corpus_schema",
+                "previous_corpus_fingerprint",
+                "previous_embedding_model",
+                "previous_embedding_dimensions",
                 "building_provider",
                 "building_provider_fingerprint",
+                "building_corpus_schema",
+                "building_corpus_fingerprint",
+                "building_embedding_model",
+                "building_embedding_dimensions",
                 "building_canonical_count",
                 "building_canonical_digest",
                 "building_delivery_count",

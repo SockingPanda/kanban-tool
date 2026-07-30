@@ -230,7 +230,7 @@ fn projection_label_deliveries_upgrade_is_additive_and_preserves_ids_and_sequenc
         |row| row.get(0),
     )?;
 
-    assert_eq!(user_version, 29);
+    assert_eq!(user_version, 30);
     assert_eq!(migration_count, 1);
     assert_eq!(
         preserved,

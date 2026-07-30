@@ -5,7 +5,7 @@ use serde::Deserialize;
 use crate::{
     ApiBoard, ApiClaim, ApiComment, ApiExecutionPlan, ApiRun, ApiTask, ApiTaskStatus, ApiTaskStep,
     ApiTaskSteps, CheckpointReport, ContractSurface, DataEnvelope, DoctorReport, GetTaskResponse,
-    MigrationState, QueueStats, SearchStatus, surface_operation_catalog,
+    MigrationState, ProjectionCorpusMetadata, QueueStats, SearchStatus, surface_operation_catalog,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -162,6 +162,12 @@ pub struct CliProjectionStoreStatus {
     #[serde(deserialize_with = "deserialize_required_nullable")]
     #[cfg_attr(
         feature = "schema",
+        schemars(required, schema_with = "required_nullable_projection_corpus_schema")
+    )]
+    pub active_corpus: Option<ProjectionCorpusMetadata>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
         schemars(required, schema_with = "required_nullable_string_schema")
     )]
     pub previous_generation: Option<String>,
@@ -177,6 +183,12 @@ pub struct CliProjectionStoreStatus {
         schemars(required, schema_with = "required_nullable_i64_schema")
     )]
     pub previous_fence_epoch: Option<i64>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_projection_corpus_schema")
+    )]
+    pub previous_corpus: Option<ProjectionCorpusMetadata>,
     #[serde(deserialize_with = "deserialize_required_nullable")]
     #[cfg_attr(
         feature = "schema",
@@ -207,6 +219,12 @@ pub struct CliProjectionStoreStatus {
         schemars(required, schema_with = "required_nullable_string_schema")
     )]
     pub building_provider_fingerprint: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_projection_corpus_schema")
+    )]
+    pub building_corpus: Option<ProjectionCorpusMetadata>,
     #[serde(deserialize_with = "deserialize_required_nullable")]
     #[cfg_attr(
         feature = "schema",
@@ -538,6 +556,13 @@ fn required_nullable_i64_schema(generator: &mut schemars::SchemaGenerator) -> sc
 #[cfg(feature = "schema")]
 fn required_nullable_string_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
     generator.subschema_for::<Option<String>>()
+}
+
+#[cfg(feature = "schema")]
+fn required_nullable_projection_corpus_schema(
+    generator: &mut schemars::SchemaGenerator,
+) -> schemars::Schema {
+    generator.subschema_for::<Option<ProjectionCorpusMetadata>>()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -2786,6 +2786,22 @@ failure 会留下新的 pending delivery，provider failure 即使没有旧 deli
 可恢复 work。迁移时已有的 dirty board 会逐板 backfill，不清空错误、旧 outbox 或
 watermark。
 
+Migration 030 为 `active`、`previous`、`building` 三个 generation 阶段分别增加
+`corpus_schema`、`corpus_fingerprint`、`embedding_model` 和
+`embedding_dimensions`。对 v30 新写入或改变的 LanceDB 状态，每个阶段都强制
+“generation 与完整 corpus binding 同时存在或同时为空”；`lancedb_chunks` 只接受
+`task-chunks-v2`，`lancedb_label_atoms` 只接受 `label-atoms-v2`，Tantivy 与
+Oxigraph 不允许携带这些字段。generation 被旧恢复路径清空时，触发器只清理同阶段的
+corpus 字段，不改 `index_outbox`、delivery、checkpoint、watermark 或 dirty 证据。
+
+v29 可能已经保存 LanceDB generation，却从未持久化 corpus/model/dimension 证据。
+Migration 030 有意保留这种“generation 非空、corpus 全空”的既有行，既不猜测模型，
+也不根据当前配置补写历史 fingerprint；运行时和 `doctor` 会把它标为
+`corpus_binding_upgrade_required`。恢复必须取得 maintenance owner 和 store lease，
+从 canonical SQLite 构建带完整 binding 的新 generation，经过 provider、coverage、
+fence、物理发布与 previous-generation 保留门禁后再确认 SQLite；不能手工补证据、
+伪造 watermark、清空 outbox 或把旧物理 generation 当作已验证制品。
+
 Projection v2 的 snapshot 流程先固定 cursor，并按 store 从 canonical SQLite 读取完整、
 稳定排序且强制携带 board scope 的 corpus：task search/chunk 投影包含 task 及其 comments、
 runs、events；graph 投影包含 relation；label atom 投影包含 atom。每条 record 具有稳定
@@ -4941,6 +4957,12 @@ owner 和全部 store 状态。owner 包含实际编译的 `capabilities[]` 与
 backend 时使用 `unavailable` + `backend_unavailable`；活动 owner 未声明该 store
 capability 时使用 `unverified` + `maintenance_owner_capability_unverified`。因此
 `doctor --strict-derived` 不会把 feature-limited owner 误判为全部派生层健康。
+store 的 `active_corpus`、`previous_corpus`、`building_corpus` 都是必需但可为
+`null` 的字段；非空值包含 `corpus_schema`、`corpus_fingerprint`、
+`embedding_model` 和 `embedding_dimensions`。LanceDB generation 必须与对应的完整
+corpus binding 同时存在；从 v29 升级而来、只有 generation 而没有历史 corpus 证据的
+行不会被迁移伪造绑定，并会报告 `corpus_binding_upgrade_required`，直到受控重建发布
+带完整绑定的新 generation。
 continuous `maintenance run` 只有在当前运行制品声明全部 projection store capability
 时才会领取 singleton lease；feature-limited 制品返回 `invalid_input`，且不得留下 owner
 或 lease。`run --once` 与定向 `rebuild` 仍可用于该制品实际编译的 store。
@@ -4962,7 +4984,7 @@ artifact 已移除，不提供新旧输出双轨。
 检查：
 
 - 数据库文件存在。
-- 迁移完整；当前已提交的迁移版本（`schema user_version`）为 29。
+- 迁移完整；当前已提交的迁移版本（`schema user_version`）为 30。
 - `PRAGMA integrity_check`。
 - 孤立的活动运行记录。
 - `running` 任务是否缺少领取。

@@ -95,6 +95,16 @@
     "CliProjectionStoreStatus": {
       "additionalProperties": false,
       "properties": {
+        "active_corpus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectionCorpusMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "active_fence_epoch": {
           "format": "int64",
           "type": [
@@ -124,6 +134,16 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "building_corpus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectionCorpusMetadata"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "building_fence_epoch": {
@@ -235,6 +255,16 @@
             "null"
           ]
         },
+        "previous_corpus": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectionCorpusMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "previous_fence_epoch": {
           "format": "int64",
           "type": [
@@ -292,14 +322,17 @@
         "active_fence_epoch",
         "active_provider",
         "active_provider_fingerprint",
+        "active_corpus",
         "previous_generation",
         "previous_fingerprint",
         "previous_fence_epoch",
+        "previous_corpus",
         "building_generation",
         "building_fingerprint",
         "building_fence_epoch",
         "building_provider",
         "building_provider_fingerprint",
+        "building_corpus",
         "building_phase",
         "snapshot_cursor",
         "checkpoint_cursor",
@@ -318,6 +351,32 @@
         "last_error",
         "fallback_reason",
         "updated_at"
+      ],
+      "type": "object"
+    },
+    "ProjectionCorpusMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "corpus_fingerprint": {
+          "type": "string"
+        },
+        "corpus_schema": {
+          "type": "string"
+        },
+        "embedding_dimensions": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "embedding_model": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "corpus_schema",
+        "corpus_fingerprint",
+        "embedding_model",
+        "embedding_dimensions"
       ],
       "type": "object"
     }

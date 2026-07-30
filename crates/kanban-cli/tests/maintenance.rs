@@ -263,6 +263,39 @@ fn doctor_strict_derived_fails_closed_on_bootstrap_store() -> anyhow::Result<()>
     Ok(())
 }
 
+#[cfg(feature = "oxigraph-backend")]
+#[test]
+fn maintenance_rebuild_targets_oxigraph_v2_store() -> anyhow::Result<()> {
+    let temp = TempDb::new("maintenance_rebuild_oxigraph_v2")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban(
+        &temp.path,
+        &["--actor", "tester", "maintenance", "run", "--once"],
+    )?
+    .success()?;
+
+    let rebuilt = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "tester",
+            "--json",
+            "maintenance",
+            "rebuild",
+            "oxigraph_relations",
+        ],
+    )?
+    .success_json()?;
+    let stores = rebuilt["data"]["stores"]
+        .as_array()
+        .context("maintenance rebuild stores")?;
+    assert_eq!(stores.len(), 1);
+    assert_eq!(stores[0]["store_name"], "oxigraph_relations");
+    assert_eq!(stores[0]["action"], "generation_published");
+    assert_eq!(stores[0]["lifecycle_status"], "ready");
+    Ok(())
+}
+
 #[test]
 fn maintenance_lock_uses_canonical_path() -> anyhow::Result<()> {
     let temp = TempDb::new("maintenance_lock_uses_canonical_database_path")?;

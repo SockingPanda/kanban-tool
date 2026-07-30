@@ -7,6 +7,7 @@ authors.workspace = true
 
 [features]
 default = []
+oxigraph-backend = ["dep:kanban-graph-oxigraph"]
 tantivy-backend = ["dep:tantivy", "kanban-search/tantivy-backend"]
 
 [dependencies]
@@ -16,6 +17,7 @@ kanban-context.workspace = true
 kanban-contract.workspace = true
 kanban-entity.workspace = true
 kanban-graph.workspace = true
+kanban-graph-oxigraph = { workspace = true, optional = true }
 kanban-indexer.workspace = true
 kanban-labels.workspace = true
 kanban-local.workspace = true

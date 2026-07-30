@@ -1,28 +1,32 @@
 use std::path::{Path, PathBuf};
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 use std::{sync::mpsc, thread, time::Duration};
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_typed_id};
-use kanban_indexer::TANTIVY_TASKS_STORE;
+use kanban_indexer::{OXIGRAPH_RELATIONS_STORE, TANTIVY_TASKS_STORE};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
 use crate::db::connect_file;
 
-use super::{ProjectionStatus, projection_status, storage, with_immediate_tx};
+#[cfg(feature = "oxigraph-backend")]
+use super::oxigraph_projection::OxigraphProjectionStore;
 #[cfg(feature = "tantivy-backend")]
+use super::tantivy_projection::TantivyProjectionStore;
+use super::{ProjectionStatus, projection_status, storage, with_immediate_tx};
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 use super::{
     ProjectionStoreBackend, acquire_projection_lease, begin_projection_generation,
     prepare_projection_snapshot_with, publish_projection_generation_with,
     reconcile_projection_generation_with, recover_projection_generation_with,
     release_projection_lease, renew_projection_lease, run_projection_batch_with,
-    tantivy_projection::TantivyProjectionStore, validate_physical_active_artifact_with,
+    validate_physical_active_artifact_with,
 };
 
 pub const DEFAULT_MAINTENANCE_LEASE_TTL_MS: i64 = 3_600_000;
 pub const DEFAULT_MAINTENANCE_CLAIM_TTL_MS: i64 = 300_000;
 pub const DEFAULT_MAINTENANCE_BATCH_SIZE: usize = 250;
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 const MAX_REBUILD_CATCH_UP_BATCHES: usize = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,7 +113,13 @@ impl MaintenanceSession {
 
     pub fn run_once(&mut self) -> Result<MaintenanceRunReport> {
         renew_maintenance_owner(self)?;
-        let stores = vec![run_tantivy_once(self, false)?];
+        let stores = vec![
+            #[cfg(feature = "tantivy-backend")]
+            run_tantivy_once(self, false)?,
+            #[cfg(feature = "oxigraph-backend")]
+            run_oxigraph_once(self, false)?,
+        ];
+        renew_maintenance_owner(self)?;
         self.report(stores)
     }
 
@@ -117,18 +127,26 @@ impl MaintenanceSession {
         renew_maintenance_owner(self)?;
         let store = match store_name {
             TANTIVY_TASKS_STORE => run_tantivy_once(self, true)?,
+            OXIGRAPH_RELATIONS_STORE => run_oxigraph_once(self, true)?,
             _ => {
                 return Err(KanbanError::InvalidInput(format!(
                     "projection store {store_name} is not yet wired to the unified maintenance runtime"
                 )));
             }
         };
+        renew_maintenance_owner(self)?;
         self.report(vec![store])
     }
 
     pub fn rebuild_all(&mut self) -> Result<MaintenanceRunReport> {
         renew_maintenance_owner(self)?;
-        let stores = vec![run_tantivy_once(self, true)?];
+        let stores = vec![
+            #[cfg(feature = "tantivy-backend")]
+            run_tantivy_once(self, true)?,
+            #[cfg(feature = "oxigraph-backend")]
+            run_oxigraph_once(self, true)?,
+        ];
+        renew_maintenance_owner(self)?;
         self.report(stores)
     }
 
@@ -171,36 +189,56 @@ impl Drop for MaintenanceSession {
 pub fn maintenance_status(path: impl AsRef<Path>) -> Result<ProjectionStatus> {
     let path = path.as_ref();
     let status = projection_status(path)?;
-    #[cfg(feature = "tantivy-backend")]
+    #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
     {
         let mut status = status;
+        #[cfg(feature = "tantivy-backend")]
         enrich_tantivy_physical_health(path, &mut status)?;
+        #[cfg(feature = "oxigraph-backend")]
+        enrich_oxigraph_physical_health(path, &mut status)?;
         Ok(status)
     }
-    #[cfg(not(feature = "tantivy-backend"))]
+    #[cfg(not(any(feature = "tantivy-backend", feature = "oxigraph-backend")))]
     {
         Ok(status)
     }
 }
 
+#[cfg(feature = "oxigraph-backend")]
+fn enrich_oxigraph_physical_health(path: &Path, status: &mut ProjectionStatus) -> Result<()> {
+    let backend = OxigraphProjectionStore::new(path)?;
+    enrich_physical_health(path, status, OXIGRAPH_RELATIONS_STORE, "Oxigraph", &backend)
+}
+
 #[cfg(feature = "tantivy-backend")]
 fn enrich_tantivy_physical_health(path: &Path, status: &mut ProjectionStatus) -> Result<()> {
+    let backend = TantivyProjectionStore::new(path)?;
+    enrich_physical_health(path, status, TANTIVY_TASKS_STORE, "Tantivy", &backend)
+}
+
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+fn enrich_physical_health(
+    path: &Path,
+    status: &mut ProjectionStatus,
+    store_name: &str,
+    display_name: &str,
+    backend: &impl ProjectionStoreBackend,
+) -> Result<()> {
     let Some(store) = status
         .stores
         .iter_mut()
-        .find(|store| store.store_name == TANTIVY_TASKS_STORE && store.control_plane == "v2")
+        .find(|store| store.store_name == store_name && store.control_plane == "v2")
     else {
         return Ok(());
     };
     let Some(generation) = store.active_generation.as_deref() else {
         return Ok(());
     };
-    let backend = TantivyProjectionStore::new(path)?;
-    let physical = validate_physical_active_artifact_with(path, TANTIVY_TASKS_STORE, &backend)
-        .and_then(|evidence| {
+    let physical =
+        validate_physical_active_artifact_with(path, store_name, backend).and_then(|evidence| {
             evidence.ok_or_else(|| {
                 KanbanError::Storage(format!(
-                    "active Tantivy generation {generation} is missing from SQLite"
+                    "active {display_name} generation {generation} is missing from SQLite"
                 ))
             })
         });
@@ -332,28 +370,78 @@ fn release_maintenance_owner(path: &Path, owner: &str, lease_token: &str) -> Res
     Ok(())
 }
 
-#[cfg(feature = "tantivy-backend")]
 fn run_tantivy_once(
     session: &mut MaintenanceSession,
     force_rebuild: bool,
 ) -> Result<MaintenanceStoreRun> {
-    let backend = TantivyProjectionStore::new(&session.db_path)?;
+    #[cfg(feature = "tantivy-backend")]
+    {
+        let backend = TantivyProjectionStore::new(&session.db_path)?;
+        run_projection_store_once(
+            session,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            &backend,
+            force_rebuild,
+        )
+    }
+    #[cfg(not(feature = "tantivy-backend"))]
+    {
+        let _ = (session, force_rebuild);
+        Err(KanbanError::InvalidInput(
+            "unified Tantivy maintenance requires the tantivy-backend feature".to_owned(),
+        ))
+    }
+}
+
+fn run_oxigraph_once(
+    session: &mut MaintenanceSession,
+    force_rebuild: bool,
+) -> Result<MaintenanceStoreRun> {
+    #[cfg(feature = "oxigraph-backend")]
+    {
+        let backend = OxigraphProjectionStore::new(&session.db_path)?;
+        run_projection_store_once(
+            session,
+            OXIGRAPH_RELATIONS_STORE,
+            "Oxigraph",
+            &backend,
+            force_rebuild,
+        )
+    }
+    #[cfg(not(feature = "oxigraph-backend"))]
+    {
+        let _ = (session, force_rebuild);
+        Err(KanbanError::InvalidInput(
+            "unified Oxigraph maintenance requires the oxigraph-backend feature".to_owned(),
+        ))
+    }
+}
+
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+fn run_projection_store_once(
+    session: &mut MaintenanceSession,
+    store_name: &str,
+    display_name: &str,
+    backend: &impl ProjectionStoreBackend,
+    force_rebuild: bool,
+) -> Result<MaintenanceStoreRun> {
     let lease = acquire_projection_lease(
         &session.db_path,
-        TANTIVY_TASKS_STORE,
+        store_name,
         &session.owner,
         session.options.lease_ttl_ms,
     )?;
-    let heartbeat = ProjectionLeaseHeartbeat::new(session, &lease.lease_token);
+    let heartbeat = ProjectionLeaseHeartbeat::new(session, store_name, &lease.lease_token);
     let operation = heartbeat.run(|| {
         let mut action = "idle".to_owned();
         let status = maintenance_status(&session.db_path)?;
         let store = status
             .stores
             .iter()
-            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .find(|store| store.store_name == store_name)
             .ok_or_else(|| {
-                KanbanError::Storage("Tantivy projection state is missing".to_owned())
+                KanbanError::Storage(format!("{display_name} projection state is missing"))
             })?;
         let physical_rebuild =
             store.fallback_reason.as_deref() == Some("physical_generation_unavailable");
@@ -365,41 +453,47 @@ fn run_tantivy_once(
             if store.building_generation.is_none() {
                 begin_projection_generation(
                     &session.db_path,
-                    TANTIVY_TASKS_STORE,
+                    store_name,
                     &session.owner,
                     &lease.lease_token,
-                    &backend,
+                    backend,
                 )?;
             }
             let rebuilding = projection_status(&session.db_path)?;
             let store = rebuilding
                 .stores
                 .iter()
-                .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+                .find(|store| store.store_name == store_name)
                 .expect("projection store seed is stable");
             match store.building_phase.as_deref() {
                 Some("snapshotting") => {
                     prepare_projection_snapshot_with(
                         &session.db_path,
-                        TANTIVY_TASKS_STORE,
+                        store_name,
                         &session.owner,
                         &lease.lease_token,
-                        &backend,
+                        backend,
                     )?;
                 }
                 Some("prepared" | "store_published") => {}
                 other => {
                     return Err(KanbanError::Conflict(format!(
-                        "unsupported Tantivy rebuilding phase {other:?}"
+                        "unsupported {display_name} rebuilding phase {other:?}"
                     )));
                 }
             }
-            let processed = catch_up_generation(session, &lease.lease_token, &backend)?;
+            let processed = catch_up_generation(
+                session,
+                store_name,
+                display_name,
+                &lease.lease_token,
+                backend,
+            )?;
             let rebuilding = projection_status(&session.db_path)?;
             let store = rebuilding
                 .stores
                 .iter()
-                .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+                .find(|store| store.store_name == store_name)
                 .expect("projection store seed is stable");
             let physical_active = backend.inspect_active()?;
             let building_is_physically_active = store
@@ -412,53 +506,65 @@ fn run_tantivy_once(
             {
                 reconcile_projection_generation_with(
                     &session.db_path,
-                    TANTIVY_TASKS_STORE,
+                    store_name,
                     &session.owner,
                     &lease.lease_token,
-                    &backend,
+                    backend,
                 )?;
                 action = "generation_reconciled".to_owned();
             } else {
                 if physical_rebuild {
                     recover_projection_generation_with(
                         &session.db_path,
-                        TANTIVY_TASKS_STORE,
+                        store_name,
                         &session.owner,
                         &lease.lease_token,
-                        &backend,
+                        backend,
                     )?;
                     action = "generation_recovered".to_owned();
                 } else {
                     publish_projection_generation_with(
                         &session.db_path,
-                        TANTIVY_TASKS_STORE,
+                        store_name,
                         &session.owner,
                         &lease.lease_token,
-                        &backend,
+                        backend,
                     )?;
                     action = "generation_published".to_owned();
                 }
             }
-            return store_run(&session.db_path, action, processed);
+            return store_run(
+                &session.db_path,
+                store_name,
+                display_name,
+                action,
+                processed,
+            );
         }
         let batch = run_projection_batch_with(
             &session.db_path,
-            TANTIVY_TASKS_STORE,
+            store_name,
             &session.owner,
             &lease.lease_token,
             session.options.claim_ttl_ms,
             session.options.batch_size,
-            &backend,
+            backend,
         )?;
         let processed = batch.items.len();
         if processed > 0 {
             action = "batch_applied".to_owned();
         }
-        store_run(&session.db_path, action, processed)
+        store_run(
+            &session.db_path,
+            store_name,
+            display_name,
+            action,
+            processed,
+        )
     });
     let release = release_projection_lease(
         &session.db_path,
-        TANTIVY_TASKS_STORE,
+        store_name,
         &session.owner,
         &lease.lease_token,
     );
@@ -469,23 +575,25 @@ fn run_tantivy_once(
     }
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 #[derive(Debug, Clone)]
 struct ProjectionLeaseHeartbeat {
     db_path: PathBuf,
     owner: String,
     maintenance_lease_token: String,
+    store_name: String,
     store_lease_token: String,
     ttl_ms: i64,
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 impl ProjectionLeaseHeartbeat {
-    fn new(session: &MaintenanceSession, store_lease_token: &str) -> Self {
+    fn new(session: &MaintenanceSession, store_name: &str, store_lease_token: &str) -> Self {
         Self {
             db_path: session.db_path.clone(),
             owner: session.owner.clone(),
             maintenance_lease_token: session.lease_token.clone(),
+            store_name: store_name.to_owned(),
             store_lease_token: store_lease_token.to_owned(),
             ttl_ms: session.options.lease_ttl_ms,
         }
@@ -500,7 +608,7 @@ impl ProjectionLeaseHeartbeat {
         )?;
         renew_projection_lease(
             &self.db_path,
-            TANTIVY_TASKS_STORE,
+            &self.store_name,
             &self.owner,
             &self.store_lease_token,
             self.ttl_ms,
@@ -535,35 +643,27 @@ impl ProjectionLeaseHeartbeat {
     }
 }
 
-#[cfg(not(feature = "tantivy-backend"))]
-fn run_tantivy_once(
-    _session: &mut MaintenanceSession,
-    _force_rebuild: bool,
-) -> Result<MaintenanceStoreRun> {
-    Err(KanbanError::InvalidInput(
-        "unified Tantivy maintenance requires the tantivy-backend feature".to_owned(),
-    ))
-}
-
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 fn catch_up_generation(
     session: &mut MaintenanceSession,
+    store_name: &str,
+    display_name: &str,
     lease_token: &str,
-    backend: &TantivyProjectionStore,
+    backend: &impl ProjectionStoreBackend,
 ) -> Result<usize> {
     let mut processed = 0;
     for _ in 0..MAX_REBUILD_CATCH_UP_BATCHES {
         renew_maintenance_owner(session)?;
         renew_projection_lease(
             &session.db_path,
-            TANTIVY_TASKS_STORE,
+            store_name,
             &session.owner,
             lease_token,
             session.options.lease_ttl_ms,
         )?;
         let batch = run_projection_batch_with(
             &session.db_path,
-            TANTIVY_TASKS_STORE,
+            store_name,
             &session.owner,
             lease_token,
             session.options.claim_ttl_ms,
@@ -575,19 +675,27 @@ fn catch_up_generation(
         }
         processed += batch.items.len();
     }
-    Err(KanbanError::Conflict(
-        "Tantivy generation catch-up did not converge within the safety bound".to_owned(),
-    ))
+    Err(KanbanError::Conflict(format!(
+        "{display_name} generation catch-up did not converge within the safety bound"
+    )))
 }
 
-#[cfg(feature = "tantivy-backend")]
-fn store_run(path: &Path, action: String, processed: usize) -> Result<MaintenanceStoreRun> {
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+fn store_run(
+    path: &Path,
+    store_name: &str,
+    display_name: &str,
+    action: String,
+    processed: usize,
+) -> Result<MaintenanceStoreRun> {
     let status = maintenance_status(path)?;
     let store = status
         .stores
         .into_iter()
-        .find(|store| store.store_name == TANTIVY_TASKS_STORE)
-        .ok_or_else(|| KanbanError::Storage("Tantivy projection state is missing".to_owned()))?;
+        .find(|store| store.store_name == store_name)
+        .ok_or_else(|| {
+            KanbanError::Storage(format!("{display_name} projection state is missing"))
+        })?;
     Ok(MaintenanceStoreRun {
         store_name: store.store_name,
         action,
@@ -645,7 +753,8 @@ mod tests {
             MaintenanceSession::start(&db_path, "heartbeat-owner", MaintenanceMode::Once, options)?;
         let lease =
             acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "heartbeat-owner", 120)?;
-        let heartbeat = ProjectionLeaseHeartbeat::new(&session, &lease.lease_token);
+        let heartbeat =
+            ProjectionLeaseHeartbeat::new(&session, TANTIVY_TASKS_STORE, &lease.lease_token);
 
         heartbeat.run(|| {
             thread::sleep(Duration::from_millis(350));
@@ -722,7 +831,13 @@ mod tests {
             &lease.lease_token,
             &backend,
         )?;
-        catch_up_generation(&mut crashed, &lease.lease_token, &backend)?;
+        catch_up_generation(
+            &mut crashed,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            &lease.lease_token,
+            &backend,
+        )?;
         let state = projection_status(&db_path)?;
         let store = state
             .stores

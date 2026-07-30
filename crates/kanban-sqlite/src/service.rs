@@ -22,6 +22,8 @@ mod label_semantics;
 mod label_suggestions;
 mod maintenance;
 mod maintenance_runtime;
+#[cfg(feature = "oxigraph-backend")]
+mod oxigraph_projection;
 mod portable;
 mod portable_core;
 mod portable_ledger;

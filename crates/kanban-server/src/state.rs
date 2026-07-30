@@ -81,7 +81,7 @@ impl AppState {
 pub struct MaintenanceConfig {
     owner: String,
     interval: Duration,
-    #[cfg(feature = "tantivy-backend")]
+    #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
     options: kanban_sqlite::api::MaintenanceRunOptions,
 }
 
@@ -90,7 +90,7 @@ impl MaintenanceConfig {
         Self {
             owner: owner.into(),
             interval,
-            #[cfg(feature = "tantivy-backend")]
+            #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
             options: kanban_sqlite::api::MaintenanceRunOptions::default(),
         }
     }
@@ -107,7 +107,7 @@ impl MaintenanceConfig {
         &self.owner
     }
 
-    #[cfg(all(test, feature = "tantivy-backend"))]
+    #[cfg(all(test, any(feature = "tantivy-backend", feature = "oxigraph-backend")))]
     fn with_options(
         owner: impl Into<String>,
         interval: Duration,
@@ -122,11 +122,11 @@ impl MaintenanceConfig {
 }
 
 pub fn maintenance_task_enabled(config: &MaintenanceConfig) -> bool {
-    #[cfg(feature = "tantivy-backend")]
+    #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
     {
         !config.interval.is_zero()
     }
-    #[cfg(not(feature = "tantivy-backend"))]
+    #[cfg(not(any(feature = "tantivy-backend", feature = "oxigraph-backend")))]
     {
         let _ = config;
         false
@@ -141,14 +141,14 @@ pub fn spawn_maintenance_task(
         return None;
     }
 
-    #[cfg(feature = "tantivy-backend")]
+    #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
     {
         Some(tokio::spawn(async move {
             run_maintenance_session_until_shutdown(state.db_path, config, CancellationToken::new())
                 .await;
         }))
     }
-    #[cfg(not(feature = "tantivy-backend"))]
+    #[cfg(not(any(feature = "tantivy-backend", feature = "oxigraph-backend")))]
     {
         let _ = (state, config);
         None
@@ -164,13 +164,13 @@ pub(crate) fn spawn_maintenance_task_until_shutdown(
         return None;
     }
 
-    #[cfg(feature = "tantivy-backend")]
+    #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
     {
         Some(tokio::spawn(async move {
             run_maintenance_session_until_shutdown(state.db_path, config, shutdown).await;
         }))
     }
-    #[cfg(not(feature = "tantivy-backend"))]
+    #[cfg(not(any(feature = "tantivy-backend", feature = "oxigraph-backend")))]
     {
         let _ = (state, config, shutdown);
         None
@@ -202,7 +202,7 @@ async fn run_maintenance_loop_until_shutdown<Run, RunFut, Wait, WaitFut>(
     }
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 async fn run_maintenance_session_until_shutdown(
     db_path: PathBuf,
     config: MaintenanceConfig,
@@ -292,14 +292,14 @@ async fn run_maintenance_session_until_shutdown(
     }
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 enum MaintenanceWait {
     Continue,
     Shutdown,
     Reacquire(kanban_core::KanbanError),
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 async fn wait_with_maintenance_heartbeats(
     mut session: kanban_sqlite::api::MaintenanceSession,
     interval: Duration,
@@ -327,7 +327,7 @@ async fn wait_with_maintenance_heartbeats(
     }
 }
 
-#[cfg(feature = "tantivy-backend")]
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 async fn wait_for_retry(shutdown: &CancellationToken, interval: Duration) -> bool {
     let delay = interval
         .min(Duration::from_secs(5))
@@ -360,7 +360,7 @@ mod tests {
         assert!(!maintenance_task_enabled(&config));
     }
 
-    #[cfg(not(feature = "tantivy-backend"))]
+    #[cfg(not(any(feature = "tantivy-backend", feature = "oxigraph-backend")))]
     #[test]
     fn maintenance_is_disabled_without_tantivy_backend() {
         let config = MaintenanceConfig::new("server-test", Duration::from_millis(5_000));
@@ -368,7 +368,7 @@ mod tests {
         assert!(!maintenance_task_enabled(&config));
     }
 
-    #[cfg(feature = "tantivy-backend")]
+    #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
     #[test]
     fn maintenance_positive_interval_is_enabled_with_tantivy_backend() {
         let config = MaintenanceConfig::new("server-test", Duration::from_millis(5_000));
@@ -376,7 +376,7 @@ mod tests {
         assert!(maintenance_task_enabled(&config));
     }
 
-    #[cfg(feature = "tantivy-backend")]
+    #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
     #[tokio::test]
     async fn maintenance_reacquires_after_conflict_heartbeats_and_releases_on_shutdown()
     -> anyhow::Result<()> {

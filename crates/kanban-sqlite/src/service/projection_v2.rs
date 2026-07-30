@@ -135,6 +135,10 @@ pub trait ProjectionStoreBackend {
 
     fn inspect_generation(&self, generation: &str) -> Result<Option<ProjectionArtifactEvidence>>;
 
+    fn validate_active_contents(&self, _active: &ProjectionArtifactEvidence) -> Result<()> {
+        Ok(())
+    }
+
     fn quarantine_generation(&self, generation: &str) -> Result<()> {
         Err(KanbanError::Conflict(format!(
             "projection backend cannot quarantine generation {generation}"
@@ -773,11 +777,15 @@ pub fn recover_projection_generation_with(
     })?;
     let expected_previous = previous_artifact(path, store_name)?;
     let operation = (|| {
-        if backend
-            .inspect_generation(&missing_active.manifest.generation)?
-            .as_ref()
-            .is_some_and(|artifact| same_artifact(artifact, &missing_active))
-        {
+        let logical_active_is_readable = backend
+            .inspect_generation(&missing_active.manifest.generation)
+            .is_ok_and(|artifact| {
+                artifact.as_ref().is_some_and(|artifact| {
+                    same_artifact(artifact, &missing_active)
+                        && backend.validate_active_contents(artifact).is_ok()
+                })
+            });
+        if logical_active_is_readable {
             return Err(KanbanError::Conflict(format!(
                 "projection recovery refused because logical active generation {} is still readable",
                 missing_active.manifest.generation
@@ -2049,6 +2057,7 @@ fn same_artifact(
     expected == actual
 }
 
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 pub(crate) fn validate_physical_active_artifact_with(
     path: &Path,
     store_name: &str,
@@ -2075,6 +2084,23 @@ pub(crate) fn validate_physical_active_artifact_with(
         return Err(KanbanError::Storage(format!(
             "physically published projection generation does not match SQLite active generation {generation}"
         )));
+    }
+    let conn = connect_file(path)?;
+    let contents_are_authoritative = conn
+        .query_row(
+            "SELECT s.building_generation IS NULL
+                    AND NOT EXISTS(
+                      SELECT 1 FROM projection_deliveries d
+                      WHERE d.store_name=s.store_name
+                        AND d.status IN ('pending','running','failed','legacy_done')
+                    )
+             FROM projection_store_state s WHERE s.store_name=?1",
+            [store_name],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(storage)?;
+    if contents_are_authoritative {
+        backend.validate_active_contents(&expected)?;
     }
     Ok(Some(expected))
 }

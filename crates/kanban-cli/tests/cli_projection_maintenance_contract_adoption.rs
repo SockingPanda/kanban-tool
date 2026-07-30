@@ -90,7 +90,24 @@ fn maintenance_run_output_fixture_is_produced_by_real_cli() -> anyhow::Result<()
     )?
     .success_json()?;
     serde_json::from_value::<CliMaintenanceRunOutput>(output.clone())?;
-    assert_eq!(normalize_report(output)?, fixture("maintenance-run")?);
+    #[cfg(feature = "oxigraph-backend")]
+    let expected = {
+        let mut expected = fixture("maintenance-run")?;
+        expected["data"]["stores"]
+            .as_array_mut()
+            .expect("maintenance stores fixture")
+            .push(serde_json::json!({
+                "store_name": "oxigraph_relations",
+                "action": "generation_published",
+                "processed": 0,
+                "lifecycle_status": "ready",
+                "fallback_reason": null
+            }));
+        expected
+    };
+    #[cfg(not(feature = "oxigraph-backend"))]
+    let expected = fixture("maintenance-run")?;
+    assert_eq!(normalize_report(output)?, expected);
     Ok(())
 }
 

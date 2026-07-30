@@ -11,6 +11,10 @@ path = "src/main.rs"
 
 [features]
 default = ["tantivy-backend"]
+oxigraph-backend = [
+  "kanban-sqlite/oxigraph-backend",
+  "kanban-server/oxigraph-backend",
+]
 tantivy-backend = [
   "kanban-search/tantivy-backend",
   "kanban-sqlite/tantivy-backend",

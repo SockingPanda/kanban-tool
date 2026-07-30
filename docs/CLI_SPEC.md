@@ -1681,12 +1681,15 @@ the graceful shutdown notice. A second Ctrl-C during shutdown exits immediately
 with code `130`.
 
 `kanban serve` starts one database-scoped Projection v2 maintenance owner when the
-binary is built with `tantivy-backend`. The owner makes one prompt startup pass and
-then processes every board every `--maintenance-interval-ms` milliseconds (default
+binary is built with at least one derived backend. The default no-heavy CLI cohort
+enables `tantivy-backend`; the production maintenance cohort additionally enables
+the explicit `oxigraph-backend` feature, and one pass processes enabled DB-scoped
+stores in deterministic order. The owner makes one prompt startup pass and then
+processes every board every `--maintenance-interval-ms` milliseconds (default
 `5000`). Use `--maintenance-interval-ms 0` to disable it. The deprecated
 `--search-sync-interval-ms` spelling remains a visible alias, but it no longer starts
-a board-specific v1 writer. Without `tantivy-backend`, the flag is accepted and no
-background maintenance task is started.
+a board-specific v1 writer. Without any derived backend, the flag is accepted and
+no background maintenance task is started.
 
 ---
 
@@ -1798,6 +1801,7 @@ kanban maintenance run --once
 kanban maintenance run --poll-interval-ms 5000
 kanban maintenance status
 kanban maintenance rebuild tantivy_tasks
+kanban maintenance rebuild oxigraph_relations
 kanban maintenance rebuild --all
 kanban doctor --strict-derived
 ```
@@ -1818,8 +1822,10 @@ but `resolved_board_id` is always the canonical board id selected by the service
 `rebuild` creates an immutable generation from a full board-scoped canonical
 snapshot, catches up post-snapshot deliveries, then publishes under the store
 fence. The previous published generation is retained. `--all` means every store
-currently wired to the unified runtime; during staged rollout this set grows from
-Tantivy to Oxigraph and the two LanceDB projections.
+currently wired to the unified runtime. The production cohort with the explicit
+`oxigraph-backend` feature includes `tantivy_tasks` followed by
+`oxigraph_relations`; the default no-heavy CLI cohort includes Tantivy only. The two
+LanceDB projections join this set in a later staged slice.
 If status proves the SQLite active generation is physically missing or unreadable,
 the runtime performs an explicit fenced recovery publish from a fresh snapshot.
 It never treats that path as a normal pointer CAS, and records only a still-readable

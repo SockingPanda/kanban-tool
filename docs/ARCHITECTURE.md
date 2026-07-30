@@ -676,15 +676,23 @@ transaction 与 SQLite 错误 authority 不转移给 wire contract。
   v2 acknowledgement reducer 再兼容更新旧 outbox/dirty 摘要，供迁移期 reader 和 doctor
   使用。任何 derived failure 都不回滚 canonical mutation。
 - `kanban maintenance run` 与 `kanban serve` 共用同一个 runtime/service path。runtime
-  在完整生命周期持有 database owner，并按 store 取得独立 fenced lease；Tantivy v2
+  在完整生命周期持有 database owner，并按 store 取得独立 fenced lease。Tantivy v2
   使用 `index/v2/tantivy_tasks/generations/<generation>` immutable generation、复合
-  `(board_id, task_id)` document key 和强制 board query filter。新 generation publish
-  后保留上一 generation；reader 只在 control state、provider fingerprint、物理
-  generation 与 delivery health 全部匹配时使用 Tantivy，否则返回 SQLite canonical
-  结果，并在 search/index machine metadata 中返回 database identity、protocol、
-  generation、resolved board id 与结构化 fallback reason。旧 server single-board
-  Tantivy timer 已由该 DB-scoped owner 替代；owner conflict、pass failure 或 lease
-  heartbeat failure 会进入有界重试/重新领取，长 poll interval 期间仍按 TTL heartbeat。
+  `(board_id, task_id)` document key 和强制 board query filter；Oxigraph v2 使用
+  `index/v2/oxigraph_relations/generations/<generation>`，从全 DB、逐 board 校验的
+  `entity_relations` snapshot 构建，并按 subject 做 board-scoped 增量替换。两个 backend
+  都先原子落盘 snapshot/metadata，再写 durable publish marker，且保留上一 generation。
+  reader 只有在 SQLite control state、完整 provider/corpus/delivery fingerprint、物理
+  generation 与 delivery health 全部匹配时才读取 derived artifact。Tantivy 不满足时
+  返回 SQLite canonical search；Oxigraph helper 不满足时 fail closed，v2 neighbors
+  还会验证 entity 属于 resolved board，并拒绝无法 board-scope 的 unrestricted SPARQL。
+  search/index machine metadata 返回 database identity、protocol、generation、resolved
+  board id 与结构化 fallback reason。旧 server single-board Tantivy timer 已由同一
+  DB-scoped owner 替代；owner conflict、pass failure 或 lease heartbeat failure 会进入
+  有界重试/重新领取，长 poll interval 期间仍按 TTL heartbeat。
+- 默认 CLI/server 继续遵守 no-heavy helper 边界，不直接链接 Oxigraph。生产
+  maintenance cohort 通过显式 `oxigraph-backend` feature 把 Oxigraph v2 backend
+  加入同一 runtime；交互式 `kanban graph` 仍使用 subprocess helper。
 - `lancedb_label_atoms` 当前仍由独立的 per-board dirty/rebuild 协议驱动；在 label
   semantics mutation 尚未写入 Projection v2 delivery 流之前，generation begin 会
   fail closed，避免 snapshot 发布后遗漏后续 atom mutation。它不能仅凭 corpus

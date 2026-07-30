@@ -7,6 +7,7 @@ authors.workspace = true
 
 [features]
 default = []
+oxigraph-backend = ["kanban-sqlite/oxigraph-backend"]
 tantivy-backend = [
   "kanban-search/tantivy-backend",
   "kanban-sqlite/tantivy-backend",

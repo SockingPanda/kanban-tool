@@ -1246,15 +1246,23 @@ transaction 与 SQLite 错误 authority 不转移给 wire contract。
   v2 acknowledgement reducer 再兼容更新旧 outbox/dirty 摘要，供迁移期 reader 和 doctor
   使用。任何 derived failure 都不回滚 canonical mutation。
 - `kanban maintenance run` 与 `kanban serve` 共用同一个 runtime/service path。runtime
-  在完整生命周期持有 database owner，并按 store 取得独立 fenced lease；Tantivy v2
+  在完整生命周期持有 database owner，并按 store 取得独立 fenced lease。Tantivy v2
   使用 `index/v2/tantivy_tasks/generations/<generation>` immutable generation、复合
-  `(board_id, task_id)` document key 和强制 board query filter。新 generation publish
-  后保留上一 generation；reader 只在 control state、provider fingerprint、物理
-  generation 与 delivery health 全部匹配时使用 Tantivy，否则返回 SQLite canonical
-  结果，并在 search/index machine metadata 中返回 database identity、protocol、
-  generation、resolved board id 与结构化 fallback reason。旧 server single-board
-  Tantivy timer 已由该 DB-scoped owner 替代；owner conflict、pass failure 或 lease
-  heartbeat failure 会进入有界重试/重新领取，长 poll interval 期间仍按 TTL heartbeat。
+  `(board_id, task_id)` document key 和强制 board query filter；Oxigraph v2 使用
+  `index/v2/oxigraph_relations/generations/<generation>`，从全 DB、逐 board 校验的
+  `entity_relations` snapshot 构建，并按 subject 做 board-scoped 增量替换。两个 backend
+  都先原子落盘 snapshot/metadata，再写 durable publish marker，且保留上一 generation。
+  reader 只有在 SQLite control state、完整 provider/corpus/delivery fingerprint、物理
+  generation 与 delivery health 全部匹配时才读取 derived artifact。Tantivy 不满足时
+  返回 SQLite canonical search；Oxigraph helper 不满足时 fail closed，v2 neighbors
+  还会验证 entity 属于 resolved board，并拒绝无法 board-scope 的 unrestricted SPARQL。
+  search/index machine metadata 返回 database identity、protocol、generation、resolved
+  board id 与结构化 fallback reason。旧 server single-board Tantivy timer 已由同一
+  DB-scoped owner 替代；owner conflict、pass failure 或 lease heartbeat failure 会进入
+  有界重试/重新领取，长 poll interval 期间仍按 TTL heartbeat。
+- 默认 CLI/server 继续遵守 no-heavy helper 边界，不直接链接 Oxigraph。生产
+  maintenance cohort 通过显式 `oxigraph-backend` feature 把 Oxigraph v2 backend
+  加入同一 runtime；交互式 `kanban graph` 仍使用 subprocess helper。
 - `lancedb_label_atoms` 当前仍由独立的 per-board dirty/rebuild 协议驱动；在 label
   semantics mutation 尚未写入 Projection v2 delivery 流之前，generation begin 会
   fail closed，避免 snapshot 发布后遗漏后续 atom mutation。它不能仅凭 corpus
@@ -4701,12 +4709,15 @@ the graceful shutdown notice. A second Ctrl-C during shutdown exits immediately
 with code `130`.
 
 `kanban serve` starts one database-scoped Projection v2 maintenance owner when the
-binary is built with `tantivy-backend`. The owner makes one prompt startup pass and
-then processes every board every `--maintenance-interval-ms` milliseconds (default
+binary is built with at least one derived backend. The default no-heavy CLI cohort
+enables `tantivy-backend`; the production maintenance cohort additionally enables
+the explicit `oxigraph-backend` feature, and one pass processes enabled DB-scoped
+stores in deterministic order. The owner makes one prompt startup pass and then
+processes every board every `--maintenance-interval-ms` milliseconds (default
 `5000`). Use `--maintenance-interval-ms 0` to disable it. The deprecated
 `--search-sync-interval-ms` spelling remains a visible alias, but it no longer starts
-a board-specific v1 writer. Without `tantivy-backend`, the flag is accepted and no
-background maintenance task is started.
+a board-specific v1 writer. Without any derived backend, the flag is accepted and
+no background maintenance task is started.
 
 ---
 
@@ -4818,6 +4829,7 @@ kanban maintenance run --once
 kanban maintenance run --poll-interval-ms 5000
 kanban maintenance status
 kanban maintenance rebuild tantivy_tasks
+kanban maintenance rebuild oxigraph_relations
 kanban maintenance rebuild --all
 kanban doctor --strict-derived
 ```
@@ -4838,8 +4850,10 @@ but `resolved_board_id` is always the canonical board id selected by the service
 `rebuild` creates an immutable generation from a full board-scoped canonical
 snapshot, catches up post-snapshot deliveries, then publishes under the store
 fence. The previous published generation is retained. `--all` means every store
-currently wired to the unified runtime; during staged rollout this set grows from
-Tantivy to Oxigraph and the two LanceDB projections.
+currently wired to the unified runtime. The production cohort with the explicit
+`oxigraph-backend` feature includes `tantivy_tasks` followed by
+`oxigraph_relations`; the default no-heavy CLI cohort includes Tantivy only. The two
+LanceDB projections join this set in a later staged slice.
 If status proves the SQLite active generation is physically missing or unreadable,
 the runtime performs an explicit fenced recovery publish from a fresh snapshot.
 It never treats that path as a normal pointer CAS, and records only a still-readable

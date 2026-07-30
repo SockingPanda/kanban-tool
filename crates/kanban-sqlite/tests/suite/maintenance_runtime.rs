@@ -83,10 +83,13 @@ fn maintenance_bootstraps_db_scoped_multi_board_tantivy_and_catches_up() -> anyh
 
     let first = maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
     assert_eq!(first.database_instance_id.len(), 29);
-    assert_eq!(first.stores.len(), 1);
-    assert_eq!(first.stores[0].store_name, "tantivy_tasks");
-    assert_eq!(first.stores[0].lifecycle_status, "ready");
-    assert_eq!(first.stores[0].fallback_reason, None);
+    let first_tantivy = first
+        .stores
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .expect("Tantivy is enabled");
+    assert_eq!(first_tantivy.lifecycle_status, "ready");
+    assert_eq!(first_tantivy.fallback_reason, None);
 
     let query = |board: &str, text: &str| SearchQuery {
         board: board.to_owned(),
@@ -154,7 +157,15 @@ fn maintenance_bootstraps_db_scoped_multi_board_tantivy_and_catches_up() -> anyh
 
     let second =
         maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
-    assert_eq!(second.stores[0].action, "batch_applied");
+    assert_eq!(
+        second
+            .stores
+            .iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy is enabled")
+            .action,
+        "batch_applied"
+    );
     let caught_up = search_tasks(&temp.path, query("other", "gamma"))?;
     assert_eq!(caught_up.meta.backend, "tantivy");
     assert_eq!(caught_up.hits[0].task_id, new_other.id);
@@ -164,6 +175,26 @@ fn maintenance_bootstraps_db_scoped_multi_board_tantivy_and_catches_up() -> anyh
 
     let legacy = result_err(rebuild_search_index(&temp.path, "default"))?;
     assert!(legacy.to_string().contains("maintenance v2"));
+    Ok(())
+}
+
+#[cfg(all(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+#[test]
+fn maintenance_run_reports_every_enabled_db_scoped_store() -> anyhow::Result<()> {
+    use kanban_sqlite::api::maintenance_run_once;
+
+    let temp = TempDb::new("maintenance_reports_enabled_stores")?;
+    init_database(&temp.path, "tester")?;
+    let report =
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    assert_eq!(
+        report
+            .stores
+            .iter()
+            .map(|store| store.store_name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["tantivy_tasks", "oxigraph_relations"]
+    );
     Ok(())
 }
 
@@ -267,6 +298,162 @@ fn maintenance_rebuild_keeps_previous_tantivy_generation() -> anyhow::Result<()>
             .join("published")
             .is_file()
     );
+    Ok(())
+}
+
+#[cfg(feature = "oxigraph-backend")]
+#[test]
+fn maintenance_bootstraps_db_scoped_multi_board_oxigraph_and_removes_relations()
+-> anyhow::Result<()> {
+    use kanban_entity::{EntityUri, Predicate};
+    use kanban_graph::RelationGraph;
+    use kanban_graph_oxigraph::OxigraphStore;
+    use kanban_sqlite::api::{
+        add_dependency, maintenance_run_once, maintenance_status, remove_dependency,
+    };
+
+    let temp = TempDb::new("maintenance_multi_board_oxigraph")?;
+    init_database(&temp.path, "tester")?;
+    insert_board(&temp.path, "other", "b_other")?;
+    let parent = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default graph parent"),
+    )?;
+    let child = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("default graph child"),
+    )?;
+    let other = create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("other graph task"),
+    )?;
+    add_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+
+    maintenance_run_once(
+        &temp.path,
+        "oxigraph-runtime-test",
+        MaintenanceRunOptions::default(),
+    )?;
+    let status = maintenance_status(&temp.path)?;
+    let oxigraph = status
+        .stores
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph store is seeded");
+    assert_eq!(oxigraph.lifecycle_status, "ready");
+    let generation = oxigraph
+        .active_generation
+        .as_deref()
+        .expect("Oxigraph generation is active");
+    let root = kanban_local::projection_store_root_path(&temp.path, "oxigraph_relations")?;
+    let graph = OxigraphStore::open(root.join("generations").join(generation))?;
+    let child_uri = EntityUri::new(format!("kb://task/{}", child.id))?;
+    let relations = graph.neighbors(&child_uri, None, 20)?;
+    assert!(relations.iter().any(|relation| {
+        relation.predicate == Predicate::DependsOn
+            && relation.object_uri.as_str() == format!("kb://task/{}", parent.id)
+    }));
+    assert!(relations.iter().all(|relation| {
+        relation.object_uri.as_str() != format!("kb://task/{}", other.id)
+            && relation.object_uri.as_str() != "kb://board/b_other"
+    }));
+
+    remove_dependency(&temp.path, "default", "tester", &parent.id, &child.id)?;
+    maintenance_run_once(
+        &temp.path,
+        "oxigraph-runtime-test",
+        MaintenanceRunOptions::default(),
+    )?;
+    let graph = OxigraphStore::open(root.join("generations").join(generation))?;
+    assert!(
+        graph
+            .neighbors(&child_uri, Some(Predicate::DependsOn), 20)?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[cfg(feature = "oxigraph-backend")]
+#[test]
+fn maintenance_detects_tampered_oxigraph_content_and_recovers() -> anyhow::Result<()> {
+    use kanban_sqlite::api::{maintenance_run_once, maintenance_status};
+
+    let temp = TempDb::new("maintenance_tampered_oxigraph")?;
+    init_database(&temp.path, "tester")?;
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("tamper evidence"),
+    )?;
+    maintenance_run_once(
+        &temp.path,
+        "oxigraph-runtime-test",
+        MaintenanceRunOptions::default(),
+    )?;
+    let ready = maintenance_status(&temp.path)?;
+    let store = ready
+        .stores
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status");
+    let generation = store
+        .active_generation
+        .as_deref()
+        .expect("active generation");
+    let root = kanban_local::projection_store_root_path(&temp.path, "oxigraph_relations")?;
+    let generation_path = root.join("generations").join(generation);
+    std::fs::write(generation_path.join("relations.json"), b"[]")?;
+    let metadata_path = generation_path.join("kb-projection-meta.json");
+    let mut metadata: serde_json::Value = serde_json::from_slice(&std::fs::read(&metadata_path)?)?;
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in (2_u64).to_le_bytes().iter().chain(b"[]") {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    metadata["content_fingerprint"] = serde_json::json!(format!("fnv64:{hash:016x}"));
+    std::fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
+
+    let degraded = maintenance_status(&temp.path)?;
+    let store = degraded
+        .stores
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status");
+    assert_eq!(
+        store.fallback_reason.as_deref(),
+        Some("physical_generation_unavailable")
+    );
+
+    let recovered = maintenance_run_once(
+        &temp.path,
+        "oxigraph-runtime-test",
+        MaintenanceRunOptions::default(),
+    )?;
+    assert_eq!(
+        recovered
+            .stores
+            .iter()
+            .find(|store| store.store_name == "oxigraph_relations")
+            .expect("Oxigraph run")
+            .action,
+        "generation_recovered"
+    );
+    let ready = maintenance_status(&temp.path)?;
+    let store = ready
+        .stores
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status");
+    assert_eq!(store.lifecycle_status, "ready");
+    assert_eq!(store.fallback_reason, None);
+    assert_ne!(store.active_generation.as_deref(), Some(generation));
     Ok(())
 }
 
@@ -564,5 +751,296 @@ fn unmappable_tantivy_delivery_fails_without_advancing_checkpoint() -> anyhow::R
         .expect("Tantivy status");
     assert_eq!(store.checkpoint_cursor, checkpoint);
     assert_eq!(store.failed, 1);
+    Ok(())
+}
+
+#[cfg(feature = "oxigraph-backend")]
+#[test]
+fn unmappable_oxigraph_upsert_fails_without_advancing_checkpoint() -> anyhow::Result<()> {
+    use kanban_sqlite::api::{maintenance_run_once, maintenance_status};
+
+    let temp = TempDb::new("maintenance_unmappable_oxigraph_upsert")?;
+    init_database(&temp.path, "tester")?;
+    maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("unmappable graph delivery"),
+    )?;
+    let before = maintenance_status(&temp.path)?;
+    let checkpoint = before
+        .stores
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status")
+        .checkpoint_cursor;
+    connect_file(&temp.path)?.execute(
+        "UPDATE projection_deliveries
+         SET entity_uri='kb://unknown/unmappable',action='upsert'
+         WHERE id=(
+           SELECT id FROM projection_deliveries
+           WHERE store_name='oxigraph_relations' AND status='pending'
+           ORDER BY cursor LIMIT 1
+         )",
+        [],
+    )?;
+
+    let error = result_err(maintenance_run_once(
+        &temp.path,
+        "runtime-test",
+        MaintenanceRunOptions::default(),
+    ))?;
+    assert!(error.to_string().contains("cannot be mapped"));
+    let after = maintenance_status(&temp.path)?;
+    let store = after
+        .stores
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status");
+    assert_eq!(store.checkpoint_cursor, checkpoint);
+    assert_eq!(store.failed, 1);
+    Ok(())
+}
+
+#[cfg(feature = "oxigraph-backend")]
+#[test]
+fn oxigraph_event_cannot_be_retargeted_to_another_existing_task() -> anyhow::Result<()> {
+    use kanban_sqlite::api::{maintenance_run_once, maintenance_status};
+
+    let temp = TempDb::new("maintenance_oxigraph_event_entity_binding")?;
+    init_database(&temp.path, "tester")?;
+    let other = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("other graph entity"),
+    )?;
+    maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    let source = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("source graph delivery"),
+    )?;
+    let before = maintenance_status(&temp.path)?;
+    let checkpoint = before
+        .stores
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status")
+        .checkpoint_cursor;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "UPDATE projection_deliveries
+         SET entity_uri=?1,action='upsert'
+         WHERE id=(
+           SELECT d.id
+           FROM projection_deliveries d
+           JOIN task_events e ON e.id=d.source_event_id
+           WHERE d.store_name='oxigraph_relations'
+             AND d.status='pending'
+             AND e.task_id=?2
+           ORDER BY d.cursor LIMIT 1
+         )",
+        rusqlite::params![format!("kb://task/{}", other.id), source.id],
+    )?;
+
+    let error = result_err(maintenance_run_once(
+        &temp.path,
+        "runtime-test",
+        MaintenanceRunOptions::default(),
+    ))?;
+    assert!(error.to_string().contains("cannot be mapped"));
+    let store = maintenance_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status");
+    assert_eq!(store.checkpoint_cursor, checkpoint);
+    assert_eq!(store.failed, 1);
+    Ok(())
+}
+
+#[cfg(feature = "oxigraph-backend")]
+#[test]
+fn oxigraph_event_cannot_fall_back_to_legacy_across_boards() -> anyhow::Result<()> {
+    use kanban_sqlite::api::{maintenance_run_once, maintenance_status};
+
+    let temp = TempDb::new("maintenance_oxigraph_cross_board_event_binding")?;
+    init_database(&temp.path, "tester")?;
+    insert_board(&temp.path, "other", "b_other")?;
+    let other = create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("other-board event"),
+    )?;
+    maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    let source = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("source graph delivery"),
+    )?;
+    let before = maintenance_status(&temp.path)?;
+    let checkpoint = before
+        .stores
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status")
+        .checkpoint_cursor;
+    let conn = connect_file(&temp.path)?;
+    let other_event: i64 = conn.query_row(
+        "SELECT id FROM task_events WHERE board_id=?1 AND task_id=?2 ORDER BY id LIMIT 1",
+        rusqlite::params![other.board_id, other.id],
+        |row| row.get(0),
+    )?;
+    conn.execute_batch("DROP TRIGGER projection_delivery_board_guard_update;")?;
+    conn.execute(
+        "UPDATE projection_deliveries
+         SET source_event_id=?1
+         WHERE id=(
+           SELECT d.id
+           FROM projection_deliveries d
+           JOIN task_events e ON e.id=d.source_event_id
+           WHERE d.store_name='oxigraph_relations'
+             AND d.status='pending'
+             AND e.task_id=?2
+           ORDER BY d.cursor LIMIT 1
+         )",
+        rusqlite::params![other_event, source.id],
+    )?;
+
+    let error = result_err(maintenance_run_once(
+        &temp.path,
+        "runtime-test",
+        MaintenanceRunOptions::default(),
+    ))?;
+    assert!(error.to_string().contains("source event"));
+    let store = maintenance_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status");
+    assert_eq!(store.checkpoint_cursor, checkpoint);
+    assert_eq!(store.failed, 1);
+    Ok(())
+}
+
+#[cfg(feature = "oxigraph-backend")]
+#[test]
+fn oxigraph_fingerprint_covers_board_global_relations() -> anyhow::Result<()> {
+    use kanban_sqlite::api::{maintenance_run_once, maintenance_status};
+
+    for direction in ["board_to_global", "global_to_board"] {
+        let temp = TempDb::new(&format!("maintenance_oxigraph_{direction}"))?;
+        init_database(&temp.path, "tester")?;
+        let conn = connect_file(&temp.path)?;
+        let board_id: String =
+            conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+                row.get(0)
+            })?;
+        conn.execute(
+            "INSERT INTO entities(
+               uri,kind,source_table,source_id,board_id,created_at,updated_at
+             ) VALUES('kb://fixture/scoped','fixture','fixture','scoped',?1,1,1)",
+            [&board_id],
+        )?;
+        conn.execute(
+            "INSERT INTO entities(
+               uri,kind,source_table,source_id,board_id,created_at,updated_at
+             ) VALUES('kb://fixture/global','fixture','fixture','global',NULL,1,1)",
+            [],
+        )?;
+        let (subject, object) = if direction == "board_to_global" {
+            ("kb://fixture/scoped", "kb://fixture/global")
+        } else {
+            ("kb://fixture/global", "kb://fixture/scoped")
+        };
+        conn.execute(
+            "INSERT INTO entity_relations(
+               subject_uri,predicate,object_uri,graph_uri,authoritative_store,
+               metadata_json,created_at,updated_at
+             ) VALUES(?1,'related_to',?2,'kb://graph/indexed','sqlite','{}',1,1)",
+            rusqlite::params![subject, object],
+        )?;
+        drop(conn);
+
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+        let status = maintenance_status(&temp.path)?;
+        let store = status
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "oxigraph_relations")
+            .expect("Oxigraph status");
+        assert_eq!(store.lifecycle_status, "ready", "{direction}");
+        assert_eq!(store.fallback_reason, None, "{direction}");
+    }
+    Ok(())
+}
+
+#[cfg(feature = "oxigraph-backend")]
+#[test]
+fn oxigraph_board_noop_requires_non_task_source_event() -> anyhow::Result<()> {
+    use kanban_sqlite::api::{maintenance_run_once, maintenance_status};
+
+    for case in ["missing_event", "task_event"] {
+        let temp = TempDb::new(&format!("maintenance_oxigraph_board_noop_{case}"))?;
+        init_database(&temp.path, "tester")?;
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+        create_task(
+            &temp.path,
+            "default",
+            "tester",
+            CreateTask::ready("board noop evidence"),
+        )?;
+        let conn = connect_file(&temp.path)?;
+        let (delivery_id, board_id): (i64, String) = conn.query_row(
+            "SELECT id,board_id FROM projection_deliveries
+             WHERE store_name='oxigraph_relations' AND status='pending'
+             ORDER BY cursor LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let checkpoint = maintenance_status(&temp.path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "oxigraph_relations")
+            .expect("Oxigraph status")
+            .checkpoint_cursor;
+        if case == "missing_event" {
+            conn.execute(
+                "UPDATE projection_deliveries
+                 SET entity_uri=?1,source_event_id=NULL
+                 WHERE id=?2",
+                rusqlite::params![format!("kb://board/{board_id}"), delivery_id],
+            )?;
+        } else {
+            conn.execute(
+                "UPDATE projection_deliveries
+                 SET entity_uri=?1
+                 WHERE id=?2",
+                rusqlite::params![format!("kb://board/{board_id}"), delivery_id],
+            )?;
+        }
+
+        let error = result_err(maintenance_run_once(
+            &temp.path,
+            "runtime-test",
+            MaintenanceRunOptions::default(),
+        ))?;
+        assert!(
+            error.to_string().contains("cannot be mapped"),
+            "{case}: {error}"
+        );
+        let store = maintenance_status(&temp.path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "oxigraph_relations")
+            .expect("Oxigraph status");
+        assert_eq!(store.checkpoint_cursor, checkpoint, "{case}");
+        assert_eq!(store.failed, 1, "{case}");
+    }
     Ok(())
 }

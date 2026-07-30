@@ -36,6 +36,7 @@ impl Default for FakeProjectionStore {
 #[derive(Default)]
 struct FakeProjectionStoreState {
     prepared: Option<ProjectionArtifactEvidence>,
+    prepared_snapshot: Option<ProjectionSnapshot>,
     active: Option<ProjectionArtifactEvidence>,
     generations: BTreeMap<String, ProjectionArtifactEvidence>,
     published_generations: BTreeSet<String>,
@@ -275,6 +276,14 @@ impl FakeProjectionStore {
             .get(generation)
             .cloned()
     }
+
+    fn prepared_snapshot(&self) -> Option<ProjectionSnapshot> {
+        self.state
+            .lock()
+            .expect("fake lock")
+            .prepared_snapshot
+            .clone()
+    }
 }
 
 impl ProjectionStoreBackend for FakeProjectionStore {
@@ -297,6 +306,7 @@ impl ProjectionStoreBackend for FakeProjectionStore {
                 "canonical snapshot records do not match manifest".to_owned(),
             ));
         }
+        state.prepared_snapshot = Some(snapshot.clone());
         state.max_fence_epoch = manifest.fence_epoch;
         let fingerprint = format!(
             "sha256:{}:{}",
@@ -929,6 +939,159 @@ fn delivery_requires_resolvable_and_consistent_board_scope() -> anyhow::Result<(
     assert!(
         mismatch.is_err(),
         "boards {board_a} and {board_b} must fail"
+    );
+    Ok(())
+}
+
+#[test]
+fn canonical_task_snapshot_orders_history_before_aggregation_and_is_repeatable()
+-> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_ordered_task_history")?;
+    init_database(&temp.path, "tester")?;
+    let conn = connect_file(&temp.path)?;
+    let board_id: String =
+        conn.query_row("SELECT id FROM boards WHERE slug='default'", [], |row| {
+            row.get(0)
+        })?;
+    let task_id = "t_snapshot_order";
+    conn.execute(
+        "INSERT INTO tasks(
+           id,board_id,seq,title,status,priority,created_by,created_at,updated_at,metadata_json
+         ) VALUES(?1,?2,99,'Snapshot order','todo',1,'tester',1,1,'{}')",
+        params![task_id, board_id],
+    )?;
+
+    for (id, body, created_at) in [
+        ("c_late", "z-late", 30_i64),
+        ("c_same_b", "y-same-b", 20),
+        ("c_early", "a-early", 10),
+        ("c_same_a", "x-same-a", 20),
+    ] {
+        conn.execute(
+            "INSERT INTO task_comments(
+               id,board_id,task_id,author,body,kind,created_at
+             ) VALUES(?1,?2,?3,'tester',?4,'note',?5)",
+            params![id, board_id, task_id, body, created_at],
+        )?;
+    }
+    for (id, summary, error, started_at) in [
+        ("r_late", "z-late-run", "late-error", 30_i64),
+        ("r_same_b", "y-same-b-run", "same-b-error", 20),
+        ("r_early", "a-early-run", "early-error", 10),
+        ("r_same_a", "x-same-a-run", "same-a-error", 20),
+    ] {
+        conn.execute(
+            "INSERT INTO task_runs(
+               id,board_id,task_id,status,claim_token,claim_owner,claim_expires_at,
+               started_at,finished_at,summary,error,metadata_json
+             ) VALUES(?1,?2,?3,'succeeded',?1,'tester',100,?6,?6,?4,?5,'{}')",
+            params![id, board_id, task_id, summary, error, started_at],
+        )?;
+    }
+    for (id, event_id, kind, payload_json) in [
+        (40_i64, "e_late", "z.late", r#"{"order":"late"}"#),
+        (30, "e_same_b", "y.same_b", r#"{"order":"same-b"}"#),
+        (10, "e_early", "a.early", r#"{"order":"early"}"#),
+        (20, "e_same_a", "x.same_a", r#"{"order":"same-a"}"#),
+    ] {
+        conn.execute(
+            "INSERT INTO task_events(
+               id,event_id,board_id,task_id,kind,actor,payload_json,created_at
+             ) VALUES(?1,?2,?3,?4,?5,'tester',?6,?1)",
+            params![id, event_id, board_id, task_id, kind, payload_json],
+        )?;
+    }
+    conn.execute_batch(
+        "DROP INDEX IF EXISTS idx_comments_task_created;
+         DROP INDEX IF EXISTS idx_runs_task_started;
+         DROP INDEX IF EXISTS idx_runs_status;
+         DROP INDEX IF EXISTS idx_events_board_id;
+         DROP INDEX IF EXISTS idx_events_task_created;
+         DROP INDEX IF EXISTS idx_events_kind_created;
+         CREATE INDEX snapshot_comments_adversarial
+           ON task_comments(board_id,task_id,body DESC,created_at,id);
+         CREATE INDEX snapshot_runs_adversarial
+           ON task_runs(board_id,task_id,summary DESC,started_at,id,error);
+         CREATE INDEX snapshot_events_adversarial
+           ON task_events(board_id,task_id,kind DESC,id,payload_json);
+         ANALYZE;",
+    )?;
+    drop(conn);
+
+    let first_backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    begin_projection_generation(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &first_backend,
+    )?;
+    prepare_projection_snapshot_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &first_backend,
+    )?;
+    let first_snapshot = first_backend
+        .prepared_snapshot()
+        .expect("captured canonical snapshot");
+    let first_record = first_snapshot
+        .records
+        .iter()
+        .find(|record| record.identity == format!("kb://task/{task_id}"))
+        .expect("task snapshot record");
+    let first_payload: serde_json::Value = serde_json::from_str(&first_record.payload_json)?;
+    assert_eq!(
+        first_payload["comments"],
+        "a-early\nx-same-a\ny-same-b\nz-late"
+    );
+    assert_eq!(
+        first_payload["run_text"],
+        "a-early-run early-error\nx-same-a-run same-a-error\n\
+         y-same-b-run same-b-error\nz-late-run late-error"
+    );
+    assert_eq!(
+        first_payload["event_text"],
+        "a.early {\"order\":\"early\"}\nx.same_a {\"order\":\"same-a\"}\n\
+         y.same_b {\"order\":\"same-b\"}\nz.late {\"order\":\"late\"}"
+    );
+
+    abort_projection_generation(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &first_backend,
+    )?;
+    let second_backend = FakeProjectionStore::default();
+    begin_projection_generation(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &second_backend,
+    )?;
+    prepare_projection_snapshot_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &second_backend,
+    )?;
+    let second_snapshot = second_backend
+        .prepared_snapshot()
+        .expect("captured repeated canonical snapshot");
+    let second_record = second_snapshot
+        .records
+        .iter()
+        .find(|record| record.identity == format!("kb://task/{task_id}"))
+        .expect("task snapshot record from repeated capture");
+    assert_eq!(second_record, first_record);
+    assert_eq!(
+        second_snapshot.manifest.canonical_digest,
+        first_snapshot.manifest.canonical_digest
     );
     Ok(())
 }

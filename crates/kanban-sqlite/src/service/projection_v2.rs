@@ -3023,18 +3023,34 @@ fn canonical_task_records(conn: &Connection) -> Result<Vec<ProjectionSnapshotRec
         .prepare(
             "SELECT t.board_id,t.id,t.seq,t.status,t.assignee,t.priority,t.created_at,t.updated_at,
                     t.due_at,t.title,t.description,
-                    COALESCE((SELECT group_concat(c.body, char(10)) FROM task_comments c
-                              WHERE c.board_id=t.board_id AND c.task_id=t.id
-                              ORDER BY c.created_at,c.id),''),
-                    COALESCE((SELECT group_concat(COALESCE(r.summary,'') || ' ' ||
-                                                  COALESCE(r.error,''), char(10))
-                              FROM task_runs r
-                              WHERE r.board_id=t.board_id AND r.task_id=t.id
-                              ORDER BY r.started_at,r.id),''),
-                    COALESCE((SELECT group_concat(e.kind || ' ' || e.payload_json, char(10))
-                              FROM task_events e
-                              WHERE e.board_id=t.board_id AND e.task_id=t.id
-                              ORDER BY e.id),'')
+                    COALESCE((
+                      SELECT group_concat(ordered.body, char(10))
+                      FROM (
+                        SELECT c.body
+                        FROM task_comments c
+                        WHERE c.board_id=t.board_id AND c.task_id=t.id
+                        ORDER BY c.created_at,c.id
+                      ) ordered
+                    ),''),
+                    COALESCE((
+                      SELECT group_concat(ordered.text, char(10))
+                      FROM (
+                        SELECT COALESCE(r.summary,'') || ' ' ||
+                               COALESCE(r.error,'') AS text
+                        FROM task_runs r
+                        WHERE r.board_id=t.board_id AND r.task_id=t.id
+                        ORDER BY r.started_at,r.id
+                      ) ordered
+                    ),''),
+                    COALESCE((
+                      SELECT group_concat(ordered.text, char(10))
+                      FROM (
+                        SELECT e.kind || ' ' || e.payload_json AS text
+                        FROM task_events e
+                        WHERE e.board_id=t.board_id AND e.task_id=t.id
+                        ORDER BY e.id
+                      ) ordered
+                    ),'')
              FROM tasks t
              ORDER BY t.board_id,t.seq,t.id",
         )

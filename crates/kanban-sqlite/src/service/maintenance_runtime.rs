@@ -3,10 +3,10 @@ use std::{
     fs::File,
     io::Read,
     path::{Path, PathBuf},
-    sync::OnceLock,
+    sync::{OnceLock, mpsc},
+    thread,
+    time::Duration,
 };
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
-use std::{sync::mpsc, thread, time::Duration};
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_typed_id};
 use kanban_indexer::{
@@ -17,6 +17,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::connect_file;
 
+use super::lancedb_projection::{
+    LanceDbProjectionFailureClass, LanceDbProjectionStore, lancedb_failure_class,
+};
 #[cfg(feature = "oxigraph-backend")]
 use super::oxigraph_projection::OxigraphProjectionStore;
 #[cfg(feature = "tantivy-backend")]
@@ -24,10 +27,9 @@ use super::tantivy_projection::TantivyProjectionStore;
 use super::{
     ProjectionRuntimeAvailability, ProjectionStatus, projection_status, storage, with_immediate_tx,
 };
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 use super::{
-    ProjectionStoreBackend, abort_projection_generation, acquire_projection_lease,
-    begin_projection_generation, prepare_projection_snapshot_with,
+    ProjectionStoreBackend, abort_incompatible_projection_generation, abort_projection_generation,
+    acquire_projection_lease, begin_projection_generation, prepare_projection_snapshot_with,
     publish_projection_generation_with, reconcile_projection_generation_with,
     recover_projection_generation_with, release_projection_lease, renew_projection_lease,
     run_projection_batch_with, validate_backend_for_target, validate_physical_active_artifact_with,
@@ -37,7 +39,6 @@ use super::{
 pub const DEFAULT_MAINTENANCE_LEASE_TTL_MS: i64 = 3_600_000;
 pub const DEFAULT_MAINTENANCE_CLAIM_TTL_MS: i64 = 300_000;
 pub const DEFAULT_MAINTENANCE_BATCH_SIZE: usize = 250;
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 const MAX_REBUILD_CATCH_UP_BATCHES: usize = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -226,6 +227,13 @@ impl MaintenanceSession {
             run_tantivy_once(self, false)?,
             #[cfg(feature = "oxigraph-backend")]
             run_oxigraph_once(self, false)?,
+            run_lancedb_once(
+                self,
+                LANCEDB_LABEL_ATOMS_STORE,
+                "LanceDB label atoms",
+                false,
+            )?,
+            run_lancedb_once(self, LANCEDB_CHUNKS_STORE, "LanceDB task chunks", false)?,
         ];
         renew_maintenance_owner(self)?;
         self.report(stores)
@@ -236,6 +244,12 @@ impl MaintenanceSession {
         let store = match store_name {
             TANTIVY_TASKS_STORE => run_tantivy_once(self, true)?,
             OXIGRAPH_RELATIONS_STORE => run_oxigraph_once(self, true)?,
+            LANCEDB_LABEL_ATOMS_STORE => {
+                run_lancedb_once(self, store_name, "LanceDB label atoms", true)?
+            }
+            LANCEDB_CHUNKS_STORE => {
+                run_lancedb_once(self, store_name, "LanceDB task chunks", true)?
+            }
             _ => {
                 return Err(KanbanError::InvalidInput(format!(
                     "projection store {store_name} is not yet wired to the unified maintenance runtime"
@@ -253,6 +267,8 @@ impl MaintenanceSession {
             run_tantivy_once(self, true)?,
             #[cfg(feature = "oxigraph-backend")]
             run_oxigraph_once(self, true)?,
+            run_lancedb_once(self, LANCEDB_LABEL_ATOMS_STORE, "LanceDB label atoms", true)?,
+            run_lancedb_once(self, LANCEDB_CHUNKS_STORE, "LanceDB task chunks", true)?,
         ];
         renew_maintenance_owner(self)?;
         self.report(stores)
@@ -315,6 +331,18 @@ pub fn maintenance_status(path: impl AsRef<Path>) -> Result<ProjectionStatus> {
         enrich_oxigraph_physical_health(path, &mut status)?;
     }
     apply_runtime_availability(&mut status);
+    enrich_lancedb_physical_health(
+        path,
+        &mut status,
+        LANCEDB_LABEL_ATOMS_STORE,
+        "LanceDB label atoms",
+    )?;
+    enrich_lancedb_physical_health(
+        path,
+        &mut status,
+        LANCEDB_CHUNKS_STORE,
+        "LanceDB task chunks",
+    )?;
     Ok(status)
 }
 
@@ -355,6 +383,8 @@ fn compiled_capabilities() -> Vec<String> {
     [
         (TANTIVY_TASKS_STORE, cfg!(feature = "tantivy-backend")),
         (OXIGRAPH_RELATIONS_STORE, cfg!(feature = "oxigraph-backend")),
+        (LANCEDB_LABEL_ATOMS_STORE, true),
+        (LANCEDB_CHUNKS_STORE, true),
     ]
     .into_iter()
     .filter(|(_, enabled)| *enabled)
@@ -366,9 +396,44 @@ fn compiled_capability(store_name: &str) -> bool {
     match store_name {
         TANTIVY_TASKS_STORE => cfg!(feature = "tantivy-backend"),
         OXIGRAPH_RELATIONS_STORE => cfg!(feature = "oxigraph-backend"),
-        LANCEDB_CHUNKS_STORE | LANCEDB_LABEL_ATOMS_STORE => false,
+        LANCEDB_CHUNKS_STORE | LANCEDB_LABEL_ATOMS_STORE => true,
         _ => false,
     }
+}
+
+fn enrich_lancedb_physical_health(
+    path: &Path,
+    status: &mut ProjectionStatus,
+    store_name: &str,
+    display_name: &str,
+) -> Result<()> {
+    let backend = match LanceDbProjectionStore::connect_resolved(path, store_name) {
+        Ok(backend) => backend,
+        Err(error) => {
+            if let Some(store) = status
+                .stores
+                .iter_mut()
+                .find(|store| store.store_name == store_name)
+            {
+                let failure = lancedb_failure_class(&error);
+                store.runtime_availability = ProjectionRuntimeAvailability::Unavailable;
+                store.lifecycle_status = "error".to_owned();
+                store.last_error = Some(format!(
+                    "{display_name} projection helper is unavailable: {error}"
+                ));
+                store.fallback_reason = Some(
+                    match failure {
+                        LanceDbProjectionFailureClass::Provider => "provider_unavailable",
+                        LanceDbProjectionFailureClass::Backend
+                        | LanceDbProjectionFailureClass::Delivery => "helper_unavailable",
+                    }
+                    .to_owned(),
+                );
+            }
+            return Ok(());
+        }
+    };
+    enrich_physical_health(path, status, store_name, display_name, &backend)
 }
 
 #[cfg(feature = "oxigraph-backend")]
@@ -415,7 +480,6 @@ fn mark_physical_health_unavailable(
     }
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 fn enrich_physical_health(
     path: &Path,
     status: &mut ProjectionStatus,
@@ -707,7 +771,32 @@ fn run_oxigraph_once(
     }
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+fn run_lancedb_once(
+    session: &mut MaintenanceSession,
+    store_name: &str,
+    display_name: &str,
+    force_rebuild: bool,
+) -> Result<MaintenanceStoreRun> {
+    let backend = match LanceDbProjectionStore::connect_resolved(&session.db_path, store_name) {
+        Ok(backend) => backend,
+        Err(error) => {
+            let kind = match lancedb_failure_class(&error) {
+                LanceDbProjectionFailureClass::Provider => MaintenanceStoreFailureKind::Provider,
+                LanceDbProjectionFailureClass::Backend => MaintenanceStoreFailureKind::Backend,
+                LanceDbProjectionFailureClass::Delivery => MaintenanceStoreFailureKind::Delivery,
+            };
+            return failed_store_run_without_store_lease(
+                session,
+                store_name,
+                display_name,
+                kind,
+                error,
+            );
+        }
+    };
+    run_projection_store_once(session, store_name, display_name, &backend, force_rebuild)
+}
+
 #[derive(Debug)]
 enum MaintenanceStoreAttemptError {
     Fatal(KanbanError),
@@ -717,10 +806,23 @@ enum MaintenanceStoreAttemptError {
     },
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TargetValidationDisposition {
+    Retry,
+    Rebuild,
+}
+
+fn target_validation_disposition(error: &KanbanError) -> TargetValidationDisposition {
+    match error {
+        KanbanError::Conflict(_) | KanbanError::InvalidInput(_) => {
+            TargetValidationDisposition::Rebuild
+        }
+        _ => TargetValidationDisposition::Retry,
+    }
+}
+
 type MaintenanceStoreAttempt<T> = std::result::Result<T, MaintenanceStoreAttemptError>;
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 fn run_projection_store_once(
     session: &mut MaintenanceSession,
     store_name: &str,
@@ -749,14 +851,17 @@ fn run_projection_store_once(
         Err(error) => Err(error),
         Ok(Ok(report)) => Ok(report),
         Ok(Err(MaintenanceStoreAttemptError::Fatal(error))) => Err(error),
-        Ok(Err(MaintenanceStoreAttemptError::Store { kind, error })) => failed_store_run(
-            session,
-            store_name,
-            display_name,
-            &lease.lease_token,
-            kind,
-            error,
-        ),
+        Ok(Err(MaintenanceStoreAttemptError::Store { kind, error })) => {
+            let kind = classify_store_failure(store_name, &error, kind);
+            failed_store_run(
+                session,
+                store_name,
+                display_name,
+                &lease.lease_token,
+                kind,
+                error,
+            )
+        }
     };
     let release = release_projection_lease(
         &session.db_path,
@@ -771,7 +876,20 @@ fn run_projection_store_once(
     }
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+fn classify_store_failure(
+    store_name: &str,
+    error: &KanbanError,
+    fallback: MaintenanceStoreFailureKind,
+) -> MaintenanceStoreFailureKind {
+    if matches!(store_name, LANCEDB_CHUNKS_STORE | LANCEDB_LABEL_ATOMS_STORE)
+        && lancedb_failure_class(error) == LanceDbProjectionFailureClass::Provider
+    {
+        MaintenanceStoreFailureKind::Provider
+    } else {
+        fallback
+    }
+}
+
 fn run_projection_store_operation(
     session: &mut MaintenanceSession,
     store_name: &str,
@@ -846,23 +964,47 @@ fn run_projection_store_operation(
                         )),
                     }
                 })?;
-                if validate_backend_for_target(
+                if let Err(error) = validate_backend_for_target(
                     &session.db_path,
                     store_name,
                     &session.owner,
                     lease_token,
                     backend,
-                )
-                .is_err()
-                {
-                    abort_projection_generation(
-                        &session.db_path,
-                        store_name,
-                        &session.owner,
-                        lease_token,
-                        backend,
-                    )
-                    .map_err(|error| MaintenanceStoreAttemptError::Store {
+                ) {
+                    if target_validation_disposition(&error) == TargetValidationDisposition::Retry {
+                        return Err(MaintenanceStoreAttemptError::Store {
+                            kind: MaintenanceStoreFailureKind::Backend,
+                            error,
+                        });
+                    }
+                    let descriptor = backend.descriptor().map_err(|error| {
+                        MaintenanceStoreAttemptError::Store {
+                            kind: MaintenanceStoreFailureKind::Backend,
+                            error,
+                        }
+                    })?;
+                    let backend_still_matches_building = descriptor.store_name == store_name
+                        && store.building_provider.as_deref() == Some(descriptor.provider.as_str())
+                        && store.building_provider_fingerprint.as_deref()
+                            == Some(descriptor.provider_fingerprint.as_str());
+                    let abort = if backend_still_matches_building {
+                        abort_projection_generation(
+                            &session.db_path,
+                            store_name,
+                            &session.owner,
+                            lease_token,
+                            backend,
+                        )
+                    } else {
+                        abort_incompatible_projection_generation(
+                            &session.db_path,
+                            store_name,
+                            &session.owner,
+                            lease_token,
+                            backend,
+                        )
+                    };
+                    abort.map_err(|error| MaintenanceStoreAttemptError::Store {
                         kind: MaintenanceStoreFailureKind::Backend,
                         error,
                     })?;
@@ -1022,7 +1164,6 @@ fn run_projection_store_operation(
     .map_err(MaintenanceStoreAttemptError::Fatal)
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 #[derive(Clone)]
 struct ProjectionLeaseHeartbeat {
     db_path: PathBuf,
@@ -1034,7 +1175,6 @@ struct ProjectionLeaseHeartbeat {
     ttl_ms: i64,
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 impl fmt::Debug for ProjectionLeaseHeartbeat {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -1050,7 +1190,6 @@ impl fmt::Debug for ProjectionLeaseHeartbeat {
     }
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 impl ProjectionLeaseHeartbeat {
     fn new(session: &MaintenanceSession, store_name: &str, store_lease_token: &str) -> Self {
         Self {
@@ -1111,7 +1250,6 @@ impl ProjectionLeaseHeartbeat {
     }
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 fn catch_up_generation(
     session: &mut MaintenanceSession,
     store_name: &str,
@@ -1156,7 +1294,6 @@ fn catch_up_generation(
     })
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 fn failed_store_run(
     session: &MaintenanceSession,
     store_name: &str,
@@ -1176,7 +1313,6 @@ fn failed_store_run(
     persist_store_failure(&session.db_path, store_name, display_name, kind, error)
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 fn failed_store_run_without_store_lease(
     session: &MaintenanceSession,
     store_name: &str,
@@ -1188,7 +1324,6 @@ fn failed_store_run_without_store_lease(
     persist_store_failure(&session.db_path, store_name, display_name, kind, error)
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 fn persist_store_failure(
     path: &Path,
     store_name: &str,
@@ -1228,7 +1363,6 @@ fn persist_store_failure(
     })
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 fn store_run(
     path: &Path,
     store_name: &str,
@@ -1310,15 +1444,203 @@ fn compute_runtime_build_identity() -> std::result::Result<String, String> {
     ))
 }
 
+#[cfg(test)]
+mod target_validation_tests {
+    use super::*;
+
+    #[test]
+    fn transient_target_validation_failure_requires_retry_without_abort() {
+        assert_eq!(
+            target_validation_disposition(&KanbanError::Storage(
+                "transient helper timeout".to_owned()
+            )),
+            TargetValidationDisposition::Retry
+        );
+    }
+
+    #[test]
+    fn deterministic_target_validation_mismatch_requires_rebuild() {
+        assert_eq!(
+            target_validation_disposition(&KanbanError::Conflict(
+                "physical generation evidence mismatch".to_owned()
+            )),
+            TargetValidationDisposition::Rebuild
+        );
+        assert_eq!(
+            target_validation_disposition(&KanbanError::InvalidInput(
+                "provider descriptor mismatch".to_owned()
+            )),
+            TargetValidationDisposition::Rebuild
+        );
+    }
+}
+
 #[cfg(all(test, feature = "tantivy-backend"))]
 mod tests {
-    use std::time::Duration;
+    use std::{
+        sync::atomic::{AtomicBool, Ordering},
+        time::Duration,
+    };
 
     use tempfile::tempdir;
 
     use super::*;
     use crate::init::init_database;
-    use crate::service::{CreateTask, create_task};
+    use crate::service::{
+        CreateTask, ProjectionArtifactEvidence, ProjectionBatch, ProjectionBatchReceipt,
+        ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreDescriptor, create_task,
+    };
+
+    struct TransientGenerationInspectStore {
+        inner: TantivyProjectionStore,
+        fail_next_inspect: AtomicBool,
+        force_active_conflict: bool,
+        descriptor_override: Option<ProjectionStoreDescriptor>,
+    }
+
+    impl TransientGenerationInspectStore {
+        fn new(inner: TantivyProjectionStore) -> Self {
+            Self {
+                inner,
+                fail_next_inspect: AtomicBool::new(true),
+                force_active_conflict: false,
+                descriptor_override: None,
+            }
+        }
+
+        fn with_descriptor(
+            inner: TantivyProjectionStore,
+            descriptor: ProjectionStoreDescriptor,
+        ) -> Self {
+            Self {
+                inner,
+                fail_next_inspect: AtomicBool::new(false),
+                force_active_conflict: false,
+                descriptor_override: Some(descriptor),
+            }
+        }
+
+        fn with_descriptor_and_active_conflict(
+            inner: TantivyProjectionStore,
+            descriptor: ProjectionStoreDescriptor,
+        ) -> Self {
+            Self {
+                inner,
+                fail_next_inspect: AtomicBool::new(false),
+                force_active_conflict: true,
+                descriptor_override: Some(descriptor),
+            }
+        }
+    }
+
+    impl ProjectionStoreBackend for TransientGenerationInspectStore {
+        fn descriptor(&self) -> Result<ProjectionStoreDescriptor> {
+            self.descriptor_override
+                .clone()
+                .map_or_else(|| self.inner.descriptor(), Ok)
+        }
+
+        fn prepare_snapshot(
+            &self,
+            snapshot: &ProjectionSnapshot,
+        ) -> Result<ProjectionArtifactEvidence> {
+            self.inner.prepare_snapshot(snapshot)
+        }
+
+        fn apply_batch(&self, batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt> {
+            self.inner.apply_batch(batch)
+        }
+
+        fn publish_generation(
+            &self,
+            expected_active: Option<&ProjectionArtifactEvidence>,
+            prepared: &ProjectionArtifactEvidence,
+        ) -> Result<ProjectionPublishReceipt> {
+            if let Some(descriptor) = &self.descriptor_override
+                && (expected_active
+                    .is_some_and(|evidence| !artifact_matches_descriptor(evidence, descriptor))
+                    || !artifact_matches_descriptor(prepared, descriptor))
+            {
+                return Err(KanbanError::Conflict(
+                    "strict backend rejected publish evidence from another provider".to_owned(),
+                ));
+            }
+            self.inner.publish_generation(expected_active, prepared)
+        }
+
+        fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>> {
+            if self.force_active_conflict {
+                return Err(KanbanError::Conflict(
+                    "strict backend found an unattributed incompatible active generation"
+                        .to_owned(),
+                ));
+            }
+            let active = self.inner.inspect_active()?;
+            if let (Some(descriptor), Some(evidence)) = (&self.descriptor_override, &active)
+                && !artifact_matches_descriptor(evidence, descriptor)
+            {
+                return Err(KanbanError::Conflict(
+                    "strict backend rejected active evidence from another provider".to_owned(),
+                ));
+            }
+            Ok(active)
+        }
+
+        fn inspect_generation(
+            &self,
+            generation: &str,
+        ) -> Result<Option<ProjectionArtifactEvidence>> {
+            if self.fail_next_inspect.swap(false, Ordering::SeqCst) {
+                return Err(KanbanError::Storage(
+                    "transient prepared generation inspection failure".to_owned(),
+                ));
+            }
+            let evidence = self.inner.inspect_generation(generation)?;
+            if let (Some(descriptor), Some(evidence)) = (&self.descriptor_override, &evidence)
+                && !artifact_matches_descriptor(evidence, descriptor)
+            {
+                return Err(KanbanError::Conflict(
+                    "strict backend rejected generation evidence from another provider".to_owned(),
+                ));
+            }
+            Ok(evidence)
+        }
+
+        fn validate_generation_publication(
+            &self,
+            expected: &ProjectionArtifactEvidence,
+        ) -> Result<()> {
+            self.inner.validate_generation_publication(expected)
+        }
+
+        fn repair_generation_publication(
+            &self,
+            expected: &ProjectionArtifactEvidence,
+        ) -> Result<()> {
+            self.inner.repair_generation_publication(expected)
+        }
+
+        fn validate_active_contents(&self, active: &ProjectionArtifactEvidence) -> Result<()> {
+            self.inner.validate_active_contents(active)
+        }
+
+        fn quarantine_generation(&self, generation: &str) -> Result<()> {
+            self.inner.quarantine_generation(generation)
+        }
+
+        fn abort_generation(&self, generation: &str) -> Result<()> {
+            self.inner.abort_generation(generation)
+        }
+    }
+
+    fn artifact_matches_descriptor(
+        evidence: &ProjectionArtifactEvidence,
+        descriptor: &ProjectionStoreDescriptor,
+    ) -> bool {
+        evidence.manifest.store_name == descriptor.store_name
+            && evidence.manifest.provider == descriptor.provider
+            && evidence.manifest.provider_fingerprint == descriptor.provider_fingerprint
+    }
 
     fn quarantined_generation_path(generation_path: &Path) -> anyhow::Result<PathBuf> {
         let parent = generation_path
@@ -1703,6 +2025,410 @@ mod tests {
                 "{phase}"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_quarantines_incompatible_prepared_generation_and_publishes_new_provider()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("provider-migration.db");
+        init_database(&db_path, "tester")?;
+        create_task(
+            &db_path,
+            "default",
+            "tester",
+            CreateTask::ready("provider migration"),
+        )?;
+        let interrupted = MaintenanceSession::start(
+            &db_path,
+            "provider-a-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let lease = acquire_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            interrupted.options.lease_ttl_ms,
+        )?;
+        let first_active = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+            &provider_a,
+        )?
+        .generation;
+        prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+            &provider_a,
+        )?;
+        publish_projection_generation_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+            &provider_a,
+        )?;
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+        )?;
+        let lease = acquire_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            interrupted.options.lease_ttl_ms,
+        )?;
+        let second_active = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+            &provider_a,
+        )?
+        .generation;
+        prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+            &provider_a,
+        )?;
+        publish_projection_generation_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+            &provider_a,
+        )?;
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+        )?;
+        let lease = acquire_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            interrupted.options.lease_ttl_ms,
+        )?;
+        let incompatible_generation = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+            &provider_a,
+        )?
+        .generation;
+        prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+            &provider_a,
+        )?;
+        let status = projection_status(&db_path)?;
+        let generations_root = kanban_local::projection_store_root_path(
+            &db_path,
+            &status.database_instance_id,
+            TANTIVY_TASKS_STORE,
+        )?
+        .join("generations");
+        let generation_paths = [
+            first_active.clone(),
+            second_active.clone(),
+            incompatible_generation.clone(),
+        ]
+        .map(|generation| generations_root.join(generation));
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+        )?;
+        interrupted.finish()?;
+
+        let mut provider_b_descriptor = provider_a.descriptor()?;
+        provider_b_descriptor.provider = "tantivy-provider-b".to_owned();
+        provider_b_descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let provider_b = TransientGenerationInspectStore::with_descriptor(
+            TantivyProjectionStore::new(&db_path)?,
+            provider_b_descriptor.clone(),
+        );
+        let mut takeover = MaintenanceSession::start(
+            &db_path,
+            "provider-b-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease = acquire_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-b-owner",
+            takeover.options.lease_ttl_ms,
+        )?;
+
+        let result = run_projection_store_operation(
+            &mut takeover,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            &lease.lease_token,
+            &provider_b,
+            false,
+        )
+        .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+        assert!(matches!(
+            result.result,
+            MaintenanceStoreResult::Succeeded { .. }
+        ));
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-b-owner",
+            &lease.lease_token,
+        )?;
+        takeover.finish()?;
+        let recovered = projection_status(&db_path)?;
+        let store = recovered
+            .stores
+            .iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+        assert_eq!(
+            store.active_provider.as_deref(),
+            Some(provider_b_descriptor.provider.as_str())
+        );
+        assert_eq!(
+            store.active_provider_fingerprint.as_deref(),
+            Some(provider_b_descriptor.provider_fingerprint.as_str())
+        );
+        assert!(store.building_generation.is_none());
+        assert_ne!(
+            store.active_generation.as_deref(),
+            Some(incompatible_generation.as_str())
+        );
+        assert!(provider_b.inspect_active()?.is_some());
+        for (generation, generation_path) in
+            [first_active, second_active, incompatible_generation.clone()]
+                .iter()
+                .zip(&generation_paths)
+        {
+            assert!(provider_b.inspect_generation(generation)?.is_none());
+            let quarantined = quarantined_generation_path(generation_path)?;
+            assert!(
+                quarantined.join("kb-projection-meta.json").is_file(),
+                "incompatible generation {generation} evidence must remain in quarantine"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn incompatible_abort_does_not_swallow_unattributed_active_conflict() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("provider-conflict.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "provider-a-owner", 20_000)?;
+        let building = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+            &provider_a,
+        )?
+        .generation;
+        prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+            &provider_a,
+        )?;
+        let status = projection_status(&db_path)?;
+        let generation_path = kanban_local::projection_store_root_path(
+            &db_path,
+            &status.database_instance_id,
+            TANTIVY_TASKS_STORE,
+        )?
+        .join("generations")
+        .join(&building);
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-a-owner",
+            &lease.lease_token,
+        )?;
+
+        let mut descriptor = provider_a.descriptor()?;
+        descriptor.provider = "tantivy-provider-b".to_owned();
+        descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let provider_b = TransientGenerationInspectStore::with_descriptor_and_active_conflict(
+            TantivyProjectionStore::new(&db_path)?,
+            descriptor,
+        );
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "provider-b-owner", 20_000)?;
+        let error = abort_incompatible_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "provider-b-owner",
+            &lease.lease_token,
+            &provider_b,
+        )
+        .expect_err("an unattributed active conflict must fail closed");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unattributed incompatible active")
+        );
+        let store = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+        assert_eq!(
+            store.building_generation.as_deref(),
+            Some(building.as_str()),
+            "SQLite must not reset until all physical active evidence is attributable"
+        );
+        assert!(
+            quarantined_generation_path(&generation_path)?
+                .join("kb-projection-meta.json")
+                .is_file(),
+            "the already quarantined building evidence remains recoverable"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_preserves_prepared_generation_on_transient_target_inspection_failure()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-target-inspection.db");
+        init_database(&db_path, "tester")?;
+        create_task(
+            &db_path,
+            "default",
+            "tester",
+            CreateTask::ready("prepared transient inspection"),
+        )?;
+        let interrupted = MaintenanceSession::start(
+            &db_path,
+            "interrupted-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let backend = TantivyProjectionStore::new(&db_path)?;
+        let lease = acquire_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "interrupted-owner",
+            interrupted.options.lease_ttl_ms,
+        )?;
+        let building = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "interrupted-owner",
+            &lease.lease_token,
+            &backend,
+        )?
+        .generation;
+        prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "interrupted-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "interrupted-owner",
+            &lease.lease_token,
+        )?;
+        interrupted.finish()?;
+
+        let mut takeover = MaintenanceSession::start(
+            &db_path,
+            "takeover-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease = acquire_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "takeover-owner",
+            takeover.options.lease_ttl_ms,
+        )?;
+        let backend = TransientGenerationInspectStore::new(TantivyProjectionStore::new(&db_path)?);
+        let attempt = run_projection_store_operation(
+            &mut takeover,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            &lease.lease_token,
+            &backend,
+            false,
+        );
+        let Err(MaintenanceStoreAttemptError::Store { kind, error }) = attempt else {
+            anyhow::bail!("transient target inspection must fail the store attempt");
+        };
+        assert_eq!(kind, MaintenanceStoreFailureKind::Backend);
+        assert!(
+            error
+                .to_string()
+                .contains("transient prepared generation inspection")
+        );
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "takeover-owner",
+            &lease.lease_token,
+        )?;
+        takeover.finish()?;
+
+        let state = projection_status(&db_path)?;
+        let store = state
+            .stores
+            .iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+        assert_eq!(
+            store.building_generation.as_deref(),
+            Some(building.as_str())
+        );
+        assert_eq!(store.building_phase.as_deref(), Some("prepared"));
+        assert!(
+            backend.inspect_generation(&building)?.is_some(),
+            "transient inspection must preserve the prepared physical generation"
+        );
+        let generation_path = kanban_local::projection_store_root_path(
+            &db_path,
+            &state.database_instance_id,
+            TANTIVY_TASKS_STORE,
+        )?
+        .join("generations")
+        .join(&building);
+        assert!(generation_path.is_dir());
+        let prefix = format!(".{building}.quarantine.");
+        assert!(
+            std::fs::read_dir(generation_path.parent().expect("generation parent"))?
+                .flatten()
+                .all(|entry| !entry.file_name().to_string_lossy().starts_with(&prefix)),
+            "transient inspection must not quarantine the prepared generation"
+        );
         Ok(())
     }
 

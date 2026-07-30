@@ -9,7 +9,7 @@ use kanban_sqlite::api::provider::{
     ProjectionSnapshot, ProjectionStoreBackend, ProjectionStoreDescriptor,
     begin_projection_generation, prepare_projection_snapshot_with,
     publish_projection_generation_with, reconcile_projection_generation_with,
-    run_projection_batch_with,
+    recover_projection_generation_with, run_projection_batch_with,
 };
 use kanban_sqlite::api::{
     abort_projection_generation, acquire_projection_lease, projection_status,
@@ -39,6 +39,14 @@ struct FakeProjectionStoreState {
     bad_snapshot_evidence: bool,
     bad_batch_receipt: bool,
     fail_after_publish_once: bool,
+    active_inspect_failure: Option<FakeInspectFailure>,
+    generation_inspect_failure: Option<(String, FakeInspectFailure)>,
+}
+
+#[derive(Clone, Copy)]
+enum FakeInspectFailure {
+    BindingMismatch,
+    TransientStorage,
 }
 
 impl FakeProjectionStore {
@@ -109,6 +117,23 @@ impl FakeProjectionStore {
             .expect("active fake generation")
             .manifest
             .schema_version += 1;
+    }
+
+    fn fail_active_inspection(&self, failure: FakeInspectFailure) {
+        self.state.lock().expect("fake lock").active_inspect_failure = Some(failure);
+    }
+
+    fn fail_generation_inspection(&self, generation: &str, failure: FakeInspectFailure) {
+        self.state
+            .lock()
+            .expect("fake lock")
+            .generation_inspect_failure = Some((generation.to_owned(), failure));
+    }
+
+    fn clear_inspection_failures(&self) {
+        let mut state = self.state.lock().expect("fake lock");
+        state.active_inspect_failure = None;
+        state.generation_inspect_failure = None;
     }
 
     fn quarantined_generation(&self, generation: &str) -> Option<ProjectionArtifactEvidence> {
@@ -238,20 +263,43 @@ impl ProjectionStoreBackend for FakeProjectionStore {
     }
 
     fn inspect_active(&self) -> kanban_core::Result<Option<ProjectionArtifactEvidence>> {
-        Ok(self.state.lock().expect("fake lock").active.clone())
+        let state = self.state.lock().expect("fake lock");
+        if state.active.is_some() {
+            match state.active_inspect_failure {
+                Some(FakeInspectFailure::BindingMismatch) => {
+                    return Err(KanbanError::Conflict(
+                        "physical evidence binding mismatch".to_owned(),
+                    ));
+                }
+                Some(FakeInspectFailure::TransientStorage) => {
+                    return Err(KanbanError::Storage(
+                        "transient physical inspection failure".to_owned(),
+                    ));
+                }
+                None => {}
+            }
+        }
+        Ok(state.active.clone())
     }
 
     fn inspect_generation(
         &self,
         generation: &str,
     ) -> kanban_core::Result<Option<ProjectionArtifactEvidence>> {
-        Ok(self
-            .state
-            .lock()
-            .expect("fake lock")
-            .generations
-            .get(generation)
-            .cloned())
+        let state = self.state.lock().expect("fake lock");
+        if let Some((failed_generation, failure)) = &state.generation_inspect_failure
+            && failed_generation == generation
+        {
+            return match failure {
+                FakeInspectFailure::BindingMismatch => Err(KanbanError::Conflict(
+                    "physical generation evidence binding mismatch".to_owned(),
+                )),
+                FakeInspectFailure::TransientStorage => Err(KanbanError::Storage(
+                    "transient generation inspection failure".to_owned(),
+                )),
+            };
+        }
+        Ok(state.generations.get(generation).cloned())
     }
 
     fn quarantine_generation(&self, generation: &str) -> kanban_core::Result<()> {
@@ -361,6 +409,19 @@ fn same_owner_cannot_replace_an_unexpired_lease_token() -> anyhow::Result<()> {
     )?;
     assert_eq!(token, first.lease_token);
     assert_eq!(epoch, first.fence_epoch);
+    Ok(())
+}
+
+#[test]
+fn projection_lease_debug_redacts_capability_token() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_lease_debug_redaction")?;
+    init_database(&temp.path, "tester")?;
+    let lease = acquire_projection_lease(&temp.path, STORE, "debug-owner", 10_000)?;
+
+    let rendered = format!("{lease:?}");
+
+    assert!(!rendered.contains(&lease.lease_token));
+    assert!(rendered.contains("[REDACTED]"));
     Ok(())
 }
 
@@ -664,6 +725,79 @@ fn abort_quarantines_mismatched_published_generation_before_sqlite_reset() -> an
         .find(|store| store.store_name == STORE)
         .expect("Tantivy status");
     assert!(store.building_generation.is_none());
+    Ok(())
+}
+
+#[test]
+fn abort_quarantines_binding_mismatch_inspection_before_sqlite_reset() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_abort_binding_mismatch")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let generation =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let prepared =
+        prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.publish_generation(None, &prepared)?;
+    backend.fail_active_inspection(FakeInspectFailure::BindingMismatch);
+
+    abort_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+
+    assert_eq!(backend.inspect_active()?, None);
+    assert_eq!(backend.inspect_generation(&generation.generation)?, None);
+    assert!(
+        backend
+            .quarantined_generation(&generation.generation)
+            .is_some(),
+        "binding-mismatched physical evidence must remain in quarantine"
+    );
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("projection state");
+    assert!(store.building_generation.is_none());
+    Ok(())
+}
+
+#[test]
+fn abort_keeps_exact_generation_and_sqlite_state_on_transient_inspect_failure() -> anyhow::Result<()>
+{
+    let temp = TempDb::new("projection_v2_abort_transient_inspect")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let generation =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let prepared =
+        prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.publish_generation(None, &prepared)?;
+    backend.fail_active_inspection(FakeInspectFailure::TransientStorage);
+
+    let error = result_err(abort_projection_generation(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(error.to_string().contains("transient physical inspection"));
+    assert!(
+        backend
+            .inspect_generation(&generation.generation)?
+            .is_some()
+    );
+    assert_eq!(backend.quarantined_generation(&generation.generation), None);
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("projection state");
+    assert_eq!(
+        store.building_generation.as_deref(),
+        Some(generation.generation.as_str())
+    );
     Ok(())
 }
 
@@ -988,27 +1122,93 @@ fn publish_keeps_previous_and_reconciles_crash_after_pointer_swap() -> anyhow::R
 }
 
 #[test]
-fn label_atoms_cannot_enter_v2_before_mutation_delivery_exists() -> anyhow::Result<()> {
+fn recovery_preserves_logical_active_on_transient_generation_inspection_failure()
+-> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_recovery_transient_inspect")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let first =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+
+    seed_delivery(&temp.path, 10)?;
+    let second =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.fail_generation_inspection(&first.generation, FakeInspectFailure::TransientStorage);
+
+    let error = result_err(recover_projection_generation_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    ))?;
+
+    assert!(
+        error
+            .to_string()
+            .contains("transient generation inspection")
+    );
+    backend.clear_inspection_failures();
+    assert!(backend.inspect_generation(&first.generation)?.is_some());
+    assert!(backend.inspect_generation(&second.generation)?.is_some());
+    assert_eq!(backend.quarantined_generation(&first.generation), None);
+    assert_eq!(
+        backend
+            .inspect_active()?
+            .map(|evidence| evidence.manifest.generation),
+        Some(first.generation.clone())
+    );
+    let store = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == STORE)
+        .expect("projection state");
+    assert_eq!(
+        store.active_generation.as_deref(),
+        Some(first.generation.as_str())
+    );
+    assert_eq!(
+        store.building_generation.as_deref(),
+        Some(second.generation.as_str())
+    );
+    Ok(())
+}
+
+#[test]
+fn label_atoms_enter_v2_after_mutation_delivery_migration() -> anyhow::Result<()> {
     const LABEL_ATOMS: &str = "lancedb_label_atoms";
-    let temp = TempDb::new("projection_v2_label_atoms_rejected")?;
+    let temp = TempDb::new("projection_v2_label_atoms_enabled")?;
     init_database(&temp.path, "tester")?;
     let backend = FakeProjectionStore::for_store(LABEL_ATOMS);
     let lease = acquire_projection_lease(&temp.path, LABEL_ATOMS, "owner", 10_000)?;
-    let error = result_err(begin_projection_generation(
+    let generation = begin_projection_generation(
         &temp.path,
         LABEL_ATOMS,
         "owner",
         &lease.lease_token,
         &backend,
-    ))?;
-    assert!(error.to_string().contains("mutation delivery protocol"));
+    )?;
     let store = projection_status(&temp.path)?
         .stores
         .into_iter()
         .find(|store| store.store_name == LABEL_ATOMS)
         .expect("label atom projection state");
-    assert_eq!(store.control_plane, "legacy");
-    assert!(store.building_generation.is_none());
+    assert_eq!(store.control_plane, "v2");
+    assert_eq!(
+        store.building_generation.as_deref(),
+        Some(generation.generation.as_str())
+    );
+    abort_projection_generation(
+        &temp.path,
+        LABEL_ATOMS,
+        "owner",
+        &lease.lease_token,
+        &backend,
+    )?;
     Ok(())
 }
 

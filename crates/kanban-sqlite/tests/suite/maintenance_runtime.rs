@@ -91,6 +91,8 @@ fn maintenance_owner_is_singleton_and_expired_token_cannot_release_successor() -
         "tantivy_tasks".to_owned(),
         #[cfg(feature = "oxigraph-backend")]
         "oxigraph_relations".to_owned(),
+        "lancedb_label_atoms".to_owned(),
+        "lancedb_chunks".to_owned(),
     ];
     expected_capabilities.sort();
     assert_eq!(status.maintenance_owner.capabilities, expected_capabilities);
@@ -221,6 +223,26 @@ fn maintenance_status_reports_compiled_backend_availability_fail_closed() -> any
         assert_eq!(
             oxigraph.fallback_reason.as_deref(),
             Some("backend_unavailable")
+        );
+    }
+
+    for store_name in ["lancedb_label_atoms", "lancedb_chunks"] {
+        let store = status
+            .stores
+            .iter()
+            .find(|store| store.store_name == store_name)
+            .unwrap_or_else(|| panic!("{store_name} status"));
+        assert_eq!(
+            store.runtime_availability,
+            ProjectionRuntimeAvailability::Unavailable
+        );
+        assert!(
+            matches!(
+                store.fallback_reason.as_deref(),
+                Some("helper_unavailable" | "provider_unavailable")
+            ),
+            "{store_name}: {:?}",
+            store.fallback_reason
         );
     }
     Ok(())
@@ -362,7 +384,12 @@ fn maintenance_run_reports_every_enabled_db_scoped_store() -> anyhow::Result<()>
             .iter()
             .map(|store| store.store_name.as_str())
             .collect::<Vec<_>>(),
-        vec!["tantivy_tasks", "oxigraph_relations"]
+        vec![
+            "tantivy_tasks",
+            "oxigraph_relations",
+            "lancedb_label_atoms",
+            "lancedb_chunks",
+        ]
     );
     Ok(())
 }

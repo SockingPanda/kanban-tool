@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{fmt, path::Path};
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_typed_id};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -11,13 +11,26 @@ use super::{storage, with_immediate_tx};
 pub const PROJECTION_PROTOCOL_VERSION: i64 = 2;
 const MAX_PROJECTION_BATCH: usize = 1_000;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionLease {
     pub store_name: String,
     pub owner: String,
     pub lease_token: String,
     pub fence_epoch: i64,
     pub lease_expires_at: i64,
+}
+
+impl fmt::Debug for ProjectionLease {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProjectionLease")
+            .field("store_name", &self.store_name)
+            .field("owner", &self.owner)
+            .field("lease_token", &"[REDACTED]")
+            .field("fence_epoch", &self.fence_epoch)
+            .field("lease_expires_at", &self.lease_expires_at)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,7 +85,7 @@ pub struct ProjectionDelivery {
     pub attempts: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionBatch {
     pub store_name: String,
     pub database_instance_id: String,
@@ -89,7 +102,28 @@ pub struct ProjectionBatch {
     pub items: Vec<ProjectionDelivery>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+impl fmt::Debug for ProjectionBatch {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProjectionBatch")
+            .field("store_name", &self.store_name)
+            .field("database_instance_id", &self.database_instance_id)
+            .field("protocol_version", &self.protocol_version)
+            .field("schema_version", &self.schema_version)
+            .field("provider", &self.provider)
+            .field("provider_fingerprint", &self.provider_fingerprint)
+            .field("owner", &self.owner)
+            .field("lease_token", &"[REDACTED]")
+            .field("fence_epoch", &self.fence_epoch)
+            .field("target_generation", &self.target_generation)
+            .field("claim_token", &"[REDACTED]")
+            .field("claim_expires_at", &self.claim_expires_at)
+            .field("item_count", &self.items.len())
+            .finish()
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionBatchReceipt {
     pub store_name: String,
     pub database_instance_id: String,
@@ -102,6 +136,25 @@ pub struct ProjectionBatchReceipt {
     pub fence_epoch: i64,
     pub claim_token: String,
     pub applied_item_count: usize,
+}
+
+impl fmt::Debug for ProjectionBatchReceipt {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProjectionBatchReceipt")
+            .field("store_name", &self.store_name)
+            .field("database_instance_id", &self.database_instance_id)
+            .field("protocol_version", &self.protocol_version)
+            .field("schema_version", &self.schema_version)
+            .field("provider", &self.provider)
+            .field("provider_fingerprint", &self.provider_fingerprint)
+            .field("target_generation", &self.target_generation)
+            .field("lease_token", &"[REDACTED]")
+            .field("fence_epoch", &self.fence_epoch)
+            .field("claim_token", &"[REDACTED]")
+            .field("applied_item_count", &self.applied_item_count)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -467,12 +520,6 @@ pub fn begin_projection_generation(
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let descriptor = backend.descriptor()?;
     validate_store_descriptor(store_name, &descriptor)?;
-    if store_name == "lancedb_label_atoms" {
-        return Err(KanbanError::Conflict(
-            "projection store lancedb_label_atoms cannot enter v2 before its mutation delivery protocol is available"
-                .to_owned(),
-        ));
-    }
     let now = SystemClock.now_ms();
     let conn = connect_file(path)?;
     with_immediate_tx(&conn, || {
@@ -682,90 +729,270 @@ pub fn abort_projection_generation(
     lease_token: &str,
     backend: &(impl ProjectionStoreBackend + ?Sized),
 ) -> Result<()> {
-    let path = path.as_ref();
+    abort_projection_generation_with_binding(
+        path.as_ref(),
+        store_name,
+        owner,
+        lease_token,
+        backend,
+        AbortBinding::Exact,
+    )
+}
+
+pub(crate) fn abort_incompatible_projection_generation(
+    path: impl AsRef<Path>,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+) -> Result<()> {
+    abort_projection_generation_with_binding(
+        path.as_ref(),
+        store_name,
+        owner,
+        lease_token,
+        backend,
+        AbortBinding::Incompatible,
+    )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AbortBinding {
+    Exact,
+    Incompatible,
+}
+
+fn abort_projection_generation_with_binding(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+    binding: AbortBinding,
+) -> Result<()> {
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let manifest = building_manifest(path, store_name, owner, lease_token)?;
-    validate_backend_binding(backend, &manifest)?;
-    if let Some(active) = backend
-        .inspect_active()?
-        .filter(|active| active.manifest.generation == manifest.generation)
-    {
-        let matches_sqlite = manifest.fingerprint.as_ref().is_some_and(|fingerprint| {
-            same_artifact(
-                &ProjectionArtifactEvidence {
-                    manifest: manifest.clone(),
-                    fingerprint: fingerprint.clone(),
-                },
-                &active,
+    let (descriptor, active, previous, reset_active, reset_previous) = match binding {
+        AbortBinding::Exact => {
+            validate_backend_binding(backend, &manifest)?;
+            (
+                None,
+                active_artifact(path, store_name)?,
+                previous_artifact(path, store_name)?,
+                false,
+                false,
             )
-        });
-        if matches_sqlite {
-            return Err(KanbanError::Conflict(format!(
-                "projection generation {} is physically active and must be reconciled instead of aborted",
-                manifest.generation
+        }
+        AbortBinding::Incompatible => {
+            let descriptor = backend.descriptor()?;
+            validate_store_descriptor(store_name, &descriptor)?;
+            if validate_descriptor_binding(
+                store_name,
+                &manifest.provider,
+                &manifest.provider_fingerprint,
+                &descriptor,
+            )
+            .is_ok()
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "projection generation {} is compatible with the current backend and cannot use incompatible-generation recovery",
+                    manifest.generation
+                )));
+            }
+            let active = active_artifact(path, store_name)?;
+            let previous = previous_artifact(path, store_name)?;
+            let reset_active = active.as_ref().is_some_and(|evidence| {
+                validate_descriptor_binding(
+                    store_name,
+                    &evidence.manifest.provider,
+                    &evidence.manifest.provider_fingerprint,
+                    &descriptor,
+                )
+                .is_err()
+            });
+            let reset_previous = previous.as_ref().is_some_and(|evidence| {
+                reset_active
+                    || validate_descriptor_binding(
+                        store_name,
+                        &evidence.manifest.provider,
+                        &evidence.manifest.provider_fingerprint,
+                        &descriptor,
+                    )
+                    .is_err()
+            });
+            (
+                Some(descriptor),
+                active,
+                previous,
+                reset_active,
+                reset_previous,
+            )
+        }
+    };
+    if binding == AbortBinding::Exact {
+        match backend.inspect_active() {
+            Ok(Some(active)) if active.manifest.generation == manifest.generation => {
+                let matches_sqlite = manifest.fingerprint.as_ref().is_some_and(|fingerprint| {
+                    same_artifact(
+                        &ProjectionArtifactEvidence {
+                            manifest: manifest.clone(),
+                            fingerprint: fingerprint.clone(),
+                        },
+                        &active,
+                    )
+                });
+                if matches_sqlite {
+                    return Err(KanbanError::Conflict(format!(
+                        "projection generation {} is physically active and must be reconciled instead of aborted",
+                        manifest.generation
+                    )));
+                }
+            }
+            Ok(Some(_) | None) | Err(KanbanError::Conflict(_)) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    let mut generations_to_quarantine = vec![manifest.generation.clone()];
+    if reset_active
+        && let Some(active) = &active
+        && !generations_to_quarantine.contains(&active.manifest.generation)
+    {
+        generations_to_quarantine.push(active.manifest.generation.clone());
+    }
+    if reset_previous
+        && let Some(previous) = &previous
+        && !generations_to_quarantine.contains(&previous.manifest.generation)
+    {
+        generations_to_quarantine.push(previous.manifest.generation.clone());
+    }
+    for generation in &generations_to_quarantine {
+        backend.quarantine_generation(generation)?;
+        if backend.inspect_generation(generation)?.is_some() {
+            return Err(KanbanError::Storage(format!(
+                "abandoned projection generation {generation} remained addressable after quarantine"
             )));
         }
     }
-    backend.quarantine_generation(&manifest.generation)?;
-    if backend.inspect_generation(&manifest.generation)?.is_some() {
-        return Err(KanbanError::Storage(format!(
-            "abandoned projection generation {} remained addressable after quarantine",
-            manifest.generation
-        )));
-    }
-    if backend
-        .inspect_active()?
-        .is_some_and(|active| active.manifest.generation == manifest.generation)
-    {
-        return Err(KanbanError::Storage(format!(
-            "abandoned projection generation {} remained published after quarantine",
-            manifest.generation
-        )));
+    let expected_active_after_quarantine = if reset_active { None } else { active.as_ref() };
+    match backend.inspect_active() {
+        Ok(actual) if actual.as_ref() == expected_active_after_quarantine => {}
+        Ok(Some(actual)) => {
+            return Err(KanbanError::Storage(format!(
+                "projection generation {} remained unexpectedly active after quarantine",
+                actual.manifest.generation
+            )));
+        }
+        Ok(None) => {
+            return Err(KanbanError::Storage(
+                "projection backend lost the compatible active generation during quarantine"
+                    .to_owned(),
+            ));
+        }
+        Err(error) => {
+            if descriptor.is_some() {
+                return Err(KanbanError::Conflict(format!(
+                    "projection backend still exposes an unattributed incompatible active generation after quarantine: {error}"
+                )));
+            }
+            return Err(error);
+        }
     }
     let now = SystemClock.now_ms();
     let conn = connect_file(path)?;
     with_immediate_tx(&conn, || {
         require_current_lease(&conn, store_name, owner, lease_token, now)?;
-        let building: Option<String> = conn
+        let current: (Option<String>, Option<String>, Option<String>) = conn
             .query_row(
-                "SELECT building_generation FROM projection_store_state WHERE store_name=?1",
+                "SELECT building_generation,active_generation,previous_generation
+                 FROM projection_store_state WHERE store_name=?1",
                 [store_name],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .map_err(storage)?;
-        let Some(building) = building else {
+        let Some(building) = current.0 else {
             return Err(KanbanError::Conflict(format!(
                 "projection store {store_name} has no building generation to abort"
             )));
         };
-        conn.execute(
-            "UPDATE projection_deliveries
-             SET status='pending',published_generation=NULL,
-                 claim_owner=NULL,claim_token=NULL,claim_lease_token=NULL,
-                 claim_fence_epoch=NULL,claim_generation=NULL,claim_expires_at=NULL,
-                 last_error='generation aborted before publish',updated_at=?1
-             WHERE store_name=?2
-               AND (published_generation=?3 OR claim_generation=?3)",
-            params![now, store_name, building],
-        )
-        .map_err(storage)?;
+        if building != manifest.generation
+            || current.1.as_deref()
+                != active
+                    .as_ref()
+                    .map(|evidence| evidence.manifest.generation.as_str())
+            || current.2.as_deref()
+                != previous
+                    .as_ref()
+                    .map(|evidence| evidence.manifest.generation.as_str())
+        {
+            return Err(stale_generation(store_name));
+        }
+        if reset_active {
+            conn.execute(
+                "UPDATE projection_deliveries
+                 SET status='pending',published_generation=NULL,
+                     claim_owner=NULL,claim_token=NULL,claim_lease_token=NULL,
+                     claim_fence_epoch=NULL,claim_generation=NULL,claim_expires_at=NULL,
+                     last_error='provider generation reset before rebuild',updated_at=?1
+                 WHERE store_name=?2",
+                params![now, store_name],
+            )
+            .map_err(storage)?;
+        } else {
+            conn.execute(
+                "UPDATE projection_deliveries
+                 SET status='pending',published_generation=NULL,
+                     claim_owner=NULL,claim_token=NULL,claim_lease_token=NULL,
+                     claim_fence_epoch=NULL,claim_generation=NULL,claim_expires_at=NULL,
+                     last_error='generation aborted before publish',updated_at=?1
+                 WHERE store_name=?2
+                   AND (published_generation=?3 OR claim_generation=?3)",
+                params![now, store_name, building],
+            )
+            .map_err(storage)?;
+        }
         recompute_checkpoint(&conn, store_name, now)?;
-        conn.execute(
+        let changed = conn
+            .execute(
             "UPDATE projection_store_state
              SET building_generation=NULL,building_fingerprint=NULL,building_fence_epoch=NULL,
                  building_provider=NULL,building_provider_fingerprint=NULL,
                  building_canonical_count=NULL,building_canonical_digest=NULL,
                  building_delivery_count=NULL,building_delivery_digest=NULL,
                  building_phase=NULL,
+                 active_generation=CASE WHEN ?4 THEN NULL ELSE active_generation END,
+                 active_fingerprint=CASE WHEN ?4 THEN NULL ELSE active_fingerprint END,
+                 active_fence_epoch=CASE WHEN ?4 THEN NULL ELSE active_fence_epoch END,
+                 active_snapshot_cursor=CASE WHEN ?4 THEN NULL ELSE active_snapshot_cursor END,
+                 active_provider=CASE WHEN ?4 THEN NULL ELSE active_provider END,
+                 active_provider_fingerprint=CASE WHEN ?4 THEN NULL ELSE active_provider_fingerprint END,
+                 active_canonical_count=CASE WHEN ?4 THEN NULL ELSE active_canonical_count END,
+                 active_canonical_digest=CASE WHEN ?4 THEN NULL ELSE active_canonical_digest END,
+                 active_delivery_count=CASE WHEN ?4 THEN NULL ELSE active_delivery_count END,
+                 active_delivery_digest=CASE WHEN ?4 THEN NULL ELSE active_delivery_digest END,
+                 previous_generation=CASE WHEN ?5 THEN NULL ELSE previous_generation END,
+                 previous_fingerprint=CASE WHEN ?5 THEN NULL ELSE previous_fingerprint END,
+                 previous_fence_epoch=CASE WHEN ?5 THEN NULL ELSE previous_fence_epoch END,
+                 previous_snapshot_cursor=CASE WHEN ?5 THEN NULL ELSE previous_snapshot_cursor END,
+                 previous_provider=CASE WHEN ?5 THEN NULL ELSE previous_provider END,
+                 previous_provider_fingerprint=CASE WHEN ?5 THEN NULL ELSE previous_provider_fingerprint END,
+                 previous_canonical_count=CASE WHEN ?5 THEN NULL ELSE previous_canonical_count END,
+                 previous_canonical_digest=CASE WHEN ?5 THEN NULL ELSE previous_canonical_digest END,
+                 previous_delivery_count=CASE WHEN ?5 THEN NULL ELSE previous_delivery_count END,
+                 previous_delivery_digest=CASE WHEN ?5 THEN NULL ELSE previous_delivery_digest END,
                  lifecycle_status=CASE
-                   WHEN active_generation IS NULL THEN 'bootstrap_required'
+                   WHEN ?4 OR active_generation IS NULL THEN 'bootstrap_required'
                    ELSE 'ready'
                  END,
+                 last_success_at=CASE WHEN ?4 THEN NULL ELSE last_success_at END,
                  last_error=NULL,updated_at=?1
              WHERE store_name=?2 AND building_generation=?3",
-            params![now, store_name, building],
-        )
-        .map_err(storage)?;
+                params![now, store_name, building, reset_active, reset_previous],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(stale_generation(store_name));
+        }
+        reconcile_legacy_store_state(&conn, store_name, now)?;
         Ok(())
     })
 }
@@ -872,21 +1099,19 @@ pub fn recover_projection_generation_with(
     })?;
     let expected_previous = previous_artifact(path, store_name)?;
     let operation = (|| {
-        let logical_active_inspection =
-            backend.inspect_generation(&missing_active.manifest.generation);
-        let logical_active_is_readable = logical_active_inspection.as_ref().is_ok_and(|artifact| {
-            artifact
-                .as_ref()
-                .is_some_and(|artifact| same_artifact(artifact, &missing_active))
-        });
-        if logical_active_is_readable {
-            backend.repair_generation_publication(&missing_active)?;
-        } else if !matches!(logical_active_inspection, Ok(None)) {
-            quarantine_unreadable_generation(backend, &missing_active.manifest.generation)?;
-        }
-        let expected_retained = logical_active_is_readable
-            .then_some(missing_active.clone())
-            .or(expected_previous);
+        let expected_retained =
+            match backend.inspect_generation(&missing_active.manifest.generation) {
+                Ok(Some(actual)) if same_artifact(&actual, &missing_active) => {
+                    backend.repair_generation_publication(&missing_active)?;
+                    Some(missing_active.clone())
+                }
+                Ok(Some(_)) | Err(KanbanError::Conflict(_)) => {
+                    quarantine_unreadable_generation(backend, &missing_active.manifest.generation)?;
+                    expected_previous
+                }
+                Ok(None) => expected_previous,
+                Err(error) => return Err(error),
+            };
         let mut physical_active = backend.inspect_active()?;
         for _ in 0..1_024 {
             let Some(active) = physical_active.as_ref() else {
@@ -1804,12 +2029,12 @@ pub(crate) fn validate_backend_for_target(
     let actual = backend
         .inspect_generation(&target_generation)?
         .ok_or_else(|| {
-            KanbanError::Storage(format!(
+            KanbanError::Conflict(format!(
                 "projection target generation {target_generation} is missing for store {store_name}"
             ))
         })?;
     if !same_artifact(&expected, &actual) {
-        return Err(KanbanError::Storage(format!(
+        return Err(KanbanError::Conflict(format!(
             "projection target generation {target_generation} evidence does not match SQLite for store {store_name}"
         )));
     }
@@ -2190,7 +2415,6 @@ fn same_artifact(
     expected == actual
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 pub(crate) fn validate_physical_active_artifact_with(
     path: &Path,
     store_name: &str,
@@ -2238,7 +2462,6 @@ pub(crate) fn validate_physical_active_artifact_with(
     Ok(Some(expected))
 }
 
-#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 pub(crate) fn validate_physical_previous_artifact_with(
     path: &Path,
     store_name: &str,

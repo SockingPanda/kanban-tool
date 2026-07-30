@@ -20,6 +20,7 @@ mod label_ontology;
 mod label_proposals;
 mod label_semantics;
 mod label_suggestions;
+mod lancedb_projection;
 mod maintenance;
 mod maintenance_runtime;
 #[cfg(feature = "oxigraph-backend")]

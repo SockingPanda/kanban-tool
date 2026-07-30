@@ -601,9 +601,16 @@ fn canonical_database_path(db_path: &Path) -> Result<PathBuf, LegacyProjectionCl
 impl LegacyProjectionCleanupGuard {
     fn validate(&self, db_path: &Path) -> Result<(), LegacyProjectionCleanupError> {
         let canonical = canonical_database_path(db_path)?;
+        #[cfg(not(windows))]
         let held = self.database_file.metadata()?;
+        #[cfg(not(windows))]
         let current = fs::symlink_metadata(&canonical)?;
-        if canonical != self.database_path || !same_file_identity(&held, &current) {
+        #[cfg(not(windows))]
+        let identity_matches = same_file_identity(&held, &current);
+        #[cfg(windows)]
+        let identity_matches = windows_snapshot_handle(&self.database_file)?.identity
+            == windows_snapshot_path(&canonical, false)?.identity;
+        if canonical != self.database_path || !identity_matches {
             return Err(LegacyProjectionCleanupError::JournalConflict(
                 "database file identity changed after cleanup guards were acquired".to_owned(),
             ));
@@ -676,15 +683,34 @@ fn inventory_root(
     let absolute_path = database_parent.join(kind.relative_path());
     let mut current = database_parent.to_path_buf();
     let mut present = true;
+    #[cfg(windows)]
+    let mut allowlist_directory_guards = Vec::new();
     for component in kind.path_components() {
         current.push(component);
         match fs::symlink_metadata(&current) {
-            Ok(metadata) if metadata.is_dir() => {}
-            Ok(_) => {
-                return Err(LegacyProjectionCleanupError::UnsafePath {
-                    path: current,
-                    reason: "legacy managed path component is not a real directory".to_owned(),
-                });
+            Ok(metadata) => {
+                #[cfg(windows)]
+                {
+                    let guard = windows_open_inventory_directory(&current)?;
+                    let snapshot = windows_snapshot_handle(&guard)?;
+                    if !metadata.is_dir()
+                        || !windows_metadata_matches_snapshot(&metadata, &snapshot)
+                    {
+                        return Err(LegacyProjectionCleanupError::UnsafePath {
+                            path: current,
+                            reason: "legacy managed path component changed while opening"
+                                .to_owned(),
+                        });
+                    }
+                    allowlist_directory_guards.push(guard);
+                }
+                #[cfg(not(windows))]
+                if !metadata.is_dir() {
+                    return Err(LegacyProjectionCleanupError::UnsafePath {
+                        path: current,
+                        reason: "legacy managed path component is not a real directory".to_owned(),
+                    });
+                }
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 present = false;
@@ -693,11 +719,14 @@ fn inventory_root(
             Err(error) => return Err(error.into()),
         }
     }
-    if present {
+    let inventory = if present {
         scan_present_root(kind, &absolute_path, &absolute_path)
     } else {
         Ok(absent_root_inventory(kind, absolute_path))
-    }
+    };
+    #[cfg(windows)]
+    drop(allowlist_directory_guards);
+    inventory
 }
 
 fn absent_root_inventory(
@@ -1354,6 +1383,17 @@ fn scan_tree(
             directory.to_path_buf(),
         ));
     }
+    #[cfg(windows)]
+    let directory_guard = windows_open_inventory_directory(directory)?;
+    #[cfg(windows)]
+    let before_snapshot = windows_snapshot_handle(&directory_guard)?;
+    #[cfg(windows)]
+    if !windows_metadata_matches_snapshot(&before, &before_snapshot) {
+        return Err(LegacyProjectionCleanupError::UnsafePath {
+            path: directory.to_path_buf(),
+            reason: "directory changed while opening legacy inventory".to_owned(),
+        });
+    }
     let mut entries = fs::read_dir(directory)?.collect::<Result<Vec<_>, _>>()?;
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
@@ -1389,7 +1429,13 @@ fn scan_tree(
         }
     }
     let after = fs::symlink_metadata(directory)?;
-    if !after.is_dir() || !same_file_snapshot(&before, &after) {
+    #[cfg(windows)]
+    let snapshot_matches = windows_metadata_matches_snapshot(&after, &before_snapshot)
+        && windows_snapshot_handle(&directory_guard)? == before_snapshot
+        && windows_snapshot_path(directory, true)? == before_snapshot;
+    #[cfg(not(windows))]
+    let snapshot_matches = same_file_snapshot(&before, &after);
+    if !after.is_dir() || !snapshot_matches {
         return Err(LegacyProjectionCleanupError::UnsafePath {
             path: directory.to_path_buf(),
             reason: "directory changed during legacy inventory".to_owned(),
@@ -1398,7 +1444,7 @@ fn scan_tree(
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(all(not(target_os = "linux"), not(windows)))]
 fn hash_regular_file(
     path: &Path,
     before: &std::fs::Metadata,
@@ -1447,6 +1493,55 @@ fn hash_regular_file(
     Ok(())
 }
 
+#[cfg(windows)]
+fn hash_regular_file(
+    path: &Path,
+    before: &std::fs::Metadata,
+    digest: &mut Sha256,
+) -> Result<(), LegacyProjectionCleanupError> {
+    let path_before = windows_snapshot_path(path, false)?;
+    if !before.is_file() || !windows_metadata_matches_snapshot(before, &path_before) {
+        return Err(LegacyProjectionCleanupError::UnsafePath {
+            path: path.to_path_buf(),
+            reason: "file changed while opening legacy inventory".to_owned(),
+        });
+    }
+    let file = windows_open_identity_path(path, false)?;
+    let opened_before = windows_snapshot_handle(&file)?;
+    let path_after_open = windows_snapshot_path(path, false)?;
+    if opened_before != path_before || path_after_open != path_before {
+        return Err(LegacyProjectionCleanupError::UnsafePath {
+            path: path.to_path_buf(),
+            reason: "file changed while opening legacy inventory".to_owned(),
+        });
+    }
+
+    let mut reader = BufReader::new(file);
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut read_bytes = 0_u64;
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+        read_bytes = read_bytes.checked_add(read as u64).ok_or_else(|| {
+            LegacyProjectionCleanupError::JournalConflict(
+                "legacy file read count overflow".to_owned(),
+            )
+        })?;
+    }
+    let opened_after = windows_snapshot_handle(reader.get_ref())?;
+    let path_after_read = windows_snapshot_path(path, false)?;
+    if read_bytes != before.len() || opened_after != path_before || path_after_read != path_before {
+        return Err(LegacyProjectionCleanupError::UnsafePath {
+            path: path.to_path_buf(),
+            reason: "file changed during legacy inventory".to_owned(),
+        });
+    }
+    Ok(())
+}
+
 #[cfg(unix)]
 fn same_file_identity(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt as _;
@@ -1467,29 +1562,158 @@ fn same_file_snapshot(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bo
 }
 
 #[cfg(windows)]
-fn same_file_identity(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt as _;
-
-    matches!(
-        (
-            left.volume_serial_number(),
-            left.file_index(),
-            right.volume_serial_number(),
-            right.file_index(),
-        ),
-        (Some(left_volume), Some(left_index), Some(right_volume), Some(right_index))
-            if left_volume == right_volume && left_index == right_index
-    )
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WindowsFileIdentity {
+    volume: u64,
+    file_id: [u8; 16],
 }
 
 #[cfg(windows)]
-fn same_file_snapshot(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WindowsFileSnapshot {
+    identity: WindowsFileIdentity,
+    attributes: u32,
+    link_count: u32,
+    length: u64,
+    creation_time: u64,
+    last_write_time: u64,
+}
+
+#[cfg(windows)]
+fn windows_open_inventory_directory(path: &Path) -> Result<File, LegacyProjectionCleanupError> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    };
+
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)?;
+    let snapshot = windows_snapshot_handle(&file)?;
+    if snapshot.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(LegacyProjectionCleanupError::UnsafePath {
+            path: path.to_path_buf(),
+            reason: "legacy inventory directory is a reparse point".to_owned(),
+        });
+    }
+    if snapshot.attributes & FILE_ATTRIBUTE_DIRECTORY == 0 {
+        return Err(LegacyProjectionCleanupError::UnsafePath {
+            path: path.to_path_buf(),
+            reason: "legacy inventory path is not a directory".to_owned(),
+        });
+    }
+    if windows_snapshot_path(path, true)? != snapshot {
+        return Err(LegacyProjectionCleanupError::UnsafePath {
+            path: path.to_path_buf(),
+            reason: "legacy inventory directory changed while opening".to_owned(),
+        });
+    }
+    Ok(file)
+}
+
+#[cfg(windows)]
+fn windows_open_identity_path(
+    path: &Path,
+    directory: bool,
+) -> Result<File, LegacyProjectionCleanupError> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE,
+        FILE_SHARE_READ, FILE_SHARE_WRITE,
+    };
+
+    let mut options = std::fs::OpenOptions::new();
+    let flags = FILE_FLAG_OPEN_REPARSE_POINT
+        | if directory {
+            FILE_FLAG_BACKUP_SEMANTICS
+        } else {
+            0
+        };
+    options
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(flags);
+    Ok(options.open(path)?)
+}
+
+#[cfg(windows)]
+fn windows_snapshot_path(
+    path: &Path,
+    directory: bool,
+) -> Result<WindowsFileSnapshot, LegacyProjectionCleanupError> {
+    windows_snapshot_handle(&windows_open_identity_path(path, directory)?)
+}
+
+#[cfg(windows)]
+fn windows_snapshot_handle(
+    file: &File,
+) -> Result<WindowsFileSnapshot, LegacyProjectionCleanupError> {
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, FILE_ID_INFO, FileIdInfo, GetFileInformationByHandle,
+        GetFileInformationByHandleEx,
+    };
+
+    let mut information = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: File owns a valid HANDLE and information is correctly sized
+    // writable storage for this synchronous call.
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut information) } == 0 {
+        return Err(io::Error::last_os_error().into());
+    }
+    let mut identity = FILE_ID_INFO::default();
+    let identity_size = u32::try_from(std::mem::size_of::<FILE_ID_INFO>()).map_err(|_| {
+        LegacyProjectionCleanupError::UnsafePath {
+            path: PathBuf::from("<handle>"),
+            reason: "FILE_ID_INFO size does not fit the Win32 API".to_owned(),
+        }
+    })?;
+    // SAFETY: File owns a valid HANDLE, identity is correctly sized writable
+    // storage, and the call is synchronous. Unsupported identity information
+    // is returned fail-closed rather than falling back to a truncated file ID.
+    if unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle(),
+            FileIdInfo,
+            (&mut identity as *mut FILE_ID_INFO).cast(),
+            identity_size,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error().into());
+    }
+
+    let length = (u64::from(information.nFileSizeHigh) << 32) | u64::from(information.nFileSizeLow);
+    let creation_time = (u64::from(information.ftCreationTime.dwHighDateTime) << 32)
+        | u64::from(information.ftCreationTime.dwLowDateTime);
+    let last_write_time = (u64::from(information.ftLastWriteTime.dwHighDateTime) << 32)
+        | u64::from(information.ftLastWriteTime.dwLowDateTime);
+    Ok(WindowsFileSnapshot {
+        identity: WindowsFileIdentity {
+            volume: identity.VolumeSerialNumber,
+            file_id: identity.FileId.Identifier,
+        },
+        attributes: information.dwFileAttributes,
+        link_count: information.nNumberOfLinks,
+        length,
+        creation_time,
+        last_write_time,
+    })
+}
+
+#[cfg(windows)]
+fn windows_metadata_matches_snapshot(
+    metadata: &std::fs::Metadata,
+    snapshot: &WindowsFileSnapshot,
+) -> bool {
     use std::os::windows::fs::MetadataExt as _;
 
-    same_file_identity(left, right)
-        && left.file_size() == right.file_size()
-        && left.creation_time() == right.creation_time()
-        && left.last_write_time() == right.last_write_time()
+    metadata.file_attributes() == snapshot.attributes
+        && metadata.file_size() == snapshot.length
+        && metadata.creation_time() == snapshot.creation_time
+        && metadata.last_write_time() == snapshot.last_write_time
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -2340,15 +2564,8 @@ fn filesystem_id(path: &Path) -> Result<u64, LegacyProjectionCleanupError> {
 
 #[cfg(windows)]
 fn filesystem_id(path: &Path) -> Result<u64, LegacyProjectionCleanupError> {
-    use std::os::windows::fs::MetadataExt as _;
-
-    fs::symlink_metadata(path)?
-        .volume_serial_number()
-        .map(u64::from)
-        .ok_or_else(|| LegacyProjectionCleanupError::UnsafePath {
-            path: path.to_path_buf(),
-            reason: "filesystem has no stable volume serial number".to_owned(),
-        })
+    let metadata = fs::symlink_metadata(path)?;
+    windows_snapshot_path(path, metadata.is_dir()).map(|snapshot| snapshot.identity.volume)
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -2725,11 +2942,15 @@ fn atomic_move_directory_no_replace(
     source: &Path,
     destination: &Path,
 ) -> Result<(), LegacyProjectionCleanupError> {
-    let source_identity = fs::symlink_metadata(source)?;
+    let source_file = windows_open_identity_path(source, true)?;
+    let source_snapshot = windows_snapshot_handle(&source_file)?;
     super::durable_move_entry_no_replace_platform(source, destination)?;
-    let destination_identity = fs::symlink_metadata(destination)?;
-    if !destination_identity.is_dir()
-        || !same_file_identity(&source_identity, &destination_identity)
+    let destination_metadata = fs::symlink_metadata(destination)?;
+    let destination_snapshot = windows_snapshot_path(destination, true)?;
+    let held_after = windows_snapshot_handle(&source_file)?;
+    if !destination_metadata.is_dir()
+        || source_snapshot.identity != destination_snapshot.identity
+        || source_snapshot.identity != held_after.identity
         || path_entry_exists(source)?
     {
         return Err(LegacyProjectionCleanupError::JournalConflict(format!(
@@ -4455,6 +4676,80 @@ mod tests {
                 .iter()
                 .all(|root| root.absolute_path.is_dir())
         );
+    }
+
+    #[test]
+    fn durable_legacy_cleanup_windows_inventory_source_contract_holds_non_reparse_directory_handles()
+     {
+        let source = include_str!("legacy_cleanup.rs");
+        let production = source
+            .split_once("#[cfg(test)]\nmod tests")
+            .expect("legacy cleanup unit-test boundary")
+            .0;
+
+        assert!(
+            production.contains("let guard = windows_open_inventory_directory(&current)?;")
+                && production.contains("allowlist_directory_guards.push(guard);"),
+            "every present allowlist component must retain a Windows directory handle"
+        );
+        assert!(
+            production
+                .contains("let directory_guard = windows_open_inventory_directory(directory)?;"),
+            "each recursive inventory must retain its Windows directory handle"
+        );
+        assert!(
+            production.contains(".share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)"),
+            "inventory directory handles must not share delete access"
+        );
+        assert!(
+            production.contains("snapshot.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0"),
+            "inventory directory handles must reject reparse points explicitly"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn durable_legacy_cleanup_windows_inventory_directory_handle_blocks_path_replacement() {
+        let temp = tempdir().expect("temporary Windows directory guard fixture");
+        let directory = temp.path().join("inventory");
+        let parked = temp.path().join("parked");
+        fs::create_dir(&directory).expect("inventory directory");
+
+        let directory_guard =
+            windows_open_inventory_directory(&directory).expect("inventory directory guard");
+        fs::rename(&directory, &parked)
+            .expect_err("non-delete-shared directory handle must block path replacement");
+        drop(directory_guard);
+        fs::rename(&directory, &parked)
+            .expect("directory rename must succeed after inventory guard release");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn durable_legacy_cleanup_windows_inventory_directory_rejects_reparse_points() {
+        use std::os::windows::fs::symlink_dir;
+
+        let temp = tempdir().expect("temporary Windows reparse fixture");
+        let target = temp.path().join("target");
+        let reparse = temp.path().join("reparse");
+        fs::create_dir(&target).expect("reparse target");
+        match symlink_dir(&target, &reparse) {
+            Ok(()) => {}
+            Err(error) if error.raw_os_error() == Some(1314) => {
+                // ERROR_PRIVILEGE_NOT_HELD: this host cannot create the native
+                // fixture. windows-latest CI retains the real reparse gate.
+                return;
+            }
+            Err(error) => panic!("create Windows directory reparse fixture: {error}"),
+        }
+
+        let error = windows_open_inventory_directory(&reparse)
+            .expect_err("directory reparse point must fail closed");
+        assert!(matches!(
+            error,
+            LegacyProjectionCleanupError::UnsafePath { path, reason }
+                if path == reparse && reason.contains("reparse")
+        ));
     }
 
     #[cfg(target_os = "linux")]

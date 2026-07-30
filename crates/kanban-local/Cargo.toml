@@ -20,9 +20,11 @@ toml.workspace = true
 windows-sys.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true
 rustix.workspace = true
 
 [dev-dependencies]
 assert_fs.workspace = true
+rusqlite.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true

@@ -1,15 +1,17 @@
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
-    io::{self, Write},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use fs_err as fs;
-use fs4::fs_std::FileExt as _;
 use serde::{Deserialize, Serialize, de::IntoDeserializer};
+use sha2::{Digest as _, Sha256};
 
 mod legacy_cleanup;
 
@@ -43,52 +45,731 @@ pub const DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS: usize = 1024;
 
 #[derive(Debug)]
 pub struct DerivedStoreWriteGuard {
-    lock_file: std::fs::File,
+    _guard: DerivedStorePhysicalGuard,
 }
 
-static DERIVED_LOCK_NONCE: AtomicU64 = AtomicU64::new(1);
+#[derive(Debug)]
+pub struct DerivedStoreReadGuard {
+    _guard: DerivedStorePhysicalGuard,
+}
+
+#[derive(Debug)]
+struct DerivedStorePhysicalGuard {
+    _database_lock: DerivedStoreDatabaseRangeGuard,
+    _sentinel_lock: DerivedStoreSentinelLockGuard,
+}
+
+#[derive(Debug)]
+struct DerivedStoreDatabaseRangeGuard {
+    file: std::fs::File,
+    offset: u64,
+}
+
+#[derive(Debug)]
+struct DerivedStoreSentinelLockGuard {
+    file: std::fs::File,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DerivedStoreLockMode {
+    Shared,
+    Exclusive,
+}
+
+const DERIVED_STORE_SENTINEL_MAGIC: &str = "kanban-derived-store-lock-v2";
+const SQLITE_MAXIMUM_FILE_SIZE: u64 = 65_536 * 4_294_967_294;
+/// The single database-lifecycle byte sits immediately above SQLite's exact
+/// maximum file size (maximum page size × maximum page count).
+///
+/// Database connection/replacement lifecycle guards own this byte. Public
+/// derived-store guards only use offsets beginning at
+/// [`DERIVED_STORE_DATABASE_LOCK_BASE`], so they can be nested after a shared
+/// lifecycle guard without overlapping its authority.
+pub const DERIVED_DATABASE_LIFECYCLE_LOCK_OFFSET: u64 = 1 << 48;
+const DERIVED_STORE_DATABASE_LOCK_BASE: u64 = DERIVED_DATABASE_LIFECYCLE_LOCK_OFFSET + 1;
+const _: () = assert!(DERIVED_DATABASE_LIFECYCLE_LOCK_OFFSET > SQLITE_MAXIMUM_FILE_SIZE);
+const DERIVED_STORE_LOCK_CONTRACT_NAMES: [&str; 8] = [
+    "tantivy_tasks",
+    "oxigraph_relations",
+    "lancedb_chunks",
+    "lancedb_label_atoms",
+    "tantivy_tasks-projection-helper",
+    "oxigraph_relations-projection-helper",
+    "lancedb_chunks-projection-helper",
+    "lancedb_label_atoms-projection-helper",
+];
+static DERIVED_STORE_NAMES_BY_OFFSET: OnceLock<Mutex<BTreeMap<u64, String>>> = OnceLock::new();
 static DURABLE_ENTRY_NONCE: AtomicU64 = AtomicU64::new(1);
 
 impl DerivedStoreWriteGuard {
     pub fn acquire(db_path: &Path, store_name: &str) -> io::Result<Self> {
-        if store_name.is_empty()
-            || !store_name
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "derived store name is not lock-path safe",
-            ));
+        Ok(Self {
+            _guard: acquire_derived_store_guard(
+                db_path,
+                store_name,
+                DerivedStoreLockMode::Exclusive,
+                true,
+            )?,
+        })
+    }
+}
+
+impl DerivedStoreReadGuard {
+    pub fn acquire(db_path: &Path, store_name: &str) -> io::Result<Self> {
+        Ok(Self {
+            _guard: acquire_derived_store_guard(
+                db_path,
+                store_name,
+                DerivedStoreLockMode::Shared,
+                false,
+            )?,
+        })
+    }
+}
+
+impl Drop for DerivedStoreDatabaseRangeGuard {
+    fn drop(&mut self) {
+        let _ = platform_unlock_database_range(&self.file, self.offset);
+    }
+}
+
+impl Drop for DerivedStoreSentinelLockGuard {
+    fn drop(&mut self) {
+        let _ = fs4::fs_std::FileExt::unlock(&self.file);
+    }
+}
+
+fn acquire_derived_store_guard(
+    db_path: &Path,
+    store_name: &str,
+    mode: DerivedStoreLockMode,
+    create_sentinel: bool,
+) -> io::Result<DerivedStorePhysicalGuard> {
+    validate_derived_store_name(store_name)?;
+    ensure_database_range_lock_supported()?;
+
+    let normalized_db_path = normalized_file_path(db_path);
+    let lock_path = derived_store_write_lock_path_from_normalized(&normalized_db_path, store_name);
+    let lock_offset = derived_store_database_lock_offset(store_name);
+    validate_derived_store_lock_offset(store_name, lock_offset)?;
+    let expected_sentinel =
+        derived_store_sentinel_bytes(&normalized_db_path, store_name, lock_offset);
+
+    let database_file = open_database_lock_file(&normalized_db_path, mode)?;
+    validate_database_lock_file(&normalized_db_path, &database_file)?;
+    if !platform_try_lock_database_range(&database_file, lock_offset, mode)? {
+        return Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            format!(
+                "derived store {store_name} has an active physical writer: {}",
+                lock_path.display()
+            ),
+        ));
+    }
+    let database_lock = DerivedStoreDatabaseRangeGuard {
+        file: database_file,
+        offset: lock_offset,
+    };
+    validate_database_lock_file(&normalized_db_path, &database_lock.file)?;
+
+    let existing_sentinel =
+        match open_and_validate_derived_store_sentinel(&lock_path, &expected_sentinel) {
+            Ok(file) => Some(file),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error),
+        };
+    let sentinel_file = match existing_sentinel {
+        Some(file) => {
+            validate_derived_store_sentinel(&lock_path, &file, &expected_sentinel)?;
+            file
         }
-        let lock_path = derived_store_write_lock_path(db_path, store_name);
-        let mut lock_file = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&lock_path)?;
-        if !lock_file.try_lock_exclusive()? {
+        None if create_sentinel => {
+            match durable_create_new_file(&lock_path, &expected_sentinel) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error),
+            }
+            open_and_validate_derived_store_sentinel(&lock_path, &expected_sentinel)?
+        }
+        None => {
             return Err(io::Error::new(
-                io::ErrorKind::WouldBlock,
+                io::ErrorKind::NotFound,
                 format!(
-                    "derived store {store_name} has an active physical writer: {}",
+                    "derived store {store_name} has no persistent lock sentinel: {}",
                     lock_path.display()
                 ),
             ));
         }
-        let identity = derived_store_lock_identity(store_name);
-        lock_file.set_len(0)?;
-        lock_file.write_all(identity.as_bytes())?;
-        lock_file.sync_data()?;
-        Ok(Self { lock_file })
+    };
+    validate_database_lock_file(&normalized_db_path, &database_lock.file)?;
+    validate_derived_store_sentinel(&lock_path, &sentinel_file, &expected_sentinel)?;
+    if !try_lock_derived_store_sentinel(&sentinel_file, mode)? {
+        return Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            format!(
+                "derived store {store_name} has an active physical writer: {}",
+                lock_path.display()
+            ),
+        ));
+    }
+    let sentinel_lock = DerivedStoreSentinelLockGuard {
+        file: sentinel_file,
+    };
+    validate_derived_store_sentinel(&lock_path, &sentinel_lock.file, &expected_sentinel)?;
+    validate_database_lock_file(&normalized_db_path, &database_lock.file)?;
+
+    Ok(DerivedStorePhysicalGuard {
+        _database_lock: database_lock,
+        _sentinel_lock: sentinel_lock,
+    })
+}
+
+fn validate_derived_store_name(store_name: &str) -> io::Result<()> {
+    if store_name.is_empty()
+        || !store_name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "derived store name is not lock-path safe",
+        ));
+    }
+    Ok(())
+}
+
+fn derived_store_database_lock_offset(store_name: &str) -> u64 {
+    let digest = Sha256::digest(store_name.as_bytes());
+    let bucket = u64::from_be_bytes([
+        digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
+    ]);
+    let available_offsets = (i64::MAX as u64) - DERIVED_STORE_DATABASE_LOCK_BASE + 1;
+    DERIVED_STORE_DATABASE_LOCK_BASE + (bucket % available_offsets)
+}
+
+fn validate_derived_store_lock_offset(store_name: &str, offset: u64) -> io::Result<()> {
+    debug_assert!(offset >= DERIVED_STORE_DATABASE_LOCK_BASE);
+    debug_assert!(offset <= i64::MAX as u64);
+
+    for contract_name in DERIVED_STORE_LOCK_CONTRACT_NAMES {
+        if contract_name != store_name
+            && derived_store_database_lock_offset(contract_name) == offset
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "derived store lock offset collision between {store_name} and {contract_name}"
+                ),
+            ));
+        }
+    }
+
+    // Cross-process offset collisions remain fail-safe because they alias the
+    // database byte and conservatively serialize the two stores. Within one
+    // process, retain every observed name so a collision is reported instead
+    // of appearing as unrelated WouldBlock contention.
+    let offsets = DERIVED_STORE_NAMES_BY_OFFSET.get_or_init(|| Mutex::new(BTreeMap::new()));
+    let mut offsets = offsets
+        .lock()
+        .map_err(|_| io::Error::other("derived store lock offset registry is poisoned"))?;
+    if let Some(existing) = offsets.get(&offset)
+        && existing != store_name
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("derived store lock offset collision between {store_name} and {existing}"),
+        ));
+    }
+    offsets
+        .entry(offset)
+        .or_insert_with(|| store_name.to_owned());
+    Ok(())
+}
+
+fn derived_store_sentinel_bytes(
+    normalized_db_path: &Path,
+    store_name: &str,
+    lock_offset: u64,
+) -> Vec<u8> {
+    let (path_encoding, path_bytes) = normalized_path_identity_bytes(normalized_db_path);
+    format!(
+        "{DERIVED_STORE_SENTINEL_MAGIC}\npath_encoding={path_encoding}\ndatabase_path_hex={}\nstore={store_name}\nlock_offset={lock_offset}\n",
+        lowercase_hex(&path_bytes)
+    )
+    .into_bytes()
+}
+
+#[cfg(unix)]
+fn normalized_path_identity_bytes(path: &Path) -> (&'static str, Vec<u8>) {
+    use std::os::unix::ffi::OsStrExt as _;
+
+    ("unix-bytes", path.as_os_str().as_bytes().to_vec())
+}
+
+#[cfg(windows)]
+fn normalized_path_identity_bytes(path: &Path) -> (&'static str, Vec<u8>) {
+    use std::os::windows::ffi::OsStrExt as _;
+
+    let bytes = path
+        .as_os_str()
+        .encode_wide()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    ("windows-utf16le", bytes)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn normalized_path_identity_bytes(path: &Path) -> (&'static str, Vec<u8>) {
+    (
+        "unsupported-display",
+        path.as_os_str().to_string_lossy().as_bytes().to_vec(),
+    )
+}
+
+fn lowercase_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+        encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    encoded
+}
+
+fn open_and_validate_derived_store_sentinel(
+    path: &Path,
+    expected: &[u8],
+) -> io::Result<std::fs::File> {
+    let file = open_existing_lock_file(path, false)?;
+    validate_derived_store_sentinel(path, &file, expected)?;
+    Ok(file)
+}
+
+fn validate_derived_store_sentinel(
+    path: &Path,
+    file: &std::fs::File,
+    expected: &[u8],
+) -> io::Result<()> {
+    let handle_before = snapshot_open_lock_file(file)?;
+    let path_before = snapshot_lock_path(path)?;
+    validate_sentinel_snapshot(path, &handle_before)?;
+    validate_sentinel_snapshot(path, &path_before)?;
+    if handle_before.identity != path_before.identity {
+        return Err(unsafe_derived_lock_path(
+            path,
+            "sentinel path does not identify the opened file",
+        ));
+    }
+
+    let mut reader = file.try_clone()?;
+    reader.seek(SeekFrom::Start(0))?;
+    let mut contents = Vec::with_capacity(expected.len().saturating_add(1));
+    let read_limit = u64::try_from(expected.len())
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    reader.take(read_limit).read_to_end(&mut contents)?;
+    if contents != expected {
+        return Err(unsafe_derived_lock_path(
+            path,
+            "sentinel identity does not match the database and store",
+        ));
+    }
+
+    let handle_after = snapshot_open_lock_file(file)?;
+    let path_after = snapshot_lock_path(path)?;
+    validate_sentinel_snapshot(path, &handle_after)?;
+    validate_sentinel_snapshot(path, &path_after)?;
+    if handle_before != handle_after || handle_before != path_after {
+        return Err(unsafe_derived_lock_path(
+            path,
+            "sentinel changed while it was being validated",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_sentinel_snapshot(path: &Path, snapshot: &DerivedLockFileSnapshot) -> io::Result<()> {
+    if !snapshot.regular_non_reparse {
+        return Err(unsafe_derived_lock_path(
+            path,
+            "sentinel is not a regular non-reparse file",
+        ));
+    }
+    if snapshot.link_count != 1 {
+        return Err(unsafe_derived_lock_path(
+            path,
+            "sentinel must have exactly one filesystem link",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_database_lock_file(path: &Path, file: &std::fs::File) -> io::Result<()> {
+    let handle_snapshot = snapshot_open_lock_file(file)?;
+    let path_snapshot = snapshot_lock_path(path)?;
+    if !handle_snapshot.regular_non_reparse || !path_snapshot.regular_non_reparse {
+        return Err(unsafe_derived_lock_path(
+            path,
+            "database authority is not a regular non-reparse file",
+        ));
+    }
+    if handle_snapshot.link_count != 1 || path_snapshot.link_count != 1 {
+        return Err(unsafe_derived_lock_path(
+            path,
+            "database authority must have exactly one filesystem link",
+        ));
+    }
+    if handle_snapshot.identity != path_snapshot.identity {
+        return Err(unsafe_derived_lock_path(
+            path,
+            "database path does not identify the opened lock authority",
+        ));
+    }
+    Ok(())
+}
+
+fn unsafe_derived_lock_path(path: &Path, reason: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("unsafe derived lock path {}: {reason}", path.display()),
+    )
+}
+
+fn try_lock_derived_store_sentinel(
+    file: &std::fs::File,
+    mode: DerivedStoreLockMode,
+) -> io::Result<bool> {
+    match mode {
+        DerivedStoreLockMode::Shared => fs4::fs_std::FileExt::try_lock_shared(file),
+        DerivedStoreLockMode::Exclusive => fs4::fs_std::FileExt::try_lock_exclusive(file),
     }
 }
 
-impl Drop for DerivedStoreWriteGuard {
-    fn drop(&mut self) {
-        let _ = self.lock_file.unlock();
+#[cfg(any(target_os = "linux", windows))]
+fn ensure_database_range_lock_supported() -> io::Result<()> {
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn ensure_database_range_lock_supported() -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "derived store locks require Linux OFD locks or Windows LockFileEx",
+    ))
+}
+
+fn open_database_lock_file(path: &Path, mode: DerivedStoreLockMode) -> io::Result<std::fs::File> {
+    open_existing_lock_file(path, matches!(mode, DerivedStoreLockMode::Exclusive))
+}
+
+#[cfg(target_os = "linux")]
+fn open_existing_lock_file(path: &Path, writable: bool) -> io::Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+
+    let mut options = std::fs::OpenOptions::new();
+    options
+        .read(true)
+        .write(writable)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK);
+    options.open(path)
+}
+
+#[cfg(windows)]
+fn open_existing_lock_file(path: &Path, writable: bool) -> io::Result<std::fs::File> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    };
+
+    let mut options = std::fs::OpenOptions::new();
+    options
+        .read(true)
+        .write(writable)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    options.open(path)
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn open_existing_lock_file(_path: &Path, _writable: bool) -> io::Result<std::fs::File> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "derived store locks require Linux OFD locks or Windows LockFileEx",
+    ))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DerivedLockFileIdentity {
+    volume: u64,
+    file_id: [u8; 16],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DerivedLockFileSnapshot {
+    identity: DerivedLockFileIdentity,
+    length: u64,
+    link_count: u64,
+    regular_non_reparse: bool,
+    attributes: u64,
+    created_or_changed: (i64, i64),
+    modified: (i64, i64),
+}
+
+fn snapshot_lock_path(path: &Path) -> io::Result<DerivedLockFileSnapshot> {
+    let current = open_existing_lock_file(path, false)?;
+    snapshot_open_lock_file(&current)
+}
+
+#[cfg(unix)]
+fn snapshot_open_lock_file(file: &std::fs::File) -> io::Result<DerivedLockFileSnapshot> {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let metadata = file.metadata()?;
+    let mut file_id = [0_u8; 16];
+    file_id[..8].copy_from_slice(&metadata.ino().to_be_bytes());
+    Ok(DerivedLockFileSnapshot {
+        identity: DerivedLockFileIdentity {
+            volume: metadata.dev(),
+            file_id,
+        },
+        length: metadata.len(),
+        link_count: metadata.nlink(),
+        regular_non_reparse: metadata.file_type().is_file(),
+        attributes: u64::from(metadata.mode()),
+        created_or_changed: (metadata.ctime(), metadata.ctime_nsec()),
+        modified: (metadata.mtime(), metadata.mtime_nsec()),
+    })
+}
+
+#[cfg(windows)]
+fn snapshot_open_lock_file(file: &std::fs::File) -> io::Result<DerivedLockFileSnapshot> {
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
+        FILE_ID_INFO, FileIdInfo, GetFileInformationByHandle, GetFileInformationByHandleEx,
+    };
+
+    let mut information = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: File owns a valid HANDLE and information points to writable,
+    // correctly sized storage for the duration of the synchronous call.
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut information) } == 0 {
+        return Err(io::Error::last_os_error());
     }
+    let mut identity = FILE_ID_INFO::default();
+    let identity_size = u32::try_from(std::mem::size_of::<FILE_ID_INFO>())
+        .map_err(|_| io::Error::other("FILE_ID_INFO size does not fit the Win32 API"))?;
+    // SAFETY: File owns a valid HANDLE, identity is correctly sized writable
+    // storage, and the call is synchronous. Failure (including an unsupported
+    // filesystem information class) is deliberately returned fail-closed.
+    if unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle(),
+            FileIdInfo,
+            (&mut identity as *mut FILE_ID_INFO).cast(),
+            identity_size,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    let file_size =
+        (u64::from(information.nFileSizeHigh) << 32) | u64::from(information.nFileSizeLow);
+    let creation_time = (u64::from(information.ftCreationTime.dwHighDateTime) << 32)
+        | u64::from(information.ftCreationTime.dwLowDateTime);
+    let last_write_time = (u64::from(information.ftLastWriteTime.dwHighDateTime) << 32)
+        | u64::from(information.ftLastWriteTime.dwLowDateTime);
+    let forbidden_attributes = FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT;
+    Ok(DerivedLockFileSnapshot {
+        identity: DerivedLockFileIdentity {
+            volume: identity.VolumeSerialNumber,
+            file_id: identity.FileId.Identifier,
+        },
+        length: file_size,
+        link_count: u64::from(information.nNumberOfLinks),
+        regular_non_reparse: information.dwFileAttributes & forbidden_attributes == 0,
+        attributes: u64::from(information.dwFileAttributes),
+        created_or_changed: (creation_time as i64, 0),
+        modified: (last_write_time as i64, 0),
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
+fn snapshot_open_lock_file(file: &std::fs::File) -> io::Result<DerivedLockFileSnapshot> {
+    let metadata = file.metadata()?;
+    let created = metadata
+        .created()
+        .ok()
+        .and_then(|value| value.elapsed().ok())
+        .map(|value| value.as_nanos() as i64)
+        .unwrap_or_default();
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|value| value.elapsed().ok())
+        .map(|value| value.as_nanos() as i64)
+        .unwrap_or_default();
+    Ok(DerivedLockFileSnapshot {
+        identity: DerivedLockFileIdentity {
+            volume: metadata.len(),
+            file_id: {
+                let mut file_id = [0_u8; 16];
+                file_id[..8].copy_from_slice(&(created as u64).to_be_bytes());
+                file_id
+            },
+        },
+        length: metadata.len(),
+        link_count: 0,
+        regular_non_reparse: metadata.file_type().is_file(),
+        attributes: 0,
+        created_or_changed: (created, 0),
+        modified: (modified, 0),
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn platform_try_lock_database_range(
+    file: &std::fs::File,
+    offset: u64,
+    mode: DerivedStoreLockMode,
+) -> io::Result<bool> {
+    use std::os::fd::AsRawFd as _;
+
+    let start = libc::off_t::try_from(offset).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "derived store database lock offset exceeds off_t",
+        )
+    })?;
+    // SAFETY: zero is a valid initial value for every field of libc::flock.
+    let mut lock: libc::flock = unsafe { std::mem::zeroed() };
+    lock.l_type = match mode {
+        DerivedStoreLockMode::Shared => libc::F_RDLCK as _,
+        DerivedStoreLockMode::Exclusive => libc::F_WRLCK as _,
+    };
+    lock.l_whence = libc::SEEK_SET as _;
+    lock.l_start = start;
+    lock.l_len = 1;
+    lock.l_pid = 0;
+    loop {
+        // SAFETY: file owns a valid descriptor and lock points to an initialized
+        // flock with a one-byte range representable by off_t.
+        if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_OFD_SETLK, &lock) } == 0 {
+            return Ok(true);
+        }
+        let error = io::Error::last_os_error();
+        match error.raw_os_error() {
+            Some(libc::EINTR) => continue,
+            Some(code) if code == libc::EACCES || code == libc::EAGAIN => return Ok(false),
+            Some(code)
+                if code == libc::EINVAL || code == libc::ENOSYS || code == libc::EOPNOTSUPP =>
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "Linux kernel or filesystem does not support OFD range locks",
+                ));
+            }
+            _ => return Err(error),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn platform_unlock_database_range(file: &std::fs::File, offset: u64) -> io::Result<()> {
+    use std::os::fd::AsRawFd as _;
+
+    let start = libc::off_t::try_from(offset).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "derived store database lock offset exceeds off_t",
+        )
+    })?;
+    // SAFETY: zero is a valid initial value for every field of libc::flock.
+    let mut lock: libc::flock = unsafe { std::mem::zeroed() };
+    lock.l_type = libc::F_UNLCK as _;
+    lock.l_whence = libc::SEEK_SET as _;
+    lock.l_start = start;
+    lock.l_len = 1;
+    lock.l_pid = 0;
+    loop {
+        // SAFETY: file owns a valid descriptor and lock describes the exact
+        // one-byte OFD range acquired by this guard.
+        if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_OFD_SETLK, &lock) } == 0 {
+            return Ok(());
+        }
+        let error = io::Error::last_os_error();
+        if error.raw_os_error() != Some(libc::EINTR) {
+            return Err(error);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn platform_try_lock_database_range(
+    file: &std::fs::File,
+    offset: u64,
+    mode: DerivedStoreLockMode,
+) -> io::Result<bool> {
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::{
+        Foundation::{ERROR_IO_PENDING, ERROR_LOCK_VIOLATION},
+        Storage::FileSystem::{LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx},
+        System::IO::OVERLAPPED,
+    };
+
+    let mut overlapped = OVERLAPPED::default();
+    overlapped.Anonymous.Anonymous.Offset = offset as u32;
+    overlapped.Anonymous.Anonymous.OffsetHigh = (offset >> 32) as u32;
+    let flags = LOCKFILE_FAIL_IMMEDIATELY
+        | if matches!(mode, DerivedStoreLockMode::Exclusive) {
+            LOCKFILE_EXCLUSIVE_LOCK
+        } else {
+            0
+        };
+    // SAFETY: the File owns a valid HANDLE and OVERLAPPED lives for the
+    // synchronous call. The requested range is exactly one byte.
+    if unsafe { LockFileEx(file.as_raw_handle(), flags, 0, 1, 0, &mut overlapped) } != 0 {
+        return Ok(true);
+    }
+    let error = io::Error::last_os_error();
+    match error.raw_os_error() {
+        Some(code) if code == ERROR_LOCK_VIOLATION as i32 || code == ERROR_IO_PENDING as i32 => {
+            Ok(false)
+        }
+        _ => Err(error),
+    }
+}
+
+#[cfg(windows)]
+fn platform_unlock_database_range(file: &std::fs::File, offset: u64) -> io::Result<()> {
+    use std::os::windows::io::AsRawHandle as _;
+    use windows_sys::Win32::{Storage::FileSystem::UnlockFileEx, System::IO::OVERLAPPED};
+
+    let mut overlapped = OVERLAPPED::default();
+    overlapped.Anonymous.Anonymous.Offset = offset as u32;
+    overlapped.Anonymous.Anonymous.OffsetHigh = (offset >> 32) as u32;
+    // SAFETY: the File owns the HANDLE used to acquire this exact range and
+    // OVERLAPPED lives for the synchronous call.
+    if unsafe { UnlockFileEx(file.as_raw_handle(), 0, 1, 0, &mut overlapped) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn platform_try_lock_database_range(
+    _file: &std::fs::File,
+    _offset: u64,
+    _mode: DerivedStoreLockMode,
+) -> io::Result<bool> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "derived store locks require Linux OFD locks or Windows LockFileEx",
+    ))
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn platform_unlock_database_range(_file: &std::fs::File, _offset: u64) -> io::Result<()> {
+    Ok(())
 }
 
 /// Flushes one regular file to its backing store.
@@ -333,7 +1014,14 @@ pub fn durable_create_new_file(path: &Path, contents: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+fn durable_publish_new_file_platform(staged: &Path, destination: &Path) -> io::Result<()> {
+    use rustix::fs::{CWD, RenameFlags, renameat_with};
+
+    renameat_with(CWD, staged, CWD, destination, RenameFlags::NOREPLACE).map_err(Into::into)
+}
+
+#[cfg(all(not(windows), not(target_os = "linux")))]
 fn durable_publish_new_file_platform(staged: &Path, destination: &Path) -> io::Result<()> {
     fs::hard_link(staged, destination)
 }
@@ -512,10 +1200,16 @@ fn parent_directory(path: &Path) -> io::Result<&Path> {
 
 pub fn derived_store_write_lock_path(db_path: &Path, store_name: &str) -> PathBuf {
     let normalized = normalized_file_path(db_path);
-    PathBuf::from(format!(
-        "{}.derived.{store_name}.lock",
-        normalized.display()
-    ))
+    derived_store_write_lock_path_from_normalized(&normalized, store_name)
+}
+
+fn derived_store_write_lock_path_from_normalized(
+    normalized_db_path: &Path,
+    store_name: &str,
+) -> PathBuf {
+    let mut lock_path = normalized_db_path.as_os_str().to_os_string();
+    lock_path.push(format!(".derived.{store_name}.lock"));
+    PathBuf::from(lock_path)
 }
 
 fn normalized_file_path(path: &Path) -> PathBuf {
@@ -536,16 +1230,6 @@ fn normalized_file_path(path: &Path) -> PathBuf {
             .unwrap_or_else(|_| PathBuf::from("."))
             .join(path)
     }
-}
-
-fn derived_store_lock_identity(store_name: &str) -> String {
-    let pid = std::process::id();
-    let nonce = DERIVED_LOCK_NONCE.fetch_add(1, Ordering::Relaxed);
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    format!("pid={pid}\nowner={pid}-{timestamp}-{nonce}\nstore={store_name}\n")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1163,6 +1847,77 @@ mod tests {
         assert_eq!(fs::read(&marker).unwrap(), b"generation=one\n");
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn durable_derived_store_new_file_publish_is_a_single_entry_atomic_rename() {
+        use std::os::unix::fs::MetadataExt as _;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let staged = tempdir.path().join("sentinel.new");
+        let destination = tempdir.path().join("sentinel");
+        let expected = b"kanban-derived-store-lock-v2\nexact=true\n";
+        fs::write(&staged, expected).unwrap();
+        let staged_before = fs::metadata(&staged).unwrap();
+
+        durable_publish_new_file_platform(&staged, &destination).unwrap();
+
+        assert!(
+            !staged.exists(),
+            "the publish primitive must never leave a second hard-link entry"
+        );
+        assert_eq!(fs::read(&destination).unwrap(), expected);
+        let published = fs::metadata(&destination).unwrap();
+        assert_eq!(published.dev(), staged_before.dev());
+        assert_eq!(published.ino(), staged_before.ino());
+        assert_eq!(published.nlink(), 1);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn durable_derived_store_first_create_race_publishes_one_exact_single_link_inode() {
+        use std::{
+            os::unix::fs::MetadataExt as _,
+            sync::{Arc, Barrier},
+        };
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let marker = tempdir.path().join("published");
+        let barrier = Arc::new(Barrier::new(17));
+        let contenders = (0..16_u8)
+            .map(|contender| {
+                let marker = marker.clone();
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    let contents = format!("winner={contender:02}\n").into_bytes();
+                    barrier.wait();
+                    (
+                        contents.clone(),
+                        durable_create_new_file(&marker, &contents),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        barrier.wait();
+
+        let mut winner = None;
+        for contender in contenders {
+            let (contents, result) = contender.join().unwrap();
+            match result {
+                Ok(()) => assert!(winner.replace(contents).is_none()),
+                Err(error) => assert_eq!(error.kind(), io::ErrorKind::AlreadyExists),
+            }
+        }
+
+        let winner = winner.expect("exactly one create-new contender must publish");
+        assert_eq!(fs::read(&marker).unwrap(), winner);
+        assert_eq!(fs::metadata(&marker).unwrap().nlink(), 1);
+        assert_eq!(
+            fs::read_dir(tempdir.path()).unwrap().count(),
+            1,
+            "all losing and renamed staged entries must be removed"
+        );
+    }
+
     #[test]
     fn durable_directory_publish_syncs_tree_and_refuses_existing_destination() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -1341,8 +2096,9 @@ mod tests {
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
 
+    #[cfg(any(target_os = "linux", windows))]
     #[test]
-    fn derived_store_lock_file_is_persistent_and_candidate_artifacts_are_ignored() {
+    fn durable_derived_store_lock_file_is_persistent_and_candidate_artifacts_are_ignored() {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path().join("kanban.db");
         fs::write(&db_path, "").unwrap();
@@ -1350,7 +2106,13 @@ mod tests {
         let abandoned_candidate =
             PathBuf::from(format!("{}.candidate.reused", lock_path.display()));
 
-        fs::write(&lock_path, "pid=").unwrap();
+        drop(DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap());
+        let sentinel_before = fs::read(&lock_path).unwrap();
+        let sentinel_text = std::str::from_utf8(&sentinel_before).unwrap();
+        assert!(sentinel_text.starts_with("kanban-derived-store-lock-v2\n"));
+        assert!(sentinel_text.contains("\nstore=tantivy_tasks\n"));
+        assert!(sentinel_text.contains("\nlock_offset="));
+        assert!(!sentinel_text.contains("pid="));
         fs::write(&abandoned_candidate, "abandoned").unwrap();
         let guard = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap();
         let error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
@@ -1358,6 +2120,7 @@ mod tests {
         drop(guard);
 
         assert!(lock_path.exists());
+        assert_eq!(fs::read(&lock_path).unwrap(), sentinel_before);
         assert_eq!(
             fs::read_to_string(&abandoned_candidate).unwrap(),
             "abandoned"
@@ -1366,8 +2129,9 @@ mod tests {
         assert!(lock_path.exists());
     }
 
+    #[cfg(any(target_os = "linux", windows))]
     #[test]
-    fn derived_store_lock_serializes_concurrent_contenders() {
+    fn durable_derived_store_lock_serializes_concurrent_contenders() {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path().join("kanban.db");
         fs::write(&db_path, "").unwrap();
@@ -1387,6 +2151,571 @@ mod tests {
         }
         drop(guard);
         drop(DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap());
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_read_guard_fails_closed_without_a_persistent_lock_file() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "").unwrap();
+        let lock_path = derived_store_write_lock_path(&db_path, "tantivy_tasks");
+
+        let error = DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        assert!(!lock_path.exists());
+    }
+
+    #[test]
+    fn durable_derived_store_read_guard_rejects_unsafe_store_names() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "").unwrap();
+
+        for store_name in ["", "../tantivy_tasks", "tantivy/tasks", "tantivy tasks"] {
+            let error = DerivedStoreReadGuard::acquire(&db_path, store_name).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        }
+    }
+
+    #[cfg(not(any(target_os = "linux", windows)))]
+    #[test]
+    fn durable_derived_store_guards_fail_closed_when_stable_range_locks_are_unsupported() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "").unwrap();
+        let lock_path = derived_store_write_lock_path(&db_path, "tantivy_tasks");
+
+        let write_error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+        let read_error = DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+
+        assert_eq!(write_error.kind(), io::ErrorKind::Unsupported);
+        assert_eq!(read_error.kind(), io::ErrorKind::Unsupported);
+        assert!(!lock_path.exists());
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_writer_rejects_legacy_mutable_sentinel_without_rewriting_it() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "").unwrap();
+        let lock_path = derived_store_write_lock_path(&db_path, "tantivy_tasks");
+        let legacy = b"pid=123\nowner=legacy\nstore=tantivy_tasks\n";
+        fs::write(&lock_path, legacy).unwrap();
+
+        let error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert_eq!(fs::read(&lock_path).unwrap(), legacy);
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_read_guards_coexist_without_changing_lock_evidence() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "").unwrap();
+        let lock_path = derived_store_write_lock_path(&db_path, "tantivy_tasks");
+        drop(DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap());
+        let bytes_before = fs::read(&lock_path).unwrap();
+        let metadata_before = fs::metadata(&lock_path).unwrap();
+
+        let first = DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+        let second = DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+
+        assert_eq!(fs::read(&lock_path).unwrap(), bytes_before);
+        let metadata_during = fs::metadata(&lock_path).unwrap();
+        assert_eq!(metadata_during.len(), metadata_before.len());
+        assert_eq!(
+            metadata_during.modified().unwrap(),
+            metadata_before.modified().unwrap()
+        );
+        assert_eq!(
+            metadata_during.permissions().readonly(),
+            metadata_before.permissions().readonly()
+        );
+        drop(second);
+        drop(first);
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_read_guard_blocks_writer_without_changing_lock_evidence() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "").unwrap();
+        let lock_path = derived_store_write_lock_path(&db_path, "tantivy_tasks");
+        drop(DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap());
+        let bytes_before = fs::read(&lock_path).unwrap();
+        let modified_before = fs::metadata(&lock_path).unwrap().modified().unwrap();
+        let reader = DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+
+        let error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+        assert_eq!(fs::read(&lock_path).unwrap(), bytes_before);
+        assert_eq!(
+            fs::metadata(&lock_path).unwrap().modified().unwrap(),
+            modified_before
+        );
+        drop(reader);
+        drop(DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap());
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_writer_blocks_read_guard() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "").unwrap();
+        let writer = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+
+        let error = DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+        drop(writer);
+        drop(DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks").unwrap());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn durable_derived_store_guards_reject_symlink_lock_without_changing_its_target() {
+        use std::os::unix::fs::symlink;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        let sentinel = b"canonical-sqlite-must-not-change";
+        fs::write(&db_path, sentinel).unwrap();
+        let lock_path = derived_store_write_lock_path(&db_path, "tantivy_tasks");
+        symlink(&db_path, &lock_path).unwrap();
+
+        let write_result = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks");
+        assert!(
+            write_result.is_err(),
+            "a derived writer must never follow a lock-path symlink"
+        );
+        let read_result = DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks");
+        assert!(
+            read_result.is_err(),
+            "a derived reader must never follow a lock-path symlink"
+        );
+        assert_eq!(fs::read(&db_path).unwrap(), sentinel);
+        assert!(
+            fs::symlink_metadata(&lock_path)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_guards_reject_hardlinked_lock_without_changing_its_target() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        let sentinel = b"canonical-sqlite-must-not-change";
+        fs::write(&db_path, sentinel).unwrap();
+        let lock_path = derived_store_write_lock_path(&db_path, "tantivy_tasks");
+        fs::hard_link(&db_path, &lock_path).unwrap();
+
+        let write_result = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks");
+        assert!(
+            write_result.is_err(),
+            "a derived writer must reject a multiply-linked lock inode"
+        );
+        let read_result = DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks");
+        assert!(
+            read_result.is_err(),
+            "a derived reader must reject a multiply-linked lock inode"
+        );
+        assert_eq!(fs::read(&db_path).unwrap(), sentinel);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn run_linux_non_regular_guard_probe_with_deadline(mode: &str, path: &Path) {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("tests::durable_derived_store_linux_non_regular_probe_child")
+            .arg("--nocapture")
+            .env("KANBAN_LOCAL_DERIVED_GUARD_PROBE", mode)
+            .env("KANBAN_LOCAL_DERIVED_GUARD_PATH", path)
+            .spawn()
+            .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                assert!(status.success(), "{mode} probe failed with {status}");
+                return;
+            }
+            if std::time::Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("{mode} probe blocked while opening {}", path.display());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn durable_derived_store_linux_non_regular_probe_child() {
+        let Ok(mode) = std::env::var("KANBAN_LOCAL_DERIVED_GUARD_PROBE") else {
+            return;
+        };
+        let path = PathBuf::from(
+            std::env::var_os("KANBAN_LOCAL_DERIVED_GUARD_PATH")
+                .expect("guard probe path must be supplied"),
+        );
+        let result = match mode.as_str() {
+            "sentinel-fifo" | "sentinel-device" => {
+                open_and_validate_derived_store_sentinel(&path, b"expected-sentinel").map(|_| ())
+            }
+            "database-fifo" | "database-device" => {
+                open_database_lock_file(&path, DerivedStoreLockMode::Shared)
+                    .and_then(|file| validate_database_lock_file(&path, &file))
+            }
+            other => panic!("unknown guard probe mode {other}"),
+        };
+        let error = result.expect_err("non-regular lock authority must fail closed");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn durable_derived_store_linux_fifo_and_device_openers_fail_before_deadline() {
+        use std::os::unix::{ffi::OsStrExt as _, fs::FileTypeExt as _};
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let fifo = tempdir.path().join("adversarial-fifo");
+        let fifo_bytes = std::ffi::CString::new(fifo.as_os_str().as_bytes()).unwrap();
+        // SAFETY: fifo_bytes is a NUL-terminated path and the mode is a valid
+        // permission mask. The path is owned by this test's private directory.
+        assert_eq!(unsafe { libc::mkfifo(fifo_bytes.as_ptr(), 0o600) }, 0);
+
+        run_linux_non_regular_guard_probe_with_deadline("sentinel-fifo", &fifo);
+        run_linux_non_regular_guard_probe_with_deadline("database-fifo", &fifo);
+        run_linux_non_regular_guard_probe_with_deadline("sentinel-device", Path::new("/dev/null"));
+        run_linux_non_regular_guard_probe_with_deadline("database-device", Path::new("/dev/null"));
+        assert!(fs::symlink_metadata(&fifo).unwrap().file_type().is_fifo());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn durable_derived_store_windows_snapshot_uses_full_file_id_identity() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let first = tempdir.path().join("first");
+        let alias = tempdir.path().join("alias");
+        let distinct = tempdir.path().join("distinct");
+        fs::write(&first, b"first").unwrap();
+        fs::hard_link(&first, &alias).unwrap();
+        fs::write(&distinct, b"distinct").unwrap();
+
+        let first = snapshot_lock_path(&first).unwrap();
+        let alias = snapshot_lock_path(&alias).unwrap();
+        let distinct = snapshot_lock_path(&distinct).unwrap();
+
+        assert_eq!(first.identity, alias.identity);
+        assert_ne!(first.identity, distinct.identity);
+        assert!(
+            std::mem::size_of_val(&first.identity) >= 24,
+            "Windows identity must retain the u64 volume and complete FILE_ID_128"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn durable_derived_store_windows_reparse_sentinel_is_rejected_without_target_mutation() {
+        use std::os::windows::fs::symlink_file;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        let target = tempdir.path().join("target");
+        let sentinel = derived_store_write_lock_path(&db_path, "tantivy_tasks");
+        fs::write(&db_path, b"canonical").unwrap();
+        fs::write(&target, b"must-not-change").unwrap();
+        if let Err(error) = symlink_file(&target, &sentinel) {
+            assert_eq!(
+                error.raw_os_error(),
+                Some(1314),
+                "only ERROR_PRIVILEGE_NOT_HELD may prevent the native reparse fixture"
+            );
+            let mut synthetic_reparse =
+                snapshot_open_lock_file(&open_existing_lock_file(&target, false).unwrap()).unwrap();
+            synthetic_reparse.regular_non_reparse = false;
+            let error = validate_sentinel_snapshot(&sentinel, &synthetic_reparse)
+                .expect_err("reparse attributes must fail closed");
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+            assert_eq!(fs::read(&target).unwrap(), b"must-not-change");
+            return;
+        }
+
+        assert!(DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").is_err());
+        assert!(DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks").is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"must-not-change");
+        assert!(fs::symlink_metadata(&sentinel).unwrap().is_symlink());
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_lock_path_cannot_fork_while_writer_is_held() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "").unwrap();
+        let lock_path = derived_store_write_lock_path(&db_path, "tantivy_tasks");
+        let displaced_lock = tempdir.path().join("displaced-derived.lock");
+        let first = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+
+        match fs::rename(&lock_path, &displaced_lock) {
+            Ok(()) => {
+                let second = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks");
+                assert!(
+                    second.is_err(),
+                    "renaming a held lock must not let a second writer lock a new inode"
+                );
+                assert!(
+                    !lock_path.exists(),
+                    "a failed second acquire must not publish a replacement lock inode"
+                );
+            }
+            Err(_) => {
+                assert!(
+                    lock_path.exists(),
+                    "a platform rename denial must leave the held lock path intact"
+                );
+                let error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+                assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+            }
+        }
+        drop(first);
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_database_hardlink_alias_is_rejected_before_any_store_path_changes() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let first_dir = tempdir.path().join("first");
+        let second_dir = tempdir.path().join("second");
+        fs::create_dir_all(&first_dir).unwrap();
+        fs::create_dir_all(&second_dir).unwrap();
+        let db_path = first_dir.join("kanban.db");
+        let db_alias = second_dir.join("kanban.db");
+        let canonical_bytes = b"canonical-sqlite-must-not-change";
+        fs::write(&db_path, canonical_bytes).unwrap();
+        fs::hard_link(&db_path, &db_alias).unwrap();
+
+        let first_root =
+            projection_store_root_path(&db_path, "db_hardlink", "tantivy_tasks").unwrap();
+        let second_root =
+            projection_store_root_path(&db_alias, "db_hardlink", "tantivy_tasks").unwrap();
+        fs::create_dir_all(&first_root).unwrap();
+        fs::create_dir_all(&second_root).unwrap();
+        fs::write(first_root.join("sentinel"), b"first-root").unwrap();
+        fs::write(second_root.join("sentinel"), b"second-root").unwrap();
+
+        for database_path in [&db_path, &db_alias] {
+            let write_error =
+                DerivedStoreWriteGuard::acquire(database_path, "tantivy_tasks").unwrap_err();
+            let read_error =
+                DerivedStoreReadGuard::acquire(database_path, "tantivy_tasks").unwrap_err();
+            assert_eq!(write_error.kind(), io::ErrorKind::InvalidData);
+            assert_eq!(read_error.kind(), io::ErrorKind::InvalidData);
+            assert!(
+                !derived_store_write_lock_path(database_path, "tantivy_tasks").exists(),
+                "hard-linked database rejection must happen before sentinel publication"
+            );
+        }
+
+        assert_eq!(fs::read(&db_path).unwrap(), canonical_bytes);
+        assert_eq!(fs::read(&db_alias).unwrap(), canonical_bytes);
+        assert_eq!(
+            fs::read(first_root.join("sentinel")).unwrap(),
+            b"first-root"
+        );
+        assert_eq!(
+            fs::read(second_root.join("sentinel")).unwrap(),
+            b"second-root"
+        );
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_database_rename_does_not_fork_lock_authority() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        let renamed_db = tempdir.path().join("renamed.db");
+        fs::write(&db_path, "").unwrap();
+        let first = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+
+        match fs::rename(&db_path, &renamed_db) {
+            Ok(()) => {
+                let error =
+                    DerivedStoreWriteGuard::acquire(&renamed_db, "tantivy_tasks").unwrap_err();
+                assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+            }
+            Err(_) => {
+                assert!(db_path.exists());
+                let error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+                assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+            }
+        }
+        drop(first);
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_database_replacement_does_not_fork_unmoved_sentinel_authority() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        let displaced_db = tempdir.path().join("displaced.db");
+        fs::write(&db_path, "old-database").unwrap();
+        let first = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+
+        match fs::rename(&db_path, &displaced_db) {
+            Ok(()) => {
+                fs::write(&db_path, "replacement-database").unwrap();
+                let error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+                assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+            }
+            Err(_) => {
+                assert!(db_path.exists());
+                let error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+                assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+            }
+        }
+        drop(first);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn durable_derived_store_unrelated_sqlite_close_does_not_release_lock() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        let connection = rusqlite::Connection::open(&db_path).unwrap();
+        connection
+            .execute_batch("CREATE TABLE canonical(value INTEGER);")
+            .unwrap();
+        drop(connection);
+        let writer = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+
+        let unrelated = rusqlite::Connection::open(&db_path).unwrap();
+        unrelated
+            .query_row("SELECT COUNT(*) FROM canonical", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap();
+        drop(unrelated);
+        let error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+        drop(writer);
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn durable_derived_store_high_range_lock_does_not_block_sqlite_wal_vacuum_or_backup() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        let backup_path = tempdir.path().join("kanban-backup.db");
+        let connection = rusqlite::Connection::open(&db_path).unwrap();
+        connection
+            .execute_batch(
+                "PRAGMA journal_mode = WAL;
+                 PRAGMA synchronous = FULL;
+                 CREATE TABLE canonical(id INTEGER PRIMARY KEY, payload BLOB NOT NULL);
+                 WITH RECURSIVE rows(id) AS (
+                   VALUES(1)
+                   UNION ALL
+                   SELECT id + 1 FROM rows WHERE id < 512
+                 )
+                 INSERT INTO canonical(id, payload)
+                 SELECT id, zeroblob(4096) FROM rows;
+                 PRAGMA wal_checkpoint(TRUNCATE);",
+            )
+            .unwrap();
+        let size_before = fs::metadata(&db_path).unwrap().len();
+        let writer = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+
+        connection.execute("DELETE FROM canonical", []).unwrap();
+        connection
+            .execute_batch(
+                "PRAGMA wal_checkpoint(TRUNCATE);
+                 VACUUM;",
+            )
+            .unwrap();
+        connection
+            .execute("VACUUM INTO ?1", [backup_path.to_string_lossy().as_ref()])
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO canonical(id, payload) VALUES (1, zeroblob(64))",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+            .unwrap();
+
+        assert!(fs::metadata(&db_path).unwrap().len() < size_before);
+        assert!(fs::metadata(&backup_path).unwrap().len() > 0);
+        drop(connection);
+        let error = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+        drop(writer);
+    }
+
+    #[test]
+    fn durable_derived_store_lock_offset_contract_is_stable_unique_and_above_sqlite_maximum() {
+        const SQLITE_MAX_PAGE_SIZE: u64 = 65_536;
+        const SQLITE_MAX_PAGE_COUNT: u64 = 4_294_967_294;
+        const SQLITE_MAXIMUM_FILE_SIZE: u64 = SQLITE_MAX_PAGE_SIZE * SQLITE_MAX_PAGE_COUNT;
+        const CONTRACT_NAMES: [&str; 8] = [
+            "tantivy_tasks",
+            "oxigraph_relations",
+            "lancedb_chunks",
+            "lancedb_label_atoms",
+            "tantivy_tasks-projection-helper",
+            "oxigraph_relations-projection-helper",
+            "lancedb_chunks-projection-helper",
+            "lancedb_label_atoms-projection-helper",
+        ];
+
+        assert_eq!(DERIVED_DATABASE_LIFECYCLE_LOCK_OFFSET, 1_u64 << 48);
+        assert!(
+            DERIVED_DATABASE_LIFECYCLE_LOCK_OFFSET > std::hint::black_box(SQLITE_MAXIMUM_FILE_SIZE)
+        );
+        assert_eq!(
+            DERIVED_STORE_DATABASE_LOCK_BASE,
+            DERIVED_DATABASE_LIFECYCLE_LOCK_OFFSET + 1
+        );
+
+        let offsets = CONTRACT_NAMES.map(derived_store_database_lock_offset);
+        assert!(offsets.iter().all(|offset| {
+            *offset > DERIVED_DATABASE_LIFECYCLE_LOCK_OFFSET && *offset <= i64::MAX as u64
+        }));
+        assert_eq!(
+            offsets
+                .iter()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len(),
+            CONTRACT_NAMES.len(),
+            "canonical stores and helper mutation locks must have unique offsets"
+        );
+        assert!(
+            offsets
+                .iter()
+                .any(|offset| *offset - DERIVED_STORE_DATABASE_LOCK_BASE > u64::from(u32::MAX)),
+            "the lock offset must consume more than the previous 32-bit hash bucket"
+        );
+        assert_eq!(
+            offsets[0],
+            derived_store_database_lock_offset(CONTRACT_NAMES[0])
+        );
+        let collision =
+            validate_derived_store_lock_offset("custom-collision-witness", offsets[0]).unwrap_err();
+        assert_eq!(collision.kind(), io::ErrorKind::InvalidData);
     }
 
     fn contract_fixture(relative: &str) -> serde_json::Value {

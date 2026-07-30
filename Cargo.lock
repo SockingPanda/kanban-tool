@@ -4217,6 +4217,8 @@ dependencies = [
  "fs-err",
  "fs4",
  "kanban-contract",
+ "libc",
+ "rusqlite",
  "rustix",
  "serde",
  "serde_json",

@@ -12,11 +12,15 @@ fs4.workspace = true
 kanban-contract.workspace = true
 serde.workspace = true
 serde_path_to_error.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix.workspace = true
 
 [dev-dependencies]
 assert_fs.workspace = true

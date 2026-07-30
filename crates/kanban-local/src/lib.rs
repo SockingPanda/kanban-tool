@@ -11,6 +11,17 @@ use fs_err as fs;
 use fs4::fs_std::FileExt as _;
 use serde::{Deserialize, Serialize, de::IntoDeserializer};
 
+mod legacy_cleanup;
+
+pub use legacy_cleanup::{
+    LEGACY_PROJECTION_ROOTS, LegacyProjectionBackupManifest, LegacyProjectionCleanupError,
+    LegacyProjectionCleanupGuard, LegacyProjectionCleanupInventory, LegacyProjectionCleanupOutcome,
+    LegacyProjectionRootInventory, LegacyProjectionRootKind,
+    acquire_legacy_projection_cleanup_guard, apply_legacy_projection_cleanup,
+    inventory_legacy_projection_roots, restore_legacy_projection_backup,
+    verify_legacy_projection_backup,
+};
+
 pub use kanban_contract::{
     ProjectConfigInput as ProjectConfig, ProjectVectorConfigInput as VectorConfig,
     WorkerFinishPolicy, WorkerProfileInput,

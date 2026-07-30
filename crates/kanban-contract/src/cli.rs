@@ -98,6 +98,13 @@ pub struct CliMaintenanceOwnerStatus {
         schemars(required, schema_with = "required_nullable_string_schema")
     )]
     pub mode: Option<String>,
+    pub capabilities: Vec<String>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub build_identity: Option<String>,
     #[serde(deserialize_with = "deserialize_required_nullable")]
     #[cfg_attr(
         feature = "schema",
@@ -210,6 +217,7 @@ pub struct CliProjectionStoreStatus {
     pub checkpoint_cursor: i64,
     pub legacy_checkpoint_cursor: i64,
     pub lifecycle_status: String,
+    pub runtime_availability: CliProjectionRuntimeAvailability,
     #[serde(deserialize_with = "deserialize_required_nullable")]
     #[cfg_attr(
         feature = "schema",
@@ -269,6 +277,15 @@ pub type CliMaintenanceStatusOutput = DataEnvelope<CliMaintenanceStatus>;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
+pub enum CliProjectionRuntimeAvailability {
+    Available,
+    Unavailable,
+    Unverified,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
 pub enum CliMaintenanceMode {
     Once,
     Continuous,
@@ -276,11 +293,33 @@ pub enum CliMaintenanceMode {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum CliMaintenanceStoreFailureKind {
+    Provider,
+    Backend,
+    Delivery,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CliMaintenanceStoreResult {
+    Succeeded {
+        action: String,
+        processed: usize,
+    },
+    Failed {
+        kind: CliMaintenanceStoreFailureKind,
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CliMaintenanceStoreRun {
     pub store_name: String,
-    pub action: String,
-    pub processed: usize,
+    pub result: CliMaintenanceStoreResult,
     pub lifecycle_status: String,
     #[serde(deserialize_with = "deserialize_required_nullable")]
     #[cfg_attr(

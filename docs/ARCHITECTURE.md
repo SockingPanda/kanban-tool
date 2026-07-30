@@ -241,7 +241,8 @@ dispatcher 或重型辅助后端。JSON Schema 只验证 wire 结构/值域，
 - 真实 `just --dump-format json --dump` parser AST hash 与 fake nested
   `just`/build-lock/cargo/python/script 有序 JSONL trace 形成双门禁，锁定上述 fmt lane、
   full/rust/test 分支、schema 子 gate、`schema-audit-closed` 的 adoption + locked audit，
-  以及 `release` 从 affected self-test 到 diff-check 的 13 步精确顺序。leaf 仅由独立
+  以及 `release` 从 affected self-test、显式 Tantivy/Oxigraph Projection cohort 到
+  diff-check 的 14 步精确顺序。leaf 仅由独立
   schema gates 执行格式、check、tests、clippy、生成和校验；witness gate 显式拒绝该
   tooling owner 冒充 runtime adopter。
 
@@ -621,6 +622,20 @@ HTTP status 映射与 operation-level transport 说明仅在 `docs/API_SPEC.md` 
   board 一致性、label ontology 账本一致性，并报告 Knowledge Substrate 的
   `index_outbox` 积压、派生存储 dirty/error 状态和各存储的 last_error。派生层
   异常不改变 SQLite task 事实；操作者通过同步/重建恢复 Tantivy/Oxigraph/LanceDB。
+
+统一 Projection v2 maintenance runtime 在数据库级使用 singleton lease，但 lease
+同时绑定当前进程实际编译的 store capability 集和运行制品 build identity。status
+不会把“存在活动 owner”解释为“所有 store 都可维护”：当前构建缺少 backend 时报告
+`unavailable`，活动 owner 未声明 store capability 时报告 `unverified`，两者都附带
+稳定 fallback reason，并使 `doctor --strict-derived` fail closed。continuous runtime
+必须声明全部 projection store capability 才能领取 singleton lease；feature-limited
+制品在 claim 前拒绝，避免部分能力 owner 长期垄断数据库级维护入口。
+
+一次 `run --once` 或 `rebuild --all` 中，store backend/provider/delivery 的局部失败
+以闭合的结构化 store result 返回并记录到对应 projection state；runtime 仍按稳定顺序
+尝试其余已编译 store。数据库访问、singleton owner、lease/fence 或 shutdown 失败属于
+全局错误，会终止本次 pass。错误作用域由运行时的显式结果类型和调用边界决定，不解析
+错误文案；任何派生失败都不回滚已经提交的 SQLite 权威 mutation。
 
 ### 8.1 Board scope 与 schema/service/doctor 分工
 

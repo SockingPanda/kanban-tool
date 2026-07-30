@@ -17,6 +17,7 @@ from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL_JUST = shutil.which("just")
+EXPECTED_JUST_VERSION = "just 1.57.0"
 CORE_PACKAGES = (
     "kanban-core",
     "kanban-contract",
@@ -37,6 +38,7 @@ CORE_PACKAGES = (
 HELPER_PACKAGES = ("kanban-vector-lancedb", "kanban-graph-oxigraph")
 TOOL_PACKAGE = "kanban-schema-tool"
 CONTRACT_PACKAGE = "kanban-contract"
+PROJECTION_RELEASE_FEATURES = "tantivy-backend,oxigraph-backend"
 Event = dict[str, object]
 ExpectedBuilder = Callable[[Path, bool], list[Event]]
 
@@ -239,7 +241,12 @@ def _schema_tool(root: Path, nextest: bool) -> list[Event]:
     ]
 
 
-def _feature_contract(root: Path, nextest: bool) -> list[Event]:
+def _feature_package(
+    root: Path,
+    nextest: bool,
+    package: str,
+    features: str,
+) -> list[Event]:
     probe = _cargo(root, "nextest", "--version")
     if nextest:
         tests = _locked(
@@ -248,31 +255,55 @@ def _feature_contract(root: Path, nextest: bool) -> list[Event]:
             "run",
             "--locked",
             "-p",
-            CONTRACT_PACKAGE,
+            package,
             "--features",
-            "schema",
+            features,
             "--no-fail-fast",
             "--no-tests",
             "pass",
         )
     else:
         tests = _locked(
-            root, "test", "--locked", "-p", CONTRACT_PACKAGE, "--features", "schema"
+            root, "test", "--locked", "-p", package, "--features", features
         )
     clippy = _locked(
         root,
         "clippy",
         "--locked",
         "-p",
-        CONTRACT_PACKAGE,
+        package,
         "--all-targets",
         "--features",
-        "schema",
+        features,
         "--",
         "-D",
         "warnings",
     )
     return [*probe, *tests, *clippy]
+
+
+def _feature_contract(root: Path, nextest: bool) -> list[Event]:
+    return _feature_package(root, nextest, CONTRACT_PACKAGE, "schema")
+
+
+def _projection_release_cohort(root: Path, nextest: bool) -> list[Event]:
+    events: list[Event] = []
+    for package in ("kanban-cli", "kanban-server"):
+        events.extend(
+            _nested(
+                root,
+                "feature-p",
+                _feature_package(
+                    root,
+                    nextest,
+                    package,
+                    PROJECTION_RELEASE_FEATURES,
+                ),
+                package,
+                PROJECTION_RELEASE_FEATURES,
+            )
+        )
+    return events
 
 
 def _schema_check(root: Path, _: bool) -> list[Event]:
@@ -445,21 +476,23 @@ def _schema_audit_closed(root: Path, _: bool) -> list[Event]:
 
 def _release(root: Path, _: bool) -> list[Event]:
     calls = (
-        "affected-self-test",
-        "schema-contract",
-        "audit",
-        "rust-full",
-        "bench-check",
-        "target-tools",
-        "cli-package",
-        "cli-package-layout",
-        "desktop-package-config",
-        "desktop-package",
-        "desktop-package-layout",
-        "smoke",
-        "diff-check",
+        ("affected-self-test",),
+        ("schema-contract",),
+        ("audit",),
+        ("rust-full",),
+        ("check-windows-p", "kanban-local"),
+        ("projection-release-cohort",),
+        ("bench-check",),
+        ("target-tools",),
+        ("cli-package",),
+        ("cli-package-layout",),
+        ("desktop-package-config",),
+        ("desktop-package",),
+        ("desktop-package-layout",),
+        ("smoke",),
+        ("diff-check",),
     )
-    return [_event(root, "just", [recipe]) for recipe in calls]
+    return [_event(root, "just", list(call)) for call in calls]
 
 
 CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
@@ -494,6 +527,12 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
     ("clippy-full", (), _clippy_full, True),
     ("rust-fast", (), _rust_fast, True),
     ("rust-full", (), _rust_full, True),
+    (
+        "projection-release-cohort",
+        (),
+        _projection_release_cohort,
+        True,
+    ),
     ("feature-p", (CONTRACT_PACKAGE, "schema"), _feature_contract, True),
     ("schema-generate", (), _schema_generate, True),
     ("schema-check", (), _schema_check, True),
@@ -523,50 +562,55 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
 )
 
 
-# just --dump-format json --dump 对全局 parser contract 与每个受保护
-# recipe AST 的 canonical JSON（sorted keys、compact separators、末尾换行）
-# 做 SHA-256。更新 setting/recipe 必须显式更新对应 hash；运行采样无法触达的
-# env/dead branch 也因此 fail closed。
+# just --dump-format json --dump 先投影为稳定的执行语义：globals 保留
+# assignments/first/groups/unexports，settings 只保留相对同版空 justfile 的
+# override；recipe 保留 dependencies/body/parameters/
+# attributes/priors/private/quiet/shebang，并规范化 parameter/dependency 的纯默认
+# 字段。parser 的 source/namepath 等位置字段和新增默认噪音不进入 witness。
+# 投影后的 canonical JSON（sorted keys、compact separators、末尾换行）做 SHA-256；
+# 更新执行语义必须显式更新对应 hash，运行采样无法触达的 env/dead branch 仍然
+# fail closed。
 PROTECTED_RECIPE_AST_SHA256 = {
-    "fmt": "e602aa4629d31c23849fd7ac6ce8426ada610686ac17b67136154851d3638793",
-    "fmt-check": "41e18d94d6309dc6df573f39df07a69adefbc8af245224ba46de2869f6e5c931",
-    "fmt-full": "2cd01fd70cfce948fa356205e63cd593c658e1bddfc042cd1bb0d87cc557c878",
-    "check": "70377f1313282fbffb1d0f39658c373b080dd18afa0f30a6e023bc63f591d1d8",
-    "check-core": "7763aa46f7e81f69a746ff7645cab5476bc22a74b354de3b4fb5a005b729bcbb",
-    "check-helpers": "c7c753226684f610d1f0b37735544d7f0ed69e4cce301f2799aedcbade76e161",
-    "check-full": "04378c09c886e1829631a0a51f809d9222d4c0fdcee63d1ae0c85e3e7dec40f3",
-    "test": "d7364e1d31ff9b6ce18122fa82b6d91433ed1e9bd6d4705ff4dcfd314281bcaf",
-    "test-p": "d096ac1d15d2a323322236b9d2edb2faa00b2a4cb2ea40afe670232fef6f744a",
-    "check-p": "3247d65a2ac334095a727baca0829ec884cdfdcbc09048fbbc8b5d31c3e8fbe9",
-    "rust-fast": "6bbfcbb125926c84e3066e835b390216497d9752147ecefecc6ee912a7d9c76a",
-    "test-core": "ef26a32ae07d30020638cff485a4a4362a1c35cc7a251ca57918d2e4eadd1159",
-    "test-helpers": "0db865a71b5839289e886854ab5ea5bf0f4f34516c62b37c06f2cddb3cf816e5",
-    "test-full": "5ced7cec91f083c1a13b7ecb409a7b58f66985d5103fc94dbeb0bdc7d56888da",
-    "clippy": "b68e87fa19b16feb752c1930747e890f496a9b6d7c199e18a014cce921c6b800",
-    "clippy-core": "fd2da09da06b2928d6e160858f8a199c78a496b643041506040ac5daf99068e6",
-    "clippy-helpers": "43f5df0a0691c2b222539a4e78d99715565ed1715d1204160c287df1d5b16599",
-    "clippy-full": "f729c7b8f04a8a8144874ded54eaf8c51a9588f9bc4ccba60f4f4240ac4c3860",
-    "rust-full": "874c085fd5ce1da73fa0f2a665d06a238b0ad27eb4bc2b068fd1e0e00648abb2",
-    "feature-p": "15eb90526fb49bc6348bdc3dfcad78a83e6cb8aa35581e32167ebf795d880d6e",
-    "schema-generate": "da92f32c14d32f64500e121cd77c0aa8ffa7130d6e58ff1bde9113e61faef47d",
-    "schema-check": "3437fc0661c6e3d76424b4299ac3b6c15865e5f88661f540332938d8378ad290",
-    "spec-bundle-generate": "8be9071c562468a80334de0e774394e9dfd2b07c756dd9a0c8dca0f758d03305",
-    "spec-bundle-check": "b2f7b1b38e32082c6c55f8677cfbabc85e8775afa5d67aacfdf021787ed798f7",
-    "schema-docs": "bc47df7c05f552862d34da3555da73590293cf5ca7483d290bb935dc9065b652",
-    "schema-fmt": "9034d88a64881b90be3933a912c18b8c0a077f113758bca17f7d9d85d9ef5096",
-    "schema-tool": "27c6b21f68463921e263f7e1262e2eb3c58106fd86130fd4363ed982ab1a870c",
-    "schema-dependency-isolation-self-test": "09d7e70be11489d5fe1bf2f7328e782c9a1859e78b6dc4e0d48bec67f7db2fff",
-    "schema-dependency-isolation": "d5e87173eba132003a4ab5128bfca5bd4e3f57c5379ae666faf06f42c5c18217",
-    "schema-adoption-witness-self-test": "dfd3dbc862cf5c192d5d3b4cafce39a65fa7919e0673749fcbf180ec6b90ad05",
-    "schema-adoption-witness": "b8a079ff467fb15f447e5649ca2ccc015b6207ad8ccf6dadeb889de59f84745c",
-    "schema-surface-audit": "69bb17990ff329d88d3e884a6bf23cb920bc607e26dbcc02ca85e78121b32792",
-    "schema-contract": "ddd8227b389f91fc388fcfc3cd6f624a2801131bbd72b7d017024a8f1b7dd519",
-    "schema-audit-closed": "b205a5e46058d095cf165c6cc7663ee851275b05ef60451065dd3be8a469ab6b",
-    "release": "9363953e0f1d4e81ac99662d2f6ba708e9b301506ea5c5495b356d3f3ad1f6bc",
+    "fmt": "775adb8877d364be2c9c5c5d8665ff9efdf27189584aea2241dcda504d372206",
+    "fmt-check": "b2fdd96430312d9ee37d369ce26ff44dab2f6a10dfcbb29bb6380fa0c371d611",
+    "fmt-full": "b30159e7d1235629c9a877ca31a1df661eaa4bc3670b0ae047350de6c06ae509",
+    "check": "cddd49fe5e50b59502f0a2a54cfd4e2acb4bb9b891f4de0c056e78f52e0783a7",
+    "check-core": "3412493908e5e51fc636899322a3da85cb88f95a11846e0043b2ac062ce0cbdf",
+    "check-helpers": "72b99d6827202bff3079e478349fc476a6476885a84e68c1db5e2d54456440eb",
+    "check-full": "a60a7ed88645351cc32236a5bca2c4edafa1d0631e63d2179d4bda6b17184208",
+    "test": "d136c26efda43f4482000099f4917c98ba3407f2072d58ee7a6ffefebba798db",
+    "test-p": "16d14ffcf302b2f745a4b4a0724a96e5a38b600870d58f36c344e185595a6b00",
+    "check-p": "afb9f318d2aa509feed7efd372318cbd4c2993742a26f078c6f740349400e33e",
+    "rust-fast": "9a013d3f1005dc4c21c44e1fc21e8d05dc36c9de73e79470021e4f62ac2801c9",
+    "test-core": "d4dc0f1b0c16f285476fba46b1fb9761e6f30c9bd8ca081c10897febb82e5aa9",
+    "test-helpers": "100355d58273d5bb201b81a27ac00b4f88bdec31c5e48e4f0aa8fe9cfe82e5f1",
+    "test-full": "253dcab5f836d56a22b0616e9ee56905aed9468afd7c6f773509f16862b6e366",
+    "clippy": "e487d817f0f09efb21d91eaa4e9793f05cb2883723cc59758c2eaa4314384010",
+    "clippy-core": "bd35e34699dbb23c0d8ca688f26859f6fd1c993c1191bc69e49c53778ec3f4cd",
+    "clippy-helpers": "09b9641653aadc6a4074e939800832daa1dba050001ce052e6f55f2129e4924d",
+    "clippy-full": "64cf5ae07fe363d605275ab8997272d6d7c48e120e9cfcf1c24ecbb105d77da8",
+    "rust-full": "05bd1a7769cf8d0ebde0582f37444132adfafd19ae8ff0682b1a8c45307b5288",
+    "projection-release-cohort": "fa986fe568697b3f4fa7e62e65280b461f2d0b7f34d18a351d0cae6c330641f4",
+    "feature-p": "90a48cdda4600c6cffd88614a139b22584936690af300aaec2a2e60bdc3fec09",
+    "schema-generate": "49f543ca2ee8cd0dcc5d8a36427176e0f49bbdb42036c8a1460778fb80aa9f83",
+    "schema-check": "353207a2d392277a1cd7f768c6b61f1485d866bc3280d35bd4142ff3cafbffb6",
+    "spec-bundle-generate": "4ad6e58b6600690d8a85c9d5472efe999b8c356f2eeafc86978edd4ccbe24fa9",
+    "spec-bundle-check": "deb622cf88b3dff62e5abbeaa87996cd5cc05cf83a9175c51376110f3f337bcb",
+    "schema-docs": "8f54ff9bd7e05e820243e82418b68c46316c11380fcadcbf816ab9a1cdfe40ac",
+    "schema-fmt": "ff27c09a697acc1fc1b7ea52c02d41035840492cb6b2ceb97162a828d1d62c28",
+    "schema-tool": "eb1a84d4fd75ab1264dcff25d69c18790c2efa9a5683161fe4807a7563707c59",
+    "schema-dependency-isolation-self-test": "1f791d177b30a450e938734f8b48480f3c1d3fe5e77d1e4588771c405383f934",
+    "schema-dependency-isolation": "70f9346e1e8d1be4d169bf6568fc743c93c445739e98fc5599c244ad8ff789bb",
+    "schema-adoption-witness-self-test": "221fd748cf1b93cb7a11f90b70b398bd08b9122df154f61012a4b92661e81fc4",
+    "schema-adoption-witness": "1c55f076cb1632e69be3f6c1b98da5ddfb292a91f238324a5f51fc584e860e1d",
+    "schema-surface-audit": "bf65e600ecefe5b05dddcf9ae165be6e5b00b54148f1d7abd0a7996041e786b0",
+    "schema-contract": "5d0d2d21d1bc9a4543a9f938f8211a3387ec34812948c91cff6d7dee6e5521c7",
+    "schema-audit-closed": "7f2f8074b1bf51095c5119ea342ad412fb50f667b59f970f68ef9239bda54f45",
+    "release": "eefd37aeb14435a92fc1d46b99bc42476864f5a50a6b41349c1440280f53f56b",
 }
 AST_ONLY_RECIPE_NAMES = {"check-p", "test-p"}
 PROTECTED_JUST_GLOBALS_SHA256 = (
-    "1bae71edc87ce712743cfed74fca0071974fc1661f401b0e96e28ab870660125"
+    "76483961d7be530d64e46198b2e15a495d851df2051ccdccf4afa1a5f2dafe2b"
 )
 
 FAKE_CARGO = r'''#!/usr/bin/env python3
@@ -661,39 +705,323 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(0o755)
 
 
-def verify_recipe_ast_projection(justfile_text: str) -> None:
-    if REAL_JUST is None:
-        raise RecipeWitnessError("PATH 中缺少真实 just executable")
+PARSER_LOCATION_FIELDS = {
+    "column",
+    "line",
+    "module_path",
+    "namepath",
+    "offset",
+    "source",
+    "source_column",
+    "source_line",
+    "source_offset",
+    "source_path",
+    "span",
+}
 
-    expected_names = {name for name, _, _, _ in CASES} | AST_ONLY_RECIPE_NAMES
-    configured_names = set(PROTECTED_RECIPE_AST_SHA256)
-    if configured_names != expected_names:
+
+def _reject_unknown_nondefault_fields(
+    value: dict[str, object],
+    known_fields: set[str],
+    *,
+    context: str,
+) -> None:
+    unsafe = []
+    for field in set(value) - known_fields - PARSER_LOCATION_FIELDS:
+        field_value = value[field]
+        if (
+            field_value is None
+            or field_value is False
+            or field_value == []
+            or field_value == {}
+        ):
+            continue
+        unsafe.append(field)
+    if unsafe:
         raise RecipeWitnessError(
-            "recipe AST hash inventory 与执行矩阵不一致: "
-            f"expected={sorted(expected_names)}, configured={sorted(configured_names)}"
+            f"{context} 出现未投影的非默认 parser 字段: "
+            f"fields={sorted(unsafe)}"
         )
 
-    with tempfile.TemporaryDirectory(prefix="schema-recipe-ast-") as temp_dir:
-        root = Path(temp_dir)
-        justfile = root / "justfile"
-        justfile.write_text(justfile_text, encoding="utf-8")
-        completed = subprocess.run(
-            [
-                REAL_JUST,
-                "--justfile",
-                str(justfile),
-                "--working-directory",
-                str(root),
-                "--dump-format",
-                "json",
-                "--dump",
-            ],
-            cwd=root,
-            check=False,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+
+def _project_setting_overrides(
+    settings: dict[str, object],
+    parser_defaults: dict[str, object],
+) -> dict[str, object]:
+    unknown = set(settings) - set(parser_defaults)
+    if unknown:
+        raise RecipeWitnessError(
+            "just settings 缺少 parser default 基线: "
+            f"unknown={sorted(unknown)}"
         )
+    return {
+        name: value
+        for name, value in settings.items()
+        if value != parser_defaults[name]
+    }
+
+
+def _project_parameter_semantics(parameter: object) -> dict[str, object]:
+    if not isinstance(parameter, dict):
+        raise RecipeWitnessError("recipe parameter AST 必须是 object")
+    name = parameter.get("name")
+    if not isinstance(name, str) or not name:
+        raise RecipeWitnessError("recipe parameter AST 缺少非空 name")
+
+    defaults: dict[str, object] = {
+        "default": None,
+        "export": False,
+        "flag": False,
+        "help": None,
+        "kind": "singular",
+        "long": None,
+        "max": None,
+        "min": None,
+        "multiple": False,
+        "pattern": None,
+        "short": None,
+        "value": None,
+    }
+    _reject_unknown_nondefault_fields(
+        parameter,
+        {"name", *defaults},
+        context="recipe parameter AST",
+    )
+    projection: dict[str, object] = {"name": name}
+    for field, default in defaults.items():
+        value = parameter.get(field, default)
+        if value != default:
+            projection[field] = value
+    return projection
+
+
+def _project_dependency_semantics(dependency: object) -> dict[str, object]:
+    if not isinstance(dependency, dict):
+        raise RecipeWitnessError("recipe dependency AST 必须是 object")
+    recipe = dependency.get("recipe")
+    if not isinstance(recipe, str) or not recipe:
+        raise RecipeWitnessError("recipe dependency AST 缺少非空 recipe")
+    _reject_unknown_nondefault_fields(
+        dependency,
+        {"arguments", "recipe", "star"},
+        context="recipe dependency AST",
+    )
+
+    projection: dict[str, object] = {"recipe": recipe}
+    arguments = dependency.get("arguments", [])
+    if arguments != []:
+        projection["arguments"] = arguments
+    star = dependency.get("star")
+    if star is not None:
+        projection["star"] = star
+    return projection
+
+
+def _project_recipe_semantics(recipe: object) -> dict[str, object]:
+    if not isinstance(recipe, dict):
+        raise RecipeWitnessError("recipe AST 必须是 object")
+    required = (
+        "attributes",
+        "body",
+        "dependencies",
+        "parameters",
+        "priors",
+        "private",
+        "quiet",
+        "shebang",
+    )
+    missing = [field for field in required if field not in recipe]
+    if missing:
+        raise RecipeWitnessError(
+            f"recipe AST 缺少执行语义字段: missing={missing}"
+        )
+    _reject_unknown_nondefault_fields(
+        recipe,
+        {*required, "doc", "name"},
+        context="recipe AST",
+    )
+    dependencies = recipe["dependencies"]
+    parameters = recipe["parameters"]
+    if not isinstance(dependencies, list):
+        raise RecipeWitnessError("recipe dependencies AST 必须是 array")
+    if not isinstance(parameters, list):
+        raise RecipeWitnessError("recipe parameters AST 必须是 array")
+    return {
+        "attributes": recipe["attributes"],
+        "body": recipe["body"],
+        "dependencies": [
+            _project_dependency_semantics(dependency)
+            for dependency in dependencies
+        ],
+        "parameters": [
+            _project_parameter_semantics(parameter) for parameter in parameters
+        ],
+        "priors": recipe["priors"],
+        "private": recipe["private"],
+        "quiet": recipe["quiet"],
+        "shebang": recipe["shebang"],
+    }
+
+
+def _project_aliases_semantics(aliases: object) -> dict[str, object]:
+    if not isinstance(aliases, dict):
+        raise RecipeWitnessError("just aliases AST 必须是 object")
+    projection: dict[str, object] = {}
+    for name, alias in aliases.items():
+        if not isinstance(alias, dict):
+            raise RecipeWitnessError(f"just alias AST 必须是 object: {name}")
+        _reject_unknown_nondefault_fields(
+            alias,
+            {"attributes", "name", "target"},
+            context=f"just alias AST ({name})",
+        )
+        target = alias.get("target")
+        if not isinstance(target, str) or not target:
+            raise RecipeWitnessError(f"just alias AST 缺少 target: {name}")
+        projection[name] = {
+            "attributes": alias.get("attributes", []),
+            "target": target,
+        }
+    return projection
+
+
+def _project_assignments_semantics(assignments: object) -> dict[str, object]:
+    if not isinstance(assignments, dict):
+        raise RecipeWitnessError("just assignments AST 必须是 object")
+    projection: dict[str, object] = {}
+    for name, assignment in assignments.items():
+        if not isinstance(assignment, dict) or "value" not in assignment:
+            raise RecipeWitnessError(
+                f"just assignment AST 缺少 value: {name}"
+            )
+        _reject_unknown_nondefault_fields(
+            assignment,
+            {"eager", "export", "name", "private", "value"},
+            context=f"just assignment AST ({name})",
+        )
+        projection[name] = {
+            "eager": assignment.get("eager", False),
+            "export": assignment.get("export", False),
+            "private": assignment.get("private", False),
+            "value": assignment["value"],
+        }
+    return projection
+
+
+def _project_modules_semantics(
+    modules: object,
+    parser_setting_defaults: dict[str, object],
+) -> dict[str, object]:
+    if not isinstance(modules, dict):
+        raise RecipeWitnessError("just modules AST 必须是 object")
+    projection: dict[str, object] = {}
+    for name, module in modules.items():
+        if not isinstance(module, dict):
+            raise RecipeWitnessError(f"just module AST 必须是 object: {name}")
+        _reject_unknown_nondefault_fields(
+            module,
+            {
+                "aliases",
+                "assignments",
+                "doc",
+                "first",
+                "groups",
+                "module_path",
+                "modules",
+                "recipes",
+                "settings",
+                "source",
+                "unexports",
+                "warnings",
+            },
+            context=f"just module AST ({name})",
+        )
+        settings = module.get("settings")
+        recipes = module.get("recipes")
+        if not isinstance(settings, dict) or not isinstance(recipes, dict):
+            raise RecipeWitnessError(
+                f"just module AST 缺少 settings/recipes: {name}"
+            )
+        projection[name] = {
+            "aliases": _project_aliases_semantics(
+                module.get("aliases", {})
+            ),
+            "assignments": _project_assignments_semantics(
+                module.get("assignments", {})
+            ),
+            "first": module.get("first"),
+            "groups": module.get("groups", []),
+            "modules": _project_modules_semantics(
+                module.get("modules", {}),
+                parser_setting_defaults,
+            ),
+            "recipes": {
+                recipe_name: _project_recipe_semantics(recipe)
+                for recipe_name, recipe in recipes.items()
+            },
+            "settings": _project_setting_overrides(
+                settings,
+                parser_setting_defaults,
+            ),
+            "unexports": module.get("unexports", []),
+        }
+    return projection
+
+
+def _project_global_semantics(
+    dump: dict[str, object],
+    parser_setting_defaults: dict[str, object],
+) -> dict[str, object]:
+    _reject_unknown_nondefault_fields(
+        dump,
+        {
+            "aliases",
+            "assignments",
+            "doc",
+            "first",
+            "groups",
+            "module_path",
+            "modules",
+            "recipes",
+            "settings",
+            "source",
+            "unexports",
+            "warnings",
+        },
+        context="just 顶层 AST",
+    )
+    settings = dump.get("settings")
+    first = dump.get("first")
+    groups = dump.get("groups")
+    unexports = dump.get("unexports")
+    if not isinstance(settings, dict):
+        raise RecipeWitnessError("just parser AST dump 缺少 settings object")
+    if first is not None and not isinstance(first, str):
+        raise RecipeWitnessError("just parser AST first 必须为 string 或 null")
+    if not isinstance(groups, list) or not isinstance(unexports, list):
+        raise RecipeWitnessError(
+            "just parser AST groups/unexports 必须为 array"
+        )
+    return {
+        "aliases": _project_aliases_semantics(dump.get("aliases")),
+        "assignments": _project_assignments_semantics(
+            dump.get("assignments")
+        ),
+        "first": first,
+        "groups": groups,
+        "modules": _project_modules_semantics(
+            dump.get("modules"),
+            parser_setting_defaults,
+        ),
+        "settings": _project_setting_overrides(
+            settings,
+            parser_setting_defaults,
+        ),
+        "unexports": unexports,
+    }
+
+
+def _parse_just_dump(completed: subprocess.CompletedProcess[str]) -> dict[str, object]:
     if completed.returncode != 0:
         raise RecipeWitnessError(
             "just parser AST dump 失败 "
@@ -705,9 +1033,68 @@ def verify_recipe_ast_projection(justfile_text: str) -> None:
         raise RecipeWitnessError(f"just parser AST dump JSON 无效: {error}") from error
     if not isinstance(dump, dict):
         raise RecipeWitnessError("just parser AST dump 顶层必须是 object")
-    global_projection = {
-        name: dump.get(name) for name in ("settings", "aliases", "modules")
-    }
+    return dump
+
+
+def _dump_just_ast(root: Path, name: str, text: str) -> dict[str, object]:
+    assert REAL_JUST is not None
+    justfile = root / name
+    justfile.write_text(text, encoding="utf-8")
+    completed = subprocess.run(
+        [
+            REAL_JUST,
+            "--justfile",
+            str(justfile),
+            "--working-directory",
+            str(root),
+            "--dump-format",
+            "json",
+            "--dump",
+        ],
+        cwd=root,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return _parse_just_dump(completed)
+
+
+def verify_recipe_ast_projection(justfile_text: str) -> None:
+    if REAL_JUST is None:
+        raise RecipeWitnessError("PATH 中缺少真实 just executable")
+    version = subprocess.run(
+        [REAL_JUST, "--version"],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if version.returncode != 0 or version.stdout.strip() != EXPECTED_JUST_VERSION:
+        raise RecipeWitnessError(
+            "just parser version 不匹配: "
+            f"expected={EXPECTED_JUST_VERSION!r}, "
+            f"actual={version.stdout.strip()!r}, stderr={version.stderr!r}"
+        )
+
+    expected_names = {name for name, _, _, _ in CASES} | AST_ONLY_RECIPE_NAMES
+    configured_names = set(PROTECTED_RECIPE_AST_SHA256)
+    if configured_names != expected_names:
+        raise RecipeWitnessError(
+            "recipe AST hash inventory 与执行矩阵不一致: "
+            f"expected={sorted(expected_names)}, configured={sorted(configured_names)}"
+        )
+
+    with tempfile.TemporaryDirectory(prefix="schema-recipe-ast-") as temp_dir:
+        root = Path(temp_dir)
+        dump = _dump_just_ast(root, "justfile", justfile_text)
+        parser_defaults = _dump_just_ast(root, "empty.just", "")
+    default_settings = parser_defaults.get("settings")
+    if not isinstance(default_settings, dict):
+        raise RecipeWitnessError(
+            "just parser default AST dump 缺少 settings object"
+        )
+    global_projection = _project_global_semantics(dump, default_settings)
     global_canonical = (
         json.dumps(
             global_projection,
@@ -731,9 +1118,10 @@ def verify_recipe_ast_projection(justfile_text: str) -> None:
         raise RecipeWitnessError("just parser AST dump 缺少 recipes object")
 
     for name, expected_hash in PROTECTED_RECIPE_AST_SHA256.items():
-        projection = recipes.get(name)
-        if not isinstance(projection, dict):
+        recipe = recipes.get(name)
+        if not isinstance(recipe, dict):
             raise RecipeWitnessError(f"just parser AST 缺少受保护 recipe: {name}")
+        projection = _project_recipe_semantics(recipe)
         canonical = (
             json.dumps(
                 projection,
@@ -911,6 +1299,314 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
         self.assert_ast_mutation_rejected(
             'set shell := ["bash", "-cu"]\n',
             'set shell := ["sh", "-cu"]\n',
+        )
+
+    def test_top_level_assignment_drift_is_rejected_by_ast(self) -> None:
+        self.assert_ast_mutation_rejected(
+            'audit-ignore-flags := "--ignore RUSTSEC-2024-0370',
+            'audit-ignore-flags := "--ignore RUSTSEC-2099-9999',
+        )
+
+    def test_semantic_recipe_projection_ignores_parser_defaults_and_locations(
+        self,
+    ) -> None:
+        recipe = {
+            "attributes": [],
+            "body": [["cargo check"]],
+            "dependencies": [
+                {"arguments": [], "recipe": "preflight", "star": None}
+            ],
+            "doc": None,
+            "name": "gate",
+            "namepath": "gate",
+            "parameters": [
+                {
+                    "default": None,
+                    "export": False,
+                    "kind": "singular",
+                    "name": "package",
+                }
+            ],
+            "priors": 0,
+            "private": False,
+            "quiet": False,
+            "shebang": False,
+        }
+        parser_augmented = json.loads(json.dumps(recipe))
+        parser_augmented.update(
+            {
+                "column": 7,
+                "future_default": None,
+                "line": 11,
+                "namepath": "root::gate",
+                "source": "/parser-specific/justfile",
+            }
+        )
+        parser_augmented["dependencies"][0].update(
+            {
+                "column": 3,
+                "source": "/parser-specific/justfile",
+                "source_path": "/parser-specific/justfile",
+            }
+        )
+        parser_augmented["parameters"][0].update(
+            {
+                "flag": False,
+                "future_default": None,
+                "help": None,
+                "long": None,
+                "max": None,
+                "min": None,
+                "multiple": False,
+                "pattern": None,
+                "short": None,
+                "value": None,
+            }
+        )
+
+        self.assertEqual(
+            _project_recipe_semantics(recipe),
+            _project_recipe_semantics(parser_augmented),
+        )
+
+    def test_semantic_recipe_projection_retains_execution_fields(self) -> None:
+        recipe = {
+            "attributes": [],
+            "body": [["cargo check"]],
+            "dependencies": [
+                {"arguments": [], "recipe": "preflight", "star": None}
+            ],
+            "parameters": [
+                {
+                    "default": None,
+                    "export": False,
+                    "kind": "singular",
+                    "name": "package",
+                }
+            ],
+            "priors": 0,
+            "private": False,
+            "quiet": False,
+            "shebang": False,
+        }
+        baseline = _project_recipe_semantics(recipe)
+        mutations = (
+            ("attributes", [["no-exit-message"]]),
+            ("body", [["cargo test"]]),
+            (
+                "dependencies",
+                [{"arguments": [], "recipe": "other", "star": None}],
+            ),
+            (
+                "parameters",
+                [
+                    {
+                        "default": None,
+                        "export": False,
+                        "kind": "star",
+                        "name": "package",
+                    }
+                ],
+            ),
+            ("priors", 1),
+            ("private", True),
+            ("quiet", True),
+            ("shebang", True),
+        )
+        for field, value in mutations:
+            with self.subTest(field=field):
+                mutation = dict(recipe)
+                mutation[field] = value
+                self.assertNotEqual(
+                    baseline,
+                    _project_recipe_semantics(mutation),
+                )
+
+    def test_semantic_projection_rejects_unknown_nondefault_fields(self) -> None:
+        recipe = {
+            "attributes": [],
+            "body": [["cargo check"]],
+            "dependencies": [
+                {"arguments": [], "recipe": "preflight", "star": None}
+            ],
+            "parameters": [
+                {
+                    "default": None,
+                    "export": False,
+                    "kind": "singular",
+                    "name": "package",
+                }
+            ],
+            "priors": 0,
+            "private": False,
+            "quiet": False,
+            "shebang": False,
+        }
+        mutations = []
+        recipe_field = json.loads(json.dumps(recipe))
+        recipe_field["future_execution_flag"] = True
+        mutations.append(recipe_field)
+        dependency_field = json.loads(json.dumps(recipe))
+        dependency_field["dependencies"][0]["future_mode"] = "strict"
+        mutations.append(dependency_field)
+        parameter_field = json.loads(json.dumps(recipe))
+        parameter_field["parameters"][0]["future_mode"] = "strict"
+        mutations.append(parameter_field)
+
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                with self.assertRaises(RecipeWitnessError):
+                    _project_recipe_semantics(mutation)
+
+    def test_parameter_and_dependency_semantics_are_not_normalized_away(
+        self,
+    ) -> None:
+        parameter = {
+            "default": None,
+            "export": False,
+            "flag": False,
+            "help": None,
+            "kind": "singular",
+            "long": None,
+            "max": None,
+            "min": None,
+            "multiple": False,
+            "name": "package",
+            "pattern": None,
+            "short": None,
+            "value": None,
+        }
+        baseline_parameter = _project_parameter_semantics(parameter)
+        parameter_mutations = {
+            "default": "kanban-cli",
+            "export": True,
+            "flag": True,
+            "help": "Cargo package",
+            "kind": "star",
+            "long": "package",
+            "max": 2,
+            "min": 1,
+            "multiple": True,
+            "pattern": ["kanban-*"],
+            "short": "p",
+            "value": "kanban-cli",
+        }
+        for field, value in parameter_mutations.items():
+            with self.subTest(parameter=field):
+                mutation = dict(parameter)
+                mutation[field] = value
+                self.assertNotEqual(
+                    baseline_parameter,
+                    _project_parameter_semantics(mutation),
+                )
+
+        dependency = {
+            "arguments": [],
+            "recipe": "preflight",
+            "star": None,
+        }
+        baseline_dependency = _project_dependency_semantics(dependency)
+        for field, value in (
+            ("arguments", [[["string", "release"]]]),
+            ("recipe", "other"),
+            ("star", 0),
+        ):
+            with self.subTest(dependency=field):
+                mutation = dict(dependency)
+                mutation[field] = value
+                self.assertNotEqual(
+                    baseline_dependency,
+                    _project_dependency_semantics(mutation),
+                )
+
+    def test_global_nested_unknown_nondefault_fields_fail_closed(self) -> None:
+        parser_defaults = {"quiet": False}
+        baseline = {
+            "aliases": {},
+            "assignments": {},
+            "doc": None,
+            "first": None,
+            "groups": [],
+            "module_path": "",
+            "modules": {},
+            "recipes": {},
+            "settings": dict(parser_defaults),
+            "source": "/parser-specific/justfile",
+            "unexports": [],
+            "warnings": [],
+        }
+        mutations = []
+        top_level = json.loads(json.dumps(baseline))
+        top_level["future_mode"] = "strict"
+        mutations.append(top_level)
+        alias = json.loads(json.dumps(baseline))
+        alias["aliases"]["gate"] = {
+            "attributes": [],
+            "future_mode": "strict",
+            "name": "gate",
+            "target": "check",
+        }
+        mutations.append(alias)
+        assignment = json.loads(json.dumps(baseline))
+        assignment["assignments"]["flags"] = {
+            "eager": False,
+            "export": False,
+            "future_mode": "strict",
+            "name": "flags",
+            "private": False,
+            "value": "--locked",
+        }
+        mutations.append(assignment)
+        module = json.loads(json.dumps(baseline))
+        module["modules"]["nested"] = {
+            "aliases": {},
+            "assignments": {},
+            "doc": None,
+            "first": None,
+            "future_mode": "strict",
+            "groups": [],
+            "module_path": "nested",
+            "modules": {},
+            "recipes": {},
+            "settings": dict(parser_defaults),
+            "source": "/parser-specific/nested.just",
+            "unexports": [],
+            "warnings": [],
+        }
+        mutations.append(module)
+
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                with self.assertRaises(RecipeWitnessError):
+                    _project_global_semantics(mutation, parser_defaults)
+
+    def test_setting_projection_ignores_new_parser_defaults(self) -> None:
+        old_defaults = {
+            "positional_arguments": False,
+            "quiet": False,
+            "shell": None,
+        }
+        old_settings = {
+            **old_defaults,
+            "positional_arguments": True,
+            "shell": {"arguments": ["-cu"], "command": "bash"},
+        }
+        new_defaults = {
+            **old_defaults,
+            "future_false": False,
+            "future_list": [],
+            "future_null": None,
+        }
+        new_settings = {
+            **old_settings,
+            "future_false": False,
+            "future_list": [],
+            "future_null": None,
+        }
+
+        self.assertEqual(
+            _project_setting_overrides(old_settings, old_defaults),
+            _project_setting_overrides(new_settings, new_defaults),
         )
 
     def test_env_gated_extra_cargo_is_rejected_by_ast(self) -> None:
@@ -1120,11 +1816,53 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
 
     def test_release_nested_gate_order_is_exact(self) -> None:
         self.assert_mutation_rejected(
+            "    just check-windows-p kanban-local\n",
+            "    echo Windows cross-check omitted\n",
+            "release",
+            _release,
+            delegate=False,
+        )
+        self.assert_mutation_rejected(
+            "    just rust-full\n    just check-windows-p kanban-local\n",
+            "    just check-windows-p kanban-local\n    just rust-full\n",
+            "release",
+            _release,
+            delegate=False,
+        )
+        self.assert_mutation_rejected(
+            "    just check-windows-p kanban-local\n    just projection-release-cohort\n",
+            "    just check-windows-p kanban-local\n    echo projection release cohort omitted\n",
+            "release",
+            _release,
+            delegate=False,
+        )
+        self.assert_mutation_rejected(
+            "    just check-windows-p kanban-local\n    just projection-release-cohort\n",
+            "    just projection-release-cohort\n    just check-windows-p kanban-local\n",
+            "release",
+            _release,
+            delegate=False,
+        )
+        self.assert_mutation_rejected(
             "    just bench-check\n    just target-tools\n",
             "    just target-tools\n    just bench-check\n",
             "release",
             _release,
             delegate=False,
+        )
+
+    def test_projection_release_cohort_cannot_drop_a_backend(self) -> None:
+        self.assert_mutation_rejected(
+            '    just feature-p kanban-cli "tantivy-backend,oxigraph-backend"\n',
+            '    just feature-p kanban-cli "tantivy-backend"\n',
+            "projection-release-cohort",
+            _projection_release_cohort,
+        )
+        self.assert_mutation_rejected(
+            '    just feature-p kanban-server "tantivy-backend,oxigraph-backend"\n',
+            '    just feature-p kanban-server "oxigraph-backend"\n',
+            "projection-release-cohort",
+            _projection_release_cohort,
         )
 
     def test_schema_dependency_internal_policy_cannot_be_removed(self) -> None:

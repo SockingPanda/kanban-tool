@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 fn fixture(operation: &str) -> anyhow::Result<Value> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     Ok(serde_json::from_str(&std::fs::read_to_string(root.join(
-        format!("schemas/fixtures/cli/{operation}-output.v1.valid.json"),
+        format!("schemas/fixtures/cli/{operation}-output.v2.valid.json"),
     ))?)?)
 }
 
@@ -98,8 +98,11 @@ fn maintenance_run_output_fixture_is_produced_by_real_cli() -> anyhow::Result<()
             .expect("maintenance stores fixture")
             .push(serde_json::json!({
                 "store_name": "oxigraph_relations",
-                "action": "generation_published",
-                "processed": 0,
+                "result": {
+                    "status": "succeeded",
+                    "action": "generation_published",
+                    "processed": 0
+                },
                 "lifecycle_status": "ready",
                 "fallback_reason": null
             }));
@@ -163,5 +166,19 @@ fn maintenance_contracts_reject_unknown_and_missing_nullable_fields() -> anyhow:
     let mut run = fixture("maintenance-run")?;
     run["data"]["stores"][0]["unexpected"] = json!(true);
     anyhow::ensure!(serde_json::from_value::<CliMaintenanceRunOutput>(run).is_err());
+
+    let mut failed = fixture("maintenance-run")?;
+    failed["data"]["stores"][0]["result"] = json!({
+        "status": "failed",
+        "kind": "backend",
+        "message": "fixture backend failure"
+    });
+    serde_json::from_value::<CliMaintenanceRunOutput>(failed.clone())?;
+    failed["data"]["stores"][0]["result"]["kind"] = json!("unknown");
+    anyhow::ensure!(serde_json::from_value::<CliMaintenanceRunOutput>(failed).is_err());
+
+    let mut nested_unknown = fixture("maintenance-run")?;
+    nested_unknown["data"]["stores"][0]["result"]["unexpected"] = json!(true);
+    anyhow::ensure!(serde_json::from_value::<CliMaintenanceRunOutput>(nested_unknown).is_err());
     Ok(())
 }

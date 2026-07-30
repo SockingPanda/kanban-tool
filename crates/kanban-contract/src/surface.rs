@@ -410,6 +410,16 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "vector embedding response",
             "helper.vector.embed-query.response"
         ),
+        SurfaceOperation {
+            key: "vector projection helper protocol".to_owned(),
+            surface: ContractSurface::Helper,
+            contracts: vec![
+                "helper.vector-projection.request",
+                "helper.vector-projection.response",
+            ],
+            migration: MigrationState::Adopted,
+            exclusion: None,
+        },
     ];
     operations.extend(
         portable_contract_catalog()

@@ -1,12 +1,12 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs::{self, OpenOptions},
-    io::Write,
+    fs,
     path::{Path, PathBuf},
     sync::Mutex,
 };
 
 use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
+use kanban_local::durable_replace_file_contents;
 use oxigraph::{
     model::{GraphName, GraphNameRef, NamedNode, NamedNodeRef, NamedOrBlankNodeRef, Quad, Term},
     sparql::{QueryResults, SparqlEvaluator},
@@ -293,21 +293,7 @@ impl OxigraphStore {
             fs::create_dir_all(parent).map_err(io_error)?;
         }
         let bytes = serde_json::to_vec_pretty(&snapshot).map_err(json_error)?;
-        let temp_path = path.with_extension("json.tmp");
-        let mut file = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(&temp_path)
-            .map_err(io_error)?;
-        file.write_all(&bytes).map_err(io_error)?;
-        file.sync_all().map_err(io_error)?;
-        fs::rename(&temp_path, path).map_err(io_error)?;
-        if let Some(parent) = path.parent() {
-            fs::File::open(parent)
-                .and_then(|directory| directory.sync_all())
-                .map_err(io_error)?;
-        }
+        durable_replace_file_contents(path, &bytes).map_err(io_error)?;
         Ok(())
     }
 }

@@ -29,6 +29,7 @@ mod labels;
 mod lifecycle;
 mod ontology;
 mod portable;
+mod projection;
 #[cfg(all(test, feature = "schema"))]
 mod protocol_tests;
 mod protocols;
@@ -64,17 +65,18 @@ pub use cli::{
     CliEvent, CliEventsOutput, CliIndexDoctorOutput, CliIndexStatusOutput, CliInitOutput,
     CliInitResult, CliMachineOutput, CliMaintenanceMode, CliMaintenanceOwnerStatus,
     CliMaintenanceRebuildOutput, CliMaintenanceRun, CliMaintenanceRunOutput, CliMaintenanceStatus,
-    CliMaintenanceStatusOutput, CliMaintenanceStoreRun, CliOperationDescriptor, CliOutboxItem,
-    CliOutboxListOutput, CliProjectionStoreStatus, CliResolvedConfigValue, CliResolvedLocaleValue,
-    CliRunLog, CliRunLogsOutput, CliRunShowOutput, CliRunsOutput, CliStatsOutput,
-    CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput, CliTaskCompleteOutput,
-    CliTaskCreateOutput, CliTaskDoneOutput, CliTaskHeartbeatOutput, CliTaskListOutput,
-    CliTaskPromoteOutput, CliTaskReclaimOutput, CliTaskReclaimResult, CliTaskReopenOutput,
-    CliTaskReviewOutput, CliTaskShowOutput, CliTaskStartOutput, CliTaskStepAddOutput,
-    CliTaskStepDoneOutput, CliTaskStepListOutput, CliTaskStepNotRequiredOutput,
-    CliTaskStepRemoveOutput, CliTaskStepRemoveResult, CliTaskStepReopenOutput,
-    CliTaskStepSkipOutput, CliTaskStepUpdateOutput, CliTaskUnblockOutput, CliTaskUpdateOutput,
-    CliVacuumOutput, CliVacuumResult, cli_operation_catalog,
+    CliMaintenanceStatusOutput, CliMaintenanceStoreFailureKind, CliMaintenanceStoreResult,
+    CliMaintenanceStoreRun, CliOperationDescriptor, CliOutboxItem, CliOutboxListOutput,
+    CliProjectionRuntimeAvailability, CliProjectionStoreStatus, CliResolvedConfigValue,
+    CliResolvedLocaleValue, CliRunLog, CliRunLogsOutput, CliRunShowOutput, CliRunsOutput,
+    CliStatsOutput, CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput,
+    CliTaskCompleteOutput, CliTaskCreateOutput, CliTaskDoneOutput, CliTaskHeartbeatOutput,
+    CliTaskListOutput, CliTaskPromoteOutput, CliTaskReclaimOutput, CliTaskReclaimResult,
+    CliTaskReopenOutput, CliTaskReviewOutput, CliTaskShowOutput, CliTaskStartOutput,
+    CliTaskStepAddOutput, CliTaskStepDoneOutput, CliTaskStepListOutput,
+    CliTaskStepNotRequiredOutput, CliTaskStepRemoveOutput, CliTaskStepRemoveResult,
+    CliTaskStepReopenOutput, CliTaskStepSkipOutput, CliTaskStepUpdateOutput, CliTaskUnblockOutput,
+    CliTaskUpdateOutput, CliVacuumOutput, CliVacuumResult, cli_operation_catalog,
 };
 pub use comments::{
     ApiComment, CommentAuthorType, CommentKind, CreateCommentPath, CreateCommentRequest,
@@ -123,6 +125,7 @@ pub use portable::{
     PortableContractDescriptor, PortableContractLane, PortableContractSide,
     portable_contract_catalog,
 };
+pub use projection::*;
 pub use protocols::*;
 pub use runs::{
     ApiClaim, ApiRun, ApiRunLog, ApiRunStatus, GetRunLogPath, GetRunLogResponse, GetRunPath,

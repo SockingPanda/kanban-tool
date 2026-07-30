@@ -46,7 +46,7 @@ fn label_proposal_migration_and_provider_unavailable_are_non_polluting() -> anyh
     init_database(&temp.path, "tester")?;
     let conn = connect_file(&temp.path)?;
     let user_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 27);
+    assert_eq!(user_version, 29);
     let has_table: i64 = conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='label_semantic_proposals'",
         [],
@@ -4582,7 +4582,7 @@ fn init_v10_backfills_stable_label_atom_hashes_and_marks_index_dirty() -> anyhow
     assert!(label_atom_board_dirty(&temp.path, "default")?);
     let user_version: i64 =
         connect_file(&temp.path)?.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(user_version, 27);
+    assert_eq!(user_version, 29);
     Ok(())
 }
 
@@ -4925,8 +4925,8 @@ fn doctor_reports_missing_label_semantics_tables_unhealthy() -> anyhow::Result<(
 
         let report = doctor_database(&temp.path)?;
 
-        assert_eq!(report.migration_version, Some(27));
-        assert_eq!(report.user_version, 27);
+        assert_eq!(report.migration_version, Some(29));
+        assert_eq!(report.user_version, 29);
         assert!(!report.ok, "{table} missing should make doctor unhealthy");
     }
     Ok(())
@@ -5095,6 +5095,89 @@ fn label_atom_rebuild_status_query_and_failure_are_independent() -> anyhow::Resu
             .any(|code| code == "label_atom_index_error")
     );
     assert!(status.message.contains("dimension mismatch"));
+    Ok(())
+}
+
+#[test]
+fn label_atom_provider_failure_bookkeeping_rolls_back_as_one_unit() -> anyhow::Result<()> {
+    let temp = TempDb::new("label_atom_provider_failure_bookkeeping_rolls_back_as_one_unit")?;
+    let init = init_database(&temp.path, "tester")?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "UPDATE derived_store_state
+         SET dirty=0,last_error=NULL
+         WHERE store_name='lancedb_label_atoms'",
+        [],
+    )?;
+    conn.execute(
+        "INSERT OR IGNORE INTO label_atom_index_boards(
+           store_name,board_id,dirty,last_rebuild_at,last_error,updated_at
+         ) VALUES ('lancedb_label_atoms',?1,0,NULL,NULL,1)",
+        [&init.board_id],
+    )?;
+    conn.execute(
+        "UPDATE label_atom_index_boards
+         SET dirty=0,last_error=NULL
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&init.board_id],
+    )?;
+    conn.execute(
+        "DELETE FROM projection_deliveries
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&init.board_id],
+    )?;
+    conn.execute(
+        "DELETE FROM index_outbox
+         WHERE projection_store='lancedb_label_atoms'
+           AND entity_uri='kb://board/' || ?1",
+        [&init.board_id],
+    )?;
+    conn.execute_batch(
+        "CREATE TRIGGER fail_label_atom_failure_board_bookkeeping
+         BEFORE UPDATE ON label_atom_index_boards
+         WHEN NEW.store_name='lancedb_label_atoms'
+           AND NEW.board_id IS OLD.board_id
+           AND NEW.last_error IS NOT NULL
+         BEGIN
+           SELECT RAISE(ABORT, 'forced board failure bookkeeping crash');
+         END;",
+    )?;
+    drop(conn);
+
+    let error = result_err(rebuild_label_atom_index_with(
+        &temp.path,
+        "default",
+        &FailingVectorStore,
+    ))?;
+    assert!(
+        error
+            .to_string()
+            .contains("forced board failure bookkeeping crash"),
+        "{error}"
+    );
+
+    let conn = connect_file(&temp.path)?;
+    let global: (bool, Option<String>) = conn.query_row(
+        "SELECT dirty,last_error FROM derived_store_state
+         WHERE store_name='lancedb_label_atoms'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let board: (bool, Option<String>) = conn.query_row(
+        "SELECT dirty,last_error FROM label_atom_index_boards
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&init.board_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    let recovery_deliveries: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM projection_deliveries
+         WHERE store_name='lancedb_label_atoms' AND board_id=?1",
+        [&init.board_id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(global, (false, None));
+    assert_eq!(board, (false, None));
+    assert_eq!(recovery_deliveries, 0);
     Ok(())
 }
 

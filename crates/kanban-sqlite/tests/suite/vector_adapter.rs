@@ -21,14 +21,18 @@ fn vector_sync_marks_lancedb_outbox_done_without_touching_other_boards() -> anyh
     let store = RecordingVectorStore::default();
     let status = sync_vector_store_with(&temp.path, "default", &store)?;
     assert_eq!(status.backend, "test-vector");
-    assert!(status.message.contains("synced 1 chunk(s)"));
+    assert!(status.message.contains("synced 2 chunk(s)"));
     assert_eq!(status.dirty, Some(true));
     assert_eq!(status.board_dirty, Some(false));
     assert!(status.diagnostics.iter().any(|code| code == "vector_dirty"));
-    assert_eq!(
-        store.upserted_texts()?,
-        vec!["default board vector task\n\nready spec"]
+    let upserted = store.upserted_texts()?;
+    assert_eq!(upserted.len(), 2);
+    assert!(
+        upserted
+            .iter()
+            .any(|text| text == "default board vector task\n\nready spec")
     );
+    assert!(upserted.iter().any(|text| text.contains("task.created")));
     assert_eq!(
         lancedb_outbox_statuses_for_board(&temp.path, "default")?,
         vec!["done"]
@@ -75,7 +79,7 @@ fn vector_sync_and_rebuild_use_store_embedding_model() -> anyhow::Result<()> {
     let store = RecordingVectorStore::with_embedding_model("static-test");
 
     sync_vector_store_with(&temp.path, "default", &store)?;
-    assert_eq!(store.upserted_models()?, vec!["static-test"]);
+    assert_eq!(store.upserted_models()?, vec!["static-test", "static-test"]);
 
     update_task(
         &temp.path,
@@ -90,7 +94,10 @@ fn vector_sync_and_rebuild_use_store_embedding_model() -> anyhow::Result<()> {
     )?;
     rebuild_vector_store_with(&temp.path, "default", &store)?;
 
-    assert_eq!(store.upserted_models()?, vec!["static-test", "static-test"]);
+    assert_eq!(
+        store.upserted_models()?,
+        vec!["static-test", "static-test", "static-test", "static-test"]
+    );
     Ok(())
 }
 
@@ -142,10 +149,14 @@ fn vector_rebuild_deletes_board_before_reindexing_current_tasks() -> anyhow::Res
     let store = RecordingVectorStore::default();
 
     sync_vector_store_with(&temp.path, "default", &store)?;
-    assert_eq!(
-        store.live_texts()?,
-        vec!["hard deleted vector task\n\nready spec"]
+    let live_texts = store.live_texts()?;
+    assert_eq!(live_texts.len(), 2);
+    assert!(
+        live_texts
+            .iter()
+            .any(|text| text == "hard deleted vector task\n\nready spec")
     );
+    assert!(live_texts.iter().any(|text| text.contains("task.created")));
 
     connect_file(&temp.path)?.execute("DELETE FROM tasks WHERE id=?1", params![task.id])?;
     let status = rebuild_vector_store_with(&temp.path, "default", &store)?;
@@ -179,6 +190,16 @@ fn vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error() -> anyh
         "tester",
         CreateTask::ready("failing vector task"),
     )?;
+    connect_file(&temp.path)?.execute(
+        "INSERT INTO index_outbox(
+           source_event_id,target,projection_store,entity_uri,action,payload_json,
+           status,attempts,last_error,created_at,updated_at
+         ) VALUES (
+           NULL,'lancedb','lancedb_label_atoms',?1,'rebuild',
+           '{\"scope\":\"board\",\"version\":1}','pending',0,NULL,1,1
+         )",
+        [format!("kb://board/{}", task.board_id)],
+    )?;
     let store = FailingVectorStore;
 
     let error = result_err(rebuild_vector_store_with(&temp.path, "default", &store))?;
@@ -189,6 +210,18 @@ fn vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error() -> anyh
     assert_eq!(
         lancedb_outbox_statuses_for_board(&temp.path, "default")?,
         vec!["failed"]
+    );
+    let exact_route: (String, i64, Option<String>) = connect_file(&temp.path)?.query_row(
+        "SELECT status,attempts,last_error
+         FROM index_outbox
+         WHERE projection_store='lancedb_label_atoms'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(
+        exact_route,
+        ("pending".to_owned(), 0, None),
+        "legacy chunk provider failure must not fail exact label work"
     );
     let derived = derived_store_statuses(&temp.path)?;
     let vector = derived
@@ -216,5 +249,68 @@ fn vector_adapter_failure_keeps_lancedb_chunks_dirty_and_records_error() -> anyh
                 .as_deref()
                 .is_some_and(|error| error.contains("dimension mismatch"))
     }));
+    Ok(())
+}
+
+#[test]
+fn vector_legacy_route_does_not_complete_dirty_or_count_label_selector() -> anyhow::Result<()> {
+    let temp = TempDb::new("vector_legacy_route_does_not_complete_dirty_or_count_label_selector")?;
+    let init = init_database(&temp.path, "tester")?;
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("legacy chunks route"),
+    )?;
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "INSERT INTO index_outbox(
+           source_event_id,target,projection_store,entity_uri,action,payload_json,
+           status,attempts,last_error,created_at,updated_at
+         ) VALUES (
+           NULL,'lancedb','lancedb_label_atoms',?1,'rebuild',
+           '{\"scope\":\"board\",\"version\":1}','pending',0,NULL,1,1
+         )",
+        [format!("kb://board/{}", init.board_id)],
+    )?;
+    drop(conn);
+
+    let before = doctor_database(&temp.path)?;
+    let chunks_before = before
+        .derived_stores
+        .iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .ok_or_else(|| test_error("missing lancedb_chunks doctor status"))?;
+    assert_eq!(
+        chunks_before.pending_outbox, 1,
+        "exact label selector must not count as legacy chunk work"
+    );
+
+    sync_vector_store_with(&temp.path, "default", &RecordingVectorStore::default())?;
+
+    let conn = connect_file(&temp.path)?;
+    let exact_route: (String, i64, Option<String>) = conn.query_row(
+        "SELECT status,attempts,last_error
+         FROM index_outbox
+         WHERE projection_store='lancedb_label_atoms'",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(exact_route, ("pending".to_owned(), 0, None));
+    let chunks = derived_store_statuses(&temp.path)?
+        .into_iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .ok_or_else(|| test_error("missing lancedb_chunks"))?;
+    assert!(
+        !chunks.dirty,
+        "exact label selector must not keep the legacy chunks store dirty"
+    );
+    let after = doctor_database(&temp.path)?;
+    let chunks_after = after
+        .derived_stores
+        .iter()
+        .find(|store| store.store_name == "lancedb_chunks")
+        .ok_or_else(|| test_error("missing lancedb_chunks doctor status"))?;
+    assert_eq!(chunks_after.pending_outbox, 0);
     Ok(())
 }

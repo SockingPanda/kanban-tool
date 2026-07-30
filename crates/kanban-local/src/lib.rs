@@ -36,6 +36,7 @@ pub struct DerivedStoreWriteGuard {
 }
 
 static DERIVED_LOCK_NONCE: AtomicU64 = AtomicU64::new(1);
+static DURABLE_ENTRY_NONCE: AtomicU64 = AtomicU64::new(1);
 
 impl DerivedStoreWriteGuard {
     pub fn acquire(db_path: &Path, store_name: &str) -> io::Result<Self> {
@@ -77,6 +78,425 @@ impl Drop for DerivedStoreWriteGuard {
     fn drop(&mut self) {
         let _ = self.lock_file.unlock();
     }
+}
+
+/// Flushes one regular file to its backing store.
+///
+/// Callers should use [`durable_sync_directory`] after creating, replacing, or
+/// removing a directory entry. The two barriers deliberately remain separate
+/// so a failed file flush can never be mistaken for a completed publish.
+pub fn durable_sync_file(path: &Path) -> io::Result<()> {
+    let metadata = fs::metadata(path)?;
+    if !metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "durability file path is not a regular file: {}",
+                path.display()
+            ),
+        ));
+    }
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)?
+        .sync_all()
+}
+
+/// Flushes directory-entry changes without hiding platform errors.
+///
+/// Unix exposes a real directory `fsync`, so failures are returned to the
+/// caller. Rust's standard library does not expose a portable Windows
+/// directory flush. On Windows this function therefore validates that the
+/// directory exists and is accessible. Directory-entry mutations in this
+/// module use `MoveFileExW(MOVEFILE_WRITE_THROUGH)` separately; this
+/// validation-only helper must not be treated as their durability barrier.
+pub fn durable_sync_directory(path: &Path) -> io::Result<()> {
+    let metadata = fs::metadata(path)?;
+    if !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "durability directory path is not a directory: {}",
+                path.display()
+            ),
+        ));
+    }
+    durable_sync_directory_platform(path)
+}
+
+#[cfg(unix)]
+fn durable_sync_directory_platform(path: &Path) -> io::Result<()> {
+    std::fs::File::open(path)?.sync_all()
+}
+
+#[cfg(windows)]
+fn durable_sync_directory_platform(_path: &Path) -> io::Result<()> {
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn durable_sync_directory_platform(path: &Path) -> io::Result<()> {
+    std::fs::File::open(path)?.sync_all()
+}
+
+/// Flushes every regular file and directory in a staged artifact tree.
+///
+/// Symlinks and other special file types are rejected because following them
+/// would make the physical generation's durability boundary ambiguous.
+pub fn durable_sync_directory_tree(path: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "durability tree root is not a directory: {}",
+                path.display()
+            ),
+        ));
+    }
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            durable_sync_directory_tree(&entry.path())?;
+        } else if file_type.is_file() {
+            durable_sync_file(&entry.path())?;
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "durability tree contains an unsupported entry: {}",
+                    entry.path().display()
+                ),
+            ));
+        }
+    }
+    durable_sync_directory(path)
+}
+
+/// Replaces a regular file from a sibling staged file and persists the parent
+/// directory entry. The sibling requirement preserves atomic rename semantics.
+pub fn durable_replace_file(staged: &Path, destination: &Path) -> io::Result<()> {
+    require_sibling_paths(staged, destination)?;
+    let metadata = fs::symlink_metadata(staged)?;
+    if !metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("staged durability path is not a file: {}", staged.display()),
+        ));
+    }
+    match fs::symlink_metadata(destination) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "durability file destination is not a regular file: {}",
+                    destination.display()
+                ),
+            ));
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    durable_sync_file(staged)?;
+    durable_replace_file_platform(staged, destination)?;
+    durable_sync_directory(parent_directory(destination)?)
+}
+
+/// Writes and durably replaces one regular file through an unpredictable
+/// sibling created with `create_new`.
+///
+/// Callers must not construct fixed `.tmp` names: an attacker or interrupted
+/// process could leave a symlink at such a path and redirect the write before
+/// [`durable_replace_file`] gets a chance to validate it.
+pub fn durable_replace_file_contents(path: &Path, contents: &[u8]) -> io::Result<()> {
+    let staged = unique_sibling_path(path, "replace")?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&staged)?;
+    let staged_write = (|| {
+        file.write_all(contents)?;
+        file.sync_all()
+    })();
+    drop(file);
+    if let Err(error) = staged_write {
+        let _ = fs::remove_file(&staged);
+        return Err(error);
+    }
+    if let Err(error) = durable_replace_file(&staged, path) {
+        let _ = fs::remove_file(&staged);
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn durable_replace_file_platform(staged: &Path, destination: &Path) -> io::Result<()> {
+    fs::rename(staged, destination)
+}
+
+#[cfg(windows)]
+fn durable_replace_file_platform(staged: &Path, destination: &Path) -> io::Result<()> {
+    windows_move_file(staged, destination, true)
+}
+
+/// Publishes a complete staged directory as a new generation.
+///
+/// Existing destinations are refused: replacing an active directory is not a
+/// portable atomic operation and generation publication must never overwrite
+/// physical evidence.
+pub fn durable_publish_directory(staged: &Path, destination: &Path) -> io::Result<()> {
+    require_sibling_paths(staged, destination)?;
+    match fs::symlink_metadata(destination) {
+        Ok(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!(
+                    "durable directory destination already exists: {}",
+                    destination.display()
+                ),
+            ));
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    durable_sync_directory_tree(staged)?;
+    durable_publish_directory_platform(staged, destination)?;
+    durable_sync_directory(parent_directory(destination)?)
+}
+
+#[cfg(not(windows))]
+fn durable_publish_directory_platform(staged: &Path, destination: &Path) -> io::Result<()> {
+    fs::rename(staged, destination)
+}
+
+#[cfg(windows)]
+fn durable_publish_directory_platform(staged: &Path, destination: &Path) -> io::Result<()> {
+    windows_move_file(staged, destination, false)
+}
+
+/// Creates and flushes a file that must not already exist, then publishes it
+/// from a sibling staged file. This prevents a short write from leaving a
+/// truncated authoritative marker.
+pub fn durable_create_new_file(path: &Path, contents: &[u8]) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!(
+                    "durable file destination already exists: {}",
+                    path.display()
+                ),
+            ));
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    let staged = unique_sibling_path(path, "new")?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&staged)?;
+    let staged_write = (|| {
+        file.write_all(contents)?;
+        file.sync_all()
+    })();
+    drop(file);
+    if let Err(error) = staged_write {
+        let _ = fs::remove_file(&staged);
+        return Err(error);
+    }
+    if let Err(error) = durable_publish_new_file_platform(&staged, path) {
+        let _ = fs::remove_file(&staged);
+        return Err(error);
+    }
+    let parent = parent_directory(path)?;
+    durable_sync_directory(parent)?;
+    if staged.exists() {
+        fs::remove_file(&staged)?;
+        durable_sync_directory(parent)?;
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn durable_publish_new_file_platform(staged: &Path, destination: &Path) -> io::Result<()> {
+    fs::hard_link(staged, destination)
+}
+
+#[cfg(windows)]
+fn durable_publish_new_file_platform(staged: &Path, destination: &Path) -> io::Result<()> {
+    windows_move_file(staged, destination, false)
+}
+
+/// Creates every missing directory through a sibling staged-directory publish.
+pub fn durable_create_dir_all(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() => return Ok(()),
+        Ok(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "durable directory path is not a directory: {}",
+                    path.display()
+                ),
+            ));
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    let parent = parent_directory(path)?;
+    durable_create_dir_all(parent)?;
+    let staged = unique_sibling_path(path, "mkdir")?;
+    fs::create_dir(&staged)?;
+    match durable_publish_directory(&staged, path) {
+        Ok(()) => Ok(()),
+        Err(error)
+            if error.kind() == io::ErrorKind::AlreadyExists
+                && fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_dir()) =>
+        {
+            let _ = fs::remove_dir(&staged);
+            Ok(())
+        }
+        Err(error) => {
+            let _ = fs::remove_dir(&staged);
+            Err(error)
+        }
+    }
+}
+
+/// Moves one invalid directory entry aside without following it.
+///
+/// The returned sibling path preserves crash/corruption evidence for later
+/// cleanup while removing the entry from the authoritative namespace.
+pub fn durable_quarantine_entry(path: &Path) -> io::Result<PathBuf> {
+    fs::symlink_metadata(path)?;
+    let quarantined = unique_sibling_path(path, "quarantine")?;
+    durable_move_entry_no_replace_platform(path, &quarantined)?;
+    durable_sync_directory(parent_directory(path)?)?;
+    Ok(quarantined)
+}
+
+/// Removes an unpublished directory after first durably moving it out of the
+/// authoritative namespace.
+pub fn durable_remove_directory(path: &Path) -> io::Result<()> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    if !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "durable removal path is not a directory: {}",
+                path.display()
+            ),
+        ));
+    }
+    let quarantined = durable_quarantine_entry(path)?;
+    fs::remove_dir_all(&quarantined)?;
+    durable_sync_directory(parent_directory(&quarantined)?)
+}
+
+#[cfg(not(windows))]
+fn durable_move_entry_no_replace_platform(source: &Path, destination: &Path) -> io::Result<()> {
+    fs::rename(source, destination)
+}
+
+#[cfg(windows)]
+fn durable_move_entry_no_replace_platform(source: &Path, destination: &Path) -> io::Result<()> {
+    windows_move_file(source, destination, false)
+}
+
+fn unique_sibling_path(path: &Path, purpose: &str) -> io::Result<PathBuf> {
+    let parent = parent_directory(path)?;
+    let name = path
+        .file_name()
+        .unwrap_or_else(|| OsStr::new("entry"))
+        .to_string_lossy();
+    for _ in 0..1_024 {
+        let nonce = DURABLE_ENTRY_NONCE.fetch_add(1, Ordering::Relaxed);
+        let candidate = parent.join(format!(".{name}.{purpose}.{}.{nonce}", std::process::id()));
+        match fs::symlink_metadata(&candidate) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(candidate),
+            Ok(_) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        format!(
+            "could not allocate a durable sibling path for {}",
+            path.display()
+        ),
+    ))
+}
+
+#[cfg(windows)]
+fn windows_move_file(staged: &Path, destination: &Path, replace: bool) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    fn wide_path(path: &Path) -> io::Result<Vec<u16>> {
+        let mut encoded = path.as_os_str().encode_wide().collect::<Vec<_>>();
+        if encoded.contains(&0) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Windows durability path contains an interior NUL",
+            ));
+        }
+        encoded.push(0);
+        Ok(encoded)
+    }
+
+    let staged = wide_path(staged)?;
+    let destination = wide_path(destination)?;
+    let flags = MOVEFILE_WRITE_THROUGH
+        | if replace {
+            MOVEFILE_REPLACE_EXISTING
+        } else {
+            0
+        };
+    // SAFETY: both buffers are NUL-terminated UTF-16 paths and remain alive
+    // for the call. All callers keep moves on one filesystem.
+    let moved = unsafe { MoveFileExW(staged.as_ptr(), destination.as_ptr(), flags) };
+    if moved == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+fn require_sibling_paths(left: &Path, right: &Path) -> io::Result<()> {
+    if left == right || left.parent() != right.parent() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "durable rename requires distinct sibling paths",
+        ));
+    }
+    Ok(())
+}
+
+fn parent_directory(path: &Path) -> io::Result<&Path> {
+    path.parent()
+        .map(|parent| {
+            if parent.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                parent
+            }
+        })
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("durability path has no parent: {}", path.display()),
+            )
+        })
 }
 
 pub fn derived_store_write_lock_path(db_path: &Path, store_name: &str) -> PathBuf {
@@ -294,22 +714,149 @@ pub fn vector_store_path(db_path: impl Into<PathBuf>) -> PathBuf {
 
 pub fn projection_store_root_path(
     db_path: impl Into<PathBuf>,
+    database_instance_id: &str,
     store_name: &str,
 ) -> io::Result<PathBuf> {
-    if store_name.is_empty()
-        || !store_name
+    validate_projection_database_instance_id(database_instance_id)?;
+    validate_projection_path_component(store_name, "derived store name")?;
+    Ok(projection_data_root(db_path.into())?
+        .join("index")
+        .join(PROJECTION_INDEX_LAYOUT_VERSION)
+        .join("databases")
+        .join(database_instance_id)
+        .join(store_name))
+}
+
+/// Resolves and validates the complete managed path to a Projection v2
+/// generations directory without following any managed symlink.
+///
+/// The canonical database parent is the trust anchor. Missing descendants are
+/// allowed so read-only inspection can report an absent store, but every
+/// existing managed component must be a real directory.
+pub fn checked_projection_store_generations_path(
+    db_path: impl Into<PathBuf>,
+    database_instance_id: &str,
+    store_name: &str,
+) -> io::Result<PathBuf> {
+    projection_store_generations_path(db_path.into(), database_instance_id, store_name, false)
+}
+
+/// Resolves, validates, and durably creates the complete managed path to a
+/// Projection v2 generations directory.
+pub fn ensure_projection_store_generations_path(
+    db_path: impl Into<PathBuf>,
+    database_instance_id: &str,
+    store_name: &str,
+) -> io::Result<PathBuf> {
+    projection_store_generations_path(db_path.into(), database_instance_id, store_name, true)
+}
+
+/// Joins one validated Projection v2 generation id beneath an already checked
+/// generations directory.
+pub fn projection_generation_path(
+    generations_path: &Path,
+    generation: &str,
+) -> io::Result<PathBuf> {
+    if !generation.starts_with("gen_") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "projection generation id must start with gen_",
+        ));
+    }
+    validate_projection_path_component(generation, "projection generation id")?;
+    Ok(generations_path.join(generation))
+}
+
+fn projection_store_generations_path(
+    db_path: PathBuf,
+    database_instance_id: &str,
+    store_name: &str,
+    create_missing: bool,
+) -> io::Result<PathBuf> {
+    validate_projection_database_instance_id(database_instance_id)?;
+    validate_projection_path_component(store_name, "derived store name")?;
+    let data_root = projection_data_root(db_path)?;
+    let mut current = data_root;
+    let mut ancestor_missing = false;
+    for component in [
+        "index",
+        PROJECTION_INDEX_LAYOUT_VERSION,
+        "databases",
+        database_instance_id,
+        store_name,
+        "generations",
+    ] {
+        current.push(component);
+        if ancestor_missing {
+            if create_missing {
+                durable_create_dir_all(&current)?;
+            }
+            continue;
+        }
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.is_dir() => {}
+            Ok(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "managed projection path component is not a directory: {}",
+                        current.display()
+                    ),
+                ));
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                ancestor_missing = true;
+                if create_missing {
+                    durable_create_dir_all(&current)?;
+                    ancestor_missing = false;
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(current)
+}
+
+fn projection_data_root(db_path: PathBuf) -> io::Result<PathBuf> {
+    match fs::canonicalize(&db_path) {
+        Ok(canonical_db) => canonical_db.parent().map(Path::to_path_buf).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "canonical database path has no parent: {}",
+                    canonical_db.display()
+                ),
+            )
+        }),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            fs::canonicalize(kb_data_dir_for_db(db_path))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn validate_projection_database_instance_id(value: &str) -> io::Result<()> {
+    if !value.starts_with("db_") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "database instance id is not projection-path safe",
+        ));
+    }
+    validate_projection_path_component(value, "database instance id")
+}
+
+fn validate_projection_path_component(value: &str, label: &str) -> io::Result<()> {
+    if value.is_empty()
+        || !value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "derived store name is not projection-path safe",
+            format!("{label} is not projection-path safe"),
         ));
     }
-    Ok(kb_data_dir_for_db(db_path)
-        .join("index")
-        .join(PROJECTION_INDEX_LAYOUT_VERSION)
-        .join(store_name))
+    Ok(())
 }
 
 pub fn blob_root_path(db_path: impl Into<PathBuf>) -> PathBuf {
@@ -552,6 +1099,236 @@ pub fn default_actor() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn durable_file_replace_syncs_and_atomically_replaces_contents() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let destination = tempdir.path().join("metadata.json");
+        let staged = tempdir.path().join("metadata.json.tmp");
+        fs::write(&destination, "old").unwrap();
+        fs::write(&staged, "new").unwrap();
+
+        durable_replace_file(&staged, &destination).unwrap();
+
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "new");
+        assert!(!staged.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn durable_file_contents_replace_ignores_fixed_temp_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let destination = tempdir.path().join("metadata.json");
+        let external = tempdir.path().join("external-sentinel");
+        let fixed_temp = tempdir.path().join("metadata.json.tmp");
+        fs::write(&destination, "old").unwrap();
+        fs::write(&external, "must-remain").unwrap();
+        symlink(&external, &fixed_temp).unwrap();
+
+        durable_replace_file_contents(&destination, b"new").unwrap();
+
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "new");
+        assert_eq!(fs::read_to_string(&external).unwrap(), "must-remain");
+        assert!(
+            fs::symlink_metadata(&fixed_temp)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+    }
+
+    #[test]
+    fn durable_create_new_file_is_a_one_way_publish_marker() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let marker = tempdir.path().join("published");
+
+        durable_create_new_file(&marker, b"generation=one\n").unwrap();
+
+        assert_eq!(fs::read(&marker).unwrap(), b"generation=one\n");
+        let error = durable_create_new_file(&marker, b"generation=two\n").unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(&marker).unwrap(), b"generation=one\n");
+    }
+
+    #[test]
+    fn durable_directory_publish_syncs_tree_and_refuses_existing_destination() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let staged = tempdir.path().join("generation.tmp");
+        let destination = tempdir.path().join("generation");
+        fs::create_dir_all(staged.join("nested")).unwrap();
+        fs::write(staged.join("nested").join("artifact"), "ready").unwrap();
+
+        durable_publish_directory(&staged, &destination).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(destination.join("nested").join("artifact")).unwrap(),
+            "ready"
+        );
+        assert!(!staged.exists());
+
+        let next = tempdir.path().join("next.tmp");
+        fs::create_dir(&next).unwrap();
+        let error = durable_publish_directory(&next, &destination).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert!(next.exists());
+    }
+
+    #[test]
+    fn durable_create_dir_all_publishes_each_missing_directory() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let nested = tempdir.path().join("index/v2/store/generations");
+
+        durable_create_dir_all(&nested).unwrap();
+
+        assert!(nested.is_dir());
+        durable_create_dir_all(&nested).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn projection_generations_path_rejects_each_managed_symlink_component() {
+        use std::os::unix::fs::symlink;
+
+        for component_depth in 0..6 {
+            let tempdir = tempfile::tempdir().unwrap();
+            let external = tempfile::tempdir().unwrap();
+            let sentinel = external.path().join("sentinel");
+            fs::write(&sentinel, b"canonical-outside").unwrap();
+            let components = [
+                "index",
+                "v2",
+                "databases",
+                "db_test",
+                "tantivy_tasks",
+                "generations",
+            ];
+            let mut parent = tempdir.path().to_path_buf();
+            for component in &components[..component_depth] {
+                parent.push(component);
+                fs::create_dir(&parent).unwrap();
+            }
+            symlink(external.path(), parent.join(components[component_depth])).unwrap();
+
+            let error = checked_projection_store_generations_path(
+                tempdir.path().join("kanban.db"),
+                "db_test",
+                "tantivy_tasks",
+            )
+            .unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+            assert_eq!(fs::read(&sentinel).unwrap(), b"canonical-outside");
+
+            let error = ensure_projection_store_generations_path(
+                tempdir.path().join("kanban.db"),
+                "db_test",
+                "tantivy_tasks",
+            )
+            .unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+            assert_eq!(fs::read(&sentinel).unwrap(), b"canonical-outside");
+        }
+    }
+
+    #[test]
+    fn projection_generation_path_rejects_traversal_and_noncanonical_ids() {
+        let generations = Path::new("/safe/generations");
+        assert_eq!(
+            projection_generation_path(generations, "../external")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            projection_generation_path(generations, "pgen_legacy")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            projection_generation_path(generations, "gen_valid-123").unwrap(),
+            generations.join("gen_valid-123")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn projection_store_paths_share_namespace_through_database_file_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let real_parent = tempdir.path().join("real");
+        let alias_parent = tempdir.path().join("alias");
+        fs::create_dir_all(&real_parent).unwrap();
+        fs::create_dir_all(&alias_parent).unwrap();
+        let real_db = real_parent.join("kanban.db");
+        let alias_db = alias_parent.join("kanban.db");
+        fs::write(&real_db, b"sqlite-placeholder").unwrap();
+        symlink(&real_db, &alias_db).unwrap();
+
+        let real_root = projection_store_root_path(&real_db, "db_test", "tantivy_tasks").unwrap();
+        let alias_root = projection_store_root_path(&alias_db, "db_test", "tantivy_tasks").unwrap();
+        assert_eq!(alias_root, real_root);
+
+        let real_generations =
+            ensure_projection_store_generations_path(&real_db, "db_test", "tantivy_tasks").unwrap();
+        fs::create_dir(real_generations.join("gen_active")).unwrap();
+        assert_eq!(
+            checked_projection_store_generations_path(&alias_db, "db_test", "tantivy_tasks")
+                .unwrap(),
+            real_generations
+        );
+        assert!(real_generations.join("gen_active").is_dir());
+    }
+
+    #[test]
+    fn durable_quarantine_entry_preserves_corrupt_marker_evidence() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let marker = tempdir.path().join("published");
+        fs::write(&marker, "corrupt").unwrap();
+
+        let quarantined = durable_quarantine_entry(&marker).unwrap();
+
+        assert!(!marker.exists());
+        assert_eq!(fs::read_to_string(quarantined).unwrap(), "corrupt");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn durable_quarantine_entry_moves_symlink_without_following_target() {
+        use std::os::unix::fs::symlink;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let target = tempdir.path().join("canonical");
+        let marker = tempdir.path().join("published");
+        fs::write(&target, "canonical-evidence").unwrap();
+        symlink(&target, &marker).unwrap();
+
+        let quarantined = durable_quarantine_entry(&marker).unwrap();
+
+        assert!(!marker.exists());
+        assert!(
+            fs::symlink_metadata(&quarantined)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read_to_string(&target).unwrap(), "canonical-evidence");
+    }
+
+    #[test]
+    fn durable_directory_sync_does_not_swallow_missing_or_wrong_type_errors() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let missing = tempdir.path().join("missing");
+        let error = durable_sync_directory(&missing).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+
+        let file = tempdir.path().join("file");
+        fs::write(&file, "not a directory").unwrap();
+        let error = durable_sync_directory(&file).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+    }
 
     #[test]
     fn derived_store_lock_file_is_persistent_and_candidate_artifacts_are_ignored() {

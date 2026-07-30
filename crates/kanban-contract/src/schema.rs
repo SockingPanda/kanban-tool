@@ -167,30 +167,30 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         CliIndexDoctorOutput
     ),
     response_schema_root!(
-        "urn:kanban-tool:schema:cli:maintenance-status-output:v1",
-        "cli/maintenance-status-output.v1.schema.json",
-        "Kanban CLI maintenance status output v1",
+        "urn:kanban-tool:schema:cli:maintenance-status-output:v2",
+        "cli/maintenance-status-output.v2.schema.json",
+        "Kanban CLI maintenance status output v2",
         "cli.maintenance-status.output",
-        "schemas/fixtures/cli/maintenance-status-output.v1.valid.json",
-        "schemas/fixtures/cli/maintenance-status-output.v1.invalid.json",
+        "schemas/fixtures/cli/maintenance-status-output.v2.valid.json",
+        "schemas/fixtures/cli/maintenance-status-output.v2.invalid.json",
         CliMaintenanceStatusOutput
     ),
     response_schema_root!(
-        "urn:kanban-tool:schema:cli:maintenance-run-output:v1",
-        "cli/maintenance-run-output.v1.schema.json",
-        "Kanban CLI maintenance run output v1",
+        "urn:kanban-tool:schema:cli:maintenance-run-output:v2",
+        "cli/maintenance-run-output.v2.schema.json",
+        "Kanban CLI maintenance run output v2",
         "cli.maintenance-run.output",
-        "schemas/fixtures/cli/maintenance-run-output.v1.valid.json",
-        "schemas/fixtures/cli/maintenance-run-output.v1.invalid.json",
+        "schemas/fixtures/cli/maintenance-run-output.v2.valid.json",
+        "schemas/fixtures/cli/maintenance-run-output.v2.invalid.json",
         CliMaintenanceRunOutput
     ),
     response_schema_root!(
-        "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v1",
-        "cli/maintenance-rebuild-output.v1.schema.json",
-        "Kanban CLI maintenance rebuild output v1",
+        "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v2",
+        "cli/maintenance-rebuild-output.v2.schema.json",
+        "Kanban CLI maintenance rebuild output v2",
         "cli.maintenance-rebuild.output",
-        "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json",
-        "schemas/fixtures/cli/maintenance-rebuild-output.v1.invalid.json",
+        "schemas/fixtures/cli/maintenance-rebuild-output.v2.valid.json",
+        "schemas/fixtures/cli/maintenance-rebuild-output.v2.invalid.json",
         CliMaintenanceRebuildOutput
     ),
     response_schema_root!(
@@ -3064,6 +3064,24 @@ fn protocol_schema_roots() -> Vec<SchemaRoot> {
             "schemas/fixtures/helper/vector-embed-query-response.v1.valid.json",
             "schemas/fixtures/helper/vector-embed-query-response.v1.invalid.json",
             crate::VectorHelperEmbedQueryResponse
+        ),
+        request_schema_root!(
+            "urn:kanban-tool:schema:helper:vector-projection-request:v1",
+            "helper/vector-projection-request.v1.schema.json",
+            "Vector Projection Helper Request v1",
+            "helper.vector-projection.request",
+            "schemas/fixtures/helper/vector-projection-request.v1.valid.json",
+            "schemas/fixtures/helper/vector-projection-request.v1.invalid.json",
+            crate::VectorProjectionHelperRequest
+        ),
+        response_schema_root!(
+            "urn:kanban-tool:schema:helper:vector-projection-response:v1",
+            "helper/vector-projection-response.v1.schema.json",
+            "Vector Projection Helper Response v1",
+            "helper.vector-projection.response",
+            "schemas/fixtures/helper/vector-projection-response.v1.valid.json",
+            "schemas/fixtures/helper/vector-projection-response.v1.invalid.json",
+            crate::VectorProjectionHelperResponse
         ),
     ]
 }

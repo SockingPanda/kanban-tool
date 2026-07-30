@@ -1892,8 +1892,10 @@ SQLite 仍是事实源；这些命令只报告统一实体注册表、派生索�
 `--limit` 由同一 SQLite 服务查询执行；`show` 继续按精确 URI 查询并保留
 `not_found` 错误封装。人类可读输出不变。
 
-`kanban graph` 和 `kanban vector` 是辅助子进程派生层入口。默认 CLI 不链接
-Oxigraph/LanceDB 重型依赖；它依次解析 `KANBAN_GRAPH_HELPER` /
+`kanban graph` 和 `kanban vector` 是辅助子进程派生层入口。源码默认 feature 图不链接
+Oxigraph/LanceDB 重型依赖；Linux release cohort 为统一 maintenance runtime 显式启用
+`tantivy-backend,oxigraph-backend`，但 graph/vector 命令仍按辅助进程边界解析
+`KANBAN_GRAPH_HELPER` /
 `KANBAN_VECTOR_HELPER`、`/usr/lib/kanban/<helper>`、CLI 同目录二进制、
 `KANBAN_CARGO_TARGET_ROOT` 或 `CARGO_TARGET_DIR` 的 `release/<helper>`，最后回退到
 `PATH` 中的辅助程序。辅助程序缺失或返回非法封装时，`status` 返回禁用/降级状态；
@@ -1946,12 +1948,37 @@ SQLite 服务查询执行。`kanban derived status --json` 同样返回 `{"data"
 提供程序或功能不可用时，该存储可报告降级，但不影响普通 `kanban label` 增删改查和
 `task_labels` 绑定。
 
+### 15.0 `kanban maintenance`
+
+`kanban maintenance status --json` 返回 Projection v2 database identity、singleton
+owner 和全部 store 状态。owner 包含实际编译的 `capabilities[]` 与
+`build_identity`，但绝不返回 lease token。每个 store 另有闭合的
+`runtime_availability`：`available`、`unavailable` 或 `unverified`。当前二进制缺少
+backend 时使用 `unavailable` + `backend_unavailable`；活动 owner 未声明该 store
+capability 时使用 `unverified` + `maintenance_owner_capability_unverified`。因此
+`doctor --strict-derived` 不会把 feature-limited owner 误判为全部派生层健康。
+continuous `maintenance run` 只有在当前运行制品声明全部 projection store capability
+时才会领取 singleton lease；feature-limited 制品返回 `invalid_input`，且不得留下 owner
+或 lease。`run --once` 与定向 `rebuild` 仍可用于该制品实际编译的 store。
+
+`kanban maintenance run --once --json` 和
+`kanban maintenance rebuild (--all | <store>) --json` 的 `stores[]` 使用闭合
+`result` 联合：成功分支为
+`{"status":"succeeded","action":...,"processed":...}`；局部失败分支为
+`{"status":"failed","kind":"provider|backend|delivery","message":...}`。
+store 局部失败不会阻止同一 pass 尝试后续已编译 store；数据库、owner、lease/fence
+或 shutdown 的全局失败仍使命令失败。脚本必须根据 `result.status` 和结构化 `kind`
+判断，不解析 `message` 文案。
+
+上述 status/run/rebuild machine contract 都是破坏性替换后的 v2 schema root；旧 v1
+artifact 已移除，不提供新旧输出双轨。
+
 ### 15.1 `kanban doctor`
 
 检查：
 
 - 数据库文件存在。
-- 迁移完整；当前已提交的迁移版本（`schema user_version`）为 25。
+- 迁移完整；当前已提交的迁移版本（`schema user_version`）为 29。
 - `PRAGMA integrity_check`。
 - 孤立的活动运行记录。
 - `running` 任务是否缺少领取。

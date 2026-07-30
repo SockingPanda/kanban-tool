@@ -157,6 +157,7 @@ pub fn has_pending_outbox_for_target(
              SELECT 1 FROM index_outbox o \
              JOIN task_events e ON e.id=o.source_event_id \
              WHERE o.target IN (?1, 'all') \
+               AND o.projection_store IS NULL \
                AND o.status IN ('pending', 'running', 'failed') \
                AND e.board_id=?2 \
                AND e.id <= ?3 \
@@ -216,6 +217,7 @@ fn complete_outbox_for_store(
         "UPDATE index_outbox \
          SET status='done', last_error=NULL, updated_at=?1 \
          WHERE target IN (?2, 'all') \
+           AND projection_store IS NULL \
            AND status IN ('pending', 'running', 'failed') \
            AND source_event_id <= ?3 \
            AND EXISTS (SELECT 1 FROM task_events e WHERE e.id=index_outbox.source_event_id AND e.board_id=?4)",
@@ -229,7 +231,9 @@ fn has_unfinished_outbox_for_store(conn: &Connection, target: OutboxTarget) -> R
     conn.query_row(
         "SELECT EXISTS( \
              SELECT 1 FROM index_outbox \
-             WHERE target IN (?1, 'all') AND status IN ('pending', 'running', 'failed') \
+             WHERE target IN (?1, 'all') \
+               AND projection_store IS NULL \
+               AND status IN ('pending', 'running', 'failed') \
          )",
         [target.as_str()],
         |row| row.get::<_, i64>(0),
@@ -249,6 +253,7 @@ fn fail_outbox_for_store(
         "UPDATE index_outbox \
          SET status='failed', attempts=attempts + 1, last_error=?1, updated_at=?2 \
          WHERE target IN (?3, 'all') \
+           AND projection_store IS NULL \
            AND status IN ('pending', 'running') \
            AND EXISTS (SELECT 1 FROM task_events e WHERE e.id=index_outbox.source_event_id AND e.board_id=?4)",
         params![error, now, target.as_str(), board_id],

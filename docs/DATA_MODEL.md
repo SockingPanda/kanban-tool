@@ -989,6 +989,7 @@ atom 快照。它保存 `board_id`、`action_id`、`label_id_snapshot`、`atom_i
 | `id` | 自增作业 ID。 |
 | `source_event_id` | 来源 `task_events.id`，允许事件被删除/导入时置空。 |
 | `target` | `tantivy` / `oxigraph` / `lancedb` / `all`。 |
+| `projection_store` | 可空的精确 store selector；当前只允许 `target=lancedb` 时使用 `lancedb_label_atoms`。`NULL` 保持旧路由语义。 |
 | `entity_uri` | 目标实体。 |
 | `action` | `upsert` / `delete` / `rebuild`。 |
 | `payload_json` | 有界的作业载荷。 |
@@ -1034,13 +1035,35 @@ lease 和 lifecycle/error 状态。
 唯一键是 `(outbox_id, store_name)`，每个 delivery 同时携带不可空 `board_id`、连续
 store cursor、claim token、lease token、fence epoch 和 target generation。
 `projection_maintenance_owner` 是 singleton database runtime lease，保存 owner、opaque
-token、mode、expiry 与 heartbeat；public status 不返回 token。lease 获取、续约与释放
-都比较 owner + token，过期 owner 无法清除后继 owner。
+token、mode、expiry、heartbeat、已编译的 store capability 集和可追溯 build identity；
+public status 不返回 token。Migration 028 会使无法证明 capability/build identity 的旧
+lease 失效。lease 获取、续约与释放都比较 owner + token + canonical capability JSON +
+build identity，过期、被篡改或来自另一构建的 owner 无法续约，也无法清除后继 owner。
+`maintenance status` 会把当前二进制未编译的 backend 标为 `unavailable`；若活动 owner
+没有声明某个 store capability，则该 store 标为 `unverified` 并提供 fallback reason，
+不能因为 singleton owner 仍活跃就推断所有 store 都在被维护。
 
 Migration 026 在 fanout/backfill 前验证每个相关 outbox row 能从 source event 或 entity
 得到唯一 board；无法解析、orphan source event 或 event/entity board 冲突时 fail closed，
 不会以 nullable/global delivery 绕过隔离。旧 `index_outbox.status=done` 只映射为
 `legacy_done`，不伪造 v2 checkpoint 或 generation coverage。
+
+Migration 029 以 additive `index_outbox.projection_store` selector 把
+`lancedb_label_atoms` 接入同一 delivery domain，且不重建 `index_outbox` 或
+`projection_deliveries`、不改变旧 ID/cursor。旧的 `target=lancedb|all` 且 selector 为
+`NULL` 的 row 仍只路由到 `lancedb_chunks`；精确
+`target=lancedb, projection_store=lancedb_label_atoms` 只路由到标签 atom store。
+selector 与 target 在插入后不可改变；exact selector row 还被 SQLite 约束为
+`source_event_id=NULL`、`kb://board/{board_id}` 实体、`action=rebuild` 和精确 payload
+`{"scope":"board","version":1}`。所有 legacy LanceDB chunks 的 pending/complete/fail、
+dirty 与 doctor count 查询都显式要求 `projection_store IS NULL`，不能凭共享
+`target=lancedb` 吞入 label atom work。标签规范 mutation 在同一 canonical SQLite
+事务里把 `label_atom_index_boards` 标脏，并由 trigger 原子写入 board-scoped
+`rebuild` delivery。事务回滚时 dirty 标记、outbox 和 delivery 一并回滚；已有
+pending/failed board rebuild 会合并，running rebuild 期间的新 mutation或 provider
+failure 会留下新的 pending delivery，provider failure 即使没有旧 delivery 也必须生成
+可恢复 work。迁移时已有的 dirty board 会逐板 backfill，不清空错误、旧 outbox 或
+watermark。
 
 Projection v2 的 snapshot 流程先固定 cursor，并按 store 从 canonical SQLite 读取完整、
 稳定排序且强制携带 board scope 的 corpus：task search/chunk 投影包含 task 及其 comments、
@@ -1053,11 +1076,11 @@ acknowledgement 的 transaction 会再次读取 canonical corpus 和 delivery co
 变化或存在 running claim 都拒绝批量完成。增量 batch 的 receipt 还必须精确匹配 lease、
 fence、provider、generation、claim token 和 item count。
 
-当前 `lancedb_label_atoms` 的 canonical mutation 尚未进入 `projection_deliveries`，
-因此 generation begin 对该 store fail closed；其 snapshot record/manifest 只定义未来
-接入时必须满足的证据形状，不能在缺少 mutation delivery 的情况下据此发布 v2
-generation。现阶段继续使用下述 `label_atom_index_boards` per-board dirty/rebuild
-协议。
+`lancedb_label_atoms` 的 canonical mutation 已通过 Migration 029 进入
+`projection_deliveries`；`label_atom_index_boards` 在迁移期继续提供 per-board
+dirty/error 兼容状态。generation 仍必须在 runtime/backend 的 provider fingerprint、
+coverage、lease/fence 和物理 generation publish 门禁全部成立后才能发布，不能因为
+delivery seam 已存在就绕过这些证据。
 
 只有物理 store 完成 generation pointer CAS、active read-back 匹配，并证明上一物理
 generation（若存在）仍可按 generation id 读取，SQLite 才原子发布 active/previous

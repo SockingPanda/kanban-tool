@@ -171,18 +171,18 @@
         "surface": "cli",
         "test_target": "cli_projection_maintenance_contract_adoption"
       },
-      "producer_fixture": "schemas/fixtures/cli/maintenance-status-output.v1.valid.json"
+      "producer_fixture": "schemas/fixtures/cli/maintenance-status-output.v2.valid.json"
     },
     "binding": "exact_surface",
     "direction": "serialize",
     "exclusion": null,
-    "fixture": "schemas/fixtures/cli/maintenance-status-output.v1.valid.json",
+    "fixture": "schemas/fixtures/cli/maintenance-status-output.v2.valid.json",
     "granularity": "exact",
     "id": "cli.maintenance-status.output",
     "migration": "adopted",
     "operation": "maintenance status",
     "path": "kanban maintenance status --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:maintenance-status-output:v1",
+    "schema_id": "urn:kanban-tool:schema:cli:maintenance-status-output:v2",
     "strictness": "deny_unknown_fields",
     "surface": "cli",
     "transport": {
@@ -209,18 +209,18 @@
         "surface": "cli",
         "test_target": "cli_projection_maintenance_contract_adoption"
       },
-      "producer_fixture": "schemas/fixtures/cli/maintenance-run-output.v1.valid.json"
+      "producer_fixture": "schemas/fixtures/cli/maintenance-run-output.v2.valid.json"
     },
     "binding": "exact_surface",
     "direction": "serialize",
     "exclusion": null,
-    "fixture": "schemas/fixtures/cli/maintenance-run-output.v1.valid.json",
+    "fixture": "schemas/fixtures/cli/maintenance-run-output.v2.valid.json",
     "granularity": "exact",
     "id": "cli.maintenance-run.output",
     "migration": "adopted",
     "operation": "maintenance run",
     "path": "kanban maintenance run --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:maintenance-run-output:v1",
+    "schema_id": "urn:kanban-tool:schema:cli:maintenance-run-output:v2",
     "strictness": "deny_unknown_fields",
     "surface": "cli",
     "transport": {
@@ -247,18 +247,18 @@
         "surface": "cli",
         "test_target": "cli_projection_maintenance_contract_adoption"
       },
-      "producer_fixture": "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json"
+      "producer_fixture": "schemas/fixtures/cli/maintenance-rebuild-output.v2.valid.json"
     },
     "binding": "exact_surface",
     "direction": "serialize",
     "exclusion": null,
-    "fixture": "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json",
+    "fixture": "schemas/fixtures/cli/maintenance-rebuild-output.v2.valid.json",
     "granularity": "exact",
     "id": "cli.maintenance-rebuild.output",
     "migration": "adopted",
     "operation": "maintenance rebuild",
     "path": "kanban maintenance rebuild --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v1",
+    "schema_id": "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v2",
     "strictness": "deny_unknown_fields",
     "surface": "cli",
     "transport": {
@@ -14925,6 +14925,82 @@
       "location": "success",
       "operation_key": "GET /api/v1/tasks/:task_id/neighborhood",
       "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "helper.vector-projection.request",
+        "direction": "deserialize",
+        "exact_test": "vector_projection_request_fixture_is_consumed_by_real_projection_handler",
+        "operation": "vector projection helper protocol",
+        "package": "kanban-vector-lancedb",
+        "surface": "helper",
+        "test_target": "vector_projection_contract_adoption"
+      },
+      "producer": {
+        "contract_id": "helper.vector-projection.request",
+        "direction": "deserialize",
+        "exact_test": "vector_projection_request_fixture_is_produced_by_contract_dto",
+        "operation": "vector projection helper protocol",
+        "package": "kanban-vector-lancedb",
+        "surface": "helper",
+        "test_target": "vector_projection_contract_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/helper/vector-projection-request.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/helper/vector-projection-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "helper.vector-projection.request",
+    "migration": "adopted",
+    "operation": "vector projection helper protocol",
+    "path": "kanban-vector-lancedb projection stdin",
+    "schema_id": "urn:kanban-tool:schema:helper:vector-projection-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "helper",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "helper.vector-projection.response",
+        "direction": "serialize",
+        "exact_test": "vector_projection_response_fixture_is_consumed_by_runtime_protocol_decoder",
+        "operation": "vector projection helper protocol",
+        "package": "kanban-vector-lancedb",
+        "surface": "helper",
+        "test_target": "vector_projection_contract_adoption"
+      },
+      "producer": {
+        "contract_id": "helper.vector-projection.response",
+        "direction": "serialize",
+        "exact_test": "vector_projection_response_fixture_is_produced_by_real_projection_handler",
+        "operation": "vector projection helper protocol",
+        "package": "kanban-vector-lancedb",
+        "surface": "helper",
+        "test_target": "vector_projection_contract_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/helper/vector-projection-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/helper/vector-projection-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "helper.vector-projection.response",
+    "migration": "adopted",
+    "operation": "vector projection helper protocol",
+    "path": "kanban-vector-lancedb projection stdout",
+    "schema_id": "urn:kanban-tool:schema:helper:vector-projection-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "helper",
+    "transport": {
+      "kind": "no_transport"
     }
   },
   {

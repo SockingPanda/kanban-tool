@@ -761,8 +761,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
     adopted_cli_output_contract!(
         "cli.maintenance-status.output",
         "maintenance status",
-        "urn:kanban-tool:schema:cli:maintenance-status-output:v1",
-        "schemas/fixtures/cli/maintenance-status-output.v1.valid.json",
+        "urn:kanban-tool:schema:cli:maintenance-status-output:v2",
+        "schemas/fixtures/cli/maintenance-status-output.v2.valid.json",
         "cli_projection_maintenance_contract_adoption",
         "maintenance_status_output_fixture_is_produced_by_real_cli",
         "maintenance_status_output_fixture_is_consumed_by_public_contract"
@@ -770,8 +770,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
     adopted_cli_output_contract!(
         "cli.maintenance-run.output",
         "maintenance run",
-        "urn:kanban-tool:schema:cli:maintenance-run-output:v1",
-        "schemas/fixtures/cli/maintenance-run-output.v1.valid.json",
+        "urn:kanban-tool:schema:cli:maintenance-run-output:v2",
+        "schemas/fixtures/cli/maintenance-run-output.v2.valid.json",
         "cli_projection_maintenance_contract_adoption",
         "maintenance_run_output_fixture_is_produced_by_real_cli",
         "maintenance_run_output_fixture_is_consumed_by_public_contract"
@@ -779,8 +779,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
     adopted_cli_output_contract!(
         "cli.maintenance-rebuild.output",
         "maintenance rebuild",
-        "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v1",
-        "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json",
+        "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v2",
+        "schemas/fixtures/cli/maintenance-rebuild-output.v2.valid.json",
         "cli_projection_maintenance_contract_adoption",
         "maintenance_rebuild_output_fixture_is_produced_by_real_cli",
         "maintenance_rebuild_output_fixture_is_consumed_by_public_contract"
@@ -4758,11 +4758,89 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             let mut inventory = OPERATION_INVENTORY.to_vec();
             adopt_phase5_api_contracts(&mut inventory);
             adopt_protocol_contracts(&mut inventory);
+            inventory.extend(vector_projection_protocol_contracts());
             inventory.extend(portable_operation_contracts());
             inventory.extend(crate::headers::header_operation_contracts());
             inventory
         })
         .as_slice()
+}
+
+fn vector_projection_protocol_contracts() -> [OperationContract; 2] {
+    [
+        OperationContract {
+            id: "helper.vector-projection.request",
+            path: "kanban-vector-lancedb projection stdin",
+            surface: ContractSurface::Helper,
+            operation: "vector projection helper protocol",
+            direction: ContractDirection::Deserialize,
+            granularity: ContractGranularity::Exact,
+            strictness: ContractStrictness::DenyUnknownFields,
+            schema_id: Some("urn:kanban-tool:schema:helper:vector-projection-request:v1"),
+            fixture: Some("schemas/fixtures/helper/vector-projection-request.v1.valid.json"),
+            adoption: Some(AdoptionEvidence {
+                producer_fixture: "schemas/fixtures/helper/vector-projection-request.v1.valid.json",
+                producer: AdoptionWitness {
+                    operation: "vector projection helper protocol",
+                    contract_id: "helper.vector-projection.request",
+                    surface: ContractSurface::Helper,
+                    direction: ContractDirection::Deserialize,
+                    package: "kanban-vector-lancedb",
+                    test_target: "vector_projection_contract_adoption",
+                    exact_test: "vector_projection_request_fixture_is_produced_by_contract_dto",
+                },
+                consumer: AdoptionWitness {
+                    operation: "vector projection helper protocol",
+                    contract_id: "helper.vector-projection.request",
+                    surface: ContractSurface::Helper,
+                    direction: ContractDirection::Deserialize,
+                    package: "kanban-vector-lancedb",
+                    test_target: "vector_projection_contract_adoption",
+                    exact_test: "vector_projection_request_fixture_is_consumed_by_real_projection_handler",
+                },
+            }),
+            exclusion: None,
+            migration: MigrationState::Adopted,
+            transport: ContractTransport::NoTransport,
+            binding: ContractBinding::ExactSurface,
+        },
+        OperationContract {
+            id: "helper.vector-projection.response",
+            path: "kanban-vector-lancedb projection stdout",
+            surface: ContractSurface::Helper,
+            operation: "vector projection helper protocol",
+            direction: ContractDirection::Serialize,
+            granularity: ContractGranularity::Exact,
+            strictness: ContractStrictness::DenyUnknownFields,
+            schema_id: Some("urn:kanban-tool:schema:helper:vector-projection-response:v1"),
+            fixture: Some("schemas/fixtures/helper/vector-projection-response.v1.valid.json"),
+            adoption: Some(AdoptionEvidence {
+                producer_fixture: "schemas/fixtures/helper/vector-projection-response.v1.valid.json",
+                producer: AdoptionWitness {
+                    operation: "vector projection helper protocol",
+                    contract_id: "helper.vector-projection.response",
+                    surface: ContractSurface::Helper,
+                    direction: ContractDirection::Serialize,
+                    package: "kanban-vector-lancedb",
+                    test_target: "vector_projection_contract_adoption",
+                    exact_test: "vector_projection_response_fixture_is_produced_by_real_projection_handler",
+                },
+                consumer: AdoptionWitness {
+                    operation: "vector projection helper protocol",
+                    contract_id: "helper.vector-projection.response",
+                    surface: ContractSurface::Helper,
+                    direction: ContractDirection::Serialize,
+                    package: "kanban-vector-lancedb",
+                    test_target: "vector_projection_contract_adoption",
+                    exact_test: "vector_projection_response_fixture_is_consumed_by_runtime_protocol_decoder",
+                },
+            }),
+            exclusion: None,
+            migration: MigrationState::Adopted,
+            transport: ContractTransport::NoTransport,
+            binding: ContractBinding::ExactSurface,
+        },
+    ]
 }
 
 macro_rules! phase5_api_request_contract {

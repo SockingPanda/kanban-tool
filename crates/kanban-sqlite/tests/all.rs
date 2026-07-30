@@ -14,6 +14,7 @@ mod suite {
     mod label_semantics;
     mod maintenance;
     mod maintenance_runtime;
+    mod projection_label_deliveries;
     mod projection_v2;
     mod retry_policy;
     mod search_sqlite;

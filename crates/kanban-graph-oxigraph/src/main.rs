@@ -181,6 +181,7 @@ struct ActiveProjection {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PhysicalEvidence {
     manifest: PhysicalManifest,
     fingerprint: String,
@@ -188,6 +189,7 @@ struct PhysicalEvidence {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PhysicalManifest {
     store_name: String,
     database_instance_id: String,
@@ -213,9 +215,14 @@ fn graph_store(args: &StoreArgs) -> Result<ResolvedGraph> {
             active: None,
         });
     };
-    let root = kanban_local::projection_store_root_path(&args.db, OXIGRAPH_RELATIONS_STORE)?;
-    validate_active_generation(&root, &active)?;
-    let generation_path = root.join("generations").join(&active.generation);
+    let generations = kanban_local::checked_projection_store_generations_path(
+        &args.db,
+        &active.database_instance_id,
+        OXIGRAPH_RELATIONS_STORE,
+    )?;
+    validate_active_generation(&generations, &active)?;
+    let generation_path =
+        kanban_local::projection_generation_path(&generations, &active.generation)?;
     validate_canonical_content(&conn, &generation_path)?;
     Ok(ResolvedGraph {
         graph: OxigraphStore::open(generation_path)?,
@@ -355,12 +362,30 @@ fn validate_physical_evidence(path: &std::path::Path, active: &ActiveProjection)
     Ok(())
 }
 
-fn validate_active_generation(root: &std::path::Path, active: &ActiveProjection) -> Result<()> {
-    let generations = root.join("generations");
-    let active_path = generations.join(&active.generation);
-    if !active_path.join("published").is_file() {
-        anyhow::bail!("Oxigraph projection v2 active generation is not published");
+fn validate_active_generation(
+    generations: &std::path::Path,
+    active: &ActiveProjection,
+) -> Result<()> {
+    let active_path = kanban_local::projection_generation_path(generations, &active.generation)?;
+    let active_marker = active_path.join("published");
+    match std::fs::symlink_metadata(&active_marker) {
+        Ok(metadata) if metadata.is_file() => {}
+        Ok(_) => {
+            anyhow::bail!("Oxigraph projection v2 published marker is not a regular file");
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!("Oxigraph projection v2 active generation is not published");
+        }
+        Err(error) => {
+            return Err(error).context("Oxigraph projection v2 published marker is unavailable");
+        }
     }
+    validate_published_marker(
+        &active_marker,
+        &active.database_instance_id,
+        &active.generation,
+        active.fence_epoch,
+    )?;
     validate_physical_evidence(&active_path, active)?;
 
     let mut highest = None;
@@ -368,8 +393,22 @@ fn validate_active_generation(root: &std::path::Path, active: &ActiveProjection)
         .context("Oxigraph projection v2 generations are unavailable")?
     {
         let entry = entry?;
-        if !entry.file_type()?.is_dir() || !entry.path().join("published").is_file() {
+        if !entry.file_type()?.is_dir() {
             continue;
+        }
+        let marker = entry.path().join("published");
+        match std::fs::symlink_metadata(&marker) {
+            Ok(metadata) if metadata.is_file() => {}
+            Ok(_) => continue,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!(
+                        "published Oxigraph marker is unavailable: {}",
+                        marker.display()
+                    )
+                });
+            }
         }
         let Ok(physical) = read_physical_evidence(&entry.path()) else {
             continue;
@@ -384,6 +423,16 @@ fn validate_active_generation(root: &std::path::Path, active: &ActiveProjection)
         {
             continue;
         }
+        if validate_published_marker(
+            &marker,
+            &manifest.database_instance_id,
+            &manifest.generation,
+            manifest.fence_epoch,
+        )
+        .is_err()
+        {
+            continue;
+        }
         let candidate = (manifest.fence_epoch, manifest.generation);
         if highest.as_ref().is_none_or(|current| candidate > *current) {
             highest = Some(candidate);
@@ -393,6 +442,35 @@ fn validate_active_generation(root: &std::path::Path, active: &ActiveProjection)
         anyhow::bail!(
             "Oxigraph projection v2 SQLite active is not the physically published active generation"
         );
+    }
+    Ok(())
+}
+
+fn published_marker_contents(
+    database_instance_id: &str,
+    generation: &str,
+    fence_epoch: i64,
+) -> Vec<u8> {
+    format!(
+        "database_instance_id={database_instance_id}\ngeneration={generation}\nfence_epoch={fence_epoch}\n"
+    )
+    .into_bytes()
+}
+
+fn validate_published_marker(
+    path: &std::path::Path,
+    database_instance_id: &str,
+    generation: &str,
+    fence_epoch: i64,
+) -> Result<()> {
+    let actual = std::fs::read(path).with_context(|| {
+        format!(
+            "Oxigraph projection v2 published marker is unavailable: {}",
+            path.display()
+        )
+    })?;
+    if actual != published_marker_contents(database_instance_id, generation, fence_epoch) {
+        anyhow::bail!("Oxigraph projection v2 published marker does not match generation evidence");
     }
     Ok(())
 }
@@ -606,7 +684,7 @@ mod tests {
              );
              CREATE TABLE projection_deliveries(store_name TEXT,status TEXT);
              INSERT INTO projection_store_state VALUES(
-                 'oxigraph_relations','v2','db_test',2,1,'pgen_test','fp_test',7,11,
+                 'oxigraph_relations','v2','db_test',2,1,'gen_test','fp_test',7,11,
                  'oxigraph','oxigraph-relations-v2',3,'canonical',4,'delivery',NULL,NULL
              );",
         )
@@ -622,7 +700,7 @@ mod tests {
                 .expect("complete evidence")
                 .expect("active generation")
                 .generation,
-            "pgen_test"
+            "gen_test"
         );
         conn.execute(
             "INSERT INTO projection_deliveries VALUES('oxigraph_relations','pending')",
@@ -705,7 +783,7 @@ mod tests {
                 "database_instance_id": "db_test",
                 "protocol_version": 2,
                 "schema_version": 1,
-                "generation": "pgen_test",
+                "generation": "gen_test",
                 "fence_epoch": 7,
                 "snapshot_cursor": 11,
                 "provider": "oxigraph",
@@ -751,7 +829,22 @@ mod tests {
             .expect("complete evidence")
             .expect("active generation");
         let temp = tempfile::tempdir().expect("temporary projection root");
-        let generation = temp.path().join("generations").join("pgen_test");
+        let generations = temp.path().join("generations");
+        let traversal_sentinel = temp.path().join("traversal-sentinel");
+        std::fs::write(&traversal_sentinel, b"must-stay").expect("sentinel");
+        let mut traversal = active.clone();
+        traversal.generation = "../../traversal-sentinel".to_owned();
+        let error = validate_active_generation(&generations, &traversal)
+            .expect_err("generation traversal must fail closed");
+        assert!(
+            error.to_string().contains("projection generation id"),
+            "{error}"
+        );
+        assert_eq!(
+            std::fs::read(&traversal_sentinel).expect("sentinel remains"),
+            b"must-stay"
+        );
+        let generation = generations.join("gen_test");
         std::fs::create_dir_all(&generation).expect("generation directory");
         let payload = serde_json::json!({
             "manifest": {
@@ -759,7 +852,7 @@ mod tests {
                 "database_instance_id": "db_test",
                 "protocol_version": 2,
                 "schema_version": 1,
-                "generation": "pgen_test",
+                "generation": "gen_test",
                 "fence_epoch": 7,
                 "snapshot_cursor": 11,
                 "provider": "oxigraph",
@@ -780,17 +873,37 @@ mod tests {
         )
         .expect("metadata");
 
-        let error = validate_active_generation(temp.path(), &active)
+        let error = validate_active_generation(&generations, &active)
             .expect_err("unpublished generation must fail closed");
         assert!(error.to_string().contains("published"));
 
-        std::fs::write(generation.join("published"), b"published").expect("marker");
-        validate_active_generation(temp.path(), &active).expect("published active");
+        std::fs::write(generation.join("published"), b"published").expect("corrupt marker");
+        let error = validate_active_generation(&generations, &active)
+            .expect_err("corrupt marker must fail closed");
+        assert!(error.to_string().contains("marker does not match"));
+        std::fs::write(
+            generation.join("published"),
+            published_marker_contents("db_test", "gen_test", 7),
+        )
+        .expect("marker");
+        validate_active_generation(&generations, &active).expect("published active");
 
-        let newer = temp.path().join("generations").join("pgen_newer");
+        let corrupt_previous = generations.join("gen_previous");
+        std::fs::create_dir_all(&corrupt_previous).expect("previous generation directory");
+        std::fs::write(
+            corrupt_previous.join("kb-projection-meta.json"),
+            b"{not-json",
+        )
+        .expect("corrupt previous metadata");
+        std::fs::write(corrupt_previous.join("published"), b"corrupt")
+            .expect("corrupt previous marker");
+        validate_active_generation(&generations, &active)
+            .expect("corrupt retained previous must not hide the exact active generation");
+
+        let newer = generations.join("gen_newer");
         std::fs::create_dir_all(&newer).expect("newer generation directory");
         let mut newer_payload = payload;
-        newer_payload["manifest"]["generation"] = serde_json::json!("pgen_newer");
+        newer_payload["manifest"]["generation"] = serde_json::json!("gen_newer");
         newer_payload["manifest"]["fence_epoch"] = serde_json::json!(8);
         std::fs::write(newer.join("relations.json"), b"[]").expect("newer relations");
         std::fs::write(
@@ -798,8 +911,12 @@ mod tests {
             serde_json::to_vec(&newer_payload).expect("newer metadata JSON"),
         )
         .expect("newer metadata");
-        std::fs::write(newer.join("published"), b"published").expect("newer marker");
-        let error = validate_active_generation(temp.path(), &active)
+        std::fs::write(
+            newer.join("published"),
+            published_marker_contents("db_test", "gen_newer", 8),
+        )
+        .expect("newer marker");
+        let error = validate_active_generation(&generations, &active)
             .expect_err("newer published generation must win");
         assert!(error.to_string().contains("physically published active"));
     }

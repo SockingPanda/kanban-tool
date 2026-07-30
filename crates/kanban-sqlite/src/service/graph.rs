@@ -58,6 +58,7 @@ pub(crate) fn context_vector_items(
         .query(&VectorQuery {
             text: task_context_text(task),
             limit,
+            board_id: task.board_id.clone(),
         })
         .map_err(vector_storage)?;
     vector_hits_to_context_items(path, hits)

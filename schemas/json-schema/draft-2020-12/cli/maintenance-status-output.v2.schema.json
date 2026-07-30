@@ -6,6 +6,18 @@
         "active": {
           "type": "boolean"
         },
+        "build_identity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "capabilities": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "last_heartbeat_at": {
           "format": "int64",
           "type": [
@@ -36,6 +48,8 @@
       "required": [
         "owner",
         "mode",
+        "capabilities",
+        "build_identity",
         "lease_expires_at",
         "last_heartbeat_at",
         "active"
@@ -69,6 +83,14 @@
         "stores"
       ],
       "type": "object"
+    },
+    "CliProjectionRuntimeAvailability": {
+      "enum": [
+        "available",
+        "unavailable",
+        "unverified"
+      ],
+      "type": "string"
     },
     "CliProjectionStoreStatus": {
       "additionalProperties": false,
@@ -240,6 +262,9 @@
           "format": "int64",
           "type": "integer"
         },
+        "runtime_availability": {
+          "$ref": "#/$defs/CliProjectionRuntimeAvailability"
+        },
         "schema_version": {
           "format": "int64",
           "type": "integer"
@@ -280,6 +305,7 @@
         "checkpoint_cursor",
         "legacy_checkpoint_cursor",
         "lifecycle_status",
+        "runtime_availability",
         "owner",
         "fence_epoch",
         "lease_expires_at",
@@ -296,7 +322,7 @@
       "type": "object"
     }
   },
-  "$id": "urn:kanban-tool:schema:cli:maintenance-status-output:v1",
+  "$id": "urn:kanban-tool:schema:cli:maintenance-status-output:v2",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -307,6 +333,6 @@
   "required": [
     "data"
   ],
-  "title": "Kanban CLI maintenance status output v1",
+  "title": "Kanban CLI maintenance status output v2",
   "type": "object"
 }

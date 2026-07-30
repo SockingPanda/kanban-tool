@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use arrow_array::Array;
@@ -18,7 +19,7 @@ use kanban_vector::{
     ChunkVectorStore, EmbeddingChunk, EmbeddingProvider, LabelAtomHit, LabelAtomQuery,
     LabelAtomVector, LabelAtomVectorHit, LabelAtomVectorQuery, LabelAtomVectorStore,
     QueryEmbeddingProvider, VectorError, VectorHit, VectorQuery, VectorStoreBackend,
-    VectorStoreStatus, ensure_dimensions,
+    VectorStoreStatus, ensure_dimensions, normalize_semantic_text, semantic_content_hash,
 };
 
 const VECTOR_COLUMN: &str = "vector";
@@ -31,6 +32,7 @@ pub struct LanceDbStore {
 
 impl LanceDbStore {
     pub fn connect(config: LanceDbConfig) -> Result<Self, VectorError> {
+        config.execution_policy.validate()?;
         let provider = config.provider.clone();
         let runtime = Runtime::new().map_err(|err| VectorError::Store(err.to_string()))?;
         if let Some(provider) = provider.as_ref() {
@@ -129,14 +131,21 @@ impl ChunkVectorStore for LanceDbStore {
                 actual: chunk.embedding_model.clone(),
             });
         }
+        if chunks
+            .iter()
+            .any(|chunk| chunk.board_id.as_deref().is_none_or(str::is_empty))
+        {
+            return Err(VectorError::Store(
+                "LanceDB task chunks require a non-empty board_id".to_owned(),
+            ));
+        }
 
         let dimensions = provider.dimensions();
-        let mut embeddings = Vec::with_capacity(chunks.len());
-        for chunk in chunks {
-            let embedding = provider.embed(&chunk.text)?;
-            ensure_dimensions(&embedding, dimensions)?;
-            embeddings.push(embedding);
-        }
+        let embeddings = embed_deduplicated(
+            provider.as_ref(),
+            chunks.iter().map(|chunk| chunk.text.as_str()),
+            &self.config.execution_policy,
+        )?;
 
         let table = self.table(dimensions)?;
         let batch = chunks_to_batch(chunks, &embeddings, dimensions)?;
@@ -210,12 +219,15 @@ impl ChunkVectorStore for LanceDbStore {
                 Err(err) => return Err(map_lancedb_error(err)),
             };
             validate_vector_schema(&table, provider.dimensions()).await?;
+            let filter = col("embedding_model")
+                .eq(lit(provider.embedding_model()))
+                .and(col("board_id").eq(lit(query.board_id.clone())));
             let stream = table
                 .query()
                 .nearest_to(embedding)
                 .map_err(map_lancedb_error)?
                 .column(VECTOR_COLUMN)
-                .only_if_expr(col("embedding_model").eq(lit(provider.embedding_model())))
+                .only_if_expr(filter)
                 .limit(query.limit)
                 .select(Select::columns(&[
                     "chunk_uri",
@@ -279,12 +291,11 @@ impl LabelAtomVectorStore for LanceDbStore {
         }
 
         let dimensions = provider.dimensions();
-        let mut embeddings = Vec::with_capacity(atoms.len());
-        for atom in atoms {
-            let embedding = provider.embed(&atom.text)?;
-            ensure_dimensions(&embedding, dimensions)?;
-            embeddings.push(embedding);
-        }
+        let embeddings = embed_deduplicated(
+            provider.as_ref(),
+            atoms.iter().map(|atom| atom.text.as_str()),
+            &self.config.execution_policy,
+        )?;
 
         let table = self.label_atom_table(dimensions)?;
         let batch = label_atoms_to_batch(atoms, &embeddings, dimensions)?;
@@ -951,11 +962,93 @@ fn map_lancedb_error(err: lancedb::Error) -> VectorError {
     VectorError::Store(err.to_string())
 }
 
+fn embed_deduplicated<'a>(
+    provider: &dyn EmbeddingProvider,
+    texts: impl IntoIterator<Item = &'a str>,
+    policy: &crate::EmbeddingExecutionPolicy,
+) -> Result<Vec<Vec<f32>>, VectorError> {
+    let mut unique_by_hash = HashMap::<String, usize>::new();
+    let mut unique_texts = Vec::<String>::new();
+    let mut source_indexes = Vec::<usize>::new();
+
+    for text in texts {
+        let normalized = normalize_semantic_text(text);
+        let content_hash = semantic_content_hash(&normalized);
+        let unique_index = match unique_by_hash.get(&content_hash) {
+            Some(index) => *index,
+            None => {
+                let index = unique_texts.len();
+                unique_texts.push(normalized);
+                unique_by_hash.insert(content_hash, index);
+                index
+            }
+        };
+        source_indexes.push(unique_index);
+    }
+
+    let mut unique_embeddings = Vec::with_capacity(unique_texts.len());
+    for (batch_index, batch) in unique_texts.chunks(policy.batch_size).enumerate() {
+        if batch_index > 0 && !policy.min_batch_interval.is_zero() {
+            std::thread::sleep(policy.min_batch_interval);
+        }
+        let embeddings = embed_batch_with_retry(provider, batch, policy)?;
+        if embeddings.len() != batch.len() {
+            return Err(VectorError::Store(format!(
+                "embedding provider batch cardinality mismatch: expected {}, got {}",
+                batch.len(),
+                embeddings.len()
+            )));
+        }
+        for embedding in &embeddings {
+            ensure_dimensions(embedding, provider.dimensions())?;
+        }
+        unique_embeddings.extend(embeddings);
+    }
+
+    source_indexes
+        .into_iter()
+        .map(|index| {
+            unique_embeddings
+                .get(index)
+                .cloned()
+                .ok_or_else(|| VectorError::Store("embedding batch index was missing".to_owned()))
+        })
+        .collect()
+}
+
+fn embed_batch_with_retry(
+    provider: &dyn EmbeddingProvider,
+    texts: &[String],
+    policy: &crate::EmbeddingExecutionPolicy,
+) -> Result<Vec<Vec<f32>>, VectorError> {
+    let mut retry_backoff = policy.initial_retry_backoff;
+    for attempt in 0..=policy.max_retries {
+        match provider.embed_batch(texts) {
+            Ok(embeddings) => return Ok(embeddings),
+            Err(error) if error.is_retryable() && attempt < policy.max_retries => {
+                let delay = retry_backoff.max(policy.min_batch_interval);
+                if !delay.is_zero() {
+                    std::thread::sleep(delay);
+                }
+                retry_backoff = retry_backoff
+                    .saturating_mul(2)
+                    .min(policy.max_retry_backoff);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!("embedding retry loop always returns")
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use std::time::Duration;
 
-    use crate::{LanceDbConfig, LanceDbStore};
+    use crate::{EmbeddingExecutionPolicy, LanceDbConfig, LanceDbStore};
     use kanban_vector::{
         ChunkBuilder, ChunkVectorStore, EmbeddingProvider, LabelAtomQuery, LabelAtomVector,
         LabelAtomVectorQuery, LabelAtomVectorStore, TaskChunkSource, VectorError, VectorQuery,
@@ -1014,6 +1107,72 @@ mod tests {
         }
     }
 
+    struct BatchCountingProvider {
+        embed_calls: Arc<AtomicUsize>,
+        batch_calls: Arc<AtomicUsize>,
+        batch_items: Arc<AtomicUsize>,
+    }
+
+    impl EmbeddingProvider for BatchCountingProvider {
+        fn embedding_model(&self) -> &str {
+            "batch-test"
+        }
+
+        fn dimensions(&self) -> usize {
+            3
+        }
+
+        fn embed(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
+            self.embed_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+
+        fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, VectorError> {
+            self.batch_calls.fetch_add(1, Ordering::SeqCst);
+            self.batch_items.fetch_add(texts.len(), Ordering::SeqCst);
+            Ok(vec![vec![1.0, 0.0, 0.0]; texts.len()])
+        }
+    }
+
+    struct RetryOnceProvider {
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl EmbeddingProvider for RetryOnceProvider {
+        fn embedding_model(&self) -> &str {
+            "retry-test"
+        }
+
+        fn dimensions(&self) -> usize {
+            3
+        }
+
+        fn embed(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
+            unreachable!("LanceDB writes must use the batch provider seam")
+        }
+
+        fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, VectorError> {
+            let call = self.calls.fetch_add(1, Ordering::SeqCst);
+            if call == 0 {
+                return Err(VectorError::Provider {
+                    message: "temporary provider outage".to_owned(),
+                    retryable: true,
+                });
+            }
+            Ok(vec![vec![1.0, 0.0, 0.0]; texts.len()])
+        }
+    }
+
+    fn test_execution_policy(batch_size: usize) -> EmbeddingExecutionPolicy {
+        EmbeddingExecutionPolicy {
+            batch_size,
+            min_batch_interval: Duration::ZERO,
+            max_retries: 2,
+            initial_retry_backoff: Duration::ZERO,
+            max_retry_backoff: Duration::ZERO,
+        }
+    }
+
     #[test]
     fn degraded_lancedb_store_reports_unavailable_without_provider() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -1064,6 +1223,7 @@ mod tests {
             .query(&VectorQuery {
                 text: "alpha".to_owned(),
                 limit: 1,
+                board_id: "b_1".to_owned(),
             })
             .unwrap();
 
@@ -1091,6 +1251,7 @@ mod tests {
             .query(&VectorQuery {
                 text: "alpha".to_owned(),
                 limit: 10,
+                board_id: "b_1".to_owned(),
             })
             .unwrap();
 
@@ -1118,6 +1279,7 @@ mod tests {
             .query(&VectorQuery {
                 text: "alpha".to_owned(),
                 limit: 10,
+                board_id: "b_second".to_owned(),
             })
             .unwrap();
 
@@ -1131,6 +1293,102 @@ mod tests {
                 .any(|hit| hit.chunk.entity_uri.as_str() == "kb://task/t_beta"),
             "{hits:?}"
         );
+    }
+
+    #[test]
+    fn lancedb_store_queries_chunks_with_mandatory_board_scope() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let provider = Arc::new(StaticProvider);
+        let store = LanceDbStore::connect(LanceDbConfig::new(tempdir.path(), provider)).unwrap();
+        let builder = ChunkBuilder::new("static-test");
+        let mut first_board = build_chunk(&builder, "t_alpha", "shared work");
+        first_board.board_id = Some("b_first".to_owned());
+        let mut second_board = build_chunk(&builder, "t_beta", "shared work");
+        second_board.board_id = Some("b_second".to_owned());
+
+        store.upsert(&[first_board, second_board]).unwrap();
+        let hits = store
+            .query(&VectorQuery {
+                text: "shared".to_owned(),
+                limit: 10,
+                board_id: "b_first".to_owned(),
+            })
+            .unwrap();
+
+        assert_eq!(hits.len(), 1, "{hits:?}");
+        assert_eq!(hits[0].chunk.entity_uri.as_str(), "kb://task/t_alpha");
+    }
+
+    #[test]
+    fn lancedb_store_batches_and_deduplicates_identical_chunk_embeddings() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let embed_calls = Arc::new(AtomicUsize::new(0));
+        let batch_calls = Arc::new(AtomicUsize::new(0));
+        let batch_items = Arc::new(AtomicUsize::new(0));
+        let provider = Arc::new(BatchCountingProvider {
+            embed_calls: embed_calls.clone(),
+            batch_calls: batch_calls.clone(),
+            batch_items: batch_items.clone(),
+        });
+        let store = LanceDbStore::connect(LanceDbConfig::new(tempdir.path(), provider)).unwrap();
+        let builder = ChunkBuilder::new("batch-test");
+
+        store
+            .upsert(&[
+                build_chunk(&builder, "t_alpha", "same semantic text"),
+                build_chunk(&builder, "t_beta", "same semantic text"),
+            ])
+            .unwrap();
+
+        assert_eq!(embed_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(batch_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(batch_items.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn lancedb_store_limits_embedding_provider_batch_size() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let embed_calls = Arc::new(AtomicUsize::new(0));
+        let batch_calls = Arc::new(AtomicUsize::new(0));
+        let batch_items = Arc::new(AtomicUsize::new(0));
+        let provider = Arc::new(BatchCountingProvider {
+            embed_calls,
+            batch_calls: batch_calls.clone(),
+            batch_items: batch_items.clone(),
+        });
+        let config = LanceDbConfig::new(tempdir.path(), provider)
+            .with_execution_policy(test_execution_policy(1));
+        let store = LanceDbStore::connect(config).unwrap();
+        let builder = ChunkBuilder::new("batch-test");
+
+        store
+            .upsert(&[
+                build_chunk(&builder, "t_alpha", "first unique text"),
+                build_chunk(&builder, "t_beta", "second unique text"),
+            ])
+            .unwrap();
+
+        assert_eq!(batch_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(batch_items.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn lancedb_store_retries_only_retryable_provider_failures() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let provider = Arc::new(RetryOnceProvider {
+            calls: calls.clone(),
+        });
+        let config = LanceDbConfig::new(tempdir.path(), provider)
+            .with_execution_policy(test_execution_policy(8));
+        let store = LanceDbStore::connect(config).unwrap();
+        let builder = ChunkBuilder::new("retry-test");
+
+        store
+            .upsert(&[build_chunk(&builder, "t_alpha", "retry text")])
+            .unwrap();
+
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 
     #[test]
@@ -1155,6 +1413,7 @@ mod tests {
                 .query(&VectorQuery {
                     text: "shared".to_owned(),
                     limit: 10,
+                    board_id: "b_1".to_owned(),
                 })
                 .unwrap()
                 .is_empty()
@@ -1170,6 +1429,7 @@ mod tests {
             .query(&VectorQuery {
                 text: "shared".to_owned(),
                 limit: 10,
+                board_id: "b_1".to_owned(),
             })
             .unwrap();
         assert_eq!(other_hits.len(), 1);
@@ -1184,6 +1444,7 @@ mod tests {
                 .query(&VectorQuery {
                     text: "shared".to_owned(),
                     limit: 10,
+                    board_id: "b_1".to_owned(),
                 })
                 .unwrap()
                 .is_empty()
@@ -1192,6 +1453,7 @@ mod tests {
             .query(&VectorQuery {
                 text: "shared".to_owned(),
                 limit: 10,
+                board_id: "b_1".to_owned(),
             })
             .unwrap();
         assert_eq!(other_hits.len(), 1);
@@ -1271,6 +1533,7 @@ mod tests {
                 .query(&VectorQuery {
                     text: "alpha".to_owned(),
                     limit: 10,
+                    board_id: "b_1".to_owned(),
                 })
                 .unwrap()
                 .is_empty(),
@@ -1289,6 +1552,7 @@ mod tests {
                 .query(&VectorQuery {
                     text: "alpha".to_owned(),
                     limit: 10,
+                    board_id: "b_1".to_owned(),
                 })
                 .unwrap()
                 .len(),
@@ -1313,6 +1577,7 @@ mod tests {
                 .query(&VectorQuery {
                     text: "alpha".to_owned(),
                     limit: 10,
+                    board_id: "b_1".to_owned(),
                 })
                 .unwrap()
                 .len(),
@@ -1419,6 +1684,7 @@ mod tests {
                 .query(&VectorQuery {
                     text: "alpha".to_owned(),
                     limit: 10,
+                    board_id: "b_1".to_owned(),
                 })
                 .unwrap()
                 .is_empty(),
@@ -1536,6 +1802,9 @@ mod tests {
                 task_id: task_id.to_owned(),
                 title: title.to_owned(),
                 description: None,
+                comments: String::new(),
+                run_text: String::new(),
+                event_text: String::new(),
                 source_event_id: None,
                 created_at: 1,
                 updated_at: 2,

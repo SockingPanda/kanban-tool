@@ -135,6 +135,31 @@ pub trait ProjectionStoreBackend {
 
     fn inspect_generation(&self, generation: &str) -> Result<Option<ProjectionArtifactEvidence>>;
 
+    fn validate_generation_publication(&self, expected: &ProjectionArtifactEvidence) -> Result<()> {
+        let actual = self
+            .inspect_generation(&expected.manifest.generation)?
+            .ok_or_else(|| {
+                KanbanError::Storage(format!(
+                    "projection generation {} is missing",
+                    expected.manifest.generation
+                ))
+            })?;
+        if actual != *expected {
+            return Err(KanbanError::Storage(format!(
+                "projection generation {} evidence mismatch",
+                expected.manifest.generation
+            )));
+        }
+        Ok(())
+    }
+
+    fn repair_generation_publication(&self, expected: &ProjectionArtifactEvidence) -> Result<()> {
+        Err(KanbanError::Conflict(format!(
+            "projection backend cannot repair publication for generation {}",
+            expected.manifest.generation
+        )))
+    }
+
     fn validate_active_contents(&self, _active: &ProjectionArtifactEvidence) -> Result<()> {
         Ok(())
     }
@@ -144,6 +169,20 @@ pub trait ProjectionStoreBackend {
             "projection backend cannot quarantine generation {generation}"
         )))
     }
+
+    fn abort_generation(&self, generation: &str) -> Result<()> {
+        Err(KanbanError::Conflict(format!(
+            "projection backend cannot abort generation {generation}"
+        )))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectionRuntimeAvailability {
+    Available,
+    Unavailable,
+    Unverified,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,6 +210,7 @@ pub struct ProjectionStoreStatus {
     pub checkpoint_cursor: i64,
     pub legacy_checkpoint_cursor: i64,
     pub lifecycle_status: String,
+    pub runtime_availability: ProjectionRuntimeAvailability,
     pub owner: Option<String>,
     pub fence_epoch: i64,
     pub lease_expires_at: Option<i64>,
@@ -189,6 +229,8 @@ pub struct ProjectionStoreStatus {
 pub struct ProjectionMaintenanceOwnerStatus {
     pub owner: Option<String>,
     pub mode: Option<String>,
+    pub capabilities: Vec<String>,
+    pub build_identity: Option<String>,
     pub lease_expires_at: Option<i64>,
     pub last_heartbeat_at: Option<i64>,
     pub active: bool,
@@ -213,27 +255,53 @@ pub fn projection_status(path: impl AsRef<Path>) -> Result<ProjectionStatus> {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .map_err(storage)?;
-    let maintenance_owner = conn
-        .query_row(
-            "SELECT owner,mode,lease_expires_at,last_heartbeat_at
+    let (owner, mode, lease_expires_at, last_heartbeat_at, capabilities_json, build_identity) =
+        conn.query_row(
+            "SELECT owner,mode,lease_expires_at,last_heartbeat_at,
+                    capabilities_json,build_identity
              FROM projection_maintenance_owner WHERE singleton=1",
             [],
             |row| {
-                let owner: Option<String> = row.get(0)?;
-                let mode: Option<String> = row.get(1)?;
-                let lease_expires_at: Option<i64> = row.get(2)?;
-                let last_heartbeat_at: Option<i64> = row.get(3)?;
-                Ok(ProjectionMaintenanceOwnerStatus {
-                    active: lease_expires_at.is_some_and(|expires_at| expires_at > now)
-                        && owner.is_some(),
-                    owner,
-                    mode,
-                    lease_expires_at,
-                    last_heartbeat_at,
-                })
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                ))
             },
         )
         .map_err(storage)?;
+    let capabilities: Vec<String> = serde_json::from_str(&capabilities_json).map_err(|error| {
+        KanbanError::Storage(format!(
+            "projection maintenance owner capabilities are invalid: {error}"
+        ))
+    })?;
+    if capabilities
+        .iter()
+        .any(|capability| capability.trim().is_empty())
+        || capabilities.windows(2).any(|pair| pair[0] >= pair[1])
+    {
+        return Err(KanbanError::Storage(
+            "projection maintenance owner capabilities are not a canonical set".to_owned(),
+        ));
+    }
+    let active = lease_expires_at.is_some_and(|expires_at| expires_at > now) && owner.is_some();
+    if owner.is_some() != build_identity.is_some() {
+        return Err(KanbanError::Storage(
+            "projection maintenance owner build identity is inconsistent".to_owned(),
+        ));
+    }
+    let maintenance_owner = ProjectionMaintenanceOwnerStatus {
+        owner,
+        mode,
+        capabilities,
+        build_identity,
+        lease_expires_at,
+        last_heartbeat_at,
+        active,
+    };
     let mut statement = conn
         .prepare(
             "SELECT \
@@ -618,12 +686,39 @@ pub fn abort_projection_generation(
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let manifest = building_manifest(path, store_name, owner, lease_token)?;
     validate_backend_binding(backend, &manifest)?;
+    if let Some(active) = backend
+        .inspect_active()?
+        .filter(|active| active.manifest.generation == manifest.generation)
+    {
+        let matches_sqlite = manifest.fingerprint.as_ref().is_some_and(|fingerprint| {
+            same_artifact(
+                &ProjectionArtifactEvidence {
+                    manifest: manifest.clone(),
+                    fingerprint: fingerprint.clone(),
+                },
+                &active,
+            )
+        });
+        if matches_sqlite {
+            return Err(KanbanError::Conflict(format!(
+                "projection generation {} is physically active and must be reconciled instead of aborted",
+                manifest.generation
+            )));
+        }
+    }
+    backend.quarantine_generation(&manifest.generation)?;
+    if backend.inspect_generation(&manifest.generation)?.is_some() {
+        return Err(KanbanError::Storage(format!(
+            "abandoned projection generation {} remained addressable after quarantine",
+            manifest.generation
+        )));
+    }
     if backend
         .inspect_active()?
         .is_some_and(|active| active.manifest.generation == manifest.generation)
     {
-        return Err(KanbanError::Conflict(format!(
-            "projection generation {} is physically active and must be reconciled instead of aborted",
+        return Err(KanbanError::Storage(format!(
+            "abandoned projection generation {} remained published after quarantine",
             manifest.generation
         )));
     }
@@ -686,7 +781,7 @@ pub fn run_projection_batch_with(
 ) -> Result<ProjectionBatch> {
     let path = path.as_ref();
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
-    validate_backend_for_target(path, store_name, backend)?;
+    validate_backend_for_target(path, store_name, owner, lease_token, backend)?;
     let batch = claim_projection_batch(path, store_name, owner, lease_token, claim_ttl_ms, limit)?;
     if batch.items.is_empty() {
         return Ok(batch);
@@ -777,26 +872,27 @@ pub fn recover_projection_generation_with(
     })?;
     let expected_previous = previous_artifact(path, store_name)?;
     let operation = (|| {
-        let logical_active_is_readable = backend
-            .inspect_generation(&missing_active.manifest.generation)
-            .is_ok_and(|artifact| {
-                artifact.as_ref().is_some_and(|artifact| {
-                    same_artifact(artifact, &missing_active)
-                        && backend.validate_active_contents(artifact).is_ok()
-                })
-            });
+        let logical_active_inspection =
+            backend.inspect_generation(&missing_active.manifest.generation);
+        let logical_active_is_readable = logical_active_inspection.as_ref().is_ok_and(|artifact| {
+            artifact
+                .as_ref()
+                .is_some_and(|artifact| same_artifact(artifact, &missing_active))
+        });
         if logical_active_is_readable {
-            return Err(KanbanError::Conflict(format!(
-                "projection recovery refused because logical active generation {} is still readable",
-                missing_active.manifest.generation
-            )));
+            backend.repair_generation_publication(&missing_active)?;
+        } else if !matches!(logical_active_inspection, Ok(None)) {
+            quarantine_unreadable_generation(backend, &missing_active.manifest.generation)?;
         }
+        let expected_retained = logical_active_is_readable
+            .then_some(missing_active.clone())
+            .or(expected_previous);
         let mut physical_active = backend.inspect_active()?;
         for _ in 0..1_024 {
             let Some(active) = physical_active.as_ref() else {
                 break;
             };
-            if expected_previous
+            if expected_retained
                 .as_ref()
                 .is_some_and(|previous| same_artifact(previous, active))
             {
@@ -817,7 +913,7 @@ pub fn recover_projection_generation_with(
         }
         if physical_active
             .as_ref()
-            .is_some_and(|active| expected_previous.as_ref() != Some(active))
+            .is_some_and(|active| expected_retained.as_ref() != Some(active))
         {
             return Err(KanbanError::Conflict(format!(
                 "projection recovery found too many unexpected physical generations for {store_name}"
@@ -855,6 +951,18 @@ pub fn recover_projection_generation_with(
         record_projection_error(path, store_name, &error.to_string())?;
     }
     operation
+}
+
+fn quarantine_unreadable_generation(
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+    generation: &str,
+) -> Result<()> {
+    backend.quarantine_generation(generation).map_err(|error| {
+        KanbanError::Storage(format!(
+            "projection backend could not non-destructively quarantine unreadable generation \
+             {generation}: {error}"
+        ))
+    })
 }
 
 pub fn reconcile_projection_generation_with(
@@ -1671,16 +1779,41 @@ fn validate_backend_binding(
     )
 }
 
-fn validate_backend_for_target(
+pub(crate) fn validate_backend_for_target(
     path: &Path,
     store_name: &str,
+    owner: &str,
+    lease_token: &str,
     backend: &(impl ProjectionStoreBackend + ?Sized),
 ) -> Result<()> {
     let descriptor = backend.descriptor()?;
     validate_store_descriptor(store_name, &descriptor)?;
     let conn = connect_file(path)?;
-    let (_, provider, provider_fingerprint) = target_generation_for_claim(&conn, store_name)?;
-    validate_descriptor_binding(store_name, &provider, &provider_fingerprint, &descriptor)
+    let (target_generation, provider, provider_fingerprint) =
+        target_generation_for_claim(&conn, store_name)?;
+    validate_descriptor_binding(store_name, &provider, &provider_fingerprint, &descriptor)?;
+    let expected = match active_artifact(path, store_name)? {
+        Some(active) if active.manifest.generation == target_generation => active,
+        _ => prepared_manifest(path, store_name, owner, lease_token)?,
+    };
+    if expected.manifest.generation != target_generation {
+        return Err(KanbanError::Conflict(format!(
+            "projection target generation evidence does not match SQLite for store {store_name}"
+        )));
+    }
+    let actual = backend
+        .inspect_generation(&target_generation)?
+        .ok_or_else(|| {
+            KanbanError::Storage(format!(
+                "projection target generation {target_generation} is missing for store {store_name}"
+            ))
+        })?;
+    if !same_artifact(&expected, &actual) {
+        return Err(KanbanError::Storage(format!(
+            "projection target generation {target_generation} evidence does not match SQLite for store {store_name}"
+        )));
+    }
+    Ok(())
 }
 
 fn validate_descriptor_binding(
@@ -2105,6 +2238,19 @@ pub(crate) fn validate_physical_active_artifact_with(
     Ok(Some(expected))
 }
 
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+pub(crate) fn validate_physical_previous_artifact_with(
+    path: &Path,
+    store_name: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+) -> Result<Option<ProjectionArtifactEvidence>> {
+    let Some(expected) = previous_artifact(path, store_name)? else {
+        return Ok(None);
+    };
+    backend.validate_generation_publication(&expected)?;
+    Ok(Some(expected))
+}
+
 fn advance_checkpoint(conn: &Connection, store_name: &str, now: i64) -> Result<i64> {
     let checkpoint = continuous_checkpoint(conn, store_name)?;
     conn.execute(
@@ -2288,6 +2434,7 @@ fn projection_status_from_row(
         checkpoint_cursor: row.get(16)?,
         legacy_checkpoint_cursor: row.get(17)?,
         lifecycle_status: lifecycle_status.to_owned(),
+        runtime_availability: ProjectionRuntimeAvailability::Unverified,
         owner: row.get(19)?,
         fence_epoch: row.get(20)?,
         lease_expires_at: row.get(21)?,

@@ -5,6 +5,8 @@
     "maintenance_owner": {
       "owner": null,
       "mode": null,
+      "capabilities": [],
+      "build_identity": null,
       "lease_expires_at": null,
       "last_heartbeat_at": null,
       "active": false
@@ -34,6 +36,7 @@
         "checkpoint_cursor": 0,
         "legacy_checkpoint_cursor": 0,
         "lifecycle_status": "bootstrap_required",
+        "runtime_availability": "available",
         "owner": null,
         "fence_epoch": 0,
         "lease_expires_at": null,

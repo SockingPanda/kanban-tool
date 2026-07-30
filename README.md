@@ -205,7 +205,9 @@ just spec-bundle-check
 Linux CLI 可以构建为独立的 Debian 包：
 
 ```bash
-./scripts/package-cli-linux.sh --format deb
+./scripts/package-cli-linux.sh --format deb \
+  --no-default-features \
+  --features tantivy-backend,oxigraph-backend
 ```
 
 桌面包与 CLI 包彼此独立；桌面包不会自动安装系统级 `kanban` 命令。

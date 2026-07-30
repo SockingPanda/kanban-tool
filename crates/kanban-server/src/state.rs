@@ -125,6 +125,7 @@ pub fn maintenance_task_enabled(config: &MaintenanceConfig) -> bool {
     #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
     {
         !config.interval.is_zero()
+            && kanban_sqlite::api::maintenance_continuous_capability_complete()
     }
     #[cfg(not(any(feature = "tantivy-backend", feature = "oxigraph-backend")))]
     {
@@ -370,10 +371,13 @@ mod tests {
 
     #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
     #[test]
-    fn maintenance_positive_interval_is_enabled_with_tantivy_backend() {
+    fn maintenance_positive_interval_requires_complete_store_capabilities() {
         let config = MaintenanceConfig::new("server-test", Duration::from_millis(5_000));
 
-        assert!(maintenance_task_enabled(&config));
+        assert_eq!(
+            maintenance_task_enabled(&config),
+            kanban_sqlite::api::maintenance_continuous_capability_complete()
+        );
     }
 
     #[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
@@ -388,6 +392,13 @@ mod tests {
         let temp = tempfile::tempdir()?;
         let db_path = temp.path().join("kanban.db");
         init_database(&db_path, "test")?;
+        if !kanban_sqlite::api::maintenance_continuous_capability_complete() {
+            assert!(!maintenance_task_enabled(&MaintenanceConfig::new(
+                "server-test",
+                Duration::from_millis(500)
+            )));
+            return Ok(());
+        }
         let blocker = MaintenanceSession::start(
             &db_path,
             "blocker",

@@ -50,18 +50,12 @@ impl OllamaEmbeddingProvider {
     pub fn check(&self) -> Result<(), VectorError> {
         self.embed("kanban vector provider check").map(|_| ())
     }
-}
 
-impl EmbeddingProvider for OllamaEmbeddingProvider {
-    fn embedding_model(&self) -> &str {
-        &self.model
-    }
-
-    fn dimensions(&self) -> usize {
-        self.dimensions
-    }
-
-    fn embed(&self, text: &str) -> Result<Vec<f32>, VectorError> {
+    fn request_embeddings(
+        &self,
+        input: EmbedInput<'_>,
+        expected_count: usize,
+    ) -> Result<Vec<Vec<f32>>, VectorError> {
         let url = format!("{}/api/embed", self.endpoint);
         let agent = ureq::AgentBuilder::new()
             .timeout_connect(OLLAMA_CONNECT_TIMEOUT)
@@ -71,27 +65,66 @@ impl EmbeddingProvider for OllamaEmbeddingProvider {
             .post(&url)
             .send_json(EmbedRequest {
                 model: &self.model,
-                input: text,
+                input,
                 dimensions: self.dimensions,
             })
             .map_err(ollama_error)?;
         let body: EmbedResponse = response
             .into_json()
             .map_err(|err| VectorError::Store(format!("Ollama embed response error: {err}")))?;
-        let embedding =
-            body.embeddings.into_iter().next().ok_or_else(|| {
-                VectorError::Store("Ollama embed response had no embeddings".into())
-            })?;
-        ensure_dimensions(&embedding, self.dimensions)?;
-        Ok(embedding)
+        if body.embeddings.len() != expected_count {
+            return Err(VectorError::Store(format!(
+                "Ollama embed response cardinality mismatch: expected {expected_count}, got {}",
+                body.embeddings.len()
+            )));
+        }
+        for embedding in &body.embeddings {
+            ensure_dimensions(embedding, self.dimensions)?;
+        }
+        Ok(body.embeddings)
+    }
+}
+
+impl EmbeddingProvider for OllamaEmbeddingProvider {
+    fn provider_name(&self) -> &str {
+        "ollama"
+    }
+
+    fn embedding_model(&self) -> &str {
+        &self.model
+    }
+
+    fn dimensions(&self) -> usize {
+        self.dimensions
+    }
+
+    fn embed(&self, text: &str) -> Result<Vec<f32>, VectorError> {
+        self.request_embeddings(EmbedInput::Single(text), 1)?
+            .into_iter()
+            .next()
+            .ok_or_else(|| VectorError::Store("Ollama embed response had no embeddings".into()))
+    }
+
+    fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, VectorError> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.request_embeddings(EmbedInput::Batch(texts), texts.len())
     }
 }
 
 #[derive(Debug, Serialize)]
 struct EmbedRequest<'a> {
     model: &'a str,
-    input: &'a str,
+    input: EmbedInput<'a>,
     dimensions: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum EmbedInput<'a> {
+    Single(&'a str),
+    Batch(&'a [String]),
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,11 +145,15 @@ fn ollama_error(error: ureq::Error) -> VectorError {
                 .ok()
                 .and_then(|body| body.error)
                 .unwrap_or_else(|| format!("HTTP {status}"));
-            VectorError::Store(format!("Ollama embed request failed: {message}"))
+            VectorError::Provider {
+                message: format!("Ollama embed request failed: {message}"),
+                retryable: status == 429 || status >= 500,
+            }
         }
-        ureq::Error::Transport(error) => {
-            VectorError::Store(format!("Ollama embed request failed: {error}"))
-        }
+        ureq::Error::Transport(error) => VectorError::Provider {
+            message: format!("Ollama embed request failed: {error}"),
+            retryable: true,
+        },
     }
 }
 
@@ -219,6 +256,26 @@ mod tests {
     }
 
     #[test]
+    fn ollama_provider_batches_inputs_in_one_request() {
+        let (endpoint, request) =
+            mock_ollama_with_request(r#"{"embeddings":[[0.1,0.2,0.3],[0.4,0.5,0.6]]}"#);
+        let provider = OllamaEmbeddingProvider::new(endpoint, "test-model", 3).unwrap();
+        let texts = vec!["first text".to_owned(), "second text".to_owned()];
+
+        assert_eq!(
+            provider.embed_batch(&texts).unwrap(),
+            vec![vec![0.1, 0.2, 0.3], vec![0.4, 0.5, 0.6]]
+        );
+        let request = request.join().unwrap();
+        let body = request.split("\r\n\r\n").nth(1).unwrap();
+        let body: serde_json::Value = serde_json::from_str(body).unwrap();
+        assert_eq!(
+            body["input"],
+            serde_json::json!(["first text", "second text"])
+        );
+    }
+
+    #[test]
     fn ollama_provider_rejects_dimension_mismatch() {
         let endpoint = mock_ollama(r#"{"embeddings":[[0.1,0.2]]}"#);
         let provider = OllamaEmbeddingProvider::new(endpoint, "test-model", 3).unwrap();
@@ -253,7 +310,10 @@ mod tests {
 
         assert!(matches!(
             provider.embed("short text"),
-            Err(VectorError::Store(_))
+            Err(VectorError::Provider {
+                retryable: false,
+                ..
+            })
         ));
     }
 }

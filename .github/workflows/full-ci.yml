@@ -85,6 +85,28 @@ jobs:
       - name: Clippy package with features
         run: cargo clippy -p '${{ matrix.package }}' --all-targets --features '${{ matrix.features }}' -- -D warnings
 
+  rust-windows-durability:
+    name: Windows projection durability
+    runs-on: windows-latest
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Test native durable filesystem primitives
+        run: cargo test --locked -p kanban-local durable_
+      - name: Test native projection backend durability
+        run: cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --lib
+      - name: Test native maintenance recovery
+        run: cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --test all suite::maintenance_runtime::
+      - name: Test native generation fencing
+        run: cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --test all suite::projection_v2::
+
   desktop:
     name: Desktop build and Tauri
     runs-on: ubuntu-22.04
@@ -170,7 +192,7 @@ jobs:
       - name: Install audit tools
         uses: taiki-e/install-action@v2
         with:
-          tool: just,cargo-deny,cargo-audit
+          tool: just@1.57.0,cargo-deny,cargo-audit
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
       - name: Audit dependencies
@@ -181,6 +203,7 @@ jobs:
     needs:
       - rust-default
       - rust-features
+      - rust-windows-durability
       - desktop
       - smoke
       - dependency-audit
@@ -192,6 +215,7 @@ jobs:
           for result in \
             '${{ needs.rust-default.result }}' \
             '${{ needs.rust-features.result }}' \
+            '${{ needs.rust-windows-durability.result }}' \
             '${{ needs.desktop.result }}' \
             '${{ needs.smoke.result }}' \
             '${{ needs.dependency-audit.result }}'

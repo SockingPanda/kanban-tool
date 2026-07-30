@@ -3,12 +3,14 @@
 use crate::{
     GraphHelperErrorResponse, GraphHelperHandshakeResponse, GraphHelperNeighborsResponse,
     GraphHelperQueryResponse, GraphHelperRebuildResponse, GraphHelperStatusResponse,
-    GraphHelperSyncResponse, ProjectConfigInput, VectorHelperCheckProviderResponse,
-    VectorHelperEmbedQueryResponse, VectorHelperErrorResponse, VectorHelperHandshakeResponse,
-    VectorHelperLabelAtomsStatusResponse, VectorHelperQueryChunksResponse,
-    VectorHelperQueryLabelAtomsResponse, VectorHelperRebuildLabelAtomsResponse,
-    VectorHelperRebuildResponse, VectorHelperStatusResponse, VectorHelperSyncLabelAtomsResponse,
-    VectorHelperSyncResponse, WorkerProfileInput,
+    GraphHelperSyncResponse, ProjectConfigInput, ProjectionArtifactManifest,
+    ProjectionBatchReceipt, ProjectionDelivery, ProjectionDeliveryAction, ProjectionPublishReceipt,
+    VectorHelperCheckProviderResponse, VectorHelperEmbedQueryResponse, VectorHelperErrorResponse,
+    VectorHelperHandshakeResponse, VectorHelperLabelAtomsStatusResponse,
+    VectorHelperQueryChunksResponse, VectorHelperQueryLabelAtomsResponse,
+    VectorHelperRebuildLabelAtomsResponse, VectorHelperRebuildResponse, VectorHelperStatusResponse,
+    VectorHelperSyncLabelAtomsResponse, VectorHelperSyncResponse, VectorProjectionHelperRequest,
+    VectorProjectionHelperResponse, WorkerProfileInput,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -88,6 +90,268 @@ fn vector_helper_protocol_fixtures_are_exact() {
     assert_exact::<VectorHelperEmbedQueryResponse>(
         "helper/vector-embed-query-response.v1.valid.json",
     );
+}
+
+#[test]
+fn vector_projection_helper_protocol_fixtures_are_exact() {
+    assert_exact::<VectorProjectionHelperRequest>("helper/vector-projection-request.v1.valid.json");
+    assert_exact::<VectorProjectionHelperResponse>(
+        "helper/vector-projection-response.v1.valid.json",
+    );
+}
+
+#[test]
+fn vector_projection_helper_protocol_rejects_wrong_variants() {
+    assert!(
+        serde_json::from_value::<VectorProjectionHelperRequest>(json!({
+            "operation": "descriptor",
+            "payload": {
+                "request_id": "req_fixture_descriptor",
+                "batch": {}
+            }
+        }))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<VectorProjectionHelperResponse>(json!({
+            "operation": "inspect_active",
+            "payload": {
+                "request_id": "req_fixture_inspect",
+                "receipt": {}
+            }
+        }))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<VectorProjectionHelperResponse>(json!({
+            "operation": "error",
+            "payload": {
+                "kind": "unknown",
+                "code": "unknown",
+                "provider": null,
+                "backend": null,
+                "retryable": false,
+                "message": "unknown kind",
+                "request_id": null,
+                "delivery_digest": null,
+                "projection_store": null,
+                "generation_id": null
+            }
+        }))
+        .is_err()
+    );
+}
+
+fn projection_manifest_json() -> Value {
+    json!({
+        "store_name": "lancedb_chunks",
+        "database_instance_id": "db_fixture",
+        "protocol_version": 2,
+        "schema_version": 2,
+        "generation": "gen_fixture",
+        "fence_epoch": 7,
+        "snapshot_cursor": 11,
+        "provider": "ollama",
+        "provider_fingerprint": "sha256:provider",
+        "corpus": {
+            "corpus_schema": "task-chunks-v2",
+            "corpus_fingerprint": "sha256:corpus",
+            "embedding_model": "fixture-model",
+            "embedding_dimensions": 3
+        },
+        "canonical_item_count": 1,
+        "canonical_digest": "sha256:canonical",
+        "delivery_item_count": 1,
+        "delivery_digest": "sha256:delivery",
+        "fingerprint": null
+    })
+}
+
+#[test]
+fn vector_projection_nullable_evidence_fields_are_required_but_accept_null() {
+    let manifest = projection_manifest_json();
+    serde_json::from_value::<ProjectionArtifactManifest>(manifest.clone()).unwrap();
+    for field in ["corpus", "fingerprint"] {
+        let mut missing = manifest.clone();
+        missing.as_object_mut().unwrap().remove(field);
+        assert!(
+            serde_json::from_value::<ProjectionArtifactManifest>(missing).is_err(),
+            "{field}"
+        );
+    }
+
+    let delivery = json!({
+        "id": 1,
+        "outbox_id": 1,
+        "store_name": "lancedb_chunks",
+        "generation_id": "gen_fixture",
+        "board_id": "b_fixture",
+        "source_event_id": null,
+        "cursor": 1,
+        "action": "delete",
+        "entity_uri": "kb://task/t_fixture",
+        "payload_json": "{}",
+        "attempts": 1
+    });
+    serde_json::from_value::<ProjectionDelivery>(delivery.clone()).unwrap();
+    let mut missing_source_event = delivery;
+    missing_source_event
+        .as_object_mut()
+        .unwrap()
+        .remove("source_event_id");
+    assert!(serde_json::from_value::<ProjectionDelivery>(missing_source_event).is_err());
+    let mut unknown_action = json!({
+        "id": 1,
+        "outbox_id": 1,
+        "store_name": "lancedb_chunks",
+        "generation_id": "gen_fixture",
+        "board_id": "b_fixture",
+        "source_event_id": null,
+        "cursor": 1,
+        "action": "reindex",
+        "entity_uri": "kb://task/t_fixture",
+        "payload_json": "{}",
+        "attempts": 1
+    });
+    assert!(serde_json::from_value::<ProjectionDelivery>(unknown_action.clone()).is_err());
+    unknown_action["action"] = json!("rebuild");
+    let delivery = serde_json::from_value::<ProjectionDelivery>(unknown_action).unwrap();
+    assert_eq!(delivery.action, ProjectionDeliveryAction::Rebuild);
+
+    let receipt = json!({
+        "active": {
+            "manifest": manifest,
+            "fingerprint": "sha256:generation"
+        },
+        "retained_previous": null
+    });
+    serde_json::from_value::<ProjectionPublishReceipt>(receipt.clone()).unwrap();
+    let mut missing_previous = receipt;
+    missing_previous
+        .as_object_mut()
+        .unwrap()
+        .remove("retained_previous");
+    assert!(serde_json::from_value::<ProjectionPublishReceipt>(missing_previous).is_err());
+}
+
+#[test]
+fn vector_projection_debug_redacts_capability_tokens() {
+    let request = serde_json::from_value::<VectorProjectionHelperRequest>(json!({
+        "operation": "apply_batch",
+        "payload": {
+            "context": {
+                "request_id": "req_fixture_apply_batch",
+                "projection_store": "lancedb_chunks",
+                "generation_id": "gen_fixture_chunks",
+                "delivery_digest": "sha256:fixture-delivery-digest"
+            },
+            "batch": {
+                "store_name": "lancedb_chunks",
+                "database_instance_id": "dbi_fixture_projection",
+                "protocol_version": 2,
+                "schema_version": 2,
+                "provider": "ollama",
+                "provider_fingerprint": "sha256:fixture-provider-fingerprint",
+                "owner": "fixture-maintenance-owner",
+                "lease_token": "fixture-lease-token-not-a-secret",
+                "fence_epoch": 7,
+                "target_generation": "gen_fixture_chunks",
+                "claim_token": "fixture-claim-token-not-a-secret",
+                "claim_expires_at": 4102444800000_i64,
+                "items": [{
+                    "id": 41,
+                    "outbox_id": 17,
+                    "store_name": "lancedb_chunks",
+                    "generation_id": "gen_fixture_chunks",
+                    "board_id": "b_fixture_board",
+                    "source_event_id": 101,
+                    "cursor": 101,
+                    "action": "upsert",
+                    "entity_uri": "kb://task/t_fixture",
+                    "payload_json": "{\"projection_store\":\"lancedb_chunks\"}",
+                    "attempts": 0
+                }]
+            }
+        }
+    }))
+    .unwrap();
+    let rendered = format!("{request:?}");
+    assert!(!rendered.contains("fixture-lease-token-not-a-secret"));
+    assert!(!rendered.contains("fixture-claim-token-not-a-secret"));
+    assert!(rendered.contains("[REDACTED]"));
+
+    let VectorProjectionHelperRequest::ApplyBatch(request) = request else {
+        panic!("fixture must be an apply_batch request");
+    };
+    let receipt = ProjectionBatchReceipt {
+        store_name: request.batch.store_name,
+        database_instance_id: request.batch.database_instance_id,
+        protocol_version: request.batch.protocol_version,
+        schema_version: request.batch.schema_version,
+        provider: request.batch.provider,
+        provider_fingerprint: request.batch.provider_fingerprint,
+        target_generation: request.batch.target_generation,
+        lease_token: request.batch.lease_token,
+        fence_epoch: request.batch.fence_epoch,
+        claim_token: request.batch.claim_token,
+        applied_item_count: request.batch.items.len(),
+    };
+    let rendered = format!("{receipt:?}");
+    assert!(!rendered.contains("fixture-lease-token-not-a-secret"));
+    assert!(!rendered.contains("fixture-claim-token-not-a-secret"));
+    assert!(rendered.contains("[REDACTED]"));
+}
+
+#[test]
+fn vector_projection_helper_stdout_never_contains_capability_fields() {
+    let schema =
+        serde_json::to_string(&schemars::schema_for!(VectorProjectionHelperResponse)).unwrap();
+    let fixture = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join("schemas/fixtures/helper/vector-projection-response.v1.valid.json"),
+    )
+    .unwrap();
+    for forbidden in ["lease_token", "claim_token"] {
+        assert!(!schema.contains(forbidden), "{forbidden}: {schema}");
+        assert!(!fixture.contains(forbidden), "{forbidden}: {fixture}");
+    }
+}
+
+#[test]
+fn vector_projection_cleanup_requires_an_explicit_dry_run_decision() {
+    let missing_dry_run = json!({
+        "operation": "cleanup",
+        "payload": {
+            "context": {
+                "request_id": "req_fixture_cleanup_default",
+                "projection_store": "lancedb_chunks",
+                "generation_id": "gen_fixture_active",
+                "delivery_digest": "sha256:fixture-delivery-digest"
+            },
+            "protection": {
+                "active_generation": "gen_fixture_active",
+                "previous_generation": "gen_fixture_previous",
+                "building_generation": null,
+                "additional_generations": []
+            }
+        }
+    });
+    assert!(
+        serde_json::from_value::<VectorProjectionHelperRequest>(missing_dry_run.clone()).is_err()
+    );
+    let mut explicit_dry_run = missing_dry_run;
+    explicit_dry_run["payload"]["dry_run"] = json!(true);
+    let request =
+        serde_json::from_value::<VectorProjectionHelperRequest>(explicit_dry_run).unwrap();
+
+    assert!(matches!(
+        request,
+        VectorProjectionHelperRequest::Cleanup(crate::VectorProjectionCleanupRequest {
+            dry_run: true,
+            ..
+        })
+    ));
 }
 
 fn collect_schema_types(root: &Value, schema: &Value, output: &mut BTreeSet<String>) {

@@ -1871,6 +1871,54 @@ fn config_and_helper_protocols_have_exact_roots_surfaces_and_witnesses() {
 }
 
 #[test]
+fn vector_projection_protocol_has_two_exact_roots_and_four_runtime_witnesses() {
+    let contract_ids = [
+        "helper.vector-projection.request",
+        "helper.vector-projection.response",
+    ];
+    let inventory = operation_inventory();
+    let roots = kanban_contract::schema_registry();
+    let surfaces = surface_operation_catalog();
+
+    for contract_id in contract_ids {
+        let contract = inventory
+            .iter()
+            .find(|contract| contract.id == contract_id)
+            .unwrap_or_else(|| panic!("missing vector projection contract {contract_id}"));
+        assert_eq!(contract.migration, MigrationState::Adopted);
+        assert!(contract.schema_id.is_some());
+        assert!(contract.fixture.is_some());
+        let adoption = contract.adoption.expect("runtime adoption witnesses");
+        assert_eq!(adoption.producer.package, "kanban-vector-lancedb");
+        assert_eq!(adoption.consumer.package, "kanban-vector-lancedb");
+        assert_eq!(
+            adoption.producer.test_target,
+            "vector_projection_contract_adoption"
+        );
+        assert_eq!(
+            adoption.consumer.test_target,
+            "vector_projection_contract_adoption"
+        );
+        assert_eq!(
+            roots
+                .iter()
+                .filter(|root| root.contract_id == contract_id)
+                .count(),
+            1
+        );
+    }
+
+    let surfaces = surfaces
+        .iter()
+        .filter(|surface| surface.key == "vector projection helper protocol")
+        .collect::<Vec<_>>();
+    assert_eq!(surfaces.len(), 1);
+    assert_eq!(surfaces[0].migration, MigrationState::Adopted);
+    assert_eq!(surfaces[0].surface, ContractSurface::Helper);
+    assert_eq!(surfaces[0].contracts, contract_ids);
+}
+
+#[test]
 fn selected_worker_profile_contract_matches_runtime_selection_boundary() {
     let inventory = operation_inventory();
     assert!(

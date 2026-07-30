@@ -47,7 +47,7 @@ schema 校验通过不代表业务命令可以执行；业务测试不能被 sch
 通配符和双向捷径；双向协议必须拆成精确的 input/output contract。
 因此“生成了 schema”永远不能代替“运行时已采用”。
 
-以下是结构根的代表性类别，不是当前 480 个根的完整清单：
+以下是结构根的代表性类别，不是当前 485 个根的完整清单：
 
 - 基础契约：API 错误响应、`GET /health` 响应、标签语义删除响应和决策评论元数据输入。
 - 生命周期请求：`SpecifyTaskRequest`、`PromoteTaskRequest`、`ClaimTaskRequest`、
@@ -65,23 +65,23 @@ schema 校验通过不代表业务命令可以执行；业务测试不能被 sch
 - 看板端点：list query、create request、get/archive path 与四个端点专属成功
   response，共 8 个精确 root；四个 success root 只共享闭合的 `ApiBoard` 组件。
 
-当前权威快照有 480 个 schema root：480 个 `adopted`、0 个 `generated`、
-0 个 `planned`、0 个 `excluded`，并登记 960 个结构化 witness。114 个有限 JSON CLI
+当前权威快照有 485 个 schema root：485 个 `adopted`、0 个 `generated`、
+0 个 `planned`、0 个 `excluded`，并登记 970 个结构化 witness。117 个有限 JSON CLI
 叶子命令均绑定到精确输出 root；export stdout JSONL 流不属于有限 envelope。21 个
 JSONL discriminator 的 input/output 分别拥有精确 root，记录数据使用闭合的自然 JSON；
 required-nullable 键禁止省略，但接受显式 `null`。CLI task/step/run adapter 会丢弃仅供持久层
 使用的 `claim_token` 与内部 `log_path`，包括递归 linked task；dependency、events 与 helper
 subprocess protocol 仍由各自组件负责，公开 CLI 契约只拥有最终 stdout shape。
 
-配置与辅助进程拥有 2 个 TOML 配置输入、7 个 graph helper 响应和 12 个 vector helper
-响应契约。worker profile 输入只约束 CLI 选中的 `[workers.<profile>]` 配置节；未选配置节
+配置与辅助进程拥有 2 个 TOML 配置输入、7 个 graph helper 响应、12 个既有 vector helper
+响应契约，以及 adopted 的 Projection v2 request/response helper 协议。worker profile 输入只约束 CLI 选中的 `[workers.<profile>]` 配置节；未选配置节
 保持不透明并允许向前兼容，选中配置节严格拒绝未知或非法字段。真实配置解码器、子进程
 适配器和协议解码器分别提供 producer/consumer witness，schema 工具依赖仍隔离在叶子 crate。
 
-`surface_operation_catalog()` 是独立维度：246 个 `adopted`、0 个 `generated`、
-0 个 `planned`、5 个 `excluded`。其中 CLI 为 114 个 `adopted`、5 个非 JSON
+`surface_operation_catalog()` 是独立维度：250 个 `adopted`、0 个 `generated`、
+0 个 `planned`、5 个 `excluded`。其中 CLI 为 117 个 `adopted`、5 个非 JSON
 `excluded`，21 个 JSONL record surfaces 与 6 个 structured metadata surfaces 全部为
-`adopted`，Config/Helper 为 2/19 个 `adopted`；API 为 83 个 `adopted`，SSE 为 1 个
+`adopted`，Config/Helper 为 2/20 个 `adopted`；API 为 83 个 `adopted`，SSE 为 1 个
 `adopted`。端点义务直方图同样独立：296 个
 `Contract`、0 个 `Todo`、207 个 `NotApplicable`、1 个有运行时证据的 `Excluded`。
 `schema-check` 的未闭合项为 0：semantic generated/planned 0 + surface
@@ -100,7 +100,7 @@ generated/planned 0 + 端点 Todo 0。
 `surface_operation_catalog()` 记录可以自动发现的公开传输操作：
 
 - API：83 个 JSON method/path，加 1 个 SSE method/path。
-- CLI：119 个 Clap 叶子命令；非 JSON 文本/守护进程/hook 协议逐项 `excluded`。
+- CLI：122 个 Clap 叶子命令；非 JSON 文本/守护进程/hook 协议逐项 `excluded`。
 - JSONL：21 个精确 `type=<discriminator>`。
 - Metadata：6 个无传输的精确结构化元数据操作。
 
@@ -266,7 +266,7 @@ just schema-audit-closed
   `just`/build-lock/cargo/python/script JSONL trace 另外锁定产品 `fmt`（core）、
   `fmt-full`（core + helper）、`schema-fmt`（contract + leaf）的互斥 package selection，
   full/rust/test 调用图、schema 子 gate、`schema-audit-closed` 内部调用、`release`
-  13 步顺序和 `test-full` 的 nextest/fallback 双分支。mutation tests 必须拒绝
+  14 步顺序、Projection release cohort 和 `test-full` 的 nextest/fallback 双分支。mutation tests 必须拒绝
   workspace-wide fmt、package 漂移、gate 删除、命令旁路与顺序调换。
 - `schema-dependency-isolation` 先运行该自测，再用结构化 manifest/full locked metadata policy
   检查全部 workspace declaration、resolved identity、真实 `Cargo.lock` 与 committed registry
@@ -291,10 +291,16 @@ just schema-audit-closed
   adoption witness，再通过 build lock 运行 `kanban-schema audit --require-closed`。当前
   migration train 的 contract、surface 与 endpoint obligation 已全部闭合；该 gate 应成功，
   G006 已由 WATCH 转为 closed evidence。
+- `projection-release-cohort` 对 `kanban-cli` 与 `kanban-server` 显式启用
+  `tantivy-backend,oxigraph-backend`，分别执行完整测试和 clippy；默认产品依赖图仍由
+  helper isolation gate 证明不携带 Oxigraph/LanceDB 重型 helper，不能用
+  `--all-features` 混淆默认隔离与发布能力。
 - `release` 精确依次调用 `affected-self-test`、`schema-contract`、`audit`、`rust-full`、
-  `bench-check`、`target-tools`、`cli-package`、`cli-package-layout`、
+  `projection-release-cohort`、`bench-check`、`target-tools`、`cli-package`、`cli-package-layout`、
   `desktop-package-config`、`desktop-package`、`desktop-package-layout`、`smoke` 与
-  `diff-check`；AST + ordered trace 对删除或重排 fail closed。
+  `diff-check`；AST + ordered trace 对删除或重排 fail closed。`cli-package` 使用
+  `--no-default-features --features tantivy-backend,oxigraph-backend` 构建主 CLI，
+  并继续把独立 LanceDB/Oxigraph helper binaries 一并装入发布包。
 
 所有会写 Cargo target 的命令必须通过这些 `just` recipes 和仓库 build lock 运行。
 

@@ -39,12 +39,65 @@
       ],
       "type": "object"
     },
+    "CliMaintenanceStoreFailureKind": {
+      "enum": [
+        "provider",
+        "backend",
+        "delivery"
+      ],
+      "type": "string"
+    },
+    "CliMaintenanceStoreResult": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "processed": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "status": {
+              "const": "succeeded",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "action",
+            "processed"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/CliMaintenanceStoreFailureKind"
+            },
+            "message": {
+              "type": "string"
+            },
+            "status": {
+              "const": "failed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "kind",
+            "message"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "CliMaintenanceStoreRun": {
       "additionalProperties": false,
       "properties": {
-        "action": {
-          "type": "string"
-        },
         "fallback_reason": {
           "type": [
             "string",
@@ -54,10 +107,8 @@
         "lifecycle_status": {
           "type": "string"
         },
-        "processed": {
-          "format": "uint",
-          "minimum": 0,
-          "type": "integer"
+        "result": {
+          "$ref": "#/$defs/CliMaintenanceStoreResult"
         },
         "store_name": {
           "type": "string"
@@ -65,15 +116,14 @@
       },
       "required": [
         "store_name",
-        "action",
-        "processed",
+        "result",
         "lifecycle_status",
         "fallback_reason"
       ],
       "type": "object"
     }
   },
-  "$id": "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v1",
+  "$id": "urn:kanban-tool:schema:cli:maintenance-run-output:v2",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -84,6 +134,6 @@
   "required": [
     "data"
   ],
-  "title": "Kanban CLI maintenance rebuild output v1",
+  "title": "Kanban CLI maintenance run output v2",
   "type": "object"
 }

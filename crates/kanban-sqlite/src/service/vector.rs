@@ -267,6 +267,7 @@ pub(crate) fn has_pending_outbox_for_target(
              SELECT 1 FROM index_outbox o \
              JOIN task_events e ON e.id=o.source_event_id \
              WHERE o.target IN (?1, 'all') \
+               AND o.projection_store IS NULL \
                AND o.status IN ('pending', 'running', 'failed') \
                AND e.board_id=?2 \
                AND e.id <= ?3 \
@@ -288,6 +289,7 @@ fn pending_vector_outbox_for_board(
              FROM index_outbox o \
              JOIN task_events e ON e.id=o.source_event_id \
              WHERE o.target IN ('lancedb', 'all') \
+               AND o.projection_store IS NULL \
                AND o.status IN ('pending', 'running', 'failed') \
                AND e.board_id=?1 \
                AND e.id <= ?2 \
@@ -314,6 +316,7 @@ fn has_pending_vector_outbox_for_board(
              SELECT 1 FROM index_outbox o \
              JOIN task_events e ON e.id=o.source_event_id \
              WHERE o.target IN ('lancedb', 'all') \
+               AND o.projection_store IS NULL \
                AND o.status IN ('pending', 'running', 'failed') \
                AND e.board_id=?1 \
                AND e.id <= ?2 \
@@ -331,10 +334,40 @@ fn vector_chunks_for_board(
 ) -> Result<Vec<kanban_vector::EmbeddingChunk>> {
     let mut stmt = conn
         .prepare(
-            "SELECT 'kb://task/' || t.id,t.board_id,t.id,t.title,t.description,\
-                    (SELECT MAX(e.id) FROM task_events e WHERE e.board_id=t.board_id AND e.task_id=t.id),\
-                    t.created_at,t.updated_at \
-             FROM tasks t WHERE t.board_id=?1 AND t.archived_at IS NULL ORDER BY t.seq ASC",
+            r#"SELECT 'kb://task/' || t.id,t.board_id,t.id,t.title,t.description,
+                      COALESCE((
+                        SELECT group_concat(ordered.body, char(10))
+                        FROM (
+                          SELECT c.body
+                          FROM task_comments c
+                          WHERE c.board_id=t.board_id AND c.task_id=t.id
+                          ORDER BY c.created_at,c.id
+                        ) ordered
+                      ),''),
+                      COALESCE((
+                        SELECT group_concat(ordered.text, char(10))
+                        FROM (
+                          SELECT COALESCE(r.summary,'') || ' ' || COALESCE(r.error,'') AS text
+                          FROM task_runs r
+                          WHERE r.board_id=t.board_id AND r.task_id=t.id
+                          ORDER BY r.started_at,r.id
+                        ) ordered
+                      ),''),
+                      COALESCE((
+                        SELECT group_concat(ordered.text, char(10))
+                        FROM (
+                          SELECT e.kind || ' ' || e.payload_json AS text
+                          FROM task_events e
+                          WHERE e.board_id=t.board_id AND e.task_id=t.id
+                          ORDER BY e.id
+                        ) ordered
+                      ),''),
+                      (SELECT MAX(e.id) FROM task_events e
+                       WHERE e.board_id=t.board_id AND e.task_id=t.id),
+                      t.created_at,t.updated_at
+               FROM tasks t
+               WHERE t.board_id=?1 AND t.archived_at IS NULL
+               ORDER BY t.seq ASC"#,
         )
         .map_err(storage)?;
     let rows = stmt
@@ -365,10 +398,41 @@ fn vector_chunks_for_entity_uris(
         .collect::<Vec<_>>()
         .join(",");
     let sql = format!(
-        "SELECT 'kb://task/' || t.id,t.board_id,t.id,t.title,t.description,\
-                (SELECT MAX(e.id) FROM task_events e WHERE e.board_id=t.board_id AND e.task_id=t.id),\
-                t.created_at,t.updated_at \
-         FROM tasks t WHERE t.board_id=? AND t.archived_at IS NULL AND t.id IN ({placeholders}) ORDER BY t.seq ASC"
+        r#"SELECT 'kb://task/' || t.id,t.board_id,t.id,t.title,t.description,
+                  COALESCE((
+                    SELECT group_concat(ordered.body, char(10))
+                    FROM (
+                      SELECT c.body
+                      FROM task_comments c
+                      WHERE c.board_id=t.board_id AND c.task_id=t.id
+                      ORDER BY c.created_at,c.id
+                    ) ordered
+                  ),''),
+                  COALESCE((
+                    SELECT group_concat(ordered.text, char(10))
+                    FROM (
+                      SELECT COALESCE(r.summary,'') || ' ' || COALESCE(r.error,'') AS text
+                      FROM task_runs r
+                      WHERE r.board_id=t.board_id AND r.task_id=t.id
+                      ORDER BY r.started_at,r.id
+                    ) ordered
+                  ),''),
+                  COALESCE((
+                    SELECT group_concat(ordered.text, char(10))
+                    FROM (
+                      SELECT e.kind || ' ' || e.payload_json AS text
+                      FROM task_events e
+                      WHERE e.board_id=t.board_id AND e.task_id=t.id
+                      ORDER BY e.id
+                    ) ordered
+                  ),''),
+                  (SELECT MAX(e.id) FROM task_events e
+                   WHERE e.board_id=t.board_id AND e.task_id=t.id),
+                  t.created_at,t.updated_at
+           FROM tasks t
+           WHERE t.board_id=? AND t.archived_at IS NULL
+             AND t.id IN ({placeholders})
+           ORDER BY t.seq ASC"#
     );
     let mut params = vec![Value::Text(board_id.to_owned())];
     params.extend(task_ids.into_iter().map(Value::Text));
@@ -390,9 +454,12 @@ fn task_chunk_source_from_row(row: &Row<'_>) -> rusqlite::Result<TaskChunkSource
         task_id: row.get(2)?,
         title: row.get(3)?,
         description: row.get(4)?,
-        source_event_id: row.get(5)?,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
+        comments: row.get(5)?,
+        run_text: row.get(6)?,
+        event_text: row.get(7)?,
+        source_event_id: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
     })
 }
 

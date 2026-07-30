@@ -4,12 +4,46 @@ use anyhow::Context;
 use common::{TempDb, kanban, kanban_in_dir};
 use kanban_sqlite::db::maintenance_lock_path;
 use pretty_assertions::assert_eq;
-use std::{
-    path::Path,
-    process::{Command as ProcessCommand, Stdio},
-    thread,
-    time::{Duration, Instant},
-};
+#[cfg(feature = "tantivy-backend")]
+use std::fs;
+use std::path::Path;
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn maintenance_run_reports_store_failure_as_closed_result() -> anyhow::Result<()> {
+    let temp = TempDb::new("maintenance_store_failure_result")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let store_root = temp.dir.join("index/v2/tantivy_tasks");
+    fs::create_dir_all(&store_root)?;
+    fs::write(store_root.join("generations"), b"not-a-directory")?;
+
+    let output = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "failure-fixture",
+            "--json",
+            "maintenance",
+            "run",
+            "--once",
+        ],
+    )?
+    .success_json()?;
+    let result = &output["data"]["stores"][0]["result"];
+    assert_eq!(result["status"], "failed");
+    assert_eq!(result["kind"], "backend");
+    assert!(
+        result["message"]
+            .as_str()
+            .is_some_and(|message| !message.is_empty())
+    );
+    let status = kanban(&temp.path, &["--json", "maintenance", "status"])?.success_json()?;
+    assert_eq!(
+        status["data"]["maintenance_owner"]["owner"],
+        serde_json::Value::Null
+    );
+    Ok(())
+}
 
 fn mark_no_plan_required(db_path: &Path, task_id: &str) -> anyhow::Result<()> {
     kanban_sqlite::api::mark_execution_plan_not_required(
@@ -52,8 +86,8 @@ fn doctor_reports_integrity_and_expired_runs() -> anyhow::Result<()> {
     let doctor = kanban(&temp.path, &["--json", "doctor"])?.success_json()?;
 
     assert_eq!(doctor["data"]["integrity_check"], "ok");
-    assert_eq!(doctor["data"]["migration_version"], 27);
-    assert_eq!(doctor["data"]["user_version"], 27);
+    assert_eq!(doctor["data"]["migration_version"], 28);
+    assert_eq!(doctor["data"]["user_version"], 28);
     assert_eq!(doctor["data"]["expired_running_tasks"], 1);
     assert_eq!(doctor["data"]["dependency_cycles"], 0);
     assert_eq!(doctor["data"]["archived_dependency_edges"], 0);
@@ -172,85 +206,36 @@ fn maintenance_rejects_missing_database() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[cfg(unix)]
 #[test]
-fn maintenance_continuous_reacquires_stale_owner_and_releases_on_sigint() -> anyhow::Result<()> {
-    let temp = TempDb::new("maintenance_continuous_reacquire")?;
+fn maintenance_continuous_partial_capability_refuses_without_claiming_owner() -> anyhow::Result<()>
+{
+    let temp = TempDb::new("maintenance_continuous_partial_capability")?;
     kanban(&temp.path, &["init"])?.success()?;
-    let mut command = ProcessCommand::new(env!("CARGO_BIN_EXE_kanban"));
-    command
-        .current_dir(&temp.dir)
-        .arg("--db")
-        .arg(&temp.path)
-        .args(["--json", "maintenance", "run", "--poll-interval-ms", "20"])
-        .env_remove("KB_BOARD")
-        .env("XDG_CONFIG_HOME", temp.dir.join(".xdg-config"))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let child = command.spawn().context("spawn continuous maintenance")?;
-
-    let first_token = wait_for_maintenance_owner(&temp.path, None)?;
-    kanban_sqlite::db::connect_file(&temp.path)?.execute(
-        "UPDATE projection_maintenance_owner
-         SET lease_expires_at=0
-         WHERE singleton=1 AND lease_token=?1",
-        [&first_token],
+    kanban(
+        &temp.path,
+        &["--json", "maintenance", "run", "--poll-interval-ms", "20"],
+    )?
+    .json_failure_code_containing(
+        2,
+        "continuous maintenance requires capabilities for every projection store",
     )?;
-    let second_token = wait_for_maintenance_owner(&temp.path, Some(&first_token))?;
-    assert_ne!(second_token, first_token);
 
-    let status = ProcessCommand::new("/bin/kill")
-        .arg("-INT")
-        .arg(child.id().to_string())
-        .status()
-        .context("send SIGINT")?;
-    anyhow::ensure!(status.success(), "kill -INT failed with {status}");
-    let output = child
-        .wait_with_output()
-        .context("wait for continuous maintenance")?;
-    anyhow::ensure!(
-        output.status.success(),
-        "continuous maintenance failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let owner: Option<String> = kanban_sqlite::db::connect_file(&temp.path)?.query_row(
-        "SELECT owner FROM projection_maintenance_owner WHERE singleton=1",
+    let owner = kanban_sqlite::db::connect_file(&temp.path)?.query_row(
+        "SELECT owner,lease_token,lease_expires_at,capabilities_json,build_identity
+         FROM projection_maintenance_owner WHERE singleton=1",
         [],
-        |row| row.get(0),
+        |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        },
     )?;
-    assert_eq!(owner, None);
+    assert_eq!(owner, (None, None, None, "[]".to_owned(), None));
     Ok(())
-}
-
-#[cfg(unix)]
-fn wait_for_maintenance_owner(
-    db_path: &Path,
-    different_from: Option<&str>,
-) -> anyhow::Result<String> {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while Instant::now() < deadline {
-        let row = kanban_sqlite::db::connect_file(db_path)?.query_row(
-            "SELECT lease_token,lease_expires_at
-             FROM projection_maintenance_owner WHERE singleton=1",
-            [],
-            |row| {
-                Ok((
-                    row.get::<_, Option<String>>(0)?,
-                    row.get::<_, Option<i64>>(1)?,
-                ))
-            },
-        )?;
-        if let (Some(token), Some(expires_at)) = row
-            && different_from != Some(token.as_str())
-            && expires_at > 0
-        {
-            return Ok(token);
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-    anyhow::bail!("maintenance owner did not reach the expected lease state")
 }
 
 #[test]
@@ -291,7 +276,8 @@ fn maintenance_rebuild_targets_oxigraph_v2_store() -> anyhow::Result<()> {
         .context("maintenance rebuild stores")?;
     assert_eq!(stores.len(), 1);
     assert_eq!(stores[0]["store_name"], "oxigraph_relations");
-    assert_eq!(stores[0]["action"], "generation_published");
+    assert_eq!(stores[0]["result"]["status"], "succeeded");
+    assert_eq!(stores[0]["result"]["action"], "generation_published");
     assert_eq!(stores[0]["lifecycle_status"], "ready");
     Ok(())
 }

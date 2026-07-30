@@ -2308,6 +2308,16 @@
   },
   {
     "contracts": [
+      "helper.vector-projection.request",
+      "helper.vector-projection.response"
+    ],
+    "exclusion": null,
+    "key": "vector projection helper protocol",
+    "migration": "adopted",
+    "surface": "helper"
+  },
+  {
+    "contracts": [
       "jsonl.board.input",
       "jsonl.board.output"
     ],

@@ -106,6 +106,10 @@ impl From<tantivy_backend::TantivyTaskIndexError> for SearchBackendError {
 #[cfg(feature = "tantivy-backend")]
 pub mod tantivy_backend {
     use super::{SearchHit, SearchMeta, SearchQuery, TaskSearchDocument};
+    use kanban_local::{
+        durable_create_dir_all, durable_create_new_file, durable_publish_directory,
+        durable_sync_directory_tree,
+    };
     use serde::{Deserialize, Serialize};
     use std::{
         error::Error,
@@ -259,7 +263,7 @@ pub mod tantivy_backend {
                 "index path must have a parent",
             )
         })?;
-        fs::create_dir_all(parent)?;
+        durable_create_dir_all(parent)?;
         let tmp_path = temp_index_path(path);
         if tmp_path.exists() {
             fs::remove_dir_all(&tmp_path)?;
@@ -360,9 +364,7 @@ pub mod tantivy_backend {
             }
             writer.commit()?;
             write_projection_metadata(&tmp_path, metadata)?;
-            sync_directory_tree(&tmp_path)?;
-            fs::rename(&tmp_path, path)?;
-            sync_directory(parent)?;
+            durable_publish_directory(&tmp_path, path)?;
             Ok(metadata.clone())
         })();
         if result.is_err() {
@@ -408,6 +410,8 @@ pub mod tantivy_backend {
             writer.add_document(to_tantivy_doc(fields, document))?;
         }
         writer.commit()?;
+        drop(writer);
+        durable_sync_directory_tree(path)?;
         Ok(metadata)
     }
 
@@ -641,35 +645,12 @@ pub mod tantivy_backend {
         metadata: &TantivyTaskProjectionMetadata,
     ) -> Result<(), TantivyTaskIndexError> {
         let metadata_path = path.join("kb-projection-meta.json");
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(metadata_path)?;
-        use std::io::Write as _;
-        file.write_all(&serde_json::to_vec_pretty(metadata)?)?;
-        file.sync_all()?;
+        durable_create_new_file(&metadata_path, &serde_json::to_vec_pretty(metadata)?)?;
         Ok(())
     }
 
     pub fn sync_task_projection_generation_files(path: &Path) -> Result<(), TantivyTaskIndexError> {
-        sync_directory_tree(path)
-    }
-
-    fn sync_directory_tree(path: &Path) -> Result<(), TantivyTaskIndexError> {
-        for entry in fs::read_dir(path)? {
-            let entry = entry?;
-            let file_type = entry.file_type()?;
-            if file_type.is_dir() {
-                sync_directory_tree(&entry.path())?;
-            } else if file_type.is_file() {
-                fs::File::open(entry.path())?.sync_all()?;
-            }
-        }
-        sync_directory(path)
-    }
-
-    fn sync_directory(path: &Path) -> Result<(), TantivyTaskIndexError> {
-        fs::File::open(path)?.sync_all()?;
+        durable_sync_directory_tree(path)?;
         Ok(())
     }
 

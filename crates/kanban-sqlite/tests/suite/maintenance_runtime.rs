@@ -1,8 +1,66 @@
 use crate::common::*;
 
 use kanban_sqlite::api::{
-    MaintenanceMode, MaintenanceRunOptions, MaintenanceSession, maintenance_status,
+    MaintenanceMode, MaintenanceRunOptions, MaintenanceSession, ProjectionRuntimeAvailability,
+    maintenance_status,
 };
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+use kanban_sqlite::api::{
+    MaintenanceRunReport, MaintenanceStoreFailureKind, MaintenanceStoreResult,
+};
+
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+fn failed_store_message<'a>(
+    report: &'a MaintenanceRunReport,
+    store_name: &str,
+    expected_kind: MaintenanceStoreFailureKind,
+) -> &'a str {
+    let store = report
+        .stores
+        .iter()
+        .find(|store| store.store_name == store_name)
+        .unwrap_or_else(|| panic!("{store_name} result"));
+    match &store.result {
+        MaintenanceStoreResult::Failed { kind, message } => {
+            assert_eq!(*kind, expected_kind);
+            message
+        }
+        result => panic!("expected {store_name} failure, got {result:?}"),
+    }
+}
+
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+fn projection_store_root(path: &Path, store_name: &str) -> anyhow::Result<std::path::PathBuf> {
+    let database_instance_id = maintenance_status(path)?.database_instance_id;
+    Ok(kanban_local::projection_store_root_path(
+        path,
+        &database_instance_id,
+        store_name,
+    )?)
+}
+
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+fn quarantined_generation_path(generation_path: &Path) -> anyhow::Result<std::path::PathBuf> {
+    let parent = generation_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("generation has no parent"))?;
+    let generation = generation_path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("generation has no file name"))?
+        .to_string_lossy();
+    let prefix = format!(".{generation}.quarantine.");
+    let matches = std::fs::read_dir(parent)?
+        .flatten()
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+        .map(|entry| entry.path())
+        .collect::<Vec<_>>();
+    anyhow::ensure!(
+        matches.len() == 1,
+        "expected one quarantine sibling for {generation}, got {}",
+        matches.len()
+    );
+    Ok(matches.into_iter().next().expect("one quarantine sibling"))
+}
 
 #[test]
 fn maintenance_owner_is_singleton_and_expired_token_cannot_release_successor() -> anyhow::Result<()>
@@ -13,13 +71,29 @@ fn maintenance_owner_is_singleton_and_expired_token_cannot_release_successor() -
     let first = MaintenanceSession::start(
         &temp.path,
         "owner-a",
-        MaintenanceMode::Continuous,
+        MaintenanceMode::Once,
         MaintenanceRunOptions::default(),
     )?;
     let status = maintenance_status(&temp.path)?;
     assert!(status.maintenance_owner.active);
     assert_eq!(status.maintenance_owner.owner.as_deref(), Some("owner-a"));
-    assert_eq!(status.maintenance_owner.mode.as_deref(), Some("continuous"));
+    assert_eq!(status.maintenance_owner.mode.as_deref(), Some("once"));
+    assert!(
+        !status
+            .maintenance_owner
+            .build_identity
+            .as_deref()
+            .unwrap()
+            .is_empty()
+    );
+    let mut expected_capabilities: Vec<String> = vec![
+        #[cfg(feature = "tantivy-backend")]
+        "tantivy_tasks".to_owned(),
+        #[cfg(feature = "oxigraph-backend")]
+        "oxigraph_relations".to_owned(),
+    ];
+    expected_capabilities.sort();
+    assert_eq!(status.maintenance_owner.capabilities, expected_capabilities);
     assert!(
         !serde_json::to_value(&status)?
             .to_string()
@@ -54,6 +128,101 @@ fn maintenance_owner_is_singleton_and_expired_token_cannot_release_successor() -
     let status = maintenance_status(&temp.path)?;
     assert!(!status.maintenance_owner.active);
     assert_eq!(status.maintenance_owner.owner, None);
+    assert!(status.maintenance_owner.capabilities.is_empty());
+    assert_eq!(status.maintenance_owner.build_identity, None);
+    Ok(())
+}
+
+#[test]
+fn maintenance_owner_renewal_is_bound_to_build_identity_and_capabilities() -> anyhow::Result<()> {
+    let temp = TempDb::new("maintenance_owner_runtime_identity_binding")?;
+    init_database(&temp.path, "tester")?;
+    let mut session = MaintenanceSession::start(
+        &temp.path,
+        "owner-a",
+        MaintenanceMode::Once,
+        MaintenanceRunOptions::default(),
+    )?;
+    let identity = maintenance_status(&temp.path)?
+        .maintenance_owner
+        .build_identity
+        .expect("active owner build identity");
+
+    connect_file(&temp.path)?.execute(
+        "UPDATE projection_maintenance_owner
+         SET build_identity='tampered-build'
+         WHERE singleton=1",
+        [],
+    )?;
+    let error = result_err(session.heartbeat())?;
+    assert!(matches!(error, KanbanError::Conflict(_)));
+
+    connect_file(&temp.path)?.execute(
+        "UPDATE projection_maintenance_owner
+         SET build_identity=?1,capabilities_json='[\"tampered\"]'
+         WHERE singleton=1",
+        [&identity],
+    )?;
+    let error = result_err(session.heartbeat())?;
+    assert!(matches!(error, KanbanError::Conflict(_)));
+
+    connect_file(&temp.path)?.execute(
+        "UPDATE projection_maintenance_owner SET lease_expires_at=0 WHERE singleton=1",
+        [],
+    )?;
+    drop(session);
+    Ok(())
+}
+
+#[test]
+fn maintenance_status_reports_compiled_backend_availability_fail_closed() -> anyhow::Result<()> {
+    let temp = TempDb::new("maintenance_backend_availability")?;
+    init_database(&temp.path, "tester")?;
+    let status = maintenance_status(&temp.path)?;
+
+    let tantivy = status
+        .stores
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .expect("Tantivy status");
+    #[cfg(feature = "tantivy-backend")]
+    assert_eq!(
+        tantivy.runtime_availability,
+        ProjectionRuntimeAvailability::Available
+    );
+    #[cfg(not(feature = "tantivy-backend"))]
+    {
+        assert_eq!(
+            tantivy.runtime_availability,
+            ProjectionRuntimeAvailability::Unavailable
+        );
+        assert_eq!(
+            tantivy.fallback_reason.as_deref(),
+            Some("backend_unavailable")
+        );
+    }
+
+    let oxigraph = status
+        .stores
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status");
+    #[cfg(feature = "oxigraph-backend")]
+    assert_eq!(
+        oxigraph.runtime_availability,
+        ProjectionRuntimeAvailability::Available
+    );
+    #[cfg(not(feature = "oxigraph-backend"))]
+    {
+        assert_eq!(
+            oxigraph.runtime_availability,
+            ProjectionRuntimeAvailability::Unavailable
+        );
+        assert_eq!(
+            oxigraph.fallback_reason.as_deref(),
+            Some("backend_unavailable")
+        );
+    }
     Ok(())
 }
 
@@ -157,15 +326,15 @@ fn maintenance_bootstraps_db_scoped_multi_board_tantivy_and_catches_up() -> anyh
 
     let second =
         maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
-    assert_eq!(
-        second
+    assert!(matches!(
+        &second
             .stores
             .iter()
             .find(|store| store.store_name == "tantivy_tasks")
             .expect("Tantivy is enabled")
-            .action,
-        "batch_applied"
-    );
+            .result,
+        MaintenanceStoreResult::Succeeded { action, .. } if action == "batch_applied"
+    ));
     let caught_up = search_tasks(&temp.path, query("other", "gamma"))?;
     assert_eq!(caught_up.meta.backend, "tantivy");
     assert_eq!(caught_up.hits[0].task_id, new_other.id);
@@ -195,6 +364,119 @@ fn maintenance_run_reports_every_enabled_db_scoped_store() -> anyhow::Result<()>
             .collect::<Vec<_>>(),
         vec!["tantivy_tasks", "oxigraph_relations"]
     );
+    Ok(())
+}
+
+#[cfg(all(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+#[test]
+fn failing_tantivy_store_does_not_starve_oxigraph() -> anyhow::Result<()> {
+    use std::fs;
+
+    use kanban_indexer::{OXIGRAPH_RELATIONS_STORE, TANTIVY_TASKS_STORE};
+    use kanban_sqlite::api::{maintenance_rebuild_all, maintenance_run_once};
+
+    for operation in ["run_once", "rebuild_all"] {
+        let temp = TempDb::new(&format!(
+            "maintenance_tantivy_failure_isolation_{operation}"
+        ))?;
+        init_database(&temp.path, "tester")?;
+        let root = projection_store_root(&temp.path, TANTIVY_TASKS_STORE)?;
+        fs::create_dir_all(&root)?;
+        fs::write(root.join("generations"), b"not-a-directory")?;
+
+        let report = if operation == "run_once" {
+            maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?
+        } else {
+            maintenance_rebuild_all(&temp.path, "runtime-test", MaintenanceRunOptions::default())?
+        };
+        let tantivy = report
+            .stores
+            .iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy result");
+        assert!(matches!(
+            &tantivy.result,
+            MaintenanceStoreResult::Failed {
+                kind: MaintenanceStoreFailureKind::Backend,
+                ..
+            }
+        ));
+        let oxigraph = report
+            .stores
+            .iter()
+            .find(|store| store.store_name == OXIGRAPH_RELATIONS_STORE)
+            .expect("Oxigraph result");
+        assert!(matches!(
+            &oxigraph.result,
+            MaintenanceStoreResult::Succeeded { .. }
+        ));
+        assert_eq!(oxigraph.lifecycle_status, "ready");
+        assert!(
+            maintenance_status(&temp.path)?
+                .stores
+                .iter()
+                .find(|store| store.store_name == OXIGRAPH_RELATIONS_STORE)
+                .and_then(|store| store.active_generation.as_ref())
+                .is_some(),
+            "{operation}"
+        );
+    }
+    Ok(())
+}
+
+#[cfg(all(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+#[test]
+fn failing_oxigraph_store_does_not_erase_tantivy_progress() -> anyhow::Result<()> {
+    use std::fs;
+
+    use kanban_indexer::{OXIGRAPH_RELATIONS_STORE, TANTIVY_TASKS_STORE};
+    use kanban_sqlite::api::{maintenance_rebuild_all, maintenance_run_once};
+
+    for operation in ["run_once", "rebuild_all"] {
+        let temp = TempDb::new(&format!(
+            "maintenance_oxigraph_failure_isolation_{operation}"
+        ))?;
+        init_database(&temp.path, "tester")?;
+        let root = projection_store_root(&temp.path, OXIGRAPH_RELATIONS_STORE)?;
+        fs::create_dir_all(&root)?;
+        fs::write(root.join("generations"), b"not-a-directory")?;
+
+        let report = if operation == "run_once" {
+            maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?
+        } else {
+            maintenance_rebuild_all(&temp.path, "runtime-test", MaintenanceRunOptions::default())?
+        };
+        let tantivy = report
+            .stores
+            .iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy result");
+        assert!(matches!(
+            &tantivy.result,
+            MaintenanceStoreResult::Succeeded { .. }
+        ));
+        let oxigraph = report
+            .stores
+            .iter()
+            .find(|store| store.store_name == OXIGRAPH_RELATIONS_STORE)
+            .expect("Oxigraph result");
+        assert!(matches!(
+            &oxigraph.result,
+            MaintenanceStoreResult::Failed {
+                kind: MaintenanceStoreFailureKind::Backend,
+                ..
+            }
+        ));
+        assert!(
+            maintenance_status(&temp.path)?
+                .stores
+                .iter()
+                .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+                .and_then(|store| store.active_generation.as_ref())
+                .is_some(),
+            "{operation}"
+        );
+    }
     Ok(())
 }
 
@@ -292,13 +574,134 @@ fn maintenance_rebuild_keeps_previous_tantivy_generation() -> anyhow::Result<()>
     assert_ne!(store.active_generation.as_deref(), Some(first.as_str()));
     assert_eq!(store.previous_generation.as_deref(), Some(first.as_str()));
     assert!(
-        temp.dir
-            .join("index/v2/tantivy_tasks/generations")
+        projection_store_root(&temp.path, "tantivy_tasks")?
+            .join("generations")
             .join(first)
             .join("published")
             .is_file()
     );
     Ok(())
+}
+
+#[cfg(any(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+fn assert_marker_recovery_rotates_corrupt_previous(
+    temp: &TempDb,
+    store_name: &str,
+) -> anyhow::Result<()> {
+    use kanban_sqlite::api::maintenance_run_once;
+
+    init_database(&temp.path, "tester")?;
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready(format!("{store_name} generation A")),
+    )?;
+    maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    let first_status = maintenance_status(&temp.path)?;
+    let first = first_status
+        .stores
+        .iter()
+        .find(|store| store.store_name == store_name)
+        .and_then(|store| store.active_generation.clone())
+        .expect("first active generation");
+    let generations = projection_store_root(&temp.path, store_name)?.join("generations");
+    let first_path = generations.join(&first);
+
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready(format!("{store_name} pending mutation B")),
+    )?;
+    std::fs::write(first_path.join("published"), b"corrupt-active-marker")?;
+    let first_recovery =
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    let first_result = first_recovery
+        .stores
+        .iter()
+        .find(|store| store.store_name == store_name)
+        .expect("first recovery result");
+    assert!(matches!(
+        &first_result.result,
+        MaintenanceStoreResult::Succeeded { action, .. } if action == "generation_recovered"
+    ));
+    let second_status = maintenance_status(&temp.path)?;
+    let second_store = second_status
+        .stores
+        .iter()
+        .find(|store| store.store_name == store_name)
+        .expect("second store status");
+    let second = second_store
+        .active_generation
+        .clone()
+        .expect("second active generation");
+    assert_ne!(second, first);
+    assert_eq!(
+        second_store.previous_generation.as_deref(),
+        Some(first.as_str())
+    );
+    assert!(first_path.is_dir(), "recovery must preserve generation A");
+    assert!(first_path.join("published").is_file());
+
+    std::fs::write(first_path.join("published"), b"corrupt-retained-previous")?;
+    let second_path = generations.join(&second);
+    std::fs::remove_file(second_path.join("published"))?;
+    create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready(format!("{store_name} pending mutation C")),
+    )?;
+    let second_recovery =
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    let second_result = second_recovery
+        .stores
+        .iter()
+        .find(|store| store.store_name == store_name)
+        .expect("second recovery result");
+    assert!(matches!(
+        &second_result.result,
+        MaintenanceStoreResult::Succeeded { action, .. } if action == "generation_recovered"
+    ));
+    let final_status = maintenance_status(&temp.path)?;
+    let final_store = final_status
+        .stores
+        .iter()
+        .find(|store| store.store_name == store_name)
+        .expect("final store status");
+    assert_ne!(
+        final_store.active_generation.as_deref(),
+        Some(second.as_str())
+    );
+    assert_eq!(
+        final_store.previous_generation.as_deref(),
+        Some(second.as_str())
+    );
+    assert!(
+        first_path.is_dir(),
+        "corrupt previous evidence must be retained"
+    );
+    assert!(
+        second_path.is_dir(),
+        "repaired active evidence must be retained"
+    );
+    assert!(second_path.join("published").is_file());
+    Ok(())
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn tantivy_marker_recovery_preserves_active_and_rotates_corrupt_previous() -> anyhow::Result<()> {
+    let temp = TempDb::new("tantivy_marker_recovery")?;
+    assert_marker_recovery_rotates_corrupt_previous(&temp, "tantivy_tasks")
+}
+
+#[cfg(feature = "oxigraph-backend")]
+#[test]
+fn oxigraph_marker_recovery_preserves_active_and_rotates_corrupt_previous() -> anyhow::Result<()> {
+    let temp = TempDb::new("oxigraph_marker_recovery")?;
+    assert_marker_recovery_rotates_corrupt_previous(&temp, "oxigraph_relations")
 }
 
 #[cfg(feature = "oxigraph-backend")]
@@ -351,7 +754,7 @@ fn maintenance_bootstraps_db_scoped_multi_board_oxigraph_and_removes_relations()
         .active_generation
         .as_deref()
         .expect("Oxigraph generation is active");
-    let root = kanban_local::projection_store_root_path(&temp.path, "oxigraph_relations")?;
+    let root = projection_store_root(&temp.path, "oxigraph_relations")?;
     let graph = OxigraphStore::open(root.join("generations").join(generation))?;
     let child_uri = EntityUri::new(format!("kb://task/{}", child.id))?;
     let relations = graph.neighbors(&child_uri, None, 20)?;
@@ -407,7 +810,7 @@ fn maintenance_detects_tampered_oxigraph_content_and_recovers() -> anyhow::Resul
         .active_generation
         .as_deref()
         .expect("active generation");
-    let root = kanban_local::projection_store_root_path(&temp.path, "oxigraph_relations")?;
+    let root = projection_store_root(&temp.path, "oxigraph_relations")?;
     let generation_path = root.join("generations").join(generation);
     std::fs::write(generation_path.join("relations.json"), b"[]")?;
     let metadata_path = generation_path.join("kb-projection-meta.json");
@@ -436,15 +839,15 @@ fn maintenance_detects_tampered_oxigraph_content_and_recovers() -> anyhow::Resul
         "oxigraph-runtime-test",
         MaintenanceRunOptions::default(),
     )?;
-    assert_eq!(
-        recovered
+    assert!(matches!(
+        &recovered
             .stores
             .iter()
             .find(|store| store.store_name == "oxigraph_relations")
             .expect("Oxigraph run")
-            .action,
-        "generation_recovered"
-    );
+            .result,
+        MaintenanceStoreResult::Succeeded { action, .. } if action == "generation_recovered"
+    ));
     let ready = maintenance_status(&temp.path)?;
     let store = ready
         .stores
@@ -480,8 +883,8 @@ fn maintenance_status_detects_and_run_repairs_missing_physical_generation() -> a
         .expect("Tantivy status");
     let generation = store.active_generation.clone().expect("active generation");
     std::fs::remove_dir_all(
-        temp.dir
-            .join("index/v2/tantivy_tasks/generations")
+        projection_store_root(&temp.path, "tantivy_tasks")?
+            .join("generations")
             .join(&generation),
     )?;
 
@@ -571,9 +974,8 @@ fn maintenance_quarantines_readable_metadata_mismatch_and_recovers() -> anyhow::
         .find(|store| store.store_name == "tantivy_tasks")
         .expect("Tantivy status");
     let generation = store.active_generation.clone().expect("active generation");
-    let generation_path = temp
-        .dir
-        .join("index/v2/tantivy_tasks/generations")
+    let generation_path = projection_store_root(&temp.path, "tantivy_tasks")?
+        .join("generations")
         .join(&generation);
     let metadata_path = generation_path.join("kb-projection-meta.json");
     let mut metadata: serde_json::Value = serde_json::from_slice(&std::fs::read(&metadata_path)?)?;
@@ -604,10 +1006,14 @@ fn maintenance_quarantines_readable_metadata_mismatch_and_recovers() -> anyhow::
         store.active_generation.as_deref(),
         Some(generation.as_str())
     );
-    assert!(generation_path.is_dir(), "recovery must preserve evidence");
     assert!(
-        !generation_path.join("published").exists(),
-        "mismatched evidence must be quarantined from the active set"
+        std::fs::symlink_metadata(&generation_path).is_err(),
+        "mismatched evidence must leave the authoritative namespace"
+    );
+    let quarantined = quarantined_generation_path(&generation_path)?;
+    assert!(
+        quarantined.join("kb-projection-meta.json").is_file(),
+        "recovery must preserve mismatched evidence in quarantine"
     );
     assert_eq!(store.previous_generation, None);
     Ok(())
@@ -649,9 +1055,8 @@ fn corrupted_tantivy_artifact_evidence_forces_every_search_surface_to_sqlite() -
             .active_generation
             .clone()
             .expect("active generation");
-        let metadata_path = temp
-            .dir
-            .join("index/v2/tantivy_tasks/generations")
+        let metadata_path = projection_store_root(&temp.path, "tantivy_tasks")?
+            .join("generations")
             .join(&generation)
             .join("kb-projection-meta.json");
         let mut metadata: serde_json::Value =
@@ -737,12 +1142,14 @@ fn unmappable_tantivy_delivery_fails_without_advancing_checkpoint() -> anyhow::R
         [],
     )?;
 
-    let error = result_err(maintenance_run_once(
-        &temp.path,
-        "runtime-test",
-        MaintenanceRunOptions::default(),
-    ))?;
-    assert!(error.to_string().contains("cannot be mapped"));
+    let report =
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    let message = failed_store_message(
+        &report,
+        "tantivy_tasks",
+        MaintenanceStoreFailureKind::Delivery,
+    );
+    assert!(message.contains("cannot be mapped"));
     let after = maintenance_status(&temp.path)?;
     let store = after
         .stores
@@ -786,12 +1193,14 @@ fn unmappable_oxigraph_upsert_fails_without_advancing_checkpoint() -> anyhow::Re
         [],
     )?;
 
-    let error = result_err(maintenance_run_once(
-        &temp.path,
-        "runtime-test",
-        MaintenanceRunOptions::default(),
-    ))?;
-    assert!(error.to_string().contains("cannot be mapped"));
+    let report =
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    let message = failed_store_message(
+        &report,
+        "oxigraph_relations",
+        MaintenanceStoreFailureKind::Delivery,
+    );
+    assert!(message.contains("cannot be mapped"));
     let after = maintenance_status(&temp.path)?;
     let store = after
         .stores
@@ -846,12 +1255,14 @@ fn oxigraph_event_cannot_be_retargeted_to_another_existing_task() -> anyhow::Res
         rusqlite::params![format!("kb://task/{}", other.id), source.id],
     )?;
 
-    let error = result_err(maintenance_run_once(
-        &temp.path,
-        "runtime-test",
-        MaintenanceRunOptions::default(),
-    ))?;
-    assert!(error.to_string().contains("cannot be mapped"));
+    let report =
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    let message = failed_store_message(
+        &report,
+        "oxigraph_relations",
+        MaintenanceStoreFailureKind::Delivery,
+    );
+    assert!(message.contains("cannot be mapped"));
     let store = maintenance_status(&temp.path)?
         .stores
         .into_iter()
@@ -912,12 +1323,14 @@ fn oxigraph_event_cannot_fall_back_to_legacy_across_boards() -> anyhow::Result<(
         rusqlite::params![other_event, source.id],
     )?;
 
-    let error = result_err(maintenance_run_once(
-        &temp.path,
-        "runtime-test",
-        MaintenanceRunOptions::default(),
-    ))?;
-    assert!(error.to_string().contains("source event"));
+    let report =
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    let message = failed_store_message(
+        &report,
+        "oxigraph_relations",
+        MaintenanceStoreFailureKind::Delivery,
+    );
+    assert!(message.contains("source event"));
     let store = maintenance_status(&temp.path)?
         .stores
         .into_iter()
@@ -1025,15 +1438,14 @@ fn oxigraph_board_noop_requires_non_task_source_event() -> anyhow::Result<()> {
             )?;
         }
 
-        let error = result_err(maintenance_run_once(
-            &temp.path,
-            "runtime-test",
-            MaintenanceRunOptions::default(),
-        ))?;
-        assert!(
-            error.to_string().contains("cannot be mapped"),
-            "{case}: {error}"
+        let report =
+            maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+        let message = failed_store_message(
+            &report,
+            "oxigraph_relations",
+            MaintenanceStoreFailureKind::Delivery,
         );
+        assert!(message.contains("cannot be mapped"), "{case}: {message}");
         let store = maintenance_status(&temp.path)?
             .stores
             .into_iter()

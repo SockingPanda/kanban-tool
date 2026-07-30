@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+JUST_VERSION="1.57.0"
 
 log() {
   printf '==> %s\n' "$*"
@@ -168,7 +169,12 @@ install_cargo_tool() {
 }
 
 install_rust_tools() {
-  install_cargo_tool just just
+  if command -v just >/dev/null 2>&1 && [[ "$(just --version)" == "just $JUST_VERSION" ]]; then
+    log "just $JUST_VERSION already installed"
+  else
+    log "Installing just $JUST_VERSION"
+    cargo install just --version "$JUST_VERSION" --locked --force
+  fi
 
   if [[ "${CODEX_CLOUD_INSTALL_NEXTEST:-1}" == "1" ]]; then
     install_cargo_tool cargo-nextest cargo-nextest

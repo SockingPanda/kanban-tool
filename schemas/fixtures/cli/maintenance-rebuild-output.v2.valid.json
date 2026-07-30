@@ -7,8 +7,11 @@
     "stores": [
       {
         "store_name": "tantivy_tasks",
-        "action": "generation_published",
-        "processed": 0,
+        "result": {
+          "status": "succeeded",
+          "action": "generation_published",
+          "processed": 0
+        },
         "lifecycle_status": "ready",
         "fallback_reason": null
       }

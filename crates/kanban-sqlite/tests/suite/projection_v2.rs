@@ -34,6 +34,7 @@ struct FakeProjectionStoreState {
     prepared: Option<ProjectionArtifactEvidence>,
     active: Option<ProjectionArtifactEvidence>,
     generations: BTreeMap<String, ProjectionArtifactEvidence>,
+    quarantined: BTreeMap<String, ProjectionArtifactEvidence>,
     max_fence_epoch: i64,
     bad_snapshot_evidence: bool,
     bad_batch_receipt: bool,
@@ -81,6 +82,43 @@ impl FakeProjectionStore {
             .expect("fake lock")
             .fail_after_publish_once = true;
     }
+
+    fn corrupt_generation_schema_version(&self, generation: &str) {
+        self.state
+            .lock()
+            .expect("fake lock")
+            .generations
+            .get_mut(generation)
+            .expect("prepared fake generation")
+            .manifest
+            .schema_version += 1;
+    }
+
+    fn corrupt_active_generation_schema_version(&self, generation: &str) {
+        let mut state = self.state.lock().expect("fake lock");
+        state
+            .generations
+            .get_mut(generation)
+            .expect("published fake generation")
+            .manifest
+            .schema_version += 1;
+        state
+            .active
+            .as_mut()
+            .filter(|active| active.manifest.generation == generation)
+            .expect("active fake generation")
+            .manifest
+            .schema_version += 1;
+    }
+
+    fn quarantined_generation(&self, generation: &str) -> Option<ProjectionArtifactEvidence> {
+        self.state
+            .lock()
+            .expect("fake lock")
+            .quarantined
+            .get(generation)
+            .cloned()
+    }
 }
 
 impl ProjectionStoreBackend for FakeProjectionStore {
@@ -118,6 +156,9 @@ impl ProjectionStoreBackend for FakeProjectionStore {
             fingerprint,
         };
         state.prepared = Some(evidence.clone());
+        state
+            .generations
+            .insert(evidence.manifest.generation.clone(), evidence.clone());
         Ok(evidence)
     }
 
@@ -211,6 +252,45 @@ impl ProjectionStoreBackend for FakeProjectionStore {
             .generations
             .get(generation)
             .cloned())
+    }
+
+    fn quarantine_generation(&self, generation: &str) -> kanban_core::Result<()> {
+        let mut state = self.state.lock().expect("fake lock");
+        let evidence = state
+            .generations
+            .remove(generation)
+            .or_else(|| {
+                state
+                    .active
+                    .as_ref()
+                    .filter(|active| active.manifest.generation == generation)
+                    .cloned()
+            })
+            .or_else(|| {
+                state
+                    .prepared
+                    .as_ref()
+                    .filter(|prepared| prepared.manifest.generation == generation)
+                    .cloned()
+            });
+        if state
+            .active
+            .as_ref()
+            .is_some_and(|active| active.manifest.generation == generation)
+        {
+            state.active = None;
+        }
+        if state
+            .prepared
+            .as_ref()
+            .is_some_and(|prepared| prepared.manifest.generation == generation)
+        {
+            state.prepared = None;
+        }
+        if let Some(evidence) = evidence {
+            state.quarantined.insert(generation.to_owned(), evidence);
+        }
+        Ok(())
     }
 }
 
@@ -512,7 +592,8 @@ fn abort_restores_pending_delivery_and_exact_checkpoint() -> anyhow::Result<()> 
     seed_delivery(&temp.path, 10)?;
     let backend = FakeProjectionStore::default();
     let lease = acquire_projection_lease(&temp.path, STORE, "owner", 10_000)?;
-    begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let generation =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
     prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
 
     let conn = connect_file(&temp.path)?;
@@ -537,12 +618,52 @@ fn abort_restores_pending_delivery_and_exact_checkpoint() -> anyhow::Result<()> 
     assert_eq!(status, "pending");
     assert_eq!(checkpoint, 0);
     drop(conn);
+    assert_eq!(backend.inspect_generation(&generation.generation)?, None);
+    assert!(
+        backend
+            .quarantined_generation(&generation.generation)
+            .is_some(),
+        "aborted physical evidence must remain in quarantine"
+    );
     assert!(
         !doctor_database(&temp.path)?
             .consistency_issues
             .iter()
             .any(|issue| issue.code == "projection_checkpoint_discontinuous")
     );
+    Ok(())
+}
+
+#[test]
+fn abort_quarantines_mismatched_published_generation_before_sqlite_reset() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_abort_mismatched_published")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let generation =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    let prepared =
+        prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.publish_generation(None, &prepared)?;
+    backend.corrupt_active_generation_schema_version(&generation.generation);
+
+    abort_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+
+    assert_eq!(backend.inspect_active()?, None);
+    assert_eq!(backend.inspect_generation(&generation.generation)?, None);
+    assert!(
+        backend
+            .quarantined_generation(&generation.generation)
+            .is_some(),
+        "mismatched published evidence must remain in quarantine"
+    );
+    let status = projection_status(&temp.path)?;
+    let store = status
+        .stores
+        .iter()
+        .find(|store| store.store_name == STORE)
+        .expect("Tantivy status");
+    assert!(store.building_generation.is_none());
     Ok(())
 }
 
@@ -702,6 +823,46 @@ fn every_physical_operation_revalidates_the_generation_provider() -> anyhow::Res
 }
 
 #[test]
+fn target_evidence_mismatch_is_rejected_before_delivery_claim() -> anyhow::Result<()> {
+    let temp = TempDb::new("projection_v2_target_evidence")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::default();
+    let lease = acquire_projection_lease(&temp.path, STORE, "owner", 20_000)?;
+    let generation =
+        begin_projection_generation(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, STORE, "owner", &lease.lease_token, &backend)?;
+    backend.corrupt_generation_schema_version(&generation.generation);
+    seed_delivery(&temp.path, 10)?;
+
+    let error = result_err(run_projection_batch_with(
+        &temp.path,
+        STORE,
+        "owner",
+        &lease.lease_token,
+        1_000,
+        10,
+        &backend,
+    ))?;
+    assert!(error.to_string().contains("evidence does not match SQLite"));
+
+    let conn = connect_file(&temp.path)?;
+    let (status, attempts, claim_token, checkpoint): (String, i64, Option<String>, i64) = conn
+        .query_row(
+            "SELECT d.status,d.attempts,d.claim_token,s.checkpoint_cursor
+             FROM projection_deliveries d
+             JOIN projection_store_state s USING(store_name)
+             WHERE d.store_name=?1 AND d.cursor=10",
+            [STORE],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+    assert_eq!(status, "pending");
+    assert_eq!(attempts, 0);
+    assert_eq!(claim_token, None);
+    assert_eq!(checkpoint, 0);
+    Ok(())
+}
+
+#[test]
 fn building_generation_ack_does_not_clean_legacy_health_before_publish() -> anyhow::Result<()> {
     let temp = TempDb::new("projection_v2_building_legacy_health")?;
     init_database(&temp.path, "tester")?;
@@ -786,6 +947,11 @@ fn publish_keeps_previous_and_reconciles_crash_after_pointer_swap() -> anyhow::R
         &backend,
     ))?;
     assert!(abort.to_string().contains("physically active"));
+    assert_eq!(
+        backend.quarantined_generation(&second.generation),
+        None,
+        "exact published evidence must be reconciled, never quarantined"
+    );
     connect_file(&temp.path)?.execute(
         "UPDATE projection_store_state SET lease_expires_at=0 WHERE store_name=?1",
         [STORE],

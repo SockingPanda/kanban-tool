@@ -58,7 +58,11 @@ const GENERIC_SIGNAL_LEDGER_MIGRATION: &str =
 const PROJECTION_V2_MIGRATION: &str = include_str!("../../../migrations/026_projection_v2.sql");
 const PROJECTION_MAINTENANCE_OWNER_MIGRATION: &str =
     include_str!("../../../migrations/027_projection_maintenance_owner.sql");
-const LATEST_MIGRATION_VERSION: i64 = 27;
+const PROJECTION_MAINTENANCE_RUNTIME_IDENTITY_MIGRATION: &str =
+    include_str!("../../../migrations/028_projection_maintenance_runtime_identity.sql");
+const PROJECTION_LABEL_ATOM_DELIVERIES_MIGRATION: &str =
+    include_str!("../../../migrations/029_projection_label_atom_deliveries.sql");
+const LATEST_MIGRATION_VERSION: i64 = 29;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -207,6 +211,16 @@ const MIGRATIONS: &[Migration] = &[
         version: 27,
         name: "027_projection_maintenance_owner",
         sql: PROJECTION_MAINTENANCE_OWNER_MIGRATION,
+    },
+    Migration {
+        version: 28,
+        name: "028_projection_maintenance_runtime_identity",
+        sql: PROJECTION_MAINTENANCE_RUNTIME_IDENTITY_MIGRATION,
+    },
+    Migration {
+        version: 29,
+        name: "029_projection_label_atom_deliveries",
+        sql: PROJECTION_LABEL_ATOM_DELIVERIES_MIGRATION,
     },
 ];
 
@@ -770,7 +784,14 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
         ),
         (
             "index_outbox",
-            &["target", "entity_uri", "action", "status", "attempts"][..],
+            &[
+                "target",
+                "projection_store",
+                "entity_uri",
+                "action",
+                "status",
+                "attempts",
+            ][..],
         ),
         (
             "derived_store_state",
@@ -827,6 +848,8 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                 "mode",
                 "started_at",
                 "last_heartbeat_at",
+                "capabilities_json",
+                "build_identity",
                 "updated_at",
             ][..],
         ),

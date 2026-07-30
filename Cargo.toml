@@ -80,6 +80,7 @@ tower = { version = "0.5", features = ["util"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 ulid = "1.1"
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 assert_fs = "1.1"
 
 kanban-core = { path = "crates/kanban-core" }

@@ -1,11 +1,13 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use kanban_contract::{
-    VectorHelperCheckProviderResponse, VectorHelperChunkHit, VectorHelperChunkRef,
-    VectorHelperEmbedQueryResponse, VectorHelperErrorResponse, VectorHelperHandshakeResponse,
-    VectorHelperLabelAtomHit, VectorHelperLabelAtomVectorHit, VectorHelperQueryChunksResponse,
-    VectorHelperQueryLabelAtomsItem, VectorHelperQueryLabelAtomsResponse,
-    VectorHelperStatusResponse,
+    VECTOR_PROJECTION_PROTOCOL_VERSION, VectorHelperCheckProviderResponse, VectorHelperChunkHit,
+    VectorHelperChunkRef, VectorHelperEmbedQueryResponse, VectorHelperErrorResponse,
+    VectorHelperHandshakeResponse, VectorHelperLabelAtomHit, VectorHelperLabelAtomVectorHit,
+    VectorHelperQueryChunksResponse, VectorHelperQueryLabelAtomsItem,
+    VectorHelperQueryLabelAtomsResponse, VectorHelperStatusResponse,
+    VectorProjectionHelperDescriptor, VectorProjectionHelperError, VectorProjectionHelperErrorKind,
+    VectorProjectionHelperOperation, VectorProjectionHelperRequest, VectorProjectionHelperResponse,
 };
 use kanban_vector::EmbeddingProvider;
 use kanban_vector::{LabelAtomHit, LabelAtomVectorHit, VectorHit, VectorStoreStatus};
@@ -107,12 +109,179 @@ pub fn vector_helper_embed_query_response(vector: Vec<f32>) -> VectorHelperEmbed
     vector
 }
 
+pub fn decode_vector_projection_request(
+    input: &[u8],
+) -> Result<VectorProjectionHelperRequest, serde_json::Error> {
+    serde_json::from_slice(input)
+}
+
+pub fn vector_projection_descriptor_response(
+    request_id: impl Into<String>,
+) -> VectorProjectionHelperResponse {
+    VectorProjectionHelperResponse::Descriptor(VectorProjectionHelperDescriptor {
+        request_id: request_id.into(),
+        protocol_version: VECTOR_PROJECTION_PROTOCOL_VERSION,
+        build_identity: format!("kanban-vector-lancedb@{}", env!("CARGO_PKG_VERSION")),
+        supported_stores: Vec::new(),
+        supported_operations: vec![VectorProjectionHelperOperation::Descriptor],
+    })
+}
+
+pub fn vector_projection_unavailable_response(
+    request: &VectorProjectionHelperRequest,
+) -> VectorProjectionHelperResponse {
+    let (request_id, projection_store, generation_id, delivery_digest) =
+        vector_projection_request_correlation(request);
+    VectorProjectionHelperResponse::Error(VectorProjectionHelperError {
+        kind: VectorProjectionHelperErrorKind::Backend,
+        code: "projection_backend_unavailable".to_owned(),
+        provider: None,
+        backend: Some("lancedb".to_owned()),
+        retryable: false,
+        message: "the LanceDB Projection v2 generation backend is not enabled".to_owned(),
+        request_id: Some(request_id.to_owned()),
+        delivery_digest: delivery_digest.map(str::to_owned),
+        projection_store: projection_store.map(str::to_owned),
+        generation_id: generation_id.map(str::to_owned),
+    })
+}
+
+pub fn vector_projection_invalid_request_response() -> VectorProjectionHelperResponse {
+    VectorProjectionHelperResponse::Error(VectorProjectionHelperError {
+        kind: VectorProjectionHelperErrorKind::Protocol,
+        code: "invalid_request".to_owned(),
+        provider: None,
+        backend: Some("lancedb".to_owned()),
+        retryable: false,
+        message: "vector projection helper stdin is not a valid request".to_owned(),
+        request_id: None,
+        delivery_digest: None,
+        projection_store: None,
+        generation_id: None,
+    })
+}
+
+fn vector_projection_request_correlation(
+    request: &VectorProjectionHelperRequest,
+) -> (&str, Option<&str>, Option<&str>, Option<&str>) {
+    match request {
+        VectorProjectionHelperRequest::Descriptor(request) => {
+            (&request.request_id, None, None, None)
+        }
+        VectorProjectionHelperRequest::PrepareSnapshot(request) => (
+            &request.context.request_id,
+            Some(&request.context.projection_store),
+            Some(&request.context.generation_id),
+            Some(&request.context.delivery_digest),
+        ),
+        VectorProjectionHelperRequest::ApplyBatch(request) => (
+            &request.context.request_id,
+            Some(&request.context.projection_store),
+            Some(&request.context.generation_id),
+            Some(&request.context.delivery_digest),
+        ),
+        VectorProjectionHelperRequest::Publish(request) => (
+            &request.context.request_id,
+            Some(&request.context.projection_store),
+            Some(&request.context.generation_id),
+            Some(&request.context.delivery_digest),
+        ),
+        VectorProjectionHelperRequest::InspectActive(request) => (
+            &request.request_id,
+            Some(&request.projection_store),
+            None,
+            None,
+        ),
+        VectorProjectionHelperRequest::InspectGeneration(request) => (
+            &request.request_id,
+            Some(&request.projection_store),
+            Some(&request.generation_id),
+            None,
+        ),
+        VectorProjectionHelperRequest::ValidateGenerationPublication(request) => (
+            &request.request_id,
+            Some(&request.projection_store),
+            Some(&request.expected.manifest.generation),
+            Some(&request.expected.manifest.delivery_digest),
+        ),
+        VectorProjectionHelperRequest::ValidateActiveContents(request) => (
+            &request.request_id,
+            Some(&request.projection_store),
+            Some(&request.active.manifest.generation),
+            Some(&request.active.manifest.delivery_digest),
+        ),
+        VectorProjectionHelperRequest::RepairPublication(request) => (
+            &request.context.request_id,
+            Some(&request.context.projection_store),
+            Some(&request.context.generation_id),
+            Some(&request.context.delivery_digest),
+        ),
+        VectorProjectionHelperRequest::Quarantine(request)
+        | VectorProjectionHelperRequest::Abort(request) => (
+            &request.context.request_id,
+            Some(&request.context.projection_store),
+            Some(&request.context.generation_id),
+            Some(&request.context.delivery_digest),
+        ),
+        VectorProjectionHelperRequest::Inventory(request) => (
+            &request.request_id,
+            Some(&request.projection_store),
+            None,
+            None,
+        ),
+        VectorProjectionHelperRequest::Cleanup(request) => (
+            &request.context.request_id,
+            Some(&request.context.projection_store),
+            Some(&request.context.generation_id),
+            Some(&request.context.delivery_digest),
+        ),
+    }
+}
+
 #[derive(Clone)]
 pub struct LanceDbConfig {
     pub path: PathBuf,
     pub table_name: String,
     pub label_atom_table_name: String,
     pub provider: Option<Arc<dyn EmbeddingProvider + Send + Sync>>,
+    pub execution_policy: EmbeddingExecutionPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmbeddingExecutionPolicy {
+    pub batch_size: usize,
+    pub min_batch_interval: Duration,
+    pub max_retries: usize,
+    pub initial_retry_backoff: Duration,
+    pub max_retry_backoff: Duration,
+}
+
+impl Default for EmbeddingExecutionPolicy {
+    fn default() -> Self {
+        Self {
+            batch_size: 32,
+            min_batch_interval: Duration::from_millis(25),
+            max_retries: 4,
+            initial_retry_backoff: Duration::from_millis(250),
+            max_retry_backoff: Duration::from_secs(5),
+        }
+    }
+}
+
+impl EmbeddingExecutionPolicy {
+    fn validate(&self) -> Result<(), kanban_vector::VectorError> {
+        if self.batch_size == 0 {
+            return Err(kanban_vector::VectorError::Store(
+                "embedding batch size must be greater than zero".to_owned(),
+            ));
+        }
+        if self.initial_retry_backoff > self.max_retry_backoff {
+            return Err(kanban_vector::VectorError::Store(
+                "embedding initial retry backoff cannot exceed maximum backoff".to_owned(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl LanceDbConfig {
@@ -125,7 +294,13 @@ impl LanceDbConfig {
             table_name: "kb_chunks".to_owned(),
             label_atom_table_name: "kb_label_atoms".to_owned(),
             provider: Some(provider),
+            execution_policy: EmbeddingExecutionPolicy::default(),
         }
+    }
+
+    pub fn with_execution_policy(mut self, policy: EmbeddingExecutionPolicy) -> Self {
+        self.execution_policy = policy;
+        self
     }
 
     pub fn degraded(path: impl Into<PathBuf>) -> Self {
@@ -134,6 +309,7 @@ impl LanceDbConfig {
             table_name: "kb_chunks".to_owned(),
             label_atom_table_name: "kb_label_atoms".to_owned(),
             provider: None,
+            execution_policy: EmbeddingExecutionPolicy::default(),
         }
     }
 }

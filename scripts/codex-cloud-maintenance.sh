@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+JUST_VERSION="1.57.0"
 
 log() {
   printf '==> %s\n' "$*"
@@ -87,9 +88,9 @@ main() {
   log "Refreshing Rust components"
   rustup component add rustfmt clippy
 
-  if ! command -v just >/dev/null 2>&1; then
-    log "Installing just"
-    cargo install just --locked
+  if ! command -v just >/dev/null 2>&1 || [[ "$(just --version)" != "just $JUST_VERSION" ]]; then
+    log "Installing just $JUST_VERSION"
+    cargo install just --version "$JUST_VERSION" --locked --force
   fi
 
   if [[ "${CODEX_CLOUD_INSTALL_NEXTEST:-1}" == "1" ]] && ! command -v cargo-nextest >/dev/null 2>&1; then

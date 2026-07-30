@@ -3,7 +3,8 @@ use std::cell::RefCell;
 use kanban_derived_io::{
     board_id, connect_file, current_last_event_id, derived_status_by_name,
     graph_relation_snapshot_for_board, has_pending_vector_outbox_for_board, maintenance_lock_path,
-    rebuild_lancedb_chunks_with_store, sync_oxigraph_with_store, vector_chunks_for_board,
+    mark_label_atom_store_failure, rebuild_lancedb_chunks_with_store, sync_oxigraph_with_store,
+    vector_chunks_for_board,
 };
 use kanban_entity::{EntityUri, Predicate, Relation};
 use kanban_graph::{GraphError, GraphQueryRow, GraphStoreStatus, RelationGraph};
@@ -24,29 +25,101 @@ fn db_status_and_vector_rebuild_use_narrow_sqlite_io() {
     assert!(has_pending_vector_outbox_for_board(&conn, "b_test", Some(2)).unwrap());
 
     let chunks = vector_chunks_for_board(&conn, "b_test", "test-model").unwrap();
-    assert_eq!(chunks.len(), 1);
+    assert_eq!(chunks.len(), 4);
     assert_eq!(chunks[0].task_id.as_deref(), Some("t_one"));
     assert_eq!(chunks[0].embedding_model, "test-model");
+    assert_eq!(
+        chunks
+            .iter()
+            .map(|chunk| chunk.source_table.as_str())
+            .collect::<Vec<_>>(),
+        ["tasks", "task_comments", "task_runs", "task_events"]
+    );
 
     drop(conn);
     let store = MockVectorStore::default();
     let status = rebuild_lancedb_chunks_with_store(db.path(), "default", &store).unwrap();
-    assert!(status.message.contains("rebuilt 1 chunk"));
+    assert!(status.message.contains("rebuilt 4 chunk"));
     assert_eq!(store.deleted_boards.borrow().as_slice(), ["b_test"]);
-    assert_eq!(store.upserted.borrow().len(), 1);
+    assert_eq!(store.upserted.borrow().len(), 4);
 
     let conn = connect_file(db.path()).unwrap();
     let derived = derived_status_by_name(&conn, LANCEDB_CHUNKS_STORE).unwrap();
     assert!(!derived.dirty);
     assert_eq!(derived.last_event_id, 2);
-    let pending: i64 = conn
+    let pending_chunks: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM index_outbox WHERE target='lancedb' AND status!='done'",
+            "SELECT COUNT(*) FROM index_outbox
+             WHERE target='lancedb' AND projection_store IS NULL AND status!='done'",
             [],
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(pending, 0);
+    assert_eq!(pending_chunks, 0);
+    let pending_labels: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM index_outbox
+             WHERE projection_store='lancedb_label_atoms' AND status='pending'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(pending_labels, 1);
+}
+
+#[test]
+fn label_atom_failure_bookkeeping_is_atomic_when_board_write_fails() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE derived_store_state(
+           store_name TEXT PRIMARY KEY,schema_version INTEGER NOT NULL,
+           last_event_id INTEGER NOT NULL,dirty INTEGER NOT NULL,
+           last_rebuild_at INTEGER,last_sync_at INTEGER,last_error TEXT,
+           updated_at INTEGER NOT NULL
+         );
+         CREATE TABLE label_atom_index_boards(
+           store_name TEXT NOT NULL,board_id TEXT NOT NULL,dirty INTEGER NOT NULL,
+           last_rebuild_at INTEGER,last_error TEXT,updated_at INTEGER NOT NULL,
+           PRIMARY KEY(store_name,board_id)
+         );
+         INSERT INTO derived_store_state
+         VALUES('lancedb_label_atoms',1,0,0,NULL,NULL,NULL,1);
+         INSERT INTO label_atom_index_boards
+         VALUES('lancedb_label_atoms','b_test',0,NULL,NULL,1);
+         CREATE TRIGGER fail_label_atom_failure_board_bookkeeping
+         BEFORE UPDATE ON label_atom_index_boards
+         WHEN NEW.store_name='lancedb_label_atoms' AND NEW.last_error IS NOT NULL
+         BEGIN
+           SELECT RAISE(ABORT, 'forced board failure bookkeeping crash');
+         END;",
+    )
+    .unwrap();
+
+    let error = mark_label_atom_store_failure(&conn, "b_test", "provider failed", 2).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("forced board failure bookkeeping crash"),
+        "{error}"
+    );
+    let global: (bool, Option<String>) = conn
+        .query_row(
+            "SELECT dirty,last_error FROM derived_store_state
+             WHERE store_name='lancedb_label_atoms'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    let board: (bool, Option<String>) = conn
+        .query_row(
+            "SELECT dirty,last_error FROM label_atom_index_boards
+             WHERE store_name='lancedb_label_atoms' AND board_id='b_test'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(global, (false, None));
+    assert_eq!(board, (false, None));
 }
 
 #[test]
@@ -186,10 +259,12 @@ impl TestDb {
         conn.execute_batch(
             "CREATE TABLE boards(id TEXT PRIMARY KEY, slug TEXT NOT NULL, archived_at INTEGER);
              CREATE TABLE tasks(id TEXT PRIMARY KEY, board_id TEXT NOT NULL, seq INTEGER NOT NULL, title TEXT NOT NULL, description TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, archived_at INTEGER);
-             CREATE TABLE task_events(id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL, board_id TEXT NOT NULL, task_id TEXT, created_at INTEGER NOT NULL);
+             CREATE TABLE task_events(id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL, board_id TEXT NOT NULL, task_id TEXT, kind TEXT NOT NULL DEFAULT 'test.event', payload_json TEXT NOT NULL DEFAULT '{}', created_at INTEGER NOT NULL);
+             CREATE TABLE task_comments(id TEXT PRIMARY KEY, board_id TEXT NOT NULL, task_id TEXT NOT NULL, body TEXT NOT NULL, created_at INTEGER NOT NULL);
+             CREATE TABLE task_runs(id TEXT PRIMARY KEY, board_id TEXT NOT NULL, task_id TEXT NOT NULL, summary TEXT, error TEXT, started_at INTEGER NOT NULL);
              CREATE TABLE entities(uri TEXT PRIMARY KEY, board_id TEXT, title TEXT);
              CREATE TABLE entity_relations(subject_uri TEXT NOT NULL, predicate TEXT NOT NULL, object_uri TEXT NOT NULL, graph_uri TEXT NOT NULL, authoritative_store TEXT NOT NULL, source_table TEXT, source_id TEXT, source_event_id INTEGER, metadata_json TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-             CREATE TABLE index_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT, source_event_id INTEGER, target TEXT NOT NULL, entity_uri TEXT NOT NULL, action TEXT NOT NULL, payload_json TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL, last_error TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE TABLE index_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT, source_event_id INTEGER, target TEXT NOT NULL, projection_store TEXT, entity_uri TEXT NOT NULL, action TEXT NOT NULL, payload_json TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL, last_error TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
              CREATE TABLE derived_store_state(store_name TEXT PRIMARY KEY, schema_version INTEGER NOT NULL, last_event_id INTEGER NOT NULL, dirty INTEGER NOT NULL, last_rebuild_at INTEGER, last_sync_at INTEGER, last_error TEXT, updated_at INTEGER NOT NULL);",
         )
         .unwrap();
@@ -201,12 +276,15 @@ impl TestDb {
         conn.execute("INSERT INTO tasks(id, board_id, seq, title, description, created_at, updated_at, archived_at) VALUES ('t_one', 'b_test', 1, 'Task one', 'Body', 1000, 2000, NULL)", []).unwrap();
         conn.execute("INSERT INTO task_events(event_id, board_id, task_id, created_at) VALUES ('e_one', 'b_test', 't_one', 1000)", []).unwrap();
         conn.execute("INSERT INTO task_events(event_id, board_id, task_id, created_at) VALUES ('e_two', 'b_test', 't_one', 2000)", []).unwrap();
+        conn.execute("INSERT INTO task_comments(id, board_id, task_id, body, created_at) VALUES ('c_one', 'b_test', 't_one', 'Comment body', 1500)", []).unwrap();
+        conn.execute("INSERT INTO task_runs(id, board_id, task_id, summary, error, started_at) VALUES ('r_one', 'b_test', 't_one', 'Run summary', NULL, 1600)", []).unwrap();
         conn.execute("INSERT INTO entities(uri, board_id, title) VALUES ('kb://task/t_one', 'b_test', 'Task one')", []).unwrap();
         conn.execute("INSERT INTO entities(uri, board_id, title) VALUES ('kb://board/b_test', 'b_test', 'Default')", []).unwrap();
         conn.execute("INSERT INTO entity_relations(subject_uri,predicate,object_uri,graph_uri,authoritative_store,source_table,source_id,source_event_id,metadata_json,created_at,updated_at) VALUES ('kb://task/t_one','belongs_to_board','kb://board/b_test','kb://graph/indexed','sqlite','tasks','t_one',2,'{}',1000,2000)", []).unwrap();
         conn.execute("INSERT INTO derived_store_state(store_name,schema_version,last_event_id,dirty,last_rebuild_at,last_sync_at,last_error,updated_at) VALUES (?1,1,0,1,NULL,NULL,NULL,1000)", [LANCEDB_CHUNKS_STORE]).unwrap();
         conn.execute("INSERT INTO derived_store_state(store_name,schema_version,last_event_id,dirty,last_rebuild_at,last_sync_at,last_error,updated_at) VALUES (?1,1,1,1,NULL,NULL,NULL,1000)", [OXIGRAPH_RELATIONS_STORE]).unwrap();
         conn.execute("INSERT INTO index_outbox(source_event_id,target,entity_uri,action,payload_json,status,attempts,last_error,created_at,updated_at) VALUES (2,'lancedb','kb://task/t_one','upsert','{}','pending',0,NULL,2000,2000)", []).unwrap();
+        conn.execute("INSERT INTO index_outbox(source_event_id,target,projection_store,entity_uri,action,payload_json,status,attempts,last_error,created_at,updated_at) VALUES (NULL,'lancedb','lancedb_label_atoms','kb://board/b_test','rebuild','{\"scope\":\"board\",\"version\":1}','pending',0,NULL,2000,2000)", []).unwrap();
         conn.execute("INSERT INTO index_outbox(source_event_id,target,entity_uri,action,payload_json,status,attempts,last_error,created_at,updated_at) VALUES (2,'oxigraph','kb://task/t_one','upsert','{}','pending',0,NULL,2000,2000)", []).unwrap();
         conn.execute("INSERT INTO index_outbox(source_event_id,target,entity_uri,action,payload_json,status,attempts,last_error,created_at,updated_at) VALUES (2,'tantivy','kb://task/t_one','upsert','{}','pending',0,NULL,2000,2000)", []).unwrap();
     }

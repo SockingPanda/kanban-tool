@@ -1485,26 +1485,28 @@ fn mark_label_atom_store_failure(
     error: &str,
     now: i64,
 ) -> Result<()> {
-    conn.execute(
-        "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
-         VALUES (?1, ?2, 0, 1, NULL, NULL, ?3, ?4) \
-         ON CONFLICT(store_name) DO UPDATE SET dirty=1, last_error=excluded.last_error, updated_at=excluded.updated_at",
-        params![
-            LANCEDB_LABEL_ATOMS_STORE,
-            DERIVED_STORE_SCHEMA_VERSION,
-            error,
-            now
-        ],
-    )
-    .map_err(storage)?;
-    conn.execute(
-        "INSERT INTO label_atom_index_boards(store_name, board_id, dirty, last_rebuild_at, last_error, updated_at) \
-         VALUES (?1, ?2, 1, NULL, ?3, ?4) \
-         ON CONFLICT(store_name, board_id) DO UPDATE SET dirty=1, last_error=excluded.last_error, updated_at=excluded.updated_at",
-        params![LANCEDB_LABEL_ATOMS_STORE, board_id, error, now],
-    )
-    .map_err(storage)?;
-    Ok(())
+    with_immediate_tx(conn, || {
+        conn.execute(
+            "INSERT INTO label_atom_index_boards(store_name, board_id, dirty, last_rebuild_at, last_error, updated_at) \
+             VALUES (?1, ?2, 1, NULL, ?3, ?4) \
+             ON CONFLICT(store_name, board_id) DO UPDATE SET dirty=1, last_error=excluded.last_error, updated_at=excluded.updated_at",
+            params![LANCEDB_LABEL_ATOMS_STORE, board_id, error, now],
+        )
+        .map_err(storage)?;
+        conn.execute(
+            "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
+             VALUES (?1, ?2, 0, 1, NULL, NULL, ?3, ?4) \
+             ON CONFLICT(store_name) DO UPDATE SET dirty=1, last_error=excluded.last_error, updated_at=excluded.updated_at",
+            params![
+                LANCEDB_LABEL_ATOMS_STORE,
+                DERIVED_STORE_SCHEMA_VERSION,
+                error,
+                now
+            ],
+        )
+        .map_err(storage)?;
+        Ok(())
+    })
 }
 
 fn has_dirty_label_atom_boards(conn: &Connection) -> Result<bool> {

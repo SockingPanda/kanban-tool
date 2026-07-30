@@ -12,8 +12,8 @@ use kanban_contract::cli_operator::{
 use kanban_core::KanbanError;
 use kanban_sqlite::api::lifecycle::begin_database_replace;
 use kanban_sqlite::api::{
-    MaintenanceMode, MaintenanceRunOptions, MaintenanceSession, backup_database,
-    checkpoint_database, export_jsonl, export_jsonl_to_writer, import_jsonl,
+    MaintenanceMode, MaintenanceRunOptions, MaintenanceSession, ProjectionRuntimeAvailability,
+    backup_database, checkpoint_database, export_jsonl, export_jsonl_to_writer, import_jsonl,
     maintenance_rebuild_all, maintenance_rebuild_store, maintenance_run_once, maintenance_status,
     queue_stats, vacuum_database,
 };
@@ -150,6 +150,7 @@ pub(crate) fn handle_doctor(db_path: &PathBuf, args: DoctorArgs, json: bool) -> 
         let projection = maintenance_status(db_path)?;
         let unhealthy = projection.stores.iter().filter(|store| {
             store.lifecycle_status != "ready"
+                || store.runtime_availability != ProjectionRuntimeAvailability::Available
                 || store.fallback_reason.is_some()
                 || store.active_generation.is_none()
         });
@@ -219,9 +220,10 @@ pub(crate) fn handle_maintenance(
                     .iter()
                     .map(|store| {
                         format!(
-                            "{}={} generation={:?} cursor={} pending={} fallback={:?}",
+                            "{}={} availability={:?} generation={:?} cursor={} pending={} fallback={:?}",
                             store.store_name,
                             store.lifecycle_status,
+                            store.runtime_availability,
                             store.active_generation,
                             store.checkpoint_cursor,
                             store.pending + store.running + store.failed + store.legacy_done,
@@ -415,9 +417,17 @@ fn print_maintenance_report(
             .stores
             .iter()
             .map(|store| {
+                let result = match &store.result {
+                    kanban_contract::CliMaintenanceStoreResult::Succeeded { action, processed } => {
+                        format!("{action} processed={processed}")
+                    }
+                    kanban_contract::CliMaintenanceStoreResult::Failed { kind, message } => {
+                        format!("failed kind={kind:?} error={message}")
+                    }
+                };
                 format!(
-                    "{}:{} processed={} fallback={:?}",
-                    store.store_name, store.action, store.processed, store.fallback_reason
+                    "{}:{} fallback={:?}",
+                    store.store_name, result, store.fallback_reason
                 )
             })
             .collect::<Vec<_>>()

@@ -29,14 +29,14 @@ fn helper_status_rejects_sqlite_active_without_published_marker() -> anyhow::Res
            source_event_id INTEGER,metadata_json TEXT,created_at INTEGER,updated_at INTEGER
          );
          INSERT INTO projection_store_state VALUES(
-           'oxigraph_relations','v2','db_test',2,1,'pgen_test','fp_test',7,11,
+           'oxigraph_relations','v2','db_test',2,1,'gen_test','fp_test',7,11,
            'oxigraph','oxigraph-relations-v2',0,'canonical',0,'delivery',NULL,NULL
          );",
     )?;
     drop(conn);
 
-    let root = kanban_local::projection_store_root_path(&db, "oxigraph_relations")?;
-    let generation = root.join("generations").join("pgen_test");
+    let root = kanban_local::projection_store_root_path(&db, "db_test", "oxigraph_relations")?;
+    let generation = root.join("generations").join("gen_test");
     std::fs::create_dir_all(&generation)?;
     std::fs::write(generation.join("relations.json"), b"[]")?;
     let content_fingerprint = fnv_fingerprint(b"[]");
@@ -48,7 +48,7 @@ fn helper_status_rejects_sqlite_active_without_published_marker() -> anyhow::Res
                 "database_instance_id": "db_test",
                 "protocol_version": 2,
                 "schema_version": 1,
-                "generation": "pgen_test",
+                "generation": "gen_test",
                 "fence_epoch": 7,
                 "snapshot_cursor": 11,
                 "provider": "oxigraph",

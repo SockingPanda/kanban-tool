@@ -150,26 +150,55 @@ pub fn mark_label_atom_store_failure(
     error: &str,
     now: i64,
 ) -> Result<()> {
-    conn.execute(
-        "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
-         VALUES (?1, ?2, 0, 1, NULL, NULL, ?3, ?4) \
-         ON CONFLICT(store_name) DO UPDATE SET dirty=1, last_error=excluded.last_error, updated_at=excluded.updated_at",
-        params![
-            LANCEDB_LABEL_ATOMS_STORE,
-            DERIVED_STORE_SCHEMA_VERSION,
-            error,
-            now
-        ],
-    )
-    .map_err(storage)?;
-    conn.execute(
-        "INSERT INTO label_atom_index_boards(store_name, board_id, dirty, last_rebuild_at, last_error, updated_at) \
-         VALUES (?1, ?2, 1, NULL, ?3, ?4) \
-         ON CONFLICT(store_name, board_id) DO UPDATE SET dirty=1, last_error=excluded.last_error, updated_at=excluded.updated_at",
-        params![LANCEDB_LABEL_ATOMS_STORE, board_id, error, now],
-    )
-    .map_err(storage)?;
-    Ok(())
+    with_failure_bookkeeping_savepoint(conn, || {
+        conn.execute(
+            "INSERT INTO label_atom_index_boards(store_name, board_id, dirty, last_rebuild_at, last_error, updated_at) \
+             VALUES (?1, ?2, 1, NULL, ?3, ?4) \
+             ON CONFLICT(store_name, board_id) DO UPDATE SET dirty=1, last_error=excluded.last_error, updated_at=excluded.updated_at",
+            params![LANCEDB_LABEL_ATOMS_STORE, board_id, error, now],
+        )
+        .map_err(storage)?;
+        conn.execute(
+            "INSERT INTO derived_store_state(store_name, schema_version, last_event_id, dirty, last_rebuild_at, last_sync_at, last_error, updated_at) \
+             VALUES (?1, ?2, 0, 1, NULL, NULL, ?3, ?4) \
+             ON CONFLICT(store_name) DO UPDATE SET dirty=1, last_error=excluded.last_error, updated_at=excluded.updated_at",
+            params![
+                LANCEDB_LABEL_ATOMS_STORE,
+                DERIVED_STORE_SCHEMA_VERSION,
+                error,
+                now
+            ],
+        )
+        .map_err(storage)?;
+        Ok(())
+    })
+}
+
+fn with_failure_bookkeeping_savepoint(
+    conn: &Connection,
+    operation: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    const SAVEPOINT: &str = "label_atom_failure_bookkeeping";
+    conn.execute_batch("SAVEPOINT label_atom_failure_bookkeeping")
+        .map_err(storage)?;
+    match operation() {
+        Ok(()) => conn
+            .execute_batch("RELEASE label_atom_failure_bookkeeping")
+            .map_err(storage),
+        Err(error) => {
+            if let Err(rollback_error) = conn.execute_batch(
+                "ROLLBACK TO label_atom_failure_bookkeeping;
+                 RELEASE label_atom_failure_bookkeeping",
+            ) {
+                Err(KanbanError::Storage(format!(
+                    "label atom failure bookkeeping rollback failed for {SAVEPOINT}: \
+                     {rollback_error}; original error: {error}"
+                )))
+            } else {
+                Err(error)
+            }
+        }
+    }
 }
 
 fn rebuild_lancedb_label_atoms_with_conn(

@@ -331,7 +331,8 @@ pub(crate) fn count_outbox_for_target(
         return Ok(0);
     }
     conn.query_row(
-        "SELECT COUNT(*) FROM index_outbox WHERE status=?1 AND target IN (?2, 'all')",
+        "SELECT COUNT(*) FROM index_outbox \
+         WHERE status=?1 AND target IN (?2, 'all') AND projection_store IS NULL",
         params![status, target.as_str()],
         |row| row.get(0),
     )

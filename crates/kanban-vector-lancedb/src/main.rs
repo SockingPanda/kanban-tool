@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::{path::PathBuf, process};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -16,10 +17,12 @@ use kanban_vector::{
 };
 use kanban_vector_lancedb::{LanceDbConfig, LanceDbStore, OllamaEmbeddingProvider};
 use kanban_vector_lancedb::{
-    vector_helper_check_provider_response, vector_helper_embed_query_response,
-    vector_helper_error_response, vector_helper_handshake_response,
-    vector_helper_query_chunks_response, vector_helper_query_label_atom_vectors_response,
-    vector_helper_query_label_atoms_response, vector_helper_status_response,
+    decode_vector_projection_request, vector_helper_check_provider_response,
+    vector_helper_embed_query_response, vector_helper_error_response,
+    vector_helper_handshake_response, vector_helper_query_chunks_response,
+    vector_helper_query_label_atom_vectors_response, vector_helper_query_label_atoms_response,
+    vector_helper_status_response, vector_projection_descriptor_response,
+    vector_projection_invalid_request_response, vector_projection_unavailable_response,
 };
 use serde::Serialize;
 use std::sync::Arc;
@@ -34,6 +37,7 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     Handshake,
+    Projection(ProjectionArgs),
     Status(StoreArgs),
     CheckProvider(ProviderArgs),
     Rebuild(StoreArgs),
@@ -47,6 +51,14 @@ enum Command {
     #[command(name = "sync-label-atoms")]
     SyncLabelAtoms(StoreArgs),
     EmbedQuery(EmbedQueryArgs),
+}
+
+#[derive(Debug, Parser)]
+struct ProjectionArgs {
+    #[arg(long)]
+    db: PathBuf,
+    #[arg(long = "vector-config", alias = "config")]
+    vector_config: Option<PathBuf>,
 }
 
 #[derive(Debug, Parser)]
@@ -77,6 +89,8 @@ struct QueryChunksArgs {
     text: String,
     #[arg(long, default_value_t = 10)]
     limit: usize,
+    #[arg(long)]
+    board_id: String,
 }
 
 #[derive(Debug, Parser)]
@@ -133,6 +147,7 @@ fn run() -> Result<()> {
         Command::Handshake => {
             print_payload(vector_helper_handshake_response(env!("CARGO_PKG_VERSION")))
         }
+        Command::Projection(args) => run_projection(args),
         Command::Status(args) => {
             print_payload(vector_helper_status_response(vector_status(&args)?))
         }
@@ -153,10 +168,19 @@ fn run() -> Result<()> {
             ))
         }
         Command::QueryChunks(args) => {
+            let conn = connect_file(&args.store.db)?;
+            let resolved_board_id = board_id(&conn, &args.store.board)?;
+            if resolved_board_id != args.board_id {
+                bail!(
+                    "query chunk board mismatch: --board resolved to {resolved_board_id}, got --board-id {}",
+                    args.board_id
+                );
+            }
             let store = configured_store(&args.store)?;
             let hits = store.query(&VectorQuery {
                 text: args.text,
                 limit: args.limit,
+                board_id: resolved_board_id,
             })?;
             print_payload(vector_helper_query_chunks_response(hits))
         }
@@ -207,6 +231,30 @@ fn run() -> Result<()> {
             ))
         }
     }
+}
+
+fn run_projection(args: ProjectionArgs) -> Result<()> {
+    const MAX_PROJECTION_STDIN_BYTES: u64 = 32 * 1024 * 1024;
+
+    let _ = (&args.db, &args.vector_config);
+    let mut input = Vec::new();
+    std::io::stdin()
+        .take(MAX_PROJECTION_STDIN_BYTES + 1)
+        .read_to_end(&mut input)
+        .context("failed to read vector projection request")?;
+    let response = if input.len() as u64 > MAX_PROJECTION_STDIN_BYTES {
+        vector_projection_invalid_request_response()
+    } else {
+        match decode_vector_projection_request(&input) {
+            Ok(kanban_contract::VectorProjectionHelperRequest::Descriptor(request)) => {
+                vector_projection_descriptor_response(request.request_id)
+            }
+            Ok(request) => vector_projection_unavailable_response(&request),
+            Err(_) => vector_projection_invalid_request_response(),
+        }
+    };
+    println!("{}", serde_json::to_string(&response)?);
+    Ok(())
 }
 
 fn parse_vector_json(vector_json: &str) -> Result<Vec<f32>> {

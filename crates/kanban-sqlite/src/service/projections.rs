@@ -245,6 +245,7 @@ pub(crate) fn complete_outbox_for_store(
         "UPDATE index_outbox \
          SET status='done', last_error=NULL, updated_at=?1 \
          WHERE target IN (?2, 'all') \
+           AND projection_store IS NULL \
            AND status IN ('pending', 'running', 'failed') \
            AND source_event_id <= ?3 \
            AND EXISTS ( \
@@ -270,6 +271,7 @@ pub(crate) fn has_unfinished_outbox_for_store(
         "SELECT EXISTS( \
              SELECT 1 FROM index_outbox \
              WHERE target IN (?1, 'all') \
+               AND projection_store IS NULL \
                AND status IN ('pending', 'running', 'failed') \
          )",
         [target.as_str()],
@@ -290,6 +292,7 @@ pub(crate) fn fail_outbox_for_store(
         "UPDATE index_outbox \
          SET status='failed', attempts=attempts + 1, last_error=?1, updated_at=?2 \
          WHERE target IN (?3, 'all') \
+           AND projection_store IS NULL \
            AND status IN ('pending', 'running') \
            AND EXISTS ( \
                SELECT 1 FROM task_events e \

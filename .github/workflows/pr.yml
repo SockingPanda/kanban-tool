@@ -111,7 +111,7 @@ jobs:
       - name: Install just
         uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: just@1.57.0
       - name: Check shell scripts
         run: |
           mapfile -d '' scripts < <(find scripts -type f -name '*.sh' -print0 | sort -z)
@@ -162,6 +162,30 @@ jobs:
           CARGO_BUILD_JOBS: "1"
       - name: Clippy
         run: cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
+
+  rust-windows-durability:
+    name: Windows projection durability
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: windows-latest
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Test native durable filesystem primitives
+        run: cargo test --locked -p kanban-local durable_
+      - name: Test native projection backend durability
+        run: cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --lib
+      - name: Test native maintenance recovery
+        run: cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --test all suite::maintenance_runtime::
+      - name: Test native generation fencing
+        run: cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --test all suite::projection_v2::
 
   desktop:
     name: Desktop checks
@@ -240,7 +264,7 @@ jobs:
       - name: Install audit tools
         uses: taiki-e/install-action@v2
         with:
-          tool: just,cargo-deny,cargo-audit
+          tool: just@1.57.0,cargo-deny,cargo-audit
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
       - name: Audit dependencies
@@ -252,6 +276,7 @@ jobs:
       - changes
       - repo-meta
       - rust-default
+      - rust-windows-durability
       - desktop
       - desktop-rust
       - dependency-audit
@@ -263,6 +288,7 @@ jobs:
           changes_result='${{ needs.changes.result }}'
           repo_meta_result='${{ needs.repo-meta.result }}'
           rust_result='${{ needs.rust-default.result }}'
+          windows_durability_result='${{ needs.rust-windows-durability.result }}'
           desktop_result='${{ needs.desktop.result }}'
           desktop_rust_result='${{ needs.desktop-rust.result }}'
           dependency_audit_result='${{ needs.dependency-audit.result }}'
@@ -270,7 +296,7 @@ jobs:
             echo "Changed-path detection finished with result: $changes_result"
             exit 1
           fi
-          for result in "$repo_meta_result" "$rust_result" "$desktop_result" "$desktop_rust_result" "$dependency_audit_result"; do
+          for result in "$repo_meta_result" "$rust_result" "$windows_durability_result" "$desktop_result" "$desktop_rust_result" "$dependency_audit_result"; do
             case "$result" in
               success|skipped) ;;
               *) echo "A gated PR job finished with result: $result"; exit 1 ;;

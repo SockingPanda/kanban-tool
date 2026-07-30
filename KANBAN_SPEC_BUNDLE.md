@@ -131,6 +131,8 @@ kanban task show personal#1 --details
 kanban task list --status ready --status running
 kanban search "项目首页"
 kanban doctor
+kanban maintenance status
+kanban maintenance run --once
 ```
 
 ## 三种使用方式
@@ -226,7 +228,9 @@ just spec-bundle-check
 Linux CLI 可以构建为独立的 Debian 包：
 
 ```bash
-./scripts/package-cli-linux.sh --format deb
+./scripts/package-cli-linux.sh --format deb \
+  --no-default-features \
+  --features tantivy-backend,oxigraph-backend
 ```
 
 桌面包与 CLI 包彼此独立；桌面包不会自动安装系统级 `kanban` 命令。
@@ -771,7 +775,8 @@ dispatcher 或重型辅助后端。JSON Schema 只验证 wire 结构/值域，
 - 真实 `just --dump-format json --dump` parser AST hash 与 fake nested
   `just`/build-lock/cargo/python/script 有序 JSONL trace 形成双门禁，锁定上述 fmt lane、
   full/rust/test 分支、schema 子 gate、`schema-audit-closed` 的 adoption + locked audit，
-  以及 `release` 从 affected self-test 到 diff-check 的 13 步精确顺序。leaf 仅由独立
+  以及 `release` 从 affected self-test、显式 Tantivy/Oxigraph Projection cohort 到
+  diff-check 的 14 步精确顺序。leaf 仅由独立
   schema gates 执行格式、check、tests、clippy、生成和校验；witness gate 显式拒绝该
   tooling owner 冒充 runtime adopter。
 
@@ -1151,6 +1156,20 @@ HTTP status 映射与 operation-level transport 说明仅在 `docs/API_SPEC.md` 
   board 一致性、label ontology 账本一致性，并报告 Knowledge Substrate 的
   `index_outbox` 积压、派生存储 dirty/error 状态和各存储的 last_error。派生层
   异常不改变 SQLite task 事实；操作者通过同步/重建恢复 Tantivy/Oxigraph/LanceDB。
+
+统一 Projection v2 maintenance runtime 在数据库级使用 singleton lease，但 lease
+同时绑定当前进程实际编译的 store capability 集和运行制品 build identity。status
+不会把“存在活动 owner”解释为“所有 store 都可维护”：当前构建缺少 backend 时报告
+`unavailable`，活动 owner 未声明 store capability 时报告 `unverified`，两者都附带
+稳定 fallback reason，并使 `doctor --strict-derived` fail closed。continuous runtime
+必须声明全部 projection store capability 才能领取 singleton lease；feature-limited
+制品在 claim 前拒绝，避免部分能力 owner 长期垄断数据库级维护入口。
+
+一次 `run --once` 或 `rebuild --all` 中，store backend/provider/delivery 的局部失败
+以闭合的结构化 store result 返回并记录到对应 projection state；runtime 仍按稳定顺序
+尝试其余已编译 store。数据库访问、singleton owner、lease/fence 或 shutdown 失败属于
+全局错误，会终止本次 pass。错误作用域由运行时的显式结果类型和调用边界决定，不解析
+错误文案；任何派生失败都不回滚已经提交的 SQLite 权威 mutation。
 
 ### 8.1 Board scope 与 schema/service/doctor 分工
 
@@ -2691,6 +2710,7 @@ atom 快照。它保存 `board_id`、`action_id`、`label_id_snapshot`、`atom_i
 | `id` | 自增作业 ID。 |
 | `source_event_id` | 来源 `task_events.id`，允许事件被删除/导入时置空。 |
 | `target` | `tantivy` / `oxigraph` / `lancedb` / `all`。 |
+| `projection_store` | 可空的精确 store selector；当前只允许 `target=lancedb` 时使用 `lancedb_label_atoms`。`NULL` 保持旧路由语义。 |
 | `entity_uri` | 目标实体。 |
 | `action` | `upsert` / `delete` / `rebuild`。 |
 | `payload_json` | 有界的作业载荷。 |
@@ -2721,6 +2741,83 @@ atom 快照。它保存 `board_id`、`action_id`、`label_id_snapshot`、`atom_i
 `last_event_id` 是存储全局成功处理水位，不是单个看板的局部水位。成功同步或重建只能单调推进这个值；当一个看板同步完成、但其他看板仍有 `pending`、`running` 或 `failed` 发件箱记录时，`dirty` 必须保持 `true`。`dirty=false` 只表示同一存储目标当前没有未完成的发件箱记录，而且最近一次存储更新没有失败。
 
 `last_error` 在成功后清空，失败时保留错误证据并保持 `dirty=true`。操作者应通过 `kanban derived status`、`kanban doctor`、维护 API 和对应的同步或重建命令恢复派生层；派生存储损坏或落后不会改变 SQLite 中的任务事实。
+
+### 13.5 Projection v2 consistency domain
+
+表：`projection_database`、`projection_store_state`、`projection_deliveries`、
+`projection_maintenance_owner`
+
+`projection_database` 为一份 SQLite 文件保存稳定 `database_instance_id` 和 projection
+protocol version。`projection_store_state` 为每个物理 store 保存 schema version、
+legacy/v2 control-plane owner、连续 checkpoint、active/previous/building generation、
+provider/model fingerprint、canonical 与 delivery 双 coverage digest、单调 fence epoch、
+lease 和 lifecycle/error 状态。
+`projection_deliveries` 把一个 `index_outbox` row 展开为各 store 的 board-scoped delivery；
+唯一键是 `(outbox_id, store_name)`，每个 delivery 同时携带不可空 `board_id`、连续
+store cursor、claim token、lease token、fence epoch 和 target generation。
+`projection_maintenance_owner` 是 singleton database runtime lease，保存 owner、opaque
+token、mode、expiry、heartbeat、已编译的 store capability 集和可追溯 build identity；
+public status 不返回 token。Migration 028 会使无法证明 capability/build identity 的旧
+lease 失效。lease 获取、续约与释放都比较 owner + token + canonical capability JSON +
+build identity，过期、被篡改或来自另一构建的 owner 无法续约，也无法清除后继 owner。
+`maintenance status` 会把当前二进制未编译的 backend 标为 `unavailable`；若活动 owner
+没有声明某个 store capability，则该 store 标为 `unverified` 并提供 fallback reason，
+不能因为 singleton owner 仍活跃就推断所有 store 都在被维护。
+
+Migration 026 在 fanout/backfill 前验证每个相关 outbox row 能从 source event 或 entity
+得到唯一 board；无法解析、orphan source event 或 event/entity board 冲突时 fail closed，
+不会以 nullable/global delivery 绕过隔离。旧 `index_outbox.status=done` 只映射为
+`legacy_done`，不伪造 v2 checkpoint 或 generation coverage。
+
+Migration 029 以 additive `index_outbox.projection_store` selector 把
+`lancedb_label_atoms` 接入同一 delivery domain，且不重建 `index_outbox` 或
+`projection_deliveries`、不改变旧 ID/cursor。旧的 `target=lancedb|all` 且 selector 为
+`NULL` 的 row 仍只路由到 `lancedb_chunks`；精确
+`target=lancedb, projection_store=lancedb_label_atoms` 只路由到标签 atom store。
+selector 与 target 在插入后不可改变；exact selector row 还被 SQLite 约束为
+`source_event_id=NULL`、`kb://board/{board_id}` 实体、`action=rebuild` 和精确 payload
+`{"scope":"board","version":1}`。所有 legacy LanceDB chunks 的 pending/complete/fail、
+dirty 与 doctor count 查询都显式要求 `projection_store IS NULL`，不能凭共享
+`target=lancedb` 吞入 label atom work。标签规范 mutation 在同一 canonical SQLite
+事务里把 `label_atom_index_boards` 标脏，并由 trigger 原子写入 board-scoped
+`rebuild` delivery。事务回滚时 dirty 标记、outbox 和 delivery 一并回滚；已有
+pending/failed board rebuild 会合并，running rebuild 期间的新 mutation或 provider
+failure 会留下新的 pending delivery，provider failure 即使没有旧 delivery 也必须生成
+可恢复 work。迁移时已有的 dirty board 会逐板 backfill，不清空错误、旧 outbox 或
+watermark。
+
+Projection v2 的 snapshot 流程先固定 cursor，并按 store 从 canonical SQLite 读取完整、
+稳定排序且强制携带 board scope 的 corpus：task search/chunk 投影包含 task 及其 comments、
+runs、events；graph 投影包含 relation；label atom 投影包含 atom。每条 record 具有稳定
+identity、payload 与 content hash；manifest 同时保存 canonical corpus 和 cursor 内
+delivery 集合的 count + stable digest，并绑定 provider/model fingerprint。Provider 必须
+实际消费 records，返回的 artifact evidence 必须匹配
+database/protocol/schema/provider/generation/fence/cursor/两组 coverage；提交 snapshot
+acknowledgement 的 transaction 会再次读取 canonical corpus 和 delivery coverage，任一
+变化或存在 running claim 都拒绝批量完成。增量 batch 的 receipt 还必须精确匹配 lease、
+fence、provider、generation、claim token 和 item count。
+
+`lancedb_label_atoms` 的 canonical mutation 已通过 Migration 029 进入
+`projection_deliveries`；`label_atom_index_boards` 在迁移期继续提供 per-board
+dirty/error 兼容状态。generation 仍必须在 runtime/backend 的 provider fingerprint、
+coverage、lease/fence 和物理 generation publish 门禁全部成立后才能发布，不能因为
+delivery seam 已存在就绕过这些证据。
+
+只有物理 store 完成 generation pointer CAS、active read-back 匹配，并证明上一物理
+generation（若存在）仍可按 generation id 读取，SQLite 才原子发布 active/previous
+metadata。若进程在物理 pointer swap 后退出，新 fence owner 可检查同一 generation 的
+artifact evidence 并 reconcile SQLite publish。
+若 logical active 的物理 artifact 已不可读，正常 publish CAS 仍 fail closed。只有
+maintenance 的显式 recovery 路径可在新 snapshot/catch-up、当前 database/provider
+binding 与 fenced lease 均成立时发布替代 generation；SQLite previous metadata 改为
+实际可读且被物理 backend 保留的 generation，而不是伪造已丢失 artifact 的保留证据。
+
+`derived_store_state` 和 `index_outbox` 在迁移期保留为 v1 compatibility projection。
+generation begin 即把 store 切到 v2 control plane；legacy 与 v2 writer 在完整物理写周期
+共享 per-database/per-store barrier，database replace 同时取得所有 store barrier，因此
+旧 Tantivy/Oxigraph/LanceDB writer、v2 pointer swap 和 replace 不会交错。v2 reducer
+只在 delivery 获得真实 generation coverage 后更新 legacy dirty/outbox 摘要，避免双控制面
+永久 dirty 或虚假 clean。
 
 表：`label_atom_index_boards`
 
@@ -4779,8 +4876,10 @@ SQLite 仍是事实源；这些命令只报告统一实体注册表、派生索�
 `--limit` 由同一 SQLite 服务查询执行；`show` 继续按精确 URI 查询并保留
 `not_found` 错误封装。人类可读输出不变。
 
-`kanban graph` 和 `kanban vector` 是辅助子进程派生层入口。默认 CLI 不链接
-Oxigraph/LanceDB 重型依赖；它依次解析 `KANBAN_GRAPH_HELPER` /
+`kanban graph` 和 `kanban vector` 是辅助子进程派生层入口。源码默认 feature 图不链接
+Oxigraph/LanceDB 重型依赖；Linux release cohort 为统一 maintenance runtime 显式启用
+`tantivy-backend,oxigraph-backend`，但 graph/vector 命令仍按辅助进程边界解析
+`KANBAN_GRAPH_HELPER` /
 `KANBAN_VECTOR_HELPER`、`/usr/lib/kanban/<helper>`、CLI 同目录二进制、
 `KANBAN_CARGO_TARGET_ROOT` 或 `CARGO_TARGET_DIR` 的 `release/<helper>`，最后回退到
 `PATH` 中的辅助程序。辅助程序缺失或返回非法封装时，`status` 返回禁用/降级状态；
@@ -4833,12 +4932,37 @@ SQLite 服务查询执行。`kanban derived status --json` 同样返回 `{"data"
 提供程序或功能不可用时，该存储可报告降级，但不影响普通 `kanban label` 增删改查和
 `task_labels` 绑定。
 
+### 15.0 `kanban maintenance`
+
+`kanban maintenance status --json` 返回 Projection v2 database identity、singleton
+owner 和全部 store 状态。owner 包含实际编译的 `capabilities[]` 与
+`build_identity`，但绝不返回 lease token。每个 store 另有闭合的
+`runtime_availability`：`available`、`unavailable` 或 `unverified`。当前二进制缺少
+backend 时使用 `unavailable` + `backend_unavailable`；活动 owner 未声明该 store
+capability 时使用 `unverified` + `maintenance_owner_capability_unverified`。因此
+`doctor --strict-derived` 不会把 feature-limited owner 误判为全部派生层健康。
+continuous `maintenance run` 只有在当前运行制品声明全部 projection store capability
+时才会领取 singleton lease；feature-limited 制品返回 `invalid_input`，且不得留下 owner
+或 lease。`run --once` 与定向 `rebuild` 仍可用于该制品实际编译的 store。
+
+`kanban maintenance run --once --json` 和
+`kanban maintenance rebuild (--all | <store>) --json` 的 `stores[]` 使用闭合
+`result` 联合：成功分支为
+`{"status":"succeeded","action":...,"processed":...}`；局部失败分支为
+`{"status":"failed","kind":"provider|backend|delivery","message":...}`。
+store 局部失败不会阻止同一 pass 尝试后续已编译 store；数据库、owner、lease/fence
+或 shutdown 的全局失败仍使命令失败。脚本必须根据 `result.status` 和结构化 `kind`
+判断，不解析 `message` 文案。
+
+上述 status/run/rebuild machine contract 都是破坏性替换后的 v2 schema root；旧 v1
+artifact 已移除，不提供新旧输出双轨。
+
 ### 15.1 `kanban doctor`
 
 检查：
 
 - 数据库文件存在。
-- 迁移完整；当前已提交的迁移版本（`schema user_version`）为 25。
+- 迁移完整；当前已提交的迁移版本（`schema user_version`）为 29。
 - `PRAGMA integrity_check`。
 - 孤立的活动运行记录。
 - `running` 任务是否缺少领取。
@@ -7473,7 +7597,7 @@ schema 校验通过不代表业务命令可以执行；业务测试不能被 sch
 通配符和双向捷径；双向协议必须拆成精确的 input/output contract。
 因此“生成了 schema”永远不能代替“运行时已采用”。
 
-以下是结构根的代表性类别，不是当前 480 个根的完整清单：
+以下是结构根的代表性类别，不是当前 485 个根的完整清单：
 
 - 基础契约：API 错误响应、`GET /health` 响应、标签语义删除响应和决策评论元数据输入。
 - 生命周期请求：`SpecifyTaskRequest`、`PromoteTaskRequest`、`ClaimTaskRequest`、
@@ -7491,23 +7615,23 @@ schema 校验通过不代表业务命令可以执行；业务测试不能被 sch
 - 看板端点：list query、create request、get/archive path 与四个端点专属成功
   response，共 8 个精确 root；四个 success root 只共享闭合的 `ApiBoard` 组件。
 
-当前权威快照有 480 个 schema root：480 个 `adopted`、0 个 `generated`、
-0 个 `planned`、0 个 `excluded`，并登记 960 个结构化 witness。114 个有限 JSON CLI
+当前权威快照有 485 个 schema root：485 个 `adopted`、0 个 `generated`、
+0 个 `planned`、0 个 `excluded`，并登记 970 个结构化 witness。117 个有限 JSON CLI
 叶子命令均绑定到精确输出 root；export stdout JSONL 流不属于有限 envelope。21 个
 JSONL discriminator 的 input/output 分别拥有精确 root，记录数据使用闭合的自然 JSON；
 required-nullable 键禁止省略，但接受显式 `null`。CLI task/step/run adapter 会丢弃仅供持久层
 使用的 `claim_token` 与内部 `log_path`，包括递归 linked task；dependency、events 与 helper
 subprocess protocol 仍由各自组件负责，公开 CLI 契约只拥有最终 stdout shape。
 
-配置与辅助进程拥有 2 个 TOML 配置输入、7 个 graph helper 响应和 12 个 vector helper
-响应契约。worker profile 输入只约束 CLI 选中的 `[workers.<profile>]` 配置节；未选配置节
+配置与辅助进程拥有 2 个 TOML 配置输入、7 个 graph helper 响应、12 个既有 vector helper
+响应契约，以及 adopted 的 Projection v2 request/response helper 协议。worker profile 输入只约束 CLI 选中的 `[workers.<profile>]` 配置节；未选配置节
 保持不透明并允许向前兼容，选中配置节严格拒绝未知或非法字段。真实配置解码器、子进程
 适配器和协议解码器分别提供 producer/consumer witness，schema 工具依赖仍隔离在叶子 crate。
 
-`surface_operation_catalog()` 是独立维度：246 个 `adopted`、0 个 `generated`、
-0 个 `planned`、5 个 `excluded`。其中 CLI 为 114 个 `adopted`、5 个非 JSON
+`surface_operation_catalog()` 是独立维度：250 个 `adopted`、0 个 `generated`、
+0 个 `planned`、5 个 `excluded`。其中 CLI 为 117 个 `adopted`、5 个非 JSON
 `excluded`，21 个 JSONL record surfaces 与 6 个 structured metadata surfaces 全部为
-`adopted`，Config/Helper 为 2/19 个 `adopted`；API 为 83 个 `adopted`，SSE 为 1 个
+`adopted`，Config/Helper 为 2/20 个 `adopted`；API 为 83 个 `adopted`，SSE 为 1 个
 `adopted`。端点义务直方图同样独立：296 个
 `Contract`、0 个 `Todo`、207 个 `NotApplicable`、1 个有运行时证据的 `Excluded`。
 `schema-check` 的未闭合项为 0：semantic generated/planned 0 + surface
@@ -7526,7 +7650,7 @@ generated/planned 0 + 端点 Todo 0。
 `surface_operation_catalog()` 记录可以自动发现的公开传输操作：
 
 - API：83 个 JSON method/path，加 1 个 SSE method/path。
-- CLI：119 个 Clap 叶子命令；非 JSON 文本/守护进程/hook 协议逐项 `excluded`。
+- CLI：122 个 Clap 叶子命令；非 JSON 文本/守护进程/hook 协议逐项 `excluded`。
 - JSONL：21 个精确 `type=<discriminator>`。
 - Metadata：6 个无传输的精确结构化元数据操作。
 
@@ -7692,7 +7816,7 @@ just schema-audit-closed
   `just`/build-lock/cargo/python/script JSONL trace 另外锁定产品 `fmt`（core）、
   `fmt-full`（core + helper）、`schema-fmt`（contract + leaf）的互斥 package selection，
   full/rust/test 调用图、schema 子 gate、`schema-audit-closed` 内部调用、`release`
-  13 步顺序和 `test-full` 的 nextest/fallback 双分支。mutation tests 必须拒绝
+  14 步顺序、Projection release cohort 和 `test-full` 的 nextest/fallback 双分支。mutation tests 必须拒绝
   workspace-wide fmt、package 漂移、gate 删除、命令旁路与顺序调换。
 - `schema-dependency-isolation` 先运行该自测，再用结构化 manifest/full locked metadata policy
   检查全部 workspace declaration、resolved identity、真实 `Cargo.lock` 与 committed registry
@@ -7717,10 +7841,16 @@ just schema-audit-closed
   adoption witness，再通过 build lock 运行 `kanban-schema audit --require-closed`。当前
   migration train 的 contract、surface 与 endpoint obligation 已全部闭合；该 gate 应成功，
   G006 已由 WATCH 转为 closed evidence。
+- `projection-release-cohort` 对 `kanban-cli` 与 `kanban-server` 显式启用
+  `tantivy-backend,oxigraph-backend`，分别执行完整测试和 clippy；默认产品依赖图仍由
+  helper isolation gate 证明不携带 Oxigraph/LanceDB 重型 helper，不能用
+  `--all-features` 混淆默认隔离与发布能力。
 - `release` 精确依次调用 `affected-self-test`、`schema-contract`、`audit`、`rust-full`、
-  `bench-check`、`target-tools`、`cli-package`、`cli-package-layout`、
+  `projection-release-cohort`、`bench-check`、`target-tools`、`cli-package`、`cli-package-layout`、
   `desktop-package-config`、`desktop-package`、`desktop-package-layout`、`smoke` 与
-  `diff-check`；AST + ordered trace 对删除或重排 fail closed。
+  `diff-check`；AST + ordered trace 对删除或重排 fail closed。`cli-package` 使用
+  `--no-default-features --features tantivy-backend,oxigraph-backend` 构建主 CLI，
+  并继续把独立 LanceDB/Oxigraph helper binaries 一并装入发布包。
 
 所有会写 Cargo target 的命令必须通过这些 `just` recipes 和仓库 build lock 运行。
 

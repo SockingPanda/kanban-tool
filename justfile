@@ -76,6 +76,9 @@ test-p package *args:
 check-p package:
     scripts/cargo-build-lock.sh -- cargo check -p {{package}} --tests
 
+check-windows-p package:
+    scripts/cargo-build-lock.sh -- cargo check --locked -p {{package}} --target x86_64-pc-windows-gnu
+
 rust-fast:
     just fmt
     just check-core
@@ -136,6 +139,10 @@ rust-full:
     just test-full
     just clippy-full
 
+projection-release-cohort:
+    just feature-p kanban-cli "tantivy-backend,oxigraph-backend"
+    just feature-p kanban-server "tantivy-backend,oxigraph-backend"
+
 web-test:
     pnpm --dir apps/desktop test
 
@@ -161,7 +168,7 @@ desktop-package:
     scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build
 
 cli-package:
-    scripts/package-cli-linux.sh --format deb
+    scripts/package-cli-linux.sh --format deb --no-default-features --features "tantivy-backend,oxigraph-backend"
 
 cli-package-layout:
     scripts/test-cli-package-layout.sh
@@ -182,6 +189,7 @@ audit:
 target-tools:
     scripts/test-cargo-target-tools.sh
     scripts/test-helper-cargo-tree.sh
+    scripts/test-windows-durability-gate.sh
 
 diff-check:
     git diff --check
@@ -268,6 +276,8 @@ release:
     just schema-contract
     just audit
     just rust-full
+    just check-windows-p kanban-local
+    just projection-release-cohort
     just bench-check
     just target-tools
     just cli-package

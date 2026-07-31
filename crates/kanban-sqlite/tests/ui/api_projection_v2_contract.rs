@@ -12,6 +12,7 @@ use kanban_sqlite::api::provider::{
 };
 use kanban_sqlite::api::{
     MaintenanceMode, MaintenanceRunOptions, MaintenanceRunReport, MaintenanceSession,
+    connect_existing_database_read_only,
     PROJECTION_PROTOCOL_VERSION, ProjectionLease, ProjectionStatus, ProjectionStoreStatus,
     abort_projection_generation, acquire_projection_lease, maintenance_rebuild_all,
     maintenance_rebuild_store, maintenance_run_once, maintenance_status, projection_status,

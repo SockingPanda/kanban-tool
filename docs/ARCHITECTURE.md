@@ -241,8 +241,9 @@ dispatcher 或重型辅助后端。JSON Schema 只验证 wire 结构/值域，
 - 真实 `just --dump-format json --dump` parser AST hash 与 fake nested
   `just`/build-lock/cargo/python/script 有序 JSONL trace 形成双门禁，锁定上述 fmt lane、
   full/rust/test 分支、schema 子 gate、`schema-audit-closed` 的 adoption + locked audit，
-  以及 `release` 从 affected self-test、显式 Tantivy/Oxigraph Projection cohort 到
-  diff-check 的 14 步精确顺序。leaf 仅由独立
+  以及 `release` 只能进入单进程 `release-cohort.sh`。release wrapper 另由 hermetic fake-git /
+  fake-package 测试锁定从 source gate、affected self-test、显式 Tantivy/Oxigraph Projection
+  cohort 到 diff-check、产物清单与最终 source recheck 的精确顺序。leaf 仅由独立
   schema gates 执行格式、check、tests、clippy、生成和校验；witness gate 显式拒绝该
   tooling owner 冒充 runtime adopter。
 
@@ -277,7 +278,27 @@ dispatcher 或重型辅助后端。JSON Schema 只验证 wire 结构/值域，
   `DatabaseRuntimeGuard`、`DatabaseReplaceGuard`、`begin_database_runtime` 和
   `begin_database_replace`。这些保护是二进制程序/运行时 owner 的基础设施，不是普通产品用例。
 - `kanban_sqlite::db` 和 `kanban_sqlite::init` 仍是显式基础设施模块；`connect_file`、
-  `init_database` 不从 `api` root 暴露。
+  `init_database` 不从 `api` root 暴露。文件数据库连接由 `connect_file` 返回
+  `DatabaseConnection`：它先在 canonical SQLite inode 的专用 lifecycle byte 上取得 shared
+  physical guard，重新检查 stable maintenance marker，再打开 SQLite 并核对 path/handle identity；
+  SQLite 成功 close 后才释放 guard。显式 close 返回 `SQLITE_BUSY` 时会把完整 wrapper 交还调用方
+  重试；Drop close 的 BUSY 或意外 panic 会保留 lifecycle guard 到进程退出，不能提前解锁；这里
+  不对 `Connection` 本体在 unwind 后的存活作额外承诺。该
+  wrapper 只提供 immutable `Deref<Connection>` 和必要的显式 transaction/close 方法，不暴露
+  `DerefMut`、`into_inner` 或可将 raw `Connection` 移出 guard 生命周期的接口。
+- 数据库替换的固定顺序是 stable maintenance marker → current inode exclusive lifecycle →
+  全部 legacy per-store database-range/sentinel authority。目标不存在时会在 marker 保护下创建
+  exclusive placeholder，未 publish 即释放时只删除仍映射到该 held inode 的 placeholder。
+  phase-two publish seam 可先独占 staged inode；rename 后必须同时证明
+  `current -> previous`、`staged -> canonical` 并显式 rebind，旧 path witness 不能继续冒充有效映射。
+  guard Drop 先释放 staged、再释放 current/legacy authority，最后才删除 maintenance marker。
+- Linux 使用 OFD byte-range lock，Windows 使用 `LockFileEx`，两者把 lifecycle byte 放在 SQLite
+  最大文件大小之外；其他 Unix 使用 fs4/`flock` whole-file shared/exclusive fallback。per-store
+  range lock 仍只支持 Linux/Windows，其他平台对派生写入/替换失败关闭。workspace raw opener
+  audit 精确锁定 `open`、`open_with_flags`、`open_with_flags_and_vfs` 及 alias；审计覆盖 production
+  source roots 中所有文件型 SQLite raw opener，包括 derived/LanceDB helper 使用的 shared-lifecycle
+  constructor，以及 exclusive-authority-owned replacement inspection opener。任何新增 raw opener
+  都必须纳入中心 guarded opener 并更新审计，不能以 phase-two exemption 绕过 lifecycle 接入。
 - crate 根模块不再提供 `kanban_sqlite::*` 旧版重新导出；旧根路径是破坏性变更，
   并由 `tests/ui/root_legacy_reexport_removed.rs` 负向编译契约锁定。`api` 根模块、
   `api::provider`、`api::lifecycle` 和显式 `db` / `init` 边界由 `public_api` trybuild contract 锁定。
@@ -636,6 +657,18 @@ HTTP status 映射与 operation-level transport 说明仅在 `docs/API_SPEC.md` 
 尝试其余已编译 store。数据库访问、singleton owner、lease/fence 或 shutdown 失败属于
 全局错误，会终止本次 pass。错误作用域由运行时的显式结果类型和调用边界决定，不解析
 错误文案；任何派生失败都不回滚已经提交的 SQLite 权威 mutation。
+
+危险运维入口继续走同一 service authority。rebuild dry-run 在 database lifecycle
+exclusive authority 内读取 checkpointed immutable SQLite snapshot，只结合 runtime
+capability 形成计划，不构造物理 backend；显式 resume 只能采用 SQLite 已绑定的
+unfinished generation。legacy cleanup inventory 使用同一 quiescent snapshot；
+apply/restore 由 service 先取得 singleton maintenance owner，再由 `kanban-local`
+同时持有数据库 lifecycle shared authority 与四个派生 store exclusive guard，并在
+任何 move 前于该 authority 内同步续租、复核 database identity。replacement gate 必须
+拒绝有效 maintenance owner。固定 allowlist、inventory digest、same-filesystem journal、
+no-replace move、durable verify/restore 共同组成 mutation 边界。DB-scoped v2 namespace
+不属于 cleanup。生产 backup、串行恢复和 rollback 见
+`docs/release/DERIVED_PROJECTION_V2_RECOVERY.md`。
 
 ### 8.1 Board scope 与 schema/service/doctor 分工
 

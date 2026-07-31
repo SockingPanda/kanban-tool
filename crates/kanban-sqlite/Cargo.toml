@@ -36,5 +36,6 @@ harness = false
 [dev-dependencies]
 anyhow.workspace = true
 criterion = "0.8.2"
+syn = { version = "2", features = ["full", "visit"] }
 tempfile.workspace = true
 trybuild = "1.0"

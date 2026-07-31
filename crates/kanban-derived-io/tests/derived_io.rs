@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, io};
 
 use kanban_derived_io::{
     board_id, connect_file, current_last_event_id, derived_status_by_name,
@@ -9,6 +9,7 @@ use kanban_derived_io::{
 use kanban_entity::{EntityUri, Predicate, Relation};
 use kanban_graph::{GraphError, GraphQueryRow, GraphStoreStatus, RelationGraph};
 use kanban_indexer::{LANCEDB_CHUNKS_STORE, OXIGRAPH_RELATIONS_STORE};
+use kanban_local::DatabaseLifecycleExclusiveGuard;
 use kanban_vector::{
     ChunkVectorStore, EmbeddingChunk, LabelAtomVectorStore, QueryEmbeddingProvider, VectorError,
     VectorQuery, VectorStoreBackend, VectorStoreStatus,
@@ -145,6 +146,23 @@ fn connect_file_removes_stale_maintenance_lock_and_opens() {
 
     let _conn = connect_file(file.path()).unwrap();
     assert!(!lock_path.exists());
+}
+
+#[cfg(any(target_os = "linux", windows))]
+#[test]
+fn derived_io_connection_holds_lifecycle_authority_until_sqlite_closes() {
+    let db = TestDb::new();
+    let connection = connect_file(db.path()).unwrap();
+
+    let error =
+        DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(db.path()).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+
+    connection
+        .close()
+        .map_err(|(_, error)| error)
+        .expect("derived IO must close SQLite before releasing lifecycle authority");
+    drop(DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(db.path()).unwrap());
 }
 
 #[test]

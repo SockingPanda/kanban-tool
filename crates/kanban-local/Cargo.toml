@@ -10,6 +10,7 @@ dirs-next.workspace = true
 fs-err.workspace = true
 fs4.workspace = true
 kanban-contract.workspace = true
+rusqlite.workspace = true
 serde.workspace = true
 serde_path_to_error.workspace = true
 sha2.workspace = true

@@ -2220,6 +2220,8 @@ pub fn default_actor() -> String {
         .unwrap_or_else(|_| "local".to_owned())
 }
 
+pub mod sqlite_connection;
+
 #[cfg(test)]
 mod tests {
     use super::*;

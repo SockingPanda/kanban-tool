@@ -5,9 +5,14 @@ use std::{
 
 use kanban_core::{KanbanError, Result};
 use kanban_local::DerivedStoreWriteGuard;
+use kanban_local::sqlite_connection::{
+    DatabaseLifecycleSharedConnectionOpenError, open_database_with_shared_lifecycle,
+};
 use rusqlite::{Connection, OptionalExtension};
 
-pub fn connect_file(path: impl AsRef<Path>) -> Result<Connection> {
+pub fn connect_file(
+    path: impl AsRef<Path>,
+) -> Result<kanban_local::sqlite_connection::DatabaseLifecycleSharedConnection> {
     let path = path.as_ref();
     let lock_path = maintenance_lock_path(path);
     if maintenance_lock_blocks(&lock_path)? {
@@ -19,9 +24,44 @@ pub fn connect_file(path: impl AsRef<Path>) -> Result<Connection> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(storage)?;
     }
-    let conn = Connection::open(path).map_err(storage)?;
+    let conn = open_database_with_shared_lifecycle(path, |guarded_path| {
+        let lock_path = maintenance_lock_path(guarded_path);
+        if maintenance_lock_blocks(&lock_path).map_err(io_storage)? {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::WouldBlock,
+                format!(
+                    "database is locked for maintenance: {}",
+                    guarded_path.display()
+                ),
+            ));
+        }
+        Ok(())
+    })
+    .map_err(lifecycle_connection_error)?;
     default_pragmas(&conn)?;
     Ok(conn)
+}
+
+fn lifecycle_connection_error(error: DatabaseLifecycleSharedConnectionOpenError) -> KanbanError {
+    match error {
+        DatabaseLifecycleSharedConnectionOpenError::BeforeOpen(error)
+            if error.kind() == std::io::ErrorKind::WouldBlock =>
+        {
+            KanbanError::InvalidInput(error.to_string())
+        }
+        DatabaseLifecycleSharedConnectionOpenError::BeforeOpen(error) => storage(error),
+        DatabaseLifecycleSharedConnectionOpenError::Lifecycle(error)
+            if error.kind() == std::io::ErrorKind::WouldBlock =>
+        {
+            KanbanError::Conflict(error.to_string())
+        }
+        DatabaseLifecycleSharedConnectionOpenError::Lifecycle(error) => storage(error),
+        DatabaseLifecycleSharedConnectionOpenError::SQLite(error) => storage(error),
+    }
+}
+
+fn io_storage(error: KanbanError) -> std::io::Error {
+    std::io::Error::other(error.to_string())
 }
 
 pub fn default_pragmas(conn: &Connection) -> Result<()> {
@@ -36,8 +76,7 @@ pub fn default_pragmas(conn: &Connection) -> Result<()> {
 }
 
 pub fn maintenance_lock_path(path: &Path) -> PathBuf {
-    let normalized = normalized_database_path(path);
-    PathBuf::from(format!("{}.maintenance.lock", normalized.display()))
+    kanban_local::database_maintenance_lock_path(path)
 }
 
 pub fn maintenance_lock_blocks(lock_path: &Path) -> Result<bool> {
@@ -98,26 +137,6 @@ pub(crate) fn search_lag(
 
 pub(crate) fn storage(error: impl std::fmt::Display) -> KanbanError {
     KanbanError::Storage(error.to_string())
-}
-
-fn normalized_database_path(path: &Path) -> PathBuf {
-    if path.exists()
-        && let Ok(canonical) = fs::canonicalize(path)
-    {
-        return canonical;
-    }
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let file_name = path.file_name().unwrap_or_default();
-    if let Ok(canonical_parent) = fs::canonicalize(parent) {
-        return canonical_parent.join(file_name);
-    }
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(path)
-    }
 }
 
 fn lock_is_stale(lock_path: &Path) -> bool {

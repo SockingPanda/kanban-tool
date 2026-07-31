@@ -18,6 +18,20 @@ mod ollama;
 pub use lancedb_store::LanceDbStore;
 pub use ollama::OllamaEmbeddingProvider;
 
+pub const VECTOR_HELPER_BUILD_IDENTITY: &str = match option_env!("KANBAN_BUILD_ID") {
+    Some(build_id) => build_id,
+    None => concat!(
+        "dev:",
+        env!("CARGO_PKG_NAME"),
+        "@",
+        env!("CARGO_PKG_VERSION")
+    ),
+};
+
+pub const fn vector_helper_build_identity() -> &'static str {
+    VECTOR_HELPER_BUILD_IDENTITY
+}
+
 pub fn vector_helper_handshake_response(version: &str) -> VectorHelperHandshakeResponse {
     VectorHelperHandshakeResponse {
         helper: "kanban-vector-lancedb".to_owned(),
@@ -121,7 +135,7 @@ pub fn vector_projection_descriptor_response(
     VectorProjectionHelperResponse::Descriptor(VectorProjectionHelperDescriptor {
         request_id: request_id.into(),
         protocol_version: VECTOR_PROJECTION_PROTOCOL_VERSION,
-        build_identity: format!("kanban-vector-lancedb@{}", env!("CARGO_PKG_VERSION")),
+        build_identity: vector_helper_build_identity().to_owned(),
         supported_stores: Vec::new(),
         supported_operations: vec![VectorProjectionHelperOperation::Descriptor],
     })

@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::io::{Read, Write};
 use std::{path::PathBuf, process};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -17,7 +17,8 @@ use kanban_vector::{
 };
 use kanban_vector_lancedb::{LanceDbConfig, LanceDbStore, OllamaEmbeddingProvider};
 use kanban_vector_lancedb::{
-    decode_vector_projection_request, vector_helper_check_provider_response,
+    decode_vector_projection_request, vector_helper_build_identity,
+    vector_helper_check_provider_response,
     vector_helper_embed_query_response, vector_helper_error_response,
     vector_helper_handshake_response, vector_helper_query_chunks_response,
     vector_helper_query_label_atom_vectors_response, vector_helper_query_label_atoms_response,
@@ -36,6 +37,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    #[command(name = "__build-identity", hide = true)]
+    BuildIdentity,
     Handshake,
     Projection(ProjectionArgs),
     Status(StoreArgs),
@@ -144,6 +147,12 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Command::BuildIdentity => {
+            std::io::stdout()
+                .write_all(vector_helper_build_identity().as_bytes())
+                .context("failed to write helper build identity")?;
+            Ok(())
+        }
         Command::Handshake => {
             print_payload(vector_helper_handshake_response(env!("CARGO_PKG_VERSION")))
         }

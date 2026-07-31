@@ -2026,8 +2026,46 @@ assert_live_unit_binding "$OWNER_PID" \
 Task canary 只有三路 delivery：Tantivy、Oxigraph、LanceDB chunks。Label atoms 使用独立
 label-semantics mutation。每个 board 在 mutation 前后使用 `sqlite3 -readonly -json`
 保存精确 event/outbox/delivery ID；这里只读查询 canonical control data，不写数据库。
+canary query text 不使用会丢标点的 slug 归一化，而是对已验证唯一的 `BOARD_ID` 做逐字节
+hex 编码，并加入 store tag；同一无损编码器必须先通过 `a-b` 与 `ab` 不碰撞 fixture。
+Tantivy title、chunk description、graph URI 和 label atom text 最终必须形成 36 个互异输入。
 
 ~~~bash
+hex_encode_canary_component() {
+  local value="$1" encoded
+  test -n "$value"
+  encoded="$(
+    printf '%s' "$value" |
+      LC_ALL=C od -An -v -tx1 |
+      tr -d '[:space:]'
+  )"
+  test -n "$encoded"
+  [[ "$encoded" =~ ^[0-9a-f]+$ ]]
+  test "$(( ${#encoded} % 2 ))" -eq 0
+  printf '%s\n' "$encoded"
+}
+
+canary_query_text() {
+  local store="$1" board_id="$2" tag board_hex
+  [[ "$board_id" =~ ^b_[A-Za-z0-9]+$ ]]
+  case "$store" in
+    tantivy_tasks) tag=tantivy ;;
+    lancedb_chunks) tag=chunks ;;
+    lancedb_label_atoms) tag=labelatoms ;;
+    *) return 1 ;;
+  esac
+  board_hex="$(hex_encode_canary_component "$board_id")"
+  printf 'projv2%sx%sx%s\n' "$tag" "$CANARY_RUN_HEX" "$board_hex"
+}
+
+CANARY_RUN_HEX="$(hex_encode_canary_component "$RECOVERY_ID")"
+FIXTURE_A_B_HEX="$(hex_encode_canary_component 'a-b')"
+FIXTURE_AB_HEX="$(hex_encode_canary_component 'ab')"
+test "$FIXTURE_A_B_HEX" != "$FIXTURE_AB_HEX"
+printf 'input=a-b hex=%s\ninput=ab hex=%s\ndistinct=true\n' \
+  "$FIXTURE_A_B_HEX" "$FIXTURE_AB_HEX" \
+  >"$EVIDENCE/canaries/lossless-text-encoding.fixture.txt"
+
 bounded_kanban --db "$DB" --json board list --include-archived \
   | tee "$EVIDENCE/canaries/boards.json"
 jq -e '[.data[] | select(.archived_at == null)] | length == 9' \
@@ -2042,19 +2080,24 @@ test "$(cut -f2 "$EVIDENCE/canaries/boards.tsv" | sort -u | wc -l)" -eq 9
 
 while IFS=$'\t' read -r BOARD BOARD_ID; do
   [[ "$BOARD_ID" =~ ^b_[A-Za-z0-9]+$ ]]
-  TASK_TEXT="projv2taskcanary${RECOVERY_ID//[^A-Za-z0-9]/}${BOARD//[^A-Za-z0-9]/}"
+  TANTIVY_TEXT="$(canary_query_text tantivy_tasks "$BOARD_ID")"
+  CHUNK_TEXT="$(canary_query_text lancedb_chunks "$BOARD_ID")"
   LABEL_NAME="projection-v2-label-canary-$RECOVERY_ID-$BOARD"
-  LABEL_TEXT="projv2labelatomcanary${RECOVERY_ID//[^A-Za-z0-9]/}${BOARD//[^A-Za-z0-9]/}"
+  LABEL_TEXT="$(canary_query_text lancedb_label_atoms "$BOARD_ID")"
+  test "$TANTIVY_TEXT" != "$CHUNK_TEXT"
+  test "$TANTIVY_TEXT" != "$LABEL_TEXT"
+  test "$CHUNK_TEXT" != "$LABEL_TEXT"
 
   bounded_kanban --db "$DB" --board "$BOARD" \
     --actor production-recovery --json \
-    task create "$TASK_TEXT" --description "$TASK_TEXT canonical task canary" \
+    task create "$TANTIVY_TEXT" --description "$CHUNK_TEXT" \
     >"$EVIDENCE/canaries/$BOARD.task-create.json"
-  jq -e --arg board_id "$BOARD_ID" '
+  jq -e --arg board_id "$BOARD_ID" --arg title "$TANTIVY_TEXT" \
+    --arg description "$CHUNK_TEXT" '
     (.data.id | type) == "string" and
     (.data.ref | type) == "string" and
     .data.board_id == $board_id and
-    (.data.title | type) == "string"
+    .data.title == $title and .data.description == $description
   ' "$EVIDENCE/canaries/$BOARD.task-create.json" \
     >"$EVIDENCE/canaries/$BOARD.task-identity.ok.txt"
   TASK_ID="$(
@@ -2164,6 +2207,41 @@ while IFS=$'\t' read -r BOARD BOARD_ID; do
     >"$EVIDENCE/canaries/$BOARD.events.after-canary.json"
 done <"$EVIDENCE/canaries/boards.tsv"
 
+printf '%s\n' $'board\tstore\tquery_input' \
+  >"$EVIDENCE/canaries/query-inputs.tsv"
+while IFS=$'\t' read -r BOARD BOARD_ID; do
+  TASK_ID="$(
+    jq -er '.data.id' "$EVIDENCE/canaries/$BOARD.task-create.json"
+  )"
+  TANTIVY_TEXT="$(
+    jq -er '.data.title' "$EVIDENCE/canaries/$BOARD.task-create.json"
+  )"
+  CHUNK_TEXT="$(
+    jq -er '.data.description' "$EVIDENCE/canaries/$BOARD.task-create.json"
+  )"
+  LABEL_TEXT="$(
+    jq -er '.data.description' \
+      "$EVIDENCE/canaries/$BOARD.label-semantics-upsert.json"
+  )"
+  test "$TANTIVY_TEXT" = "$(canary_query_text tantivy_tasks "$BOARD_ID")"
+  test "$CHUNK_TEXT" = "$(canary_query_text lancedb_chunks "$BOARD_ID")"
+  test "$LABEL_TEXT" = "$(canary_query_text lancedb_label_atoms "$BOARD_ID")"
+  printf '%s\t%s\t%s\n' "$BOARD" tantivy_tasks "$TANTIVY_TEXT"
+  printf '%s\t%s\t%s\n' "$BOARD" oxigraph_relations "kb://task/$TASK_ID"
+  printf '%s\t%s\t%s\n' "$BOARD" lancedb_chunks "$CHUNK_TEXT"
+  printf '%s\t%s\t%s\n' "$BOARD" lancedb_label_atoms "$LABEL_TEXT"
+done <"$EVIDENCE/canaries/boards.tsv" \
+  >>"$EVIDENCE/canaries/query-inputs.tsv"
+test "$(tail -n +2 "$EVIDENCE/canaries/query-inputs.tsv" | wc -l)" -eq 36
+test "$(
+  tail -n +2 "$EVIDENCE/canaries/query-inputs.tsv" |
+    cut -f3 |
+    LC_ALL=C sort -u |
+    wc -l
+)" -eq 36
+awk -F '\t' 'NR == 1 { next } NF != 3 || $3 == "" { exit 1 }' \
+  "$EVIDENCE/canaries/query-inputs.tsv"
+
 bounded_kanban --db "$DB" --json outbox list --limit 1000 \
   >"$EVIDENCE/canaries/outbox.after-all-canaries.json"
 ~~~
@@ -2179,13 +2257,14 @@ path，不能证明 Tantivy。chunk CLI 输出只有 `chunk.entity_uri`，没有
 - helper 的 `--board-id` preflight guard probe；
 - 每个 chunk `entity_uri` 到 canonical `entities.board_id` 的只读映射。
 
-函数总是生成恰好 36 个唯一矩阵行。合法但尚未收敛的空命中写 `FAIL` 并返回 1；命令/JSON
-contract 错误返回 2；任一 cross-board hit 返回 3。空结果不会被当作 PASS。
+函数总是生成恰好 36 个唯一矩阵行，并使用上一节已证明互异的 36 个 query input。合法但
+尚未收敛的空命中写 `FAIL` 并返回 1；命令/JSON contract 错误返回 2；任一 cross-board
+hit 返回 3。空结果不会被当作 PASS。
 
 ~~~bash
 run_query_matrix() {
   local output_dir="$1" matrix="$2"
-  local BOARD BOARD_ID TASK_ID TASK_REF TASK_TEXT LABEL_ID LABEL_TEXT
+  local BOARD BOARD_ID TASK_ID TASK_REF TANTIVY_TEXT CHUNK_TEXT LABEL_ID LABEL_TEXT
   local search_file graph_file chunks_file labels_file board_file helper_file
   local hit_count target_hits cross_hits resolved pass uri row
   local incomplete=0 cross_board_failure=0
@@ -2208,7 +2287,11 @@ run_query_matrix() {
       || return 2
     TASK_REF="$(jq -er '.data.ref' "$EVIDENCE/canaries/$BOARD.task-create.json")" \
       || return 2
-    TASK_TEXT="$(jq -er '.data.title' "$EVIDENCE/canaries/$BOARD.task-create.json")" \
+    TANTIVY_TEXT="$(jq -er '.data.title' "$EVIDENCE/canaries/$BOARD.task-create.json")" \
+      || return 2
+    CHUNK_TEXT="$(
+      jq -er '.data.description' "$EVIDENCE/canaries/$BOARD.task-create.json"
+    )" \
       || return 2
     LABEL_ID="$(
       jq -er '.data.label_id' \
@@ -2230,7 +2313,7 @@ run_query_matrix() {
 
     search_file="$output_dir/$BOARD.1-tantivy_tasks.json"
     bounded_kanban --db "$DB" --board "$BOARD" --json \
-      search "$TASK_TEXT" --limit 20 >"$search_file" || return 2
+      search "$TANTIVY_TEXT" --limit 20 >"$search_file" || return 2
     jq -e '
       (.data.hits | type) == "array" and
       (.meta.backend | type) == "string" and
@@ -2304,13 +2387,13 @@ run_query_matrix() {
 
     chunks_file="$output_dir/$BOARD.3-lancedb_chunks.json"
     bounded_kanban --db "$DB" --board "$BOARD" --json \
-      vector query-chunks "$TASK_TEXT" --limit 20 \
+      vector query-chunks "$CHUNK_TEXT" --limit 20 \
       "${vector_config_args[@]}" >"$chunks_file" || return 2
     jq -e '(.data | type) == "array"' "$chunks_file" >/dev/null || return 2
     helper_file="$output_dir/$BOARD.3-lancedb_chunks.board-guard-helper.json"
     bounded_vector_helper query-chunks \
       --db "$DB" --board "$BOARD" --board-id "$BOARD_ID" \
-      --text "$TASK_TEXT" --limit 20 "${vector_config_args[@]}" \
+      --text "$CHUNK_TEXT" --limit 20 "${vector_config_args[@]}" \
       >"$helper_file" || return 2
     jq -e '
       .protocol == "kanban-derived-helper.v1" and

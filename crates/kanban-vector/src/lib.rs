@@ -1926,6 +1926,28 @@ pub fn corpus_provider_fingerprint(corpus_schema: &str, provider_fingerprint: &s
     ])
 }
 
+/// Build the canonical identity for the label-atom corpus.
+///
+/// Label atoms intentionally use a corpus namespace separate from task chunks;
+/// the provider/model/dimension tuple is included in the fingerprint so a
+/// projection cannot be reused after any embedding configuration change.
+pub fn label_atoms_corpus_metadata(
+    provider: &str,
+    model: &str,
+    dimensions: usize,
+) -> ProjectionCorpusMetadata {
+    let provider_fingerprint = embedding_provider_fingerprint(provider, model, dimensions);
+    ProjectionCorpusMetadata {
+        corpus_schema: LABEL_ATOMS_CORPUS_SCHEMA.to_owned(),
+        corpus_fingerprint: corpus_provider_fingerprint(
+            LABEL_ATOMS_CORPUS_SCHEMA,
+            &provider_fingerprint,
+        ),
+        embedding_model: model.to_owned(),
+        embedding_dimensions: dimensions,
+    }
+}
+
 fn sha256_fingerprint(parts: &[&[u8]]) -> String {
     let mut digest = Sha256::new();
     for part in parts {
@@ -1987,7 +2009,7 @@ mod tests {
         LabelAtomVectorStore, SubprocessVectorProjectionClient, TASK_CHUNKS_CORPUS_SCHEMA,
         TaskChunkSource, VectorError, VectorProjectionClientLimits, VectorStore,
         VectorStoreBackend, corpus_provider_fingerprint, embedding_provider_fingerprint,
-        ensure_dimensions,
+        ensure_dimensions, label_atoms_corpus_metadata,
     };
     use kanban_contract::{
         ProjectionBatch, ProjectionCorpusMetadata, ProjectionDelivery, ProjectionDeliveryAction,
@@ -2842,5 +2864,24 @@ mod tests {
 
         assert!(chunks.starts_with("sha256:"), "{chunks}");
         assert_ne!(chunks, label_atoms);
+    }
+
+    #[test]
+    fn label_atoms_corpus_metadata_is_canonical_and_provider_bound() {
+        let metadata = label_atoms_corpus_metadata("ollama", "model-a", 768);
+        assert_eq!(metadata.corpus_schema, LABEL_ATOMS_CORPUS_SCHEMA);
+        assert_eq!(metadata.embedding_model, "model-a");
+        assert_eq!(metadata.embedding_dimensions, 768);
+        assert_eq!(
+            metadata.corpus_fingerprint,
+            corpus_provider_fingerprint(
+                LABEL_ATOMS_CORPUS_SCHEMA,
+                &embedding_provider_fingerprint("ollama", "model-a", 768),
+            )
+        );
+        assert_ne!(
+            metadata.corpus_fingerprint,
+            label_atoms_corpus_metadata("other", "model-a", 768).corpus_fingerprint
+        );
     }
 }

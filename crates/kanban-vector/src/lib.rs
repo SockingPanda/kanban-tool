@@ -2714,10 +2714,7 @@ mod tests {
 
         for (request, capabilities) in [
             (prepare, vec!["destructive-lease-token-secret"]),
-            (
-                apply,
-                vec!["lease-token-secret", "claim-token-secret"],
-            ),
+            (apply, vec!["lease-token-secret", "claim-token-secret"]),
             (publish, vec!["destructive-lease-token-secret"]),
             (repair, vec!["destructive-lease-token-secret"]),
             (quarantine, vec!["destructive-lease-token-secret"]),

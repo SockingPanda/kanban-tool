@@ -1,0 +1,28 @@
+{
+  "description_zh": "origin/derived-projection-v2 与 main 无共同祖先；以下切片通过可审计的语义移植进入统一恢复分支，禁止普通 merge。",
+  "integration_strategy": "semantic-port-without-merge-base",
+  "mappings": [
+    {
+      "integrated_commit": "095a5c2ee88434976ae7f8c8bf8310c8227eec70",
+      "source_branch": "origin/derived-projection-v2",
+      "source_commit": "0e58068fc67913495d8566e0a839e7a068456f81",
+      "subject": "Projection v2 consistency foundation"
+    },
+    {
+      "integrated_commit": "7f218272f4dfe12ee2c85bedc376c13c809a87ae",
+      "source_branch": "origin/derived-projection-v2",
+      "source_commit": "85e1f797c2d5c2b089d1a2f29827f42e25cd595c",
+      "subject": "unified maintenance runtime + DB-scoped multi-board Tantivy v2"
+    },
+    {
+      "integrated_commit": "e1c3b55bf18774cba49d5f2691a4107d1ea73882",
+      "source_branch": "origin/derived-projection-v2",
+      "source_commit": "c764706fcae214f58a3a65f5dc565135522bbd81",
+      "subject": "DB-scoped Oxigraph Projection v2"
+    }
+  ],
+  "project": "kanban-tool",
+  "schema_version": 1,
+  "source_ref": "refs/heads/derived-projection-v2",
+  "source_tip": "c764706fcae214f58a3a65f5dc565135522bbd81"
+}

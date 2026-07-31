@@ -273,18 +273,4 @@ schema-audit-closed:
     scripts/cargo-build-lock.sh -- cargo run --locked -p kanban-schema-tool --bin kanban-schema -- audit --root . --require-closed
 
 release:
-    just affected-self-test
-    just schema-contract
-    just audit
-    just rust-full
-    just check-windows-p kanban-local
-    just projection-release-cohort
-    just bench-check
-    just target-tools
-    just cli-package
-    just cli-package-layout
-    just desktop-package-config
-    just desktop-package
-    just desktop-package-layout
-    just smoke
-    just diff-check
+    scripts/release-cohort.sh

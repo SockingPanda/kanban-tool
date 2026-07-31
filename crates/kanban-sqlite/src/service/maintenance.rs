@@ -709,15 +709,14 @@ pub(crate) fn assert_database_idle_for_replace(guard: &mut DatabaseReplaceGuard)
 }
 
 fn assert_database_idle_with_connection(conn: &Connection, path: &Path) -> Result<()> {
+    // Reject unknown/fake databases before any setup pragma can persistently
+    // mutate them (notably journal_mode=WAL). This is only a preliminary
+    // read-only identity check; the authoritative schema check is repeated
+    // after BEGIN IMMEDIATE below.
+    validate_initialized_database_connection(path, conn)?;
     default_pragmas(conn)?;
     conn.busy_timeout(Duration::from_millis(0))
         .map_err(storage)?;
-    if !table_exists(conn, "schema_migrations")? {
-        return Err(KanbanError::InvalidInput(format!(
-            "database is not initialized; refusing replacement: {}",
-            path.display()
-        )));
-    }
     let checkpoint = conn
         .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
             Ok(CheckpointResult {
@@ -743,6 +742,9 @@ fn assert_database_idle_with_connection(conn: &Connection, path: &Path) -> Resul
         ))
     })?;
     let result = (|| {
+        // Revalidate while the RESERVED write lock is held. A raw writer may
+        // have changed the schema after the preliminary identity probe.
+        validate_initialized_database_connection(path, conn)?;
         if table_exists(conn, "projection_maintenance_owner")? {
             let now = SystemClock.now_ms();
             let active_owner = conn
@@ -840,7 +842,12 @@ fn validate_initialized_database(
     path: &Path,
     conn: DatabaseConnection,
 ) -> Result<DatabaseConnection> {
-    if !table_exists(&conn, "schema_migrations")? {
+    validate_initialized_database_connection(path, &conn)?;
+    Ok(conn)
+}
+
+fn validate_initialized_database_connection(path: &Path, conn: &Connection) -> Result<()> {
+    if !table_exists(conn, "schema_migrations")? {
         return Err(KanbanError::InvalidInput(format!(
             "database is not initialized: {}",
             path.display()
@@ -862,7 +869,15 @@ fn validate_initialized_database(
             path.display()
         )));
     }
-    Ok(conn)
+    let missing_tables = doctor_missing_required_tables(conn, migration_version, user_version)?;
+    if !missing_tables.is_empty() {
+        return Err(KanbanError::InvalidInput(format!(
+            "database schema is incomplete (missing {}): {}",
+            missing_tables.join(", "),
+            path.display()
+        )));
+    }
+    Ok(())
 }
 
 pub(crate) fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
@@ -2339,6 +2354,8 @@ mod lifecycle_tests {
         default_pragmas(&conn).unwrap();
         conn.execute_batch(
             "CREATE TABLE schema_migrations(version INTEGER);
+             INSERT INTO schema_migrations(version) VALUES (1);
+             PRAGMA user_version=1;
              CREATE TABLE projection_maintenance_owner(
                  singleton INTEGER PRIMARY KEY,
                  owner TEXT,
@@ -2376,8 +2393,11 @@ mod lifecycle_tests {
         default_pragmas(&conn).unwrap();
         conn.execute_batch(
             "CREATE TABLE schema_migrations(version INTEGER);
+             INSERT INTO schema_migrations(version) VALUES (1);
+             CREATE TABLE task_dependencies(id INTEGER);
              CREATE TABLE tasks(status TEXT);
-             CREATE TABLE task_runs(status TEXT);",
+             CREATE TABLE task_runs(status TEXT);
+             PRAGMA user_version=1;",
         )
         .unwrap();
         let mut transaction_started = false;

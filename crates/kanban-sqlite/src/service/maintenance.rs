@@ -783,7 +783,13 @@ fn assert_database_idle_with_connection(conn: &Connection, path: &Path) -> Resul
             path.display()
         ))
     });
-    result.and(commit)
+    match (result, commit) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
+        (Err(probe_error), Err(commit_error)) => Err(KanbanError::Storage(format!(
+            "replacement inspection failed: {probe_error}; transaction commit failed: {commit_error}"
+        ))),
+    }
 }
 
 pub(crate) fn count_table_status(conn: &Connection, table: &str, status: &str) -> Result<i64> {
@@ -2292,6 +2298,37 @@ mod lifecycle_tests {
         rusqlite::ffi::SQLITE_OK
     }
 
+    unsafe extern "C" fn deny_status_reads_and_commit(
+        context: *mut std::ffi::c_void,
+        action: std::ffi::c_int,
+        arg1: *const std::ffi::c_char,
+        arg2: *const std::ffi::c_char,
+        _: *const std::ffi::c_char,
+        _: *const std::ffi::c_char,
+    ) -> std::ffi::c_int {
+        let began = unsafe { &mut *(context.cast::<bool>()) };
+        if action == rusqlite::ffi::SQLITE_TRANSACTION
+            && !arg1.is_null()
+            && unsafe { std::ffi::CStr::from_ptr(arg1).to_bytes() } == b"BEGIN"
+        {
+            *began = true;
+        }
+        if action == rusqlite::ffi::SQLITE_TRANSACTION
+            && !arg1.is_null()
+            && unsafe { std::ffi::CStr::from_ptr(arg1).to_bytes() } == b"COMMIT"
+        {
+            return rusqlite::ffi::SQLITE_DENY;
+        }
+        if action == rusqlite::ffi::SQLITE_READ
+            && *began
+            && !arg2.is_null()
+            && unsafe { std::ffi::CStr::from_ptr(arg2).to_bytes() } == b"status"
+        {
+            return rusqlite::ffi::SQLITE_DENY;
+        }
+        rusqlite::ffi::SQLITE_OK
+    }
+
     #[test]
     fn replace_does_not_publish_or_retain_authority_when_inspection_pragmas_fail() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -2436,6 +2473,37 @@ mod lifecycle_tests {
         );
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert!(!path.with_extension("db-wal").exists());
+    }
+
+    #[test]
+    fn replace_preserves_probe_and_commit_failures() {
+        let conn = Connection::open_in_memory().unwrap();
+        default_pragmas(&conn).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_migrations(version INTEGER);
+             INSERT INTO schema_migrations(version) VALUES (1);
+             CREATE TABLE task_dependencies(id INTEGER);
+             CREATE TABLE tasks(status TEXT);
+             CREATE TABLE task_runs(status TEXT);
+             PRAGMA user_version=1;",
+        )
+        .unwrap();
+        let mut began = false;
+        assert_eq!(
+            unsafe {
+                rusqlite::ffi::sqlite3_set_authorizer(
+                    conn.handle(),
+                    Some(deny_status_reads_and_commit),
+                    (&mut began as *mut bool).cast(),
+                )
+            },
+            rusqlite::ffi::SQLITE_OK
+        );
+        let error =
+            assert_database_idle_with_connection(&conn, Path::new("database.db")).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("replacement inspection failed"));
+        assert!(message.contains("transaction commit failed"));
     }
 
     #[cfg(unix)]

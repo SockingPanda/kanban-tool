@@ -766,6 +766,43 @@ outer_lock_marker="$TMPDIR/outer-lock-marker"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$outer_lock_marker"
 [[ -e "$outer_lock_marker" ]] || fail "nested lock-held command did not run"
 
+assert_target_tools_safe_path_gate_order() {
+  local -a recipe=()
+  local line safe_path_count=0 provenance_count=0 safe_path_index=-1 provenance_index=-1
+
+  mapfile -t recipe < <(
+    awk '
+      $0 == "target-tools:" { in_recipe=1; next }
+      in_recipe && $0 !~ /^[[:space:]]/ { exit }
+      in_recipe { print }
+    ' "$ROOT/justfile"
+  )
+
+  local index=0
+  for line in "${recipe[@]}"; do
+    case "$line" in
+      "    python3 -B scripts/test_release_safe_path.py")
+        safe_path_count=$((safe_path_count + 1))
+        safe_path_index=$index
+        ;;
+      "    scripts/test-release-provenance.sh")
+        provenance_count=$((provenance_count + 1))
+        provenance_index=$index
+        ;;
+    esac
+    index=$((index + 1))
+  done
+
+  [[ "$safe_path_count" -eq 1 ]] ||
+    fail "target-tools recipe must invoke standalone release safe-path tests exactly once"
+  [[ "$provenance_count" -eq 1 ]] ||
+    fail "target-tools recipe must invoke complete release provenance gate exactly once"
+  [[ "$safe_path_index" -lt "$provenance_index" ]] ||
+    fail "standalone release safe-path tests must run before complete release provenance gate"
+}
+
+assert_target_tools_safe_path_gate_order
+
 assert_distinct_worktrees_share_target_and_lock
 assert_package_lock_marker_is_wrapper_owned
 assert_package_waits_for_shared_build_lock

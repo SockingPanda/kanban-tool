@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
+
+use crate::db::connect_existing_read_only;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompletionCandidateKind {
@@ -62,10 +64,7 @@ fn db_candidates(
     if !path.exists() {
         return Vec::new();
     }
-    let Ok(conn) = Connection::open_with_flags(
-        path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ) else {
+    let Ok(conn) = connect_existing_read_only(path) else {
         return Vec::new();
     };
     f(&conn).unwrap_or_default()

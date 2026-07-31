@@ -1531,7 +1531,15 @@ fn fixed_size_list_value(array: &FixedSizeListArray, row: usize) -> Result<Vec<f
             "projection vector row contains a null coordinate".to_owned(),
         ));
     }
-    Ok((0..values.len()).map(|index| values.value(index)).collect())
+    let coordinates = (0..values.len())
+        .map(|index| values.value(index))
+        .collect::<Vec<_>>();
+    if coordinates.iter().any(|coordinate| !coordinate.is_finite()) {
+        return Err(VectorError::Store(
+            "projection vector row contains a non-finite coordinate".to_owned(),
+        ));
+    }
+    Ok(coordinates)
 }
 
 fn optional_string(array: &StringArray, row: usize) -> Option<String> {
@@ -2402,6 +2410,21 @@ mod tests {
             super::fixed_size_list_value(&outer_null, 0),
             Err(VectorError::Store(message)) if message.contains("null")
         ));
+    }
+
+    #[test]
+    fn projection_vector_reader_rejects_non_finite_coordinates() {
+        for coordinate in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let non_finite = arrow_array::FixedSizeListArray::from_iter_primitive::<
+                arrow_array::types::Float32Type,
+                _,
+                _,
+            >(vec![Some(vec![Some(coordinate)])], 1);
+            assert!(matches!(
+                super::fixed_size_list_value(&non_finite, 0),
+                Err(VectorError::Store(message)) if message.contains("non-finite")
+            ));
+        }
     }
 
     fn build_chunk(

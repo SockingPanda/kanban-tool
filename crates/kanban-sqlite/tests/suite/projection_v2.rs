@@ -23,6 +23,27 @@ use kanban_sqlite::api::{
 
 const STORE: &str = "tantivy_tasks";
 
+type PublishedGenerationStoreState = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    i64,
+    i64,
+    String,
+);
+
+type FutureFenceStoreState = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<i64>,
+    Option<String>,
+    Option<String>,
+    i64,
+    String,
+);
+
 struct FakeProjectionStore {
     descriptor: ProjectionStoreDescriptor,
     state: Mutex<FakeProjectionStoreState>,
@@ -2149,15 +2170,7 @@ fn service_lease_rollover_publishes_prepared_generation_and_retains_previous() -
         Some(first_evidence)
     );
 
-    let sqlite: (
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        i64,
-        i64,
-        String,
-    ) = connect_file(&temp.path)?.query_row(
+    let sqlite: PublishedGenerationStoreState = connect_file(&temp.path)?.query_row(
         "SELECT active_generation,previous_generation,building_generation,lease_token,
                 active_fence_epoch,fence_epoch,lifecycle_status
          FROM projection_store_state WHERE store_name=?1",
@@ -2260,16 +2273,7 @@ fn service_lease_rollover_rejects_stale_and_future_publish_without_promotion() -
         Some(prepared)
     );
 
-    let sqlite: (
-        Option<String>,
-        Option<String>,
-        Option<String>,
-        Option<i64>,
-        Option<String>,
-        Option<String>,
-        i64,
-        String,
-    ) = connect_file(&temp.path)?.query_row(
+    let sqlite: FutureFenceStoreState = connect_file(&temp.path)?.query_row(
         "SELECT active_generation,previous_generation,building_generation,
                 building_fence_epoch,lease_owner,lease_token,fence_epoch,lifecycle_status
          FROM projection_store_state WHERE store_name=?1",

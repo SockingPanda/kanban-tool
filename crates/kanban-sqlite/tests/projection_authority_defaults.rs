@@ -4,8 +4,8 @@ use kanban_core::Result;
 use kanban_sqlite::api::provider::{
     ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
     ProjectionBatchReceipt, ProjectionDestructiveAuthority, ProjectionGenerationBinding,
-    ProjectionGenerationRole, ProjectionPublishReceipt, ProjectionSnapshot,
-    ProjectionStoreBackend, ProjectionStoreDescriptor,
+    ProjectionGenerationRole, ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreBackend,
+    ProjectionStoreDescriptor,
 };
 
 #[derive(Default)]
@@ -72,17 +72,11 @@ impl ProjectionStoreBackend for LegacyOnlyMutatingBackend {
         Ok(None)
     }
 
-    fn inspect_generation(
-        &self,
-        _generation: &str,
-    ) -> Result<Option<ProjectionArtifactEvidence>> {
+    fn inspect_generation(&self, _generation: &str) -> Result<Option<ProjectionArtifactEvidence>> {
         Ok(None)
     }
 
-    fn repair_generation_publication(
-        &self,
-        _expected: &ProjectionArtifactEvidence,
-    ) -> Result<()> {
+    fn repair_generation_publication(&self, _expected: &ProjectionArtifactEvidence) -> Result<()> {
         self.repair_calls.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }

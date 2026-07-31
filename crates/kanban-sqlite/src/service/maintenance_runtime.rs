@@ -4371,7 +4371,10 @@ mod legacy_binding_recovery_tests {
             CreateTask::ready("prepared abort authority"),
         )?;
         let initial_snapshot = canonical_control_plane_snapshot(&path)?;
-        assert_eq!(initial_snapshot.pending_deliveries, initial_snapshot.delivery_count);
+        assert_eq!(
+            initial_snapshot.pending_deliveries,
+            initial_snapshot.delivery_count
+        );
         assert_eq!(initial_snapshot.checkpoint_cursor, 0);
         assert_eq!(initial_snapshot.legacy_checkpoint_cursor, 0);
         let backend = RecoveryBackend::empty_with_helper_path(&path);
@@ -4399,7 +4402,10 @@ mod legacy_binding_recovery_tests {
         };
         let before_abort = canonical_control_plane_snapshot(&path)?;
         let prepared_store = lance_store_status(&path)?;
-        assert_eq!(prepared_store.building_generation.as_deref(), Some(generation.as_str()));
+        assert_eq!(
+            prepared_store.building_generation.as_deref(),
+            Some(generation.as_str())
+        );
         assert_eq!(prepared_store.building_phase.as_deref(), Some("prepared"));
         assert_eq!(before_abort.delivery_count, 1);
         assert_eq!(before_abort.pending_deliveries, 0);
@@ -4420,7 +4426,10 @@ mod legacy_binding_recovery_tests {
 
         let after_abort = canonical_control_plane_snapshot(&path)?;
         assert_eq!(after_abort.outbox_rows, initial_snapshot.outbox_rows);
-        assert_eq!(after_abort.derived_store_row.len(), initial_snapshot.derived_store_row.len());
+        assert_eq!(
+            after_abort.derived_store_row.len(),
+            initial_snapshot.derived_store_row.len()
+        );
         for ((name, before), (_, after)) in initial_snapshot
             .derived_store_row
             .iter()
@@ -4432,19 +4441,43 @@ mod legacy_binding_recovery_tests {
                 "derived_store_state canonical column {name} changed: {before:?} -> {after:?}"
             );
         }
-        assert_eq!(after_abort.derived_store.0, initial_snapshot.derived_store.0);
-        assert_eq!(after_abort.derived_store.1, initial_snapshot.derived_store.1);
+        assert_eq!(
+            after_abort.derived_store.0,
+            initial_snapshot.derived_store.0
+        );
+        assert_eq!(
+            after_abort.derived_store.1,
+            initial_snapshot.derived_store.1
+        );
         assert_eq!(after_abort.delivery_count, initial_snapshot.delivery_count);
-        assert_eq!(after_abort.pending_deliveries, initial_snapshot.pending_deliveries);
-        assert_eq!(after_abort.published_deliveries, initial_snapshot.published_deliveries);
-        assert_eq!(after_abort.claimed_deliveries, initial_snapshot.claimed_deliveries);
-        assert_eq!(after_abort.checkpoint_cursor, initial_snapshot.checkpoint_cursor);
+        assert_eq!(
+            after_abort.pending_deliveries,
+            initial_snapshot.pending_deliveries
+        );
+        assert_eq!(
+            after_abort.published_deliveries,
+            initial_snapshot.published_deliveries
+        );
+        assert_eq!(
+            after_abort.claimed_deliveries,
+            initial_snapshot.claimed_deliveries
+        );
+        assert_eq!(
+            after_abort.checkpoint_cursor,
+            initial_snapshot.checkpoint_cursor
+        );
         assert_eq!(
             after_abort.legacy_checkpoint_cursor,
             initial_snapshot.legacy_checkpoint_cursor
         );
-        assert_eq!(after_abort.delivery_invariants, initial_snapshot.delivery_invariants);
-        assert_eq!(after_abort.delivery_rows.len(), initial_snapshot.delivery_rows.len());
+        assert_eq!(
+            after_abort.delivery_invariants,
+            initial_snapshot.delivery_invariants
+        );
+        assert_eq!(
+            after_abort.delivery_rows.len(),
+            initial_snapshot.delivery_rows.len()
+        );
         for (row_index, (before, after)) in initial_snapshot
             .delivery_rows
             .iter()
@@ -4459,7 +4492,10 @@ mod legacy_binding_recovery_tests {
                 );
             }
         }
-        assert_eq!(after_abort.store_state_row.len(), initial_snapshot.store_state_row.len());
+        assert_eq!(
+            after_abort.store_state_row.len(),
+            initial_snapshot.store_state_row.len()
+        );
         for ((name, before), (_, after)) in initial_snapshot
             .store_state_row
             .iter()
@@ -4486,7 +4522,10 @@ mod legacy_binding_recovery_tests {
         let after_store = lance_store_status(&path)?;
         assert_eq!(after_store.building_generation, None);
         assert_eq!(after_store.building_phase, None);
-        assert_eq!(state_value(&after_abort.store_state_row, "control_plane"), "text:v2");
+        assert_eq!(
+            state_value(&after_abort.store_state_row, "control_plane"),
+            "text:v2"
+        );
         assert_eq!(
             state_value(&after_abort.store_state_row, "snapshot_cursor"),
             state_value(&before_abort.store_state_row, "snapshot_cursor")
@@ -5803,9 +5842,7 @@ mod legacy_binding_recovery_tests {
         values
             .into_iter()
             .enumerate()
-            .map(|(index, value)| {
-                Ok((row.as_ref().column_name(index)?.to_owned(), value))
-            })
+            .map(|(index, value)| Ok((row.as_ref().column_name(index)?.to_owned(), value)))
             .collect()
     }
 
@@ -5841,7 +5878,9 @@ mod legacy_binding_recovery_tests {
         let mut outbox_rows_statement = conn.prepare("SELECT * FROM index_outbox ORDER BY id")?;
         let outbox_column_count = outbox_rows_statement.column_count();
         let outbox_rows = outbox_rows_statement
-            .query_map([], |row| sqlite_named_row_snapshot(row, outbox_column_count))?
+            .query_map([], |row| {
+                sqlite_named_row_snapshot(row, outbox_column_count)
+            })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         let derived_store = conn.query_row(
             "SELECT dirty,last_event_id,last_sync_at,last_error,updated_at
@@ -5857,9 +5896,8 @@ mod legacy_binding_recovery_tests {
                 ))
             },
         )?;
-        let mut derived_store_statement = conn.prepare(
-            "SELECT * FROM derived_store_state WHERE store_name=?1",
-        )?;
+        let mut derived_store_statement =
+            conn.prepare("SELECT * FROM derived_store_state WHERE store_name=?1")?;
         let derived_store_column_count = derived_store_statement.column_count();
         let derived_store_row = derived_store_statement.query_row([STORE], |row| {
             sqlite_named_row_snapshot(row, derived_store_column_count)
@@ -5880,9 +5918,8 @@ mod legacy_binding_recovery_tests {
             [STORE],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
-        let mut store_state_statement = conn.prepare(
-            "SELECT * FROM projection_store_state WHERE store_name=?1",
-        )?;
+        let mut store_state_statement =
+            conn.prepare("SELECT * FROM projection_store_state WHERE store_name=?1")?;
         let store_state_column_count = store_state_statement.column_count();
         let store_state_row = store_state_statement.query_row([STORE], |row| {
             sqlite_named_row_snapshot(row, store_state_column_count)
@@ -5896,12 +5933,13 @@ mod legacy_binding_recovery_tests {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        let mut delivery_rows_statement = conn.prepare(
-            "SELECT * FROM projection_deliveries WHERE store_name=?1 ORDER BY id",
-        )?;
+        let mut delivery_rows_statement =
+            conn.prepare("SELECT * FROM projection_deliveries WHERE store_name=?1 ORDER BY id")?;
         let delivery_column_count = delivery_rows_statement.column_count();
         let delivery_rows = delivery_rows_statement
-            .query_map([STORE], |row| sqlite_named_row_snapshot(row, delivery_column_count))?
+            .query_map([STORE], |row| {
+                sqlite_named_row_snapshot(row, delivery_column_count)
+            })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         let mut delivery_invariants_statement = conn.prepare(
             "SELECT id,status,attempts,next_attempt_at,claim_owner,claim_token,

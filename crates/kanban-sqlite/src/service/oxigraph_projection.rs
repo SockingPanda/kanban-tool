@@ -338,11 +338,7 @@ impl OxigraphProjectionStore {
                 "Oxigraph publish evidence belongs to another database".to_owned(),
             ));
         }
-        if self
-            .inspect_published_while_helper_locked()?
-            .last()
-            != expected_active
-        {
+        if self.inspect_published_while_helper_locked()?.last() != expected_active {
             return Err(KanbanError::Conflict(
                 "Oxigraph active generation changed before publish".to_owned(),
             ));
@@ -1773,11 +1769,15 @@ mod tests {
              WHERE store_name=?6",
             params![
                 provider_fingerprint,
-                corpus.as_ref().map(|binding| binding.corpus_schema.as_str()),
+                corpus
+                    .as_ref()
+                    .map(|binding| binding.corpus_schema.as_str()),
                 corpus
                     .as_ref()
                     .map(|binding| binding.corpus_fingerprint.as_str()),
-                corpus.as_ref().map(|binding| binding.embedding_model.as_str()),
+                corpus
+                    .as_ref()
+                    .map(|binding| binding.embedding_model.as_str()),
                 embedding_dimensions,
                 OXIGRAPH_RELATIONS_STORE,
             ],
@@ -1788,17 +1788,16 @@ mod tests {
                 .unwrap();
         }
         if let Some(expected) = &corpus {
-            let persisted: (String, String, String, i64) =
-                crate::db::connect_file(&store.db_path)
-                    .unwrap()
-                    .query_row(
-                        "SELECT building_corpus_schema,building_corpus_fingerprint,
+            let persisted: (String, String, String, i64) = crate::db::connect_file(&store.db_path)
+                .unwrap()
+                .query_row(
+                    "SELECT building_corpus_schema,building_corpus_fingerprint,
                                 building_embedding_model,building_embedding_dimensions
                          FROM projection_store_state WHERE store_name=?1",
-                        [OXIGRAPH_RELATIONS_STORE],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-                    )
-                    .unwrap();
+                    [OXIGRAPH_RELATIONS_STORE],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .unwrap();
             assert_eq!(
                 persisted,
                 (
@@ -1904,12 +1903,8 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let (store, evidence, authority) =
             fenced_fixture(&temp, "gen_historical_provider_quarantine");
-        let authority = historical_fenced_authority(
-            &store,
-            authority,
-            "oxigraph-provider-historical-v0",
-            None,
-        );
+        let authority =
+            historical_fenced_authority(&store, authority, "oxigraph-provider-historical-v0", None);
         let generation = evidence.manifest.generation.as_str();
         let mut mismatched = authority.clone();
         mismatched.expected_binding.provider_fingerprint =
@@ -1918,7 +1913,10 @@ mod tests {
         let error = store
             .quarantine_generation_fenced(generation, &mismatched)
             .expect_err("mismatched historical authority must fail closed");
-        assert!(error.to_string().contains("destructive authority"), "{error}");
+        assert!(
+            error.to_string().contains("destructive authority"),
+            "{error}"
+        );
         assert!(store.generation_path(generation).is_dir());
         assert!(
             fs::read_dir(store.generations_root())
@@ -1942,8 +1940,7 @@ mod tests {
     #[test]
     fn historical_corpus_requires_exact_authority_for_fenced_abort() {
         let temp = tempfile::tempdir().unwrap();
-        let (store, evidence, authority) =
-            fenced_fixture(&temp, "gen_historical_corpus_abort");
+        let (store, evidence, authority) = fenced_fixture(&temp, "gen_historical_corpus_abort");
         let authority = historical_fenced_authority(
             &store,
             authority,
@@ -1962,7 +1959,10 @@ mod tests {
         let error = store
             .abort_generation_fenced(generation, &mismatched)
             .expect_err("mismatched historical corpus authority must fail closed");
-        assert!(error.to_string().contains("destructive authority"), "{error}");
+        assert!(
+            error.to_string().contains("destructive authority"),
+            "{error}"
+        );
         assert!(store.generation_path(generation).is_dir());
 
         let error = store

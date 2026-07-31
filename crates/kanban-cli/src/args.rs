@@ -223,6 +223,12 @@ pub(crate) struct MaintenanceRebuildArgs {
     /// Rebuild every store currently supported by the unified runtime.
     #[arg(long)]
     pub(crate) all: bool,
+    /// Validate and report the rebuild plan without claiming an owner or mutating state.
+    #[arg(long)]
+    pub(crate) dry_run: bool,
+    /// Resume the selected store's unfinished building generation.
+    #[arg(long, conflicts_with = "all")]
+    pub(crate) resume: bool,
 }
 
 #[derive(Debug, Subcommand)]

@@ -12,12 +12,14 @@ use kanban_contract::cli_operator::{
 use kanban_core::KanbanError;
 use kanban_sqlite::api::lifecycle::begin_database_replace;
 use kanban_sqlite::api::{
-    MaintenanceMode, MaintenanceRunOptions, MaintenanceSession, ProjectionRuntimeAvailability,
-    backup_database, checkpoint_database, export_jsonl, export_jsonl_to_writer, import_jsonl,
-    maintenance_apply_legacy_projection_cleanup, maintenance_inventory_legacy_projections,
-    maintenance_rebuild_all, maintenance_rebuild_store,
-    maintenance_restore_legacy_projection_cleanup, maintenance_run_once, maintenance_status,
-    maintenance_verify_legacy_projection_cleanup, queue_stats, vacuum_database,
+    MaintenanceMode, MaintenanceRebuildIntent, MaintenanceRunOptions, MaintenanceSession,
+    ProjectionRuntimeAvailability, backup_database, checkpoint_database, export_jsonl,
+    export_jsonl_to_writer, import_jsonl, maintenance_apply_legacy_projection_cleanup,
+    maintenance_inventory_legacy_projections, maintenance_plan_rebuild_all,
+    maintenance_plan_rebuild_store, maintenance_rebuild_all, maintenance_rebuild_store,
+    maintenance_restore_legacy_projection_cleanup, maintenance_resume_rebuild_store,
+    maintenance_run_once, maintenance_status, maintenance_verify_legacy_projection_cleanup,
+    queue_stats, vacuum_database,
 };
 use kanban_sqlite::init::init_database;
 
@@ -272,8 +274,31 @@ pub(crate) fn handle_maintenance(
             }
         }
         MaintenanceCommand::Rebuild(args) => {
-            let report = if args.all {
+            let intent = if args.resume {
+                MaintenanceRebuildIntent::Resume
+            } else {
+                MaintenanceRebuildIntent::Fresh
+            };
+            let report = if args.dry_run {
+                if args.all {
+                    maintenance_plan_rebuild_all(db_path, actor)?
+                } else {
+                    maintenance_plan_rebuild_store(
+                        db_path,
+                        actor,
+                        args.store.as_deref().expect("clap target group"),
+                        intent,
+                    )?
+                }
+            } else if args.all {
                 maintenance_rebuild_all(db_path, actor, MaintenanceRunOptions::default())?
+            } else if args.resume {
+                maintenance_resume_rebuild_store(
+                    db_path,
+                    actor,
+                    args.store.as_deref().expect("clap target group"),
+                    MaintenanceRunOptions::default(),
+                )?
             } else {
                 maintenance_rebuild_store(
                     db_path,

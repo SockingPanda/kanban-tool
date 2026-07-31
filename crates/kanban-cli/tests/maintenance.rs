@@ -166,6 +166,13 @@ fn maintenance_rejects_missing_database() -> anyhow::Result<()> {
         vec!["--json", "maintenance", "status"],
         vec!["--json", "maintenance", "run", "--once"],
         vec!["--json", "maintenance", "rebuild", "tantivy_tasks"],
+        vec![
+            "--json",
+            "maintenance",
+            "rebuild",
+            "tantivy_tasks",
+            "--dry-run",
+        ],
         vec!["--json", "checkpoint"],
         vec!["--json", "vacuum"],
         vec![
@@ -203,6 +210,174 @@ fn maintenance_rejects_missing_database() -> anyhow::Result<()> {
             .exists()
     );
     assert!(!export_path.exists());
+    Ok(())
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn maintenance_rebuild_dry_run_is_read_only_and_reports_the_exact_intent() -> anyhow::Result<()> {
+    let temp = TempDb::new("maintenance_rebuild_dry_run")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let before = kanban_sqlite::api::projection_status(&temp.path)?;
+    let before_outbox = kanban_sqlite::api::list_outbox(
+        &temp.path,
+        kanban_sqlite::api::OutboxListOptions {
+            status: None,
+            limit: 1_000,
+        },
+    )?;
+    checkpoint_sqlite_for_read_only_snapshot(&temp.path)?;
+    let before_tree = exact_tree_snapshot(&temp.dir)?;
+
+    let output = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "dry-run-owner",
+            "--json",
+            "maintenance",
+            "rebuild",
+            "tantivy_tasks",
+            "--dry-run",
+        ],
+    )?
+    .success_json()?;
+
+    assert_eq!(output["data"]["owner"], "dry-run-owner");
+    assert_eq!(output["data"]["stores"].as_array().map(Vec::len), Some(1));
+    assert_eq!(output["data"]["stores"][0]["store_name"], "tantivy_tasks");
+    assert_eq!(
+        output["data"]["stores"][0]["result"],
+        serde_json::json!({
+            "status": "succeeded",
+            "action": "dry_run_rebuild",
+            "processed": 0
+        })
+    );
+    let all = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "dry-run-owner",
+            "--json",
+            "maintenance",
+            "rebuild",
+            "--all",
+            "--dry-run",
+        ],
+    )?
+    .success_json()?;
+    assert!(
+        all["data"]["stores"]
+            .as_array()
+            .is_some_and(|stores| !stores.is_empty())
+    );
+    assert_eq!(
+        exact_tree_snapshot(&temp.dir)?,
+        before_tree,
+        "fresh and all-store dry-runs must not change the database, WAL/SHM sidecars, lifecycle files, or any derived root"
+    );
+    assert_eq!(kanban_sqlite::api::projection_status(&temp.path)?, before);
+    assert_eq!(
+        kanban_sqlite::api::list_outbox(
+            &temp.path,
+            kanban_sqlite::api::OutboxListOptions {
+                status: None,
+                limit: 1_000,
+            },
+        )?,
+        before_outbox
+    );
+    let owner = kanban_sqlite::db::connect_file(&temp.path)?.query_row(
+        "SELECT owner,lease_token,lease_expires_at
+         FROM projection_maintenance_owner WHERE singleton=1",
+        [],
+        |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+            ))
+        },
+    )?;
+    assert_eq!(owner, (None, None, None));
+    assert!(
+        !temp.dir.join("index/v2/databases").exists(),
+        "dry-run must not create the Projection v2 physical namespace"
+    );
+    Ok(())
+}
+
+#[cfg(feature = "tantivy-backend")]
+#[test]
+fn maintenance_rebuild_requires_explicit_resume_for_unfinished_generation() -> anyhow::Result<()> {
+    let temp = TempDb::new("maintenance_rebuild_explicit_resume")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    kanban_sqlite::db::connect_file(&temp.path)?.execute(
+        "UPDATE projection_store_state
+         SET building_generation='gen_resume_fixture',
+             building_fingerprint='fnv64:resume-fixture',
+             building_fence_epoch=1,
+             building_provider='tantivy',
+             building_provider_fingerprint='tantivy-tasks-v2',
+             building_canonical_count=0,
+             building_canonical_digest='fnv64:resume-canonical',
+             building_delivery_count=0,
+             building_delivery_digest='fnv64:resume-delivery',
+             building_phase='snapshotting',
+             lifecycle_status='rebuilding',
+             fence_epoch=1
+         WHERE store_name='tantivy_tasks'",
+        [],
+    )?;
+    checkpoint_sqlite_for_read_only_snapshot(&temp.path)?;
+    let before_tree = exact_tree_snapshot(&temp.dir)?;
+
+    kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "resume-owner",
+            "--json",
+            "maintenance",
+            "rebuild",
+            "tantivy_tasks",
+            "--dry-run",
+        ],
+    )?
+    .json_failure_containing("use --resume")?;
+
+    let output = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "resume-owner",
+            "--json",
+            "maintenance",
+            "rebuild",
+            "tantivy_tasks",
+            "--dry-run",
+            "--resume",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(
+        output["data"]["stores"][0]["result"]["action"],
+        "dry_run_resume"
+    );
+    assert_eq!(
+        exact_tree_snapshot(&temp.dir)?,
+        before_tree,
+        "fresh rejection and explicit resume dry-run must preserve the exact database and physical tree"
+    );
+    assert_eq!(
+        kanban_sqlite::api::projection_status(&temp.path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .and_then(|store| store.building_generation),
+        Some("gen_resume_fixture".to_owned())
+    );
     Ok(())
 }
 

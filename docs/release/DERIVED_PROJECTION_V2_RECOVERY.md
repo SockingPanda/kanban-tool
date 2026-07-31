@@ -753,16 +753,21 @@ cohort 中六个 artifact，以及实际部署的 CLI/两个 helper。它必须�
 ~~~bash
 assert_release_binding() {
   local phase="$1" dir commit tree branch remote_output remote_commit remote_ref
-  local source artifacts marker source_sha source_map_sha build_id generation
+  local source source_map source_remote_output source_remote_commit source_remote_ref
+  local source_saved_tip source_tip merge_base merge_base_rc
+  local artifacts marker source_sha source_map_sha build_id generation
   local index role relative expected_sha expected_size actual_path actual_sha actual_size
-  local -a roles relatives deployed
+  local kind source_commit integrated_commit
+  local -a roles relatives deployed map_sources map_integrated expected_sources expected_integrated
 
   dir="$EVIDENCE/preflight/release-$phase"
   install -d -m 0700 "$dir"
   source="$COHORT/source-provenance.json"
+  source_map="$COHORT/derived-projection-v2-source-map.json"
   artifacts="$COHORT/release-artifacts.json"
   marker="${COHORT}.published"
   test -s "$source"
+  test -s "$source_map"
   test -s "$artifacts"
   test -f "$marker"
   test ! -L "$marker"
@@ -803,6 +808,96 @@ assert_release_binding() {
   "$REPO/scripts/release-source-gate.sh" validate --manifest "$source"
   printf 'source_gate_validate=true\n' \
     >"$dir/source-provenance.schema-and-identity.ok.txt"
+
+  jq -e --argjson expected_source_commits \
+    '["0e58068fc67913495d8566e0a839e7a068456f81",
+      "85e1f797c2d5c2b089d1a2f29827f42e25cd595c",
+      "c764706fcae214f58a3a65f5dc565135522bbd81"]' \
+    --argjson expected_integrated_commits \
+    '["095a5c2ee88434976ae7f8c8bf8310c8227eec70",
+      "7f218272f4dfe12ee2c85bedc376c13c809a87ae",
+      "e1c3b55bf18774cba49d5f2691a4107d1ea73882"]' '
+    (keys_unsorted | sort) ==
+      ["description_zh","integration_strategy","mappings","project",
+       "schema_version","source_ref","source_tip"] and
+    .schema_version == 1 and .project == "kanban-tool" and
+    .integration_strategy == "semantic-port-without-merge-base" and
+    .source_ref == "refs/heads/derived-projection-v2" and
+    (.source_tip | type) == "string" and
+    (.source_tip | test("^[0-9a-f]{40}$")) and
+    (.mappings | length) == 3 and
+    all(.mappings[];
+      (keys_unsorted | sort) ==
+        ["integrated_commit","source_branch","source_commit","subject"] and
+      .source_branch == "origin/derived-projection-v2" and
+      (.source_commit | test("^[0-9a-f]{40}$")) and
+      (.integrated_commit | test("^[0-9a-f]{40}$")) and
+      (.subject | type) == "string" and (.subject | length) > 0
+    ) and
+    ([.mappings[].source_commit] == $expected_source_commits) and
+    ([.mappings[].integrated_commit] == $expected_integrated_commits) and
+    .source_tip == $expected_source_commits[-1]
+  ' "$source_map" >"$dir/source-map.schema-and-exact-mapping.ok.txt"
+
+  mapfile -t map_sources < <(jq -er '.mappings[].source_commit' "$source_map")
+  mapfile -t map_integrated < <(jq -er '.mappings[].integrated_commit' "$source_map")
+  expected_sources=(
+    0e58068fc67913495d8566e0a839e7a068456f81
+    85e1f797c2d5c2b089d1a2f29827f42e25cd595c
+    c764706fcae214f58a3a65f5dc565135522bbd81
+  )
+  expected_integrated=(
+    095a5c2ee88434976ae7f8c8bf8310c8227eec70
+    7f218272f4dfe12ee2c85bedc376c13c809a87ae
+    e1c3b55bf18774cba49d5f2691a4107d1ea73882
+  )
+  test "${map_sources[*]}" = "${expected_sources[*]}"
+  test "${map_integrated[*]}" = "${expected_integrated[*]}"
+  source_tip="$(jq -er '.source_tip' "$source_map")"
+  source_saved_tip="$(git -C "$REPO" rev-parse --verify \
+    'refs/remotes/origin/derived-projection-v2^{commit}')"
+  test "$source_saved_tip" = "$source_tip"
+  source_remote_output="$(
+    git -C "$REPO" ls-remote --exit-code origin refs/heads/derived-projection-v2
+  )"
+  printf '%s\n' "$source_remote_output" >"$dir/remote-derived-projection-v2.txt"
+  test "$(printf '%s\n' "$source_remote_output" | awk 'NF { count++ } END { print count+0 }')" -eq 1
+  read -r source_remote_commit source_remote_ref extra <<<"$source_remote_output"
+  test -z "${extra:-}"
+  test "$source_remote_ref" = refs/heads/derived-projection-v2
+  test "$source_remote_commit" = "$source_tip"
+  for index in "${!map_integrated[@]}"; do
+    git -C "$REPO" merge-base --is-ancestor \
+      "${map_integrated[$index]}" "$commit"
+    printf '%s ancestor_of %s\n' "${map_integrated[$index]}" "$commit" \
+      >>"$dir/integrated-commit-ancestry.txt"
+    git -C "$REPO" merge-base --is-ancestor \
+      "${map_sources[$index]}" "$source_tip"
+    printf '%s ancestor_of %s\n' "${map_sources[$index]}" "$source_tip" \
+      >>"$dir/source-slice-ancestry.txt"
+  done
+  if merge_base="$(git -C "$REPO" merge-base "$commit" "$source_tip" 2>"$dir/no-merge-base.stderr")"; then
+    fail "main and semantic-port source unexpectedly have a merge base: $merge_base"
+  else
+    merge_base_rc=$?
+  fi
+  test "$merge_base_rc" -eq 1
+  test -z "$merge_base"
+  : >"$dir/no-merge-base.ok.txt"
+
+  jq -e --slurpfile source_map \
+    "$source_map" '
+    .semantic_source.name == "origin/derived-projection-v2" and
+    .semantic_source.remote_ref == "refs/heads/derived-projection-v2" and
+    .semantic_source.saved_ref == "refs/remotes/origin/derived-projection-v2" and
+    .semantic_source.no_merge_base_with_main == true and
+    .semantic_source.remote_tip == $source_map[0].source_tip and
+    .semantic_source.saved_tip == $source_map[0].source_tip and
+    (.semantic_source.verified_source_commits ==
+      ($source_map[0].mappings | map(.source_commit))) and
+    (.semantic_source.verified_source_commits | length) == 3 and
+    .source_map.path == "docs/release/derived-projection-v2-source-map.json"
+  ' "$source" >"$dir/semantic-source-port.ok.txt"
 
   source_sha="$(sha256sum "$source" | awk '{print $1}')"
   source_map_sha="$(sha256sum "$COHORT/derived-projection-v2-source-map.json" | awk '{print $1}')"
@@ -907,6 +1002,59 @@ assert_release_binding() {
 assert_release_binding pre-mutation
 ~~~
 
+canonical backup 是恢复期间不可替换的只读锚点。以下 guard 不信任调用方重新提供的
+路径或 digest：它只读取首次创建的 `canonical.sqlite.sha256`，要求 backup/hash 都是
+非 symlink 的 regular file、权限为 `0600`，并用 `sha256sum --check --strict` 验证原始
+digest。guard 失败必须停止流程；在 ERR trap 尚未安装的早期阶段，显式打印
+`fail-closed-before-hard-stop-trap` 后直接 `exit 1`，绝不继续执行任何生产动作。
+
+~~~bash
+HARD_STOP_TRAP_INSTALLED=0
+CANONICAL_BACKUP_SHA256=""
+
+canonical_backup_guard_fail() {
+  local phase="$1" reason="$2"
+  if test "${HARD_STOP_TRAP_INSTALLED:-0}" -eq 1; then
+    hard_stop "canonical-backup-unchanged phase=$phase reason=$reason"
+  fi
+  printf 'fail-closed-before-hard-stop-trap: canonical backup guard phase=%s reason=%s\n' \
+    "$phase" "$reason" >&2
+  exit 1
+}
+
+assert_canonical_backup_unchanged() {
+  local phase="$1" backup hash hash_line
+  backup="$EVIDENCE/backup/canonical.sqlite"
+  hash="$EVIDENCE/backup/canonical.sqlite.sha256"
+  if ! test -f "$backup" || test -L "$backup"; then
+    canonical_backup_guard_fail "$phase" missing-or-symlink-backup
+  fi
+  if ! test "$(stat -c '%F' "$backup")" = "regular file" ||
+    ! test "$(stat -c '%a' "$backup")" = 600; then
+    canonical_backup_guard_fail "$phase" backup-type-or-mode
+  fi
+  if ! test -f "$hash" || test -L "$hash"; then
+    canonical_backup_guard_fail "$phase" missing-or-symlink-hash
+  fi
+  if ! test "$(stat -c '%F' "$hash")" = "regular file" ||
+    ! test "$(stat -c '%a' "$hash")" = 600; then
+    canonical_backup_guard_fail "$phase" hash-type-or-mode
+  fi
+  if ! [[ "${CANONICAL_BACKUP_SHA256:-}" =~ ^[0-9a-f]{64}$ ]]; then
+    canonical_backup_guard_fail "$phase" missing-original-digest
+  fi
+  hash_line="$(cat "$hash")"
+  if ! test "$hash_line" = "$CANONICAL_BACKUP_SHA256  canonical.sqlite"; then
+    canonical_backup_guard_fail "$phase" hash-file-drift
+  fi
+  if ! (cd "$(dirname "$hash")" && sha256sum --check --strict "$(basename "$hash")" >/dev/null); then
+    canonical_backup_guard_fail "$phase" checksum-mismatch
+  fi
+  printf 'phase=%s sha256=%s unchanged=true\n' "$phase" "$CANONICAL_BACKUP_SHA256" \
+    >"$EVIDENCE/backup/canonical.sqlite.unchanged.$phase.ok.txt"
+}
+~~~
+
 在停止 writer 之前保存只读基线。此处只要求 canonical doctor 字段通过；派生层仍可处于
 待恢复状态，所以不能用当前 derived readiness 反向定义预期 binding。
 
@@ -976,6 +1124,9 @@ chmod 0600 "$EVIDENCE/backup/canonical.sqlite"
   cd "$EVIDENCE/backup"
   sha256sum canonical.sqlite >canonical.sqlite.sha256
 )
+CANONICAL_BACKUP_SHA256="$(awk 'NF == 2 { print $1 }' \
+  "$EVIDENCE/backup/canonical.sqlite.sha256")"
+[[ "$CANONICAL_BACKUP_SHA256" =~ ^[0-9a-f]{64}$ ]]
 chmod 0600 "$EVIDENCE/backup/canonical.sqlite.sha256"
 (
   cd "$EVIDENCE/backup"
@@ -997,6 +1148,11 @@ df -P "$DB" "$EVIDENCE/backup/canonical.sqlite" \
 backup 后、任何 rebuild 前继续使用只读 legacy inventory；保存精确 digest。非空
 WAL/journal 会令 inventory fail closed；不要删 sidecar，也不要提前调用 cleanup apply。
 
+`EVIDENCE/backup/canonical.sqlite` 及其 `.sha256` 是本次恢复的 canonical backup，后续步骤
+只允许读取和校验，禁止用 cleanup backup、restore drill 或任何 generation 操作覆盖、替换
+或移动它。第 14 节会再次执行同一个 checksum；任一前后 hash 漂移都必须 hard-stop，不能
+继续 cleanup 或 owner restart。
+
 ~~~bash
 bounded_kanban --db "$DB" --json maintenance cleanup-legacy inventory \
   | tee "$EVIDENCE/preflight/legacy-inventory.json"
@@ -1012,10 +1168,13 @@ assert_writers_stopped
 ## 5. 隔离 restore drill
 
 restore drill 只在 `EVIDENCE/restore-drill` 中进行，绝不替换生产 DB。它验证 backup checksum、
-doctor、database identity 和九个 active board 的 canonical stats。
+doctor、database identity 和九个 active board 的 canonical stats；它刻意不复制或宣称
+验证任何派生物理 root 的 ready，派生层 readiness 必须由后续同 cohort rebuild 与 owner
+health gate 单独证明。
 
 ~~~bash
 export DRILL_DB="$EVIDENCE/restore-drill/kb.db"
+assert_canonical_backup_unchanged restore-drill-before
 test ! -e "$DRILL_DB"
 cp --reflink=auto --no-preserve=mode \
   "$EVIDENCE/backup/canonical.sqlite" "$DRILL_DB"
@@ -1077,6 +1236,7 @@ jq -e --arg expected "$DB_INSTANCE_ID" \
   "$EVIDENCE/restore-drill/maintenance-status.json" \
   >"$EVIDENCE/restore-drill/database-instance-id.ok.txt"
 assert_writers_stopped
+assert_canonical_backup_unchanged restore-drill-after
 ~~~
 
 任何 identity/count/doctor/hash mismatch 都是 hard stop；restore drill 不得修改生产 outbox
@@ -1907,6 +2067,7 @@ hard_stop() {
   exit 1
 }
 
+HARD_STOP_TRAP_INSTALLED=1
 trap 'hard_stop "fatal-command-error line=$LINENO"' ERR
 
 assert_non_owner_writers_stopped() {
@@ -2754,6 +2915,7 @@ OLD_HEARTBEAT="$(
 [[ "$OLD_HEARTBEAT" =~ ^[0-9]+$ ]]
 
 RESTART_STARTED_MS=$(( $(date +%s) * 1000 ))
+assert_canonical_backup_unchanged owner-restart-before
 bounded_sudo systemctl restart "$MAINTENANCE_UNIT"
 RESTART_DEADLINE=$(( $(date +%s) + OWNER_START_TIMEOUT_SEC ))
 while :; do
@@ -3196,6 +3358,7 @@ assert_writers_stopped "$CLEANUP_DIR/writers.after-owner-stop.txt"
 wait_for_exact_maintenance_release "$CLEANUP_DIR" after-owner-stop
 assert_writers_stopped "$CLEANUP_DIR/writers.after-owner-release.txt"
 assert_no_database_holders "$CLEANUP_DIR/database-holders.after-owner-stop.txt"
+assert_canonical_backup_unchanged cleanup-apply-before
 
 bounded_kanban --db "$DB" --actor production-recovery --json \
   maintenance cleanup-legacy apply \
@@ -3259,6 +3422,7 @@ owner/binding/health gate；这里不得只检查 `systemctl is-active`。
 
 ~~~bash
 assert_writers_stopped "$CLEANUP_DIR/writers.before-owner-restart.txt"
+assert_canonical_backup_unchanged owner-restart-before
 CLEANUP_RESTART_STARTED_MS=$(( $(date +%s) * 1000 ))
 bounded_sudo systemctl start "$MAINTENANCE_UNIT"
 CLEANUP_RESTART_DEADLINE=$(( $(date +%s) + OWNER_START_TIMEOUT_SEC ))

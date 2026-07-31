@@ -30,10 +30,10 @@ use super::{
     projection_status_quiescent, storage, with_immediate_tx,
 };
 use super::{
-    ProjectionStoreBackend,
+    ProjectionSnapshotPrepareDisposition, ProjectionStoreBackend,
     abort_incompatible_projection_generation, abort_projection_generation,
     acquire_projection_lease, begin_projection_generation, prepare_projection_snapshot_with,
-    publish_projection_generation_with,
+    prepare_projection_snapshot_with_disposition, publish_projection_generation_with,
     reconcile_projection_generation_with, recover_incompatible_projection_bindings,
     recover_projection_generation_with, release_projection_lease, renew_projection_lease,
     run_projection_batch_with, validate_backend_for_target, validate_physical_active_artifact_with,
@@ -1133,6 +1133,76 @@ fn require_explicit_resume_invariant(
     Ok(())
 }
 
+fn prepare_snapshot_with_one_automatic_rebase(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &impl ProjectionStoreBackend,
+    intent: MaintenanceStoreRunIntent,
+    fresh_generation_created: bool,
+) -> MaintenanceStoreAttempt<()> {
+    let disposition =
+        prepare_projection_snapshot_with_disposition(path, store_name, owner, lease_token, backend)
+            .map_err(|error| MaintenanceStoreAttemptError::Store {
+                kind: MaintenanceStoreFailureKind::Backend,
+                error,
+            })?;
+    match disposition {
+        ProjectionSnapshotPrepareDisposition::Prepared(_) => Ok(()),
+        ProjectionSnapshotPrepareDisposition::CoverageChanged => {
+            if intent == MaintenanceStoreRunIntent::Resume {
+                return Err(MaintenanceStoreAttemptError::Fatal(KanbanError::Conflict(
+                    format!(
+                        "explicit resume for projection store {store_name} found an obsolete snapshot baseline; refusing to replace it"
+                    ),
+                )));
+            }
+            if intent == MaintenanceStoreRunIntent::Fresh && !fresh_generation_created {
+                return Err(MaintenanceStoreAttemptError::Store {
+                    kind: MaintenanceStoreFailureKind::Backend,
+                    error: KanbanError::Conflict(format!(
+                        "fresh rebuild for projection store {store_name} did not create the obsolete snapshot generation"
+                    )),
+                });
+            }
+            abort_projection_generation(path, store_name, owner, lease_token, backend).map_err(
+                |error| MaintenanceStoreAttemptError::Store {
+                    kind: MaintenanceStoreFailureKind::Backend,
+                    error,
+                },
+            )?;
+            begin_projection_generation(path, store_name, owner, lease_token, backend).map_err(
+                |error| MaintenanceStoreAttemptError::Store {
+                    kind: MaintenanceStoreFailureKind::Backend,
+                    error,
+                },
+            )?;
+            match prepare_projection_snapshot_with_disposition(
+                path,
+                store_name,
+                owner,
+                lease_token,
+                backend,
+            )
+            .map_err(|error| MaintenanceStoreAttemptError::Store {
+                kind: MaintenanceStoreFailureKind::Backend,
+                error,
+            })? {
+                ProjectionSnapshotPrepareDisposition::Prepared(_) => Ok(()),
+                ProjectionSnapshotPrepareDisposition::CoverageChanged => {
+                    Err(MaintenanceStoreAttemptError::Store {
+                        kind: MaintenanceStoreFailureKind::Backend,
+                        error: KanbanError::Conflict(format!(
+                            "projection snapshot coverage changed again for store {store_name}; automatic maintenance will retry in a later pass"
+                        )),
+                    })
+                }
+            }
+        }
+    }
+}
+
 fn run_projection_store_once(
     session: &mut MaintenanceSession,
     store_name: &str,
@@ -1314,6 +1384,7 @@ fn run_projection_store_operation_with_intent(
         || store.active_generation.is_none()
         || store.building_generation.is_some()
     {
+        let fresh_generation_created = store.building_generation.is_none();
         if store.building_generation.is_none() {
             begin_projection_generation(
                 &session.db_path,
@@ -1393,20 +1464,19 @@ fn run_projection_store_operation_with_intent(
                     "{display_name} projection state is missing"
                 )))
             })?;
+        if let Some(invariant) = resume_invariant.as_ref() {
+            require_explicit_resume_invariant(store, invariant)?;
+        }
         match store.building_phase.as_deref() {
-            Some("snapshotting") => {
-                prepare_projection_snapshot_with(
-                    &session.db_path,
-                    store_name,
-                    &session.owner,
-                    lease_token,
-                    backend,
-                )
-                .map_err(|error| MaintenanceStoreAttemptError::Store {
-                    kind: MaintenanceStoreFailureKind::Backend,
-                    error,
-                })?;
-            }
+            Some("snapshotting") => prepare_snapshot_with_one_automatic_rebase(
+                &session.db_path,
+                store_name,
+                &session.owner,
+                lease_token,
+                backend,
+                intent,
+                fresh_generation_created,
+            )?,
             Some("prepared" | "store_published") => {
                 store.building_generation.as_deref().ok_or_else(|| {
                     MaintenanceStoreAttemptError::Store {
@@ -2029,6 +2099,7 @@ mod legacy_binding_recovery_tests {
         prepared: Option<ProjectionArtifactEvidence>,
         quarantined: BTreeMap<String, ProjectionArtifactEvidence>,
         quarantine_attempts: Vec<String>,
+        after_prepare: Option<Box<dyn FnOnce() + Send>>,
         before_active_inspect: Option<Box<dyn FnOnce() + Send>>,
         promote_after_active_quarantine: Option<String>,
     }
@@ -2126,6 +2197,13 @@ mod legacy_binding_recovery_tests {
                 .before_active_inspect = Some(Box::new(hook));
         }
 
+        fn set_after_prepare(&self, hook: impl FnOnce() + Send + 'static) {
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .after_prepare = Some(Box::new(hook));
+        }
+
         fn quarantined_ids(&self) -> BTreeSet<String> {
             self.state
                 .lock()
@@ -2179,11 +2257,17 @@ mod legacy_binding_recovery_tests {
                 manifest,
                 fingerprint,
             };
-            let mut state = self.state.lock().expect("recovery backend lock");
-            state
-                .generations
-                .insert(evidence.manifest.generation.clone(), evidence.clone());
-            state.prepared = Some(evidence.clone());
+            let hook = {
+                let mut state = self.state.lock().expect("recovery backend lock");
+                state
+                    .generations
+                    .insert(evidence.manifest.generation.clone(), evidence.clone());
+                state.prepared = Some(evidence.clone());
+                state.after_prepare.take()
+            };
+            if let Some(hook) = hook {
+                hook();
+            }
             Ok(evidence)
         }
 
@@ -2474,6 +2558,164 @@ mod legacy_binding_recovery_tests {
         Ok(())
     }
 
+    #[test]
+    fn automatic_snapshot_coverage_drift_quarantines_once_and_rebases_to_latest_truth()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let path = temp.path().join("automatic-snapshot-rebase.db");
+        init_database(&path, "tester")?;
+        create_task(
+            &path,
+            "default",
+            "tester",
+            CreateTask::ready("present before snapshot"),
+        )?;
+        let backend = RecoveryBackend::empty();
+        let mutation_path = path.clone();
+        backend.set_after_prepare(move || {
+            create_task(
+                &mutation_path,
+                "default",
+                "concurrent-writer",
+                CreateTask::ready("committed while provider was preparing"),
+            )
+            .expect("canonical mutation during physical snapshot");
+        });
+        let mut session = MaintenanceSession::start(
+            &path,
+            "automatic-rebase-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease = acquire_projection_lease(
+            &path,
+            STORE,
+            "automatic-rebase-owner",
+            session.options.lease_ttl_ms,
+        )?;
+
+        let result = run_projection_store_operation_with_intent(
+            &mut session,
+            STORE,
+            "LanceDB task chunks",
+            &lease.lease_token,
+            &backend,
+            MaintenanceStoreRunIntent::Automatic,
+        )
+        .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+
+        assert!(matches!(
+            result.result,
+            MaintenanceStoreResult::Succeeded { .. }
+        ));
+        let quarantine_attempts = backend.quarantine_attempts();
+        assert_eq!(
+            quarantine_attempts.len(),
+            1,
+            "one pass may rebase at most the single obsolete snapshot it observed"
+        );
+        let stale_generation = &quarantine_attempts[0];
+        assert!(backend.quarantined_ids().contains(stale_generation));
+        let store = lance_store_status(&path)?;
+        assert!(store.building_generation.is_none());
+        assert_ne!(
+            store.active_generation.as_deref(),
+            Some(stale_generation.as_str())
+        );
+        assert_eq!(store.lifecycle_status, "ready");
+        let conn = connect_file(&path)?;
+        let (not_done, checkpoint, maximum_cursor): (i64, i64, i64) = conn.query_row(
+            "SELECT
+                 SUM(status!='done'),
+                 (SELECT checkpoint_cursor FROM projection_store_state WHERE store_name=?1),
+                 COALESCE(MAX(cursor),0)
+             FROM projection_deliveries WHERE store_name=?1",
+            [STORE],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        assert_eq!(not_done, 0);
+        assert_eq!(checkpoint, maximum_cursor);
+        release_projection_lease(&path, STORE, "automatic-rebase-owner", &lease.lease_token)?;
+        session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_resume_preserves_an_obsolete_snapshot_generation_for_automatic_recovery()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let path = temp.path().join("explicit-resume-obsolete-snapshot.db");
+        init_database(&path, "tester")?;
+        create_task(
+            &path,
+            "default",
+            "tester",
+            CreateTask::ready("resume baseline"),
+        )?;
+        let backend = RecoveryBackend::empty();
+        let seed = MaintenanceSession::start(
+            &path,
+            "resume-seed-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease =
+            acquire_projection_lease(&path, STORE, "resume-seed-owner", seed.options.lease_ttl_ms)?;
+        let building = begin_projection_generation(
+            &path,
+            STORE,
+            "resume-seed-owner",
+            &lease.lease_token,
+            &backend,
+        )?
+        .generation;
+        let physical_before = backend.inspect_generation(&building)?;
+        create_task(
+            &path,
+            "default",
+            "concurrent-writer",
+            CreateTask::ready("new truth after resume baseline"),
+        )?;
+        release_projection_lease(&path, STORE, "resume-seed-owner", &lease.lease_token)?;
+        seed.finish()?;
+
+        let mut takeover = MaintenanceSession::start(
+            &path,
+            "resume-takeover-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease = acquire_projection_lease(
+            &path,
+            STORE,
+            "resume-takeover-owner",
+            takeover.options.lease_ttl_ms,
+        )?;
+        let attempt = run_projection_store_operation_with_intent(
+            &mut takeover,
+            STORE,
+            "LanceDB task chunks",
+            &lease.lease_token,
+            &backend,
+            MaintenanceStoreRunIntent::Resume,
+        );
+        let Err(MaintenanceStoreAttemptError::Fatal(error)) = attempt else {
+            anyhow::bail!("explicit resume must fail closed on an obsolete snapshot baseline");
+        };
+        assert!(error.to_string().contains("explicit resume"));
+        assert!(error.to_string().contains("obsolete"));
+        assert_eq!(
+            lance_store_status(&path)?.building_generation.as_deref(),
+            Some(building.as_str())
+        );
+        assert!(backend.quarantine_attempts().is_empty());
+        assert_eq!(backend.inspect_generation(&building)?, physical_before);
+        release_projection_lease(&path, STORE, "resume-takeover-owner", &lease.lease_token)?;
+        takeover.finish()?;
+        Ok(())
+    }
+
+    #[test]
     fn aliased_generation_ids_fail_before_any_physical_mutation() -> anyhow::Result<()> {
         let (_temp, path) = v29_lance_fixture_with_building_id(true, true, true, PREVIOUS)?;
         let backend = RecoveryBackend::empty();

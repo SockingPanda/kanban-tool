@@ -82,6 +82,18 @@ pub struct ProjectionArtifactEvidence {
     pub fingerprint: String,
 }
 
+/// A typed outcome for snapshot preparation that lets the maintenance runtime
+/// distinguish a stale canonical baseline from provider or artifact failures.
+///
+/// `CoverageChanged` is only emitted after an immediate transaction proves that
+/// the current lease still owns the exact snapshotting generation and that the
+/// canonical or delivery coverage no longer matches its persisted manifest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ProjectionSnapshotPrepareDisposition {
+    Prepared(ProjectionArtifactEvidence),
+    CoverageChanged,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionDelivery {
     pub id: i64,
@@ -680,6 +692,29 @@ pub fn prepare_projection_snapshot_with(
     lease_token: &str,
     backend: &(impl ProjectionStoreBackend + ?Sized),
 ) -> Result<ProjectionArtifactEvidence> {
+    match prepare_projection_snapshot_with_disposition(
+        path,
+        store_name,
+        owner,
+        lease_token,
+        backend,
+    )? {
+        ProjectionSnapshotPrepareDisposition::Prepared(evidence) => Ok(evidence),
+        ProjectionSnapshotPrepareDisposition::CoverageChanged => {
+            Err(KanbanError::Conflict(format!(
+                "projection snapshot coverage changed for store {store_name}; automatic maintenance may rebase it"
+            )))
+        }
+    }
+}
+
+pub(crate) fn prepare_projection_snapshot_with_disposition(
+    path: impl AsRef<Path>,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+) -> Result<ProjectionSnapshotPrepareDisposition> {
     let path = path.as_ref();
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let manifest = building_manifest(path, store_name, owner, lease_token)?;
@@ -709,8 +744,14 @@ pub fn prepare_projection_snapshot_with(
     }) {
         Ok(snapshot) => snapshot,
         Err(error) => {
-            record_projection_error(path, store_name, &error.to_string())?;
-            return Err(error);
+            return classify_snapshot_prepare_error(
+                path,
+                store_name,
+                owner,
+                lease_token,
+                &manifest,
+                error,
+            );
         }
     };
     let evidence = match backend.prepare_snapshot(&snapshot).and_then(|evidence| {
@@ -775,10 +816,92 @@ pub fn prepare_projection_snapshot_with(
         advance_checkpoint(&conn, store_name, now)?;
         Ok(())
     }) {
-        record_projection_error(path, store_name, &error.to_string())?;
-        return Err(error);
+        return classify_snapshot_prepare_error(
+            path,
+            store_name,
+            owner,
+            lease_token,
+            &manifest,
+            error,
+        );
     }
-    Ok(evidence)
+    Ok(ProjectionSnapshotPrepareDisposition::Prepared(evidence))
+}
+
+fn classify_snapshot_prepare_error(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    manifest: &ProjectionArtifactManifest,
+    error: KanbanError,
+) -> Result<ProjectionSnapshotPrepareDisposition> {
+    record_projection_error(path, store_name, &error.to_string())?;
+    match snapshot_prepare_disposition(path, store_name, owner, lease_token, manifest)? {
+        SnapshotPrepareDisposition::CoverageChanged => {
+            Ok(ProjectionSnapshotPrepareDisposition::CoverageChanged)
+        }
+        SnapshotPrepareDisposition::Preserve => Err(error),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SnapshotPrepareDisposition {
+    CoverageChanged,
+    Preserve,
+}
+
+fn snapshot_prepare_disposition(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    manifest: &ProjectionArtifactManifest,
+) -> Result<SnapshotPrepareDisposition> {
+    let now = SystemClock.now_ms();
+    let conn = connect_file(path)?;
+    with_immediate_tx(&conn, || {
+        require_current_lease(&conn, store_name, owner, lease_token, now)?;
+        let (building_generation, building_fence_epoch, building_phase, building_fingerprint): (
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<String>,
+        ) = conn
+            .query_row(
+                "SELECT building_generation,building_fence_epoch,building_phase,building_fingerprint \
+                 FROM projection_store_state WHERE store_name=?1",
+                [store_name],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .map_err(storage)?;
+        if building_generation.as_deref() != Some(manifest.generation.as_str())
+            || building_fence_epoch != Some(manifest.fence_epoch)
+            || building_phase.as_deref() != Some("snapshotting")
+            || building_fingerprint.is_some()
+        {
+            return Ok(SnapshotPrepareDisposition::Preserve);
+        }
+        let canonical_coverage =
+            snapshot_record_coverage(&canonical_snapshot_records(&conn, store_name)?);
+        let delivery_coverage =
+            delivery_snapshot_coverage(&conn, store_name, manifest.snapshot_cursor)?;
+        if canonical_coverage
+            != (
+                manifest.canonical_item_count,
+                manifest.canonical_digest.clone(),
+            )
+            || delivery_coverage
+                != (
+                    manifest.delivery_item_count,
+                    manifest.delivery_digest.clone(),
+                )
+        {
+            Ok(SnapshotPrepareDisposition::CoverageChanged)
+        } else {
+            Ok(SnapshotPrepareDisposition::Preserve)
+        }
+    })
 }
 
 pub fn abort_projection_generation(

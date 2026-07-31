@@ -16,7 +16,9 @@ use crate::{
     CliConfigShowOutput, CliDependencyAddOutput, CliDependencyListOutput,
     CliDependencyRemoveOutput, CliDerivedStatusOutput, CliDoctorOutput, CliEntityListOutput,
     CliEntityShowOutput, CliEventsOutput, CliIndexDoctorOutput, CliIndexStatusOutput,
-    CliInitOutput, CliMaintenanceRebuildOutput, CliMaintenanceRunOutput,
+    CliInitOutput, CliMaintenanceLegacyCleanupApplyOutput,
+    CliMaintenanceLegacyCleanupInventoryOutput, CliMaintenanceLegacyCleanupRestoreOutput,
+    CliMaintenanceLegacyCleanupVerifyOutput, CliMaintenanceRebuildOutput, CliMaintenanceRunOutput,
     CliMaintenanceStatusOutput, CliOutboxListOutput, CliRunLogsOutput, CliRunShowOutput,
     CliRunsOutput, CliStatsOutput, CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput,
     CliTaskCompleteOutput, CliTaskCreateOutput, CliTaskDoneOutput, CliTaskHeartbeatOutput,
@@ -192,6 +194,42 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/cli/maintenance-rebuild-output.v2.valid.json",
         "schemas/fixtures/cli/maintenance-rebuild-output.v2.invalid.json",
         CliMaintenanceRebuildOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-inventory-output:v1",
+        "cli/maintenance-cleanup-legacy-inventory-output.v1.schema.json",
+        "Kanban CLI maintenance cleanup legacy inventory output v1",
+        "cli.maintenance-cleanup-legacy-inventory.output",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.invalid.json",
+        CliMaintenanceLegacyCleanupInventoryOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-apply-output:v1",
+        "cli/maintenance-cleanup-legacy-apply-output.v1.schema.json",
+        "Kanban CLI maintenance cleanup legacy apply output v1",
+        "cli.maintenance-cleanup-legacy-apply.output",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.invalid.json",
+        CliMaintenanceLegacyCleanupApplyOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-verify-output:v1",
+        "cli/maintenance-cleanup-legacy-verify-output.v1.schema.json",
+        "Kanban CLI maintenance cleanup legacy verify output v1",
+        "cli.maintenance-cleanup-legacy-verify.output",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.invalid.json",
+        CliMaintenanceLegacyCleanupVerifyOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-restore-output:v1",
+        "cli/maintenance-cleanup-legacy-restore-output.v1.schema.json",
+        "Kanban CLI maintenance cleanup legacy restore output v1",
+        "cli.maintenance-cleanup-legacy-restore.output",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.invalid.json",
+        CliMaintenanceLegacyCleanupRestoreOutput
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:derived-status-output:v1",

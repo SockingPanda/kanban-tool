@@ -268,6 +268,158 @@
   {
     "adoption": {
       "consumer": {
+        "contract_id": "cli.maintenance-cleanup-legacy-inventory.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_cleanup_legacy_inventory_output_fixture_is_consumed_by_public_contract",
+        "operation": "maintenance cleanup-legacy inventory",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.maintenance-cleanup-legacy-inventory.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_cleanup_legacy_inventory_output_fixture_is_produced_by_real_cli",
+        "operation": "maintenance cleanup-legacy inventory",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.maintenance-cleanup-legacy-inventory.output",
+    "migration": "adopted",
+    "operation": "maintenance cleanup-legacy inventory",
+    "path": "kanban maintenance cleanup-legacy inventory --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-inventory-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.maintenance-cleanup-legacy-apply.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_cleanup_legacy_apply_output_fixture_is_consumed_by_public_contract",
+        "operation": "maintenance cleanup-legacy apply",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.maintenance-cleanup-legacy-apply.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_cleanup_legacy_apply_output_fixture_is_produced_by_real_cli",
+        "operation": "maintenance cleanup-legacy apply",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.maintenance-cleanup-legacy-apply.output",
+    "migration": "adopted",
+    "operation": "maintenance cleanup-legacy apply",
+    "path": "kanban maintenance cleanup-legacy apply --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-apply-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.maintenance-cleanup-legacy-verify.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_cleanup_legacy_verify_output_fixture_is_consumed_by_public_contract",
+        "operation": "maintenance cleanup-legacy verify",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.maintenance-cleanup-legacy-verify.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_cleanup_legacy_verify_output_fixture_is_produced_by_real_cli",
+        "operation": "maintenance cleanup-legacy verify",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.maintenance-cleanup-legacy-verify.output",
+    "migration": "adopted",
+    "operation": "maintenance cleanup-legacy verify",
+    "path": "kanban maintenance cleanup-legacy verify --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-verify-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.maintenance-cleanup-legacy-restore.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_cleanup_legacy_restore_output_fixture_is_consumed_by_public_contract",
+        "operation": "maintenance cleanup-legacy restore",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.maintenance-cleanup-legacy-restore.output",
+        "direction": "serialize",
+        "exact_test": "maintenance_cleanup_legacy_restore_output_fixture_is_produced_by_real_cli",
+        "operation": "maintenance cleanup-legacy restore",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_projection_maintenance_contract_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.maintenance-cleanup-legacy-restore.output",
+    "migration": "adopted",
+    "operation": "maintenance cleanup-legacy restore",
+    "path": "kanban maintenance cleanup-legacy restore --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-restore-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
         "contract_id": "cli.derived-status.output",
         "direction": "serialize",
         "exact_test": "derived_status_output_fixture_is_consumed_by_public_contract",

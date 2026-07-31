@@ -1,0 +1,13 @@
+{
+  "data": {
+    "action": "apply",
+    "dry_run": false,
+    "resumed": false,
+    "format_version": 1,
+    "database_instance_id": "db_fixture",
+    "database_path": "/fixture/kb.db",
+    "backup_dir": null,
+    "inventory_digest": "sha256:fixture-inventory",
+    "roots": []
+  }
+}

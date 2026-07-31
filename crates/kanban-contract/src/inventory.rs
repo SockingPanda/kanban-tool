@@ -786,6 +786,42 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "maintenance_rebuild_output_fixture_is_consumed_by_public_contract"
     ),
     adopted_cli_output_contract!(
+        "cli.maintenance-cleanup-legacy-inventory.output",
+        "maintenance cleanup-legacy inventory",
+        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-inventory-output:v1",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.valid.json",
+        "cli_projection_maintenance_contract_adoption",
+        "maintenance_cleanup_legacy_inventory_output_fixture_is_produced_by_real_cli",
+        "maintenance_cleanup_legacy_inventory_output_fixture_is_consumed_by_public_contract"
+    ),
+    adopted_cli_output_contract!(
+        "cli.maintenance-cleanup-legacy-apply.output",
+        "maintenance cleanup-legacy apply",
+        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-apply-output:v1",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.valid.json",
+        "cli_projection_maintenance_contract_adoption",
+        "maintenance_cleanup_legacy_apply_output_fixture_is_produced_by_real_cli",
+        "maintenance_cleanup_legacy_apply_output_fixture_is_consumed_by_public_contract"
+    ),
+    adopted_cli_output_contract!(
+        "cli.maintenance-cleanup-legacy-verify.output",
+        "maintenance cleanup-legacy verify",
+        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-verify-output:v1",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.valid.json",
+        "cli_projection_maintenance_contract_adoption",
+        "maintenance_cleanup_legacy_verify_output_fixture_is_produced_by_real_cli",
+        "maintenance_cleanup_legacy_verify_output_fixture_is_consumed_by_public_contract"
+    ),
+    adopted_cli_output_contract!(
+        "cli.maintenance-cleanup-legacy-restore.output",
+        "maintenance cleanup-legacy restore",
+        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-restore-output:v1",
+        "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.valid.json",
+        "cli_projection_maintenance_contract_adoption",
+        "maintenance_cleanup_legacy_restore_output_fixture_is_produced_by_real_cli",
+        "maintenance_cleanup_legacy_restore_output_fixture_is_consumed_by_public_contract"
+    ),
+    adopted_cli_output_contract!(
         "cli.derived-status.output",
         "derived status",
         "urn:kanban-tool:schema:cli:derived-status-output:v1",

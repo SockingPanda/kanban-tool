@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:aadb17d2181255182d356745408b5dbc8a50118d2a168663f846adc000edd8c0"
+    "sha256": "sha256:d71ff334b4662923fcf9a7e2f4085d5bda46f5220b3be69b533a368280a4ccff"
   },
   "roots": [
     {
@@ -72,6 +72,46 @@
       "path": "cli/maintenance-rebuild-output.v2.schema.json",
       "schema_fixture": "schemas/fixtures/cli/maintenance-rebuild-output.v2.valid.json",
       "sha256": "sha256:c5a0a30dfc100af24d90c9a8620fd7be3850503333dd7ff3e34da15bacc831e9",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "cli.maintenance-cleanup-legacy-inventory.output",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-inventory-output:v1",
+      "invalid_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.invalid.json",
+      "path": "cli/maintenance-cleanup-legacy-inventory-output.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.valid.json",
+      "sha256": "sha256:332d4343115e8e219f736e6c66284e0004de080e9e5a299756353874a7015a41",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "cli.maintenance-cleanup-legacy-apply.output",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-apply-output:v1",
+      "invalid_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.invalid.json",
+      "path": "cli/maintenance-cleanup-legacy-apply-output.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.valid.json",
+      "sha256": "sha256:df10a1c6f8f6e2421d70dbbae25c55182d2e9d259b0e6d228929d3c19381ba0d",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "cli.maintenance-cleanup-legacy-verify.output",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-verify-output:v1",
+      "invalid_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.invalid.json",
+      "path": "cli/maintenance-cleanup-legacy-verify-output.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.valid.json",
+      "sha256": "sha256:a1935832fb2445324a6442c99d8540703b9b8143c4de0c6b25ce975fc1e9001a",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "cli.maintenance-cleanup-legacy-restore.output",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-restore-output:v1",
+      "invalid_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.invalid.json",
+      "path": "cli/maintenance-cleanup-legacy-restore-output.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.valid.json",
+      "sha256": "sha256:f40ed5004ceed4b0edadcca7865fbb42724754e4a7a6e498384e82a79185dd18",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -4858,6 +4898,6 @@
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "surface_catalog": {
     "path": "surface-operations.json",
-    "sha256": "sha256:2d15c36dec899b3c80fc2106b14adb772e76bcc2488a19a3f395baa7777a097c"
+    "sha256": "sha256:ca3df4a4bb5846ca65708234a30a55ab262bcc37508a7d0ab6e503c9b7b652ab"
   }
 }

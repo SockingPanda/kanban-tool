@@ -1,6 +1,4 @@
-use serde::Serialize;
-
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     ApiBoard, ApiClaim, ApiComment, ApiExecutionPlan, ApiRun, ApiTask, ApiTaskStatus, ApiTaskStep,
@@ -361,6 +359,150 @@ pub struct CliMaintenanceRun {
 pub type CliMaintenanceRunOutput = DataEnvelope<CliMaintenanceRun>;
 pub type CliMaintenanceRebuildOutput = DataEnvelope<CliMaintenanceRun>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum CliMaintenanceLegacyCleanupAction {
+    Inventory,
+    Apply,
+    Verify,
+    Restore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum CliLegacyProjectionRootKind {
+    TantivyV1,
+    OxigraphV1,
+    LanceDbV1,
+    TantivyUnscopedV2,
+    OxigraphUnscopedV2,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CliMaintenanceLegacyCleanupRoot {
+    pub kind: CliLegacyProjectionRootKind,
+    pub relative_path: String,
+    pub absolute_path: String,
+    pub present: bool,
+    pub file_count: u64,
+    pub directory_count: u64,
+    pub byte_count: u64,
+    pub digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CliMaintenanceLegacyCleanup {
+    pub action: CliMaintenanceLegacyCleanupAction,
+    pub dry_run: bool,
+    pub resumed: bool,
+    pub format_version: u32,
+    pub database_instance_id: String,
+    pub database_path: String,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(required, schema_with = "required_nullable_string_schema")
+    )]
+    pub backup_dir: Option<String>,
+    pub inventory_digest: String,
+    pub roots: Vec<CliMaintenanceLegacyCleanupRoot>,
+}
+
+pub type CliMaintenanceLegacyCleanupOutput = DataEnvelope<CliMaintenanceLegacyCleanup>;
+
+macro_rules! legacy_cleanup_output {
+    (
+        $payload:ident,
+        $output:ident,
+        $expected_action:ident,
+        $action_literal:literal,
+        $expected_dry_run:expr
+    ) => {
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub struct $payload(pub CliMaintenanceLegacyCleanup);
+
+        impl Serialize for $payload {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                self.0.serialize(serializer)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $payload {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let report = CliMaintenanceLegacyCleanup::deserialize(deserializer)?;
+                if report.action != CliMaintenanceLegacyCleanupAction::$expected_action
+                    || report.dry_run != $expected_dry_run
+                {
+                    return Err(serde::de::Error::custom(concat!(
+                        "expected cleanup-legacy ",
+                        $action_literal,
+                        " output"
+                    )));
+                }
+                Ok(Self(report))
+            }
+        }
+
+        #[cfg(feature = "schema")]
+        impl schemars::JsonSchema for $payload {
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                stringify!($payload).into()
+            }
+
+            fn inline_schema() -> bool {
+                true
+            }
+
+            fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+                legacy_cleanup_schema(generator, $action_literal, $expected_dry_run)
+            }
+        }
+
+        pub type $output = DataEnvelope<$payload>;
+    };
+}
+
+legacy_cleanup_output!(
+    CliMaintenanceLegacyCleanupInventory,
+    CliMaintenanceLegacyCleanupInventoryOutput,
+    Inventory,
+    "inventory",
+    true
+);
+legacy_cleanup_output!(
+    CliMaintenanceLegacyCleanupApply,
+    CliMaintenanceLegacyCleanupApplyOutput,
+    Apply,
+    "apply",
+    false
+);
+legacy_cleanup_output!(
+    CliMaintenanceLegacyCleanupVerify,
+    CliMaintenanceLegacyCleanupVerifyOutput,
+    Verify,
+    "verify",
+    false
+);
+legacy_cleanup_output!(
+    CliMaintenanceLegacyCleanupRestore,
+    CliMaintenanceLegacyCleanupRestoreOutput,
+    Restore,
+    "restore",
+    false
+);
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
@@ -546,6 +688,28 @@ where
 #[cfg(feature = "schema")]
 fn required_nullable_u64_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
     generator.subschema_for::<Option<u64>>()
+}
+
+#[cfg(feature = "schema")]
+fn legacy_cleanup_schema(
+    generator: &mut schemars::SchemaGenerator,
+    action: &str,
+    dry_run: bool,
+) -> schemars::Schema {
+    let mut schema = serde_json::to_value(
+        <CliMaintenanceLegacyCleanup as schemars::JsonSchema>::json_schema(generator),
+    )
+    .expect("cleanup schema serializes");
+    let properties = schema
+        .get_mut("properties")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("cleanup schema has properties");
+    properties.insert("action".to_owned(), serde_json::json!({ "const": action }));
+    properties.insert(
+        "dry_run".to_owned(),
+        serde_json::json!({ "const": dry_run }),
+    );
+    schema.try_into().expect("cleanup schema remains valid")
 }
 
 #[cfg(feature = "schema")]

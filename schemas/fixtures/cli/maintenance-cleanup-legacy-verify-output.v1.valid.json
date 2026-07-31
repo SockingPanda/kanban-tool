@@ -1,0 +1,64 @@
+{
+  "data": {
+    "action": "verify",
+    "dry_run": false,
+    "resumed": false,
+    "format_version": 1,
+    "database_instance_id": "db_fixture",
+    "database_path": "/fixture/kb.db",
+    "backup_dir": "/fixture/backup",
+    "inventory_digest": "sha256:fixture-inventory",
+    "roots": [
+      {
+        "kind": "tantivy_v1",
+        "relative_path": "index/v1/tasks",
+        "absolute_path": "/fixture/index/v1/tasks",
+        "present": true,
+        "file_count": 1,
+        "directory_count": 2,
+        "byte_count": 17,
+        "digest": "sha256:fixture-root"
+      },
+      {
+        "kind": "oxigraph_v1",
+        "relative_path": "index/v1/graph",
+        "absolute_path": "/fixture/index/v1/graph",
+        "present": false,
+        "file_count": 0,
+        "directory_count": 0,
+        "byte_count": 0,
+        "digest": "sha256:fixture-root"
+      },
+      {
+        "kind": "lance_db_v1",
+        "relative_path": "index/v1/vectors",
+        "absolute_path": "/fixture/index/v1/vectors",
+        "present": false,
+        "file_count": 0,
+        "directory_count": 0,
+        "byte_count": 0,
+        "digest": "sha256:fixture-root"
+      },
+      {
+        "kind": "tantivy_unscoped_v2",
+        "relative_path": "index/v2/tantivy_tasks",
+        "absolute_path": "/fixture/index/v2/tantivy_tasks",
+        "present": false,
+        "file_count": 0,
+        "directory_count": 0,
+        "byte_count": 0,
+        "digest": "sha256:fixture-root"
+      },
+      {
+        "kind": "oxigraph_unscoped_v2",
+        "relative_path": "index/v2/oxigraph_relations",
+        "absolute_path": "/fixture/index/v2/oxigraph_relations",
+        "present": false,
+        "file_count": 0,
+        "directory_count": 0,
+        "byte_count": 0,
+        "digest": "sha256:fixture-root"
+      }
+    ]
+  }
+}

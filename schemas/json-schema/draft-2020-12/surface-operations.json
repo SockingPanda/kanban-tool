@@ -1329,6 +1329,42 @@
   },
   {
     "contracts": [
+      "cli.maintenance-cleanup-legacy-apply.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance cleanup-legacy apply",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-cleanup-legacy-inventory.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance cleanup-legacy inventory",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-cleanup-legacy-restore.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance cleanup-legacy restore",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-cleanup-legacy-verify.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance cleanup-legacy verify",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
       "cli.maintenance-rebuild.output"
     ],
     "exclusion": null,

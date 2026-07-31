@@ -1,0 +1,131 @@
+{
+  "$defs": {
+    "CliLegacyProjectionRootKind": {
+      "enum": [
+        "tantivy_v1",
+        "oxigraph_v1",
+        "lance_db_v1",
+        "tantivy_unscoped_v2",
+        "oxigraph_unscoped_v2"
+      ],
+      "type": "string"
+    },
+    "CliMaintenanceLegacyCleanupAction": {
+      "enum": [
+        "inventory",
+        "apply",
+        "verify",
+        "restore"
+      ],
+      "type": "string"
+    },
+    "CliMaintenanceLegacyCleanupRoot": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute_path": {
+          "type": "string"
+        },
+        "byte_count": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "digest": {
+          "type": "string"
+        },
+        "directory_count": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "file_count": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/CliLegacyProjectionRootKind"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "relative_path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "relative_path",
+        "absolute_path",
+        "present",
+        "file_count",
+        "directory_count",
+        "byte_count",
+        "digest"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-verify-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "const": "verify"
+        },
+        "backup_dir": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "database_instance_id": {
+          "type": "string"
+        },
+        "database_path": {
+          "type": "string"
+        },
+        "dry_run": {
+          "const": false
+        },
+        "format_version": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inventory_digest": {
+          "type": "string"
+        },
+        "resumed": {
+          "type": "boolean"
+        },
+        "roots": {
+          "items": {
+            "$ref": "#/$defs/CliMaintenanceLegacyCleanupRoot"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "action",
+        "dry_run",
+        "resumed",
+        "format_version",
+        "database_instance_id",
+        "database_path",
+        "backup_dir",
+        "inventory_digest",
+        "roots"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI maintenance cleanup legacy verify output v1",
+  "type": "object"
+}

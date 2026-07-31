@@ -97,6 +97,26 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         adopted!(Cli, "index status", "cli.index-status.output"),
         adopted!(Cli, "index sync", "cli.index-sync.output"),
         adopted!(Cli, "init", "cli.init.output"),
+        adopted!(
+            Cli,
+            "maintenance cleanup-legacy apply",
+            "cli.maintenance-cleanup-legacy-apply.output"
+        ),
+        adopted!(
+            Cli,
+            "maintenance cleanup-legacy inventory",
+            "cli.maintenance-cleanup-legacy-inventory.output"
+        ),
+        adopted!(
+            Cli,
+            "maintenance cleanup-legacy restore",
+            "cli.maintenance-cleanup-legacy-restore.output"
+        ),
+        adopted!(
+            Cli,
+            "maintenance cleanup-legacy verify",
+            "cli.maintenance-cleanup-legacy-verify.output"
+        ),
         adopted!(Cli, "maintenance rebuild", "cli.maintenance-rebuild.output"),
         adopted!(Cli, "maintenance run", "cli.maintenance-run.output"),
         adopted!(Cli, "maintenance status", "cli.maintenance-status.output"),

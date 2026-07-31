@@ -52,6 +52,7 @@ struct FakeProjectionStoreState {
     active_contents_validation_failure: bool,
     label_mutation_during_apply: Option<ApplyLabelMutation>,
     label_mutation_during_publish: Option<ApplyLabelMutation>,
+    applied_batches: Vec<ProjectionBatch>,
     repair_calls: usize,
 }
 
@@ -284,6 +285,14 @@ impl FakeProjectionStore {
             .prepared_snapshot
             .clone()
     }
+
+    fn applied_batches(&self) -> Vec<ProjectionBatch> {
+        self.state
+            .lock()
+            .expect("fake lock")
+            .applied_batches
+            .clone()
+    }
 }
 
 impl ProjectionStoreBackend for FakeProjectionStore {
@@ -347,6 +356,7 @@ impl ProjectionStoreBackend for FakeProjectionStore {
             ));
         }
         state.max_fence_epoch = batch.fence_epoch;
+        state.applied_batches.push(batch.clone());
         let bad_batch_receipt = state.bad_batch_receipt;
         let label_mutation = state.label_mutation_during_apply.take();
         drop(state);
@@ -1661,6 +1671,114 @@ fn building_generation_ack_does_not_clean_legacy_health_before_publish() -> anyh
     )?;
     assert_eq!(outbox_status, "done");
     assert_eq!(dirty, 0);
+    Ok(())
+}
+
+#[test]
+fn taskless_board_upsert_ack_advances_real_service_checkpoint() -> anyhow::Result<()> {
+    const CHUNKS: &str = "lancedb_chunks";
+    let temp = TempDb::new("projection_v2_taskless_board_upsert_ack")?;
+    init_database(&temp.path, "tester")?;
+    let backend = FakeProjectionStore::for_store(CHUNKS);
+    let lease = acquire_projection_lease(&temp.path, CHUNKS, "owner", 20_000)?;
+    begin_projection_generation(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+    prepare_projection_snapshot_with(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+    publish_projection_generation_with(&temp.path, CHUNKS, "owner", &lease.lease_token, &backend)?;
+    let checkpoint_before = projection_status(&temp.path)?
+        .stores
+        .into_iter()
+        .find(|store| store.store_name == CHUNKS)
+        .expect("chunks projection state")
+        .checkpoint_cursor;
+
+    let board = create_board(
+        &temp.path,
+        "tester",
+        CreateBoard {
+            slug: "taskless-board".to_owned(),
+            name: "Taskless board".to_owned(),
+            description: None,
+        },
+    )?;
+    let entity_uri = format!("kb://board/{}", board.id);
+    let conn = connect_file(&temp.path)?;
+    let (delivery_id, outbox_id, cursor, source_event_id, action, status): (
+        i64,
+        i64,
+        i64,
+        i64,
+        String,
+        String,
+    ) = conn.query_row(
+        "SELECT id,outbox_id,cursor,source_event_id,action,status
+         FROM projection_deliveries
+         WHERE store_name=?1 AND board_id=?2 AND entity_uri=?3",
+        params![CHUNKS, board.id, entity_uri],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+            ))
+        },
+    )?;
+    assert_eq!(action, "upsert");
+    assert_eq!(status, "pending");
+    let (event_board_id, task_id, run_id, kind): (String, Option<String>, Option<String>, String) =
+        conn.query_row(
+            "SELECT board_id,task_id,run_id,kind FROM task_events WHERE id=?1",
+            [source_event_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+    assert_eq!(event_board_id, board.id);
+    assert_eq!(task_id, None);
+    assert_eq!(run_id, None);
+    assert_eq!(kind, "board.created");
+    drop(conn);
+
+    let batch = run_projection_batch_with(
+        &temp.path,
+        CHUNKS,
+        "owner",
+        &lease.lease_token,
+        1_000,
+        10,
+        &backend,
+    )?;
+    assert_eq!(batch.items.len(), 1);
+    let item = &batch.items[0];
+    assert_eq!(item.id, delivery_id);
+    assert_eq!(item.outbox_id, outbox_id);
+    assert_eq!(item.board_id, board.id);
+    assert_eq!(item.source_event_id, Some(source_event_id));
+    assert_eq!(item.cursor, cursor);
+    assert_eq!(item.action, "upsert");
+    assert_eq!(item.entity_uri, entity_uri);
+    assert_eq!(backend.applied_batches(), vec![batch]);
+
+    let conn = connect_file(&temp.path)?;
+    let (outbox_status, delivery_status, checkpoint, last_success_at): (
+        String,
+        String,
+        i64,
+        Option<i64>,
+    ) = conn.query_row(
+        "SELECT o.status,d.status,s.checkpoint_cursor,s.last_success_at
+         FROM projection_deliveries d
+         JOIN index_outbox o ON o.id=d.outbox_id
+         JOIN projection_store_state s ON s.store_name=d.store_name
+         WHERE d.id=?1",
+        [delivery_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+    assert_eq!(outbox_status, "done");
+    assert_eq!(delivery_status, "done");
+    assert!(checkpoint_before < cursor);
+    assert_eq!(checkpoint, cursor);
+    assert!(last_success_at.is_some());
     Ok(())
 }
 

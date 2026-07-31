@@ -2,6 +2,7 @@ use crate::db::{
     connect_file, default_pragmas, maintenance_lock_blocks, maintenance_lock_path,
     DatabaseConnection,
     runtime_lock_blocks, runtime_lock_path,
+    open_database_with_exclusive_authority,
 };
 
 use super::{
@@ -455,15 +456,7 @@ fn begin_database_replace_with_hook(
             .into_derived_store_authority(&store_names)
             .map_err(crate::db::lifecycle_storage)?,
     );
-    let current_path = guard
-        .current_authority
-        .as_ref()
-        .expect("replacement authority was installed above")
-        .path()
-        .to_path_buf();
-    if !created_current_authority
-        && let Err(error) = assert_database_idle_for_replace(&current_path)
-    {
+    if !created_current_authority && let Err(error) = assert_database_idle_for_replace(&mut guard) {
         drop(guard);
         return Err(error);
     }
@@ -694,12 +687,30 @@ pub(crate) fn count_active_parents_with_incomplete_required_steps(
     }
 }
 
-pub(crate) fn assert_database_idle_for_replace(path: &Path) -> Result<()> {
-    let conn = match Connection::open(path) {
-        Ok(conn) => conn,
-        Err(_) => return Ok(()),
-    };
-    if default_pragmas(&conn).is_err() {
+pub(crate) fn assert_database_idle_for_replace(guard: &mut DatabaseReplaceGuard) -> Result<()> {
+    let authority = guard.current_authority.take().ok_or_else(|| {
+        KanbanError::Conflict("current database lifecycle authority is not held".to_owned())
+    })?;
+    let path = authority.path().to_path_buf();
+    let connection = open_database_with_exclusive_authority(authority)?;
+    let result = assert_database_idle_with_connection(&connection, &path);
+    match connection.close() {
+        Ok(authority) => {
+            guard.current_authority = Some(authority);
+            result
+        }
+        Err((connection, error)) => {
+            drop(connection);
+            Err(KanbanError::Storage(format!(
+                "failed to close replacement inspection connection for {}: {error}",
+                path.display()
+            )))
+        }
+    }
+}
+
+fn assert_database_idle_with_connection(conn: &Connection, path: &Path) -> Result<()> {
+    if default_pragmas(conn).is_err() {
         return Ok(());
     }
     conn.busy_timeout(Duration::from_millis(0))

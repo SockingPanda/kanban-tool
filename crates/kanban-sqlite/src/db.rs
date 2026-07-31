@@ -8,8 +8,8 @@ use std::{
 
 use kanban_core::{KanbanError, Result};
 use kanban_local::{
-    DatabaseLifecycleExclusiveGuard, DatabaseLifecycleSharedGuard, DerivedStoreWriteGuard,
-    database_maintenance_lock_path,
+    DatabaseLifecycleExclusiveAuthority, DatabaseLifecycleExclusiveGuard,
+    DatabaseLifecycleSharedGuard, DerivedStoreWriteGuard, database_maintenance_lock_path,
 };
 use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior};
 
@@ -20,6 +20,17 @@ use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior};
 pub struct DatabaseConnection {
     inner: Option<Connection>,
     lifecycle: Option<DatabaseConnectionLifecycle>,
+}
+
+/// A SQLite connection inspected while a replacement owns every exclusive
+/// lifecycle and legacy derived-store authority for its canonical database.
+///
+/// This type never exposes ownership of the raw connection. Its explicit
+/// close returns the authority only after SQLite has fully closed, so callers
+/// can restore that authority to a replacement guard without a lock gap.
+pub(crate) struct DatabaseExclusiveAuthorityConnection {
+    inner: Option<Connection>,
+    authority: Option<DatabaseLifecycleExclusiveAuthority>,
 }
 
 #[derive(Debug)]
@@ -82,7 +93,9 @@ impl DatabaseConnection {
             .lifecycle
             .take()
             .expect("an open database connection owns a lifecycle guard");
-        match close_connection_with(connection, lifecycle, Connection::close) {
+        match close_connection_with(connection, lifecycle, Connection::close, |lifecycle| {
+            drop(lifecycle)
+        }) {
             Ok(()) => Ok(()),
             Err((connection, lifecycle, error)) => {
                 self.inner = Some(connection);
@@ -126,7 +139,9 @@ impl Drop for DatabaseConnection {
             .lifecycle
             .take()
             .expect("an open database connection owns a lifecycle guard");
-        match close_connection_with(connection, lifecycle, Connection::close) {
+        match close_connection_with(connection, lifecycle, Connection::close, |lifecycle| {
+            drop(lifecycle)
+        }) {
             Ok(()) => {}
             Err((connection, lifecycle, _error)) => {
                 // Releasing the lifecycle byte while SQLite still owns main,
@@ -140,24 +155,131 @@ impl Drop for DatabaseConnection {
     }
 }
 
+impl DatabaseExclusiveAuthorityConnection {
+    fn new(inner: Connection, authority: DatabaseLifecycleExclusiveAuthority) -> Self {
+        Self {
+            inner: Some(inner),
+            authority: Some(authority),
+        }
+    }
+
+    /// Explicitly closes SQLite, returning the still-exclusive authority only
+    /// after SQLite proves that no handles remain.
+    #[allow(clippy::result_large_err)] // mirrors rusqlite::Connection::close ownership recovery
+    pub(crate) fn close(
+        mut self,
+    ) -> std::result::Result<DatabaseLifecycleExclusiveAuthority, (Self, rusqlite::Error)> {
+        let connection = self.inner.take().expect("database connection is open");
+        let authority = self
+            .authority
+            .take()
+            .expect("an open replacement inspection owns lifecycle authority");
+        match close_connection_with(connection, authority, Connection::close, |authority| {
+            authority
+        }) {
+            Ok(authority) => Ok(authority),
+            Err((connection, authority, error)) => {
+                self.inner = Some(connection);
+                self.authority = Some(authority);
+                Err((self, error))
+            }
+        }
+    }
+}
+
+impl Deref for DatabaseExclusiveAuthorityConnection {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.as_ref().expect("database connection is open")
+    }
+}
+
+impl fmt::Debug for DatabaseExclusiveAuthorityConnection {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DatabaseExclusiveAuthorityConnection")
+            .field(
+                "path",
+                &self.authority.as_ref().map(|authority| authority.path()),
+            )
+            .field("open", &self.inner.is_some())
+            .finish()
+    }
+}
+
+impl Drop for DatabaseExclusiveAuthorityConnection {
+    fn drop(&mut self) {
+        let Some(connection) = self.inner.take() else {
+            return;
+        };
+        let authority = self
+            .authority
+            .take()
+            .expect("an open replacement inspection owns lifecycle authority");
+        match close_connection_with(connection, authority, Connection::close, |authority| {
+            drop(authority)
+        }) {
+            Ok(()) => {}
+            Err((connection, authority, _error)) => {
+                // A failed close must retain every lifecycle and legacy-store
+                // byte until process exit, otherwise replacement could publish
+                // while SQLite still owns a pager, statement, or WAL handle.
+                mem::forget(connection);
+                mem::forget(authority);
+            }
+        }
+    }
+}
+
 #[allow(clippy::result_large_err)] // fail-closed close must return both owned resources on BUSY
-fn close_connection_with<Lifecycle>(
+fn close_connection_with<Lifecycle, Output>(
     connection: Connection,
     lifecycle: Lifecycle,
     close: impl FnOnce(Connection) -> std::result::Result<(), (Connection, rusqlite::Error)>,
-) -> std::result::Result<(), (Connection, Lifecycle, rusqlite::Error)> {
+    after_close: impl FnOnce(Lifecycle) -> Output,
+) -> std::result::Result<Output, (Connection, Lifecycle, rusqlite::Error)> {
     // ManuallyDrop makes unexpected panic/unwind fail closed: the lifecycle
     // file handle is intentionally leaked unless close returns a proven result.
-    let mut lifecycle = ManuallyDrop::new(lifecycle);
+    let lifecycle = ManuallyDrop::new(lifecycle);
     match close(connection) {
         Ok(()) => {
-            // SAFETY: successful SQLite close proves no main/pager/statement/WAL
-            // handles remain, so the lifecycle guard may now unlock exactly once.
-            unsafe { ManuallyDrop::drop(&mut lifecycle) };
-            Ok(())
+            // Successful SQLite close proves that no main, pager, statement,
+            // or WAL handles remain. The caller may now either release the
+            // authority or retain it for a following replacement phase.
+            Ok(after_close(ManuallyDrop::into_inner(lifecycle)))
         }
         Err((connection, error)) => Err((connection, ManuallyDrop::into_inner(lifecycle), error)),
     }
+}
+
+/// Opens a canonical database only while the caller owns the replacement's
+/// exclusive lifecycle plus legacy derived-store authority.
+///
+/// The authority stays inside the returned wrapper until an explicit,
+/// successful SQLite close. This is the sole replacement inspection opener
+/// audited by `raw_file_open_audit`.
+pub(crate) fn open_database_with_exclusive_authority(
+    authority: DatabaseLifecycleExclusiveAuthority,
+) -> Result<DatabaseExclusiveAuthorityConnection> {
+    authority
+        .validate_path_identity()
+        .map_err(lifecycle_storage)?;
+    let connection = Connection::open(authority.path())
+        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+    let guarded = DatabaseExclusiveAuthorityConnection::new(connection, authority);
+    if let Err(error) = guarded
+        .authority
+        .as_ref()
+        .expect("replacement inspection authority is installed above")
+        .validate_path_identity()
+    {
+        // Drop closes SQLite before releasing the authority; a BUSY close is
+        // deliberately leaked by the wrapper, preserving fail-closed safety.
+        drop(guarded);
+        return Err(lifecycle_storage(error));
+    }
+    Ok(guarded)
 }
 
 pub fn connect_file(path: &Path) -> Result<DatabaseConnection> {
@@ -468,7 +590,7 @@ fn process_is_alive(_pid: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kanban_local::DatabaseLifecycleExclusiveGuard;
+    use kanban_local::{DatabaseLifecycleExclusiveGuard, DatabaseLifecycleSharedGuard};
 
     #[cfg(any(target_os = "linux", windows))]
     #[test]
@@ -560,6 +682,39 @@ mod tests {
         drop(DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(&previous).unwrap());
     }
 
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn exclusive_authority_connection_retains_replace_fence_until_authority_returns() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("kanban.db");
+        drop(connect_file(&path).unwrap());
+        let authority = DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(&path)
+            .unwrap()
+            .into_derived_store_authority(&[])
+            .unwrap();
+
+        let connection = open_database_with_exclusive_authority(authority).unwrap();
+        assert_eq!(
+            DatabaseLifecycleSharedGuard::acquire_existing(&path)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+
+        let authority = connection
+            .close()
+            .map_err(|(_, error)| error)
+            .expect("explicit close must preserve the exclusive authority");
+        assert_eq!(
+            DatabaseLifecycleSharedGuard::acquire_existing(&path)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        drop(authority);
+        drop(DatabaseLifecycleSharedGuard::acquire_existing(&path).unwrap());
+    }
+
     #[allow(clippy::result_large_err)] // forced closure mirrors rusqlite::Connection::close
     #[cfg(any(unix, windows))]
     #[test]
@@ -571,10 +726,15 @@ mod tests {
         let lifecycle = guarded.lifecycle.take().unwrap();
 
         let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = close_connection_with(connection, lifecycle, |connection| {
-                std::mem::forget(connection);
-                panic!("forced close panic");
-            });
+            let _ = close_connection_with(
+                connection,
+                lifecycle,
+                |connection| {
+                    std::mem::forget(connection);
+                    panic!("forced close panic");
+                },
+                |lifecycle| drop(lifecycle),
+            );
         }));
 
         assert!(panic.is_err());

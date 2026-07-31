@@ -4,26 +4,27 @@ use std::{path::PathBuf, process};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Parser, Subcommand};
 use kanban_derived_io::{
-    board_id, connect_file, current_last_event_id, derived_status_by_name,
-    has_pending_vector_outbox_for_board, label_atom_index_status_from_base,
-    rebuild_lancedb_chunks_with_store, rebuild_lancedb_label_atoms_with_store,
-    sync_lancedb_chunks_with_store, sync_lancedb_label_atoms_with_store,
+    connect_file, ensure_legacy_projection_control, rebuild_lancedb_chunks_with_store,
+    rebuild_lancedb_label_atoms_with_store, sync_lancedb_chunks_with_store,
+    sync_lancedb_label_atoms_with_store,
 };
 use kanban_helper_protocol::HelperEnvelope;
-use kanban_indexer::LANCEDB_CHUNKS_STORE;
+use kanban_indexer::{LANCEDB_CHUNKS_STORE, LANCEDB_LABEL_ATOMS_STORE};
 use kanban_vector::{
-    ChunkVectorStore, EmbeddingProvider, LabelAtomQuery, LabelAtomVectorQuery,
-    LabelAtomVectorStore, VectorQuery, VectorStoreBackend, VectorStoreStatus,
+    EmbeddingProvider, LabelAtomQuery, LabelAtomVectorQuery, VectorQuery, VectorStoreStatus,
 };
-use kanban_vector_lancedb::{LanceDbConfig, LanceDbStore, OllamaEmbeddingProvider};
+use kanban_vector_lancedb::{
+    ActiveLanceProjectionReader, LanceDbConfig, LanceDbStore, OllamaEmbeddingProvider,
+    VectorProjectionBackend,
+};
 use kanban_vector_lancedb::{
     decode_vector_projection_request, vector_helper_build_identity,
-    vector_helper_check_provider_response,
-    vector_helper_embed_query_response, vector_helper_error_response,
-    vector_helper_handshake_response, vector_helper_query_chunks_response,
-    vector_helper_query_label_atom_vectors_response, vector_helper_query_label_atoms_response,
-    vector_helper_status_response, vector_projection_descriptor_response,
-    vector_projection_invalid_request_response, vector_projection_unavailable_response,
+    vector_helper_check_provider_response, vector_helper_embed_query_response,
+    vector_helper_error_response, vector_helper_handshake_response,
+    vector_helper_query_chunks_response, vector_helper_query_label_atom_vectors_response,
+    vector_helper_query_label_atoms_response, vector_helper_status_response,
+    vector_projection_descriptor_response, vector_projection_invalid_request_response,
+    vector_projection_unavailable_response,
 };
 use serde::Serialize;
 use std::sync::Arc;
@@ -93,7 +94,7 @@ struct QueryChunksArgs {
     #[arg(long, default_value_t = 10)]
     limit: usize,
     #[arg(long)]
-    board_id: String,
+    board_id: Option<String>,
 }
 
 #[derive(Debug, Parser)]
@@ -169,28 +170,40 @@ fn run() -> Result<()> {
             print_payload(vector_helper_check_provider_response())
         }
         Command::Rebuild(args) => {
+            require_legacy_control(&args, LANCEDB_CHUNKS_STORE)?;
             let store = configured_store(&args)?;
             print_payload(vector_helper_status_response(
                 rebuild_lancedb_chunks_with_store(&args.db, &args.board, &store)?,
             ))
         }
         Command::Sync(args) => {
+            require_legacy_control(&args, LANCEDB_CHUNKS_STORE)?;
             let store = configured_store(&args)?;
             print_payload(vector_helper_status_response(
                 sync_lancedb_chunks_with_store(&args.db, &args.board, &store)?,
             ))
         }
         Command::QueryChunks(args) => {
-            let conn = connect_file(&args.store.db)?;
-            let resolved_board_id = board_id(&conn, &args.store.board)?;
-            if resolved_board_id != args.board_id {
+            let preflight_board_id =
+                ActiveLanceProjectionReader::resolve_board(&args.store.db, &args.store.board)?;
+            if let Some(requested_board_id) = args.board_id.as_deref()
+                && preflight_board_id != requested_board_id
+            {
                 bail!(
-                    "query chunk board mismatch: --board resolved to {resolved_board_id}, got --board-id {}",
-                    args.board_id
+                    "query chunk board mismatch: --board resolved to {preflight_board_id}, got --board-id {}",
+                    requested_board_id
                 );
             }
-            let store = configured_store(&args.store)?;
-            let hits = store.query(&VectorQuery {
+            let reader = configured_active_reader_for_board(
+                &args.store,
+                LANCEDB_CHUNKS_STORE,
+                &preflight_board_id,
+            )?;
+            let resolved_board_id = reader
+                .resolved_board_id()
+                .expect("board-scoped reader must retain the resolved board")
+                .to_owned();
+            let hits = reader.query_chunks(&VectorQuery {
                 text: args.text,
                 limit: args.limit,
                 board_id: resolved_board_id,
@@ -198,24 +211,44 @@ fn run() -> Result<()> {
             print_payload(vector_helper_query_chunks_response(hits))
         }
         Command::QueryLabelAtoms(args) => {
-            if let Some(vector_json) = args.vector_json {
-                let vector = parse_vector_json(&vector_json)?;
-                let store = configured_store(&args.store)?;
-                let hits = store.query_label_atoms_by_vector(&LabelAtomVectorQuery {
+            let vector = args
+                .vector_json
+                .as_deref()
+                .map(parse_vector_json)
+                .transpose()?;
+            let preflight_board_id =
+                ActiveLanceProjectionReader::resolve_board(&args.store.db, &args.store.board)?;
+            if let Some(requested_board_id) = args.board_id.as_deref()
+                && preflight_board_id != requested_board_id
+            {
+                bail!(
+                    "query label atom board mismatch: --board resolved to {preflight_board_id}, got --board-id {requested_board_id}"
+                );
+            }
+            let reader = configured_active_reader_for_board(
+                &args.store,
+                LANCEDB_LABEL_ATOMS_STORE,
+                &preflight_board_id,
+            )?;
+            let resolved_board_id = reader
+                .resolved_board_id()
+                .expect("board-scoped reader must retain the resolved board")
+                .to_owned();
+            if let Some(vector) = vector {
+                let hits = reader.query_label_atoms_by_vector(&LabelAtomVectorQuery {
                     vector,
                     limit: args.limit,
-                    board_id: args.board_id,
+                    board_id: Some(resolved_board_id),
                     embedding_model: args.embedding_model,
                     polarity: args.polarity,
                     include_vector: args.include_vector,
                 })?;
                 print_payload(vector_helper_query_label_atom_vectors_response(hits))
             } else {
-                let store = configured_store(&args.store)?;
-                let hits = store.query_label_atoms(&LabelAtomQuery {
+                let hits = reader.query_label_atoms(&LabelAtomQuery {
                     text: args.text.unwrap_or_default(),
                     limit: args.limit,
-                    board_id: args.board_id,
+                    board_id: Some(resolved_board_id),
                     embedding_model: args.embedding_model,
                     polarity: args.polarity,
                 })?;
@@ -226,12 +259,14 @@ fn run() -> Result<()> {
             print_payload(vector_helper_status_response(label_atom_status(&args)?))
         }
         Command::RebuildLabelAtoms(args) => {
+            require_legacy_control(&args, LANCEDB_LABEL_ATOMS_STORE)?;
             let store = configured_store(&args)?;
             print_payload(vector_helper_status_response(
                 rebuild_lancedb_label_atoms_with_store(&args.db, &args.board, &store)?,
             ))
         }
         Command::SyncLabelAtoms(args) => {
+            require_legacy_control(&args, LANCEDB_LABEL_ATOMS_STORE)?;
             let store = configured_store(&args)?;
             print_payload(vector_helper_status_response(
                 sync_lancedb_label_atoms_with_store(&args.db, &args.board, &store)?,
@@ -249,7 +284,6 @@ fn run() -> Result<()> {
 fn run_projection(args: ProjectionArgs) -> Result<()> {
     const MAX_PROJECTION_STDIN_BYTES: u64 = 32 * 1024 * 1024;
 
-    let _ = (&args.db, &args.vector_config);
     let mut input = Vec::new();
     std::io::stdin()
         .take(MAX_PROJECTION_STDIN_BYTES + 1)
@@ -259,15 +293,35 @@ fn run_projection(args: ProjectionArgs) -> Result<()> {
         vector_projection_invalid_request_response()
     } else {
         match decode_vector_projection_request(&input) {
-            Ok(kanban_contract::VectorProjectionHelperRequest::Descriptor(request)) => {
-                vector_projection_descriptor_response(request.request_id)
-            }
-            Ok(request) => vector_projection_unavailable_response(&request),
+            Ok(request) => match configured_projection_backend(&args)? {
+                Some(backend) => backend.execute(&request),
+                None => match request {
+                    kanban_contract::VectorProjectionHelperRequest::Descriptor(request) => {
+                        vector_projection_descriptor_response(request.request_id)
+                    }
+                    request => vector_projection_unavailable_response(&request),
+                },
+            },
             Err(_) => vector_projection_invalid_request_response(),
         }
     };
     println!("{}", serde_json::to_string(&response)?);
     Ok(())
+}
+
+fn configured_projection_backend(args: &ProjectionArgs) -> Result<Option<VectorProjectionBackend>> {
+    if !args.db.is_file() {
+        return Ok(None);
+    }
+    let Some(config) = kanban_local::resolved_vector_config(args.vector_config.as_deref())
+        .with_context(|| "failed to read vector projection config")?
+    else {
+        return Ok(None);
+    };
+    let provider = Arc::new(provider_from_config(&config)?);
+    VectorProjectionBackend::new(&args.db, provider)
+        .map(Some)
+        .map_err(|error| anyhow!(error))
 }
 
 fn parse_vector_json(vector_json: &str) -> Result<Vec<f32>> {
@@ -297,35 +351,34 @@ fn vector_json_path(path: &str) -> String {
 }
 
 fn label_atom_status(args: &StoreArgs) -> Result<VectorStoreStatus> {
-    let conn = connect_file(&args.db)?;
-    let board_id = board_id(&conn, &args.board)?;
-    let mut status = match resolved_config(args)? {
-        Some(config) => VectorStoreStatus::new(
-            "lancedb-label-atoms",
-            true,
-            format!(
-                "LanceDB label atom helper enabled for Ollama endpoint {}, model {} ({} dimensions)",
-                config.endpoint, config.model, config.dimensions
-            ),
-        ),
-        None => {
-            let mut status = LanceDbStore::connect(LanceDbConfig::degraded(
-                kanban_local::vector_store_path(args.db.clone()),
-            ))?
-            .status();
-            status.backend = "lancedb-label-atoms".to_owned();
-            status.message = "LanceDB label atom helper configured without an embedding provider; label atom retrieval degraded".to_owned();
-            status
-        }
-    };
-    if !status
-        .diagnostics
-        .iter()
-        .any(|code| code == "label_atom_helper")
-    {
+    let Some(config) = resolved_config(args)? else {
+        let mut status = LanceDbStore::connect(LanceDbConfig::degraded(
+            kanban_local::vector_store_path(args.db.clone()),
+        ))?
+        .status();
+        status.backend = "lancedb-label-atoms".to_owned();
+        status.message =
+            "LanceDB label atom helper is not configured; label atom retrieval degraded".to_owned();
         status.diagnostics.push("label_atom_helper".to_owned());
-    }
-    label_atom_index_status_from_base(&conn, &board_id, status).map_err(Into::into)
+        return Ok(status);
+    };
+    let preflight_board_id = ActiveLanceProjectionReader::resolve_board(&args.db, &args.board)?;
+    let base_status = VectorStoreStatus::new(
+        "lancedb-label-atoms",
+        true,
+        format!(
+            "LanceDB Projection v2 label atom helper enabled for Ollama endpoint {}, model {} ({} dimensions)",
+            config.endpoint, config.model, config.dimensions,
+        ),
+    );
+    active_reader_from_config_for_board_with_status(
+        args,
+        LANCEDB_LABEL_ATOMS_STORE,
+        &config,
+        &preflight_board_id,
+        base_status,
+    )
+    .map(|(_, status)| status)
 }
 
 fn provider_from_store_args(args: &StoreArgs) -> Result<OllamaEmbeddingProvider> {
@@ -339,62 +392,90 @@ fn provider_from_store_args(args: &StoreArgs) -> Result<OllamaEmbeddingProvider>
 }
 
 fn vector_status(args: &StoreArgs) -> Result<VectorStoreStatus> {
-    let conn = connect_file(&args.db)?;
-    let board_id = board_id(&conn, &args.board)?;
-    let mut status = match resolved_config(args)? {
-        Some(config) => VectorStoreStatus::new(
-            "lancedb",
-            true,
-            format!(
-                "LanceDB vector helper enabled for Ollama endpoint {}, model {} ({} dimensions)",
-                config.endpoint, config.model, config.dimensions
-            ),
-        ),
-        None => LanceDbStore::connect(LanceDbConfig::degraded(kanban_local::vector_store_path(
-            args.db.clone(),
-        )))?
-        .status(),
+    let Some(config) = resolved_config(args)? else {
+        let mut status = LanceDbStore::connect(LanceDbConfig::degraded(
+            kanban_local::vector_store_path(args.db.clone()),
+        ))?
+        .status();
+        status.message = "LanceDB vector helper unavailable; vector retrieval degraded".to_owned();
+        status.diagnostics.push("vector_store_disabled".to_owned());
+        return Ok(status);
     };
-    let state = derived_status_by_name(&conn, LANCEDB_CHUNKS_STORE)?;
-    let current_last_event_id = current_last_event_id(&conn, &board_id)?;
-    let board_dirty = has_pending_vector_outbox_for_board(&conn, &board_id, current_last_event_id)?;
-    status.dirty = Some(state.dirty);
-    status.board_dirty = Some(board_dirty);
-    if !status.enabled {
-        push_diagnostic(&mut status, "vector_store_disabled");
-    }
-    if state.dirty {
-        push_diagnostic(&mut status, "vector_dirty");
-    }
-    if board_dirty {
-        push_diagnostic(&mut status, "vector_board_dirty");
-    }
-    if state.last_error.is_some() {
-        push_diagnostic(&mut status, "vector_error");
-    }
-    status.message = format!(
-        "{}; dirty={} last_event_id={} board_dirty={} last_error={}",
-        status.message,
-        state.dirty,
-        state.last_event_id,
-        board_dirty,
-        state.last_error.as_deref().unwrap_or("none")
+    let preflight_board_id = ActiveLanceProjectionReader::resolve_board(&args.db, &args.board)?;
+    let base_status = VectorStoreStatus::new(
+        "lancedb",
+        true,
+        format!(
+            "LanceDB Projection v2 vector helper enabled for Ollama endpoint {}, model {} ({} dimensions)",
+            config.endpoint, config.model, config.dimensions,
+        ),
     );
-    Ok(status)
+    active_reader_from_config_for_board_with_status(
+        args,
+        LANCEDB_CHUNKS_STORE,
+        &config,
+        &preflight_board_id,
+        base_status,
+    )
+    .map(|(_, status)| status)
 }
 
 fn configured_store(args: &StoreArgs) -> Result<LanceDbStore> {
-    let Some(config) = resolved_config(args)? else {
-        bail!(
-            "vector helper requires a configured embedding provider; run `kanban vector configure` or pass --vector-config"
-        )
-    };
+    let config = required_config(args)?;
     let provider = Arc::new(provider_from_config(&config)?);
     LanceDbStore::connect(LanceDbConfig::new(
         kanban_local::vector_store_path(args.db.clone()),
         provider,
     ))
     .map_err(Into::into)
+}
+
+fn configured_active_reader_for_board(
+    args: &StoreArgs,
+    store_name: &str,
+    expected_board_id: &str,
+) -> Result<ActiveLanceProjectionReader> {
+    let config = required_config(args)?;
+    let provider = Arc::new(provider_from_config(&config)?);
+    ActiveLanceProjectionReader::open_for_board(
+        &args.db,
+        store_name,
+        &args.board,
+        Some(expected_board_id),
+        provider,
+    )
+    .map_err(Into::into)
+}
+
+fn active_reader_from_config_for_board_with_status(
+    args: &StoreArgs,
+    store_name: &str,
+    config: &kanban_local::VectorConfig,
+    expected_board_id: &str,
+    base_status: VectorStoreStatus,
+) -> Result<(ActiveLanceProjectionReader, VectorStoreStatus)> {
+    let provider = Arc::new(provider_from_config(config)?);
+    ActiveLanceProjectionReader::open_for_board_with_status(
+        &args.db,
+        store_name,
+        &args.board,
+        Some(expected_board_id),
+        provider,
+        base_status,
+    )
+    .map_err(Into::into)
+}
+
+fn required_config(args: &StoreArgs) -> Result<kanban_local::VectorConfig> {
+    resolved_config(args)?.context(
+        "vector helper requires a configured embedding provider; run `kanban vector configure` or pass --vector-config",
+    )
+}
+
+fn require_legacy_control(args: &StoreArgs, store_name: &str) -> Result<()> {
+    let conn = connect_file(&args.db)?;
+    ensure_legacy_projection_control(&conn, store_name)?;
+    Ok(())
 }
 
 fn resolved_config(args: &StoreArgs) -> Result<Option<kanban_local::VectorConfig>> {
@@ -417,12 +498,6 @@ fn provider_from_config(config: &kanban_local::VectorConfig) -> Result<OllamaEmb
         config.dimensions,
     )
     .map_err(Into::into)
-}
-
-fn push_diagnostic(status: &mut VectorStoreStatus, code: &str) {
-    if !status.diagnostics.iter().any(|value| value == code) {
-        status.diagnostics.push(code.to_owned());
-    }
 }
 
 fn print_payload(payload: impl Serialize) -> Result<()> {

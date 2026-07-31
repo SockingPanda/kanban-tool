@@ -1857,7 +1857,8 @@ fn subprocess_vector_store_for_state(
         state.db_path().to_path_buf(),
         board.to_owned(),
         state.vector_config_path().map(std::path::Path::to_path_buf),
-    );
+    )
+    .with_status_scope(kanban_vector::VectorStatusScope::LabelAtoms);
     let Some(config) = kanban_local::resolved_vector_config(state.vector_config_path())
         .map_err(|error| invalid_input(error.to_string()))?
     else {

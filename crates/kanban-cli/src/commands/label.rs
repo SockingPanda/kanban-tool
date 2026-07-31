@@ -1811,7 +1811,8 @@ fn subprocess_vector_store(
         db_path.to_path_buf(),
         board.to_owned(),
         vector_config_path.map(Path::to_path_buf),
-    );
+    )
+    .with_status_scope(kanban_vector::VectorStatusScope::LabelAtoms);
     let Some(config) = kanban_local::resolved_vector_config(vector_config_path)? else {
         return Ok(store);
     };

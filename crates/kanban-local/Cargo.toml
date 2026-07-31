@@ -19,8 +19,10 @@ toml.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
 rustix.workspace = true
 
 [dev-dependencies]

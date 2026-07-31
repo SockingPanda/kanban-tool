@@ -1,0 +1,5 @@
+error[E0599]: no method named `into_inner` found for struct `DatabaseConnection` in the current scope
+ --> tests/ui/database_connection_no_into_inner.rs:4:24
+  |
+4 |     let _ = connection.into_inner();
+  |                        ^^^^^^^^^^ method not found in `DatabaseConnection`

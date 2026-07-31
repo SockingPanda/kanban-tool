@@ -81,3 +81,10 @@ fn db_init_modules_remain_explicit_public_api() {
     let tests = trybuild::TestCases::new();
     tests.pass("tests/ui/db_init_module_contract.rs");
 }
+
+#[test]
+fn database_connection_does_not_expose_raw_connection_ownership() {
+    let tests = trybuild::TestCases::new();
+    tests.compile_fail("tests/ui/database_connection_no_deref_mut.rs");
+    tests.compile_fail("tests/ui/database_connection_no_into_inner.rs");
+}

@@ -43,6 +43,46 @@ pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://127.0.0.1:11434";
 pub const DEFAULT_OLLAMA_EMBEDDING_MODEL: &str = "qwen3-embedding:0.6b";
 pub const DEFAULT_OLLAMA_EMBEDDING_DIMENSIONS: usize = 1024;
 
+/// Shared physical authority for the lifetime of one canonical SQLite opener.
+///
+/// The guard is acquired before SQLite opens the path and must outlive the
+/// SQLite connection's successful close. Replacement code takes the exclusive
+/// counterpart on the same inode byte.
+#[derive(Debug)]
+pub struct DatabaseLifecycleSharedGuard {
+    guard: DatabaseLifecyclePhysicalGuard,
+}
+
+/// Exclusive physical authority for a future canonical database replacement.
+///
+/// This phase exposes only acquisition. Atomic replacement and recovery remain
+/// owned by the higher-level lifecycle API.
+#[derive(Debug)]
+pub struct DatabaseLifecycleExclusiveGuard {
+    guard: DatabaseLifecyclePhysicalGuard,
+}
+
+/// Exclusive database authority plus every legacy derived-store lock.
+///
+/// The exclusive lifecycle guard is consumed when this authority is built, so
+/// callers cannot accidentally release it before the legacy database-range and
+/// sentinel guards. Fields are ordered so legacy guards unlock first and the
+/// lifecycle authority unlocks last.
+#[derive(Debug)]
+pub struct DatabaseLifecycleExclusiveAuthority {
+    _store_locks: Vec<DerivedStoreLockSet>,
+    lifecycle: DatabaseLifecycleExclusiveGuard,
+}
+
+#[derive(Debug)]
+struct DatabaseLifecyclePhysicalGuard {
+    file: std::fs::File,
+    normalized_path: PathBuf,
+    lifecycle_locked: bool,
+    created_authority_file: bool,
+    remove_created_file_on_drop: bool,
+}
+
 #[derive(Debug)]
 pub struct DerivedStoreWriteGuard {
     _guard: DerivedStorePhysicalGuard,
@@ -55,8 +95,14 @@ pub struct DerivedStoreReadGuard {
 
 #[derive(Debug)]
 struct DerivedStorePhysicalGuard {
-    _database_lock: DerivedStoreDatabaseRangeGuard,
+    _store_locks: DerivedStoreLockSet,
+    _lifecycle_guard: DatabaseLifecycleSharedGuard,
+}
+
+#[derive(Debug)]
+struct DerivedStoreLockSet {
     _sentinel_lock: DerivedStoreSentinelLockGuard,
+    _database_lock: DerivedStoreDatabaseRangeGuard,
 }
 
 #[derive(Debug)]
@@ -100,6 +146,185 @@ const DERIVED_STORE_LOCK_CONTRACT_NAMES: [&str; 8] = [
 ];
 static DERIVED_STORE_NAMES_BY_OFFSET: OnceLock<Mutex<BTreeMap<u64, String>>> = OnceLock::new();
 static DURABLE_ENTRY_NONCE: AtomicU64 = AtomicU64::new(1);
+
+impl DatabaseLifecycleSharedGuard {
+    /// Acquires the shared lifecycle byte for an existing canonical database.
+    pub fn acquire_existing(path: &Path) -> io::Result<Self> {
+        Ok(Self {
+            guard: acquire_database_lifecycle_guard(
+                path,
+                DerivedStoreLockMode::Shared,
+                false,
+                false,
+            )?,
+        })
+    }
+
+    /// Safely creates a missing database authority, or opens the existing one,
+    /// then acquires its shared lifecycle byte.
+    pub fn acquire_or_create(path: &Path) -> io::Result<Self> {
+        Ok(Self {
+            guard: acquire_database_lifecycle_guard(
+                path,
+                DerivedStoreLockMode::Shared,
+                true,
+                false,
+            )?,
+        })
+    }
+
+    /// Returns the canonical path whose inode is held by this guard.
+    pub fn path(&self) -> &Path {
+        &self.guard.normalized_path
+    }
+
+    /// Revalidates that the public path still resolves to the held inode.
+    pub fn validate_path_identity(&self) -> io::Result<()> {
+        self.guard.validate_path_identity()
+    }
+}
+
+impl DatabaseLifecycleExclusiveGuard {
+    /// Acquires the exclusive lifecycle byte for an existing replacement
+    /// target. The handle is writable and delete-share compatible on Windows.
+    pub fn acquire_existing_for_replace(path: &Path) -> io::Result<Self> {
+        Ok(Self {
+            guard: acquire_database_lifecycle_guard(
+                path,
+                DerivedStoreLockMode::Exclusive,
+                false,
+                false,
+            )?,
+        })
+    }
+
+    /// Acquires or creates the exclusive replacement authority.
+    ///
+    /// The caller must already own the stable maintenance namespace fence for
+    /// `path`. If this call creates a placeholder, dropping the guard before it
+    /// is published removes that placeholder only while it still resolves to
+    /// the held inode.
+    pub fn acquire_or_create_for_replace(path: &Path) -> io::Result<Self> {
+        Ok(Self {
+            guard: acquire_database_lifecycle_guard(
+                path,
+                DerivedStoreLockMode::Exclusive,
+                true,
+                true,
+            )?,
+        })
+    }
+
+    /// Reports whether this acquisition created its database authority file.
+    pub fn created_authority_file(&self) -> bool {
+        self.guard.created_authority_file
+    }
+
+    /// Returns the canonical path whose inode is held by this guard.
+    pub fn path(&self) -> &Path {
+        &self.guard.normalized_path
+    }
+
+    /// Revalidates that the replacement path still resolves to the held inode.
+    pub fn validate_path_identity(&self) -> io::Result<()> {
+        self.guard.validate_path_identity()
+    }
+
+    /// Validates that another namespace path resolves to the held inode.
+    pub fn validate_identity_at(&self, path: &Path) -> io::Result<()> {
+        self.guard.validate_identity_at(path).map(|_| ())
+    }
+
+    /// Rebinds this authority after a caller-controlled atomic rename.
+    ///
+    /// The new path is validated against the open handle before the stored
+    /// namespace identity changes.
+    pub fn rebind_after_rename(&mut self, path: &Path) -> io::Result<()> {
+        self.guard.rebind_after_rename(path)
+    }
+
+    /// Consumes the lifecycle guard and acquires legacy store range/sentinel
+    /// guards without recursively taking a shared lifecycle lock.
+    pub fn into_derived_store_authority(
+        self,
+        store_names: &[&str],
+    ) -> io::Result<DatabaseLifecycleExclusiveAuthority> {
+        let mut store_locks = Vec::with_capacity(store_names.len());
+        for store_name in store_names {
+            store_locks.push(acquire_derived_store_lock_set(
+                self.path(),
+                store_name,
+                DerivedStoreLockMode::Exclusive,
+                true,
+            )?);
+        }
+        self.validate_path_identity()?;
+        Ok(DatabaseLifecycleExclusiveAuthority {
+            _store_locks: store_locks,
+            lifecycle: self,
+        })
+    }
+}
+
+impl DatabaseLifecycleExclusiveAuthority {
+    /// Returns the canonical current-database path owned by this authority.
+    pub fn path(&self) -> &Path {
+        self.lifecycle.path()
+    }
+
+    /// Revalidates the current path against the held lifecycle inode.
+    pub fn validate_path_identity(&self) -> io::Result<()> {
+        self.lifecycle.validate_path_identity()
+    }
+
+    /// Validates that another namespace path resolves to the held inode.
+    pub fn validate_identity_at(&self, path: &Path) -> io::Result<()> {
+        self.lifecycle.validate_identity_at(path)
+    }
+
+    /// Rebinds the lifecycle side of this composite authority after rename.
+    ///
+    /// Legacy range and sentinel guards remain held until this composite is
+    /// dropped; only the lifecycle inode's namespace witness changes.
+    pub fn rebind_after_rename(&mut self, path: &Path) -> io::Result<()> {
+        self.lifecycle.rebind_after_rename(path)
+    }
+
+    /// Reports whether the lifecycle acquisition created its authority file.
+    pub fn created_authority_file(&self) -> bool {
+        self.lifecycle.created_authority_file()
+    }
+}
+
+impl DatabaseLifecyclePhysicalGuard {
+    fn validate_path_identity(&self) -> io::Result<()> {
+        validate_database_lock_file(&self.normalized_path, &self.file)
+    }
+
+    fn validate_identity_at(&self, path: &Path) -> io::Result<PathBuf> {
+        let normalized_path = normalized_file_path(path);
+        validate_database_lock_file(&normalized_path, &self.file)?;
+        Ok(normalized_path)
+    }
+
+    fn rebind_after_rename(&mut self, path: &Path) -> io::Result<()> {
+        self.normalized_path = self.validate_identity_at(path)?;
+        Ok(())
+    }
+}
+
+impl Drop for DatabaseLifecyclePhysicalGuard {
+    fn drop(&mut self) {
+        let remove_created_file = self.remove_created_file_on_drop
+            && validate_database_lock_file(&self.normalized_path, &self.file).is_ok();
+        if self.lifecycle_locked {
+            let _ = platform_unlock_database_lifecycle(&self.file);
+        }
+        if remove_created_file {
+            let _ = fs::remove_file(&self.normalized_path);
+        }
+    }
+}
 
 impl DerivedStoreWriteGuard {
     pub fn acquire(db_path: &Path, store_name: &str) -> io::Result<Self> {
@@ -148,15 +373,36 @@ fn acquire_derived_store_guard(
     validate_derived_store_name(store_name)?;
     ensure_database_range_lock_supported()?;
 
-    let normalized_db_path = normalized_file_path(db_path);
-    let lock_path = derived_store_write_lock_path_from_normalized(&normalized_db_path, store_name);
+    let lifecycle_guard = DatabaseLifecycleSharedGuard::acquire_existing(db_path)?;
+    let normalized_db_path = lifecycle_guard.path().to_path_buf();
+    ensure_database_maintenance_fence_absent(&normalized_db_path)?;
+    let store_locks =
+        acquire_derived_store_lock_set(&normalized_db_path, store_name, mode, create_sentinel)?;
+    lifecycle_guard.validate_path_identity()?;
+
+    Ok(DerivedStorePhysicalGuard {
+        _store_locks: store_locks,
+        _lifecycle_guard: lifecycle_guard,
+    })
+}
+
+fn acquire_derived_store_lock_set(
+    normalized_db_path: &Path,
+    store_name: &str,
+    mode: DerivedStoreLockMode,
+    create_sentinel: bool,
+) -> io::Result<DerivedStoreLockSet> {
+    validate_derived_store_name(store_name)?;
+    ensure_database_range_lock_supported()?;
+
+    let lock_path = derived_store_write_lock_path_from_normalized(normalized_db_path, store_name);
     let lock_offset = derived_store_database_lock_offset(store_name);
     validate_derived_store_lock_offset(store_name, lock_offset)?;
     let expected_sentinel =
-        derived_store_sentinel_bytes(&normalized_db_path, store_name, lock_offset);
+        derived_store_sentinel_bytes(normalized_db_path, store_name, lock_offset);
 
-    let database_file = open_database_lock_file(&normalized_db_path, mode)?;
-    validate_database_lock_file(&normalized_db_path, &database_file)?;
+    let database_file = open_database_lock_file(normalized_db_path, mode)?;
+    validate_database_lock_file(normalized_db_path, &database_file)?;
     if !platform_try_lock_database_range(&database_file, lock_offset, mode)? {
         return Err(io::Error::new(
             io::ErrorKind::WouldBlock,
@@ -170,7 +416,7 @@ fn acquire_derived_store_guard(
         file: database_file,
         offset: lock_offset,
     };
-    validate_database_lock_file(&normalized_db_path, &database_lock.file)?;
+    validate_database_lock_file(normalized_db_path, &database_lock.file)?;
 
     let existing_sentinel =
         match open_and_validate_derived_store_sentinel(&lock_path, &expected_sentinel) {
@@ -201,7 +447,7 @@ fn acquire_derived_store_guard(
             ));
         }
     };
-    validate_database_lock_file(&normalized_db_path, &database_lock.file)?;
+    validate_database_lock_file(normalized_db_path, &database_lock.file)?;
     validate_derived_store_sentinel(&lock_path, &sentinel_file, &expected_sentinel)?;
     if !try_lock_derived_store_sentinel(&sentinel_file, mode)? {
         return Err(io::Error::new(
@@ -216,12 +462,47 @@ fn acquire_derived_store_guard(
         file: sentinel_file,
     };
     validate_derived_store_sentinel(&lock_path, &sentinel_lock.file, &expected_sentinel)?;
-    validate_database_lock_file(&normalized_db_path, &database_lock.file)?;
+    validate_database_lock_file(normalized_db_path, &database_lock.file)?;
 
-    Ok(DerivedStorePhysicalGuard {
-        _database_lock: database_lock,
+    Ok(DerivedStoreLockSet {
         _sentinel_lock: sentinel_lock,
+        _database_lock: database_lock,
     })
+}
+
+fn acquire_database_lifecycle_guard(
+    path: &Path,
+    mode: DerivedStoreLockMode,
+    create_if_missing: bool,
+    remove_created_file_on_drop: bool,
+) -> io::Result<DatabaseLifecyclePhysicalGuard> {
+    ensure_database_lifecycle_lock_supported()?;
+    let normalized_path = normalized_file_path(path);
+    let (file, created_authority_file) = if create_if_missing {
+        open_or_create_database_lock_file(&normalized_path, mode)?
+    } else {
+        (open_database_lock_file(&normalized_path, mode)?, false)
+    };
+    let mut guard = DatabaseLifecyclePhysicalGuard {
+        file,
+        normalized_path,
+        lifecycle_locked: false,
+        created_authority_file,
+        remove_created_file_on_drop: created_authority_file && remove_created_file_on_drop,
+    };
+    validate_database_lock_file(&guard.normalized_path, &guard.file)?;
+    if !platform_try_lock_database_lifecycle(&guard.file, mode)? {
+        return Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            format!(
+                "database lifecycle has an active physical writer or connection: {}",
+                guard.normalized_path.display()
+            ),
+        ));
+    }
+    guard.lifecycle_locked = true;
+    validate_database_lock_file(&guard.normalized_path, &guard.file)?;
+    Ok(guard)
 }
 
 fn validate_derived_store_name(store_name: &str) -> io::Result<()> {
@@ -458,11 +739,49 @@ fn ensure_database_range_lock_supported() -> io::Result<()> {
     ))
 }
 
+#[cfg(any(unix, windows))]
+fn ensure_database_lifecycle_lock_supported() -> io::Result<()> {
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn ensure_database_lifecycle_lock_supported() -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "database lifecycle locks require Unix flock, Linux OFD locks, or Windows LockFileEx",
+    ))
+}
+
 fn open_database_lock_file(path: &Path, mode: DerivedStoreLockMode) -> io::Result<std::fs::File> {
     open_existing_lock_file(path, matches!(mode, DerivedStoreLockMode::Exclusive))
 }
 
-#[cfg(target_os = "linux")]
+fn open_or_create_database_lock_file(
+    path: &Path,
+    mode: DerivedStoreLockMode,
+) -> io::Result<(std::fs::File, bool)> {
+    for _ in 0..16 {
+        match open_existing_lock_file(path, matches!(mode, DerivedStoreLockMode::Exclusive)) {
+            Ok(file) => return Ok((file, false)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        match create_new_database_lock_file(path) {
+            Ok(file) => return Ok((file, true)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::WouldBlock,
+        format!(
+            "database lifecycle authority changed repeatedly while opening {}",
+            path.display()
+        ),
+    ))
+}
+
+#[cfg(unix)]
 fn open_existing_lock_file(path: &Path, writable: bool) -> io::Result<std::fs::File> {
     use std::os::unix::fs::OpenOptionsExt as _;
 
@@ -470,6 +789,19 @@ fn open_existing_lock_file(path: &Path, writable: bool) -> io::Result<std::fs::F
     options
         .read(true)
         .write(writable)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK);
+    options.open(path)
+}
+
+#[cfg(unix)]
+fn create_new_database_lock_file(path: &Path) -> io::Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+
+    let mut options = std::fs::OpenOptions::new();
+    options
+        .read(true)
+        .write(true)
+        .create_new(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK);
     options.open(path)
 }
@@ -490,11 +822,36 @@ fn open_existing_lock_file(path: &Path, writable: bool) -> io::Result<std::fs::F
     options.open(path)
 }
 
-#[cfg(not(any(target_os = "linux", windows)))]
+#[cfg(windows)]
+fn create_new_database_lock_file(path: &Path) -> io::Result<std::fs::File> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    };
+
+    let mut options = std::fs::OpenOptions::new();
+    options
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    options.open(path)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn open_existing_lock_file(_path: &Path, _writable: bool) -> io::Result<std::fs::File> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "derived store locks require Linux OFD locks or Windows LockFileEx",
+    ))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn create_new_database_lock_file(_path: &Path) -> io::Result<std::fs::File> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "database lifecycle locks require Linux OFD locks or Windows LockFileEx",
     ))
 }
 
@@ -769,6 +1126,51 @@ fn platform_try_lock_database_range(
 
 #[cfg(not(any(target_os = "linux", windows)))]
 fn platform_unlock_database_range(_file: &std::fs::File, _offset: u64) -> io::Result<()> {
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", windows))]
+fn platform_try_lock_database_lifecycle(
+    file: &std::fs::File,
+    mode: DerivedStoreLockMode,
+) -> io::Result<bool> {
+    platform_try_lock_database_range(file, DERIVED_DATABASE_LIFECYCLE_LOCK_OFFSET, mode)
+}
+
+#[cfg(any(target_os = "linux", windows))]
+fn platform_unlock_database_lifecycle(file: &std::fs::File) -> io::Result<()> {
+    platform_unlock_database_range(file, DERIVED_DATABASE_LIFECYCLE_LOCK_OFFSET)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn platform_try_lock_database_lifecycle(
+    file: &std::fs::File,
+    mode: DerivedStoreLockMode,
+) -> io::Result<bool> {
+    match mode {
+        DerivedStoreLockMode::Shared => fs4::fs_std::FileExt::try_lock_shared(file),
+        DerivedStoreLockMode::Exclusive => fs4::fs_std::FileExt::try_lock_exclusive(file),
+    }
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn platform_unlock_database_lifecycle(file: &std::fs::File) -> io::Result<()> {
+    fs4::fs_std::FileExt::unlock(file)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn platform_try_lock_database_lifecycle(
+    _file: &std::fs::File,
+    _mode: DerivedStoreLockMode,
+) -> io::Result<bool> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "database lifecycle locks require Unix flock, Linux OFD locks, or Windows LockFileEx",
+    ))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn platform_unlock_database_lifecycle(_file: &std::fs::File) -> io::Result<()> {
     Ok(())
 }
 
@@ -1196,6 +1598,33 @@ fn parent_directory(path: &Path) -> io::Result<&Path> {
                 format!("durability path has no parent: {}", path.display()),
             )
         })
+}
+
+/// Returns the stable maintenance marker path for one canonical database.
+///
+/// Replacement creates this namespace fence before taking inode authorities.
+/// Shared openers recheck it only after acquiring their lifecycle guard, which
+/// closes the check-before-lock race across a database rename.
+pub fn database_maintenance_lock_path(db_path: &Path) -> PathBuf {
+    let normalized = normalized_file_path(db_path);
+    let mut marker = normalized.into_os_string();
+    marker.push(".maintenance.lock");
+    PathBuf::from(marker)
+}
+
+fn ensure_database_maintenance_fence_absent(normalized_db_path: &Path) -> io::Result<()> {
+    let marker = database_maintenance_lock_path(normalized_db_path);
+    match fs::symlink_metadata(&marker) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+        Ok(_) => Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            format!(
+                "database is fenced for maintenance: {}",
+                normalized_db_path.display()
+            ),
+        )),
+    }
 }
 
 pub fn derived_store_write_lock_path(db_path: &Path, store_name: &str) -> PathBuf {

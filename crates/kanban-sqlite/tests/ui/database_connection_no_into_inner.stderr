@@ -2,4 +2,10 @@ error[E0599]: no method named `into_inner` found for struct `DatabaseConnection`
  --> tests/ui/database_connection_no_into_inner.rs:4:24
   |
 4 |     let _ = connection.into_inner();
-  |                        ^^^^^^^^^^ method not found in `DatabaseConnection`
+  |                        ^^^^^^^^^^
+  |
+help: there is a method `into_either` with a similar name, but with different arguments
+ --> $CARGO/either-$VERSION/src/into_either.rs
+  |
+  |     fn into_either(self, into_left: bool) -> Either<Self, Self> {
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

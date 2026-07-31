@@ -1497,8 +1497,150 @@ assert_writers_stopped
 
 按 dry-run 保存的 mode，继续以 T/O/label-atoms/chunks 顺序串行 rebuild。每步只允许一个
 一次性 owner，命令结束后 singleton owner 必须释放，长期 writer 必须仍为 inactive。
+每个命令前必须保存该 store 的 active/previous generation、fingerprint、fence 和 corpus
+原始快照；成功后 active generation 必须改变，并且只能命中下列 conditional outcome：
+bootstrap 保持 previous 为空；正常兼容 rotation 将发布前 active 全量身份精确保留为
+previous；descriptor incompatibility reset 清空 previous；physical-unavailable recovery
+则精确保留发布前 active 或已有 previous，若没有 predecessor 则 previous 仍为空。发布前
+更老的 previous 只保留在证据快照中，不得误断言它继续占用 `previous` role。
 
 ~~~bash
+write_store_generation_snapshot() {
+  local status_file="$1" store="$2" output_file="$3"
+  jq -e --arg store "$store" '
+    [.data.stores[] | select(.store_name == $store)] as $matches |
+    if ($matches | length) != 1 then
+      error("expected exactly one store status")
+    else
+      $matches[0] |
+      {
+        store_name,
+        runtime_availability,
+        fallback_reason,
+        transition_family: (
+          if .active_generation == null then
+            "bootstrap"
+          elif .fallback_reason == "physical_generation_unavailable" then
+            "physical_recovery"
+          elif .fallback_reason == "corpus_binding_upgrade_required" or
+               .fallback_reason == "corpus_binding_invalid" then
+            "reset"
+          elif .runtime_availability == "available" and .fallback_reason == null then
+            "compatible_or_descriptor_reset"
+          else
+            error("cannot classify generation transition family before mutation")
+          end
+        ),
+        active: {
+          generation: .active_generation,
+          fingerprint: .active_fingerprint,
+          fence_epoch: .active_fence_epoch,
+          corpus: .active_corpus
+        },
+        previous: {
+          generation: .previous_generation,
+          fingerprint: .previous_fingerprint,
+          fence_epoch: .previous_fence_epoch,
+          corpus: .previous_corpus
+        }
+      }
+    end
+  ' "$status_file" >"$output_file"
+}
+
+assert_store_generation_transition() {
+  local before_file="$1" after_file="$2" store="$3" output_file="$4"
+  jq -e --arg store "$store" --slurpfile before "$before_file" '
+    $before[0] as $old |
+    ([.data.stores[] | select(.store_name == $store)]) as $matches |
+    ($matches | .[0]) as $new |
+    if ($before | length) == 1 and ($matches | length) == 1 and
+       $old.store_name == $store and
+       $new.active_generation != null and
+       $new.active_generation != $old.active.generation and
+       $new.active_fingerprint != null and
+       $new.active_fence_epoch != null then
+      (
+      if $old.transition_family == "bootstrap" and
+        $old.active.fingerprint == null and
+        $old.active.fence_epoch == null and
+        $old.active.corpus == null and
+        $new.previous_generation == null and
+        $new.previous_fingerprint == null and
+        $new.previous_fence_epoch == null and
+        $new.previous_corpus == null then
+        "bootstrap"
+      elif $old.transition_family == "compatible_or_descriptor_reset" and
+           $old.active.generation != null and
+           $old.active.fingerprint != null and
+           $old.active.fence_epoch != null and
+           $new.active_fence_epoch > $old.active.fence_epoch and
+           $new.previous_generation == $old.active.generation and
+           $new.previous_fingerprint == $old.active.fingerprint and
+           $new.previous_fence_epoch == $old.active.fence_epoch and
+           $new.previous_corpus == $old.active.corpus then
+        "normal_rotation"
+      elif $old.transition_family == "compatible_or_descriptor_reset" and
+           $new.previous_generation == null and
+           $new.previous_fingerprint == null and
+           $new.previous_fence_epoch == null and
+           $new.previous_corpus == null and
+           $new.active_fence_epoch > $old.active.fence_epoch then
+        "descriptor_reset"
+      elif $old.transition_family == "physical_recovery" and
+           $old.previous.generation == null and
+           $old.previous.fingerprint == null and
+           $old.previous.fence_epoch == null and
+           $old.previous.corpus == null and
+           $new.active_fence_epoch > $old.active.fence_epoch and
+           $new.previous_generation == null and
+           $new.previous_fingerprint == null and
+           $new.previous_fence_epoch == null and
+           $new.previous_corpus == null then
+        "physical_recovery_no_predecessor"
+      elif $old.transition_family == "physical_recovery" and
+           $old.active.generation != null and
+           $new.active_fence_epoch > $old.active.fence_epoch and
+           $new.previous_generation == $old.active.generation and
+           $new.previous_fingerprint == $old.active.fingerprint and
+           $new.previous_fence_epoch == $old.active.fence_epoch and
+           $new.previous_corpus == $old.active.corpus then
+        "physical_recovery_active_retained"
+      elif $old.transition_family == "physical_recovery" and
+           $old.previous.generation != null and
+           $new.active_fence_epoch > $old.active.fence_epoch and
+           $new.previous_generation == $old.previous.generation and
+           $new.previous_fingerprint == $old.previous.fingerprint and
+           $new.previous_fence_epoch == $old.previous.fence_epoch and
+           $new.previous_corpus == $old.previous.corpus then
+        "physical_recovery_previous_retained"
+      elif $old.transition_family == "reset" and
+           $old.active.fence_epoch != null and
+           $new.active_fence_epoch > $old.active.fence_epoch and
+           $new.previous_generation == null and
+           $new.previous_fingerprint == null and
+           $new.previous_fence_epoch == null and
+           $new.previous_corpus == null then
+        "incompatible_reset"
+      else
+        false
+      end
+      ) as $disposition |
+      if $disposition != false and
+         $new.building_generation == null and
+         $new.building_fingerprint == null and
+         $new.building_fence_epoch == null and
+         $new.building_corpus == null then
+        $disposition
+      else
+        false
+      end
+    else
+      false
+    end
+  ' "$after_file" >"$output_file"
+}
+
 for store in "${REBUILD_STORES[@]}"; do
   assert_writers_stopped
   mode="$(tr -d '\n' <"$EVIDENCE/compatibility/rebuild-mode.$store.txt")"
@@ -1520,6 +1662,20 @@ for store in "${REBUILD_STORES[@]}"; do
       exit 1
       ;;
   esac
+  bounded_kanban --db "$DB" --json maintenance status \
+    >"$EVIDENCE/compatibility/status.before-rebuild.$store.json"
+  assert_status_shape \
+    "$EVIDENCE/compatibility/status.before-rebuild.$store.json" \
+    "$EVIDENCE/compatibility/status.before-rebuild.$store.shape.ok.txt" \
+    "$DB_INSTANCE_ID"
+  write_store_generation_snapshot \
+    "$EVIDENCE/compatibility/status.before-rebuild.$store.json" "$store" \
+    "$EVIDENCE/compatibility/generations.before-rebuild.$store.json"
+  # transition_family is derived from authoritative pre-mutation status;
+  # the exact disposition is emitted only after matching the postcondition.
+  jq -e '.transition_family != null' \
+    "$EVIDENCE/compatibility/generations.before-rebuild.$store.json" \
+    >"$EVIDENCE/compatibility/generation-disposition.$store.ok.txt"
   "${rebuild_args[@]}" \
     | tee "$EVIDENCE/compatibility/rebuild.$store.json"
   jq -e --arg store "$store" '
@@ -1530,6 +1686,14 @@ for store in "${REBUILD_STORES[@]}"; do
     >"$EVIDENCE/compatibility/rebuild.$store.ok.txt"
   bounded_kanban --db "$DB" --json maintenance status \
     >"$EVIDENCE/compatibility/status.after.$store.json"
+  assert_status_shape \
+    "$EVIDENCE/compatibility/status.after.$store.json" \
+    "$EVIDENCE/compatibility/status.after.$store.shape.ok.txt" \
+    "$DB_INSTANCE_ID"
+  assert_store_generation_transition \
+    "$EVIDENCE/compatibility/generations.before-rebuild.$store.json" \
+    "$EVIDENCE/compatibility/status.after.$store.json" "$store" \
+    "$EVIDENCE/compatibility/generations.transition.$store.ok.txt"
   bounded_kanban --db "$DB" --json outbox list --limit 1000 \
     >"$EVIDENCE/compatibility/outbox.after.$store.json"
   wait_for_lease_expiry
@@ -1543,8 +1707,9 @@ assert_final_store_state after-rebuild \
 assert_writers_stopped
 ~~~
 
-这一步的 empty diff 只比较真实 active provider/corpus 字段。`previous_generation` 仍须通过
-status shape 闭合性检查并保留；它不被伪造为 final expected，也不会被清理。
+这一步的 empty diff 只比较真实 active provider/corpus 字段。`previous_generation` 不被
+伪造为 final expected；它由逐 store transition assertion 按记录的 conditional disposition
+精确绑定为发布前 active、已有 previous 或 null，并由后续 status shape 持续检查其闭合性。
 
 ## 9. 启动 continuous owner 后建立 9×4 canary
 

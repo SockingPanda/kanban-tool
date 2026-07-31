@@ -3,10 +3,11 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 use kanban_contract::{
-    VectorProjectionDescriptorRequest, VectorProjectionHelperRequest,
-    VectorProjectionHelperResponse,
+    VectorProjectionDescriptorRequest, VectorProjectionHelperErrorKind,
+    VectorProjectionHelperRequest, VectorProjectionHelperResponse,
 };
 use kanban_vector::decode_vector_projection_response;
+use kanban_vector_lancedb::vector_helper_build_identity;
 
 fn fixture(relative: &str) -> String {
     std::fs::read_to_string(
@@ -28,9 +29,12 @@ fn descriptor_request() -> VectorProjectionHelperRequest {
 
 #[test]
 fn vector_projection_request_fixture_is_produced_by_contract_dto() {
+    let fixture_json = fixture("vector-projection-request.v2.valid.json");
+    let fixture_request: VectorProjectionHelperRequest =
+        serde_json::from_str(&fixture_json).unwrap();
     assert_eq!(
-        serde_json::to_string(&descriptor_request()).unwrap(),
-        fixture("vector-projection-request.v1.valid.json")
+        serde_json::to_value(fixture_request).unwrap(),
+        serde_json::from_str::<serde_json::Value>(&fixture_json).unwrap()
     );
 }
 
@@ -51,7 +55,7 @@ fn vector_projection_request_fixture_is_consumed_by_real_projection_handler() {
         .stdin
         .take()
         .unwrap()
-        .write_all(fixture("vector-projection-request.v1.valid.json").as_bytes())
+        .write_all(fixture("vector-projection-request.v2.valid.json").as_bytes())
         .unwrap();
     let output = child.wait_with_output().unwrap();
 
@@ -62,10 +66,24 @@ fn vector_projection_request_fixture_is_consumed_by_real_projection_handler() {
     );
     let response =
         serde_json::from_slice::<VectorProjectionHelperResponse>(&output.stdout).unwrap();
-    assert!(matches!(
-        response,
-        VectorProjectionHelperResponse::Descriptor(_)
-    ));
+    let VectorProjectionHelperResponse::Error(error) = response else {
+        panic!("expected unavailable response for a non-descriptor v2 request");
+    };
+    assert_eq!(error.kind, VectorProjectionHelperErrorKind::Backend);
+    assert_eq!(error.code, "projection_backend_unavailable");
+    assert_eq!(error.request_id.as_deref(), Some("req_fixture_quarantine"));
+    assert_eq!(
+        error.projection_store.as_deref(),
+        Some("lancedb_chunks")
+    );
+    assert_eq!(
+        error.generation_id.as_deref(),
+        Some("gen_fixture_active")
+    );
+    assert_eq!(
+        error.delivery_digest.as_deref(),
+        Some("sha256:fixture-delivery-digest")
+    );
 }
 
 #[test]
@@ -153,10 +171,20 @@ fn vector_projection_response_fixture_is_produced_by_real_projection_handler() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(
-        String::from_utf8(output.stdout).unwrap().trim(),
-        fixture("vector-projection-response.v1.valid.json")
-    );
+    let response =
+        serde_json::from_slice::<VectorProjectionHelperResponse>(&output.stdout).unwrap();
+    let VectorProjectionHelperResponse::Descriptor(descriptor) = &response else {
+        panic!("expected descriptor response");
+    };
+    assert_eq!(descriptor.build_identity, vector_helper_build_identity());
+
+    let actual = serde_json::to_value(response).unwrap();
+    let mut expected =
+        serde_json::from_str::<serde_json::Value>(&fixture("vector-projection-response.v1.valid.json"))
+            .unwrap();
+    expected["payload"]["build_identity"] =
+        serde_json::json!(vector_helper_build_identity());
+    assert_eq!(actual, expected);
 }
 
 #[test]

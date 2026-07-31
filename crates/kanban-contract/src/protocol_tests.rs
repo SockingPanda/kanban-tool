@@ -94,7 +94,7 @@ fn vector_helper_protocol_fixtures_are_exact() {
 
 #[test]
 fn vector_projection_helper_protocol_fixtures_are_exact() {
-    assert_exact::<VectorProjectionHelperRequest>("helper/vector-projection-request.v1.valid.json");
+    assert_exact::<VectorProjectionHelperRequest>("helper/vector-projection-request.v2.valid.json");
     assert_exact::<VectorProjectionHelperResponse>(
         "helper/vector-projection-response.v1.valid.json",
     );
@@ -139,6 +139,137 @@ fn vector_projection_helper_protocol_rejects_wrong_variants() {
             }
         }))
         .is_err()
+    );
+}
+
+#[test]
+fn vector_projection_destructive_authority_is_required() {
+    let context = json!({
+        "request_id": "req_destructive_authority_required",
+        "projection_store": "lancedb_chunks",
+        "generation_id": "gen_fixture_active",
+        "delivery_digest": "sha256:fixture-delivery-digest"
+    });
+    let requests = [
+        json!({
+            "operation": "quarantine",
+            "payload": {
+                "context": context
+            }
+        }),
+        json!({
+            "operation": "abort",
+            "payload": {
+                "context": context
+            }
+        }),
+        json!({
+            "operation": "cleanup",
+            "payload": {
+                "context": context,
+                "dry_run": false,
+                "protection": {
+                    "active_generation": "gen_fixture_active",
+                    "previous_generation": "gen_fixture_previous",
+                    "building_generation": null,
+                    "additional_generations": []
+                }
+            }
+        }),
+    ];
+
+    for request in requests {
+        assert!(
+            serde_json::from_value::<VectorProjectionHelperRequest>(request).is_err(),
+            "destructive request without authority must be rejected"
+        );
+    }
+}
+
+#[test]
+fn vector_projection_destructive_authority_debug_redacts_lease_token() {
+    let mut manifest = projection_manifest_json();
+    manifest["generation"] = json!("gen_fixture_active");
+    manifest["fingerprint"] = json!("sha256:fixture-generation-fingerprint");
+    let request = serde_json::from_value::<VectorProjectionHelperRequest>(json!({
+        "operation": "quarantine",
+        "payload": {
+            "context": {
+                "request_id": "req_destructive_authority_debug",
+                "projection_store": "lancedb_chunks",
+                "generation_id": "gen_fixture_active",
+                "delivery_digest": "sha256:delivery"
+            },
+            "authority": {
+                "owner": "fixture-maintenance-owner",
+                "lease_token": "fixture-destructive-lease-token-secret",
+                "fence_epoch": 11,
+                "role": "active",
+                "generation": "gen_fixture_active",
+                "expected_manifest": manifest,
+                "expected_binding": {
+                    "generation": "gen_fixture_active",
+                    "fingerprint": "sha256:fixture-generation-fingerprint",
+                    "fence_epoch": 7,
+                    "snapshot_cursor": 11,
+                    "provider": "ollama",
+                    "provider_fingerprint": "sha256:provider",
+                    "canonical_count": 1,
+                    "canonical_digest": "sha256:canonical",
+                    "delivery_count": 1,
+                    "delivery_digest": "sha256:delivery",
+                    "corpus": {
+                        "corpus_schema": "task-chunks-v2",
+                        "corpus_fingerprint": "sha256:corpus",
+                        "embedding_model": "fixture-model",
+                        "embedding_dimensions": 3
+                    }
+                },
+                "building_phase": null
+            }
+        }
+    }))
+    .expect("destructive request with authority must decode");
+
+    let rendered = format!("{request:?}");
+    assert!(!rendered.contains("fixture-destructive-lease-token-secret"));
+    assert!(rendered.contains("[REDACTED]"));
+}
+
+#[test]
+fn vector_projection_orphaned_authority_accepts_explicit_null_evidence() {
+    let request = json!({
+        "operation": "quarantine",
+        "payload": {
+            "context": {
+                "request_id": "req_orphaned_authority",
+                "projection_store": "lancedb_chunks",
+                "generation_id": "orphaned-entry",
+                "delivery_digest": "sha256:orphaned-correlation"
+            },
+            "authority": {
+                "owner": "fixture-maintenance-owner",
+                "lease_token": "fixture-orphaned-lease-token",
+                "fence_epoch": 11,
+                "role": "orphaned",
+                "generation": "orphaned-entry",
+                "expected_manifest": null,
+                "expected_binding": null,
+                "building_phase": null
+            }
+        }
+    });
+    serde_json::from_value::<VectorProjectionHelperRequest>(request.clone())
+        .expect("orphaned authority must represent absent physical evidence explicitly");
+
+    let mut missing_binding = request;
+    missing_binding["payload"]["authority"]
+        .as_object_mut()
+        .unwrap()
+        .remove("expected_binding");
+    assert!(
+        serde_json::from_value::<VectorProjectionHelperRequest>(missing_binding).is_err(),
+        "required-nullable expected_binding must not be omitted"
     );
 }
 
@@ -245,6 +376,33 @@ fn vector_projection_debug_redacts_capability_tokens() {
                 "generation_id": "gen_fixture_chunks",
                 "delivery_digest": "sha256:fixture-delivery-digest"
             },
+            "authority": {
+                "owner": "fixture-maintenance-owner",
+                "lease_token": "fixture-authority-lease-token-not-a-secret",
+                "fence_epoch": 7,
+                "role": "building",
+                "generation": "gen_fixture_chunks",
+                "expected_manifest": null,
+                "expected_binding": {
+                    "generation": "gen_fixture_chunks",
+                    "fingerprint": null,
+                    "fence_epoch": 7,
+                    "snapshot_cursor": null,
+                    "provider": "ollama",
+                    "provider_fingerprint": "sha256:fixture-provider-fingerprint",
+                    "canonical_count": 0,
+                    "canonical_digest": "sha256:fixture-canonical-digest",
+                    "delivery_count": 0,
+                    "delivery_digest": "sha256:fixture-delivery-digest",
+                    "corpus": {
+                        "corpus_schema": "task-chunks-v2",
+                        "corpus_fingerprint": "sha256:fixture-corpus-fingerprint",
+                        "embedding_model": "fixture-model",
+                        "embedding_dimensions": 3
+                    }
+                },
+                "building_phase": "snapshotting"
+            },
             "batch": {
                 "store_name": "lancedb_chunks",
                 "database_instance_id": "dbi_fixture_projection",
@@ -320,6 +478,8 @@ fn vector_projection_helper_stdout_never_contains_capability_fields() {
 
 #[test]
 fn vector_projection_cleanup_requires_an_explicit_dry_run_decision() {
+    let authority =
+        fixture("helper/vector-projection-request.v2.valid.json")["payload"]["authority"].clone();
     let missing_dry_run = json!({
         "operation": "cleanup",
         "payload": {
@@ -329,6 +489,7 @@ fn vector_projection_cleanup_requires_an_explicit_dry_run_decision() {
                 "generation_id": "gen_fixture_active",
                 "delivery_digest": "sha256:fixture-delivery-digest"
             },
+            "authority": authority,
             "protection": {
                 "active_generation": "gen_fixture_active",
                 "previous_generation": "gen_fixture_previous",

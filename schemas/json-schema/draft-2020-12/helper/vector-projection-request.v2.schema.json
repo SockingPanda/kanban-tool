@@ -27,7 +27,7 @@
           "type": "integer"
         },
         "corpus": {
-          "$ref": "#/$defs/RequiredNullableSchema"
+          "$ref": "#/$defs/RequiredNullableSchema2"
         },
         "database_instance_id": {
           "type": "string"
@@ -44,7 +44,7 @@
           "type": "integer"
         },
         "fingerprint": {
-          "$ref": "#/$defs/RequiredNullableSchema2"
+          "$ref": "#/$defs/RequiredNullableSchema3"
         },
         "generation": {
           "type": "string"
@@ -219,7 +219,7 @@
           "type": "string"
         },
         "source_event_id": {
-          "$ref": "#/$defs/RequiredNullableSchema3"
+          "$ref": "#/$defs/RequiredNullableSchema5"
         },
         "store_name": {
           "type": "string"
@@ -294,7 +294,7 @@
     "RequiredNullableSchema": {
       "anyOf": [
         {
-          "$ref": "#/$defs/ProjectionCorpusMetadata"
+          "$ref": "#/$defs/ProjectionArtifactManifest"
         },
         {
           "type": "null"
@@ -303,13 +303,35 @@
       "description": "Schema-only marker for a key that is required but may contain JSON null."
     },
     "RequiredNullableSchema2": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectionCorpusMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Schema-only marker for a key that is required but may contain JSON null."
+    },
+    "RequiredNullableSchema3": {
       "description": "Schema-only marker for a key that is required but may contain JSON null.",
       "type": [
         "string",
         "null"
       ]
     },
-    "RequiredNullableSchema3": {
+    "RequiredNullableSchema4": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VectorProjectionGenerationBinding"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Schema-only marker for a key that is required but may contain JSON null."
+    },
+    "RequiredNullableSchema5": {
       "description": "Schema-only marker for a key that is required but may contain JSON null.",
       "format": "int64",
       "type": [
@@ -317,7 +339,18 @@
         "null"
       ]
     },
-    "RequiredNullableSchema4": {
+    "RequiredNullableSchema6": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VectorProjectionBuildingPhase"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Schema-only marker for a key that is required but may contain JSON null."
+    },
+    "RequiredNullableSchema7": {
       "anyOf": [
         {
           "$ref": "#/$defs/ProjectionArtifactEvidence"
@@ -331,6 +364,10 @@
     "VectorProjectionApplyBatchRequest": {
       "additionalProperties": false,
       "properties": {
+        "authority": {
+          "$ref": "#/$defs/VectorProjectionDestructiveAuthority",
+          "description": "Exact DB-scoped operation authority for the generation being mutated.\nThe batch retains its delivery claim capability separately; both\ncapabilities are checked before any Lance rows or state are changed."
+        },
         "batch": {
           "$ref": "#/$defs/ProjectionBatch"
         },
@@ -340,15 +377,24 @@
       },
       "required": [
         "context",
+        "authority",
         "batch"
       ],
       "type": "object"
+    },
+    "VectorProjectionBuildingPhase": {
+      "enum": [
+        "snapshotting",
+        "prepared",
+        "store_published"
+      ],
+      "type": "string"
     },
     "VectorProjectionCleanupProtection": {
       "additionalProperties": false,
       "properties": {
         "active_generation": {
-          "$ref": "#/$defs/RequiredNullableSchema2"
+          "$ref": "#/$defs/RequiredNullableSchema3"
         },
         "additional_generations": {
           "items": {
@@ -357,10 +403,10 @@
           "type": "array"
         },
         "building_generation": {
-          "$ref": "#/$defs/RequiredNullableSchema2"
+          "$ref": "#/$defs/RequiredNullableSchema3"
         },
         "previous_generation": {
-          "$ref": "#/$defs/RequiredNullableSchema2"
+          "$ref": "#/$defs/RequiredNullableSchema3"
         }
       },
       "required": [
@@ -374,6 +420,9 @@
     "VectorProjectionCleanupRequest": {
       "additionalProperties": false,
       "properties": {
+        "authority": {
+          "$ref": "#/$defs/VectorProjectionDestructiveAuthority"
+        },
         "context": {
           "$ref": "#/$defs/VectorProjectionMutationContext"
         },
@@ -386,6 +435,7 @@
       },
       "required": [
         "context",
+        "authority",
         "dry_run",
         "protection"
       ],
@@ -403,17 +453,128 @@
       ],
       "type": "object"
     },
+    "VectorProjectionDestructiveAuthority": {
+      "additionalProperties": false,
+      "description": "Current lease capability plus the exact SQLite generation snapshot that\nauthorizes one destructive helper mutation.\n\nThe context digest is correlation evidence only. `lease_token` is the\nopaque capability and must never be rendered in diagnostics.",
+      "properties": {
+        "building_phase": {
+          "$ref": "#/$defs/RequiredNullableSchema6"
+        },
+        "expected_binding": {
+          "$ref": "#/$defs/RequiredNullableSchema4"
+        },
+        "expected_manifest": {
+          "$ref": "#/$defs/RequiredNullableSchema"
+        },
+        "fence_epoch": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "generation": {
+          "type": "string"
+        },
+        "lease_token": {
+          "type": "string"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/VectorProjectionGenerationRole"
+        }
+      },
+      "required": [
+        "owner",
+        "lease_token",
+        "fence_epoch",
+        "role",
+        "generation",
+        "expected_manifest",
+        "expected_binding",
+        "building_phase"
+      ],
+      "type": "object"
+    },
+    "VectorProjectionGenerationBinding": {
+      "additionalProperties": false,
+      "description": "Exact persisted generation binding used for destructive compare-and-swap.\n\n`fingerprint` and `snapshot_cursor` remain required-nullable because a\n`snapshotting` building generation has not produced those values yet.",
+      "properties": {
+        "canonical_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "canonical_digest": {
+          "type": "string"
+        },
+        "corpus": {
+          "$ref": "#/$defs/RequiredNullableSchema2"
+        },
+        "delivery_count": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "delivery_digest": {
+          "type": "string"
+        },
+        "fence_epoch": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/RequiredNullableSchema3"
+        },
+        "generation": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "provider_fingerprint": {
+          "type": "string"
+        },
+        "snapshot_cursor": {
+          "$ref": "#/$defs/RequiredNullableSchema5"
+        }
+      },
+      "required": [
+        "generation",
+        "fingerprint",
+        "fence_epoch",
+        "snapshot_cursor",
+        "provider",
+        "provider_fingerprint",
+        "canonical_count",
+        "canonical_digest",
+        "delivery_count",
+        "delivery_digest",
+        "corpus"
+      ],
+      "type": "object"
+    },
     "VectorProjectionGenerationMutationRequest": {
       "additionalProperties": false,
       "properties": {
+        "authority": {
+          "$ref": "#/$defs/VectorProjectionDestructiveAuthority"
+        },
         "context": {
           "$ref": "#/$defs/VectorProjectionMutationContext"
         }
       },
       "required": [
-        "context"
+        "context",
+        "authority"
       ],
       "type": "object"
+    },
+    "VectorProjectionGenerationRole": {
+      "enum": [
+        "active",
+        "previous",
+        "building",
+        "orphaned"
+      ],
+      "type": "string"
     },
     "VectorProjectionInspectActiveRequest": {
       "additionalProperties": false,
@@ -494,6 +655,10 @@
     "VectorProjectionPrepareSnapshotRequest": {
       "additionalProperties": false,
       "properties": {
+        "authority": {
+          "$ref": "#/$defs/VectorProjectionDestructiveAuthority",
+          "description": "DB-scoped lease/generation capability for the physical snapshot\nmaterialization.  The helper must compare this capability with the\nSQLite authority after acquiring its `${store}-projection-helper`\nlock; the mutation context alone is correlation evidence."
+        },
         "context": {
           "$ref": "#/$defs/VectorProjectionMutationContext"
         },
@@ -506,6 +671,7 @@
       },
       "required": [
         "context",
+        "authority",
         "snapshot",
         "metadata"
       ],
@@ -514,11 +680,14 @@
     "VectorProjectionPublishRequest": {
       "additionalProperties": false,
       "properties": {
+        "authority": {
+          "$ref": "#/$defs/VectorProjectionDestructiveAuthority"
+        },
         "context": {
           "$ref": "#/$defs/VectorProjectionMutationContext"
         },
         "expected_active": {
-          "$ref": "#/$defs/RequiredNullableSchema4"
+          "$ref": "#/$defs/RequiredNullableSchema7"
         },
         "prepared": {
           "$ref": "#/$defs/ProjectionArtifactEvidence"
@@ -526,6 +695,7 @@
       },
       "required": [
         "context",
+        "authority",
         "expected_active",
         "prepared"
       ],
@@ -534,6 +704,9 @@
     "VectorProjectionRepairPublicationRequest": {
       "additionalProperties": false,
       "properties": {
+        "authority": {
+          "$ref": "#/$defs/VectorProjectionDestructiveAuthority"
+        },
         "context": {
           "$ref": "#/$defs/VectorProjectionMutationContext"
         },
@@ -543,6 +716,7 @@
       },
       "required": [
         "context",
+        "authority",
         "expected"
       ],
       "type": "object"
@@ -588,7 +762,7 @@
       "type": "object"
     }
   },
-  "$id": "urn:kanban-tool:schema:helper:vector-projection-request:v1",
+  "$id": "urn:kanban-tool:schema:helper:vector-projection-request:v2",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "oneOf": [
     {
@@ -813,5 +987,5 @@
       "type": "object"
     }
   ],
-  "title": "Vector Projection Helper Request v1"
+  "title": "Vector Projection Helper Request v2"
 }

@@ -8,8 +8,10 @@ use kanban_contract::{
     ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch, ProjectionDelivery,
     ProjectionDeliveryAction, ProjectionSnapshot, ProjectionSnapshotRecord,
     VECTOR_PROJECTION_PROTOCOL_VERSION, VectorProjectionApplyBatchRequest,
-    VectorProjectionCleanupProtection, VectorProjectionCleanupRequest,
-    VectorProjectionGenerationMutationRequest, VectorProjectionGenerationState,
+    VectorProjectionBuildingPhase, VectorProjectionCleanupProtection,
+    VectorProjectionCleanupRequest, VectorProjectionDestructiveAuthority,
+    VectorProjectionGenerationBinding, VectorProjectionGenerationMutationRequest,
+    VectorProjectionGenerationRole, VectorProjectionGenerationState,
     VectorProjectionHelperErrorKind, VectorProjectionHelperOperation,
     VectorProjectionHelperRequest, VectorProjectionHelperResponse,
     VectorProjectionInspectActiveRequest, VectorProjectionInspectGenerationRequest,
@@ -708,6 +710,12 @@ fn helper_read_operations_fail_busy_while_a_physical_writer_is_active() {
             "cleanup dry-run",
             VectorProjectionHelperRequest::Cleanup(VectorProjectionCleanupRequest {
                 context: context(&evidence, "req_guard_cleanup"),
+                authority: destructive_authority(
+                    &evidence,
+                    evidence.manifest.fence_epoch,
+                    VectorProjectionGenerationRole::Building,
+                    Some(VectorProjectionBuildingPhase::Prepared),
+                ),
                 dry_run: true,
                 protection: VectorProjectionCleanupProtection {
                     active_generation: None,
@@ -1188,6 +1196,12 @@ fn active_reader_rejects_a_newer_published_physical_generation() {
     let response = backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(
         VectorProjectionPublishRequest {
             context: context(&newer, "req_publish_without_sqlite_swap"),
+            authority: destructive_authority(
+                &newer,
+                newer.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected_active: Some(active),
             prepared: newer,
         },
@@ -1321,9 +1335,13 @@ fn provider_upgrade_inspects_retains_and_cleans_historical_generation_without_re
         "gen_upgraded_cleanup_candidate",
         3,
     );
+    clear_building_authority(&db, LANCEDB_CHUNKS_STORE);
     let cleaned = cleanup(
         &upgraded,
-        &cleanup_candidate,
+        &second,
+        cleanup_candidate.manifest.fence_epoch,
+        VectorProjectionGenerationRole::Active,
+        None,
         false,
         VectorProjectionCleanupProtection {
             active_generation: Some(second.manifest.generation.clone()),
@@ -1382,6 +1400,12 @@ fn provider_upgrade_refuses_to_publish_when_retained_previous_is_not_physically_
     let response = upgraded.execute(&VectorProjectionHelperRequest::Publish(Box::new(
         VectorProjectionPublishRequest {
             context: context(&second, "req_publish_after_corrupt_previous"),
+            authority: destructive_authority(
+                &second,
+                second.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected_active: Some(first),
             prepared: second.clone(),
         },
@@ -1466,6 +1490,12 @@ fn publish_retry_fails_closed_on_another_generations_corrupt_marker() {
     let response = backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(
         VectorProjectionPublishRequest {
             context: context(&candidate, "req_publish_other_corrupt"),
+            authority: destructive_authority(
+                &candidate,
+                candidate.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected_active: Some(active),
             prepared: candidate.clone(),
         },
@@ -1487,6 +1517,12 @@ fn repair_publication_recovers_a_prepared_generation_after_marker_crash() {
     let response = backend.execute(&VectorProjectionHelperRequest::RepairPublication(
         VectorProjectionRepairPublicationRequest {
             context,
+            authority: destructive_authority(
+                &evidence,
+                evidence.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected: evidence.clone(),
         },
     ));
@@ -1515,6 +1551,12 @@ fn repair_publication_replaces_only_the_expected_generations_corrupt_marker() {
     let response = backend.execute(&VectorProjectionHelperRequest::RepairPublication(
         VectorProjectionRepairPublicationRequest {
             context: context(&evidence, "req_repair_own_marker"),
+            authority: destructive_authority(
+                &evidence,
+                evidence.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Active,
+                None,
+            ),
             expected: evidence.clone(),
         },
     ));
@@ -1545,6 +1587,12 @@ fn repair_publication_quarantines_the_expected_generations_marker_directory() {
     let response = backend.execute(&VectorProjectionHelperRequest::RepairPublication(
         VectorProjectionRepairPublicationRequest {
             context: context(&evidence, "req_repair_marker_directory"),
+            authority: destructive_authority(
+                &evidence,
+                evidence.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Active,
+                None,
+            ),
             expected: evidence.clone(),
         },
     ));
@@ -1585,6 +1633,12 @@ fn repair_publication_fails_closed_on_another_generations_corrupt_marker() {
     let response = backend.execute(&VectorProjectionHelperRequest::RepairPublication(
         VectorProjectionRepairPublicationRequest {
             context: context(&expected, "req_repair_with_other_corrupt"),
+            authority: destructive_authority(
+                &expected,
+                expected.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected: expected.clone(),
         },
     ));
@@ -1624,6 +1678,12 @@ fn repair_publication_rejects_corrupt_physical_rows_without_creating_a_marker() 
     let response = backend.execute(&VectorProjectionHelperRequest::RepairPublication(
         VectorProjectionRepairPublicationRequest {
             context: context(&evidence, "req_repair_corrupt"),
+            authority: destructive_authority(
+                &evidence,
+                evidence.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected: evidence.clone(),
         },
     ));
@@ -1650,6 +1710,12 @@ fn publish_requires_a_present_and_exactly_bound_embedding_cache() {
     let missing_response = backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(
         VectorProjectionPublishRequest {
             context: context(&missing, "req_publish_cache_missing"),
+            authority: destructive_authority(
+                &missing,
+                missing.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected_active: None,
             prepared: missing.clone(),
         },
@@ -1676,6 +1742,12 @@ fn publish_requires_a_present_and_exactly_bound_embedding_cache() {
     let wrong_response = backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(
         VectorProjectionPublishRequest {
             context: context(&wrong, "req_publish_cache_wrong_binding"),
+            authority: destructive_authority(
+                &wrong,
+                wrong.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected_active: None,
             prepared: wrong.clone(),
         },
@@ -1724,6 +1796,12 @@ fn repair_rejects_wrong_bound_delivery_state_without_rewriting_it() {
     let response = backend.execute(&VectorProjectionHelperRequest::RepairPublication(
         VectorProjectionRepairPublicationRequest {
             context: context(&evidence, "req_repair_wrong_delivery_state"),
+            authority: destructive_authority(
+                &evidence,
+                evidence.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected: evidence.clone(),
         },
     ));
@@ -1788,6 +1866,12 @@ fn publish_rejects_a_retained_previous_with_unrecoverable_auxiliary_state() {
     let response = backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(
         VectorProjectionPublishRequest {
             context: context(&second, "req_publish_previous_cache_missing"),
+            authority: destructive_authority(
+                &second,
+                second.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected_active: Some(first),
             prepared: second.clone(),
         },
@@ -1818,6 +1902,12 @@ fn quarantine_moves_the_whole_generation_and_preserves_evidence() {
     let response = backend.execute(&VectorProjectionHelperRequest::Quarantine(
         VectorProjectionGenerationMutationRequest {
             context: context(&evidence, "req_quarantine"),
+            authority: destructive_authority(
+                &evidence,
+                evidence.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
         },
     ));
     assert!(matches!(
@@ -1878,6 +1968,12 @@ fn abort_requires_the_persisted_delivery_digest_and_never_removes_a_published_ge
     let rejected = backend.execute(&VectorProjectionHelperRequest::Abort(
         VectorProjectionGenerationMutationRequest {
             context: wrong_context,
+            authority: destructive_authority(
+                &prepared,
+                prepared.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
         },
     ));
     assert!(matches!(rejected, VectorProjectionHelperResponse::Error(_)));
@@ -1898,6 +1994,12 @@ fn abort_requires_the_persisted_delivery_digest_and_never_removes_a_published_ge
     let rejected = backend.execute(&VectorProjectionHelperRequest::Abort(
         VectorProjectionGenerationMutationRequest {
             context: context(&published, "req_abort_published"),
+            authority: destructive_authority(
+                &published,
+                published.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Active,
+                None,
+            ),
         },
     ));
     assert!(matches!(rejected, VectorProjectionHelperResponse::Error(_)));
@@ -1918,13 +2020,22 @@ fn cleanup_dry_run_and_real_cleanup_never_remove_protected_generations() {
     let building = prepare(&backend, &db, LANCEDB_CHUNKS_STORE, "gen_building", 3);
     let explicit = prepare(&backend, &db, LANCEDB_CHUNKS_STORE, "gen_explicit", 4);
     let candidate = prepare(&backend, &db, LANCEDB_CHUNKS_STORE, "gen_candidate", 5);
+    clear_building_authority(&db, LANCEDB_CHUNKS_STORE);
     let protection = VectorProjectionCleanupProtection {
         active_generation: Some(active.manifest.generation.clone()),
         previous_generation: Some(previous.manifest.generation.clone()),
         building_generation: Some(building.manifest.generation.clone()),
         additional_generations: vec![explicit.manifest.generation.clone()],
     };
-    let dry_run = cleanup(&backend, &building, true, protection.clone());
+    let dry_run = cleanup(
+        &backend,
+        &active,
+        candidate.manifest.fence_epoch,
+        VectorProjectionGenerationRole::Active,
+        None,
+        true,
+        protection.clone(),
+    );
     assert!(dry_run.removed_generations.is_empty());
     assert!(dry_run.skipped_generations.iter().any(|entry| {
         entry.generation_id == candidate.manifest.generation && entry.reason == "dry_run"
@@ -1943,7 +2054,15 @@ fn cleanup_dry_run_and_real_cleanup_never_remove_protected_generations() {
         );
     }
 
-    let cleaned = cleanup(&backend, &building, false, protection);
+    let cleaned = cleanup(
+        &backend,
+        &active,
+        candidate.manifest.fence_epoch,
+        VectorProjectionGenerationRole::Active,
+        None,
+        false,
+        protection,
+    );
     assert_eq!(
         cleaned.removed_generations,
         vec![candidate.manifest.generation.clone()]
@@ -1977,18 +2096,26 @@ fn cleanup_rejects_a_stale_or_wrong_context_digest_before_removing_any_generatio
         "gen_cleanup_authority",
         1,
     );
+    publish(&backend, &db, None, &authority);
     let victim = prepare(&backend, &db, LANCEDB_CHUNKS_STORE, "gen_cleanup_victim", 2);
+    clear_building_authority(&db, LANCEDB_CHUNKS_STORE);
     let mut wrong_context = context(&authority, "req_cleanup_wrong_digest");
     wrong_context.delivery_digest = "fnv64:stale-cleanup-authority".to_owned();
 
     let response = backend.execute(&VectorProjectionHelperRequest::Cleanup(
         VectorProjectionCleanupRequest {
             context: wrong_context,
+            authority: destructive_authority(
+                &authority,
+                victim.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Active,
+                None,
+            ),
             dry_run: false,
             protection: VectorProjectionCleanupProtection {
-                active_generation: None,
+                active_generation: Some(authority.manifest.generation.clone()),
                 previous_generation: None,
-                building_generation: Some(authority.manifest.generation.clone()),
+                building_generation: None,
                 additional_generations: Vec::new(),
             },
         },
@@ -2009,25 +2136,40 @@ fn cleanup_rejects_a_stale_or_wrong_context_digest_before_removing_any_generatio
 
 #[test]
 fn cleanup_rejects_a_missing_context_generation_before_removing_any_generation() {
-    let (_temp, db, backend) = backend();
+    let (temp, db, backend) = backend();
+    let authority = prepare(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_cleanup_missing_authority",
+        1,
+    );
+    publish(&backend, &db, None, &authority);
     let victim = prepare(
         &backend,
         &db,
         LANCEDB_CHUNKS_STORE,
         "gen_cleanup_missing_victim",
-        1,
+        2,
     );
+    clear_building_authority(&db, LANCEDB_CHUNKS_STORE);
+    let root = generations(&db, LANCEDB_CHUNKS_STORE);
+    let missing_authority = root.join(&authority.manifest.generation);
+    let displaced_authority = temp.path().join("missing-context-authority");
+    fs::rename(&missing_authority, &displaced_authority).unwrap();
+
     let response = backend.execute(&VectorProjectionHelperRequest::Cleanup(
         VectorProjectionCleanupRequest {
-            context: VectorProjectionMutationContext {
-                request_id: "req_cleanup_missing_context".to_owned(),
-                projection_store: LANCEDB_CHUNKS_STORE.to_owned(),
-                generation_id: "gen_cleanup_missing_context".to_owned(),
-                delivery_digest: "fnv64:missing-context".to_owned(),
-            },
+            context: context(&authority, "req_cleanup_missing_context"),
+            authority: destructive_authority(
+                &authority,
+                victim.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Active,
+                None,
+            ),
             dry_run: false,
             protection: VectorProjectionCleanupProtection {
-                active_generation: None,
+                active_generation: Some(authority.manifest.generation.clone()),
                 previous_generation: None,
                 building_generation: None,
                 additional_generations: Vec::new(),
@@ -2035,10 +2177,11 @@ fn cleanup_rejects_a_missing_context_generation_before_removing_any_generation()
         },
     ));
     assert!(matches!(response, VectorProjectionHelperResponse::Error(_)));
+    assert!(!missing_authority.exists());
+    assert!(displaced_authority.is_dir());
     assert!(
-        generations(&db, LANCEDB_CHUNKS_STORE)
-            .join(&victim.manifest.generation)
-            .is_dir()
+        root.join(&victim.manifest.generation).is_dir(),
+        "missing canonical context must not authorize deleting an orphan"
     );
 }
 
@@ -2052,6 +2195,7 @@ fn cleanup_rejects_a_corrupt_context_snapshot_before_removing_any_generation() {
         "gen_cleanup_corrupt_authority",
         1,
     );
+    publish(&backend, &db, None, &authority);
     let victim = prepare(
         &backend,
         &db,
@@ -2059,6 +2203,7 @@ fn cleanup_rejects_a_corrupt_context_snapshot_before_removing_any_generation() {
         "gen_cleanup_corrupt_victim",
         2,
     );
+    clear_building_authority(&db, LANCEDB_CHUNKS_STORE);
     fs::write(
         generations(&db, LANCEDB_CHUNKS_STORE)
             .join(&authority.manifest.generation)
@@ -2070,11 +2215,17 @@ fn cleanup_rejects_a_corrupt_context_snapshot_before_removing_any_generation() {
     let response = backend.execute(&VectorProjectionHelperRequest::Cleanup(
         VectorProjectionCleanupRequest {
             context: context(&authority, "req_cleanup_corrupt_context"),
+            authority: destructive_authority(
+                &authority,
+                victim.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Active,
+                None,
+            ),
             dry_run: false,
             protection: VectorProjectionCleanupProtection {
-                active_generation: None,
+                active_generation: Some(authority.manifest.generation.clone()),
                 previous_generation: None,
-                building_generation: Some(authority.manifest.generation.clone()),
+                building_generation: None,
                 additional_generations: Vec::new(),
             },
         },
@@ -2098,6 +2249,7 @@ fn cleanup_rejects_a_context_generation_symlink_before_removing_any_generation()
         "gen_cleanup_symlink_authority",
         1,
     );
+    publish(&backend, &db, None, &authority);
     let victim = prepare(
         &backend,
         &db,
@@ -2105,6 +2257,7 @@ fn cleanup_rejects_a_context_generation_symlink_before_removing_any_generation()
         "gen_cleanup_symlink_victim",
         2,
     );
+    clear_building_authority(&db, LANCEDB_CHUNKS_STORE);
     let root = generations(&db, LANCEDB_CHUNKS_STORE);
     let managed_authority = root.join(&authority.manifest.generation);
     let external_authority = temp.path().join("external-valid-generation");
@@ -2114,11 +2267,17 @@ fn cleanup_rejects_a_context_generation_symlink_before_removing_any_generation()
     let response = backend.execute(&VectorProjectionHelperRequest::Cleanup(
         VectorProjectionCleanupRequest {
             context: context(&authority, "req_cleanup_symlink_context"),
+            authority: destructive_authority(
+                &authority,
+                victim.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Active,
+                None,
+            ),
             dry_run: false,
             protection: VectorProjectionCleanupProtection {
-                active_generation: None,
+                active_generation: Some(authority.manifest.generation.clone()),
                 previous_generation: None,
-                building_generation: Some(authority.manifest.generation.clone()),
+                building_generation: None,
                 additional_generations: Vec::new(),
             },
         },
@@ -2381,6 +2540,109 @@ fn queued_prepare_cannot_recreate_a_generation_after_sqlite_clears_building_auth
 }
 
 #[test]
+fn queued_prepare_cannot_mutate_after_same_owner_fence_bump() {
+    let (_temp, db) = authority_database();
+    let backend = Arc::new(
+        VectorProjectionBackend::new(&db, Arc::new(StaticProvider)).expect("configured backend"),
+    );
+    let request = prepare_request(
+        &backend,
+        LANCEDB_CHUNKS_STORE,
+        "gen_queued_fence_prepare",
+        1,
+        Vec::new(),
+    );
+    authorize_snapshotting(&db, &request);
+    let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&request.context.generation_id);
+    assert!(!generation.exists());
+
+    let lock_name = format!("{LANCEDB_CHUNKS_STORE}-projection-helper");
+    let parent_guard =
+        DerivedStoreWriteGuard::acquire(&db, &lock_name).expect("parent helper guard");
+    let entered = Arc::new(Barrier::new(2));
+    let worker = {
+        let backend = Arc::clone(&backend);
+        let entered = Arc::clone(&entered);
+        std::thread::spawn(move || {
+            entered.wait();
+            backend.execute(&VectorProjectionHelperRequest::PrepareSnapshot(request))
+        })
+    };
+    entered.wait();
+
+    bump_same_owner_fence(&db, LANCEDB_CHUNKS_STORE);
+    drop(parent_guard);
+
+    match worker.join().expect("queued helper thread") {
+        VectorProjectionHelperResponse::Error(error) => {
+            assert_eq!(error.kind, VectorProjectionHelperErrorKind::Delivery);
+            assert!(error.message.contains("SQLite"));
+        }
+        response => panic!("same-owner stale queued prepare was accepted: {response:?}"),
+    }
+    assert!(
+        !generation.exists(),
+        "a queued prepare must not create data after its fence is bumped"
+    );
+}
+
+#[test]
+fn queued_quarantine_cannot_cross_a_sqlite_lease_rebind() {
+    let (_temp, db, backend) = backend();
+    let backend = Arc::new(backend);
+    let evidence = prepare(&backend, &db, LANCEDB_CHUNKS_STORE, "gen_queued_rebind", 1);
+    let _ = publish(&backend, &db, None, &evidence);
+    let request = VectorProjectionHelperRequest::Quarantine(
+        kanban_contract::VectorProjectionGenerationMutationRequest {
+            context: context(&evidence, "req_queued_rebind"),
+            authority: destructive_authority(
+                &evidence,
+                evidence.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Active,
+                None,
+            ),
+        },
+    );
+    let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
+    assert!(generation.join("projection-evidence.json").is_file());
+    let helper_guard =
+        DerivedStoreWriteGuard::acquire(&db, &format!("{LANCEDB_CHUNKS_STORE}-projection-helper"))
+            .expect("parent helper guard");
+    let entered = Arc::new(Barrier::new(2));
+    let worker = {
+        let backend = Arc::clone(&backend);
+        let entered = Arc::clone(&entered);
+        std::thread::spawn(move || {
+            entered.wait();
+            backend.execute(&request)
+        })
+    };
+    entered.wait();
+
+    rusqlite::Connection::open(&db)
+        .unwrap()
+        .execute(
+            "UPDATE projection_store_state
+             SET lease_owner='rebound-owner',lease_token='rebound-token',
+                 fence_epoch=fence_epoch+1
+             WHERE store_name=?1",
+            [LANCEDB_CHUNKS_STORE],
+        )
+        .unwrap();
+    drop(helper_guard);
+
+    match worker.join().expect("queued helper thread") {
+        VectorProjectionHelperResponse::Error(error) => {
+            assert_eq!(error.kind, VectorProjectionHelperErrorKind::Delivery);
+            assert!(error.message.contains("SQLite"));
+        }
+        response => panic!("stale queued quarantine was accepted: {response:?}"),
+    }
+    assert!(generation.join("projection-evidence.json").is_file());
+    assert!(generation.is_dir());
+}
+
+#[test]
 fn current_snapshotting_authority_still_prepares_the_same_generation() {
     let (_temp, db) = authority_database();
     let backend =
@@ -2414,6 +2676,12 @@ fn publish_cannot_recreate_a_marker_after_sqlite_clears_building_authority() {
     let response = backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(
         VectorProjectionPublishRequest {
             context: context(&evidence, "req_stale_publish"),
+            authority: destructive_authority(
+                &evidence,
+                evidence.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected_active: None,
             prepared: evidence.clone(),
         },
@@ -2426,6 +2694,447 @@ fn publish_cannot_recreate_a_marker_after_sqlite_clears_building_authority() {
             .exists(),
         "a publish that lost SQLite building authority must not recreate its marker"
     );
+}
+
+#[test]
+fn queued_apply_cannot_mutate_after_same_owner_fence_bump() {
+    let (_temp, db, backend) = backend();
+    let backend = Arc::new(backend);
+    let evidence = prepare(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_queued_fence_apply",
+        1,
+    );
+    rusqlite::Connection::open(&db)
+        .unwrap()
+        .execute(
+            "INSERT INTO tasks(
+                 id,board_id,seq,title,description,status,archived_at,created_at,updated_at
+             ) VALUES ('t_queued_fence','b_one',1,'queued fence apply',NULL,'todo',NULL,1,1)",
+            [],
+        )
+        .unwrap();
+    let request = apply_request(
+        &evidence,
+        delivery(&evidence, 802, 2, ProjectionDeliveryAction::Upsert),
+    );
+    authorize_apply(&db, &request);
+    let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
+    let before = filesystem_digest(&generation);
+
+    let lock_name = format!("{LANCEDB_CHUNKS_STORE}-projection-helper");
+    let parent_guard =
+        DerivedStoreWriteGuard::acquire(&db, &lock_name).expect("parent helper guard");
+    let entered = Arc::new(Barrier::new(2));
+    let worker = {
+        let backend = Arc::clone(&backend);
+        let entered = Arc::clone(&entered);
+        std::thread::spawn(move || {
+            entered.wait();
+            backend.execute(&VectorProjectionHelperRequest::ApplyBatch(request))
+        })
+    };
+    entered.wait();
+
+    bump_same_owner_fence(&db, LANCEDB_CHUNKS_STORE);
+    drop(parent_guard);
+
+    match worker.join().expect("queued helper thread") {
+        VectorProjectionHelperResponse::Error(error) => {
+            assert_eq!(error.kind, VectorProjectionHelperErrorKind::Delivery);
+            assert!(error.message.contains("SQLite"));
+        }
+        response => panic!("same-owner stale queued apply was accepted: {response:?}"),
+    }
+    assert_eq!(
+        filesystem_digest(&generation),
+        before,
+        "a queued apply must not mutate LanceDB or sidecars after its fence is bumped"
+    );
+}
+
+#[test]
+fn lease_rollover_reclaims_pending_apply_for_active_generation_with_older_manifest_fence() {
+    let (_temp, db, backend) = backend();
+    let evidence = prepare(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_active_lease_rollover",
+        1,
+    );
+    publish(&backend, &db, None, &evidence);
+    insert_task_for_apply(&db, "active lease rollover");
+    let mut request = apply_request(
+        &evidence,
+        delivery(&evidence, 803, 2, ProjectionDeliveryAction::Upsert),
+    );
+    authorize_apply(&db, &request);
+    let successor_fence = release_and_reacquire_projection_lease(
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "successor-owner",
+        "successor-lease-capability",
+    );
+    bind_apply_request_to_lease(
+        &mut request,
+        "successor-owner",
+        "successor-lease-capability",
+        successor_fence,
+        VectorProjectionGenerationRole::Active,
+        None,
+    );
+    authorize_apply(&db, &request);
+    let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
+    let before = filesystem_digest(&generation);
+
+    let response = match backend.execute(&VectorProjectionHelperRequest::ApplyBatch(request.clone()))
+    {
+        VectorProjectionHelperResponse::ApplyBatch(response) => response,
+        response => panic!("successor active apply was rejected: {response:?}"),
+    };
+
+    assert_eq!(successor_fence, evidence.manifest.fence_epoch + 1);
+    assert_eq!(response.ack.request_id, request.context.request_id);
+    assert_eq!(response.receipt.fence_epoch, successor_fence);
+    assert_eq!(response.receipt.applied_item_count, 1);
+    assert_ne!(filesystem_digest(&generation), before);
+    acknowledge_apply(&db, &request);
+}
+
+#[test]
+fn lease_rollover_resumes_prepared_building_apply_with_older_generation_fence() {
+    let (_temp, db, backend) = backend();
+    let evidence = prepare(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_building_lease_rollover",
+        1,
+    );
+    insert_task_for_apply(&db, "building lease rollover");
+    let mut request = apply_request(
+        &evidence,
+        delivery(&evidence, 804, 2, ProjectionDeliveryAction::Upsert),
+    );
+    authorize_apply(&db, &request);
+    let successor_fence = release_and_reacquire_projection_lease(
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "successor-owner",
+        "successor-lease-capability",
+    );
+    bind_apply_request_to_lease(
+        &mut request,
+        "successor-owner",
+        "successor-lease-capability",
+        successor_fence,
+        VectorProjectionGenerationRole::Building,
+        Some(VectorProjectionBuildingPhase::Prepared),
+    );
+    authorize_apply(&db, &request);
+    let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
+    let before = filesystem_digest(&generation);
+
+    let response = match backend.execute(&VectorProjectionHelperRequest::ApplyBatch(request.clone()))
+    {
+        VectorProjectionHelperResponse::ApplyBatch(response) => response,
+        response => panic!("successor prepared-building apply was rejected: {response:?}"),
+    };
+
+    assert_eq!(successor_fence, evidence.manifest.fence_epoch + 1);
+    assert_eq!(response.ack.request_id, request.context.request_id);
+    assert_eq!(response.receipt.fence_epoch, successor_fence);
+    assert_eq!(response.receipt.applied_item_count, 1);
+    assert_ne!(filesystem_digest(&generation), before);
+    acknowledge_apply(&db, &request);
+
+    let mut authority = destructive_authority(
+        &evidence,
+        successor_fence,
+        VectorProjectionGenerationRole::Building,
+        Some(VectorProjectionBuildingPhase::Prepared),
+    );
+    bind_destructive_authority_to_lease(
+        &mut authority,
+        "successor-owner",
+        "successor-lease-capability",
+        successor_fence,
+    );
+    let publish_request = VectorProjectionPublishRequest {
+        context: context(&evidence, "req_publish_building_lease_rollover"),
+        authority,
+        expected_active: None,
+        prepared: evidence.clone(),
+    };
+    let receipt = match backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(
+        publish_request,
+    ))) {
+        VectorProjectionHelperResponse::Publish(response) => response.receipt,
+        response => panic!("successor prepared-building publish was rejected: {response:?}"),
+    };
+    assert_eq!(receipt.active, evidence);
+    mark_published_authority(&db, &receipt.active);
+    assert_active_ready_after_rollover(&db, &receipt.active, successor_fence);
+}
+
+#[test]
+fn lease_rollover_reconciles_prepared_building_publication_with_older_generation_fence() {
+    let (_temp, db, backend) = backend();
+    let evidence = prepare(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_repair_lease_rollover",
+        1,
+    );
+    let successor_fence = release_and_reacquire_projection_lease(
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "successor-owner",
+        "successor-lease-capability",
+    );
+    let mut authority = destructive_authority(
+        &evidence,
+        successor_fence,
+        VectorProjectionGenerationRole::Building,
+        Some(VectorProjectionBuildingPhase::Prepared),
+    );
+    bind_destructive_authority_to_lease(
+        &mut authority,
+        "successor-owner",
+        "successor-lease-capability",
+        successor_fence,
+    );
+    let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
+    let before = filesystem_digest(&generation);
+    let request = VectorProjectionRepairPublicationRequest {
+        context: context(&evidence, "req_repair_building_lease_rollover"),
+        authority,
+        expected: evidence.clone(),
+    };
+
+    match backend.execute(&VectorProjectionHelperRequest::RepairPublication(request)) {
+        VectorProjectionHelperResponse::RepairPublication(response) => {
+            assert_eq!(response.generation_id, evidence.manifest.generation);
+        }
+        response => panic!("successor prepared-building repair was rejected: {response:?}"),
+    }
+    assert_ne!(filesystem_digest(&generation), before);
+    mark_published_authority(&db, &evidence);
+    assert_active_ready_after_rollover(&db, &evidence, successor_fence);
+}
+
+#[test]
+fn lease_rollover_publish_and_repair_reject_stale_forged_and_future_authority_without_mutation() {
+    let (_temp, db, backend) = backend();
+    let evidence = prepare(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_fenced_publish_repair_rollover",
+        1,
+    );
+    let stale_authority = destructive_authority(
+        &evidence,
+        evidence.manifest.fence_epoch,
+        VectorProjectionGenerationRole::Building,
+        Some(VectorProjectionBuildingPhase::Prepared),
+    );
+    let stale_publish = VectorProjectionPublishRequest {
+        context: context(&evidence, "req_stale_publish_rollover"),
+        authority: stale_authority.clone(),
+        expected_active: None,
+        prepared: evidence.clone(),
+    };
+    let stale_repair = VectorProjectionRepairPublicationRequest {
+        context: context(&evidence, "req_stale_repair_rollover"),
+        authority: stale_authority,
+        expected: evidence.clone(),
+    };
+    let successor_fence = release_and_reacquire_projection_lease(
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "successor-owner",
+        "successor-lease-capability",
+    );
+    let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
+    let before = filesystem_digest(&generation);
+
+    assert_projection_delivery_error(
+        backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(
+            stale_publish,
+        ))),
+        "stale publish crossed lease rollover",
+    );
+    assert_eq!(filesystem_digest(&generation), before);
+    assert_projection_delivery_error(
+        backend.execute(&VectorProjectionHelperRequest::RepairPublication(
+            stale_repair,
+        )),
+        "stale repair crossed lease rollover",
+    );
+    assert_eq!(filesystem_digest(&generation), before);
+
+    let mut forged_authority = destructive_authority(
+        &evidence,
+        successor_fence,
+        VectorProjectionGenerationRole::Building,
+        Some(VectorProjectionBuildingPhase::Prepared),
+    );
+    bind_destructive_authority_to_lease(
+        &mut forged_authority,
+        "successor-owner",
+        "successor-lease-capability",
+        successor_fence,
+    );
+    forged_authority
+        .expected_binding
+        .as_mut()
+        .expect("exact generation binding")
+        .fence_epoch += 1;
+    assert_projection_delivery_error(
+        backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(
+            VectorProjectionPublishRequest {
+                context: context(&evidence, "req_forged_publish_rollover"),
+                authority: forged_authority.clone(),
+                expected_active: None,
+                prepared: evidence.clone(),
+            },
+        ))),
+        "forged publish binding crossed lease rollover",
+    );
+    assert_eq!(filesystem_digest(&generation), before);
+    assert_projection_delivery_error(
+        backend.execute(&VectorProjectionHelperRequest::RepairPublication(
+            VectorProjectionRepairPublicationRequest {
+                context: context(&evidence, "req_forged_repair_rollover"),
+                authority: forged_authority,
+                expected: evidence.clone(),
+            },
+        )),
+        "forged repair binding crossed lease rollover",
+    );
+    assert_eq!(filesystem_digest(&generation), before);
+
+    let (_future_temp, future_db, future_backend) = crate::backend();
+    let future_evidence = prepare(
+        &future_backend,
+        &future_db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_future_fence_publish_repair",
+        3,
+    );
+    let changed = rusqlite::Connection::open(&future_db)
+        .unwrap()
+        .execute(
+            "UPDATE projection_store_state
+             SET fence_epoch=2
+             WHERE store_name=?1 AND fence_epoch=3
+               AND lease_owner='fixture-owner'
+               AND lease_token='fixture-lease-capability'",
+            [LANCEDB_CHUNKS_STORE],
+        )
+        .unwrap();
+    assert_eq!(changed, 1);
+    let future_authority = destructive_authority(
+        &future_evidence,
+        2,
+        VectorProjectionGenerationRole::Building,
+        Some(VectorProjectionBuildingPhase::Prepared),
+    );
+    let future_generation =
+        generations(&future_db, LANCEDB_CHUNKS_STORE).join(&future_evidence.manifest.generation);
+    let future_before = filesystem_digest(&future_generation);
+    assert_projection_delivery_error(
+        future_backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(
+            VectorProjectionPublishRequest {
+                context: context(&future_evidence, "req_future_publish_rollover"),
+                authority: future_authority.clone(),
+                expected_active: None,
+                prepared: future_evidence.clone(),
+            },
+        ))),
+        "future generation fence was accepted for publish",
+    );
+    assert_eq!(filesystem_digest(&future_generation), future_before);
+    assert_projection_delivery_error(
+        future_backend.execute(&VectorProjectionHelperRequest::RepairPublication(
+            VectorProjectionRepairPublicationRequest {
+                context: context(&future_evidence, "req_future_repair_rollover"),
+                authority: future_authority,
+                expected: future_evidence,
+            },
+        )),
+        "future generation fence was accepted for repair",
+    );
+    assert_eq!(filesystem_digest(&future_generation), future_before);
+}
+
+#[test]
+fn lease_rollover_rejects_stale_owner_and_forged_binding_without_mutation() {
+    let (_temp, db, backend) = backend();
+    let evidence = prepare(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_fenced_lease_rollover",
+        1,
+    );
+    publish(&backend, &db, None, &evidence);
+    insert_task_for_apply(&db, "fenced lease rollover");
+    let stale = apply_request(
+        &evidence,
+        delivery(&evidence, 805, 2, ProjectionDeliveryAction::Upsert),
+    );
+    authorize_apply(&db, &stale);
+    let successor_fence = release_and_reacquire_projection_lease(
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "successor-owner",
+        "successor-lease-capability",
+    );
+    let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
+    let before = filesystem_digest(&generation);
+
+    match backend.execute(&VectorProjectionHelperRequest::ApplyBatch(stale)) {
+        VectorProjectionHelperResponse::Error(error) => {
+            assert_eq!(error.kind, VectorProjectionHelperErrorKind::Delivery);
+            assert!(error.message.contains("SQLite"));
+        }
+        response => panic!("stale owner crossed lease rollover: {response:?}"),
+    }
+    assert_eq!(filesystem_digest(&generation), before);
+
+    let mut forged = apply_request(
+        &evidence,
+        delivery(&evidence, 806, 2, ProjectionDeliveryAction::Upsert),
+    );
+    bind_apply_request_to_lease(
+        &mut forged,
+        "successor-owner",
+        "successor-lease-capability",
+        successor_fence,
+        VectorProjectionGenerationRole::Active,
+        None,
+    );
+    forged
+        .authority
+        .expected_binding
+        .as_mut()
+        .expect("exact generation binding")
+        .fence_epoch += 1;
+    authorize_apply(&db, &forged);
+    match backend.execute(&VectorProjectionHelperRequest::ApplyBatch(forged)) {
+        VectorProjectionHelperResponse::Error(error) => {
+            assert_eq!(error.kind, VectorProjectionHelperErrorKind::Delivery);
+            assert!(error.message.contains("SQLite"));
+        }
+        response => panic!("forged generation binding crossed lease rollover: {response:?}"),
+    }
+    assert_eq!(filesystem_digest(&generation), before);
 }
 
 #[test]
@@ -2486,6 +3195,12 @@ fn repair_cannot_recreate_a_marker_after_sqlite_clears_active_authority() {
     let response = backend.execute(&VectorProjectionHelperRequest::RepairPublication(
         VectorProjectionRepairPublicationRequest {
             context: context(&evidence, "req_stale_repair"),
+            authority: destructive_authority(
+                &evidence,
+                evidence.manifest.fence_epoch,
+                VectorProjectionGenerationRole::Building,
+                Some(VectorProjectionBuildingPhase::Prepared),
+            ),
             expected: evidence,
         },
     ));
@@ -2494,6 +3209,167 @@ fn repair_cannot_recreate_a_marker_after_sqlite_clears_active_authority() {
         !marker.exists(),
         "repair must not recreate a marker after SQLite clears active authority"
     );
+}
+
+#[test]
+fn queued_publish_cannot_mutate_after_same_owner_fence_bump() {
+    let (_temp, db, backend) = backend();
+    let evidence = prepare(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_queued_fence_publish",
+        1,
+    );
+    let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
+    let before = filesystem_digest(&generation);
+    let request = VectorProjectionPublishRequest {
+        context: context(&evidence, "req_queued_fence_publish"),
+        authority: destructive_authority(
+            &evidence,
+            evidence.manifest.fence_epoch,
+            VectorProjectionGenerationRole::Building,
+            Some(VectorProjectionBuildingPhase::Prepared),
+        ),
+        expected_active: None,
+        prepared: evidence.clone(),
+    };
+
+    let lock_name = format!("{LANCEDB_CHUNKS_STORE}-projection-helper");
+    let parent_guard =
+        DerivedStoreWriteGuard::acquire(&db, &lock_name).expect("parent helper guard");
+    let entered = Arc::new(Barrier::new(2));
+    let worker = {
+        let backend = Arc::new(backend);
+        let entered = Arc::clone(&entered);
+        std::thread::spawn(move || {
+            entered.wait();
+            backend.execute(&VectorProjectionHelperRequest::Publish(Box::new(request)))
+        })
+    };
+    entered.wait();
+
+    bump_same_owner_fence(&db, LANCEDB_CHUNKS_STORE);
+    drop(parent_guard);
+
+    match worker.join().expect("queued helper thread") {
+        VectorProjectionHelperResponse::Error(error) => {
+            assert_eq!(error.kind, VectorProjectionHelperErrorKind::Delivery);
+            assert!(error.message.contains("SQLite"));
+        }
+        response => panic!("same-owner stale queued publish was accepted: {response:?}"),
+    }
+    assert_eq!(
+        filesystem_digest(&generation),
+        before,
+        "a queued publish must not mutate the prepared generation after its fence is bumped"
+    );
+    assert!(
+        !generation.join("published").exists(),
+        "a queued publish must not recreate its marker after its fence is bumped"
+    );
+}
+
+#[test]
+fn queued_repair_cannot_mutate_after_same_owner_fence_bump() {
+    let (_temp, db, backend) = backend();
+    let evidence = prepare(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_queued_fence_repair",
+        1,
+    );
+    publish(&backend, &db, None, &evidence);
+    let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
+    let marker = generation.join("published");
+    fs::remove_file(&marker).unwrap();
+    let before = filesystem_digest(&generation);
+    let request = VectorProjectionRepairPublicationRequest {
+        context: context(&evidence, "req_queued_fence_repair"),
+        authority: destructive_authority(
+            &evidence,
+            evidence.manifest.fence_epoch,
+            VectorProjectionGenerationRole::Active,
+            None,
+        ),
+        expected: evidence,
+    };
+
+    let lock_name = format!("{LANCEDB_CHUNKS_STORE}-projection-helper");
+    let parent_guard =
+        DerivedStoreWriteGuard::acquire(&db, &lock_name).expect("parent helper guard");
+    let entered = Arc::new(Barrier::new(2));
+    let worker = {
+        let backend = Arc::new(backend);
+        let entered = Arc::clone(&entered);
+        std::thread::spawn(move || {
+            entered.wait();
+            backend.execute(&VectorProjectionHelperRequest::RepairPublication(request))
+        })
+    };
+    entered.wait();
+
+    bump_same_owner_fence(&db, LANCEDB_CHUNKS_STORE);
+    drop(parent_guard);
+
+    match worker.join().expect("queued helper thread") {
+        VectorProjectionHelperResponse::Error(error) => {
+            assert_eq!(error.kind, VectorProjectionHelperErrorKind::Delivery);
+            assert!(error.message.contains("SQLite"));
+        }
+        response => panic!("same-owner stale queued repair was accepted: {response:?}"),
+    }
+    assert_eq!(
+        filesystem_digest(&generation),
+        before,
+        "a queued repair must not mutate sidecars after its fence is bumped"
+    );
+    assert!(
+        !marker.exists(),
+        "a queued repair must not recreate its marker after its fence is bumped"
+    );
+}
+
+#[test]
+fn heartbeat_renewal_with_same_owner_token_and_fence_is_accepted() {
+    let (_temp, db) = authority_database();
+    let backend =
+        VectorProjectionBackend::new(&db, Arc::new(StaticProvider)).expect("configured backend");
+    let request = prepare_request(
+        &backend,
+        LANCEDB_CHUNKS_STORE,
+        "gen_heartbeat_renewal",
+        1,
+        Vec::new(),
+    );
+    authorize_snapshotting(&db, &request);
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute(
+        "UPDATE projection_store_state
+         SET lease_expires_at=?1
+         WHERE store_name=?2",
+        rusqlite::params![4_000_000_000_000_i64, LANCEDB_CHUNKS_STORE],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE projection_store_state
+         SET lease_expires_at=?1
+         WHERE store_name=?2",
+        rusqlite::params![5_000_000_000_000_i64, LANCEDB_CHUNKS_STORE],
+    )
+    .unwrap();
+    drop(conn);
+
+    match backend.execute(&VectorProjectionHelperRequest::PrepareSnapshot(request)) {
+        VectorProjectionHelperResponse::PrepareSnapshot(response) => {
+            assert_eq!(
+                response.evidence.manifest.generation,
+                "gen_heartbeat_renewal"
+            );
+        }
+        response => panic!("heartbeat-renewed authority was rejected: {response:?}"),
+    }
 }
 
 #[test]
@@ -3038,6 +3914,20 @@ fn install_authority_schema(conn: &rusqlite::Connection) {
              active_canonical_digest TEXT,
              active_delivery_count INTEGER,
              active_delivery_digest TEXT,
+             previous_generation TEXT,
+             previous_fingerprint TEXT,
+             previous_fence_epoch INTEGER,
+             previous_snapshot_cursor INTEGER,
+             previous_provider TEXT,
+             previous_provider_fingerprint TEXT,
+             previous_corpus_schema TEXT,
+             previous_corpus_fingerprint TEXT,
+             previous_embedding_model TEXT,
+             previous_embedding_dimensions INTEGER,
+             previous_canonical_count INTEGER,
+             previous_canonical_digest TEXT,
+             previous_delivery_count INTEGER,
+             previous_delivery_digest TEXT,
              building_generation TEXT,
              building_fingerprint TEXT,
              building_fence_epoch INTEGER,
@@ -3052,6 +3942,7 @@ fn install_authority_schema(conn: &rusqlite::Connection) {
              building_delivery_count INTEGER,
              building_delivery_digest TEXT,
              building_phase TEXT,
+             lifecycle_status TEXT NOT NULL DEFAULT 'ready',
              snapshot_cursor INTEGER NOT NULL,
              fence_epoch INTEGER NOT NULL,
              lease_owner TEXT,
@@ -3069,6 +3960,7 @@ fn install_authority_schema(conn: &rusqlite::Connection) {
              entity_uri TEXT NOT NULL,
              payload_json TEXT NOT NULL,
              status TEXT NOT NULL,
+             published_generation TEXT,
              attempts INTEGER NOT NULL,
              claim_owner TEXT,
              claim_token TEXT,
@@ -3100,7 +3992,7 @@ fn authorize_snapshotting(db: &Path, request: &VectorProjectionPrepareSnapshotRe
              building_embedding_dimensions=?8,building_canonical_count=?9,
              building_canonical_digest=?10,building_delivery_count=?11,
              building_delivery_digest=?12,building_phase='snapshotting',
-             snapshot_cursor=?13,fence_epoch=?2,
+             lifecycle_status='rebuilding',snapshot_cursor=?13,fence_epoch=?2,
              lease_owner='fixture-owner',
              lease_token='fixture-lease-capability',
              lease_expires_at=?14
@@ -3160,6 +4052,62 @@ fn clear_active_authority(db: &Path, store_name: &str) {
     .unwrap();
 }
 
+fn bump_same_owner_fence(db: &Path, store_name: &str) {
+    let conn = rusqlite::Connection::open(db).unwrap();
+    conn.execute(
+        "UPDATE projection_store_state
+         SET fence_epoch=fence_epoch+1
+         WHERE store_name=?1",
+        [store_name],
+    )
+    .unwrap();
+}
+
+fn release_and_reacquire_projection_lease(
+    db: &Path,
+    store_name: &str,
+    successor_owner: &str,
+    successor_token: &str,
+) -> i64 {
+    let conn = rusqlite::Connection::open(db).unwrap();
+    conn.execute(
+        "UPDATE projection_deliveries
+         SET status='pending',claim_owner=NULL,claim_token=NULL,
+             claim_lease_token=NULL,claim_fence_epoch=NULL,
+             claim_generation=NULL,claim_expires_at=NULL
+         WHERE store_name=?1 AND status='running'
+           AND claim_lease_token='fixture-lease-capability'",
+        [store_name],
+    )
+    .unwrap();
+    let released = conn
+        .execute(
+            "UPDATE projection_store_state
+             SET lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL
+             WHERE store_name=?1 AND lease_owner='fixture-owner'
+               AND lease_token='fixture-lease-capability'",
+            [store_name],
+        )
+        .unwrap();
+    assert_eq!(released, 1);
+    let acquired = conn
+        .execute(
+            "UPDATE projection_store_state
+             SET lease_owner=?1,lease_token=?2,lease_expires_at=?3,
+                 fence_epoch=fence_epoch+1
+             WHERE store_name=?4 AND lease_token IS NULL",
+            rusqlite::params![successor_owner, successor_token, i64::MAX, store_name],
+        )
+        .unwrap();
+    assert_eq!(acquired, 1);
+    conn.query_row(
+        "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
+        [store_name],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
 fn mark_prepared_authority(db: &Path, evidence: &ProjectionArtifactEvidence) {
     let conn = rusqlite::Connection::open(db).unwrap();
     let changed = conn
@@ -3200,7 +4148,7 @@ fn mark_published_authority(db: &Path, evidence: &ProjectionArtifactEvidence) {
                  building_embedding_dimensions=NULL,building_canonical_count=NULL,
                  building_canonical_digest=NULL,building_delivery_count=NULL,
                  building_delivery_digest=NULL,building_phase=NULL,
-                 snapshot_cursor=?4,fence_epoch=?3
+                 lifecycle_status='ready',snapshot_cursor=?4
              WHERE store_name=?15 AND building_generation=?1
                AND building_fingerprint=?2 AND building_fence_epoch=?3",
             rusqlite::params![
@@ -3285,12 +4233,35 @@ fn prepare_request(
         .unwrap();
     let delivery_digest = format!("fnv64:delivery-{generation}");
     let canonical_digest = record_coverage_digest(&records);
+    let corpus = descriptor.corpus.clone();
     VectorProjectionPrepareSnapshotRequest {
         context: VectorProjectionMutationContext {
             request_id: format!("req_prepare_{generation}"),
             projection_store: store_name.to_owned(),
             generation_id: generation.to_owned(),
             delivery_digest: delivery_digest.clone(),
+        },
+        authority: VectorProjectionDestructiveAuthority {
+            owner: "fixture-owner".to_owned(),
+            lease_token: "fixture-lease-capability".to_owned(),
+            fence_epoch,
+            role: VectorProjectionGenerationRole::Building,
+            generation: generation.to_owned(),
+            expected_manifest: None,
+            expected_binding: Some(VectorProjectionGenerationBinding {
+                generation: generation.to_owned(),
+                fingerprint: None,
+                fence_epoch,
+                snapshot_cursor: None,
+                provider: descriptor.provider.clone(),
+                provider_fingerprint: descriptor.provider_fingerprint.clone(),
+                canonical_count: records.len() as i64,
+                canonical_digest: canonical_digest.clone(),
+                delivery_count: 0,
+                delivery_digest: delivery_digest.clone(),
+                corpus: corpus.clone(),
+            }),
+            building_phase: Some(VectorProjectionBuildingPhase::Snapshotting),
         },
         metadata: descriptor.corpus.clone().unwrap(),
         snapshot: ProjectionSnapshot {
@@ -3304,7 +4275,7 @@ fn prepare_request(
                 snapshot_cursor: fence_epoch,
                 provider: descriptor.provider,
                 provider_fingerprint: descriptor.provider_fingerprint,
-                corpus: descriptor.corpus,
+                corpus,
                 canonical_item_count: records.len() as i64,
                 canonical_digest,
                 delivery_item_count: 0,
@@ -3539,8 +4510,47 @@ fn apply_request(
             generation_id: evidence.manifest.generation.clone(),
             delivery_digest: evidence.manifest.delivery_digest.clone(),
         },
+        authority: destructive_authority(
+            evidence,
+            evidence.manifest.fence_epoch,
+            VectorProjectionGenerationRole::Building,
+            Some(VectorProjectionBuildingPhase::Prepared),
+        ),
         batch,
     }
+}
+
+fn bind_apply_request_to_lease(
+    request: &mut VectorProjectionApplyBatchRequest,
+    owner: &str,
+    lease_token: &str,
+    fence_epoch: i64,
+    role: VectorProjectionGenerationRole,
+    building_phase: Option<VectorProjectionBuildingPhase>,
+) {
+    request.batch.owner = owner.to_owned();
+    request.batch.lease_token = lease_token.to_owned();
+    request.batch.fence_epoch = fence_epoch;
+    request.batch.claim_token = format!("successor-claim-capability-{fence_epoch}");
+    bind_destructive_authority_to_lease(
+        &mut request.authority,
+        owner,
+        lease_token,
+        fence_epoch,
+    );
+    request.authority.role = role;
+    request.authority.building_phase = building_phase;
+}
+
+fn bind_destructive_authority_to_lease(
+    authority: &mut VectorProjectionDestructiveAuthority,
+    owner: &str,
+    lease_token: &str,
+    fence_epoch: i64,
+) {
+    authority.owner = owner.to_owned();
+    authority.lease_token = lease_token.to_owned();
+    authority.fence_epoch = fence_epoch;
 }
 
 fn authorize_apply(db: &Path, request: &VectorProjectionApplyBatchRequest) {
@@ -3578,6 +4588,110 @@ fn authorize_apply(db: &Path, request: &VectorProjectionApplyBatchRequest) {
             ],
         )
         .unwrap();
+    }
+}
+
+fn acknowledge_apply(db: &Path, request: &VectorProjectionApplyBatchRequest) {
+    let conn = rusqlite::Connection::open(db).unwrap();
+    for delivery in &request.batch.items {
+        let changed = conn
+            .execute(
+                "UPDATE projection_deliveries
+                 SET status='done',published_generation=claim_generation,
+                     claim_owner=NULL,claim_token=NULL,claim_lease_token=NULL,
+                     claim_fence_epoch=NULL,claim_generation=NULL,claim_expires_at=NULL
+                 WHERE id=?1 AND store_name=?2 AND status='running'
+                   AND claim_owner=?3 AND claim_token=?4
+                   AND claim_lease_token=?5 AND claim_fence_epoch=?6
+                   AND claim_generation=?7",
+                rusqlite::params![
+                    delivery.id,
+                    request.batch.store_name,
+                    request.batch.owner,
+                    request.batch.claim_token,
+                    request.batch.lease_token,
+                    request.batch.fence_epoch,
+                    request.batch.target_generation,
+                ],
+            )
+            .unwrap();
+        assert_eq!(changed, 1);
+        let acknowledged: (String, Option<String>) = conn
+            .query_row(
+                "SELECT status,published_generation
+                 FROM projection_deliveries WHERE id=?1",
+                [delivery.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            acknowledged,
+            (
+                "done".to_owned(),
+                Some(request.batch.target_generation.clone())
+            )
+        );
+    }
+}
+
+fn insert_task_for_apply(db: &Path, title: &str) {
+    rusqlite::Connection::open(db)
+        .unwrap()
+        .execute(
+            "INSERT INTO tasks(
+                 id,board_id,seq,title,description,status,archived_at,created_at,updated_at
+             ) VALUES ('t_one','b_one',1,?1,NULL,'todo',NULL,1,1)",
+            [title],
+        )
+        .unwrap();
+}
+
+fn assert_active_ready_after_rollover(
+    db: &Path,
+    evidence: &ProjectionArtifactEvidence,
+    current_lease_fence: i64,
+) {
+    let state: (Option<String>, Option<i64>, i64, String, Option<String>) =
+        rusqlite::Connection::open(db)
+            .unwrap()
+            .query_row(
+                "SELECT active_generation,active_fence_epoch,fence_epoch,
+                        lifecycle_status,building_generation
+                 FROM projection_store_state WHERE store_name=?1",
+                [&evidence.manifest.store_name],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .unwrap();
+    assert_eq!(
+        state,
+        (
+            Some(evidence.manifest.generation.clone()),
+            Some(evidence.manifest.fence_epoch),
+            current_lease_fence,
+            "ready".to_owned(),
+            None,
+        )
+    );
+}
+
+fn assert_projection_delivery_error(
+    response: VectorProjectionHelperResponse,
+    accepted_message: &str,
+) {
+    match response {
+        VectorProjectionHelperResponse::Error(error) => {
+            assert_eq!(error.kind, VectorProjectionHelperErrorKind::Delivery);
+            assert!(error.message.contains("SQLite"));
+        }
+        response => panic!("{accepted_message}: {response:?}"),
     }
 }
 
@@ -3655,6 +4769,12 @@ fn publish(
 ) -> kanban_contract::ProjectionPublishReceipt {
     let request = VectorProjectionPublishRequest {
         context: context(prepared, "req_publish"),
+        authority: destructive_authority(
+            prepared,
+            prepared.manifest.fence_epoch,
+            VectorProjectionGenerationRole::Building,
+            Some(VectorProjectionBuildingPhase::Prepared),
+        ),
         expected_active: expected_active.cloned(),
         prepared: prepared.clone(),
     };
@@ -3685,18 +4805,58 @@ fn inventory(
 fn cleanup(
     backend: &VectorProjectionBackend,
     context_evidence: &ProjectionArtifactEvidence,
+    current_lease_fence_epoch: i64,
+    role: VectorProjectionGenerationRole,
+    building_phase: Option<VectorProjectionBuildingPhase>,
     dry_run: bool,
     protection: VectorProjectionCleanupProtection,
 ) -> kanban_contract::VectorProjectionCleanupResponse {
     match backend.execute(&VectorProjectionHelperRequest::Cleanup(
         VectorProjectionCleanupRequest {
             context: context(context_evidence, "req_cleanup"),
+            authority: destructive_authority(
+                context_evidence,
+                current_lease_fence_epoch,
+                role,
+                building_phase,
+            ),
             dry_run,
             protection,
         },
     )) {
         VectorProjectionHelperResponse::Cleanup(response) => response,
         response => panic!("unexpected cleanup response: {response:?}"),
+    }
+}
+
+fn destructive_authority(
+    evidence: &ProjectionArtifactEvidence,
+    current_lease_fence_epoch: i64,
+    role: VectorProjectionGenerationRole,
+    building_phase: Option<VectorProjectionBuildingPhase>,
+) -> VectorProjectionDestructiveAuthority {
+    let manifest = &evidence.manifest;
+    VectorProjectionDestructiveAuthority {
+        owner: "fixture-owner".to_owned(),
+        lease_token: "fixture-lease-capability".to_owned(),
+        fence_epoch: current_lease_fence_epoch,
+        role,
+        generation: manifest.generation.clone(),
+        expected_manifest: Some(manifest.clone()),
+        expected_binding: Some(VectorProjectionGenerationBinding {
+            generation: manifest.generation.clone(),
+            fingerprint: Some(evidence.fingerprint.clone()),
+            fence_epoch: manifest.fence_epoch,
+            snapshot_cursor: Some(manifest.snapshot_cursor),
+            provider: manifest.provider.clone(),
+            provider_fingerprint: manifest.provider_fingerprint.clone(),
+            canonical_count: manifest.canonical_item_count,
+            canonical_digest: manifest.canonical_digest.clone(),
+            delivery_count: manifest.delivery_item_count,
+            delivery_digest: manifest.delivery_digest.clone(),
+            corpus: manifest.corpus.clone(),
+        }),
+        building_phase,
     }
 }
 

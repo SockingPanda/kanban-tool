@@ -3104,12 +3104,12 @@ fn protocol_schema_roots() -> Vec<SchemaRoot> {
             crate::VectorHelperEmbedQueryResponse
         ),
         request_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-projection-request:v1",
-            "helper/vector-projection-request.v1.schema.json",
-            "Vector Projection Helper Request v1",
+            "urn:kanban-tool:schema:helper:vector-projection-request:v2",
+            "helper/vector-projection-request.v2.schema.json",
+            "Vector Projection Helper Request v2",
             "helper.vector-projection.request",
-            "schemas/fixtures/helper/vector-projection-request.v1.valid.json",
-            "schemas/fixtures/helper/vector-projection-request.v1.invalid.json",
+            "schemas/fixtures/helper/vector-projection-request.v2.valid.json",
+            "schemas/fixtures/helper/vector-projection-request.v2.invalid.json",
             crate::VectorProjectionHelperRequest
         ),
         response_schema_root!(

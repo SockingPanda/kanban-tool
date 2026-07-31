@@ -16,9 +16,11 @@ use kanban_contract::{
     ProjectionSnapshot as WireProjectionSnapshot,
     ProjectionSnapshotRecord as WireProjectionSnapshotRecord,
     ProjectionStoreDescriptor as WireProjectionStoreDescriptor, VECTOR_PROJECTION_PROTOCOL_VERSION,
-    VectorProjectionApplyBatchRequest, VectorProjectionCleanupProtection,
-    VectorProjectionCleanupRequest, VectorProjectionCleanupResponse,
-    VectorProjectionDescriptorRequest, VectorProjectionGenerationMutationRequest,
+    VectorProjectionApplyBatchRequest, VectorProjectionBuildingPhase,
+    VectorProjectionCleanupProtection, VectorProjectionCleanupRequest,
+    VectorProjectionCleanupResponse, VectorProjectionDescriptorRequest,
+    VectorProjectionDestructiveAuthority, VectorProjectionGenerationBinding,
+    VectorProjectionGenerationMutationRequest, VectorProjectionGenerationRole,
     VectorProjectionHelperDescriptor, VectorProjectionHelperErrorKind,
     VectorProjectionHelperOperation, VectorProjectionHelperRequest, VectorProjectionHelperResponse,
     VectorProjectionInspectActiveRequest, VectorProjectionInspectGenerationRequest,
@@ -28,7 +30,7 @@ use kanban_contract::{
     VectorProjectionRepairPublicationRequest, VectorProjectionValidateActiveRequest,
     VectorProjectionValidateGenerationRequest, VectorProjectionValidationResponse,
 };
-use kanban_core::{KanbanError, Result, new_typed_id};
+use kanban_core::{Clock, KanbanError, Result, SystemClock, new_typed_id};
 use kanban_indexer::{
     DERIVED_STORE_SCHEMA_VERSION, LANCEDB_CHUNKS_STORE, LANCEDB_LABEL_ATOMS_STORE,
 };
@@ -40,8 +42,9 @@ use kanban_vector::{
 
 use super::{
     ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
-    ProjectionBatchReceipt, ProjectionCorpusMetadata, ProjectionPublishReceipt, ProjectionSnapshot,
-    ProjectionStoreBackend, ProjectionStoreDescriptor,
+    ProjectionBatchReceipt, ProjectionCorpusMetadata, ProjectionDestructiveAuthority,
+    ProjectionGenerationRole, ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreBackend,
+    ProjectionStoreDescriptor,
 };
 
 const VECTOR_PROJECTION_HELPER: &str = "kanban-vector-lancedb";
@@ -200,6 +203,25 @@ impl LanceDbProjectionStore {
         &self,
         snapshot: &WireProjectionSnapshot,
     ) -> Result<WireProjectionArtifactEvidence> {
+        let authority = self.destructive_authority(&snapshot.manifest.generation)?;
+        self.prepare_wire_snapshot_with_wire_authority(snapshot, &authority)
+    }
+
+    pub(crate) fn prepare_wire_snapshot_with_authority(
+        &self,
+        snapshot: &WireProjectionSnapshot,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<WireProjectionArtifactEvidence> {
+        let (_, wire_authority) =
+            self.wire_destructive_authority(&snapshot.manifest.generation, authority)?;
+        self.prepare_wire_snapshot_with_wire_authority(snapshot, &wire_authority)
+    }
+
+    fn prepare_wire_snapshot_with_wire_authority(
+        &self,
+        snapshot: &WireProjectionSnapshot,
+        authority: &VectorProjectionDestructiveAuthority,
+    ) -> Result<WireProjectionArtifactEvidence> {
         let metadata = snapshot.manifest.corpus.clone().ok_or_else(|| {
             KanbanError::InvalidInput(format!(
                 "LanceDB projection snapshot for {} has no corpus binding",
@@ -211,6 +233,13 @@ impl LanceDbProjectionStore {
             &snapshot.manifest.generation,
             &snapshot.manifest.delivery_digest,
         )?;
+        let authority_digest = self.wire_authority_delivery_digest(authority, "prepare")?;
+        if authority_digest != snapshot.manifest.delivery_digest {
+            return Err(KanbanError::Conflict(
+                "LanceDB projection prepare authority does not match snapshot delivery digest"
+                    .to_owned(),
+            ));
+        }
         self.remember_generation_digest(
             &snapshot.manifest.generation,
             &snapshot.manifest.delivery_digest,
@@ -220,6 +249,7 @@ impl LanceDbProjectionStore {
             VectorProjectionHelperRequest::PrepareSnapshot(
                 VectorProjectionPrepareSnapshotRequest {
                     context: context.clone(),
+                    authority: authority.clone(),
                     snapshot: snapshot.clone(),
                     metadata,
                 },
@@ -259,13 +289,42 @@ impl LanceDbProjectionStore {
         batch: &WireProjectionBatch,
         delivery_digest: &str,
     ) -> Result<WireProjectionBatchReceipt> {
+        let authority = self.destructive_authority(&batch.target_generation)?;
+        self.apply_wire_batch_with_wire_authority(batch, delivery_digest, &authority)
+    }
+
+    pub(crate) fn apply_wire_batch_with_authority(
+        &self,
+        batch: &WireProjectionBatch,
+        delivery_digest: &str,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<WireProjectionBatchReceipt> {
+        let (_, wire_authority) =
+            self.wire_destructive_authority(&batch.target_generation, authority)?;
+        self.apply_wire_batch_with_wire_authority(batch, delivery_digest, &wire_authority)
+    }
+
+    fn apply_wire_batch_with_wire_authority(
+        &self,
+        batch: &WireProjectionBatch,
+        delivery_digest: &str,
+        authority: &VectorProjectionDestructiveAuthority,
+    ) -> Result<WireProjectionBatchReceipt> {
         let context =
             mutation_context(&batch.store_name, &batch.target_generation, delivery_digest)?;
+        let authority_digest = self.wire_authority_delivery_digest(authority, "apply")?;
+        if authority_digest != delivery_digest {
+            return Err(KanbanError::Conflict(
+                "LanceDB projection apply authority does not match batch delivery digest"
+                    .to_owned(),
+            ));
+        }
         self.remember_generation_digest(&batch.target_generation, delivery_digest);
         let response = self.execute_checked(
             "apply batch",
             VectorProjectionHelperRequest::ApplyBatch(VectorProjectionApplyBatchRequest {
                 context: context.clone(),
+                authority: authority.clone(),
                 batch: batch.clone(),
             }),
         )?;
@@ -308,6 +367,27 @@ impl LanceDbProjectionStore {
         expected_active: Option<&WireProjectionArtifactEvidence>,
         prepared: &WireProjectionArtifactEvidence,
     ) -> Result<WireProjectionPublishReceipt> {
+        let authority = self.destructive_authority(&prepared.manifest.generation)?;
+        self.publish_wire_generation_with_wire_authority(expected_active, prepared, &authority)
+    }
+
+    pub(crate) fn publish_wire_generation_with_authority(
+        &self,
+        expected_active: Option<&WireProjectionArtifactEvidence>,
+        prepared: &WireProjectionArtifactEvidence,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<WireProjectionPublishReceipt> {
+        let (_, wire_authority) =
+            self.wire_destructive_authority(&prepared.manifest.generation, authority)?;
+        self.publish_wire_generation_with_wire_authority(expected_active, prepared, &wire_authority)
+    }
+
+    fn publish_wire_generation_with_wire_authority(
+        &self,
+        expected_active: Option<&WireProjectionArtifactEvidence>,
+        prepared: &WireProjectionArtifactEvidence,
+        authority: &VectorProjectionDestructiveAuthority,
+    ) -> Result<WireProjectionPublishReceipt> {
         self.require_evidence_binding("publish generation", prepared)?;
         if let Some(expected_active) = expected_active {
             self.require_evidence_binding("publish previous generation", expected_active)?;
@@ -317,6 +397,13 @@ impl LanceDbProjectionStore {
             &prepared.manifest.generation,
             &prepared.manifest.delivery_digest,
         )?;
+        let authority_digest = self.wire_authority_delivery_digest(authority, "publish")?;
+        if authority_digest != prepared.manifest.delivery_digest {
+            return Err(KanbanError::Conflict(
+                "LanceDB projection publish authority does not match prepared delivery digest"
+                    .to_owned(),
+            ));
+        }
         self.remember_generation_digest(
             &prepared.manifest.generation,
             &prepared.manifest.delivery_digest,
@@ -325,6 +412,7 @@ impl LanceDbProjectionStore {
             "publish generation",
             VectorProjectionHelperRequest::Publish(Box::new(VectorProjectionPublishRequest {
                 context: context.clone(),
+                authority: authority.clone(),
                 expected_active: expected_active.cloned(),
                 prepared: prepared.clone(),
             })),
@@ -473,17 +561,44 @@ impl LanceDbProjectionStore {
         &self,
         expected: &WireProjectionArtifactEvidence,
     ) -> Result<()> {
+        let authority = self.destructive_authority(&expected.manifest.generation)?;
+        self.repair_wire_publication_with_wire_authority(expected, &authority)
+    }
+
+    pub(crate) fn repair_wire_publication_with_authority(
+        &self,
+        expected: &WireProjectionArtifactEvidence,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        let (_, wire_authority) =
+            self.wire_destructive_authority(&expected.manifest.generation, authority)?;
+        self.repair_wire_publication_with_wire_authority(expected, &wire_authority)
+    }
+
+    fn repair_wire_publication_with_wire_authority(
+        &self,
+        expected: &WireProjectionArtifactEvidence,
+        authority: &VectorProjectionDestructiveAuthority,
+    ) -> Result<()> {
         self.require_evidence_binding("repair publication", expected)?;
         let context = mutation_context(
             &expected.manifest.store_name,
             &expected.manifest.generation,
             &expected.manifest.delivery_digest,
         )?;
+        let authority_digest = self.wire_authority_delivery_digest(authority, "repair")?;
+        if authority_digest != expected.manifest.delivery_digest {
+            return Err(KanbanError::Conflict(
+                "LanceDB projection repair authority does not match expected delivery digest"
+                    .to_owned(),
+            ));
+        }
         let response = self.execute_checked(
             "repair publication",
             VectorProjectionHelperRequest::RepairPublication(
                 VectorProjectionRepairPublicationRequest {
                     context: context.clone(),
+                    authority: authority.clone(),
                     expected: expected.clone(),
                 },
             ),
@@ -587,10 +702,12 @@ impl LanceDbProjectionStore {
             context_generation,
             delivery_digest,
         )?;
+        let authority = self.destructive_authority(context_generation)?;
         let response = self.execute_checked(
             "cleanup generations",
             VectorProjectionHelperRequest::Cleanup(VectorProjectionCleanupRequest {
                 context: context.clone(),
+                authority,
                 dry_run,
                 protection,
             }),
@@ -615,6 +732,26 @@ impl LanceDbProjectionStore {
         request: impl FnOnce(VectorProjectionGenerationMutationRequest) -> VectorProjectionHelperRequest,
         response_ack: impl FnOnce(VectorProjectionHelperResponse) -> Option<VectorProjectionMutationAck>,
     ) -> Result<()> {
+        let authority = self.destructive_authority(generation_id)?;
+        self.mutate_wire_generation_with_authority(
+            action,
+            generation_id,
+            delivery_digest,
+            authority,
+            request,
+            response_ack,
+        )
+    }
+
+    fn mutate_wire_generation_with_authority(
+        &self,
+        action: &str,
+        generation_id: &str,
+        delivery_digest: &str,
+        authority: VectorProjectionDestructiveAuthority,
+        request: impl FnOnce(VectorProjectionGenerationMutationRequest) -> VectorProjectionHelperRequest,
+        response_ack: impl FnOnce(VectorProjectionHelperResponse) -> Option<VectorProjectionMutationAck>,
+    ) -> Result<()> {
         let context = mutation_context(
             &self.store_descriptor.store_name,
             generation_id,
@@ -624,12 +761,284 @@ impl LanceDbProjectionStore {
             action,
             request(VectorProjectionGenerationMutationRequest {
                 context: context.clone(),
+                authority,
             }),
         )?;
         let Some(ack) = response_ack(response) else {
             return wrong_operation(action);
         };
         require_ack(action, &context, &ack)
+    }
+
+    fn wire_authority_delivery_digest<'a>(
+        &self,
+        authority: &'a VectorProjectionDestructiveAuthority,
+        action: &str,
+    ) -> Result<&'a str> {
+        authority
+            .expected_binding
+            .as_ref()
+            .map(|binding| binding.delivery_digest.as_str())
+            .filter(|digest| !digest.trim().is_empty())
+            .ok_or_else(|| {
+                KanbanError::Conflict(format!(
+                    "LanceDB projection {action} authority is stale or incomplete"
+                ))
+            })
+    }
+
+    fn wire_destructive_authority(
+        &self,
+        generation_id: &str,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<(String, VectorProjectionDestructiveAuthority)> {
+        if authority.generation != generation_id
+            || authority.owner.trim().is_empty()
+            || authority.lease_token.trim().is_empty()
+            || authority.fence_epoch < 0
+            || authority.lease_expires_at <= SystemClock.now_ms()
+            || authority.expected_binding.generation != generation_id
+            || authority.expected_binding.delivery_digest.trim().is_empty()
+        {
+            return Err(KanbanError::Conflict(
+                "LanceDB projection destructive authority is stale or incomplete".to_owned(),
+            ));
+        }
+        let role = match authority.role {
+            ProjectionGenerationRole::Active => VectorProjectionGenerationRole::Active,
+            ProjectionGenerationRole::Previous => VectorProjectionGenerationRole::Previous,
+            ProjectionGenerationRole::Building => VectorProjectionGenerationRole::Building,
+            ProjectionGenerationRole::Orphaned => VectorProjectionGenerationRole::Orphaned,
+        };
+        let binding = &authority.expected_binding;
+        let expected_binding = match authority.role {
+            ProjectionGenerationRole::Orphaned => None,
+            ProjectionGenerationRole::Active
+            | ProjectionGenerationRole::Previous
+            | ProjectionGenerationRole::Building => Some(VectorProjectionGenerationBinding {
+                generation: binding.generation.clone(),
+                fingerprint: binding.fingerprint.clone(),
+                fence_epoch: binding.fence_epoch,
+                snapshot_cursor: binding.snapshot_cursor,
+                provider: binding.provider.clone(),
+                provider_fingerprint: binding.provider_fingerprint.clone(),
+                canonical_count: binding.canonical_count,
+                canonical_digest: binding.canonical_digest.clone(),
+                delivery_count: binding.delivery_count,
+                delivery_digest: binding.delivery_digest.clone(),
+                corpus: binding.corpus.as_ref().map(wire_corpus_metadata),
+            }),
+        };
+        let expected_manifest = authority
+            .expected_manifest
+            .as_ref()
+            .map(wire_destructive_manifest)
+            .transpose()?;
+        if let Some(manifest) = &expected_manifest
+            && (manifest.store_name != self.store_descriptor.store_name
+                || manifest.generation != generation_id
+                || manifest.delivery_digest != binding.delivery_digest)
+        {
+            return Err(KanbanError::Conflict(
+                "LanceDB projection destructive authority manifest is inconsistent".to_owned(),
+            ));
+        }
+        let building_phase = authority
+            .building_phase
+            .as_deref()
+            .map(|phase| match phase {
+                "snapshotting" => Ok(VectorProjectionBuildingPhase::Snapshotting),
+                "prepared" => Ok(VectorProjectionBuildingPhase::Prepared),
+                "store_published" => Ok(VectorProjectionBuildingPhase::StorePublished),
+                _ => Err(KanbanError::Conflict(
+                    "LanceDB projection destructive authority building phase is invalid".to_owned(),
+                )),
+            })
+            .transpose()?;
+        Ok((
+            binding.delivery_digest.clone(),
+            VectorProjectionDestructiveAuthority {
+                owner: authority.owner.clone(),
+                lease_token: authority.lease_token.clone(),
+                fence_epoch: authority.fence_epoch,
+                role,
+                generation: generation_id.to_owned(),
+                expected_manifest,
+                expected_binding,
+                building_phase,
+            },
+        ))
+    }
+
+    /// Snapshot the current SQLite lease and generation binding for a
+    /// destructive helper request. The opaque lease token is copied only into
+    /// the wire capability and is never included in diagnostics.
+    fn destructive_authority(
+        &self,
+        generation: &str,
+    ) -> Result<VectorProjectionDestructiveAuthority> {
+        let conn = crate::db::connect_existing_read_only(&self.db_path)?;
+        let row = conn.query_row(
+            "SELECT database_instance_id,protocol_version,schema_version,control_plane,
+                    fence_epoch,lease_owner,lease_token,lease_expires_at,
+                    active_generation,active_fingerprint,active_fence_epoch,active_snapshot_cursor,
+                    active_provider,active_provider_fingerprint,active_canonical_count,active_canonical_digest,
+                    active_delivery_count,active_delivery_digest,active_corpus_schema,active_corpus_fingerprint,
+                    active_embedding_model,active_embedding_dimensions,
+                    previous_generation,previous_fingerprint,previous_fence_epoch,previous_snapshot_cursor,
+                    previous_provider,previous_provider_fingerprint,previous_canonical_count,previous_canonical_digest,
+                    previous_delivery_count,previous_delivery_digest,previous_corpus_schema,previous_corpus_fingerprint,
+                    previous_embedding_model,previous_embedding_dimensions,
+                    building_generation,building_fingerprint,building_fence_epoch,snapshot_cursor,building_provider,
+                    building_provider_fingerprint,building_canonical_count,building_canonical_digest,
+                    building_delivery_count,building_delivery_digest,building_corpus_schema,building_corpus_fingerprint,
+                    building_embedding_model,building_embedding_dimensions,building_phase
+             FROM projection_store_state WHERE store_name=?1",
+            [&self.store_descriptor.store_name],
+            |r| {
+                let db: String = r.get(0)?;
+                let protocol: i64 = r.get(1)?;
+                let schema: i64 = r.get(2)?;
+                let control: String = r.get(3)?;
+                let fence: i64 = r.get(4)?;
+                let owner: Option<String> = r.get(5)?;
+                let token: Option<String> = r.get(6)?;
+                let expires_at: Option<i64> = r.get(7)?;
+                let text = |i: usize| -> rusqlite::Result<Option<String>> {
+                    Ok(match r.get::<_, rusqlite::types::Value>(i)? {
+                        rusqlite::types::Value::Null => None,
+                        rusqlite::types::Value::Text(v) => Some(v),
+                        rusqlite::types::Value::Integer(v) => Some(v.to_string()),
+                        rusqlite::types::Value::Real(v) => Some(v.to_string()),
+                        rusqlite::types::Value::Blob(_) => None,
+                    })
+                };
+                let active = (8usize..22).map(&text).collect::<rusqlite::Result<Vec<_>>>()?;
+                let previous = (22usize..36).map(&text).collect::<rusqlite::Result<Vec<_>>>()?;
+                let building = (36usize..51).map(&text).collect::<rusqlite::Result<Vec<_>>>()?;
+                Ok((
+                    db, protocol, schema, control, fence, owner, token, expires_at, active,
+                    previous, building,
+                ))
+            },
+        ).map_err(super::storage)?;
+        let (
+            db,
+            protocol,
+            schema,
+            control,
+            fence,
+            owner,
+            token,
+            expires_at,
+            active,
+            previous,
+            building,
+        ) = row;
+        if db.trim().is_empty()
+            || protocol != VECTOR_PROJECTION_PROTOCOL_VERSION
+            || schema != self.store_descriptor.schema_version
+            || control != "v2"
+            || fence < 0
+            || expires_at.is_none_or(|expires_at| expires_at <= SystemClock.now_ms())
+        {
+            return Err(KanbanError::Conflict(
+                "projection destructive authority is stale".to_owned(),
+            ));
+        }
+        let owner = owner
+            .ok_or_else(|| KanbanError::Conflict("projection lease is not active".to_owned()))?;
+        let token = token
+            .ok_or_else(|| KanbanError::Conflict("projection lease is not active".to_owned()))?;
+        let parse = |v: &[Option<String>]| -> Option<VectorProjectionGenerationBinding> {
+            let generation = v[0].clone()?;
+            let corpus = match (&v[10], &v[11], &v[12], &v[13]) {
+                (Some(schema), Some(fp), Some(model), Some(dim)) => {
+                    Some(kanban_contract::ProjectionCorpusMetadata {
+                        corpus_schema: schema.clone(),
+                        corpus_fingerprint: fp.clone(),
+                        embedding_model: model.clone(),
+                        embedding_dimensions: dim.parse().ok()?,
+                    })
+                }
+                _ => None,
+            };
+            Some(VectorProjectionGenerationBinding {
+                generation,
+                fingerprint: v[1].clone(),
+                fence_epoch: v[2].as_deref()?.parse().ok()?,
+                snapshot_cursor: v[3].as_deref()?.parse().ok(),
+                provider: v[4].clone()?,
+                provider_fingerprint: v[5].clone()?,
+                canonical_count: v[6].as_deref()?.parse().ok()?,
+                canonical_digest: v[7].clone()?,
+                delivery_count: v[8].as_deref()?.parse().ok()?,
+                delivery_digest: v[9].clone()?,
+                corpus,
+            })
+        };
+        let (role, binding, phase) =
+            if building.first().and_then(|x| x.as_deref()) == Some(generation) {
+                let p = building[14].as_deref().and_then(|p| match p {
+                    "snapshotting" => Some(VectorProjectionBuildingPhase::Snapshotting),
+                    "prepared" => Some(VectorProjectionBuildingPhase::Prepared),
+                    "store_published" => Some(VectorProjectionBuildingPhase::StorePublished),
+                    _ => None,
+                });
+                let mut binding = parse(&building);
+                if p == Some(VectorProjectionBuildingPhase::Snapshotting)
+                    && let Some(binding) = &mut binding
+                {
+                    binding.snapshot_cursor = None;
+                }
+                (VectorProjectionGenerationRole::Building, binding, p)
+            } else if active.first().and_then(|x| x.as_deref()) == Some(generation) {
+                (VectorProjectionGenerationRole::Active, parse(&active), None)
+            } else if previous.first().and_then(|x| x.as_deref()) == Some(generation) {
+                (
+                    VectorProjectionGenerationRole::Previous,
+                    parse(&previous),
+                    None,
+                )
+            } else {
+                (VectorProjectionGenerationRole::Orphaned, None, None)
+            };
+        let binding = binding.ok_or_else(|| {
+            KanbanError::Conflict(
+                "LanceDB projection generation is not bound to an active SQLite role".to_owned(),
+            )
+        })?;
+        let expected_manifest =
+            binding
+                .fingerprint
+                .as_ref()
+                .map(|fp| kanban_contract::ProjectionArtifactManifest {
+                    store_name: self.store_descriptor.store_name.clone(),
+                    database_instance_id: db.clone(),
+                    protocol_version: protocol,
+                    schema_version: schema,
+                    generation: binding.generation.clone(),
+                    fence_epoch: binding.fence_epoch,
+                    snapshot_cursor: binding.snapshot_cursor.unwrap_or_default(),
+                    provider: binding.provider.clone(),
+                    provider_fingerprint: binding.provider_fingerprint.clone(),
+                    corpus: binding.corpus.clone(),
+                    canonical_item_count: binding.canonical_count,
+                    canonical_digest: binding.canonical_digest.clone(),
+                    delivery_item_count: binding.delivery_count,
+                    delivery_digest: binding.delivery_digest.clone(),
+                    fingerprint: Some(fp.clone()),
+                });
+        Ok(VectorProjectionDestructiveAuthority {
+            owner,
+            lease_token: token,
+            fence_epoch: fence,
+            role,
+            generation: generation.to_owned(),
+            expected_manifest,
+            expected_binding: Some(binding),
+            building_phase: phase,
+        })
     }
 
     fn require_evidence_binding(
@@ -948,10 +1357,44 @@ impl ProjectionStoreBackend for LanceDbProjectionStore {
         self.local_evidence("prepare snapshot", evidence)
     }
 
+    fn prepare_snapshot_with_authority(
+        &self,
+        snapshot: &ProjectionSnapshot,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<ProjectionArtifactEvidence> {
+        let snapshot = self.wire_snapshot(snapshot)?;
+        let evidence = self.prepare_wire_snapshot_with_authority(&snapshot, authority)?;
+        self.local_evidence("prepare snapshot", evidence)
+    }
+
     fn apply_batch(&self, batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt> {
         let delivery_digest = self.generation_delivery_digest(&batch.target_generation)?;
         let wire_batch = self.wire_batch(batch)?;
         let receipt = self.apply_wire_batch(&wire_batch, &delivery_digest)?;
+        Ok(ProjectionBatchReceipt {
+            store_name: receipt.store_name,
+            database_instance_id: receipt.database_instance_id,
+            protocol_version: receipt.protocol_version,
+            schema_version: receipt.schema_version,
+            provider: receipt.provider,
+            provider_fingerprint: receipt.provider_fingerprint,
+            target_generation: receipt.target_generation,
+            lease_token: receipt.lease_token,
+            fence_epoch: receipt.fence_epoch,
+            claim_token: receipt.claim_token,
+            applied_item_count: receipt.applied_item_count,
+        })
+    }
+
+    fn apply_batch_with_authority(
+        &self,
+        batch: &ProjectionBatch,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<ProjectionBatchReceipt> {
+        let delivery_digest = authority.expected_binding.delivery_digest.clone();
+        let wire_batch = self.wire_batch(batch)?;
+        let receipt =
+            self.apply_wire_batch_with_authority(&wire_batch, &delivery_digest, authority)?;
         Ok(ProjectionBatchReceipt {
             store_name: receipt.store_name,
             database_instance_id: receipt.database_instance_id,
@@ -986,6 +1429,30 @@ impl ProjectionStoreBackend for LanceDbProjectionStore {
         })
     }
 
+    fn publish_generation_with_authority(
+        &self,
+        expected_active: Option<&ProjectionArtifactEvidence>,
+        prepared: &ProjectionArtifactEvidence,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<ProjectionPublishReceipt> {
+        let expected_active = expected_active
+            .map(|evidence| self.wire_evidence("publish previous", evidence))
+            .transpose()?;
+        let prepared = self.wire_evidence("publish prepared", prepared)?;
+        let receipt = self.publish_wire_generation_with_authority(
+            expected_active.as_ref(),
+            &prepared,
+            authority,
+        )?;
+        Ok(ProjectionPublishReceipt {
+            active: self.local_evidence("publish active", receipt.active)?,
+            retained_previous: receipt
+                .retained_previous
+                .map(|evidence| self.local_evidence("publish retained previous", evidence))
+                .transpose()?,
+        })
+    }
+
     fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>> {
         self.inspect_wire_active()?
             .map(|evidence| self.local_evidence("inspect active", evidence))
@@ -1003,9 +1470,26 @@ impl ProjectionStoreBackend for LanceDbProjectionStore {
         self.validate_wire_generation_publication(&expected)
     }
 
+    fn validate_generation_publication_with_authority(
+        &self,
+        expected: &ProjectionArtifactEvidence,
+        _authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        self.validate_generation_publication(expected)
+    }
+
     fn repair_generation_publication(&self, expected: &ProjectionArtifactEvidence) -> Result<()> {
         let expected = self.wire_evidence("repair publication", expected)?;
         self.repair_wire_publication(&expected)
+    }
+
+    fn repair_generation_publication_with_authority(
+        &self,
+        expected: &ProjectionArtifactEvidence,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        let expected = self.wire_evidence("repair publication", expected)?;
+        self.repair_wire_publication_with_authority(&expected, authority)
     }
 
     fn validate_active_contents(&self, active: &ProjectionArtifactEvidence) -> Result<()> {
@@ -1021,6 +1505,46 @@ impl ProjectionStoreBackend for LanceDbProjectionStore {
     fn abort_generation(&self, generation: &str) -> Result<()> {
         let delivery_digest = self.generation_delivery_digest(generation)?;
         self.abort_wire_generation(generation, &delivery_digest)
+    }
+
+    fn quarantine_generation_fenced(
+        &self,
+        generation: &str,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        let (delivery_digest, wire_authority) =
+            self.wire_destructive_authority(generation, authority)?;
+        self.mutate_wire_generation_with_authority(
+            "quarantine generation",
+            generation,
+            &delivery_digest,
+            wire_authority,
+            VectorProjectionHelperRequest::Quarantine,
+            |response| match response {
+                VectorProjectionHelperResponse::Quarantine(ack) => Some(ack),
+                _ => None,
+            },
+        )
+    }
+
+    fn abort_generation_fenced(
+        &self,
+        generation: &str,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        let (delivery_digest, wire_authority) =
+            self.wire_destructive_authority(generation, authority)?;
+        self.mutate_wire_generation_with_authority(
+            "abort generation",
+            generation,
+            &delivery_digest,
+            wire_authority,
+            VectorProjectionHelperRequest::Abort,
+            |response| match response {
+                VectorProjectionHelperResponse::Abort(ack) => Some(ack),
+                _ => None,
+            },
+        )
     }
 }
 
@@ -1040,6 +1564,28 @@ fn wire_corpus_metadata(corpus: &ProjectionCorpusMetadata) -> WireProjectionCorp
         embedding_model: corpus.embedding_model.clone(),
         embedding_dimensions: corpus.embedding_dimensions,
     }
+}
+
+fn wire_destructive_manifest(
+    manifest: &ProjectionArtifactManifest,
+) -> Result<WireProjectionArtifactManifest> {
+    Ok(WireProjectionArtifactManifest {
+        store_name: manifest.store_name.clone(),
+        database_instance_id: manifest.database_instance_id.clone(),
+        protocol_version: manifest.protocol_version,
+        schema_version: manifest.schema_version,
+        generation: manifest.generation.clone(),
+        fence_epoch: manifest.fence_epoch,
+        snapshot_cursor: manifest.snapshot_cursor,
+        provider: manifest.provider.clone(),
+        provider_fingerprint: manifest.provider_fingerprint.clone(),
+        corpus: manifest.corpus.as_ref().map(wire_corpus_metadata),
+        canonical_item_count: manifest.canonical_item_count,
+        canonical_digest: manifest.canonical_digest.clone(),
+        delivery_item_count: manifest.delivery_item_count,
+        delivery_digest: manifest.delivery_digest.clone(),
+        fingerprint: manifest.fingerprint.clone(),
+    })
 }
 
 fn mutation_context(
@@ -1256,6 +1802,7 @@ mod tests {
     use kanban_vector::{corpus_provider_fingerprint, embedding_provider_fingerprint};
 
     use super::*;
+    use crate::service::ProjectionGenerationBinding;
 
     struct ScriptedTransport {
         response: Mutex<Option<VectorProjectionHelperResponse>>,
@@ -1568,8 +2115,33 @@ mod tests {
             }],
         };
 
+        let authority = ProjectionDestructiveAuthority {
+            owner: batch.owner.clone(),
+            lease_token: batch.lease_token.clone(),
+            fence_epoch: batch.fence_epoch,
+            lease_expires_at: i64::MAX,
+            role: ProjectionGenerationRole::Building,
+            generation: batch.target_generation.clone(),
+            expected_manifest: None,
+            expected_binding: ProjectionGenerationBinding {
+                generation: batch.target_generation.clone(),
+                fingerprint: None,
+                fence_epoch: batch.fence_epoch,
+                snapshot_cursor: None,
+                provider: batch.provider.clone(),
+                provider_fingerprint: batch.provider_fingerprint.clone(),
+                canonical_count: 0,
+                canonical_digest: "canonical:fixture".to_owned(),
+                delivery_count: 0,
+                delivery_digest: "delivery:fixture".to_owned(),
+                corpus: Some(local_corpus_metadata(
+                    store_descriptor.corpus.clone().unwrap(),
+                )),
+            },
+            building_phase: Some("snapshotting".to_owned()),
+        };
         let receipt = backend
-            .apply_wire_batch(&batch, "delivery:fixture")
+            .apply_wire_batch_with_authority(&batch, "delivery:fixture", &authority)
             .unwrap();
 
         assert_eq!(receipt.lease_token, "lease-secret");
@@ -1632,7 +2204,33 @@ mod tests {
             records: Vec::new(),
         };
 
-        let evidence = backend.prepare_wire_snapshot(&snapshot).unwrap();
+        let manifest = &snapshot.manifest;
+        let authority = ProjectionDestructiveAuthority {
+            owner: "fixture-owner".to_owned(),
+            lease_token: "fixture-lease-capability".to_owned(),
+            fence_epoch: manifest.fence_epoch,
+            lease_expires_at: i64::MAX,
+            role: ProjectionGenerationRole::Building,
+            generation: manifest.generation.clone(),
+            expected_manifest: None,
+            expected_binding: ProjectionGenerationBinding {
+                generation: manifest.generation.clone(),
+                fingerprint: None,
+                fence_epoch: manifest.fence_epoch,
+                snapshot_cursor: None,
+                provider: manifest.provider.clone(),
+                provider_fingerprint: manifest.provider_fingerprint.clone(),
+                canonical_count: manifest.canonical_item_count,
+                canonical_digest: manifest.canonical_digest.clone(),
+                delivery_count: manifest.delivery_item_count,
+                delivery_digest: manifest.delivery_digest.clone(),
+                corpus: manifest.corpus.clone().map(local_corpus_metadata),
+            },
+            building_phase: Some("snapshotting".to_owned()),
+        };
+        let evidence = backend
+            .prepare_wire_snapshot_with_authority(&snapshot, &authority)
+            .unwrap();
 
         assert_eq!(evidence.fingerprint, "physical:fixture");
         assert_eq!(
@@ -1760,6 +2358,309 @@ mod tests {
             backend.wire_batch(&batch),
             Err(KanbanError::Conflict(_))
         ));
+    }
+
+    #[test]
+    fn destructive_authority_rejects_expired_sqlite_lease_before_transport() {
+        let (_temp, backend) = destructive_store_fixture(0, false);
+
+        let error = backend.destructive_authority("gen_orphaned").unwrap_err();
+
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert!(error.to_string().contains("stale"));
+    }
+
+    #[test]
+    fn destructive_authority_does_not_create_missing_database() {
+        let temp = tempfile::tempdir().unwrap();
+        let db_path = temp.path().join("missing.db");
+        let descriptor = helper_descriptor(LANCEDB_CHUNKS_STORE, TASK_CHUNKS_CORPUS_SCHEMA);
+        let store = descriptor.supported_stores[0].clone();
+        let backend = LanceDbProjectionStore {
+            db_path: db_path.clone(),
+            transport: Arc::new(ScriptedTransport::new(descriptor_response(
+                LANCEDB_CHUNKS_STORE,
+                TASK_CHUNKS_CORPUS_SCHEMA,
+            ))),
+            helper_descriptor: descriptor,
+            store_descriptor: store,
+            generation_digests: Arc::new(Mutex::new(BTreeMap::new())),
+        };
+
+        assert!(backend.destructive_authority("gen_missing").is_err());
+        assert!(!db_path.exists());
+    }
+
+    #[test]
+    fn destructive_authority_maps_exact_previous_snapshot() {
+        let (_temp, backend) = destructive_store_fixture(i64::MAX, true);
+
+        let authority = backend.destructive_authority("gen_previous").unwrap();
+
+        assert_eq!(authority.owner, "current-owner");
+        assert_eq!(authority.lease_token, "current-lease-capability");
+        assert_eq!(authority.fence_epoch, 8);
+        assert_eq!(authority.role, VectorProjectionGenerationRole::Previous);
+        assert_eq!(
+            authority
+                .expected_binding
+                .as_ref()
+                .map(|binding| binding.generation.as_str()),
+            Some("gen_previous")
+        );
+        assert_eq!(
+            authority
+                .expected_manifest
+                .as_ref()
+                .map(|manifest| manifest.database_instance_id.as_str()),
+            Some("db_fixture")
+        );
+        assert!(authority.building_phase.is_none());
+        assert!(!format!("{authority:?}").contains("current-lease-capability"));
+    }
+
+    #[test]
+    fn fenced_trait_overrides_forward_historical_previous_authority_and_dynamic_ack() {
+        let descriptor = helper_descriptor(LANCEDB_CHUNKS_STORE, TASK_CHUNKS_CORPUS_SCHEMA);
+        let store_descriptor = descriptor.supported_stores[0].clone();
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let observed_by_transport = observed.clone();
+        let transport = Arc::new(FunctionTransport::new(move |request| {
+            let (mutation, response) = match request {
+                VectorProjectionHelperRequest::Quarantine(mutation) => (
+                    mutation,
+                    VectorProjectionHelperResponse::Quarantine(VectorProjectionMutationAck {
+                        request_id: mutation.context.request_id.clone(),
+                        projection_store: mutation.context.projection_store.clone(),
+                        generation_id: mutation.context.generation_id.clone(),
+                        delivery_digest: mutation.context.delivery_digest.clone(),
+                    }),
+                ),
+                VectorProjectionHelperRequest::Abort(mutation) => (
+                    mutation,
+                    VectorProjectionHelperResponse::Abort(VectorProjectionMutationAck {
+                        request_id: mutation.context.request_id.clone(),
+                        projection_store: mutation.context.projection_store.clone(),
+                        generation_id: mutation.context.generation_id.clone(),
+                        delivery_digest: mutation.context.delivery_digest.clone(),
+                    }),
+                ),
+                _ => return Err(VectorError::Store("unexpected request".to_owned())),
+            };
+            observed_by_transport
+                .lock()
+                .unwrap()
+                .push(request.operation());
+            assert_eq!(mutation.authority.owner, "current-owner");
+            assert_eq!(mutation.authority.lease_token, "current-lease-capability");
+            assert_eq!(mutation.authority.fence_epoch, 11);
+            assert_eq!(
+                mutation.authority.role,
+                VectorProjectionGenerationRole::Previous
+            );
+            assert_eq!(mutation.authority.generation, "gen_historical_previous");
+            assert!(mutation.authority.building_phase.is_none());
+            let binding = mutation.authority.expected_binding.as_ref().unwrap();
+            assert_eq!(binding.generation, "gen_historical_previous");
+            assert_eq!(binding.fence_epoch, 7);
+            assert_eq!(binding.snapshot_cursor, Some(41));
+            assert_eq!(binding.provider, "historical-provider");
+            assert_eq!(
+                binding.provider_fingerprint,
+                "historical-provider-fingerprint"
+            );
+            assert_eq!(binding.canonical_count, 3);
+            assert_eq!(binding.canonical_digest, "historical-canonical");
+            assert_eq!(binding.delivery_count, 4);
+            assert_eq!(binding.delivery_digest, "historical-delivery");
+            assert_eq!(binding.fingerprint.as_deref(), Some("historical-physical"));
+            let corpus = binding.corpus.as_ref().unwrap();
+            assert_eq!(corpus.corpus_schema, "task-chunks-v1");
+            assert_eq!(corpus.corpus_fingerprint, "historical-corpus");
+            assert_eq!(corpus.embedding_model, "historical-model");
+            assert_eq!(corpus.embedding_dimensions, 7);
+            let manifest = mutation.authority.expected_manifest.as_ref().unwrap();
+            assert_eq!(manifest.store_name, LANCEDB_CHUNKS_STORE);
+            assert_eq!(manifest.database_instance_id, "db_fixture");
+            assert_eq!(
+                manifest.protocol_version,
+                VECTOR_PROJECTION_PROTOCOL_VERSION
+            );
+            assert_eq!(manifest.schema_version, DERIVED_STORE_SCHEMA_VERSION);
+            assert_eq!(manifest.generation, binding.generation);
+            assert_eq!(manifest.fence_epoch, binding.fence_epoch);
+            assert_eq!(manifest.snapshot_cursor, binding.snapshot_cursor.unwrap());
+            assert_eq!(manifest.provider, binding.provider);
+            assert_eq!(manifest.provider_fingerprint, binding.provider_fingerprint);
+            assert_eq!(manifest.corpus, binding.corpus);
+            assert_eq!(manifest.canonical_item_count, binding.canonical_count);
+            assert_eq!(manifest.canonical_digest, binding.canonical_digest);
+            assert_eq!(manifest.delivery_item_count, binding.delivery_count);
+            assert_eq!(manifest.delivery_digest, binding.delivery_digest);
+            assert_eq!(manifest.fingerprint, binding.fingerprint);
+            Ok(response)
+        }));
+        let backend = LanceDbProjectionStore {
+            db_path: PathBuf::from("unused-fenced-override-fixture.db"),
+            transport,
+            helper_descriptor: descriptor,
+            store_descriptor,
+            generation_digests: Arc::new(Mutex::new(BTreeMap::new())),
+        };
+        let historical_corpus = Some(super::ProjectionCorpusMetadata {
+            corpus_schema: "task-chunks-v1".to_owned(),
+            corpus_fingerprint: "historical-corpus".to_owned(),
+            embedding_model: "historical-model".to_owned(),
+            embedding_dimensions: 7,
+        });
+        let manifest = ProjectionArtifactManifest {
+            store_name: LANCEDB_CHUNKS_STORE.to_owned(),
+            database_instance_id: "db_fixture".to_owned(),
+            protocol_version: VECTOR_PROJECTION_PROTOCOL_VERSION,
+            schema_version: DERIVED_STORE_SCHEMA_VERSION,
+            generation: "gen_historical_previous".to_owned(),
+            fence_epoch: 7,
+            snapshot_cursor: 41,
+            provider: "historical-provider".to_owned(),
+            provider_fingerprint: "historical-provider-fingerprint".to_owned(),
+            corpus: historical_corpus.clone(),
+            canonical_item_count: 3,
+            canonical_digest: "historical-canonical".to_owned(),
+            delivery_item_count: 4,
+            delivery_digest: "historical-delivery".to_owned(),
+            fingerprint: Some("historical-physical".to_owned()),
+        };
+        let authority = ProjectionDestructiveAuthority {
+            owner: "current-owner".to_owned(),
+            lease_token: "current-lease-capability".to_owned(),
+            fence_epoch: 11,
+            lease_expires_at: i64::MAX,
+            role: ProjectionGenerationRole::Previous,
+            generation: manifest.generation.clone(),
+            expected_manifest: Some(manifest.clone()),
+            expected_binding: ProjectionGenerationBinding {
+                generation: manifest.generation.clone(),
+                fingerprint: manifest.fingerprint.clone(),
+                fence_epoch: manifest.fence_epoch,
+                snapshot_cursor: Some(manifest.snapshot_cursor),
+                provider: manifest.provider.clone(),
+                provider_fingerprint: manifest.provider_fingerprint.clone(),
+                canonical_count: manifest.canonical_item_count,
+                canonical_digest: manifest.canonical_digest.clone(),
+                delivery_count: manifest.delivery_item_count,
+                delivery_digest: manifest.delivery_digest.clone(),
+                corpus: historical_corpus,
+            },
+            building_phase: None,
+        };
+
+        ProjectionStoreBackend::quarantine_generation_fenced(
+            &backend,
+            &manifest.generation,
+            &authority,
+        )
+        .unwrap();
+        ProjectionStoreBackend::abort_generation_fenced(&backend, &manifest.generation, &authority)
+            .unwrap();
+
+        assert_eq!(
+            *observed.lock().unwrap(),
+            vec![
+                VectorProjectionHelperOperation::Quarantine,
+                VectorProjectionHelperOperation::Abort,
+            ]
+        );
+    }
+
+    fn destructive_store_fixture(
+        lease_expires_at: i64,
+        with_previous: bool,
+    ) -> (tempfile::TempDir, LanceDbProjectionStore) {
+        let temp = tempfile::tempdir().unwrap();
+        let db_path = temp.path().join("kanban.db");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE projection_store_state (
+                 store_name TEXT PRIMARY KEY,
+                 database_instance_id TEXT NOT NULL,
+                 protocol_version INTEGER NOT NULL,
+                 schema_version INTEGER NOT NULL,
+                 control_plane TEXT NOT NULL,
+                 fence_epoch INTEGER NOT NULL,
+                 lease_owner TEXT,
+                 lease_token TEXT,
+                 lease_expires_at INTEGER,
+                 active_generation TEXT, active_fingerprint TEXT,
+                 active_fence_epoch INTEGER, active_snapshot_cursor INTEGER,
+                 active_provider TEXT, active_provider_fingerprint TEXT,
+                 active_canonical_count INTEGER, active_canonical_digest TEXT,
+                 active_delivery_count INTEGER, active_delivery_digest TEXT,
+                 active_corpus_schema TEXT, active_corpus_fingerprint TEXT,
+                 active_embedding_model TEXT, active_embedding_dimensions INTEGER,
+                 previous_generation TEXT, previous_fingerprint TEXT,
+                 previous_fence_epoch INTEGER, previous_snapshot_cursor INTEGER,
+                 previous_provider TEXT, previous_provider_fingerprint TEXT,
+                 previous_canonical_count INTEGER, previous_canonical_digest TEXT,
+                 previous_delivery_count INTEGER, previous_delivery_digest TEXT,
+                 previous_corpus_schema TEXT, previous_corpus_fingerprint TEXT,
+                 previous_embedding_model TEXT, previous_embedding_dimensions INTEGER,
+                 building_generation TEXT, building_fingerprint TEXT,
+                 building_fence_epoch INTEGER, snapshot_cursor INTEGER,
+                 building_provider TEXT, building_provider_fingerprint TEXT,
+                 building_canonical_count INTEGER, building_canonical_digest TEXT,
+                 building_delivery_count INTEGER, building_delivery_digest TEXT,
+                 building_corpus_schema TEXT, building_corpus_fingerprint TEXT,
+                 building_embedding_model TEXT, building_embedding_dimensions INTEGER,
+                 building_phase TEXT
+             );",
+        )
+        .unwrap();
+        let descriptor = helper_descriptor(LANCEDB_CHUNKS_STORE, TASK_CHUNKS_CORPUS_SCHEMA);
+        let store = descriptor.supported_stores[0].clone();
+        let corpus = store.corpus.as_ref().unwrap();
+        conn.execute(
+            "INSERT INTO projection_store_state(
+                 store_name,database_instance_id,protocol_version,schema_version,control_plane,
+                 fence_epoch,lease_owner,lease_token,lease_expires_at,snapshot_cursor,
+                 previous_generation,previous_fingerprint,previous_fence_epoch,
+                 previous_snapshot_cursor,previous_provider,previous_provider_fingerprint,
+                 previous_canonical_count,previous_canonical_digest,
+                 previous_delivery_count,previous_delivery_digest,
+                 previous_corpus_schema,previous_corpus_fingerprint,
+                 previous_embedding_model,previous_embedding_dimensions
+             ) VALUES (
+                 ?1,'db_fixture',2,?2,'v2',8,'current-owner','current-lease-capability',?3,7,
+                 ?4,?5,7,7,?6,?7,3,'canonical:previous',4,'delivery:previous',
+                 ?8,?9,?10,?11
+             )",
+            rusqlite::params![
+                store.store_name,
+                store.schema_version,
+                lease_expires_at,
+                with_previous.then_some("gen_previous"),
+                with_previous.then_some("physical:previous"),
+                with_previous.then_some(store.provider.as_str()),
+                with_previous.then_some(store.provider_fingerprint.as_str()),
+                with_previous.then_some(corpus.corpus_schema.as_str()),
+                with_previous.then_some(corpus.corpus_fingerprint.as_str()),
+                with_previous.then_some(corpus.embedding_model.as_str()),
+                with_previous.then_some(i64::try_from(corpus.embedding_dimensions).unwrap()),
+            ],
+        )
+        .unwrap();
+        drop(conn);
+        let transport = Arc::new(ScriptedTransport::new(descriptor_response(
+            LANCEDB_CHUNKS_STORE,
+            TASK_CHUNKS_CORPUS_SCHEMA,
+        )));
+        let backend = LanceDbProjectionStore {
+            db_path,
+            transport,
+            helper_descriptor: descriptor,
+            store_descriptor: store,
+            generation_digests: Arc::new(Mutex::new(BTreeMap::new())),
+        };
+        (temp, backend)
     }
 
     fn descriptor_response(

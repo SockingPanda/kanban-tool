@@ -1,7 +1,0 @@
-{
-  "operation": "descriptor",
-  "payload": {
-    "request_id": "req_fixture_wrong_variant",
-    "batch": {}
-  }
-}

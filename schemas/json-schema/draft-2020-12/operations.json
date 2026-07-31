@@ -15099,18 +15099,18 @@
         "surface": "helper",
         "test_target": "vector_projection_contract_adoption"
       },
-      "producer_fixture": "schemas/fixtures/helper/vector-projection-request.v1.valid.json"
+      "producer_fixture": "schemas/fixtures/helper/vector-projection-request.v2.valid.json"
     },
     "binding": "exact_surface",
     "direction": "deserialize",
     "exclusion": null,
-    "fixture": "schemas/fixtures/helper/vector-projection-request.v1.valid.json",
+    "fixture": "schemas/fixtures/helper/vector-projection-request.v2.valid.json",
     "granularity": "exact",
     "id": "helper.vector-projection.request",
     "migration": "adopted",
     "operation": "vector projection helper protocol",
     "path": "kanban-vector-lancedb projection stdin",
-    "schema_id": "urn:kanban-tool:schema:helper:vector-projection-request:v1",
+    "schema_id": "urn:kanban-tool:schema:helper:vector-projection-request:v2",
     "strictness": "deny_unknown_fields",
     "surface": "helper",
     "transport": {

@@ -260,6 +260,105 @@ pub struct VectorProjectionMutationContext {
     pub delivery_digest: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum VectorProjectionGenerationRole {
+    Active,
+    Previous,
+    Building,
+    Orphaned,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum VectorProjectionBuildingPhase {
+    Snapshotting,
+    Prepared,
+    StorePublished,
+}
+
+/// Exact persisted generation binding used for destructive compare-and-swap.
+///
+/// `fingerprint` and `snapshot_cursor` remain required-nullable because a
+/// `snapshotting` building generation has not produced those values yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VectorProjectionGenerationBinding {
+    pub generation: String,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(feature = "schema", schemars(with = "RequiredNullableSchema<String>"))]
+    pub fingerprint: Option<String>,
+    pub fence_epoch: i64,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(feature = "schema", schemars(with = "RequiredNullableSchema<i64>"))]
+    pub snapshot_cursor: Option<i64>,
+    pub provider: String,
+    pub provider_fingerprint: String,
+    pub canonical_count: i64,
+    pub canonical_digest: String,
+    pub delivery_count: i64,
+    pub delivery_digest: String,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(with = "RequiredNullableSchema<ProjectionCorpusMetadata>")
+    )]
+    pub corpus: Option<ProjectionCorpusMetadata>,
+}
+
+/// Current lease capability plus the exact SQLite generation snapshot that
+/// authorizes one destructive helper mutation.
+///
+/// The context digest is correlation evidence only. `lease_token` is the
+/// opaque capability and must never be rendered in diagnostics.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VectorProjectionDestructiveAuthority {
+    pub owner: String,
+    pub lease_token: String,
+    pub fence_epoch: i64,
+    pub role: VectorProjectionGenerationRole,
+    pub generation: String,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(with = "RequiredNullableSchema<ProjectionArtifactManifest>")
+    )]
+    pub expected_manifest: Option<ProjectionArtifactManifest>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(with = "RequiredNullableSchema<VectorProjectionGenerationBinding>")
+    )]
+    pub expected_binding: Option<VectorProjectionGenerationBinding>,
+    #[serde(deserialize_with = "deserialize_required_nullable")]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(with = "RequiredNullableSchema<VectorProjectionBuildingPhase>")
+    )]
+    pub building_phase: Option<VectorProjectionBuildingPhase>,
+}
+
+impl fmt::Debug for VectorProjectionDestructiveAuthority {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("VectorProjectionDestructiveAuthority")
+            .field("owner", &self.owner)
+            .field("lease_token", &"[REDACTED]")
+            .field("fence_epoch", &self.fence_epoch)
+            .field("role", &self.role)
+            .field("generation", &self.generation)
+            .field("expected_manifest", &self.expected_manifest)
+            .field("expected_binding", &self.expected_binding)
+            .field("building_phase", &self.building_phase)
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
@@ -277,6 +376,11 @@ pub type VectorProjectionPrepareMetadata = ProjectionCorpusMetadata;
 #[serde(deny_unknown_fields)]
 pub struct VectorProjectionPrepareSnapshotRequest {
     pub context: VectorProjectionMutationContext,
+    /// DB-scoped lease/generation capability for the physical snapshot
+    /// materialization.  The helper must compare this capability with the
+    /// SQLite authority after acquiring its `${store}-projection-helper`
+    /// lock; the mutation context alone is correlation evidence.
+    pub authority: VectorProjectionDestructiveAuthority,
     pub snapshot: ProjectionSnapshot,
     pub metadata: VectorProjectionPrepareMetadata,
 }
@@ -286,6 +390,10 @@ pub struct VectorProjectionPrepareSnapshotRequest {
 #[serde(deny_unknown_fields)]
 pub struct VectorProjectionApplyBatchRequest {
     pub context: VectorProjectionMutationContext,
+    /// Exact DB-scoped operation authority for the generation being mutated.
+    /// The batch retains its delivery claim capability separately; both
+    /// capabilities are checked before any Lance rows or state are changed.
+    pub authority: VectorProjectionDestructiveAuthority,
     pub batch: ProjectionBatch,
 }
 
@@ -294,6 +402,7 @@ pub struct VectorProjectionApplyBatchRequest {
 #[serde(deny_unknown_fields)]
 pub struct VectorProjectionPublishRequest {
     pub context: VectorProjectionMutationContext,
+    pub authority: VectorProjectionDestructiveAuthority,
     #[serde(deserialize_with = "deserialize_required_nullable")]
     #[cfg_attr(
         feature = "schema",
@@ -343,6 +452,7 @@ pub struct VectorProjectionValidateActiveRequest {
 #[serde(deny_unknown_fields)]
 pub struct VectorProjectionRepairPublicationRequest {
     pub context: VectorProjectionMutationContext,
+    pub authority: VectorProjectionDestructiveAuthority,
     pub expected: ProjectionArtifactEvidence,
 }
 
@@ -351,6 +461,7 @@ pub struct VectorProjectionRepairPublicationRequest {
 #[serde(deny_unknown_fields)]
 pub struct VectorProjectionGenerationMutationRequest {
     pub context: VectorProjectionMutationContext,
+    pub authority: VectorProjectionDestructiveAuthority,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -382,6 +493,7 @@ pub struct VectorProjectionCleanupProtection {
 #[serde(deny_unknown_fields)]
 pub struct VectorProjectionCleanupRequest {
     pub context: VectorProjectionMutationContext,
+    pub authority: VectorProjectionDestructiveAuthority,
     pub dry_run: bool,
     pub protection: VectorProjectionCleanupProtection,
 }

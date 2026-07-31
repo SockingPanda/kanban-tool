@@ -1634,7 +1634,7 @@ fn map_lancedb_error(err: lancedb::Error) -> VectorError {
     VectorError::Store(err.to_string())
 }
 
-fn embed_deduplicated<'a>(
+pub(crate) fn embed_deduplicated<'a>(
     provider: &dyn EmbeddingProvider,
     texts: impl IntoIterator<Item = &'a str>,
     policy: &crate::EmbeddingExecutionPolicy,

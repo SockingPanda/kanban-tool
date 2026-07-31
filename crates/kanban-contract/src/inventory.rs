@@ -4812,10 +4812,10 @@ fn vector_projection_protocol_contracts() -> [OperationContract; 2] {
             direction: ContractDirection::Deserialize,
             granularity: ContractGranularity::Exact,
             strictness: ContractStrictness::DenyUnknownFields,
-            schema_id: Some("urn:kanban-tool:schema:helper:vector-projection-request:v1"),
-            fixture: Some("schemas/fixtures/helper/vector-projection-request.v1.valid.json"),
+            schema_id: Some("urn:kanban-tool:schema:helper:vector-projection-request:v2"),
+            fixture: Some("schemas/fixtures/helper/vector-projection-request.v2.valid.json"),
             adoption: Some(AdoptionEvidence {
-                producer_fixture: "schemas/fixtures/helper/vector-projection-request.v1.valid.json",
+                producer_fixture: "schemas/fixtures/helper/vector-projection-request.v2.valid.json",
                 producer: AdoptionWitness {
                     operation: "vector projection helper protocol",
                     contract_id: "helper.vector-projection.request",

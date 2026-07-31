@@ -10,9 +10,11 @@ use kanban_contract::{
     ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreDescriptor,
     VECTOR_PROJECTION_PROTOCOL_VERSION, VectorProjectionApplyBatchRequest,
     VectorProjectionApplyBatchResponse, VectorProjectionBatchApplicationReceipt,
-    VectorProjectionCleanupProtection, VectorProjectionCleanupRequest,
-    VectorProjectionCleanupResponse, VectorProjectionGenerationInventoryEntry,
-    VectorProjectionGenerationMutationRequest, VectorProjectionGenerationState,
+    VectorProjectionBuildingPhase, VectorProjectionCleanupProtection,
+    VectorProjectionCleanupRequest, VectorProjectionCleanupResponse,
+    VectorProjectionDestructiveAuthority, VectorProjectionGenerationBinding,
+    VectorProjectionGenerationInventoryEntry, VectorProjectionGenerationMutationRequest,
+    VectorProjectionGenerationRole, VectorProjectionGenerationState,
     VectorProjectionHelperDescriptor, VectorProjectionHelperError, VectorProjectionHelperErrorKind,
     VectorProjectionHelperOperation, VectorProjectionHelperRequest, VectorProjectionHelperResponse,
     VectorProjectionInspectActiveResponse, VectorProjectionInspectGenerationResponse,
@@ -410,6 +412,7 @@ struct SqliteMutationAuthority {
     lease_expires_at: Option<i64>,
     building: SqliteGenerationAuthority,
     active: SqliteGenerationAuthority,
+    previous: SqliteGenerationAuthority,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -434,6 +437,76 @@ struct SqliteDeliveryClaim {
 }
 
 impl SqliteGenerationAuthority {
+    fn wire_binding(&self) -> Option<VectorProjectionGenerationBinding> {
+        let corpus = match (
+            &self.corpus_schema,
+            &self.corpus_fingerprint,
+            &self.embedding_model,
+            self.embedding_dimensions,
+        ) {
+            (Some(schema), Some(fingerprint), Some(model), Some(dimensions)) => {
+                Some(ProjectionCorpusMetadata {
+                    corpus_schema: schema.clone(),
+                    corpus_fingerprint: fingerprint.clone(),
+                    embedding_model: model.clone(),
+                    embedding_dimensions: usize::try_from(dimensions).ok()?,
+                })
+            }
+            (None, None, None, None) => None,
+            _ => return None,
+        };
+        Some(VectorProjectionGenerationBinding {
+            generation: self.generation.clone()?,
+            fingerprint: self.fingerprint.clone(),
+            fence_epoch: self.fence_epoch?,
+            snapshot_cursor: if self.phase.as_deref() == Some("snapshotting") {
+                None
+            } else {
+                self.snapshot_cursor
+            },
+            provider: self.provider.clone()?,
+            provider_fingerprint: self.provider_fingerprint.clone()?,
+            canonical_count: self.canonical_item_count?,
+            canonical_digest: self.canonical_digest.clone()?,
+            delivery_count: self.delivery_item_count?,
+            delivery_digest: self.delivery_digest.clone()?,
+            corpus,
+        })
+    }
+
+    fn matches_binding(&self, binding: &VectorProjectionGenerationBinding) -> bool {
+        self.generation.as_deref() == Some(binding.generation.as_str())
+            && self.fingerprint == binding.fingerprint
+            && self.fence_epoch == Some(binding.fence_epoch)
+            && self.snapshot_cursor == binding.snapshot_cursor
+            && self.provider.as_deref() == Some(binding.provider.as_str())
+            && self.provider_fingerprint.as_deref() == Some(binding.provider_fingerprint.as_str())
+            && self.canonical_item_count == Some(binding.canonical_count)
+            && self.canonical_digest.as_deref() == Some(binding.canonical_digest.as_str())
+            && self.delivery_item_count == Some(binding.delivery_count)
+            && self.delivery_digest.as_deref() == Some(binding.delivery_digest.as_str())
+            && self.corpus_schema.as_deref()
+                == binding
+                    .corpus
+                    .as_ref()
+                    .map(|corpus| corpus.corpus_schema.as_str())
+            && self.corpus_fingerprint.as_deref()
+                == binding
+                    .corpus
+                    .as_ref()
+                    .map(|corpus| corpus.corpus_fingerprint.as_str())
+            && self.embedding_model.as_deref()
+                == binding
+                    .corpus
+                    .as_ref()
+                    .map(|corpus| corpus.embedding_model.as_str())
+            && self.embedding_dimensions
+                == binding
+                    .corpus
+                    .as_ref()
+                    .and_then(|corpus| i64::try_from(corpus.embedding_dimensions).ok())
+    }
+
     fn matches_manifest(
         &self,
         manifest: &ProjectionArtifactManifest,
@@ -476,6 +549,85 @@ impl SqliteGenerationAuthority {
             && self.embedding_dimensions.is_none()
             && self.phase.is_none()
     }
+
+    fn is_unbound_building(&self) -> bool {
+        self.generation.is_none()
+            && self.fingerprint.is_none()
+            && self.fence_epoch.is_none()
+            && self.provider.is_none()
+            && self.provider_fingerprint.is_none()
+            && self.canonical_item_count.is_none()
+            && self.canonical_digest.is_none()
+            && self.delivery_item_count.is_none()
+            && self.delivery_digest.is_none()
+            && self.corpus_schema.is_none()
+            && self.corpus_fingerprint.is_none()
+            && self.embedding_model.is_none()
+            && self.embedding_dimensions.is_none()
+            && self.phase.is_none()
+    }
+
+    fn has_complete_manifest_binding(
+        &self,
+        require_fingerprint: bool,
+        require_snapshot_cursor: bool,
+    ) -> bool {
+        self.generation
+            .as_deref()
+            .is_some_and(|generation| generation.starts_with("gen_"))
+            && (!require_fingerprint
+                || self
+                    .fingerprint
+                    .as_deref()
+                    .is_some_and(|fingerprint| !fingerprint.is_empty()))
+            && self.fence_epoch.is_some_and(|fence_epoch| fence_epoch >= 0)
+            && (!require_snapshot_cursor
+                || self
+                    .snapshot_cursor
+                    .is_some_and(|snapshot_cursor| snapshot_cursor >= 0))
+            && self
+                .provider
+                .as_deref()
+                .is_some_and(|provider| !provider.is_empty())
+            && self
+                .provider_fingerprint
+                .as_deref()
+                .is_some_and(|fingerprint| !fingerprint.is_empty())
+            && self
+                .canonical_item_count
+                .is_some_and(|item_count| item_count >= 0)
+            && self
+                .canonical_digest
+                .as_deref()
+                .is_some_and(|digest| !digest.is_empty())
+            && self
+                .delivery_item_count
+                .is_some_and(|item_count| item_count >= 0)
+            && self
+                .delivery_digest
+                .as_deref()
+                .is_some_and(|digest| !digest.is_empty())
+            && self
+                .corpus_schema
+                .as_deref()
+                .is_some_and(|schema| !schema.is_empty())
+            && self
+                .corpus_fingerprint
+                .as_deref()
+                .is_some_and(|fingerprint| !fingerprint.is_empty())
+            && self
+                .embedding_model
+                .as_deref()
+                .is_some_and(|model| !model.is_empty())
+            && self
+                .embedding_dimensions
+                .is_some_and(|dimensions| dimensions > 0)
+    }
+
+    fn matches_context(&self, context: &VectorProjectionMutationContext) -> bool {
+        self.generation.as_deref() == Some(context.generation_id.as_str())
+            && self.delivery_digest.as_deref() == Some(context.delivery_digest.as_str())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -504,6 +656,7 @@ struct PersistentEmbeddingProvider {
     inner: Arc<dyn EmbeddingProvider + Send + Sync>,
     path: PathBuf,
     cache_key_prefix: String,
+    persist_cache: bool,
     state: Mutex<EmbeddingCacheFile>,
 }
 
@@ -620,7 +773,9 @@ impl EmbeddingProvider for PersistentEmbeddingProvider {
                     }
                 }
             }
-            persist_json(&self.path, &*state).map_err(vector_backend_io)?;
+            if self.persist_cache {
+                persist_json(&self.path, &*state).map_err(vector_backend_io)?;
+            }
         }
 
         let state = self.lock_state()?;
@@ -1086,6 +1241,7 @@ impl VectorProjectionBackend {
             }
             VectorProjectionHelperRequest::Quarantine(request) => {
                 let _guard = self.acquire_mutation_guard(&request.context.projection_store)?;
+                self.validate_orphan_generation_mutation_authority(request, "quarantine")?;
                 self.quarantine(request)?;
                 Ok(VectorProjectionHelperResponse::Quarantine(ack(
                     &request.context
@@ -1093,6 +1249,7 @@ impl VectorProjectionBackend {
             }
             VectorProjectionHelperRequest::Abort(request) => {
                 let _guard = self.acquire_mutation_guard(&request.context.projection_store)?;
+                self.validate_orphan_generation_mutation_authority(request, "abort")?;
                 self.abort(request)?;
                 Ok(VectorProjectionHelperResponse::Abort(ack(&request.context)))
             }
@@ -1114,13 +1271,15 @@ impl VectorProjectionBackend {
                         &self.db_path,
                         &request.context.projection_store,
                     )?;
+                    let authority = self.validate_cleanup_authority(request)?;
                     Ok(VectorProjectionHelperResponse::Cleanup(
-                        self.cleanup(request)?,
+                        self.cleanup(request, &authority)?,
                     ))
                 } else {
                     let _guard = self.acquire_mutation_guard(&request.context.projection_store)?;
+                    let authority = self.validate_cleanup_authority(request)?;
                     Ok(VectorProjectionHelperResponse::Cleanup(
-                        self.cleanup(request)?,
+                        self.cleanup(request, &authority)?,
                     ))
                 }
             }
@@ -1160,9 +1319,14 @@ impl VectorProjectionBackend {
             manifest: persisted_snapshot.manifest.clone(),
             fingerprint,
         };
+        self.validate_prepare_authority(request)?;
         let generations = self.generations_root(&descriptor.store_name, true)?;
         let generation_path = checked_generation_path(&generations, &evidence.manifest.generation)?;
         let mut resume = false;
+        // Lease expiry/rebind can happen while provider work is in progress.
+        // The helper lock serializes lease rollover, while this callback makes
+        // each physical mutation fail closed on an expired or rebound lease.
+        let revalidate = || self.validate_prepare_authority(request);
         match fs::symlink_metadata(&generation_path) {
             Ok(metadata) if metadata.is_dir() => {
                 if let Ok(stored) = self.read_evidence_at(descriptor, &generation_path) {
@@ -1184,6 +1348,7 @@ impl VectorProjectionBackend {
                                             .to_owned(),
                                     ));
                                 }
+                                revalidate()?;
                                 durable_quarantine_entry(&generation_path).map_err(backend_io)?;
                             }
                         }
@@ -1193,6 +1358,7 @@ impl VectorProjectionBackend {
                             evidence.manifest.generation
                         )));
                     } else {
+                        revalidate()?;
                         durable_quarantine_entry(&generation_path).map_err(backend_io)?;
                     }
                 } else if marker_exists(&generation_path)? {
@@ -1201,6 +1367,7 @@ impl VectorProjectionBackend {
                         evidence.manifest.generation
                     )));
                 } else if path_exists(&generation_path.join(EVIDENCE_FILE))? {
+                    revalidate()?;
                     durable_quarantine_entry(&generation_path).map_err(backend_io)?;
                 } else {
                     match self.read_snapshot_at(descriptor, &generation_path) {
@@ -1208,12 +1375,14 @@ impl VectorProjectionBackend {
                             resume = true;
                         }
                         Ok(_) | Err(_) => {
+                            revalidate()?;
                             durable_quarantine_entry(&generation_path).map_err(backend_io)?;
                         }
                     }
                 }
             }
             Ok(_) => {
+                revalidate()?;
                 durable_quarantine_entry(&generation_path).map_err(backend_io)?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -1221,16 +1390,26 @@ impl VectorProjectionBackend {
         }
 
         if !resume {
+            revalidate()?;
             durable_create_dir_all(&generation_path).map_err(backend_io)?;
             let snapshot_bytes = serde_json::to_vec(&persisted_snapshot).map_err(backend_json)?;
+            revalidate()?;
             durable_create_new_file(&generation_path.join(SNAPSHOT_FILE), &snapshot_bytes)
                 .map_err(backend_io)?;
         }
-        self.hydrate_snapshot(descriptor, &generation_path, &persisted_snapshot)?;
+        revalidate()?;
+        self.hydrate_snapshot(
+            descriptor,
+            &generation_path,
+            &persisted_snapshot,
+            &revalidate,
+        )?;
         self.validate_generation_materialization(descriptor, &generation_path)?;
         self.validate_snapshot_materialization(descriptor, &generation_path, &persisted_snapshot)?;
+        revalidate()?;
         self.write_content_metadata(descriptor, &generation_path, &evidence)?;
         let evidence_bytes = serde_json::to_vec(&evidence).map_err(backend_json)?;
+        revalidate()?;
         durable_create_new_file(&generation_path.join(EVIDENCE_FILE), &evidence_bytes)
             .map_err(backend_io)?;
         durable_sync_directory_tree(&generation_path).map_err(backend_io)?;
@@ -1292,42 +1471,8 @@ impl VectorProjectionBackend {
         generation_path: &Path,
         allow_create: bool,
     ) -> Result<GuardedLanceDbStore, VectorProjectionBackendError> {
-        let expected = self.expected_embedding_cache(descriptor, generation_path)?;
-        let cache_path = generation_path.join(EMBEDDING_CACHE_FILE);
-        let cache_key_prefix = embedding_cache_key_prefix(&expected);
-        let state = match fs::symlink_metadata(&cache_path) {
-            Ok(metadata) if metadata.is_file() => {
-                let stored: EmbeddingCacheFile =
-                    serde_json::from_slice(&fs::read(&cache_path).map_err(backend_io)?)
-                        .map_err(backend_json)?;
-                require_embedding_cache_binding(&stored, &expected)?;
-                stored
-            }
-            Ok(_) => {
-                return Err(VectorProjectionBackendError::Backend(format!(
-                    "embedding cache path is not a regular file: {}",
-                    cache_path.display()
-                )));
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound && allow_create => {
-                persist_json(&cache_path, &expected).map_err(backend_io)?;
-                expected
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(VectorProjectionBackendError::Backend(format!(
-                    "embedding cache is missing: {}",
-                    cache_path.display()
-                )));
-            }
-            Err(error) => return Err(backend_io(error)),
-        };
-        let provider: Arc<dyn EmbeddingProvider + Send + Sync> =
-            Arc::new(PersistentEmbeddingProvider {
-                inner: Arc::clone(&self.provider),
-                path: cache_path,
-                cache_key_prefix,
-                state: Mutex::new(state),
-            });
+        let provider =
+            self.persistent_embedding_provider(descriptor, generation_path, allow_create, true)?;
         let lance_path = generation_path.join(LANCE_DATA_DIR);
         match fs::symlink_metadata(&lance_path) {
             Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
@@ -1376,6 +1521,51 @@ impl VectorProjectionBackend {
             generation_guard,
             table_guard,
         })
+    }
+
+    fn persistent_embedding_provider(
+        &self,
+        descriptor: &ProjectionStoreDescriptor,
+        generation_path: &Path,
+        allow_create: bool,
+        persist_cache: bool,
+    ) -> Result<Arc<PersistentEmbeddingProvider>, VectorProjectionBackendError> {
+        let expected = self.expected_embedding_cache(descriptor, generation_path)?;
+        let cache_path = generation_path.join(EMBEDDING_CACHE_FILE);
+        let cache_key_prefix = embedding_cache_key_prefix(&expected);
+        let state = match fs::symlink_metadata(&cache_path) {
+            Ok(metadata) if metadata.is_file() => {
+                let stored: EmbeddingCacheFile =
+                    serde_json::from_slice(&fs::read(&cache_path).map_err(backend_io)?)
+                        .map_err(backend_json)?;
+                require_embedding_cache_binding(&stored, &expected)?;
+                stored
+            }
+            Ok(_) => {
+                return Err(VectorProjectionBackendError::Backend(format!(
+                    "embedding cache path is not a regular file: {}",
+                    cache_path.display()
+                )));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound && allow_create => {
+                persist_json(&cache_path, &expected).map_err(backend_io)?;
+                expected
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(VectorProjectionBackendError::Backend(format!(
+                    "embedding cache is missing: {}",
+                    cache_path.display()
+                )));
+            }
+            Err(error) => return Err(backend_io(error)),
+        };
+        Ok(Arc::new(PersistentEmbeddingProvider {
+            inner: Arc::clone(&self.provider),
+            path: cache_path,
+            cache_key_prefix,
+            persist_cache,
+            state: Mutex::new(state),
+        }))
     }
 
     fn expected_embedding_cache(
@@ -1491,32 +1681,39 @@ impl VectorProjectionBackend {
         })
     }
 
-    fn hydrate_snapshot(
+    fn hydrate_snapshot<F: Fn() -> Result<(), VectorProjectionBackendError>>(
         &self,
         descriptor: &ProjectionStoreDescriptor,
         generation_path: &Path,
         snapshot: &ProjectionSnapshot,
+        revalidate: &F,
     ) -> Result<(), VectorProjectionBackendError> {
+        revalidate()?;
         let store = self.generation_store(descriptor, generation_path, true)?;
         store.validate_path_identity()?;
         let result = match descriptor.store_name.as_str() {
             LANCEDB_CHUNKS_STORE => {
                 let (boards, chunks) = self.task_chunks_from_snapshot(snapshot)?;
                 for board_id in boards {
+                    revalidate()?;
                     store.delete_board(&board_id).map_err(map_vector_error)?;
                 }
+                revalidate()?;
                 store.upsert(&chunks).map_err(map_vector_error)
             }
             LANCEDB_LABEL_ATOMS_STORE => {
+                revalidate()?;
                 store
                     .ensure_label_atom_projection_table()
                     .map_err(map_vector_error)?;
                 let (boards, atoms) = self.label_atoms_from_snapshot(snapshot)?;
                 for board_id in boards {
+                    revalidate()?;
                     store
                         .delete_label_atoms_for_board(&board_id)
                         .map_err(map_vector_error)?;
                 }
+                revalidate()?;
                 store.upsert_label_atoms(&atoms).map_err(map_vector_error)
             }
             _ => Err(VectorProjectionBackendError::Protocol(format!(
@@ -1721,6 +1918,7 @@ impl VectorProjectionBackend {
     fn expected_snapshot_content_rows(
         &self,
         descriptor: &ProjectionStoreDescriptor,
+        generation_path: &Path,
         snapshot: &ProjectionSnapshot,
     ) -> Result<Vec<ProjectionContentRow>, VectorProjectionBackendError> {
         match descriptor.store_name.as_str() {
@@ -1728,13 +1926,13 @@ impl VectorProjectionBackend {
                 let (_, chunks) = self.task_chunks_from_snapshot(snapshot)?;
                 let rows =
                     expected_chunk_projection_content_rows(&chunks).map_err(map_vector_error)?;
-                self.bind_expected_vectors(rows)
+                self.bind_expected_vectors(descriptor, generation_path, true, rows)
             }
             LANCEDB_LABEL_ATOMS_STORE => {
                 let (_, atoms) = self.label_atoms_from_snapshot(snapshot)?;
                 let rows = expected_label_atom_projection_content_rows(&atoms)
                     .map_err(map_vector_error)?;
-                self.bind_expected_vectors(rows)
+                self.bind_expected_vectors(descriptor, generation_path, true, rows)
             }
             _ => Err(VectorProjectionBackendError::Protocol(format!(
                 "unsupported LanceDB projection store: {}",
@@ -1747,6 +1945,7 @@ impl VectorProjectionBackend {
         &self,
         conn: &Connection,
         descriptor: &ProjectionStoreDescriptor,
+        generation_path: &Path,
     ) -> Result<Vec<ProjectionContentRow>, VectorProjectionBackendError> {
         match descriptor.store_name.as_str() {
             LANCEDB_CHUNKS_STORE => {
@@ -1761,13 +1960,13 @@ impl VectorProjectionBackend {
                 }
                 let rows =
                     expected_chunk_projection_content_rows(&chunks).map_err(map_vector_error)?;
-                self.bind_expected_vectors(rows)
+                self.bind_expected_vectors(descriptor, generation_path, false, rows)
             }
             LANCEDB_LABEL_ATOMS_STORE => {
                 let atoms = all_label_atoms(conn, self.provider.embedding_model())?;
                 let rows = expected_label_atom_projection_content_rows(&atoms)
                     .map_err(map_vector_error)?;
-                self.bind_expected_vectors(rows)
+                self.bind_expected_vectors(descriptor, generation_path, false, rows)
             }
             _ => Err(VectorProjectionBackendError::Protocol(format!(
                 "unsupported LanceDB projection store: {}",
@@ -1778,8 +1977,12 @@ impl VectorProjectionBackend {
 
     fn bind_expected_vectors(
         &self,
+        descriptor: &ProjectionStoreDescriptor,
+        generation_path: &Path,
+        persist_cache: bool,
         mut rows: Vec<ProjectionContentRow>,
     ) -> Result<Vec<ProjectionContentRow>, VectorProjectionBackendError> {
+        self.execution_policy.validate().map_err(map_vector_error)?;
         let texts = rows
             .iter()
             .map(|row| {
@@ -1798,10 +2001,18 @@ impl VectorProjectionBackend {
                     })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let vectors = self
-            .provider
-            .embed_batch(&texts)
-            .map_err(map_vector_error)?;
+        let provider = self.persistent_embedding_provider(
+            descriptor,
+            generation_path,
+            false,
+            persist_cache,
+        )?;
+        let vectors = crate::lancedb_store::embed_deduplicated(
+            provider.as_ref(),
+            texts.iter().map(String::as_str),
+            &self.execution_policy,
+        )
+        .map_err(map_vector_error)?;
         if vectors.len() != rows.len() {
             return Err(VectorProjectionBackendError::Backend(
                 "embedding provider returned an unexpected row count".to_owned(),
@@ -1825,7 +2036,7 @@ impl VectorProjectionBackend {
         generation_path: &Path,
         snapshot: &ProjectionSnapshot,
     ) -> Result<(), VectorProjectionBackendError> {
-        let expected = self.expected_snapshot_content_rows(descriptor, snapshot)?;
+        let expected = self.expected_snapshot_content_rows(descriptor, generation_path, snapshot)?;
         let actual = self.actual_content_rows(descriptor, generation_path)?;
         if !same_projection_content_rows(&actual, &expected) {
             return Err(VectorProjectionBackendError::Backend(
@@ -1968,7 +2179,8 @@ impl VectorProjectionBackend {
     ) -> Result<(), VectorProjectionBackendError> {
         self.validate_content_metadata(generation_path, evidence)?;
         let actual = self.historical_content_rows(evidence, generation_path)?;
-        let canonical = self.expected_canonical_content_rows_from(conn, descriptor)?;
+        let canonical =
+            self.expected_canonical_content_rows_from(conn, descriptor, generation_path)?;
         if !same_projection_content_rows(&actual, &canonical) {
             return Err(VectorProjectionBackendError::Delivery(
                 "LanceDB physical row set does not match canonical SQLite truth".to_owned(),
@@ -1998,6 +2210,7 @@ impl VectorProjectionBackend {
         let generation_path =
             checked_generation_path(&generations, &request.context.generation_id)?;
         self.validate_generation_materialization(descriptor, &generation_path)?;
+        let revalidate = || self.validate_apply_authority(request);
 
         let mut state = self.load_delivery_state(descriptor, &generation_path, &evidence)?;
         let mut pending = Vec::new();
@@ -2021,11 +2234,14 @@ impl VectorProjectionBackend {
         if !pending.is_empty() {
             match descriptor.store_name.as_str() {
                 LANCEDB_CHUNKS_STORE => {
-                    self.apply_task_deliveries(descriptor, &generation_path, &pending)?
+                    self.apply_task_deliveries(descriptor, &generation_path, &pending, &revalidate)?
                 }
-                LANCEDB_LABEL_ATOMS_STORE => {
-                    self.apply_label_deliveries(descriptor, &generation_path, &pending)?
-                }
+                LANCEDB_LABEL_ATOMS_STORE => self.apply_label_deliveries(
+                    descriptor,
+                    &generation_path,
+                    &pending,
+                    &revalidate,
+                )?,
                 _ => {
                     return Err(VectorProjectionBackendError::Protocol(format!(
                         "unsupported LanceDB projection store: {}",
@@ -2033,8 +2249,10 @@ impl VectorProjectionBackend {
                     )));
                 }
             }
+            revalidate()?;
             self.write_content_metadata(descriptor, &generation_path, &evidence)?;
             state.applied.extend(signatures);
+            revalidate()?;
             persist_json(&generation_path.join(DELIVERY_STATE_FILE), &state).map_err(backend_io)?;
         } else {
             self.validate_content_metadata(&generation_path, &evidence)?;
@@ -2071,7 +2289,7 @@ impl VectorProjectionBackend {
             || batch.provider != descriptor.provider
             || batch.provider_fingerprint != descriptor.provider_fingerprint
             || batch.target_generation != evidence.manifest.generation
-            || batch.fence_epoch != evidence.manifest.fence_epoch
+            || batch.fence_epoch < evidence.manifest.fence_epoch
             || batch.fence_epoch < 0
             || batch.owner.trim().is_empty()
             || batch.lease_token.trim().is_empty()
@@ -2150,6 +2368,7 @@ impl VectorProjectionBackend {
         descriptor: &ProjectionStoreDescriptor,
         generation_path: &Path,
         deliveries: &[&ProjectionDelivery],
+        revalidate: &impl Fn() -> Result<(), VectorProjectionBackendError>,
     ) -> Result<(), VectorProjectionBackendError> {
         let conn = open_readonly_database(&self.db_path)?;
         let store = self.generation_store(descriptor, generation_path, false)?;
@@ -2205,6 +2424,7 @@ impl VectorProjectionBackend {
         let mut chunks = Vec::new();
         let builder = ChunkBuilder::new(self.provider.embedding_model());
         for board_id in rebuild_boards.keys() {
+            revalidate()?;
             store.delete_board(board_id).map_err(map_vector_error)?;
             for source in task_sources_for_board(&conn, board_id)? {
                 chunks.extend(
@@ -2219,9 +2439,12 @@ impl VectorProjectionBackend {
             .values()
             .map(|(_, entity_uri, _)| entity_uri.clone())
             .collect::<Vec<_>>();
-        store
-            .delete_entities(&entity_uris)
-            .map_err(map_vector_error)?;
+        if !entity_uris.is_empty() {
+            revalidate()?;
+            store
+                .delete_entities(&entity_uris)
+                .map_err(map_vector_error)?;
+        }
         for ((board_id, task_id), (_, _, _action)) in task_actions {
             if let Some(source) = task_source(&conn, &board_id, &task_id)? {
                 chunks.extend(
@@ -2231,7 +2454,10 @@ impl VectorProjectionBackend {
                 );
             }
         }
-        store.upsert(&chunks).map_err(map_vector_error)?;
+        if !chunks.is_empty() {
+            revalidate()?;
+            store.upsert(&chunks).map_err(map_vector_error)?;
+        }
         store.validate_path_identity()
     }
 
@@ -2305,10 +2531,12 @@ impl VectorProjectionBackend {
         descriptor: &ProjectionStoreDescriptor,
         generation_path: &Path,
         deliveries: &[&ProjectionDelivery],
+        revalidate: &impl Fn() -> Result<(), VectorProjectionBackendError>,
     ) -> Result<(), VectorProjectionBackendError> {
         let conn = open_readonly_database(&self.db_path)?;
         let store = self.generation_store(descriptor, generation_path, false)?;
         store.validate_path_identity()?;
+        revalidate()?;
         store
             .ensure_label_atom_projection_table()
             .map_err(map_vector_error)?;
@@ -2329,6 +2557,7 @@ impl VectorProjectionBackend {
             .collect::<BTreeSet<_>>();
         let mut atoms = Vec::new();
         for board_id in boards {
+            revalidate()?;
             store
                 .delete_label_atoms_for_board(&board_id)
                 .map_err(map_vector_error)?;
@@ -2338,7 +2567,10 @@ impl VectorProjectionBackend {
                 self.provider.embedding_model(),
             )?);
         }
-        store.upsert_label_atoms(&atoms).map_err(map_vector_error)?;
+        if !atoms.is_empty() {
+            revalidate()?;
+            store.upsert_label_atoms(&atoms).map_err(map_vector_error)?;
+        }
         store.validate_path_identity()
     }
 
@@ -2410,7 +2642,9 @@ impl VectorProjectionBackend {
             checked_generation_path(&generations, &request.context.generation_id)?;
         self.validate_historical_materialization(&request.prepared, &generation_path)?;
         self.validate_content_metadata(&generation_path, &request.prepared)?;
-        self.repair_marker(&request.prepared)?;
+        self.repair_marker(&request.prepared, || {
+            self.validate_publish_authority(request)
+        })?;
         let active = self
             .inspect_active(&request.context.projection_store)?
             .ok_or_else(|| {
@@ -2545,7 +2779,9 @@ impl VectorProjectionBackend {
                     .to_owned(),
             ));
         }
-        self.repair_marker(&request.expected)
+        self.repair_marker(&request.expected, || {
+            self.validate_repair_authority(request)
+        })
     }
 
     fn quarantine(
@@ -2567,6 +2803,7 @@ impl VectorProjectionBackend {
                             .to_owned(),
                     ));
                 }
+                self.validate_orphan_generation_mutation_authority(request, "quarantine")?;
                 durable_quarantine_entry(&path).map_err(backend_io)?;
                 Ok(())
             }
@@ -2588,6 +2825,7 @@ impl VectorProjectionBackend {
             Err(error) => return Err(backend_io(error)),
         };
         if !metadata.is_dir() {
+            self.validate_orphan_generation_mutation_authority(request, "abort")?;
             durable_quarantine_entry(&path).map_err(backend_io)?;
             return Ok(());
         }
@@ -2610,12 +2848,14 @@ impl VectorProjectionBackend {
                 request.context.generation_id
             )));
         }
+        self.validate_orphan_generation_mutation_authority(request, "abort")?;
         durable_remove_directory(&path).map_err(backend_io)
     }
 
     fn cleanup(
         &self,
         request: &VectorProjectionCleanupRequest,
+        authority: &SqliteMutationAuthority,
     ) -> Result<VectorProjectionCleanupResponse, VectorProjectionBackendError> {
         self.validate_context(&request.context)?;
         validate_cleanup_protection(&request.protection)?;
@@ -2624,6 +2864,21 @@ impl VectorProjectionBackend {
         let active = published.last().cloned();
         let previous = published.iter().rev().nth(1).cloned();
         let mut protected = BTreeMap::<String, VectorProjectionProtectionReason>::new();
+        protect_optional(
+            &mut protected,
+            authority.active.generation.as_deref(),
+            VectorProjectionProtectionReason::Active,
+        );
+        protect_optional(
+            &mut protected,
+            authority.previous.generation.as_deref(),
+            VectorProjectionProtectionReason::Previous,
+        );
+        protect_optional(
+            &mut protected,
+            authority.building.generation.as_deref(),
+            VectorProjectionProtectionReason::Building,
+        );
         protect_optional(
             &mut protected,
             request.protection.active_generation.as_deref(),
@@ -2681,6 +2936,11 @@ impl VectorProjectionBackend {
                         reason: "dry_run".to_owned(),
                     });
                 } else {
+                    // Re-read the complete lease/role/generation/binding
+                    // authority immediately before every delete.  A later
+                    // lease rollover or rebind must make the cleanup fail
+                    // closed rather than deleting under the old capability.
+                    self.validate_cleanup_authority(request)?;
                     durable_remove_directory(&entry.path()).map_err(backend_io)?;
                     removed_generations.push(name);
                 }
@@ -3076,14 +3336,10 @@ impl VectorProjectionBackend {
         Ok(())
     }
 
-    /// Re-check SQLite only after the cross-process helper lock is held.
-    ///
-    /// Prepare, publish and repair requests intentionally do not carry lease
-    /// capabilities on the wire. For those operations this proves that an
-    /// unexpired SQLite lease exists and that the request's fenced generation
-    /// evidence is still the exact canonical authority; it does not claim that
-    /// the request possesses the opaque lease token. Apply requests carry both
-    /// lease and claim capabilities and are checked more strongly below.
+    /// Re-check the exact SQLite operation capability only after the
+    /// cross-process helper lock is held.  Every physical mutator carries the
+    /// opaque lease token plus the generation binding; apply additionally
+    /// carries its delivery claim capability.
     fn validate_prepare_authority(
         &self,
         request: &VectorProjectionPrepareSnapshotRequest,
@@ -3106,7 +3362,16 @@ impl VectorProjectionBackend {
                 &request.context.projection_store,
             ));
         }
-        let authority = self.load_sqlite_mutation_authority(&request.context.projection_store)?;
+        let authority =
+            self.validate_operation_authority(&request.context, &request.authority, "prepare")?;
+        if request.authority.role != VectorProjectionGenerationRole::Building
+            || request.authority.building_phase != Some(VectorProjectionBuildingPhase::Snapshotting)
+        {
+            return Err(stale_sqlite_authority(
+                "prepare",
+                &request.context.projection_store,
+            ));
+        }
         self.require_current_sqlite_lease(&authority, manifest.fence_epoch)?;
         if authority.building.phase.as_deref() != Some("snapshotting")
             || !authority.building.matches_manifest(manifest, None)
@@ -3125,7 +3390,8 @@ impl VectorProjectionBackend {
     ) -> Result<(), VectorProjectionBackendError> {
         self.validate_context(&request.context)?;
         let descriptor = self.require_store(&request.context.projection_store)?;
-        let authority = self.load_sqlite_mutation_authority(&request.context.projection_store)?;
+        let authority =
+            self.validate_operation_authority(&request.context, &request.authority, "apply")?;
         self.require_sqlite_identity(&authority)?;
         let now = current_time_ms()?;
         if authority.fence_epoch != request.batch.fence_epoch
@@ -3146,6 +3412,12 @@ impl VectorProjectionBackend {
         }
 
         let target = if authority.building.generation.is_some() {
+            if request.authority.role != VectorProjectionGenerationRole::Building {
+                return Err(stale_sqlite_authority(
+                    "apply",
+                    &request.context.projection_store,
+                ));
+            }
             if !matches!(
                 authority.building.phase.as_deref(),
                 Some("prepared" | "store_published")
@@ -3159,8 +3431,24 @@ impl VectorProjectionBackend {
             }
             &authority.building
         } else {
+            if request.authority.role != VectorProjectionGenerationRole::Active {
+                return Err(stale_sqlite_authority(
+                    "apply",
+                    &request.context.projection_store,
+                ));
+            }
             &authority.active
         };
+        if request.authority.owner != request.batch.owner
+            || request.authority.lease_token != request.batch.lease_token
+            || request.authority.fence_epoch != request.batch.fence_epoch
+            || request.authority.generation != request.batch.target_generation
+        {
+            return Err(stale_sqlite_authority(
+                "apply",
+                &request.context.projection_store,
+            ));
+        }
         let evidence = self
             .inspect_generation(
                 &request.context.projection_store,
@@ -3253,8 +3541,18 @@ impl VectorProjectionBackend {
                 &request.context.projection_store,
             ));
         }
-        let authority = self.load_sqlite_mutation_authority(&request.context.projection_store)?;
-        self.require_current_sqlite_lease(&authority, manifest.fence_epoch)?;
+        let authority =
+            self.validate_operation_authority(&request.context, &request.authority, "publish")?;
+        self.require_current_sqlite_lease_at_or_after_generation(
+            &authority,
+            manifest.fence_epoch,
+        )?;
+        if request.authority.role != VectorProjectionGenerationRole::Building {
+            return Err(stale_sqlite_authority(
+                "publish",
+                &request.context.projection_store,
+            ));
+        }
         if !matches!(
             authority.building.phase.as_deref(),
             Some("prepared" | "store_published")
@@ -3305,9 +3603,12 @@ impl VectorProjectionBackend {
                 &request.context.projection_store,
             ));
         }
-        let authority = self.load_sqlite_mutation_authority(&request.context.projection_store)?;
-        self.require_sqlite_identity(&authority)?;
-        self.require_unexpired_sqlite_lease(&authority)?;
+        let authority =
+            self.validate_operation_authority(&request.context, &request.authority, "repair")?;
+        self.require_current_sqlite_lease_at_or_after_generation(
+            &authority,
+            request.expected.manifest.fence_epoch,
+        )?;
         let matches_active = authority.active.matches_manifest(
             &request.expected.manifest,
             Some(request.expected.fingerprint.as_str()),
@@ -3325,24 +3626,367 @@ impl VectorProjectionBackend {
                 &request.context.projection_store,
             ));
         }
-        if matches_building && authority.fence_epoch != request.expected.manifest.fence_epoch {
+        let expected_role = if matches_building {
+            VectorProjectionGenerationRole::Building
+        } else {
+            VectorProjectionGenerationRole::Active
+        };
+        if request.authority.role != expected_role {
             return Err(stale_sqlite_authority(
                 "repair",
                 &request.context.projection_store,
             ));
         }
-        if matches_active
-            && authority.fence_epoch != request.expected.manifest.fence_epoch
-            && (authority.building.fence_epoch != Some(authority.fence_epoch)
-                || !matches!(
-                    authority.building.phase.as_deref(),
-                    Some("snapshotting" | "prepared" | "store_published")
-                ))
+        Ok(())
+    }
+
+    /// Validate an opaque operation capability against the complete SQLite
+    /// authority after the helper's per-store write lock has been acquired.
+    /// The caller-supplied context and suffix alone are deliberately
+    /// insufficient to authorize a physical mutation.
+    fn validate_operation_authority(
+        &self,
+        context: &VectorProjectionMutationContext,
+        supplied: &VectorProjectionDestructiveAuthority,
+        action: &str,
+    ) -> Result<SqliteMutationAuthority, VectorProjectionBackendError> {
+        // Operation requests validate only the SQLite authority shape here.
+        // Physical evidence is checked by the operation itself, and checking
+        // every unrelated active/previous generation would make a legitimate
+        // prepare fail merely because another retained generation needs
+        // repair.  The helper lock plus this exact lease/role/binding CAS is
+        // the stale-request fence; target materialization checks stay local
+        // to prepare/apply/publish/repair.
+        let authority = self.load_wire_operation_authority(&context.projection_store, action)?;
+        self.validate_wire_destructive_authority(supplied, context, &authority, action)?;
+        if supplied.role == VectorProjectionGenerationRole::Orphaned {
+            return Err(stale_sqlite_authority(action, &context.projection_store));
+        }
+        Ok(authority)
+    }
+
+    fn load_wire_operation_authority(
+        &self,
+        store_name: &str,
+        action: &str,
+    ) -> Result<SqliteMutationAuthority, VectorProjectionBackendError> {
+        let stale = || stale_sqlite_authority(action, store_name);
+        let authority = self.load_sqlite_mutation_authority(store_name)?;
+        self.require_unexpired_sqlite_lease(&authority)?;
+        if authority.fence_epoch < 0 {
+            return Err(stale());
+        }
+        let generations = [
+            authority.active.generation.as_deref(),
+            authority.previous.generation.as_deref(),
+            authority.building.generation.as_deref(),
+        ];
+        if generations.iter().enumerate().any(|(index, generation)| {
+            generation.is_some_and(|generation| {
+                generations[..index]
+                    .iter()
+                    .filter_map(|candidate| *candidate)
+                    .any(|prior| prior == generation)
+            })
+        }) {
+            return Err(stale());
+        }
+        for generation in [&authority.active, &authority.previous] {
+            if generation.generation.is_none() {
+                if !generation.is_absent() {
+                    return Err(stale());
+                }
+            } else if generation.phase.is_some()
+                || !generation.has_complete_manifest_binding(true, true)
+            {
+                return Err(stale());
+            }
+        }
+        let building = &authority.building;
+        if building.generation.is_none() {
+            if !building.is_unbound_building() {
+                return Err(stale());
+            }
+        } else {
+            let phase = building.phase.as_deref().ok_or_else(stale)?;
+            let requires_fingerprint = matches!(phase, "prepared" | "store_published");
+            if !matches!(phase, "snapshotting" | "prepared" | "store_published")
+                || building
+                    .fence_epoch
+                    .is_none_or(|fence_epoch| fence_epoch > authority.fence_epoch)
+                || !building
+                    .has_complete_manifest_binding(requires_fingerprint, phase != "snapshotting")
+                || (phase == "snapshotting" && building.fingerprint.is_some())
+            {
+                return Err(stale());
+            }
+        }
+        Ok(authority)
+    }
+
+    fn validate_orphan_generation_mutation_authority(
+        &self,
+        request: &VectorProjectionGenerationMutationRequest,
+        action: &str,
+    ) -> Result<(), VectorProjectionBackendError> {
+        self.validate_context(&request.context)?;
+        let authority = self.validate_destructive_sqlite_authority(
+            &request.context.projection_store,
+            action,
+            Some(&request.context.generation_id),
+        )?;
+        self.validate_wire_destructive_authority(
+            &request.authority,
+            &request.context,
+            &authority,
+            action,
+        )?;
+        Ok(())
+    }
+
+    fn validate_wire_destructive_authority(
+        &self,
+        supplied: &VectorProjectionDestructiveAuthority,
+        context: &VectorProjectionMutationContext,
+        sqlite: &SqliteMutationAuthority,
+        action: &str,
+    ) -> Result<(), VectorProjectionBackendError> {
+        let stale = || stale_sqlite_authority(action, &context.projection_store);
+        if supplied.owner.trim().is_empty()
+            || supplied.lease_token.trim().is_empty()
+            || supplied.generation != context.generation_id
+            || supplied.owner != sqlite.lease_owner.as_deref().unwrap_or_default()
+            || supplied.lease_token != sqlite.lease_token.as_deref().unwrap_or_default()
+            || supplied.fence_epoch != sqlite.fence_epoch
+        {
+            return Err(stale());
+        }
+        let (role, authority) = if sqlite.active.generation.as_deref()
+            == Some(context.generation_id.as_str())
+        {
+            (VectorProjectionGenerationRole::Active, &sqlite.active)
+        } else if sqlite.previous.generation.as_deref() == Some(context.generation_id.as_str()) {
+            (VectorProjectionGenerationRole::Previous, &sqlite.previous)
+        } else if sqlite.building.generation.as_deref() == Some(context.generation_id.as_str()) {
+            (VectorProjectionGenerationRole::Building, &sqlite.building)
+        } else {
+            (VectorProjectionGenerationRole::Orphaned, &sqlite.active)
+        };
+        if supplied.role != role {
+            return Err(stale());
+        }
+        if role == VectorProjectionGenerationRole::Orphaned {
+            if supplied.expected_binding.is_some()
+                || supplied.expected_manifest.is_some()
+                || supplied.building_phase.is_some()
+            {
+                return Err(stale());
+            }
+            return Ok(());
+        }
+        let binding = authority.wire_binding().ok_or_else(stale)?;
+        if supplied.expected_binding.as_ref() != Some(&binding)
+            || context.delivery_digest != binding.delivery_digest
+        {
+            return Err(stale());
+        }
+        let expected_phase = match authority.phase.as_deref() {
+            Some("snapshotting") => Some(VectorProjectionBuildingPhase::Snapshotting),
+            Some("prepared") => Some(VectorProjectionBuildingPhase::Prepared),
+            Some("store_published") => Some(VectorProjectionBuildingPhase::StorePublished),
+            Some(_) => return Err(stale()),
+            None => None,
+        };
+        if supplied.building_phase != expected_phase {
+            return Err(stale());
+        }
+        let expected_manifest = match (&binding.fingerprint, binding.snapshot_cursor) {
+            (Some(fingerprint), Some(snapshot_cursor)) => Some(ProjectionArtifactManifest {
+                store_name: context.projection_store.clone(),
+                database_instance_id: sqlite.database_instance_id.clone(),
+                protocol_version: sqlite.protocol_version,
+                schema_version: sqlite.schema_version,
+                generation: binding.generation.clone(),
+                fence_epoch: binding.fence_epoch,
+                snapshot_cursor,
+                provider: binding.provider.clone(),
+                provider_fingerprint: binding.provider_fingerprint.clone(),
+                corpus: binding.corpus.clone(),
+                canonical_item_count: binding.canonical_count,
+                canonical_digest: binding.canonical_digest.clone(),
+                delivery_item_count: binding.delivery_count,
+                delivery_digest: binding.delivery_digest.clone(),
+                fingerprint: Some(fingerprint.clone()),
+            }),
+            (None, None)
+                if role == VectorProjectionGenerationRole::Building
+                    && expected_phase == Some(VectorProjectionBuildingPhase::Snapshotting) =>
+            {
+                None
+            }
+            _ => return Err(stale()),
+        };
+        if supplied.expected_manifest != expected_manifest {
+            return Err(stale());
+        }
+        Ok(())
+    }
+
+    fn validate_cleanup_authority(
+        &self,
+        request: &VectorProjectionCleanupRequest,
+    ) -> Result<SqliteMutationAuthority, VectorProjectionBackendError> {
+        self.validate_context(&request.context)?;
+        validate_cleanup_protection(&request.protection)?;
+        let authority = self.validate_destructive_sqlite_authority(
+            &request.context.projection_store,
+            "cleanup",
+            None,
+        )?;
+        self.validate_wire_destructive_authority(
+            &request.authority,
+            &request.context,
+            &authority,
+            "cleanup",
+        )?;
+        if request.authority.role == VectorProjectionGenerationRole::Orphaned
+            || (!authority.active.matches_context(&request.context)
+                && !authority.previous.matches_context(&request.context)
+                && !authority.building.matches_context(&request.context))
         {
             return Err(stale_sqlite_authority(
-                "repair",
+                "cleanup",
                 &request.context.projection_store,
             ));
+        }
+        Ok(authority)
+    }
+
+    fn validate_destructive_sqlite_authority(
+        &self,
+        store_name: &str,
+        action: &str,
+        allow_missing_generation: Option<&str>,
+    ) -> Result<SqliteMutationAuthority, VectorProjectionBackendError> {
+        let stale = || stale_sqlite_authority(action, store_name);
+        let authority = self.load_sqlite_mutation_authority(store_name)?;
+        self.require_unexpired_sqlite_lease(&authority)?;
+        if authority.fence_epoch < 0 {
+            return Err(stale());
+        }
+        let generations = [
+            authority.active.generation.as_deref(),
+            authority.previous.generation.as_deref(),
+            authority.building.generation.as_deref(),
+        ];
+        if generations.iter().enumerate().any(|(index, generation)| {
+            generation.is_some_and(|generation| {
+                generations[..index]
+                    .iter()
+                    .filter_map(|candidate| *candidate)
+                    .any(|prior| prior == generation)
+            })
+        }) {
+            return Err(stale());
+        }
+        self.validate_active_sqlite_authority(
+            store_name,
+            &authority.active,
+            action,
+            allow_missing_generation,
+        )?;
+        self.validate_active_sqlite_authority(
+            store_name,
+            &authority.previous,
+            action,
+            allow_missing_generation,
+        )?;
+        self.validate_building_sqlite_authority(
+            &authority,
+            store_name,
+            action,
+            allow_missing_generation,
+        )?;
+        Ok(authority)
+    }
+
+    fn validate_active_sqlite_authority(
+        &self,
+        store_name: &str,
+        active: &SqliteGenerationAuthority,
+        action: &str,
+        allow_missing_generation: Option<&str>,
+    ) -> Result<(), VectorProjectionBackendError> {
+        let stale = || stale_sqlite_authority(action, store_name);
+        if active.generation.is_none() {
+            return if active.is_absent() {
+                Ok(())
+            } else {
+                Err(stale())
+            };
+        }
+        if active.phase.is_some() || !active.has_complete_manifest_binding(true, true) {
+            return Err(stale());
+        }
+        let generation = active.generation.as_deref().ok_or_else(stale)?;
+        let evidence = self.inspect_generation(store_name, generation)?;
+        let Some(evidence) = evidence else {
+            if allow_missing_generation == Some(generation) {
+                return Ok(());
+            }
+            return Err(stale());
+        };
+        if !active.matches_manifest(&evidence.manifest, Some(evidence.fingerprint.as_str()))
+            || (action != "repair" && !self.marker_is_valid(&evidence)?)
+        {
+            return Err(stale());
+        }
+        Ok(())
+    }
+
+    fn validate_building_sqlite_authority(
+        &self,
+        authority: &SqliteMutationAuthority,
+        store_name: &str,
+        action: &str,
+        allow_missing_generation: Option<&str>,
+    ) -> Result<(), VectorProjectionBackendError> {
+        let stale = || stale_sqlite_authority(action, store_name);
+        let building = &authority.building;
+        if building.generation.is_none() {
+            return if building.is_unbound_building() {
+                Ok(())
+            } else {
+                Err(stale())
+            };
+        }
+        let phase = building.phase.as_deref().ok_or_else(stale)?;
+        let requires_fingerprint = matches!(phase, "prepared" | "store_published");
+        if !matches!(phase, "snapshotting" | "prepared" | "store_published")
+            || building.fence_epoch != Some(authority.fence_epoch)
+            || !building
+                .has_complete_manifest_binding(requires_fingerprint, phase != "snapshotting")
+            || (phase == "snapshotting" && building.fingerprint.is_some())
+        {
+            return Err(stale());
+        }
+        if phase == "snapshotting" {
+            return Ok(());
+        }
+        let generation = building.generation.as_deref().ok_or_else(stale)?;
+        let evidence = self.inspect_generation(store_name, generation)?;
+        let Some(evidence) = evidence else {
+            if allow_missing_generation == Some(generation) {
+                return Ok(());
+            }
+            return Err(stale());
+        };
+        if !building.matches_manifest(&evidence.manifest, Some(evidence.fingerprint.as_str()))
+            || (action != "repair"
+                && phase == "store_published"
+                && !self.marker_is_valid(&evidence)?)
+        {
+            return Err(stale());
         }
         Ok(())
     }
@@ -3375,7 +4019,13 @@ impl VectorProjectionBackend {
                     active_canonical_count,active_canonical_digest,
                     active_delivery_count,active_delivery_digest,
                     active_corpus_schema,active_corpus_fingerprint,
-                    active_embedding_model,active_embedding_dimensions
+                    active_embedding_model,active_embedding_dimensions,
+                    previous_generation,previous_fingerprint,previous_fence_epoch,
+                    previous_snapshot_cursor,previous_provider,previous_provider_fingerprint,
+                    previous_canonical_count,previous_canonical_digest,
+                    previous_delivery_count,previous_delivery_digest,
+                    previous_corpus_schema,previous_corpus_fingerprint,
+                    previous_embedding_model,previous_embedding_dimensions
              FROM projection_store_state WHERE store_name=?1",
             [store_name],
             |row| {
@@ -3420,6 +4070,23 @@ impl VectorProjectionBackend {
                         corpus_fingerprint: row.get(34)?,
                         embedding_model: row.get(35)?,
                         embedding_dimensions: row.get(36)?,
+                        phase: None,
+                    },
+                    previous: SqliteGenerationAuthority {
+                        generation: row.get(37)?,
+                        fingerprint: row.get(38)?,
+                        fence_epoch: row.get(39)?,
+                        snapshot_cursor: row.get(40)?,
+                        provider: row.get(41)?,
+                        provider_fingerprint: row.get(42)?,
+                        canonical_item_count: row.get(43)?,
+                        canonical_digest: row.get(44)?,
+                        delivery_item_count: row.get(45)?,
+                        delivery_digest: row.get(46)?,
+                        corpus_schema: row.get(47)?,
+                        corpus_fingerprint: row.get(48)?,
+                        embedding_model: row.get(49)?,
+                        embedding_dimensions: row.get(50)?,
                         phase: None,
                     },
                 })
@@ -3496,6 +4163,18 @@ impl VectorProjectionBackend {
         Ok(())
     }
 
+    fn require_current_sqlite_lease_at_or_after_generation(
+        &self,
+        authority: &SqliteMutationAuthority,
+        generation_fence_epoch: i64,
+    ) -> Result<(), VectorProjectionBackendError> {
+        self.require_unexpired_sqlite_lease(authority)?;
+        if authority.fence_epoch < generation_fence_epoch {
+            return Err(stale_sqlite_authority("mutation", "configured store"));
+        }
+        Ok(())
+    }
+
     fn require_store(
         &self,
         store_name: &str,
@@ -3559,9 +4238,10 @@ impl VectorProjectionBackend {
         }
     }
 
-    fn repair_marker(
+    fn repair_marker<F: Fn() -> Result<(), VectorProjectionBackendError>>(
         &self,
         evidence: &ProjectionArtifactEvidence,
+        revalidate: F,
     ) -> Result<(), VectorProjectionBackendError> {
         let generations = self.generations_root(&evidence.manifest.store_name, false)?;
         let generation_path = checked_generation_path(&generations, &evidence.manifest.generation)?;
@@ -3587,14 +4267,17 @@ impl VectorProjectionBackend {
                 if fs::read(&marker).map_err(backend_io)? == expected {
                     return Ok(());
                 }
+                revalidate()?;
                 durable_quarantine_entry(&marker).map_err(backend_io)?;
             }
             Ok(_) => {
+                revalidate()?;
                 durable_quarantine_entry(&marker).map_err(backend_io)?;
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(backend_io(error)),
         }
+        revalidate()?;
         durable_create_new_file(&marker, &expected).map_err(backend_io)?;
         if !self.marker_is_valid(evidence)? {
             return Err(VectorProjectionBackendError::Backend(
@@ -4580,8 +5263,919 @@ fn correlation(
 
 #[cfg(test)]
 mod tests {
-    use super::{projection_content_fingerprint, same_projection_content_rows};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    use super::*;
     use crate::lancedb_store::ProjectionContentRow;
+
+    struct DestructiveTestProvider;
+
+    impl EmbeddingProvider for DestructiveTestProvider {
+        fn provider_name(&self) -> &str {
+            "fixture"
+        }
+
+        fn embedding_model(&self) -> &str {
+            "fixture-model"
+        }
+
+        fn dimensions(&self) -> usize {
+            2
+        }
+
+        fn embed(&self, text: &str) -> Result<Vec<f32>, VectorError> {
+            Ok(vec![text.len() as f32, 1.0])
+        }
+    }
+
+    struct PolicyProbeProvider {
+        batch_sizes: Mutex<Vec<usize>>,
+        max_batch_size: AtomicUsize,
+        fail_once: AtomicBool,
+    }
+
+    impl PolicyProbeProvider {
+        fn new(max_batch_size: usize) -> Self {
+            Self {
+                batch_sizes: Mutex::new(Vec::new()),
+                max_batch_size: AtomicUsize::new(max_batch_size),
+                fail_once: AtomicBool::new(false),
+            }
+        }
+
+        fn fail_next(&self) {
+            self.fail_once.store(true, Ordering::SeqCst);
+        }
+
+        fn batch_sizes(&self) -> Vec<usize> {
+            self.batch_sizes.lock().unwrap().clone()
+        }
+    }
+
+    impl EmbeddingProvider for PolicyProbeProvider {
+        fn provider_name(&self) -> &str {
+            "fixture"
+        }
+
+        fn embedding_model(&self) -> &str {
+            "fixture-model"
+        }
+
+        fn dimensions(&self) -> usize {
+            2
+        }
+
+        fn embed(&self, text: &str) -> Result<Vec<f32>, VectorError> {
+            self.embed_batch(&[text.to_owned()])?
+                .into_iter()
+                .next()
+                .ok_or_else(|| VectorError::Store("fixture embedding was missing".to_owned()))
+        }
+
+        fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, VectorError> {
+            self.batch_sizes.lock().unwrap().push(texts.len());
+            if texts.len() > self.max_batch_size.load(Ordering::SeqCst) {
+                return Err(VectorError::Provider {
+                    message: "fixture provider batch limit exceeded".to_owned(),
+                    retryable: false,
+                });
+            }
+            if self.fail_once.swap(false, Ordering::SeqCst) {
+                return Err(VectorError::Provider {
+                    message: "fixture provider interruption".to_owned(),
+                    retryable: true,
+                });
+            }
+            Ok(texts
+                .iter()
+                .map(|text| vec![text.len() as f32, 1.0])
+                .collect())
+        }
+    }
+
+    #[test]
+    fn bind_expected_vectors_obeys_execution_policy() {
+        let temp = tempfile::tempdir().unwrap();
+        let provider = Arc::new(PolicyProbeProvider::new(1));
+        let backend = VectorProjectionBackend::new(temp.path().join("kanban.db"), provider.clone())
+            .unwrap()
+            .with_execution_policy(EmbeddingExecutionPolicy {
+                batch_size: 1,
+                min_batch_interval: Duration::ZERO,
+                max_retries: 0,
+                initial_retry_backoff: Duration::ZERO,
+                max_retry_backoff: Duration::ZERO,
+            });
+        let descriptor = backend
+            .descriptor("req_policy_test")
+            .supported_stores
+            .into_iter()
+            .find(|store| store.store_name == LANCEDB_CHUNKS_STORE)
+            .unwrap();
+        let generation_path = temp.path().join("gen_policy_test");
+        fs::create_dir_all(&generation_path).unwrap();
+        let cache = backend
+            .expected_embedding_cache(&descriptor, &generation_path)
+            .unwrap();
+        persist_json(&generation_path.join(EMBEDDING_CACHE_FILE), &cache).unwrap();
+        let rows = vec![
+            ProjectionContentRow {
+                key: "one".to_owned(),
+                content_json: serde_json::json!({"text": "first"}).to_string(),
+                vector_bits: None,
+            },
+            ProjectionContentRow {
+                key: "two".to_owned(),
+                content_json: serde_json::json!({"text": "second"}).to_string(),
+                vector_bits: None,
+            },
+            ProjectionContentRow {
+                key: "three".to_owned(),
+                content_json: serde_json::json!({"text": "first"}).to_string(),
+                vector_bits: None,
+            },
+        ];
+
+        let bound = backend
+            .bind_expected_vectors(&descriptor, &generation_path, true, rows)
+            .unwrap();
+        assert_eq!(bound.len(), 3);
+        assert_eq!(provider.batch_sizes(), vec![1, 1]);
+        assert_eq!(bound[0].vector_bits, bound[2].vector_bits);
+    }
+
+    #[test]
+    fn bind_expected_vectors_retries_with_backoff_and_reuses_persistent_cache() {
+        let temp = tempfile::tempdir().unwrap();
+        let provider = Arc::new(PolicyProbeProvider::new(1));
+        let backend = VectorProjectionBackend::new(temp.path().join("kanban.db"), provider.clone())
+            .unwrap()
+            .with_execution_policy(EmbeddingExecutionPolicy {
+                batch_size: 1,
+                min_batch_interval: Duration::ZERO,
+                max_retries: 1,
+                initial_retry_backoff: Duration::from_millis(10),
+                max_retry_backoff: Duration::from_millis(10),
+            });
+        let descriptor = backend
+            .descriptor("req_policy_retry_test")
+            .supported_stores
+            .into_iter()
+            .find(|store| store.store_name == LANCEDB_CHUNKS_STORE)
+            .unwrap();
+        let generation_path = temp.path().join("gen_policy_retry_test");
+        fs::create_dir_all(&generation_path).unwrap();
+        let cache = backend
+            .expected_embedding_cache(&descriptor, &generation_path)
+            .unwrap();
+        persist_json(&generation_path.join(EMBEDDING_CACHE_FILE), &cache).unwrap();
+
+        let initial = ProjectionContentRow {
+            key: "initial".to_owned(),
+            content_json: serde_json::json!({"text": "initial"}).to_string(),
+            vector_bits: None,
+        };
+        backend
+            .bind_expected_vectors(&descriptor, &generation_path, true, vec![initial.clone()])
+            .unwrap();
+        provider.fail_next();
+        let retry = ProjectionContentRow {
+            key: "retry".to_owned(),
+            content_json: serde_json::json!({"text": "retry"}).to_string(),
+            vector_bits: None,
+        };
+        let started = std::time::Instant::now();
+        backend
+            .bind_expected_vectors(&descriptor, &generation_path, true, vec![retry])
+            .unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(8));
+        assert_eq!(provider.batch_sizes(), vec![1, 1, 1]);
+
+        provider.fail_next();
+        backend
+            .bind_expected_vectors(&descriptor, &generation_path, true, vec![initial])
+            .unwrap();
+        assert_eq!(
+            provider.batch_sizes(),
+            vec![1, 1, 1],
+            "a cached canonical row must not invoke a failed provider"
+        );
+    }
+
+    #[test]
+    fn active_validation_cache_backfill_is_read_only_under_a_shared_read_guard() {
+        let temp = tempfile::tempdir().unwrap();
+        let db_path = temp.path().join("kanban.db");
+        rusqlite::Connection::open(&db_path).unwrap();
+        let provider = Arc::new(PolicyProbeProvider::new(1));
+        let backend = VectorProjectionBackend::new(&db_path, provider.clone())
+            .unwrap()
+            .with_execution_policy(EmbeddingExecutionPolicy {
+                batch_size: 1,
+                min_batch_interval: Duration::ZERO,
+                max_retries: 1,
+                initial_retry_backoff: Duration::from_millis(10),
+                max_retry_backoff: Duration::from_millis(10),
+            })
+            .bind_database_instance("db_fixture".to_owned());
+        let descriptor = backend
+            .descriptor("req_policy_read_only_test")
+            .supported_stores
+            .into_iter()
+            .find(|store| store.store_name == LANCEDB_CHUNKS_STORE)
+            .unwrap();
+        let generation_path = temp.path().join("gen_policy_read_only_test");
+        fs::create_dir_all(&generation_path).unwrap();
+        let cache_path = generation_path.join(EMBEDDING_CACHE_FILE);
+        let cache = backend
+            .expected_embedding_cache(&descriptor, &generation_path)
+            .unwrap();
+        persist_json(&cache_path, &cache).unwrap();
+        let before = fs::read(&cache_path).unwrap();
+
+        let lock_name = format!("{LANCEDB_CHUNKS_STORE}-projection-helper");
+        let writer = DerivedStoreWriteGuard::acquire(&db_path, &lock_name)
+            .expect("fixture write guard creates the persistent lock sentinel");
+        drop(writer);
+        let _read_guard = acquire_helper_read_guard(&db_path, LANCEDB_CHUNKS_STORE)
+            .expect("fixture read guard");
+
+        provider.fail_next();
+        let started = std::time::Instant::now();
+        backend
+            .bind_expected_vectors(
+                &descriptor,
+                &generation_path,
+                false,
+                vec![ProjectionContentRow {
+                    key: "read-only".to_owned(),
+                    content_json: serde_json::json!({"text": "read-only"}).to_string(),
+                    vector_bits: None,
+                }],
+            )
+            .unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(8));
+        assert_eq!(provider.batch_sizes(), vec![1, 1]);
+        assert_eq!(fs::read(&cache_path).unwrap(), before);
+    }
+
+    #[test]
+    fn bind_expected_vectors_rejects_zero_batch_policy_without_provider_call() {
+        let temp = tempfile::tempdir().unwrap();
+        let provider = Arc::new(PolicyProbeProvider::new(1));
+        let backend = VectorProjectionBackend::new(temp.path().join("kanban.db"), provider.clone())
+            .unwrap()
+            .with_execution_policy(EmbeddingExecutionPolicy {
+                batch_size: 0,
+                min_batch_interval: Duration::ZERO,
+                max_retries: 0,
+                initial_retry_backoff: Duration::ZERO,
+                max_retry_backoff: Duration::ZERO,
+            });
+        let descriptor = backend
+            .descriptor("req_policy_zero_batch_test")
+            .supported_stores
+            .into_iter()
+            .find(|store| store.store_name == LANCEDB_CHUNKS_STORE)
+            .unwrap();
+        let generation_path = temp.path().join("gen_policy_zero_batch_test");
+        fs::create_dir_all(&generation_path).unwrap();
+        let cache = backend
+            .expected_embedding_cache(&descriptor, &generation_path)
+            .unwrap();
+        persist_json(&generation_path.join(EMBEDDING_CACHE_FILE), &cache).unwrap();
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            backend.bind_expected_vectors(
+                &descriptor,
+                &generation_path,
+                false,
+                vec![ProjectionContentRow {
+                    key: "zero-batch".to_owned(),
+                    content_json: serde_json::json!({"text": "zero-batch"}).to_string(),
+                    vector_bits: None,
+                }],
+            )
+        }));
+        assert!(
+            result.is_ok(),
+            "an invalid embedding policy must return an error instead of panicking"
+        );
+        let error = result.unwrap().expect_err("zero batch size must be rejected");
+        assert!(matches!(
+            error,
+            VectorProjectionBackendError::Backend(message)
+                if message.contains("embedding batch size must be greater than zero")
+        ));
+        assert!(
+            provider.batch_sizes().is_empty(),
+            "invalid policy must fail before invoking the provider"
+        );
+    }
+
+    struct DestructiveAuthorityFixture {
+        _temp: tempfile::TempDir,
+        db_path: PathBuf,
+        backend: VectorProjectionBackend,
+    }
+
+    #[test]
+    fn stale_queued_quarantine_rechecks_sqlite_before_moving_new_active() {
+        let fixture = destructive_authority_fixture();
+        let active = install_generation(
+            &fixture.backend,
+            "gen_reused_quarantine",
+            2,
+            "fnv64:shared-delivery",
+            true,
+        );
+        bind_active_authority(&fixture.db_path, &active);
+        let active_path = generation_path_for(&fixture.backend, &active);
+
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Quarantine(
+                VectorProjectionGenerationMutationRequest {
+                    context: mutation_context(&active, "req_stale_quarantine"),
+                    authority: test_destructive_authority(
+                        &active,
+                        VectorProjectionGenerationRole::Active,
+                    ),
+                },
+            ));
+
+        assert_stale_delivery(response);
+        assert!(
+            active_path.join("sentinel").is_file(),
+            "stale quarantine must not move the newly active generation"
+        );
+    }
+
+    #[test]
+    fn stale_queued_abort_rechecks_sqlite_before_deleting_resumed_building() {
+        let fixture = destructive_authority_fixture();
+        let building = install_generation(
+            &fixture.backend,
+            "gen_reused_abort",
+            2,
+            "fnv64:shared-delivery",
+            false,
+        );
+        bind_building_authority(&fixture.db_path, &building);
+        let building_path = generation_path_for(&fixture.backend, &building);
+
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Abort(
+                VectorProjectionGenerationMutationRequest {
+                    context: mutation_context(&building, "req_stale_abort"),
+                    authority: test_destructive_authority(
+                        &building,
+                        VectorProjectionGenerationRole::Building,
+                    ),
+                },
+            ));
+
+        assert_stale_delivery(response);
+        assert!(
+            building_path.join("sentinel").is_file(),
+            "stale abort must not delete the generation resumed by the new lease owner"
+        );
+    }
+
+    #[test]
+    fn forged_cleanup_with_omitted_canonical_protection_is_zero_delete() {
+        let fixture = destructive_authority_fixture();
+        let building = install_generation(
+            &fixture.backend,
+            "gen_canonical_building",
+            2,
+            "fnv64:canonical-delivery",
+            false,
+        );
+        bind_building_authority(&fixture.db_path, &building);
+        let forged = install_generation(
+            &fixture.backend,
+            "gen_forged_cleanup_context",
+            1,
+            "fnv64:forged-delivery",
+            false,
+        );
+        let generations = fixture
+            .backend
+            .generations_root(LANCEDB_CHUNKS_STORE, false)
+            .unwrap();
+        let victim = generations.join("gen_cleanup_victim");
+        fs::create_dir(&victim).unwrap();
+        fs::write(victim.join("sentinel"), b"victim").unwrap();
+
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Cleanup(
+                VectorProjectionCleanupRequest {
+                    context: mutation_context(&forged, "req_forged_cleanup"),
+                    authority: test_destructive_authority(
+                        &forged,
+                        VectorProjectionGenerationRole::Orphaned,
+                    ),
+                    dry_run: false,
+                    protection: VectorProjectionCleanupProtection {
+                        active_generation: None,
+                        previous_generation: None,
+                        building_generation: None,
+                        additional_generations: Vec::new(),
+                    },
+                },
+            ));
+
+        assert_stale_delivery(response);
+        for path in [
+            generation_path_for(&fixture.backend, &building),
+            generation_path_for(&fixture.backend, &forged),
+            victim,
+        ] {
+            assert!(
+                path.join("sentinel").is_file(),
+                "forged cleanup authority must be zero-delete: {}",
+                path.display()
+            );
+        }
+    }
+
+    #[test]
+    fn forged_cleanup_authority_fields_are_zero_delete_with_valid_context() {
+        let fixture = destructive_authority_fixture();
+        let active = install_generation(
+            &fixture.backend,
+            "gen_cleanup_active",
+            2,
+            "fnv64:cleanup-active",
+            true,
+        );
+        bind_active_authority(&fixture.db_path, &active);
+        let generations = fixture
+            .backend
+            .generations_root(LANCEDB_CHUNKS_STORE, false)
+            .unwrap();
+        let victim = generations.join("gen_cleanup_victim_capability");
+        fs::create_dir(&victim).unwrap();
+        fs::write(victim.join("sentinel"), b"victim").unwrap();
+        let exact = current_test_authority(&active, VectorProjectionGenerationRole::Active, 2);
+        let mut forged = Vec::new();
+        let mut owner = exact.clone();
+        owner.owner = "stale-owner".to_owned();
+        forged.push(owner);
+        let mut token = exact.clone();
+        token.lease_token = "stale-lease-capability".to_owned();
+        forged.push(token);
+        let mut fence = exact.clone();
+        fence.fence_epoch += 1;
+        forged.push(fence);
+        let mut role = exact.clone();
+        role.role = VectorProjectionGenerationRole::Previous;
+        forged.push(role);
+        let mut binding = exact;
+        binding.expected_binding.as_mut().unwrap().delivery_digest =
+            "fnv64:stale-binding".to_owned();
+        forged.push(binding);
+
+        for (index, authority) in forged.into_iter().enumerate() {
+            let response = fixture
+                .backend
+                .execute(&VectorProjectionHelperRequest::Cleanup(
+                    VectorProjectionCleanupRequest {
+                        context: mutation_context(&active, &format!("req_forged_cleanup_{index}")),
+                        authority,
+                        dry_run: false,
+                        protection: VectorProjectionCleanupProtection {
+                            active_generation: None,
+                            previous_generation: None,
+                            building_generation: None,
+                            additional_generations: Vec::new(),
+                        },
+                    },
+                ));
+
+            assert_stale_delivery(response);
+            assert!(generation_path_for(&fixture.backend, &active).is_dir());
+            assert!(victim.join("sentinel").is_file());
+        }
+    }
+
+    #[test]
+    fn aliased_sqlite_generation_roles_are_zero_mutation() {
+        let fixture = destructive_authority_fixture();
+        let active = install_generation(
+            &fixture.backend,
+            "gen_aliased_roles",
+            2,
+            "fnv64:aliased-roles",
+            true,
+        );
+        bind_active_authority(&fixture.db_path, &active);
+        bind_previous_authority(&fixture.db_path, &active);
+        let path = generation_path_for(&fixture.backend, &active);
+
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Quarantine(
+                VectorProjectionGenerationMutationRequest {
+                    context: mutation_context(&active, "req_aliased_roles"),
+                    authority: current_test_authority(
+                        &active,
+                        VectorProjectionGenerationRole::Active,
+                        2,
+                    ),
+                },
+            ));
+
+        assert_stale_delivery(response);
+        assert!(path.join("sentinel").is_file());
+    }
+
+    #[test]
+    fn current_owner_can_quarantine_exact_previous_generation() {
+        let fixture = destructive_authority_fixture();
+        let previous = install_generation(
+            &fixture.backend,
+            "gen_previous_incompatible",
+            1,
+            "fnv64:previous-incompatible",
+            true,
+        );
+        bind_previous_authority(&fixture.db_path, &previous);
+        let path = generation_path_for(&fixture.backend, &previous);
+
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Quarantine(
+                VectorProjectionGenerationMutationRequest {
+                    context: mutation_context(&previous, "req_previous_recovery"),
+                    authority: current_test_authority(
+                        &previous,
+                        VectorProjectionGenerationRole::Previous,
+                        2,
+                    ),
+                },
+            ));
+
+        assert!(matches!(
+            response,
+            VectorProjectionHelperResponse::Quarantine(_)
+        ));
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn quarantine_retry_after_response_loss_is_idempotent() {
+        let fixture = destructive_authority_fixture();
+        let previous = install_generation(
+            &fixture.backend,
+            "gen_previous_response_loss",
+            1,
+            "fnv64:previous-response-loss",
+            true,
+        );
+        bind_previous_authority(&fixture.db_path, &previous);
+        let request =
+            VectorProjectionHelperRequest::Quarantine(VectorProjectionGenerationMutationRequest {
+                context: mutation_context(&previous, "req_previous_response_loss"),
+                authority: current_test_authority(
+                    &previous,
+                    VectorProjectionGenerationRole::Previous,
+                    2,
+                ),
+            });
+
+        let first = fixture.backend.execute(&request);
+        let retry = fixture.backend.execute(&request);
+
+        assert!(matches!(
+            first,
+            VectorProjectionHelperResponse::Quarantine(_)
+        ));
+        assert!(matches!(
+            retry,
+            VectorProjectionHelperResponse::Quarantine(_)
+        ));
+    }
+
+    #[test]
+    fn abort_retry_after_response_loss_is_idempotent() {
+        let fixture = destructive_authority_fixture();
+        let building = install_generation(
+            &fixture.backend,
+            "gen_building_response_loss",
+            2,
+            "fnv64:building-response-loss",
+            false,
+        );
+        bind_building_authority(&fixture.db_path, &building);
+        let request =
+            VectorProjectionHelperRequest::Abort(VectorProjectionGenerationMutationRequest {
+                context: mutation_context(&building, "req_building_response_loss"),
+                authority: current_test_authority(
+                    &building,
+                    VectorProjectionGenerationRole::Building,
+                    2,
+                ),
+            });
+
+        let first = fixture.backend.execute(&request);
+        let retry = fixture.backend.execute(&request);
+
+        assert!(matches!(first, VectorProjectionHelperResponse::Abort(_)));
+        assert!(matches!(retry, VectorProjectionHelperResponse::Abort(_)));
+    }
+
+    #[test]
+    fn current_owner_can_abort_snapshotting_generation_without_manifest() {
+        let fixture = destructive_authority_fixture();
+        let building = install_generation(
+            &fixture.backend,
+            "gen_snapshotting_abort",
+            2,
+            "fnv64:snapshotting-abort",
+            false,
+        );
+        bind_building_authority(&fixture.db_path, &building);
+        rusqlite::Connection::open(&fixture.db_path)
+            .unwrap()
+            .execute(
+                "UPDATE projection_store_state
+                 SET building_fingerprint=NULL,building_phase='snapshotting'
+                 WHERE store_name=?1",
+                [LANCEDB_CHUNKS_STORE],
+            )
+            .unwrap();
+        let path = generation_path_for(&fixture.backend, &building);
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Abort(
+                VectorProjectionGenerationMutationRequest {
+                    context: mutation_context(&building, "req_snapshotting_abort"),
+                    authority: snapshotting_test_authority(&building),
+                },
+            ));
+
+        assert!(matches!(response, VectorProjectionHelperResponse::Abort(_)));
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn stale_snapshotting_authority_with_fingerprint_is_zero_mutation() {
+        let fixture = destructive_authority_fixture();
+        let building = install_generation(
+            &fixture.backend,
+            "gen_snapshotting_stale",
+            2,
+            "fnv64:snapshotting-stale",
+            false,
+        );
+        bind_building_authority(&fixture.db_path, &building);
+        rusqlite::Connection::open(&fixture.db_path)
+            .unwrap()
+            .execute(
+                "UPDATE projection_store_state
+                 SET building_fingerprint=NULL,building_phase='snapshotting'
+                 WHERE store_name=?1",
+                [LANCEDB_CHUNKS_STORE],
+            )
+            .unwrap();
+        let path = generation_path_for(&fixture.backend, &building);
+        let mut authority =
+            current_test_authority(&building, VectorProjectionGenerationRole::Building, 2);
+        authority.building_phase = Some(VectorProjectionBuildingPhase::Snapshotting);
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Abort(
+                VectorProjectionGenerationMutationRequest {
+                    context: mutation_context(&building, "req_snapshotting_stale"),
+                    authority,
+                },
+            ));
+
+        assert_stale_delivery(response);
+        assert!(path.join("sentinel").is_file());
+    }
+
+    #[test]
+    fn current_owner_can_quarantine_store_published_building_generation() {
+        let fixture = destructive_authority_fixture();
+        let building = install_generation(
+            &fixture.backend,
+            "gen_store_published_quarantine",
+            2,
+            "fnv64:store-published-quarantine",
+            true,
+        );
+        bind_building_authority(&fixture.db_path, &building);
+        rusqlite::Connection::open(&fixture.db_path)
+            .unwrap()
+            .execute(
+                "UPDATE projection_store_state
+                 SET building_phase='store_published'
+                 WHERE store_name=?1",
+                [LANCEDB_CHUNKS_STORE],
+            )
+            .unwrap();
+        let path = generation_path_for(&fixture.backend, &building);
+        let mut authority =
+            current_test_authority(&building, VectorProjectionGenerationRole::Building, 2);
+        authority.building_phase = Some(VectorProjectionBuildingPhase::StorePublished);
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Quarantine(
+                VectorProjectionGenerationMutationRequest {
+                    context: mutation_context(&building, "req_store_published_quarantine"),
+                    authority,
+                },
+            ));
+
+        assert!(matches!(
+            response,
+            VectorProjectionHelperResponse::Quarantine(_)
+        ));
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn current_owner_can_abort_exact_building_generation() {
+        let fixture = destructive_authority_fixture();
+        let building = install_generation(
+            &fixture.backend,
+            "gen_current_building_abort",
+            2,
+            "fnv64:current-building",
+            false,
+        );
+        bind_building_authority(&fixture.db_path, &building);
+        let path = generation_path_for(&fixture.backend, &building);
+
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Abort(
+                VectorProjectionGenerationMutationRequest {
+                    context: mutation_context(&building, "req_current_building_abort"),
+                    authority: current_test_authority(
+                        &building,
+                        VectorProjectionGenerationRole::Building,
+                        2,
+                    ),
+                },
+            ));
+
+        assert!(matches!(response, VectorProjectionHelperResponse::Abort(_)));
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn canonical_binding_drift_is_zero_mutation() {
+        let fixture = destructive_authority_fixture();
+        let active = install_generation(
+            &fixture.backend,
+            "gen_binding_drift",
+            2,
+            "fnv64:binding-drift",
+            true,
+        );
+        bind_active_authority(&fixture.db_path, &active);
+        let path = generation_path_for(&fixture.backend, &active);
+        let mut authority =
+            current_test_authority(&active, VectorProjectionGenerationRole::Active, 2);
+        authority
+            .expected_binding
+            .as_mut()
+            .unwrap()
+            .canonical_digest = "fnv64:forged-canonical".to_owned();
+
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Quarantine(
+                VectorProjectionGenerationMutationRequest {
+                    context: mutation_context(&active, "req_binding_drift"),
+                    authority,
+                },
+            ));
+
+        assert_stale_delivery(response);
+        assert!(path.join("sentinel").is_file());
+    }
+
+    #[test]
+    fn every_destructive_binding_field_drift_is_zero_mutation() {
+        let fixture = destructive_authority_fixture();
+        let active = install_generation(
+            &fixture.backend,
+            "gen_binding_field_drift",
+            2,
+            "fnv64:binding-field-drift",
+            true,
+        );
+        bind_active_authority(&fixture.db_path, &active);
+        let path = generation_path_for(&fixture.backend, &active);
+        let drifts: Vec<fn(&mut VectorProjectionGenerationBinding)> = vec![
+            |binding| binding.generation = "gen_forged_binding".to_owned(),
+            |binding| binding.fingerprint = Some("fnv64:forged-fingerprint".to_owned()),
+            |binding| binding.fence_epoch += 1,
+            |binding| binding.snapshot_cursor = Some(999),
+            |binding| binding.provider = "forged-provider".to_owned(),
+            |binding| binding.provider_fingerprint = "fnv64:forged-provider".to_owned(),
+            |binding| binding.canonical_count += 1,
+            |binding| binding.canonical_digest = "fnv64:forged-canonical".to_owned(),
+            |binding| binding.delivery_count += 1,
+            |binding| binding.delivery_digest = "fnv64:forged-delivery".to_owned(),
+            |binding| binding.corpus.as_mut().unwrap().corpus_schema = "forged-corpus".to_owned(),
+            |binding| {
+                binding.corpus.as_mut().unwrap().corpus_fingerprint =
+                    "fnv64:forged-corpus".to_owned()
+            },
+            |binding| binding.corpus.as_mut().unwrap().embedding_model = "forged-model".to_owned(),
+            |binding| binding.corpus.as_mut().unwrap().embedding_dimensions += 1,
+        ];
+
+        for (index, drift) in drifts.into_iter().enumerate() {
+            let mut authority =
+                current_test_authority(&active, VectorProjectionGenerationRole::Active, 2);
+            drift(authority.expected_binding.as_mut().unwrap());
+            let response = fixture
+                .backend
+                .execute(&VectorProjectionHelperRequest::Quarantine(
+                    VectorProjectionGenerationMutationRequest {
+                        context: mutation_context(&active, &format!("req_binding_drift_{index}")),
+                        authority,
+                    },
+                ));
+            assert_stale_delivery(response);
+            assert!(path.join("sentinel").is_file());
+        }
+    }
+
+    #[test]
+    fn expired_cleanup_authority_is_zero_delete() {
+        let fixture = destructive_authority_fixture();
+        let active = install_generation(
+            &fixture.backend,
+            "gen_expired_cleanup",
+            2,
+            "fnv64:expired-cleanup",
+            true,
+        );
+        bind_active_authority(&fixture.db_path, &active);
+        let generations = fixture
+            .backend
+            .generations_root(LANCEDB_CHUNKS_STORE, false)
+            .unwrap();
+        let victim = generations.join("gen_expired_cleanup_victim");
+        fs::create_dir(&victim).unwrap();
+        fs::write(victim.join("sentinel"), b"victim").unwrap();
+        rusqlite::Connection::open(&fixture.db_path)
+            .unwrap()
+            .execute(
+                "UPDATE projection_store_state SET lease_expires_at=0 WHERE store_name=?1",
+                [LANCEDB_CHUNKS_STORE],
+            )
+            .unwrap();
+
+        let response = fixture
+            .backend
+            .execute(&VectorProjectionHelperRequest::Cleanup(
+                VectorProjectionCleanupRequest {
+                    context: mutation_context(&active, "req_expired_cleanup"),
+                    authority: current_test_authority(
+                        &active,
+                        VectorProjectionGenerationRole::Active,
+                        2,
+                    ),
+                    dry_run: false,
+                    protection: VectorProjectionCleanupProtection {
+                        active_generation: None,
+                        previous_generation: None,
+                        building_generation: None,
+                        additional_generations: Vec::new(),
+                    },
+                },
+            ));
+
+        assert_stale_delivery(response);
+        assert!(generation_path_for(&fixture.backend, &active).is_dir());
+        assert!(victim.join("sentinel").is_file());
+    }
+
+    #[test]
+    fn sqlite_authority_io_failure_remains_backend_classified() {
+        let fixture = destructive_authority_fixture();
+        fs::remove_file(&fixture.db_path).unwrap();
+
+        let error = fixture
+            .backend
+            .load_sqlite_mutation_authority(LANCEDB_CHUNKS_STORE)
+            .unwrap_err();
+
+        assert!(matches!(error, VectorProjectionBackendError::Backend(_)));
+    }
 
     #[test]
     fn physical_content_fingerprint_includes_vector_bits() {
@@ -4606,6 +6200,346 @@ mod tests {
         assert_ne!(
             projection_content_fingerprint(&first),
             projection_content_fingerprint(&changed)
+        );
+    }
+
+    fn destructive_authority_fixture() -> DestructiveAuthorityFixture {
+        let temp = tempfile::tempdir().unwrap();
+        let db_path = temp.path().join("kanban.db");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE projection_database (
+                 singleton INTEGER PRIMARY KEY,
+                 database_instance_id TEXT NOT NULL,
+                 protocol_version INTEGER NOT NULL
+             );
+             INSERT INTO projection_database(singleton,database_instance_id,protocol_version)
+             VALUES (1,'db_fixture',2);
+             CREATE TABLE projection_store_state (
+                 store_name TEXT PRIMARY KEY,
+                 database_instance_id TEXT NOT NULL,
+                 protocol_version INTEGER NOT NULL,
+                 schema_version INTEGER NOT NULL,
+                 control_plane TEXT NOT NULL,
+                 active_generation TEXT,
+                 active_fingerprint TEXT,
+                 active_fence_epoch INTEGER,
+                 active_snapshot_cursor INTEGER,
+                 active_provider TEXT,
+                 active_provider_fingerprint TEXT,
+                 active_corpus_schema TEXT,
+                 active_corpus_fingerprint TEXT,
+                 active_embedding_model TEXT,
+                 active_embedding_dimensions INTEGER,
+                 active_canonical_count INTEGER,
+                 active_canonical_digest TEXT,
+                 active_delivery_count INTEGER,
+                 active_delivery_digest TEXT,
+                 previous_generation TEXT,
+                 previous_fingerprint TEXT,
+                 previous_fence_epoch INTEGER,
+                 previous_snapshot_cursor INTEGER,
+                 previous_provider TEXT,
+                 previous_provider_fingerprint TEXT,
+                 previous_corpus_schema TEXT,
+                 previous_corpus_fingerprint TEXT,
+                 previous_embedding_model TEXT,
+                 previous_embedding_dimensions INTEGER,
+                 previous_canonical_count INTEGER,
+                 previous_canonical_digest TEXT,
+                 previous_delivery_count INTEGER,
+                 previous_delivery_digest TEXT,
+                 building_generation TEXT,
+                 building_fingerprint TEXT,
+                 building_fence_epoch INTEGER,
+                 building_provider TEXT,
+                 building_provider_fingerprint TEXT,
+                 building_corpus_schema TEXT,
+                 building_corpus_fingerprint TEXT,
+                 building_embedding_model TEXT,
+                 building_embedding_dimensions INTEGER,
+                 building_canonical_count INTEGER,
+                 building_canonical_digest TEXT,
+                 building_delivery_count INTEGER,
+                 building_delivery_digest TEXT,
+                 building_phase TEXT,
+                 snapshot_cursor INTEGER NOT NULL,
+                 fence_epoch INTEGER NOT NULL,
+                 lease_owner TEXT,
+                 lease_token TEXT,
+                 lease_expires_at INTEGER
+             );
+             INSERT INTO projection_store_state(
+                 store_name,database_instance_id,protocol_version,schema_version,
+                 control_plane,snapshot_cursor,fence_epoch,
+                 lease_owner,lease_token,lease_expires_at
+             ) VALUES (
+                 'lancedb_chunks','db_fixture',2,1,'v2',0,2,
+                 'new-owner','new-lease-capability',9223372036854775807
+             );",
+        )
+        .unwrap();
+        drop(conn);
+        let backend = VectorProjectionBackend::new(&db_path, Arc::new(DestructiveTestProvider))
+            .unwrap()
+            .bind_database_instance("db_fixture".to_owned());
+        backend
+            .generations_root(LANCEDB_CHUNKS_STORE, true)
+            .unwrap();
+        DestructiveAuthorityFixture {
+            _temp: temp,
+            db_path,
+            backend,
+        }
+    }
+
+    fn install_generation(
+        backend: &VectorProjectionBackend,
+        generation: &str,
+        fence_epoch: i64,
+        delivery_digest: &str,
+        published: bool,
+    ) -> ProjectionArtifactEvidence {
+        let descriptor = backend.require_store(LANCEDB_CHUNKS_STORE).unwrap();
+        let mut snapshot = ProjectionSnapshot {
+            manifest: ProjectionArtifactManifest {
+                store_name: descriptor.store_name.clone(),
+                database_instance_id: "db_fixture".to_owned(),
+                protocol_version: VECTOR_PROJECTION_PROTOCOL_VERSION,
+                schema_version: descriptor.schema_version,
+                generation: generation.to_owned(),
+                fence_epoch,
+                snapshot_cursor: fence_epoch,
+                provider: descriptor.provider.clone(),
+                provider_fingerprint: descriptor.provider_fingerprint.clone(),
+                corpus: descriptor.corpus.clone(),
+                canonical_item_count: 0,
+                canonical_digest: "fnv64:cbf29ce484222325".to_owned(),
+                delivery_item_count: 0,
+                delivery_digest: delivery_digest.to_owned(),
+                fingerprint: None,
+            },
+            records: Vec::new(),
+        };
+        let fingerprint = snapshot_fingerprint(&snapshot);
+        snapshot.manifest.fingerprint = Some(fingerprint.clone());
+        let evidence = ProjectionArtifactEvidence {
+            manifest: snapshot.manifest.clone(),
+            fingerprint,
+        };
+        let path = generation_path_for(backend, &evidence);
+        fs::create_dir(&path).unwrap();
+        persist_json(&path.join(SNAPSHOT_FILE), &snapshot).unwrap();
+        persist_json(&path.join(EVIDENCE_FILE), &evidence).unwrap();
+        fs::write(path.join("sentinel"), b"generation").unwrap();
+        if published {
+            fs::write(path.join(PUBLISHED_MARKER), marker_contents(&evidence)).unwrap();
+        }
+        evidence
+    }
+
+    fn generation_path_for(
+        backend: &VectorProjectionBackend,
+        evidence: &ProjectionArtifactEvidence,
+    ) -> PathBuf {
+        backend
+            .generations_root(&evidence.manifest.store_name, false)
+            .unwrap()
+            .join(&evidence.manifest.generation)
+    }
+
+    fn bind_active_authority(db_path: &Path, evidence: &ProjectionArtifactEvidence) {
+        let manifest = &evidence.manifest;
+        let corpus = manifest.corpus.as_ref().unwrap();
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.execute(
+            "UPDATE projection_store_state
+             SET active_generation=?1,active_fingerprint=?2,
+                 active_fence_epoch=?3,active_snapshot_cursor=?4,
+                 active_provider=?5,active_provider_fingerprint=?6,
+                 active_corpus_schema=?7,active_corpus_fingerprint=?8,
+                 active_embedding_model=?9,active_embedding_dimensions=?10,
+                 active_canonical_count=?11,active_canonical_digest=?12,
+                 active_delivery_count=?13,active_delivery_digest=?14,
+                 snapshot_cursor=?4,fence_epoch=?3
+             WHERE store_name=?15",
+            params![
+                manifest.generation,
+                evidence.fingerprint,
+                manifest.fence_epoch,
+                manifest.snapshot_cursor,
+                manifest.provider,
+                manifest.provider_fingerprint,
+                corpus.corpus_schema,
+                corpus.corpus_fingerprint,
+                corpus.embedding_model,
+                i64::try_from(corpus.embedding_dimensions).unwrap(),
+                manifest.canonical_item_count,
+                manifest.canonical_digest,
+                manifest.delivery_item_count,
+                manifest.delivery_digest,
+                manifest.store_name,
+            ],
+        )
+        .unwrap();
+    }
+
+    fn bind_previous_authority(db_path: &Path, evidence: &ProjectionArtifactEvidence) {
+        let manifest = &evidence.manifest;
+        let corpus = manifest.corpus.as_ref().unwrap();
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.execute(
+            "UPDATE projection_store_state
+             SET previous_generation=?1,previous_fingerprint=?2,
+                 previous_fence_epoch=?3,previous_snapshot_cursor=?4,
+                 previous_provider=?5,previous_provider_fingerprint=?6,
+                 previous_corpus_schema=?7,previous_corpus_fingerprint=?8,
+                 previous_embedding_model=?9,previous_embedding_dimensions=?10,
+                 previous_canonical_count=?11,previous_canonical_digest=?12,
+                 previous_delivery_count=?13,previous_delivery_digest=?14
+             WHERE store_name=?15",
+            params![
+                manifest.generation,
+                evidence.fingerprint,
+                manifest.fence_epoch,
+                manifest.snapshot_cursor,
+                manifest.provider,
+                manifest.provider_fingerprint,
+                corpus.corpus_schema,
+                corpus.corpus_fingerprint,
+                corpus.embedding_model,
+                i64::try_from(corpus.embedding_dimensions).unwrap(),
+                manifest.canonical_item_count,
+                manifest.canonical_digest,
+                manifest.delivery_item_count,
+                manifest.delivery_digest,
+                manifest.store_name,
+            ],
+        )
+        .unwrap();
+    }
+
+    fn bind_building_authority(db_path: &Path, evidence: &ProjectionArtifactEvidence) {
+        let manifest = &evidence.manifest;
+        let corpus = manifest.corpus.as_ref().unwrap();
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.execute(
+            "UPDATE projection_store_state
+             SET building_generation=?1,building_fingerprint=?2,
+                 building_fence_epoch=?3,building_provider=?4,
+                 building_provider_fingerprint=?5,
+                 building_corpus_schema=?6,building_corpus_fingerprint=?7,
+                 building_embedding_model=?8,building_embedding_dimensions=?9,
+                 building_canonical_count=?10,building_canonical_digest=?11,
+                 building_delivery_count=?12,building_delivery_digest=?13,
+                 building_phase='prepared',snapshot_cursor=?14,fence_epoch=?3
+             WHERE store_name=?15",
+            params![
+                manifest.generation,
+                evidence.fingerprint,
+                manifest.fence_epoch,
+                manifest.provider,
+                manifest.provider_fingerprint,
+                corpus.corpus_schema,
+                corpus.corpus_fingerprint,
+                corpus.embedding_model,
+                i64::try_from(corpus.embedding_dimensions).unwrap(),
+                manifest.canonical_item_count,
+                manifest.canonical_digest,
+                manifest.delivery_item_count,
+                manifest.delivery_digest,
+                manifest.snapshot_cursor,
+                manifest.store_name,
+            ],
+        )
+        .unwrap();
+    }
+
+    fn mutation_context(
+        evidence: &ProjectionArtifactEvidence,
+        request_id: &str,
+    ) -> VectorProjectionMutationContext {
+        VectorProjectionMutationContext {
+            request_id: request_id.to_owned(),
+            projection_store: evidence.manifest.store_name.clone(),
+            generation_id: evidence.manifest.generation.clone(),
+            delivery_digest: evidence.manifest.delivery_digest.clone(),
+        }
+    }
+
+    fn test_destructive_authority(
+        evidence: &ProjectionArtifactEvidence,
+        role: VectorProjectionGenerationRole,
+    ) -> VectorProjectionDestructiveAuthority {
+        VectorProjectionDestructiveAuthority {
+            owner: "owner".to_owned(),
+            lease_token: "lease".to_owned(),
+            fence_epoch: evidence.manifest.fence_epoch,
+            role,
+            generation: evidence.manifest.generation.clone(),
+            expected_manifest: None,
+            expected_binding: None,
+            building_phase: None,
+        }
+    }
+
+    fn current_test_authority(
+        evidence: &ProjectionArtifactEvidence,
+        role: VectorProjectionGenerationRole,
+        fence_epoch: i64,
+    ) -> VectorProjectionDestructiveAuthority {
+        let manifest = &evidence.manifest;
+        VectorProjectionDestructiveAuthority {
+            owner: "new-owner".to_owned(),
+            lease_token: "new-lease-capability".to_owned(),
+            fence_epoch,
+            role,
+            generation: manifest.generation.clone(),
+            expected_manifest: Some(manifest.clone()),
+            expected_binding: Some(VectorProjectionGenerationBinding {
+                generation: manifest.generation.clone(),
+                fingerprint: manifest.fingerprint.clone(),
+                fence_epoch: manifest.fence_epoch,
+                snapshot_cursor: Some(manifest.snapshot_cursor),
+                provider: manifest.provider.clone(),
+                provider_fingerprint: manifest.provider_fingerprint.clone(),
+                canonical_count: manifest.canonical_item_count,
+                canonical_digest: manifest.canonical_digest.clone(),
+                delivery_count: manifest.delivery_item_count,
+                delivery_digest: manifest.delivery_digest.clone(),
+                corpus: manifest.corpus.clone(),
+            }),
+            building_phase: (role == VectorProjectionGenerationRole::Building)
+                .then_some(VectorProjectionBuildingPhase::Prepared),
+        }
+    }
+
+    fn snapshotting_test_authority(
+        evidence: &ProjectionArtifactEvidence,
+    ) -> VectorProjectionDestructiveAuthority {
+        let mut authority = current_test_authority(
+            evidence,
+            VectorProjectionGenerationRole::Building,
+            evidence.manifest.fence_epoch,
+        );
+        authority.expected_manifest = None;
+        let binding = authority.expected_binding.as_mut().unwrap();
+        binding.fingerprint = None;
+        binding.snapshot_cursor = None;
+        authority.building_phase = Some(VectorProjectionBuildingPhase::Snapshotting);
+        authority
+    }
+
+    fn assert_stale_delivery(response: VectorProjectionHelperResponse) {
+        let VectorProjectionHelperResponse::Error(error) = response else {
+            panic!("stale destructive request was accepted: {response:?}");
+        };
+        assert_eq!(error.kind, VectorProjectionHelperErrorKind::Delivery);
+        assert_eq!(error.code, "projection_delivery_mismatch");
+        assert!(
+            error
+                .message
+                .contains("SQLite Projection v2 authority rejected stale")
         );
     }
 }

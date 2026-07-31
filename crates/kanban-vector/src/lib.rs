@@ -3,10 +3,11 @@ use kanban_contract::{
     VectorHelperEmbedQueryResponse, VectorHelperErrorResponse, VectorHelperLabelAtomHit,
     VectorHelperQueryChunksResponse, VectorHelperQueryLabelAtomsItem,
     VectorHelperQueryLabelAtomsResponse, VectorHelperStatusResponse,
-    VectorProjectionApplyBatchRequest, VectorProjectionHelperDescriptor,
-    VectorProjectionHelperError, VectorProjectionHelperErrorKind, VectorProjectionHelperRequest,
-    VectorProjectionHelperResponse, VectorProjectionMutationAck, VectorProjectionMutationContext,
-    VectorProjectionProtectionReason,
+    VectorProjectionApplyBatchRequest, VectorProjectionBuildingPhase,
+    VectorProjectionDestructiveAuthority, VectorProjectionGenerationBinding,
+    VectorProjectionGenerationRole, VectorProjectionHelperDescriptor, VectorProjectionHelperError,
+    VectorProjectionHelperErrorKind, VectorProjectionHelperRequest, VectorProjectionHelperResponse,
+    VectorProjectionMutationAck, VectorProjectionMutationContext, VectorProjectionProtectionReason,
 };
 use kanban_entity::{ChunkRef, EntityUri};
 use kanban_helper_protocol::HelperEnvelope;
@@ -1049,13 +1050,20 @@ fn valid_projection_request_correlation(request: &VectorProjectionHelperRequest)
         VectorProjectionHelperRequest::PrepareSnapshot(request) => {
             context_matches_manifest(&request.context, &request.snapshot.manifest)
                 && request.snapshot.manifest.corpus.as_ref() == Some(&request.metadata)
+                && valid_projection_destructive_authority(&request.context, &request.authority)
         }
         VectorProjectionHelperRequest::ApplyBatch(VectorProjectionApplyBatchRequest {
             context,
+            authority,
             batch,
         }) => {
             context.projection_store == batch.store_name
                 && context.generation_id == batch.target_generation
+                && valid_projection_destructive_authority(context, authority)
+                && authority.owner == batch.owner
+                && authority.lease_token == batch.lease_token
+                && authority.fence_epoch == batch.fence_epoch
+                && authority.generation == batch.target_generation
                 && batch.items.iter().all(|item| {
                     item.store_name == batch.store_name
                         && item.generation_id == batch.target_generation
@@ -1063,6 +1071,7 @@ fn valid_projection_request_correlation(request: &VectorProjectionHelperRequest)
         }
         VectorProjectionHelperRequest::Publish(request) => {
             context_matches_manifest(&request.context, &request.prepared.manifest)
+                && valid_projection_destructive_authority(&request.context, &request.authority)
                 && request.expected_active.as_ref().is_none_or(|expected| {
                     expected.manifest.store_name == request.context.projection_store
                 })
@@ -1075,12 +1084,149 @@ fn valid_projection_request_correlation(request: &VectorProjectionHelperRequest)
         }
         VectorProjectionHelperRequest::RepairPublication(request) => {
             context_matches_manifest(&request.context, &request.expected.manifest)
+                && valid_projection_destructive_authority(&request.context, &request.authority)
+        }
+        VectorProjectionHelperRequest::Quarantine(request)
+        | VectorProjectionHelperRequest::Abort(request) => {
+            valid_projection_destructive_authority(&request.context, &request.authority)
         }
         VectorProjectionHelperRequest::Cleanup(request) => {
             valid_cleanup_protection(&request.protection)
+                && valid_projection_destructive_authority(&request.context, &request.authority)
         }
         _ => true,
     }
+}
+
+fn valid_projection_destructive_authority(
+    context: &VectorProjectionMutationContext,
+    authority: &VectorProjectionDestructiveAuthority,
+) -> bool {
+    if context.request_id.trim().is_empty()
+        || context.projection_store.trim().is_empty()
+        || context.generation_id.trim().is_empty()
+        || context.delivery_digest.trim().is_empty()
+        || authority.owner.trim().is_empty()
+        || authority.lease_token.trim().is_empty()
+        || authority.fence_epoch < 0
+        || authority.generation != context.generation_id
+    {
+        return false;
+    }
+
+    if authority.role == VectorProjectionGenerationRole::Orphaned {
+        return authority.expected_manifest.is_none()
+            && authority.expected_binding.is_none()
+            && authority.building_phase.is_none();
+    }
+
+    let Some(binding) = authority.expected_binding.as_ref() else {
+        return false;
+    };
+    if authority.generation != binding.generation
+        || context.delivery_digest != binding.delivery_digest
+        || binding.fence_epoch > authority.fence_epoch
+        || !valid_projection_generation_binding(binding)
+    {
+        return false;
+    }
+
+    let has_complete_artifact_binding = binding
+        .fingerprint
+        .as_ref()
+        .is_some_and(|fingerprint| !fingerprint.trim().is_empty())
+        && binding.snapshot_cursor.is_some();
+    let manifest_matches = authority
+        .expected_manifest
+        .as_ref()
+        .is_some_and(|manifest| {
+            context_matches_manifest(context, manifest)
+                && valid_projection_manifest(manifest)
+                && projection_manifest_matches_generation_binding(manifest, binding)
+        });
+
+    match authority.role {
+        VectorProjectionGenerationRole::Active | VectorProjectionGenerationRole::Previous => {
+            authority.building_phase.is_none() && has_complete_artifact_binding && manifest_matches
+        }
+        VectorProjectionGenerationRole::Building => match authority.building_phase {
+            Some(VectorProjectionBuildingPhase::Snapshotting) => {
+                authority.expected_manifest.is_none()
+                    && binding.fingerprint.is_none()
+                    && binding.snapshot_cursor.is_none()
+            }
+            Some(
+                VectorProjectionBuildingPhase::Prepared
+                | VectorProjectionBuildingPhase::StorePublished,
+            ) => has_complete_artifact_binding && manifest_matches,
+            None => false,
+        },
+        VectorProjectionGenerationRole::Orphaned => {
+            unreachable!("orphaned authority returned before binding validation")
+        }
+    }
+}
+
+fn valid_projection_generation_binding(binding: &VectorProjectionGenerationBinding) -> bool {
+    !binding.generation.trim().is_empty()
+        && binding
+            .fingerprint
+            .as_ref()
+            .is_none_or(|fingerprint| !fingerprint.trim().is_empty())
+        && binding.fence_epoch >= 0
+        && binding.snapshot_cursor.is_none_or(|cursor| cursor >= 0)
+        && !binding.provider.trim().is_empty()
+        && !binding.provider_fingerprint.trim().is_empty()
+        && binding.canonical_count >= 0
+        && !binding.canonical_digest.trim().is_empty()
+        && binding.delivery_count >= 0
+        && !binding.delivery_digest.trim().is_empty()
+        && binding.corpus.as_ref().is_none_or(valid_projection_corpus)
+}
+
+fn valid_projection_manifest(manifest: &ProjectionArtifactManifest) -> bool {
+    !manifest.store_name.trim().is_empty()
+        && manifest.database_instance_id.starts_with("db_")
+        && manifest.protocol_version == kanban_contract::VECTOR_PROJECTION_PROTOCOL_VERSION
+        && manifest.schema_version > 0
+        && !manifest.generation.trim().is_empty()
+        && manifest.fence_epoch >= 0
+        && manifest.snapshot_cursor >= 0
+        && !manifest.provider.trim().is_empty()
+        && !manifest.provider_fingerprint.trim().is_empty()
+        && manifest.canonical_item_count >= 0
+        && !manifest.canonical_digest.trim().is_empty()
+        && manifest.delivery_item_count >= 0
+        && !manifest.delivery_digest.trim().is_empty()
+        && manifest
+            .fingerprint
+            .as_ref()
+            .is_some_and(|fingerprint| !fingerprint.trim().is_empty())
+        && manifest.corpus.as_ref().is_none_or(valid_projection_corpus)
+}
+
+fn valid_projection_corpus(corpus: &ProjectionCorpusMetadata) -> bool {
+    !corpus.corpus_schema.trim().is_empty()
+        && !corpus.corpus_fingerprint.trim().is_empty()
+        && !corpus.embedding_model.trim().is_empty()
+        && corpus.embedding_dimensions > 0
+}
+
+fn projection_manifest_matches_generation_binding(
+    manifest: &ProjectionArtifactManifest,
+    binding: &VectorProjectionGenerationBinding,
+) -> bool {
+    manifest.generation == binding.generation
+        && manifest.fingerprint == binding.fingerprint
+        && manifest.fence_epoch == binding.fence_epoch
+        && Some(manifest.snapshot_cursor) == binding.snapshot_cursor
+        && manifest.provider == binding.provider
+        && manifest.provider_fingerprint == binding.provider_fingerprint
+        && manifest.canonical_item_count == binding.canonical_count
+        && manifest.canonical_digest == binding.canonical_digest
+        && manifest.delivery_item_count == binding.delivery_count
+        && manifest.delivery_digest == binding.delivery_digest
+        && manifest.corpus == binding.corpus
 }
 
 fn valid_cleanup_protection(
@@ -1662,14 +1808,38 @@ fn bounded_projection_message(
     max_bytes: usize,
 ) -> String {
     let mut value = value.replace(['\r', '\n'], " ");
-    if let VectorProjectionHelperRequest::ApplyBatch(request) = request {
-        for capability in [&request.batch.lease_token, &request.batch.claim_token] {
-            if !capability.is_empty() {
-                value = value.replace(capability, "[REDACTED]");
-            }
+    match request {
+        VectorProjectionHelperRequest::PrepareSnapshot(request) => {
+            redact_projection_capability(&mut value, &request.authority.lease_token);
         }
+        VectorProjectionHelperRequest::Publish(request) => {
+            redact_projection_capability(&mut value, &request.authority.lease_token);
+        }
+        VectorProjectionHelperRequest::RepairPublication(request) => {
+            redact_projection_capability(&mut value, &request.authority.lease_token);
+        }
+        VectorProjectionHelperRequest::ApplyBatch(request) => {
+            for capability in [&request.batch.lease_token, &request.batch.claim_token] {
+                redact_projection_capability(&mut value, capability);
+            }
+            redact_projection_capability(&mut value, &request.authority.lease_token);
+        }
+        VectorProjectionHelperRequest::Quarantine(request)
+        | VectorProjectionHelperRequest::Abort(request) => {
+            redact_projection_capability(&mut value, &request.authority.lease_token);
+        }
+        VectorProjectionHelperRequest::Cleanup(request) => {
+            redact_projection_capability(&mut value, &request.authority.lease_token);
+        }
+        _ => {}
     }
     truncate_projection_message(value, max_bytes)
+}
+
+fn redact_projection_capability(value: &mut String, capability: &str) {
+    if !capability.is_empty() {
+        *value = value.replace(capability, "[REDACTED]");
+    }
 }
 
 fn truncate_projection_message(mut value: String, max_bytes: usize) -> String {
@@ -2034,16 +2204,20 @@ mod tests {
         ensure_dimensions, label_atoms_corpus_metadata,
     };
     use kanban_contract::{
-        ProjectionBatch, ProjectionCorpusMetadata, ProjectionDelivery, ProjectionDeliveryAction,
+        ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
+        ProjectionCorpusMetadata, ProjectionDelivery, ProjectionDeliveryAction, ProjectionSnapshot,
         ProjectionStoreDescriptor, VectorProjectionApplyBatchRequest,
         VectorProjectionApplyBatchResponse, VectorProjectionBatchApplicationReceipt,
-        VectorProjectionCleanupProtection, VectorProjectionCleanupRequest,
-        VectorProjectionCleanupResponse, VectorProjectionHelperDescriptor,
-        VectorProjectionHelperError, VectorProjectionHelperErrorKind,
-        VectorProjectionHelperOperation, VectorProjectionHelperRequest,
-        VectorProjectionHelperResponse, VectorProjectionMutationAck,
-        VectorProjectionMutationContext, VectorProjectionProtectedGeneration,
-        VectorProjectionProtectionReason,
+        VectorProjectionBuildingPhase, VectorProjectionCleanupProtection,
+        VectorProjectionCleanupRequest, VectorProjectionCleanupResponse,
+        VectorProjectionDestructiveAuthority, VectorProjectionGenerationBinding,
+        VectorProjectionGenerationMutationRequest, VectorProjectionGenerationRole,
+        VectorProjectionHelperDescriptor, VectorProjectionHelperError,
+        VectorProjectionHelperErrorKind, VectorProjectionHelperOperation,
+        VectorProjectionHelperRequest, VectorProjectionHelperResponse, VectorProjectionMutationAck,
+        VectorProjectionMutationContext, VectorProjectionPrepareSnapshotRequest,
+        VectorProjectionProtectedGeneration, VectorProjectionProtectionReason,
+        VectorProjectionPublishRequest, VectorProjectionRepairPublicationRequest,
     };
     #[cfg(unix)]
     use std::fs;
@@ -2061,13 +2235,18 @@ mod tests {
     fn assert_vector_store<T: VectorStore>(_store: &T) {}
 
     fn projection_apply_request() -> VectorProjectionHelperRequest {
+        let context = VectorProjectionMutationContext {
+            request_id: "request-1".to_owned(),
+            projection_store: "lancedb_chunks".to_owned(),
+            generation_id: "generation-7".to_owned(),
+            delivery_digest: "sha256:delivery-7".to_owned(),
+        };
+        let mut authority = projection_destructive_authority(&context);
+        authority.fence_epoch = 8;
+        authority.lease_token = "lease-token-secret".to_owned();
         VectorProjectionHelperRequest::ApplyBatch(VectorProjectionApplyBatchRequest {
-            context: VectorProjectionMutationContext {
-                request_id: "request-1".to_owned(),
-                projection_store: "lancedb_chunks".to_owned(),
-                generation_id: "generation-7".to_owned(),
-                delivery_digest: "sha256:delivery-7".to_owned(),
-            },
+            context,
+            authority,
             batch: ProjectionBatch {
                 store_name: "lancedb_chunks".to_owned(),
                 database_instance_id: "database-1".to_owned(),
@@ -2117,6 +2296,73 @@ mod tests {
                 fence_epoch: 8,
                 applied_item_count: 1,
             },
+        })
+    }
+
+    fn projection_destructive_context() -> VectorProjectionMutationContext {
+        VectorProjectionMutationContext {
+            request_id: "destructive-request-1".to_owned(),
+            projection_store: "lancedb_chunks".to_owned(),
+            generation_id: "generation-active".to_owned(),
+            delivery_digest: "sha256:delivery-active".to_owned(),
+        }
+    }
+
+    fn projection_destructive_authority(
+        context: &VectorProjectionMutationContext,
+    ) -> VectorProjectionDestructiveAuthority {
+        let corpus = Some(ProjectionCorpusMetadata {
+            corpus_schema: TASK_CHUNKS_CORPUS_SCHEMA.to_owned(),
+            corpus_fingerprint: "sha256:corpus-active".to_owned(),
+            embedding_model: "model-1".to_owned(),
+            embedding_dimensions: 3,
+        });
+        let manifest = ProjectionArtifactManifest {
+            store_name: context.projection_store.clone(),
+            database_instance_id: "db_projection_1".to_owned(),
+            protocol_version: 2,
+            schema_version: 29,
+            generation: context.generation_id.clone(),
+            fence_epoch: 7,
+            snapshot_cursor: 41,
+            provider: "lancedb".to_owned(),
+            provider_fingerprint: "sha256:provider".to_owned(),
+            corpus: corpus.clone(),
+            canonical_item_count: 2,
+            canonical_digest: "sha256:canonical-active".to_owned(),
+            delivery_item_count: 1,
+            delivery_digest: context.delivery_digest.clone(),
+            fingerprint: Some("sha256:generation-active".to_owned()),
+        };
+        VectorProjectionDestructiveAuthority {
+            owner: "maintenance-owner".to_owned(),
+            lease_token: "destructive-lease-token-secret".to_owned(),
+            fence_epoch: 11,
+            role: VectorProjectionGenerationRole::Active,
+            generation: manifest.generation.clone(),
+            expected_binding: Some(VectorProjectionGenerationBinding {
+                generation: manifest.generation.clone(),
+                fingerprint: manifest.fingerprint.clone(),
+                fence_epoch: manifest.fence_epoch,
+                snapshot_cursor: Some(manifest.snapshot_cursor),
+                provider: manifest.provider.clone(),
+                provider_fingerprint: manifest.provider_fingerprint.clone(),
+                canonical_count: manifest.canonical_item_count,
+                canonical_digest: manifest.canonical_digest.clone(),
+                delivery_count: manifest.delivery_item_count,
+                delivery_digest: manifest.delivery_digest.clone(),
+                corpus,
+            }),
+            expected_manifest: Some(manifest),
+            building_phase: None,
+        }
+    }
+
+    fn projection_quarantine_request() -> VectorProjectionHelperRequest {
+        let context = projection_destructive_context();
+        VectorProjectionHelperRequest::Quarantine(VectorProjectionGenerationMutationRequest {
+            authority: projection_destructive_authority(&context),
+            context,
         })
     }
 
@@ -2170,6 +2416,334 @@ mod tests {
     }
 
     #[test]
+    fn projection_destructive_authority_rejects_empty_capability_or_invalid_fence() {
+        let request = projection_quarantine_request();
+        assert!(super::valid_projection_request_correlation(&request));
+
+        let mutations: [fn(&mut VectorProjectionDestructiveAuthority); 5] = [
+            |authority: &mut VectorProjectionDestructiveAuthority| authority.owner.clear(),
+            |authority: &mut VectorProjectionDestructiveAuthority| {
+                authority.lease_token = " \t".to_owned();
+            },
+            |authority: &mut VectorProjectionDestructiveAuthority| authority.fence_epoch = -1,
+            |authority: &mut VectorProjectionDestructiveAuthority| {
+                authority.expected_binding.as_mut().unwrap().fence_epoch = -1;
+            },
+            |authority: &mut VectorProjectionDestructiveAuthority| {
+                authority.expected_binding.as_mut().unwrap().fence_epoch =
+                    authority.fence_epoch + 1;
+            },
+        ];
+        for mutate in mutations {
+            let mut invalid = request.clone();
+            let VectorProjectionHelperRequest::Quarantine(request) = &mut invalid else {
+                unreachable!()
+            };
+            mutate(&mut request.authority);
+            assert!(!super::valid_projection_request_correlation(&invalid));
+        }
+    }
+
+    #[test]
+    fn projection_destructive_authority_rejects_role_binding_inconsistency() {
+        let request = projection_quarantine_request();
+
+        let mut missing_canonical_manifest = request.clone();
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut missing_canonical_manifest
+        else {
+            unreachable!()
+        };
+        mutation.authority.expected_manifest = None;
+        assert!(!super::valid_projection_request_correlation(
+            &missing_canonical_manifest
+        ));
+
+        let mut missing_canonical_binding = request.clone();
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut missing_canonical_binding
+        else {
+            unreachable!()
+        };
+        mutation.authority.expected_binding = None;
+        assert!(!super::valid_projection_request_correlation(
+            &missing_canonical_binding
+        ));
+
+        let mut active_with_building_phase = request.clone();
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut active_with_building_phase
+        else {
+            unreachable!()
+        };
+        mutation.authority.building_phase = Some(VectorProjectionBuildingPhase::Prepared);
+        assert!(!super::valid_projection_request_correlation(
+            &active_with_building_phase
+        ));
+
+        let mut building_without_phase = request.clone();
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut building_without_phase
+        else {
+            unreachable!()
+        };
+        mutation.authority.role = VectorProjectionGenerationRole::Building;
+        assert!(!super::valid_projection_request_correlation(
+            &building_without_phase
+        ));
+
+        let mut snapshotting_with_manifest = request.clone();
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut snapshotting_with_manifest
+        else {
+            unreachable!()
+        };
+        mutation.authority.role = VectorProjectionGenerationRole::Building;
+        mutation.authority.building_phase = Some(VectorProjectionBuildingPhase::Snapshotting);
+        assert!(!super::valid_projection_request_correlation(
+            &snapshotting_with_manifest
+        ));
+
+        let mut prepared_without_manifest = request.clone();
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut prepared_without_manifest
+        else {
+            unreachable!()
+        };
+        mutation.authority.role = VectorProjectionGenerationRole::Building;
+        mutation.authority.building_phase = Some(VectorProjectionBuildingPhase::Prepared);
+        mutation.authority.expected_manifest = None;
+        assert!(!super::valid_projection_request_correlation(
+            &prepared_without_manifest
+        ));
+
+        let mut orphan_with_canonical_evidence = request.clone();
+        let VectorProjectionHelperRequest::Quarantine(mutation) =
+            &mut orphan_with_canonical_evidence
+        else {
+            unreachable!()
+        };
+        mutation.authority.role = VectorProjectionGenerationRole::Orphaned;
+        assert!(!super::valid_projection_request_correlation(
+            &orphan_with_canonical_evidence
+        ));
+
+        let mut orphan_with_building_phase = request;
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut orphan_with_building_phase
+        else {
+            unreachable!()
+        };
+        mutation.authority.role = VectorProjectionGenerationRole::Orphaned;
+        mutation.authority.expected_manifest = None;
+        mutation.authority.expected_binding = None;
+        mutation.authority.building_phase = Some(VectorProjectionBuildingPhase::Snapshotting);
+        assert!(!super::valid_projection_request_correlation(
+            &orphan_with_building_phase
+        ));
+    }
+
+    #[test]
+    fn projection_destructive_authority_accepts_supported_role_binding_shapes() {
+        let request = projection_quarantine_request();
+
+        for role in [
+            VectorProjectionGenerationRole::Active,
+            VectorProjectionGenerationRole::Previous,
+        ] {
+            let mut candidate = request.clone();
+            let VectorProjectionHelperRequest::Quarantine(mutation) = &mut candidate else {
+                unreachable!()
+            };
+            mutation.authority.role = role;
+            assert!(super::valid_projection_request_correlation(&candidate));
+        }
+
+        for phase in [
+            VectorProjectionBuildingPhase::Prepared,
+            VectorProjectionBuildingPhase::StorePublished,
+        ] {
+            let mut candidate = request.clone();
+            let VectorProjectionHelperRequest::Quarantine(mutation) = &mut candidate else {
+                unreachable!()
+            };
+            mutation.authority.role = VectorProjectionGenerationRole::Building;
+            mutation.authority.building_phase = Some(phase);
+            assert!(super::valid_projection_request_correlation(&candidate));
+        }
+
+        let mut snapshotting = request;
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut snapshotting else {
+            unreachable!()
+        };
+        mutation.authority.role = VectorProjectionGenerationRole::Building;
+        mutation.authority.building_phase = Some(VectorProjectionBuildingPhase::Snapshotting);
+        mutation.authority.expected_manifest = None;
+        let binding = mutation.authority.expected_binding.as_mut().unwrap();
+        binding.fingerprint = None;
+        binding.snapshot_cursor = None;
+        assert!(super::valid_projection_request_correlation(&snapshotting));
+
+        let mut orphaned = projection_quarantine_request();
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut orphaned else {
+            unreachable!()
+        };
+        mutation.context.generation_id = "orphaned-entry".to_owned();
+        mutation.authority.role = VectorProjectionGenerationRole::Orphaned;
+        mutation.authority.generation = "orphaned-entry".to_owned();
+        mutation.authority.expected_manifest = None;
+        mutation.authority.expected_binding = None;
+        assert!(super::valid_projection_request_correlation(&orphaned));
+    }
+
+    #[test]
+    fn projection_destructive_authority_rejects_context_and_exact_binding_drift() {
+        let request = projection_quarantine_request();
+
+        let mut generation_drift = request.clone();
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut generation_drift else {
+            unreachable!()
+        };
+        mutation.authority.generation = "generation-other".to_owned();
+        assert!(!super::valid_projection_request_correlation(
+            &generation_drift
+        ));
+
+        let mut delivery_drift = request.clone();
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut delivery_drift else {
+            unreachable!()
+        };
+        mutation
+            .authority
+            .expected_binding
+            .as_mut()
+            .unwrap()
+            .delivery_digest = "sha256:delivery-other".to_owned();
+        assert!(!super::valid_projection_request_correlation(
+            &delivery_drift
+        ));
+
+        let mut manifest_binding_drift = request;
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut manifest_binding_drift
+        else {
+            unreachable!()
+        };
+        mutation
+            .authority
+            .expected_binding
+            .as_mut()
+            .unwrap()
+            .canonical_count += 1;
+        assert!(!super::valid_projection_request_correlation(
+            &manifest_binding_drift
+        ));
+    }
+
+    #[test]
+    fn projection_destructive_authority_redacts_token_from_bounded_diagnostics() {
+        let quarantine = projection_quarantine_request();
+        let VectorProjectionHelperRequest::Quarantine(quarantine_request) = &quarantine else {
+            unreachable!()
+        };
+        let token = quarantine_request.authority.lease_token.clone();
+        let abort = VectorProjectionHelperRequest::Abort(quarantine_request.clone());
+        let cleanup = VectorProjectionHelperRequest::Cleanup(VectorProjectionCleanupRequest {
+            context: quarantine_request.context.clone(),
+            authority: quarantine_request.authority.clone(),
+            dry_run: false,
+            protection: VectorProjectionCleanupProtection {
+                active_generation: Some("generation-active".to_owned()),
+                previous_generation: None,
+                building_generation: None,
+                additional_generations: Vec::new(),
+            },
+        });
+
+        for request in [quarantine, abort, cleanup] {
+            let message =
+                super::bounded_projection_message(&format!("helper echoed {token}"), &request, 240);
+            assert!(!message.contains(&token));
+            assert!(message.contains("[REDACTED]"));
+        }
+    }
+
+    #[test]
+    fn every_mutating_projection_request_redacts_its_authority_capability() {
+        let context = projection_destructive_context();
+        let authority = projection_destructive_authority(&context);
+        let manifest = authority.expected_manifest.clone().unwrap();
+        let evidence = ProjectionArtifactEvidence {
+            fingerprint: manifest.fingerprint.clone().unwrap(),
+            manifest: manifest.clone(),
+        };
+        let prepare = VectorProjectionHelperRequest::PrepareSnapshot(
+            VectorProjectionPrepareSnapshotRequest {
+                context: context.clone(),
+                authority: authority.clone(),
+                snapshot: ProjectionSnapshot {
+                    manifest: manifest.clone(),
+                    records: Vec::new(),
+                },
+                metadata: manifest.corpus.clone().unwrap(),
+            },
+        );
+        let publish =
+            VectorProjectionHelperRequest::Publish(Box::new(VectorProjectionPublishRequest {
+                context: context.clone(),
+                authority: authority.clone(),
+                expected_active: None,
+                prepared: evidence.clone(),
+            }));
+        let repair = VectorProjectionHelperRequest::RepairPublication(
+            VectorProjectionRepairPublicationRequest {
+                context: context.clone(),
+                authority: authority.clone(),
+                expected: evidence,
+            },
+        );
+        let apply = projection_apply_request();
+        let quarantine = projection_quarantine_request();
+        let VectorProjectionHelperRequest::Quarantine(quarantine_request) = &quarantine else {
+            unreachable!()
+        };
+        let abort = VectorProjectionHelperRequest::Abort(quarantine_request.clone());
+        let cleanup = VectorProjectionHelperRequest::Cleanup(VectorProjectionCleanupRequest {
+            context: quarantine_request.context.clone(),
+            authority: quarantine_request.authority.clone(),
+            dry_run: false,
+            protection: VectorProjectionCleanupProtection {
+                active_generation: Some("generation-active".to_owned()),
+                previous_generation: None,
+                building_generation: None,
+                additional_generations: Vec::new(),
+            },
+        });
+
+        for (request, capabilities) in [
+            (prepare, vec!["destructive-lease-token-secret"]),
+            (
+                apply,
+                vec!["lease-token-secret", "claim-token-secret"],
+            ),
+            (publish, vec!["destructive-lease-token-secret"]),
+            (repair, vec!["destructive-lease-token-secret"]),
+            (quarantine, vec!["destructive-lease-token-secret"]),
+            (abort, vec!["destructive-lease-token-secret"]),
+            (cleanup, vec!["destructive-lease-token-secret"]),
+        ] {
+            let message = super::bounded_projection_message(
+                &format!(
+                    "helper echoed {}",
+                    capabilities
+                        .iter()
+                        .map(|capability| capability.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" and ")
+                ),
+                &request,
+                240,
+            );
+            for capability in capabilities {
+                assert!(!message.contains(capability), "{message}");
+            }
+            assert!(message.contains("[REDACTED]"), "{message}");
+        }
+    }
+
+    #[test]
     fn projection_descriptor_fences_operation_protocol_schema_and_store() {
         let request = projection_apply_request();
         let descriptor = projection_helper_descriptor();
@@ -2205,6 +2779,35 @@ mod tests {
     }
 
     #[test]
+    fn projection_destructive_descriptor_uses_store_identity_not_historical_provider() {
+        let mut request = projection_quarantine_request();
+        let VectorProjectionHelperRequest::Quarantine(mutation) = &mut request else {
+            unreachable!()
+        };
+        let historical_corpus = Some(ProjectionCorpusMetadata {
+            corpus_schema: TASK_CHUNKS_CORPUS_SCHEMA.to_owned(),
+            corpus_fingerprint: "sha256:historical-corpus".to_owned(),
+            embedding_model: "historical-model".to_owned(),
+            embedding_dimensions: 7,
+        });
+        let binding = mutation.authority.expected_binding.as_mut().unwrap();
+        binding.provider = "historical-provider".to_owned();
+        binding.provider_fingerprint = "sha256:historical-provider".to_owned();
+        binding.corpus = historical_corpus.clone();
+        let manifest = mutation.authority.expected_manifest.as_mut().unwrap();
+        manifest.provider = "historical-provider".to_owned();
+        manifest.provider_fingerprint = "sha256:historical-provider".to_owned();
+        manifest.corpus = historical_corpus;
+
+        let mut descriptor = projection_helper_descriptor();
+        descriptor.supported_operations = vec![
+            VectorProjectionHelperOperation::Descriptor,
+            VectorProjectionHelperOperation::Quarantine,
+        ];
+        super::validate_projection_request_against_descriptor(&request, &descriptor).unwrap();
+    }
+
+    #[test]
     fn projection_cleanup_response_cannot_remove_protected_or_dry_run_generations() {
         let context = VectorProjectionMutationContext {
             request_id: "cleanup-1".to_owned(),
@@ -2214,6 +2817,7 @@ mod tests {
         };
         let request = VectorProjectionHelperRequest::Cleanup(VectorProjectionCleanupRequest {
             context: context.clone(),
+            authority: projection_destructive_authority(&context),
             dry_run: true,
             protection: VectorProjectionCleanupProtection {
                 active_generation: Some("generation-active".to_owned()),

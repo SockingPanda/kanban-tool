@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:d71ff334b4662923fcf9a7e2f4085d5bda46f5220b3be69b533a368280a4ccff"
+    "sha256": "sha256:40fbc22196afcf3cf226dd290e77389138f20acbbef9ba35290d4970bd7444cc"
   },
   "roots": [
     {
@@ -3627,11 +3627,11 @@
     {
       "contract_id": "helper.vector-projection.request",
       "direction": "deserialize",
-      "id": "urn:kanban-tool:schema:helper:vector-projection-request:v1",
-      "invalid_fixture": "schemas/fixtures/helper/vector-projection-request.v1.invalid.json",
-      "path": "helper/vector-projection-request.v1.schema.json",
-      "schema_fixture": "schemas/fixtures/helper/vector-projection-request.v1.valid.json",
-      "sha256": "sha256:2e45c60fd70e587356b374e07befaf70ab88606f8caae2c863b51a983c177710",
+      "id": "urn:kanban-tool:schema:helper:vector-projection-request:v2",
+      "invalid_fixture": "schemas/fixtures/helper/vector-projection-request.v2.invalid.json",
+      "path": "helper/vector-projection-request.v2.schema.json",
+      "schema_fixture": "schemas/fixtures/helper/vector-projection-request.v2.valid.json",
+      "sha256": "sha256:e9c64fceb21e02edaac7d16a617e2e7053099e5e0cae81760362ceb24e156038",
       "strictness": "deny_unknown_fields"
     },
     {

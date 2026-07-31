@@ -680,8 +680,14 @@ fn label_semantics_and_atoms_commands_round_trip_json() -> anyhow::Result<()> {
                     .is_some_and(|text| text.contains("Backend replacement semantics")))
     );
 
-    let status =
-        kanban(&temp.path, &["--json", "label", "atom-index", "status"])?.success_json()?;
+    let unavailable_helper = temp.dir.join("missing-vector-helper");
+    let status = kanban_in_dir_envs(
+        &temp.path,
+        &["--json", "label", "atom-index", "status"],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", unavailable_helper.as_path())],
+    )?
+    .success_json()?;
     assert_eq!(status["data"]["enabled"], false);
 
     let vector_config = temp.dir.join("vector.toml");
@@ -694,12 +700,7 @@ model = "offline-cli-test-model"
 dimensions = 3
 "#,
     )?;
-    let expected_index_failures = &[
-        "label vector helper adapter is not available",
-        "vector helper unavailable",
-        "Ollama embed request failed",
-    ];
-    kanban(
+    kanban_in_dir_envs(
         &temp.path,
         &[
             "label",
@@ -708,9 +709,11 @@ dimensions = 3
             "--vector-config",
             vector_config.to_str().context("vector config path")?,
         ],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", unavailable_helper.as_path())],
     )?
-    .failure_containing_any(expected_index_failures)?;
-    kanban(
+    .failure_containing("vector helper unavailable")?;
+    kanban_in_dir_envs(
         &temp.path,
         &[
             "label",
@@ -720,8 +723,10 @@ dimensions = 3
             "--vector-config",
             vector_config.to_str().context("vector config path")?,
         ],
+        &temp.dir,
+        &[("KANBAN_VECTOR_HELPER", unavailable_helper.as_path())],
     )?
-    .failure_containing_any(expected_index_failures)?;
+    .failure_containing("vector helper unavailable")?;
 
     kanban(
         &temp.path,

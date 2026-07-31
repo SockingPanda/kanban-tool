@@ -10,6 +10,9 @@ use super::{
     RunLogPathStatus, StaleClaimRecord, StatusCount, board_id, count_dependency_cycles,
     derived_store_statuses_conn, run_log_path_status_for_db_dir, storage,
 };
+use crate::init::{
+    LATEST_MIGRATION_VERSION, validate_schema_migrations_ledger, validate_schema_shape,
+};
 
 use std::{
     collections::{HashMap, HashSet},
@@ -940,6 +943,16 @@ fn validate_initialized_database_connection(path: &Path, conn: &Connection) -> R
             path.display()
         )));
     }
+    if user_version != LATEST_MIGRATION_VERSION {
+        return Err(KanbanError::InvalidInput(format!(
+            "database schema version is not current (expected {}, found {}): {}",
+            LATEST_MIGRATION_VERSION,
+            user_version,
+            path.display()
+        )));
+    }
+    validate_schema_shape(conn)?;
+    validate_schema_migrations_ledger(conn)?;
     Ok(())
 }
 
@@ -2611,6 +2624,138 @@ mod lifecycle_tests {
         );
     }
 
+    #[test]
+    fn existing_read_only_database_opener_rejects_same_version_wrong_schema() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("wrong-schema.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);
+             INSERT INTO schema_migrations(version) VALUES (30);
+             PRAGMA user_version=30;
+             CREATE TABLE tasks(x INTEGER);
+             CREATE TABLE task_dependencies(x INTEGER);
+             CREATE TABLE task_runs(x INTEGER);
+             CREATE TABLE entities(x INTEGER);
+             CREATE TABLE relation_predicates(x INTEGER);
+             CREATE TABLE entity_relations(x INTEGER);
+             CREATE TABLE index_outbox(x INTEGER);
+             CREATE TABLE derived_store_state(x INTEGER);
+             CREATE TABLE label_semantics(x INTEGER);
+             CREATE TABLE label_atoms(x INTEGER);
+             CREATE TABLE label_atom_index_boards(x INTEGER);
+             CREATE TABLE label_semantic_proposals(x INTEGER);
+             CREATE TABLE label_ontology_observations(x INTEGER);
+             CREATE TABLE label_ontology_signals(x INTEGER);
+             CREATE TABLE label_ontology_actions(x INTEGER);
+             CREATE TABLE label_ontology_action_atom_effects(x INTEGER);
+             CREATE TABLE label_ontology_action_signals(x INTEGER);
+             CREATE TABLE task_subtasks(x INTEGER);
+             CREATE TABLE task_execution_plans(x INTEGER);
+             CREATE TABLE task_steps(x INTEGER);
+             CREATE TABLE signal_observations(x INTEGER);
+             CREATE TABLE signals(x INTEGER);
+             CREATE TABLE projection_database(x INTEGER);
+             CREATE TABLE projection_store_state(x INTEGER);
+             CREATE TABLE projection_deliveries(x INTEGER);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let error = connect_existing_database_read_only(&path).unwrap_err();
+        assert!(matches!(
+            error,
+            KanbanError::Storage(message) if message.contains("schema validation failed")
+        ));
+    }
+
+    #[test]
+    fn existing_read_only_database_opener_rejects_older_version_with_required_names_only() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("old-schema.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY);
+             INSERT INTO schema_migrations(version) VALUES (1);
+             PRAGMA user_version=1;
+             CREATE TABLE tasks(x INTEGER);
+             CREATE TABLE task_dependencies(x INTEGER);
+             CREATE TABLE task_runs(x INTEGER);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let error = connect_existing_database_read_only(&path).unwrap_err();
+        assert!(matches!(
+            error,
+            KanbanError::InvalidInput(message) if message.contains("not current")
+        ));
+    }
+
+    #[test]
+    fn schema_validation_rejects_non_composite_task_runs_foreign_key() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE tasks(id TEXT PRIMARY KEY, board_id TEXT);
+             CREATE TABLE task_runs(task_id TEXT, board_id TEXT,
+               FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE);",
+        )
+        .unwrap();
+        let error = crate::init::validate_task_runs_foreign_key(&conn).unwrap_err();
+        assert!(matches!(error, KanbanError::Storage(message) if message.contains("foreign key")));
+    }
+
+    #[test]
+    fn schema_validation_rejects_composite_task_runs_foreign_key_with_wrong_seq_mapping() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE tasks(id TEXT, board_id TEXT, PRIMARY KEY(id), UNIQUE(board_id, id));
+             CREATE TABLE task_runs(task_id TEXT, board_id TEXT,
+               FOREIGN KEY(board_id, task_id) REFERENCES tasks(board_id, id) ON DELETE CASCADE);",
+        )
+        .unwrap();
+        let pragma_rows: Vec<(i64, i64, String, String)> = conn
+            .prepare("SELECT id, seq, \"from\", \"to\" FROM pragma_foreign_key_list('task_runs')")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .unwrap()
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(pragma_rows, vec![(0, 0, "board_id".into(), "board_id".into()), (0, 1, "task_id".into(), "id".into())]);
+        let error = crate::init::validate_task_runs_foreign_key(&conn).unwrap_err();
+        assert!(matches!(error, KanbanError::Storage(message) if message.contains("foreign key")));
+    }
+
+    #[test]
+    fn schema_validation_rejects_task_runs_fk_without_composite_parent_key() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE tasks(id TEXT PRIMARY KEY, board_id TEXT);
+             CREATE TABLE task_runs(task_id TEXT, board_id TEXT,
+               FOREIGN KEY(task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE);",
+        )
+        .unwrap();
+        let error = crate::init::validate_tasks_composite_parent_key(&conn).unwrap_err();
+        assert!(matches!(error, KanbanError::Storage(message) if message.contains("composite")));
+    }
+
+    #[test]
+    fn read_only_opener_rejects_migration_ledger_corruption() {
+        for (label, mutation) in [
+            ("name", "UPDATE schema_migrations SET name='wrong' WHERE version=1"),
+            ("checksum", "UPDATE schema_migrations SET checksum='wrong' WHERE version=1"),
+            ("extra", "INSERT INTO schema_migrations(version,name,checksum,applied_at) VALUES (0,'extra','extra',0)"),
+            ("missing", "DELETE FROM schema_migrations WHERE version=1"),
+        ] {
+            let tempdir = tempfile::tempdir().unwrap();
+            let path = tempdir.path().join(format!("ledger-{label}.db"));
+            crate::init::init_database(&path, "tester").unwrap();
+            Connection::open(&path).unwrap().execute_batch(mutation).unwrap();
+            let error = connect_existing_database_read_only(&path).unwrap_err();
+            assert!(matches!(error, KanbanError::Storage(ref message) if message.contains("migration")), "{label}: {error}");
+        }
+    }
+
     #[cfg(any(unix, windows))]
     #[test]
     fn existing_read_only_database_opener_retains_lifecycle_guard_and_rejects_writes() {
@@ -2635,6 +2780,19 @@ mod lifecycle_tests {
 
         drop(connection);
         drop(DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(&path).unwrap());
+    }
+
+    #[test]
+    fn read_only_opener_ignores_unrelated_expression_unique_index() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("expression-index.db");
+        crate::init::init_database(&path, "tester").unwrap();
+        let conn = Connection::open(&path).unwrap();
+        conn.execute("CREATE UNIQUE INDEX tasks_expression_unique ON tasks(lower(title))", [])
+            .unwrap();
+        drop(conn);
+        let connection = connect_existing_database_read_only(&path).unwrap();
+        drop(connection);
     }
 
     #[cfg(unix)]

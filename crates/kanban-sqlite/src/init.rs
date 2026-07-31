@@ -64,7 +64,7 @@ const PROJECTION_LABEL_ATOM_DELIVERIES_MIGRATION: &str =
     include_str!("../../../migrations/029_projection_label_atom_deliveries.sql");
 const PROJECTION_CORPUS_BINDINGS_MIGRATION: &str =
     include_str!("../../../migrations/030_projection_corpus_bindings.sql");
-const LATEST_MIGRATION_VERSION: i64 = 30;
+pub(crate) const LATEST_MIGRATION_VERSION: i64 = 30;
 const LEGACY_INITIAL_MIGRATION_CHECKSUMS: &[&str] = &[
     "fnv64:0ca871be950fc8a6",
     "fnv64:3b08da4e2b6041f5",
@@ -663,7 +663,7 @@ fn ensure_schema_migrations_shape(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn validate_schema_shape(conn: &Connection) -> Result<()> {
+pub(crate) fn validate_schema_shape(conn: &Connection) -> Result<()> {
     let required = [
         (
             "boards",
@@ -979,6 +979,123 @@ fn validate_schema_shape(conn: &Connection) -> Result<()> {
                     "schema validation failed: missing column {table}.{column}"
                 )));
             }
+        }
+    }
+    let tasks_id_is_primary_key: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('tasks') WHERE name='id' AND pk=1)",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    if !tasks_id_is_primary_key {
+        return Err(KanbanError::Storage(
+            "schema validation failed: tasks.id is not a primary key".to_owned(),
+        ));
+    }
+    validate_task_runs_foreign_key(conn)?;
+    validate_tasks_composite_parent_key(conn)?;
+    Ok(())
+}
+
+pub(crate) fn validate_tasks_composite_parent_key(conn: &Connection) -> Result<()> {
+    let mut indexes = conn
+        .prepare("SELECT name FROM pragma_index_list('tasks') WHERE \"unique\"=1 AND partial=0")
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    let names = indexes
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|err| KanbanError::Storage(err.to_string()))?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    for name in names {
+        let mut info = conn
+            .prepare("SELECT name FROM pragma_index_info(?1) ORDER BY seqno")
+            .map_err(|err| KanbanError::Storage(err.to_string()))?;
+        let columns = info
+            .query_map([name], |row| row.get::<_, Option<String>>(0))
+            .map_err(|err| KanbanError::Storage(err.to_string()))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|err| KanbanError::Storage(err.to_string()))?;
+        if columns.as_slice() == [Some("id".to_owned()), Some("board_id".to_owned())] {
+            return Ok(());
+        }
+    }
+    Err(KanbanError::Storage(
+        "schema validation failed: tasks composite (id, board_id) unique key is missing".to_owned(),
+    ))
+}
+
+pub(crate) fn validate_task_runs_foreign_key(conn: &Connection) -> Result<()> {
+    let mut stmt = conn
+        .prepare("SELECT id, seq, \"from\", \"to\", on_delete FROM pragma_foreign_key_list('task_runs') WHERE \"table\"='tasks' ORDER BY id, seq")
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    let fks = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })
+        .map_err(|err| KanbanError::Storage(err.to_string()))?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    let task_runs_has_task_fk = fks.iter().any(|(id, ..)| {
+        let pairs: Vec<_> = fks
+            .iter()
+            .filter(|(candidate, ..)| candidate == id)
+            .map(|(_, seq, from, to, on_delete)| (*seq, from.as_str(), to.as_str(), on_delete.as_str()))
+            .collect();
+        pairs == [
+            (0, "task_id", "id", "CASCADE"),
+            (1, "board_id", "board_id", "CASCADE"),
+        ]
+    });
+    if !task_runs_has_task_fk {
+        return Err(KanbanError::Storage(
+            "schema validation failed: task_runs.task_id foreign key is missing".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_schema_migrations_ledger(conn: &Connection) -> Result<()> {
+    let row_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })
+        .map_err(|err| KanbanError::Storage(err.to_string()))?;
+    if row_count != MIGRATIONS.len() as i64 {
+        return Err(KanbanError::Storage(format!(
+            "schema validation failed: expected {} migration rows, found {row_count}",
+            MIGRATIONS.len()
+        )));
+    }
+    for migration in MIGRATIONS {
+        let row: Option<(String, String)> = conn
+            .query_row(
+                "SELECT name, checksum FROM schema_migrations WHERE version=?1",
+                [migration.version],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|err| KanbanError::Storage(err.to_string()))?;
+        let Some((name, checksum)) = row else {
+            return Err(KanbanError::Storage(format!(
+                "schema validation failed: missing migration row {}",
+                migration.version
+            )));
+        };
+        let expected = migration_checksum(migration.sql);
+        if name != migration.name
+            || (checksum != expected && !is_allowed_legacy_migration_checksum(migration, &checksum))
+        {
+            return Err(KanbanError::Storage(format!(
+                "schema validation failed: migration {} ledger mismatch",
+                migration.version
+            )));
         }
     }
     Ok(())

@@ -1,9 +1,7 @@
 use crate::db::{
+    DatabaseConnection, connect_existing_quiescent_read_only, connect_existing_read_only,
     connect_file, default_pragmas, maintenance_lock_blocks, maintenance_lock_path,
-    connect_existing_quiescent_read_only,
-    DatabaseConnection,
-    runtime_lock_blocks, runtime_lock_path,
-    open_database_with_exclusive_authority,
+    open_database_with_exclusive_authority, runtime_lock_blocks, runtime_lock_path,
 };
 
 use super::{
@@ -735,14 +733,55 @@ fn assert_database_idle_with_connection(conn: &Connection, path: &Path) -> Resul
             path.display()
         )));
     }
-    conn.execute_batch("BEGIN IMMEDIATE; COMMIT;")
-        .map_err(|error| {
-            KanbanError::InvalidInput(format!(
-                "database is busy; stop kanban serve/dispatch before import --replace: {} ({error})",
+    // Acquire SQLite's reserved write lock before the final idle checks. A
+    // raw writer that bypasses the lifecycle byte lock can otherwise commit
+    // running work between the initial counts and BEGIN IMMEDIATE.
+    conn.execute_batch("BEGIN IMMEDIATE;").map_err(|error| {
+        KanbanError::InvalidInput(format!(
+            "database is busy; stop kanban serve/dispatch before import --replace: {} ({error})",
+            path.display()
+        ))
+    })?;
+    let result = (|| {
+        if table_exists(conn, "projection_maintenance_owner")? {
+            let now = SystemClock.now_ms();
+            let active_owner = conn
+                .query_row(
+                    "SELECT owner
+                     FROM projection_maintenance_owner
+                     WHERE singleton=1
+                       AND owner IS NOT NULL
+                       AND lease_token IS NOT NULL
+                       AND lease_expires_at>?1",
+                    [now],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()
+                .map_err(storage)?;
+            if let Some(owner) = active_owner {
+                return Err(KanbanError::InvalidInput(format!(
+                    "database has active projection maintenance owner {owner}; stop maintenance before import --replace: {}",
+                    path.display()
+                )));
+            }
+        }
+        let running_tasks = count_table_status(conn, "tasks", "running")?;
+        let running_runs = count_table_status(conn, "task_runs", "running")?;
+        if running_tasks > 0 || running_runs > 0 {
+            return Err(KanbanError::InvalidInput(format!(
+                "database has running work; stop kanban serve/dispatch before import --replace: {}",
                 path.display()
-            ))
-        })?;
-    Ok(())
+            )));
+        }
+        Ok(())
+    })();
+    let commit = conn.execute_batch("COMMIT;").map_err(|error| {
+        KanbanError::InvalidInput(format!(
+            "database is busy; stop kanban serve/dispatch before import --replace: {} ({error})",
+            path.display()
+        ))
+    });
+    result.and(commit)
 }
 
 pub(crate) fn count_table_status(conn: &Connection, table: &str, status: &str) -> Result<i64> {
@@ -2176,6 +2215,7 @@ fn doctor_issue_counts(issues: &[DoctorIssue]) -> (i64, i64) {
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+    use std::io;
 
     unsafe extern "C" fn deny_table_probe_reads(
         _: *mut std::ffi::c_void,
@@ -2209,6 +2249,30 @@ mod lifecycle_tests {
             if *probes > 4 {
                 return rusqlite::ffi::SQLITE_DENY;
             }
+        }
+        rusqlite::ffi::SQLITE_OK
+    }
+
+    unsafe extern "C" fn require_transaction_before_status_reads(
+        context: *mut std::ffi::c_void,
+        action: std::ffi::c_int,
+        arg1: *const std::ffi::c_char,
+        arg2: *const std::ffi::c_char,
+        _: *const std::ffi::c_char,
+        _: *const std::ffi::c_char,
+    ) -> std::ffi::c_int {
+        let state = unsafe { &mut *(context.cast::<bool>()) };
+        if action == rusqlite::ffi::SQLITE_TRANSACTION {
+            if !arg1.is_null() && unsafe { std::ffi::CStr::from_ptr(arg1).to_bytes() } == b"BEGIN" {
+                *state = true;
+            }
+        }
+        if action == rusqlite::ffi::SQLITE_READ
+            && !arg2.is_null()
+            && unsafe { std::ffi::CStr::from_ptr(arg2).to_bytes() } == b"status"
+            && !*state
+        {
+            return rusqlite::ffi::SQLITE_DENY;
         }
         rusqlite::ffi::SQLITE_OK
     }
@@ -2304,6 +2368,32 @@ mod lifecycle_tests {
 
         assert!(matches!(error, KanbanError::Storage(_)), "error: {error}");
         assert!(probes > 4, "expected tasks/task_runs table probe failure");
+    }
+
+    #[test]
+    fn replace_rechecks_statuses_after_acquiring_sqlite_write_lock() {
+        let conn = Connection::open_in_memory().unwrap();
+        default_pragmas(&conn).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_migrations(version INTEGER);
+             CREATE TABLE tasks(status TEXT);
+             CREATE TABLE task_runs(status TEXT);",
+        )
+        .unwrap();
+        let mut transaction_started = false;
+        assert_eq!(
+            unsafe {
+                rusqlite::ffi::sqlite3_set_authorizer(
+                    conn.handle(),
+                    Some(require_transaction_before_status_reads),
+                    (&mut transaction_started as *mut bool).cast(),
+                )
+            },
+            rusqlite::ffi::SQLITE_OK
+        );
+
+        assert_database_idle_with_connection(&conn, Path::new("database.db")).unwrap();
+        assert!(transaction_started);
     }
 
     #[cfg(unix)]

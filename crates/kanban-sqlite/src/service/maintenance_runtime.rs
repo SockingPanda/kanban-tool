@@ -1110,6 +1110,13 @@ fn target_validation_disposition(error: &KanbanError) -> TargetValidationDisposi
 
 type MaintenanceStoreAttempt<T> = std::result::Result<T, MaintenanceStoreAttemptError>;
 
+fn begin_generation_failure(error: KanbanError) -> MaintenanceStoreAttemptError {
+    MaintenanceStoreAttemptError::Store {
+        kind: MaintenanceStoreFailureKind::Backend,
+        error,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExplicitResumeInvariant {
     generation: String,
@@ -1393,10 +1400,7 @@ fn run_projection_store_operation_with_intent(
                 lease_token,
                 backend,
             )
-            .map_err(|error| MaintenanceStoreAttemptError::Store {
-                kind: MaintenanceStoreFailureKind::Provider,
-                error,
-            })?;
+            .map_err(begin_generation_failure)?;
         }
         let rebuilding =
             projection_status(&session.db_path).map_err(MaintenanceStoreAttemptError::Fatal)?;
@@ -1447,10 +1451,7 @@ fn run_projection_store_operation_with_intent(
                     lease_token,
                     backend,
                 )
-                .map_err(|error| MaintenanceStoreAttemptError::Store {
-                    kind: MaintenanceStoreFailureKind::Provider,
-                    error,
-                })?;
+                .map_err(begin_generation_failure)?;
             }
         }
         let rebuilding =
@@ -1543,10 +1544,7 @@ fn run_projection_store_operation_with_intent(
                         lease_token,
                         backend,
                     )
-                    .map_err(|error| MaintenanceStoreAttemptError::Store {
-                        kind: MaintenanceStoreFailureKind::Provider,
-                        error,
-                    })?;
+                    .map_err(begin_generation_failure)?;
                     prepare_projection_snapshot_with(
                         &session.db_path,
                         store_name,
@@ -2005,6 +2003,22 @@ fn compute_runtime_build_identity() -> std::result::Result<String, String> {
 #[cfg(test)]
 mod target_validation_tests {
     use super::*;
+
+    #[test]
+    fn generation_begin_failure_is_not_classified_as_provider() {
+        let attempt = begin_generation_failure(KanbanError::Storage(
+            "local generation metadata write failed".to_owned(),
+        ));
+        let MaintenanceStoreAttemptError::Store { kind, error } = attempt else {
+            panic!("generation begin failure must be a store failure");
+        };
+        assert_eq!(kind, MaintenanceStoreFailureKind::Backend);
+        assert!(
+            error
+                .to_string()
+                .contains("local generation metadata write failed")
+        );
+    }
 
     #[test]
     fn transient_target_validation_failure_requires_retry_without_abort() {

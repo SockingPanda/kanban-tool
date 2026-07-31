@@ -25,7 +25,7 @@ use super::oxigraph_projection::OxigraphProjectionStore;
 #[cfg(feature = "tantivy-backend")]
 use super::tantivy_projection::TantivyProjectionStore;
 use super::{
-    ProjectionCorpusMetadata, ProjectionRuntimeAvailability, ProjectionStatus,
+    ProjectionCorpusMetadata, ProjectionLease, ProjectionRuntimeAvailability, ProjectionStatus,
     ProjectionStoreDescriptor, ProjectionStoreStatus, projection_status,
     projection_status_quiescent, storage, with_immediate_tx,
 };
@@ -1859,14 +1859,21 @@ fn failed_store_run(
     error: KanbanError,
 ) -> Result<MaintenanceStoreRun> {
     renew_maintenance_owner(session)?;
-    renew_projection_lease(
+    let lease = renew_projection_lease(
         &session.db_path,
         store_name,
         &session.owner,
         lease_token,
         session.options.lease_ttl_ms,
     )?;
-    persist_store_failure(&session.db_path, store_name, display_name, kind, error)
+    persist_store_failure(
+        &session.db_path,
+        store_name,
+        display_name,
+        &lease,
+        kind,
+        error,
+    )
 }
 
 fn failed_store_run_without_store_lease(
@@ -1876,17 +1883,105 @@ fn failed_store_run_without_store_lease(
     kind: MaintenanceStoreFailureKind,
     error: KanbanError,
 ) -> Result<MaintenanceStoreRun> {
-    renew_maintenance_owner(session)?;
-    persist_store_failure(&session.db_path, store_name, display_name, kind, error)
+    let message = error.to_string();
+    let fallback_reason = store_failure_fallback_reason(store_name, &kind);
+    let report = || MaintenanceStoreRun {
+        store_name: store_name.to_owned(),
+        result: MaintenanceStoreResult::Failed {
+            kind: kind.clone(),
+            message: message.clone(),
+        },
+        lifecycle_status: "error".to_owned(),
+        fallback_reason: Some(fallback_reason.to_owned()),
+    };
+
+    // Constructor/provider failures happen before the normal projection lease
+    // is acquired.  Refresh the singleton maintenance authority first; if it
+    // is stale, return only the structured report rather than attempting an
+    // unfenced store-name write.  Non-conflict database failures remain fatal.
+    match renew_maintenance_owner(session) {
+        Ok(()) => {}
+        Err(KanbanError::Conflict(_)) => return Ok(report()),
+        Err(error) => return Err(error),
+    }
+    let lease = match acquire_projection_lease(
+        &session.db_path,
+        store_name,
+        &session.owner,
+        session.options.lease_ttl_ms,
+    ) {
+        Ok(lease) => lease,
+        Err(KanbanError::Conflict(_)) => return Ok(report()),
+        Err(error) => return Err(error),
+    };
+
+    // Persist only under the freshly acquired owner/token/fence/expiry CAS,
+    // then release through the same service path even when persistence races
+    // with a handoff.  A stale/conflicted writer is deliberately downgraded to
+    // the structured local failure report and never touches the successor.
+    let persisted = persist_store_failure(
+        &session.db_path,
+        store_name,
+        display_name,
+        &lease,
+        kind.clone(),
+        error,
+    );
+    let released = release_projection_lease(
+        &session.db_path,
+        store_name,
+        &session.owner,
+        &lease.lease_token,
+    );
+    resolve_unleased_failure_results(persisted, released, report())
+}
+
+fn resolve_unleased_failure_results(
+    persisted: Result<MaintenanceStoreRun>,
+    released: Result<()>,
+    report: MaintenanceStoreRun,
+) -> Result<MaintenanceStoreRun> {
+    match (persisted, released) {
+        (Ok(run), Ok(())) => Ok(run),
+        (Err(KanbanError::Conflict(_)), Ok(()))
+        | (Err(KanbanError::Conflict(_)), Err(KanbanError::Conflict(_)))
+        | (Ok(_), Err(KanbanError::Conflict(_))) => Ok(report),
+        (Err(KanbanError::Conflict(_)), Err(release_error)) => Err(release_error),
+        (Err(error), _) => Err(error),
+        (Ok(_), Err(error)) => Err(error),
+    }
+}
+
+fn store_failure_fallback_reason(
+    store_name: &str,
+    kind: &MaintenanceStoreFailureKind,
+) -> &'static str {
+    match (kind, store_name) {
+        (MaintenanceStoreFailureKind::Provider, _) => "provider_unavailable",
+        (
+            MaintenanceStoreFailureKind::Backend | MaintenanceStoreFailureKind::Delivery,
+            LANCEDB_LABEL_ATOMS_STORE | LANCEDB_CHUNKS_STORE,
+        ) => "helper_unavailable",
+        (MaintenanceStoreFailureKind::Backend | MaintenanceStoreFailureKind::Delivery, _) => {
+            "physical_generation_unavailable"
+        }
+    }
 }
 
 fn persist_store_failure(
     path: &Path,
     store_name: &str,
     display_name: &str,
+    lease: &ProjectionLease,
     kind: MaintenanceStoreFailureKind,
     error: KanbanError,
 ) -> Result<MaintenanceStoreRun> {
+    if lease.store_name != store_name {
+        return Err(KanbanError::Conflict(format!(
+            "{display_name} projection lease authority targets {}",
+            lease.store_name
+        )));
+    }
     let message = error.to_string();
     let now = SystemClock.now_ms();
     let conn = connect_file(path)?;
@@ -1894,13 +1989,21 @@ fn persist_store_failure(
         .execute(
             "UPDATE projection_store_state
              SET lifecycle_status='error',last_error=?1,updated_at=?2
-             WHERE store_name=?3",
-            params![message, now, store_name],
+             WHERE store_name=?3 AND lease_owner=?4 AND lease_token=?5
+               AND fence_epoch=?6 AND lease_expires_at>?2",
+            params![
+                message,
+                now,
+                store_name,
+                lease.owner,
+                lease.lease_token,
+                lease.fence_epoch,
+            ],
         )
         .map_err(storage)?;
     if changed != 1 {
-        return Err(KanbanError::Storage(format!(
-            "{display_name} projection state is missing"
+        return Err(KanbanError::Conflict(format!(
+            "{display_name} projection lease is stale while persisting failure"
         )));
     }
     let status = projection_status(path)?;
@@ -1911,11 +2014,15 @@ fn persist_store_failure(
         .ok_or_else(|| {
             KanbanError::Storage(format!("{display_name} projection state is missing"))
         })?;
+    let fallback_reason = match store.fallback_reason.as_deref() {
+        Some("corpus_binding_upgrade_required" | "corpus_binding_invalid") => store.fallback_reason,
+        _ => Some(store_failure_fallback_reason(store_name, &kind).to_owned()),
+    };
     Ok(MaintenanceStoreRun {
         store_name: store.store_name,
         result: MaintenanceStoreResult::Failed { kind, message },
         lifecycle_status: store.lifecycle_status,
-        fallback_reason: store.fallback_reason,
+        fallback_reason,
     })
 }
 
@@ -2074,6 +2181,461 @@ mod target_validation_tests {
             descriptor.corpus.as_ref(),
             &descriptor,
         ));
+    }
+}
+
+#[cfg(test)]
+mod unleased_failure_tests {
+    use std::cell::Cell;
+
+    use rusqlite::params;
+    use tempfile::tempdir;
+
+    use super::*;
+    use crate::init::init_database;
+    use crate::service::{CreateTask, create_task};
+
+    fn failure_report(message: &str) -> MaintenanceStoreRun {
+        MaintenanceStoreRun {
+            store_name: TANTIVY_TASKS_STORE.to_owned(),
+            result: MaintenanceStoreResult::Failed {
+                kind: MaintenanceStoreFailureKind::Backend,
+                message: message.to_owned(),
+            },
+            lifecycle_status: "error".to_owned(),
+            fallback_reason: Some("physical_generation_unavailable".to_owned()),
+        }
+    }
+
+    #[test]
+    fn unleased_result_resolution_propagates_non_conflict_release_error() {
+        let error = resolve_unleased_failure_results(
+            Err(KanbanError::Conflict(
+                "failure persistence lost its lease".to_owned(),
+            )),
+            Err(KanbanError::Storage(
+                "projection lease release failed".to_owned(),
+            )),
+            failure_report("report only"),
+        )
+        .expect_err("release storage failure must not be masked by persistence conflict");
+
+        assert!(matches!(
+            error,
+            KanbanError::Storage(message) if message == "projection lease release failed"
+        ));
+    }
+
+    #[test]
+    fn unleased_result_resolution_keeps_ordinary_conflicts_report_only() -> anyhow::Result<()> {
+        let report = failure_report("report only");
+        let persist_conflict = resolve_unleased_failure_results(
+            Err(KanbanError::Conflict(
+                "failure persistence lost its lease".to_owned(),
+            )),
+            Ok(()),
+            report.clone(),
+        )?;
+        assert_eq!(persist_conflict, report);
+
+        let both_conflict = resolve_unleased_failure_results(
+            Err(KanbanError::Conflict(
+                "failure persistence lost its lease".to_owned(),
+            )),
+            Err(KanbanError::Conflict(
+                "projection lease was already handed off".to_owned(),
+            )),
+            report.clone(),
+        )?;
+        assert_eq!(both_conflict, report);
+
+        let release_conflict = resolve_unleased_failure_results(
+            Ok(failure_report("persisted result")),
+            Err(KanbanError::Conflict(
+                "projection lease was already handed off".to_owned(),
+            )),
+            report.clone(),
+        )?;
+        assert_eq!(release_conflict, report);
+        Ok(())
+    }
+
+    #[test]
+    fn backend_open_failure_records_fenced_diagnostic_and_later_store_runs() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let task = create_task(
+            &db_path,
+            "default",
+            "tester",
+            CreateTask::ready("failure fencing canonical task"),
+        )?;
+        let canonical_before = {
+            let conn = connect_file(&db_path)?;
+            let task_state = conn.query_row(
+                "SELECT status,title,description,metadata_json FROM tasks WHERE id=?1",
+                [&task.id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                },
+            )?;
+            let mut statement = conn.prepare(
+                "SELECT id,kind,payload_json FROM task_events WHERE task_id=?1 ORDER BY id",
+            )?;
+            let events = statement
+                .query_map([&task.id], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            (task_state, events)
+        };
+        let session = MaintenanceSession::start(
+            &db_path,
+            "maintenance-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let before = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+
+        let later_store_ran = Cell::new(false);
+        let stores = vec![
+            failed_store_run_without_store_lease(
+                &session,
+                TANTIVY_TASKS_STORE,
+                "Tantivy",
+                MaintenanceStoreFailureKind::Backend,
+                KanbanError::Storage("backend could not be opened".to_owned()),
+            )?,
+            {
+                later_store_ran.set(true);
+                MaintenanceStoreRun {
+                    store_name: LANCEDB_LABEL_ATOMS_STORE.to_owned(),
+                    result: MaintenanceStoreResult::Succeeded {
+                        action: "later_store_ran".to_owned(),
+                        processed: 0,
+                    },
+                    lifecycle_status: "ready".to_owned(),
+                    fallback_reason: None,
+                }
+            },
+        ];
+        assert!(later_store_ran.get());
+        assert_eq!(stores.len(), 2);
+        assert_eq!(stores[0].store_name, TANTIVY_TASKS_STORE);
+        assert_eq!(stores[0].lifecycle_status, "error");
+        assert_eq!(
+            stores[0].fallback_reason.as_deref(),
+            Some("physical_generation_unavailable")
+        );
+        assert!(matches!(
+            &stores[0].result,
+            MaintenanceStoreResult::Failed {
+                kind: MaintenanceStoreFailureKind::Backend,
+                message,
+            } if message.contains("backend could not be opened")
+        ));
+        assert_eq!(stores[1].store_name, LANCEDB_LABEL_ATOMS_STORE);
+
+        let after = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+        assert_ne!(after.lifecycle_status, before.lifecycle_status);
+        assert_eq!(after.lifecycle_status, "error");
+        assert!(
+            after
+                .last_error
+                .as_deref()
+                .is_some_and(|error| error.contains("backend could not be opened"))
+        );
+        assert_eq!(
+            after.fallback_reason.as_deref(),
+            Some("derived_store_error")
+        );
+        assert_eq!(after.owner, None);
+        assert_eq!(after.lease_expires_at, None);
+        let canonical_after = {
+            let conn = connect_file(&db_path)?;
+            let task_state = conn.query_row(
+                "SELECT status,title,description,metadata_json FROM tasks WHERE id=?1",
+                [&task.id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                },
+            )?;
+            let mut statement = conn.prepare(
+                "SELECT id,kind,payload_json FROM task_events WHERE task_id=?1 ORDER BY id",
+            )?;
+            let events = statement
+                .query_map([&task.id], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            (task_state, events)
+        };
+        assert_eq!(canonical_after, canonical_before);
+        session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn unleased_failure_does_not_mutate_successor_projection_state() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let session = MaintenanceSession::start(
+            &db_path,
+            "maintenance-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let successor =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "successor-owner", 10_000)?;
+        let before = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+
+        let report = failed_store_run_without_store_lease(
+            &session,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            MaintenanceStoreFailureKind::Backend,
+            KanbanError::Storage("backend could not be opened".to_owned()),
+        )?;
+        assert!(matches!(
+            report.result,
+            MaintenanceStoreResult::Failed {
+                kind: MaintenanceStoreFailureKind::Backend,
+                ..
+            }
+        ));
+
+        let after = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+        assert_eq!(after.lifecycle_status, before.lifecycle_status);
+        assert_eq!(after.last_error, before.last_error);
+        assert_eq!(after.fallback_reason, before.fallback_reason);
+        assert_eq!(after.owner.as_deref(), Some("successor-owner"));
+        assert_eq!(after.fence_epoch, successor.fence_epoch);
+        assert_eq!(after.lease_expires_at, before.lease_expires_at);
+
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "successor-owner",
+            &successor.lease_token,
+        )?;
+        session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn unleased_failure_retry_after_release_is_idempotently_fenced() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let session = MaintenanceSession::start(
+            &db_path,
+            "maintenance-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+
+        let first = failed_store_run_without_store_lease(
+            &session,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            MaintenanceStoreFailureKind::Backend,
+            KanbanError::Storage("first open failure".to_owned()),
+        )?;
+        let retry = failed_store_run_without_store_lease(
+            &session,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            MaintenanceStoreFailureKind::Provider,
+            KanbanError::Storage("retry provider failure".to_owned()),
+        )?;
+        assert!(matches!(
+            first.result,
+            MaintenanceStoreResult::Failed {
+                kind: MaintenanceStoreFailureKind::Backend,
+                ..
+            }
+        ));
+        assert!(matches!(
+            retry.result,
+            MaintenanceStoreResult::Failed {
+                kind: MaintenanceStoreFailureKind::Provider,
+                ..
+            }
+        ));
+
+        let after = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+        assert_eq!(after.lifecycle_status, "error");
+        assert!(
+            after
+                .last_error
+                .as_deref()
+                .is_some_and(|error| error.contains("retry provider failure"))
+        );
+        assert_eq!(after.owner, None);
+        assert_eq!(after.lease_expires_at, None);
+        session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn leased_failure_renews_after_recovery_fence_bump_before_persistence() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let session = MaintenanceSession::start(
+            &db_path,
+            "maintenance-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "maintenance-owner", 10_000)?;
+        let old_fence = lease.fence_epoch;
+        connect_file(&db_path)?.execute(
+            "UPDATE projection_store_state
+             SET fence_epoch=fence_epoch+1
+             WHERE store_name=?1 AND lease_owner=?2 AND lease_token=?3",
+            params![TANTIVY_TASKS_STORE, "maintenance-owner", lease.lease_token],
+        )?;
+
+        let stale = persist_store_failure(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            &lease,
+            MaintenanceStoreFailureKind::Backend,
+            KanbanError::Storage("stale pre-recovery fence".to_owned()),
+        )
+        .expect_err("pre-bump failure writer must fail closed");
+        assert!(matches!(stale, KanbanError::Conflict(_)));
+
+        let report = failed_store_run(
+            &session,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            &lease.lease_token,
+            MaintenanceStoreFailureKind::Backend,
+            KanbanError::Storage("post-recovery failure".to_owned()),
+        )?;
+        assert!(matches!(
+            report.result,
+            MaintenanceStoreResult::Failed {
+                kind: MaintenanceStoreFailureKind::Backend,
+                ..
+            }
+        ));
+        let after = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+        assert_eq!(after.fence_epoch, old_fence + 1);
+        assert_eq!(after.owner.as_deref(), Some("maintenance-owner"));
+        assert!(
+            after
+                .last_error
+                .as_deref()
+                .is_some_and(|error| error.contains("post-recovery failure"))
+        );
+
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "maintenance-owner",
+            &lease.lease_token,
+        )?;
+        session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn unleased_failure_with_stale_maintenance_owner_is_report_only() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let session = MaintenanceSession::start(
+            &db_path,
+            "maintenance-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        connect_file(&db_path)?.execute(
+            "UPDATE projection_maintenance_owner SET lease_expires_at=0 WHERE singleton=1",
+            [],
+        )?;
+        let before = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+
+        let report = failed_store_run_without_store_lease(
+            &session,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            MaintenanceStoreFailureKind::Backend,
+            KanbanError::Storage("stale maintenance owner".to_owned()),
+        )?;
+        assert!(matches!(
+            report.result,
+            MaintenanceStoreResult::Failed {
+                kind: MaintenanceStoreFailureKind::Backend,
+                ..
+            }
+        ));
+
+        let after = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+        assert_eq!(after.lifecycle_status, before.lifecycle_status);
+        assert_eq!(after.last_error, before.last_error);
+        assert_eq!(after.fallback_reason, before.fallback_reason);
+        assert_eq!(after.owner, before.owner);
+        assert_eq!(after.fence_epoch, before.fence_epoch);
+        drop(session);
+        Ok(())
     }
 }
 
@@ -4603,6 +5165,60 @@ mod tests {
         let building = begin_projection_generation(
             &db_path,
             TANTIVY_TASKS_STORE,
+    #[test]
+    fn failure_persistence_rejects_handoff_after_failure_before_persist() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+
+        let old = acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "old-owner", 10_000)?;
+        let renewed = renew_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "old-owner",
+            &old.lease_token,
+            10_000,
+        )?;
+        release_projection_lease(&db_path, TANTIVY_TASKS_STORE, "old-owner", &old.lease_token)?;
+        let successor =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "successor-owner", 10_000)?;
+        let before = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+
+        let error = persist_store_failure(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            &renewed,
+            MaintenanceStoreFailureKind::Backend,
+            KanbanError::Storage("failure from the previous owner".to_owned()),
+        )
+        .expect_err("a handed-off lease must reject stale failure persistence");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+
+        let after = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+        assert_eq!(after.lifecycle_status, before.lifecycle_status);
+        assert_eq!(after.last_error, before.last_error);
+        assert_eq!(after.fallback_reason, before.fallback_reason);
+        assert_eq!(after.owner.as_deref(), Some("successor-owner"));
+        assert_eq!(after.fence_epoch, successor.fence_epoch);
+
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "successor-owner",
+            &successor.lease_token,
+        )?;
+        Ok(())
+    }
+
             "interrupted-owner",
             &lease.lease_token,
             &backend,

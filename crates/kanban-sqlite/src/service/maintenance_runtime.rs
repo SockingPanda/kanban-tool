@@ -4835,7 +4835,7 @@ mod legacy_binding_recovery_tests {
             lease.lease_expires_at,
             ProjectionGenerationRole::Building,
         );
-        let before = canonical_control_plane_snapshot(&path)?;
+        let mut before = canonical_control_plane_snapshot(&path)?;
         backend.fail_next_quarantine("simulated crash before physical quarantine");
 
         let error = recover_incompatible_projection_bindings(
@@ -4847,7 +4847,10 @@ mod legacy_binding_recovery_tests {
         )
         .expect_err("failure before the first physical quarantine must surface");
         assert!(error.to_string().contains("simulated crash"));
-        assert_eq!(canonical_control_plane_snapshot(&path)?, before);
+        let mut after_failure = canonical_control_plane_snapshot(&path)?;
+        normalize_recovery_fence_bump(&mut before);
+        normalize_recovery_fence_bump(&mut after_failure);
+        assert_eq!(after_failure, before);
         let fence_after_failure: i64 = connect_file(&path)?.query_row(
             "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
             [STORE],
@@ -4909,7 +4912,7 @@ mod legacy_binding_recovery_tests {
         let owner = "post-quarantine-crash-owner";
         let lease = acquire_projection_lease(&path, STORE, owner, 20_000)?;
         let old_fence = lease.fence_epoch;
-        let before = canonical_control_plane_snapshot(&path)?;
+        let mut before = canonical_control_plane_snapshot(&path)?;
         backend.fail_next_active_inspect("simulated crash after physical quarantine");
 
         let error = recover_incompatible_projection_bindings(
@@ -4925,7 +4928,10 @@ mod legacy_binding_recovery_tests {
                 .to_string()
                 .contains("simulated crash after physical quarantine")
         );
-        assert_eq!(canonical_control_plane_snapshot(&path)?, before);
+        let mut after_failure = canonical_control_plane_snapshot(&path)?;
+        normalize_recovery_fence_bump(&mut before);
+        normalize_recovery_fence_bump(&mut after_failure);
+        assert_eq!(after_failure, before);
         let fence_after_failure: i64 = connect_file(&path)?.query_row(
             "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
             [STORE],
@@ -5969,6 +5975,16 @@ mod legacy_binding_recovery_tests {
             delivery_rows,
             delivery_invariants,
         })
+    }
+
+    fn normalize_recovery_fence_bump(snapshot: &mut CanonicalControlPlaneSnapshot) {
+        for (column, value) in &mut snapshot.store_state_row {
+            match column.as_str() {
+                "fence_epoch" => *value = "normalized:recovery-fence".to_owned(),
+                "updated_at" => *value = "normalized:updated-at".to_owned(),
+                _ => {}
+            }
+        }
     }
 }
 

@@ -127,7 +127,30 @@ just release
 
 `just release` 有意设置得较重。分支影响发布打包、桌面包行为或跨入口集成时才使用它。
 它包含 `just audit` 和 `just rust-full`，所以会在打包和冒烟检查前完成依赖公告检查、辅助
-crate 验证、测试与 lint。
+crate 验证、测试与 lint。发布入口还要求当前目录是真实仓库根、symbolic `main`、工作树
+（含 untracked）干净且 HEAD 与远端 `origin/main` 完全一致；保存/实时的
+`origin/derived-projection-v2` tip、三个 source slice ancestry 与 no-merge-base 证明也必须
+与 canonical source map 一致。整个 cohort 持有同一把 reentrant build lock，把 deterministic
+`KANBAN_BUILD_ID`、source manifest 和语义移植 source map 绑定到 CLI、desktop 与 helper。
+发布前会对私有同盘 staged generation 重新检查 source、helper runtime identity、package
+payload 与全部 artifact hash。发布机必须是支持 Linux read lease
+（`F_SETLEASE`）以及 `renameat2(RENAME_NOREPLACE|RENAME_EXCHANGE)` 的同盘 filesystem；
+不支持、已有 writer、任一 xattr/ACL/file capability 或 identity drift 都 fail closed。
+safe-path 只用 `O_NOFOLLOW` dirfd `*at` 操作；semantic verifier 通过继承的 pinned tree fd
+读取同一 snapshot，并在 kernel lease 内执行前后 semantic/digest verify、parent fsync 和
+必要的 atomic rollback。generation 只有在同级 `<generation>.published` marker 以
+no-replace durable publish 且 reader 重新验证 marker/tree 后才有 authority；无 marker
+generation 不会被采用。rename 前的 `<generation>.publishing` intent 绑定 deterministic
+source stage、destination、tree inode 与 digest；只有 exact intent 能在真实 wrapper 重跑时
+恢复，unknown destination 原地不动。单文件 replacement 用 exchange 保留 rollback copy，
+commit 前 rewalk public path，rollback 前核对双端 inode；drift 时写 retention marker。
+临时 tree 只按预先 pinned identity 清理，无法证明安全时保留并告警。成功进程持有
+leases/fds 直到 flush 后退出；hermetic test 另用 whole-wrapper hash、default-deny `PATH`
+与 exact ordered JSONL trace 锁定命令图。lease 释放后仍须由生产 filesystem 权限保护
+cohort root，`0555/0444` 不是永久 hostile-root immutability。
+`just release` 只生成并验证可追溯的 release cohort，不执行部署、不授予生产恢复权限，
+也不替代 `docs/release/DERIVED_PROJECTION_V2_RECOVERY.md`；实际生产恢复必须严格遵循该
+runbook。
 
 ## 提示词模板
 

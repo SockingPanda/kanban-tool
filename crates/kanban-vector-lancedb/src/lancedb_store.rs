@@ -1262,19 +1262,21 @@ fn batches_to_hits(batches: &[RecordBatch]) -> Result<Vec<VectorHit>, VectorErro
         let distance = float32_column(batch, "_distance")?;
 
         for row in 0..batch.num_rows() {
-            let chunk_uri = kanban_entity::EntityUri::new(chunk_uri.value(row).to_owned())
-                .map_err(|err| VectorError::Store(err.to_string()))?;
-            let entity_uri = kanban_entity::EntityUri::new(entity_uri.value(row).to_owned())
-                .map_err(|err| VectorError::Store(err.to_string()))?;
+            let chunk_uri =
+                kanban_entity::EntityUri::new(required_string(chunk_uri, row, "chunk_uri")?)
+                    .map_err(|err| VectorError::Store(err.to_string()))?;
+            let entity_uri =
+                kanban_entity::EntityUri::new(required_string(entity_uri, row, "entity_uri")?)
+                    .map_err(|err| VectorError::Store(err.to_string()))?;
             hits.push(VectorHit {
                 chunk: kanban_entity::ChunkRef {
                     uri: chunk_uri,
                     entity_uri,
-                    ordinal: ordinal.value(row),
+                    ordinal: required_i64(ordinal, row, "ordinal")?,
                     content_hash: optional_string(content_hash, row),
                 },
-                score: distance.value(row),
-                text: optional_string(text, row),
+                score: required_f32(distance, row, "_distance")?,
+                text: Some(required_string(text, row, "text")?.to_owned()),
                 summary: optional_string(summary, row),
             });
         }
@@ -1299,17 +1301,18 @@ fn batches_to_label_atom_hits(batches: &[RecordBatch]) -> Result<Vec<LabelAtomHi
 
         for row in 0..batch.num_rows() {
             hits.push(LabelAtomHit {
-                atom_id: atom_id.value(row).to_owned(),
-                label_id: label_id.value(row).to_owned(),
-                label_name: label_name.value(row).to_owned(),
-                board_id: board_id.value(row).to_owned(),
-                polarity: polarity.value(row).to_owned(),
-                kind: kind.value(row).to_owned(),
-                text: text.value(row).to_owned(),
-                ordinal: ordinal.value(row),
-                content_hash: content_hash.value(row).to_owned(),
-                embedding_model: embedding_model.value(row).to_owned(),
-                distance: distance.value(row),
+                atom_id: required_string(atom_id, row, "atom_id")?.to_owned(),
+                label_id: required_string(label_id, row, "label_id")?.to_owned(),
+                label_name: required_string(label_name, row, "label_name")?.to_owned(),
+                board_id: required_string(board_id, row, "board_id")?.to_owned(),
+                polarity: required_string(polarity, row, "polarity")?.to_owned(),
+                kind: required_string(kind, row, "kind")?.to_owned(),
+                text: required_string(text, row, "text")?.to_owned(),
+                ordinal: required_i64(ordinal, row, "ordinal")?,
+                content_hash: required_string(content_hash, row, "content_hash")?.to_owned(),
+                embedding_model: required_string(embedding_model, row, "embedding_model")?
+                    .to_owned(),
+                distance: required_f32(distance, row, "_distance")?,
             });
         }
     }
@@ -1340,17 +1343,22 @@ fn batches_to_label_atom_vector_hits(
         for row in 0..batch.num_rows() {
             hits.push(LabelAtomVectorHit {
                 hit: LabelAtomHit {
-                    atom_id: atom_id.value(row).to_owned(),
-                    label_id: label_id.value(row).to_owned(),
-                    label_name: label_name.value(row).to_owned(),
-                    board_id: board_id.value(row).to_owned(),
-                    polarity: polarity.value(row).to_owned(),
-                    kind: kind.value(row).to_owned(),
-                    text: text.value(row).to_owned(),
-                    ordinal: ordinal.value(row),
-                    content_hash: content_hash.value(row).to_owned(),
-                    embedding_model: embedding_model.value(row).to_owned(),
-                    distance: distance.value(row),
+                    atom_id: required_string(atom_id, row, "atom_id")?.to_owned(),
+                    label_id: required_string(label_id, row, "label_id")?.to_owned(),
+                    label_name: required_string(label_name, row, "label_name")?.to_owned(),
+                    board_id: required_string(board_id, row, "board_id")?.to_owned(),
+                    polarity: required_string(polarity, row, "polarity")?.to_owned(),
+                    kind: required_string(kind, row, "kind")?.to_owned(),
+                    text: required_string(text, row, "text")?.to_owned(),
+                    ordinal: required_i64(ordinal, row, "ordinal")?,
+                    content_hash: required_string(content_hash, row, "content_hash")?.to_owned(),
+                    embedding_model: required_string(
+                        embedding_model,
+                        row,
+                        "embedding_model",
+                    )?
+                    .to_owned(),
+                    distance: required_f32(distance, row, "_distance")?,
                 },
                 vector: vectors
                     .as_ref()
@@ -1387,27 +1395,28 @@ fn chunk_batches_to_projection_rows(
         let ordinal = int64_column(batch, "ordinal")?;
         let vectors = fixed_size_list_column(batch, VECTOR_COLUMN)?;
         for row in 0..batch.num_rows() {
+            let chunk_key_value = required_string(&chunk_key, row, "chunk_key")?;
             rows.push(ProjectionContentRow {
-                key: chunk_key.value(row).to_owned(),
+                key: chunk_key_value.to_owned(),
                 content_json: serde_json::json!({
-                    "chunk_key": chunk_key.value(row),
-                    "entity_uri": entity_uri.value(row),
-                    "chunk_uri": chunk_uri.value(row),
-                    "kind": kind.value(row),
+                    "chunk_key": chunk_key_value,
+                    "entity_uri": required_string(&entity_uri, row, "entity_uri")?,
+                    "chunk_uri": required_string(&chunk_uri, row, "chunk_uri")?,
+                    "kind": required_string(&kind, row, "kind")?,
                     "project_id": optional_string(project_id, row),
                     "board_id": optional_string(board_id, row),
                     "task_id": optional_string(task_id, row),
-                    "source_table": source_table.value(row),
-                    "source_id": source_id.value(row),
-                    "text": text.value(row),
+                    "source_table": required_string(&source_table, row, "source_table")?,
+                    "source_id": required_string(&source_id, row, "source_id")?,
+                    "text": required_string(&text, row, "text")?,
                     "summary": optional_string(summary, row),
-                    "embedding_model": embedding_model.value(row),
+                    "embedding_model": required_string(&embedding_model, row, "embedding_model")?,
                     "content_hash": optional_string(content_hash, row),
-                    "created_at": created_at.value(row),
-                    "updated_at": updated_at.value(row),
+                    "created_at": required_i64(&created_at, row, "created_at")?,
+                    "updated_at": required_i64(&updated_at, row, "updated_at")?,
                     "source_event_id": optional_i64(source_event_id, row),
-                    "metadata_json": metadata_json.value(row),
-                    "ordinal": ordinal.value(row),
+                    "metadata_json": required_string(&metadata_json, row, "metadata_json")?,
+                    "ordinal": required_i64(&ordinal, row, "ordinal")?,
                 })
                 .to_string(),
                 vector_bits: Some(
@@ -1442,22 +1451,23 @@ fn label_atom_batches_to_projection_rows(
         let updated_at = int64_column(batch, "updated_at")?;
         let vectors = fixed_size_list_column(batch, VECTOR_COLUMN)?;
         for row in 0..batch.num_rows() {
+            let atom_key_value = required_string(&atom_key, row, "atom_key")?;
             rows.push(ProjectionContentRow {
-                key: atom_key.value(row).to_owned(),
+                key: atom_key_value.to_owned(),
                 content_json: serde_json::json!({
-                    "atom_key": atom_key.value(row),
-                    "atom_id": atom_id.value(row),
-                    "label_id": label_id.value(row),
-                    "label_name": label_name.value(row),
-                    "board_id": board_id.value(row),
-                    "polarity": polarity.value(row),
-                    "kind": kind.value(row),
-                    "text": text.value(row),
-                    "ordinal": ordinal.value(row),
-                    "content_hash": content_hash.value(row),
-                    "embedding_model": embedding_model.value(row),
-                    "created_at": created_at.value(row),
-                    "updated_at": updated_at.value(row),
+                    "atom_key": atom_key_value,
+                    "atom_id": required_string(&atom_id, row, "atom_id")?,
+                    "label_id": required_string(&label_id, row, "label_id")?,
+                    "label_name": required_string(&label_name, row, "label_name")?,
+                    "board_id": required_string(&board_id, row, "board_id")?,
+                    "polarity": required_string(&polarity, row, "polarity")?,
+                    "kind": required_string(&kind, row, "kind")?,
+                    "text": required_string(&text, row, "text")?,
+                    "ordinal": required_i64(&ordinal, row, "ordinal")?,
+                    "content_hash": required_string(&content_hash, row, "content_hash")?,
+                    "embedding_model": required_string(&embedding_model, row, "embedding_model")?,
+                    "created_at": required_i64(&created_at, row, "created_at")?,
+                    "updated_at": required_i64(&updated_at, row, "updated_at")?,
                 })
                 .to_string(),
                 vector_bits: Some(
@@ -1496,6 +1506,37 @@ fn int64_column<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a Int64Array
         .column_by_name(name)
         .and_then(|column| column.as_any().downcast_ref::<Int64Array>())
         .ok_or_else(|| VectorError::Store(format!("missing int64 column {name}")))
+}
+
+fn required_string<'a>(
+    array: &'a StringArray,
+    row: usize,
+    name: &str,
+) -> Result<&'a str, VectorError> {
+    if array.is_null(row) {
+        return Err(VectorError::Store(format!(
+            "projection required string column {name} contains a null row"
+        )));
+    }
+    Ok(array.value(row))
+}
+
+fn required_i64(array: &Int64Array, row: usize, name: &str) -> Result<i64, VectorError> {
+    if array.is_null(row) {
+        return Err(VectorError::Store(format!(
+            "projection required int64 column {name} contains a null row"
+        )));
+    }
+    Ok(array.value(row))
+}
+
+fn required_f32(array: &Float32Array, row: usize, name: &str) -> Result<f32, VectorError> {
+    if array.is_null(row) {
+        return Err(VectorError::Store(format!(
+            "projection required float32 column {name} contains a null row"
+        )));
+    }
+    Ok(array.value(row))
 }
 
 fn float32_column<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a Float32Array, VectorError> {
@@ -1642,6 +1683,8 @@ fn embed_batch_with_retry(
 
 #[cfg(test)]
 mod tests {
+    use arrow_array::{ArrayRef, Float32Array, RecordBatch, new_null_array};
+    use arrow_schema::{DataType, Field, Schema};
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -2425,6 +2468,220 @@ mod tests {
                 Err(VectorError::Store(message)) if message.contains("non-finite")
             ));
         }
+    }
+
+    #[test]
+    fn chunk_projection_reader_rejects_null_required_cells() {
+        let builder = ChunkBuilder::new("static-test");
+        let chunk = build_chunk(&builder, "t_null", "null");
+        let batch = super::chunks_to_batch(&[chunk], &[vec![1.0, 0.0, 0.0]], 3).unwrap();
+        assert_eq!(
+            super::chunk_batches_to_projection_rows(std::slice::from_ref(&batch))
+                .unwrap()
+                .len(),
+            1
+        );
+        for name in [
+            "chunk_key", "entity_uri", "chunk_uri", "kind", "source_table", "source_id",
+            "text", "embedding_model", "created_at", "updated_at", "metadata_json", "ordinal",
+        ] {
+            let index = batch.schema().index_of(name).unwrap();
+            let mut columns = batch.columns().to_vec();
+            columns[index] = new_null_array(batch.schema().field(index).data_type(), 1);
+            let mut fields = batch.schema().fields().to_vec();
+            fields[index] = Arc::new(batch.schema().field(index).as_ref().clone().with_nullable(true));
+            let invalid = RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).unwrap();
+            let error = super::chunk_batches_to_projection_rows(&[invalid]).unwrap_err();
+            assert!(matches!(error, VectorError::Store(message) if message.contains(name)));
+        }
+    }
+
+    #[test]
+    fn label_atom_projection_reader_rejects_null_required_cells() {
+        let atom = LabelAtomVector {
+            atom_id: "atom-1".to_owned(),
+            label_id: "label-1".to_owned(),
+            label_name: "Label".to_owned(),
+            board_id: "board-1".to_owned(),
+            polarity: "positive".to_owned(),
+            kind: "task".to_owned(),
+            text: "text".to_owned(),
+            ordinal: 0,
+            content_hash: "hash".to_owned(),
+            embedding_model: "static-test".to_owned(),
+            created_at: 1,
+            updated_at: 2,
+        };
+        let batch = super::label_atoms_to_batch(&[atom], &[vec![1.0, 0.0, 0.0]], 3).unwrap();
+        assert_eq!(
+            super::label_atom_batches_to_projection_rows(std::slice::from_ref(&batch))
+                .unwrap()
+                .len(),
+            1
+        );
+        for name in [
+            "atom_key", "atom_id", "label_id", "label_name", "board_id", "polarity", "kind",
+            "text", "ordinal", "content_hash", "embedding_model", "created_at", "updated_at",
+        ] {
+            let index = batch.schema().index_of(name).unwrap();
+            let mut columns = batch.columns().to_vec();
+            columns[index] = new_null_array(batch.schema().field(index).data_type(), 1);
+            let mut fields = batch.schema().fields().to_vec();
+            fields[index] = Arc::new(batch.schema().field(index).as_ref().clone().with_nullable(true));
+            let invalid = RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).unwrap();
+            let error = super::label_atom_batches_to_projection_rows(&[invalid]).unwrap_err();
+            assert!(matches!(error, VectorError::Store(message) if message.contains(name)));
+        }
+    }
+
+    #[test]
+    fn query_reader_rejects_null_required_chunk_hit_cells() {
+        let builder = ChunkBuilder::new("static-test");
+        let chunk = build_chunk(&builder, "t_query_null", "query null");
+        let base = super::chunks_to_batch(&[chunk], &[vec![1.0, 0.0, 0.0]], 3).unwrap();
+        let batch = query_batch(
+            &base,
+            &[
+                "chunk_uri",
+                "entity_uri",
+                "ordinal",
+                "content_hash",
+                "text",
+                "summary",
+            ],
+        );
+        assert_eq!(
+            super::batches_to_hits(std::slice::from_ref(&batch))
+                .unwrap()
+                .len(),
+            1
+        );
+        for name in ["chunk_uri", "entity_uri", "ordinal", "text", "_distance"] {
+            let invalid = batch_with_null_cell(&batch, name);
+            let error = super::batches_to_hits(&[invalid]).unwrap_err();
+            assert!(matches!(error, VectorError::Store(message) if message.contains(name)));
+        }
+    }
+
+    #[test]
+    fn query_reader_rejects_null_required_label_hit_cells() {
+        let batch = label_query_batch(false);
+        assert_eq!(
+            super::batches_to_label_atom_hits(std::slice::from_ref(&batch))
+                .unwrap()
+                .len(),
+            1
+        );
+        for name in [
+            "atom_id",
+            "label_id",
+            "label_name",
+            "board_id",
+            "polarity",
+            "kind",
+            "text",
+            "ordinal",
+            "content_hash",
+            "embedding_model",
+            "_distance",
+        ] {
+            let invalid = batch_with_null_cell(&batch, name);
+            let error = super::batches_to_label_atom_hits(&[invalid]).unwrap_err();
+            assert!(matches!(error, VectorError::Store(message) if message.contains(name)));
+        }
+    }
+
+    #[test]
+    fn query_reader_rejects_null_required_label_vector_hit_cells() {
+        let batch = label_query_batch(true);
+        assert_eq!(
+            super::batches_to_label_atom_vector_hits(std::slice::from_ref(&batch), true)
+                .unwrap()
+                .len(),
+            1
+        );
+        for name in [
+            "atom_id",
+            "label_id",
+            "label_name",
+            "board_id",
+            "polarity",
+            "kind",
+            "text",
+            "ordinal",
+            "content_hash",
+            "embedding_model",
+            "_distance",
+            "vector",
+        ] {
+            let invalid = batch_with_null_cell(&batch, name);
+            let error = super::batches_to_label_atom_vector_hits(&[invalid], true).unwrap_err();
+            assert!(matches!(error, VectorError::Store(message) if message.contains("null") || message.contains(name)));
+        }
+    }
+
+    fn query_batch(base: &RecordBatch, names: &[&str]) -> RecordBatch {
+        let mut fields = names
+            .iter()
+            .map(|name| Arc::new(base.schema().field_with_name(name).unwrap().clone()))
+            .collect::<Vec<_>>();
+        let mut columns = names
+            .iter()
+            .map(|name| base.column_by_name(name).unwrap().clone())
+            .collect::<Vec<ArrayRef>>();
+        fields.push(Arc::new(Field::new("_distance", DataType::Float32, false)));
+        columns.push(Arc::new(Float32Array::from(vec![0.25])));
+        RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).unwrap()
+    }
+
+    fn batch_with_null_cell(batch: &RecordBatch, name: &str) -> RecordBatch {
+        let index = batch.schema().index_of(name).unwrap();
+        let mut columns = batch.columns().to_vec();
+        columns[index] = new_null_array(batch.schema().field(index).data_type(), batch.num_rows());
+        let mut fields = batch.schema().fields().to_vec();
+        fields[index] = Arc::new(
+            batch
+                .schema()
+                .field(index)
+                .as_ref()
+                .clone()
+                .with_nullable(true),
+        );
+        RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).unwrap()
+    }
+
+    fn label_query_batch(include_vector: bool) -> RecordBatch {
+        let atom = LabelAtomVector {
+            atom_id: "atom-query-1".to_owned(),
+            label_id: "label-query-1".to_owned(),
+            label_name: "Query Label".to_owned(),
+            board_id: "board-query-1".to_owned(),
+            polarity: "positive".to_owned(),
+            kind: "task".to_owned(),
+            text: "query text".to_owned(),
+            ordinal: 0,
+            content_hash: "query-hash".to_owned(),
+            embedding_model: "static-test".to_owned(),
+            created_at: 1,
+            updated_at: 2,
+        };
+        let base = super::label_atoms_to_batch(&[atom], &[vec![1.0, 0.0, 0.0]], 3).unwrap();
+        let mut names = vec![
+            "atom_id",
+            "label_id",
+            "label_name",
+            "board_id",
+            "polarity",
+            "kind",
+            "text",
+            "ordinal",
+            "content_hash",
+            "embedding_model",
+        ];
+        if include_vector {
+            names.push("vector");
+        }
+        query_batch(&base, &names)
     }
 
     fn build_chunk(

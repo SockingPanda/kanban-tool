@@ -10,8 +10,38 @@ use super::{storage, with_immediate_tx};
 
 pub const PROJECTION_PROTOCOL_VERSION: i64 = 2;
 const MAX_PROJECTION_BATCH: usize = 1_000;
+const TANTIVY_TASKS_STORE: &str = "tantivy_tasks";
+const OXIGRAPH_RELATIONS_STORE: &str = "oxigraph_relations";
 const LANCEDB_CHUNKS_STORE: &str = "lancedb_chunks";
 const LANCEDB_LABEL_ATOMS_STORE: &str = "lancedb_label_atoms";
+
+/// Every projection backend and its SQLite lease share one distinct physical
+/// authority fence. The service's legacy `${store}` guard remains the outer
+/// service-path lock; this suffix lock is acquired by backend operations (or
+/// by the LanceDB child helper) before authority validation and physical
+/// mutation. Lease rollover must acquire the same suffix before changing the
+/// owner/token/fence, so no backend can mutate under a stale lease. Renewal is
+/// deliberately expiry-only and uses its owner/token CAS without this lock so
+/// long-running physical work can keep the lease alive.
+fn acquire_projection_authority_guard(
+    path: &Path,
+    store_name: &str,
+) -> Result<Option<kanban_local::DerivedStoreWriteGuard>> {
+    if matches!(
+        store_name,
+        TANTIVY_TASKS_STORE
+            | OXIGRAPH_RELATIONS_STORE
+            | LANCEDB_CHUNKS_STORE
+            | LANCEDB_LABEL_ATOMS_STORE
+    ) {
+        Ok(Some(crate::db::acquire_derived_store_write_guard(
+            path,
+            &format!("{store_name}-projection-helper"),
+        )?))
+    } else {
+        Ok(None)
+    }
+}
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionLease {
@@ -583,6 +613,7 @@ pub fn acquire_projection_lease(
     ttl_ms: i64,
 ) -> Result<ProjectionLease> {
     validate_owner_and_ttl(owner, ttl_ms)?;
+    let _authority_guard = acquire_projection_authority_guard(path.as_ref(), store_name)?;
     let now = SystemClock.now_ms();
     let lease_expires_at = checked_expiry(now, ttl_ms, "projection lease")?;
     let lease_token = new_typed_id("please");
@@ -625,6 +656,10 @@ pub fn renew_projection_lease(
     ttl_ms: i64,
 ) -> Result<ProjectionLease> {
     validate_owner_and_ttl(owner, ttl_ms)?;
+    // Renewal only extends the current owner's expiry; it never changes the
+    // owner, opaque token, or fence. It therefore remains safe while a
+    // physical backend holds the suffix authority lock, and is required for
+    // the maintenance heartbeat to keep long-running helper work alive.
     let now = SystemClock.now_ms();
     let lease_expires_at = checked_expiry(now, ttl_ms, "projection lease")?;
     let conn = connect_file(path.as_ref())?;
@@ -662,6 +697,7 @@ pub fn release_projection_lease(
     owner: &str,
     lease_token: &str,
 ) -> Result<()> {
+    let _authority_guard = acquire_projection_authority_guard(path.as_ref(), store_name)?;
     let now = SystemClock.now_ms();
     let conn = connect_file(path.as_ref())?;
     with_immediate_tx(&conn, || {
@@ -852,6 +888,11 @@ pub(crate) fn prepare_projection_snapshot_with_disposition(
     let path = path.as_ref();
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let manifest = building_manifest(path, store_name, owner, lease_token)?;
+    // Keep the lease capability that authorized this snapshot attempt.  Error
+    // persistence must use this exact fence rather than refreshing the lease
+    // after a backend failure: a same-token fence rollover must not let the
+    // stale operation mark the successor's control plane dirty.
+    let snapshot_lease = current_lease_authority(path, store_name, owner, lease_token)?;
     validate_backend_binding(backend, &manifest)?;
     if manifest.fingerprint.is_some() {
         return Err(KanbanError::Conflict(format!(
@@ -884,18 +925,50 @@ pub(crate) fn prepare_projection_snapshot_with_disposition(
                 owner,
                 lease_token,
                 &manifest,
+                &snapshot_lease,
                 error,
             );
         }
     };
-    let evidence = match backend.prepare_snapshot(&snapshot).and_then(|evidence| {
-        validate_artifact_evidence(&manifest, &evidence)?;
-        Ok(evidence)
-    }) {
+    let prepare_authority = current_building_authority(path, store_name, owner, lease_token)?;
+    let evidence = match backend
+        .prepare_snapshot_with_authority(&snapshot, &prepare_authority)
+        .and_then(|evidence| {
+            validate_artifact_evidence(&manifest, &evidence)?;
+            Ok(evidence)
+        }) {
         Ok(evidence) => evidence,
         Err(error) => {
-            record_projection_error(path, store_name, &error.to_string())?;
-            return Err(error);
+            // A provider may have left a partial generation (or a staged
+            // directory) behind before reporting failure.  The prepare path
+            // has no authority to delete it itself, so immediately hand the
+            // exact capability to the fenced abort operation.  If the lease
+            // rolled over before that operation acquired the helper suffix,
+            // the backend must reject the stale capability and leave the
+            // physical evidence for the successor to recover.
+            let result_error = match abort_projection_generation_with_authority(
+                path,
+                store_name,
+                owner,
+                lease_token,
+                backend,
+                &prepare_authority,
+            ) {
+                Ok(()) => error,
+                Err(abort_error) => KanbanError::Conflict(format!(
+                    "projection snapshot prepare failed and fenced recovery could not clean generation {}: {abort_error}; original error: {error}",
+                    prepare_authority.generation
+                )),
+            };
+            let error_lease = lease_from_destructive_authority(store_name, &prepare_authority);
+            if let Err(record_error) =
+                record_projection_error(path, store_name, &error_lease, &result_error.to_string())
+            {
+                if !matches!(&record_error, KanbanError::Conflict(_)) {
+                    return Err(record_error);
+                }
+            }
+            return Err(result_error);
         }
     };
     let now = SystemClock.now_ms();
@@ -956,6 +1029,7 @@ pub(crate) fn prepare_projection_snapshot_with_disposition(
             owner,
             lease_token,
             &manifest,
+            &lease_from_destructive_authority(store_name, &prepare_authority),
             error,
         );
     }
@@ -968,9 +1042,16 @@ fn classify_snapshot_prepare_error(
     owner: &str,
     lease_token: &str,
     manifest: &ProjectionArtifactManifest,
+    authority: &ProjectionLease,
     error: KanbanError,
 ) -> Result<ProjectionSnapshotPrepareDisposition> {
-    record_projection_error(path, store_name, &error.to_string())?;
+    if let Err(record_error) =
+        record_projection_error(path, store_name, authority, &error.to_string())
+    {
+        if !matches!(&record_error, KanbanError::Conflict(_)) {
+            return Err(record_error);
+        }
+    }
     match snapshot_prepare_disposition(path, store_name, owner, lease_token, manifest)? {
         SnapshotPrepareDisposition::CoverageChanged => {
             Ok(ProjectionSnapshotPrepareDisposition::CoverageChanged)
@@ -1106,6 +1187,12 @@ pub(crate) fn recover_incompatible_projection_bindings(
         return Ok(false);
     }
 
+    // Advance the store fence before touching any physical generation. The
+    // returned snapshot is the authority baseline for the whole recovery;
+    // requests queued with the pre-bump fence now fail closed even when they
+    // retain the same owner and lease token.
+    let snapshot = bump_recovery_fence(path, &conn, store_name, owner, lease_token, &snapshot)?;
+
     // A building generation created before legacy history was attributed cannot
     // be carried across the recovery boundary, even if its own descriptor is
     // current. If active is discarded, previous must also be discarded so a
@@ -1150,25 +1237,20 @@ pub(crate) fn recover_incompatible_projection_bindings(
             binding,
         )?;
         let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
+        if lease.fence_epoch != snapshot.lease.fence_epoch {
+            return Err(stale_generation(store_name));
+        }
         authority.fence_epoch = lease.fence_epoch;
         authority.lease_expires_at = lease.lease_expires_at;
         backend.quarantine_generation_fenced(generation, &authority)?;
     }
 
-    // Lance helpers mutate generation directories under a separate process
-    // lock. Acquire that exact lock after the idempotent quarantine calls and
-    // hold it across every physical readback and the SQLite CAS commit so a
-    // queued helper cannot republish stale generation state between them.
-    let _helper_write_guard =
-        if matches!(store_name, LANCEDB_CHUNKS_STORE | LANCEDB_LABEL_ATOMS_STORE) {
-            Some(crate::db::acquire_derived_store_write_guard(
-                path,
-                &format!("{store_name}-projection-helper"),
-            )?)
-        } else {
-            None
-        };
-
+    // Each backend operation owns the distinct projection-helper authority
+    // lock while it validates SQLite and mutates or reads physical state. Do
+    // not hold that suffix lock across child-helper calls here: LanceDB
+    // helpers acquire it in the child process, while the SQLite CAS below is
+    // already serialized by the service's immediate transaction and checks
+    // the bumped lease owner/token/fence snapshot before committing.
     for generation in &generations_to_quarantine {
         if backend.inspect_generation(generation)?.is_some() {
             return Err(KanbanError::Storage(format!(
@@ -1314,6 +1396,135 @@ enum AbortBinding {
     Incompatible,
 }
 
+/// Abort the exact building generation that a failed snapshot prepare was
+/// authorized to materialize.  The caller already holds the service's generic
+/// store write guard; the backend owns the distinct projection-helper suffix
+/// for the physical operation and validates the capability after acquiring it.
+/// SQLite cleanup is a second fenced CAS, so a lease rollover between the
+/// physical abort and this transaction cannot clear a successor's generation.
+fn abort_projection_generation_with_authority(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+    authority: &ProjectionDestructiveAuthority,
+) -> Result<()> {
+    if authority.generation.trim().is_empty()
+        || authority.owner != owner
+        || authority.lease_token != lease_token
+        || authority.role != ProjectionGenerationRole::Building
+    {
+        return Err(stale_generation(store_name));
+    }
+
+    // Snapshot the exact binding before asking the provider to mutate.  This
+    // is a cheap fail-closed check for fakes and legacy adapters; real
+    // providers repeat the same check while holding their helper suffix.
+    let now = SystemClock.now_ms();
+    let conn = connect_file(path)?;
+    let snapshot =
+        projection_binding_recovery_snapshot(&conn, store_name, owner, lease_token, now)?;
+    snapshot.validate_shape(store_name)?;
+    let current = destructive_authority_from_snapshot(
+        &snapshot,
+        store_name,
+        owner,
+        lease_token,
+        ProjectionGenerationRole::Building,
+        &snapshot.building,
+    )?;
+    if current.fence_epoch != authority.fence_epoch
+        || current.generation != authority.generation
+        || current.expected_binding != authority.expected_binding
+        || current.expected_manifest != authority.expected_manifest
+        || current.building_phase != authority.building_phase
+    {
+        return Err(stale_generation(store_name));
+    }
+
+    // Never remove a physical generation that is currently discoverable as an
+    // active publication.  A prepare failure must be recovered through the
+    // publish/reconcile path if it reached that state.
+    match backend.inspect_active()? {
+        Some(active) if active.manifest.generation == authority.generation => {
+            return Err(KanbanError::Conflict(format!(
+                "projection generation {} is physically active and must be reconciled instead of aborted",
+                authority.generation
+            )));
+        }
+        Some(_) | None => {}
+    }
+    backend.abort_generation_fenced(&authority.generation, authority)?;
+    if backend.inspect_generation(&authority.generation)?.is_some() {
+        return Err(KanbanError::Storage(format!(
+            "aborted projection generation {} remained addressable",
+            authority.generation
+        )));
+    }
+
+    let now = SystemClock.now_ms();
+    with_immediate_tx(&conn, || {
+        require_current_lease(&conn, store_name, owner, lease_token, now)?;
+        let current: (Option<String>, Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT building_generation,building_fence_epoch,building_phase
+                 FROM projection_store_state WHERE store_name=?1",
+                [store_name],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .map_err(storage)?;
+        if current.0.as_deref() != Some(authority.generation.as_str())
+            || current.1 != Some(authority.expected_binding.fence_epoch)
+            || current.2.as_deref() != authority.building_phase.as_deref()
+        {
+            return Err(stale_generation(store_name));
+        }
+        conn.execute(
+            "UPDATE projection_deliveries
+             SET status='pending',published_generation=NULL,
+                 claim_owner=NULL,claim_token=NULL,claim_lease_token=NULL,
+                 claim_fence_epoch=NULL,claim_generation=NULL,claim_expires_at=NULL,
+                 last_error='generation aborted after snapshot prepare failure',updated_at=?1
+             WHERE store_name=?2
+               AND (published_generation=?3 OR claim_generation=?3)",
+            params![now, store_name, authority.generation],
+        )
+        .map_err(storage)?;
+        recompute_checkpoint(&conn, store_name, now)?;
+        let changed = conn
+            .execute(
+                "UPDATE projection_store_state
+                 SET building_generation=NULL,building_fingerprint=NULL,
+                     building_fence_epoch=NULL,building_provider=NULL,
+                     building_provider_fingerprint=NULL,building_corpus_schema=NULL,
+                     building_corpus_fingerprint=NULL,building_embedding_model=NULL,
+                     building_embedding_dimensions=NULL,building_canonical_count=NULL,
+                     building_canonical_digest=NULL,building_delivery_count=NULL,
+                     building_delivery_digest=NULL,building_phase=NULL,
+                     lifecycle_status=CASE WHEN active_generation IS NULL
+                                           THEN 'bootstrap_required' ELSE 'ready' END,
+                     last_error=NULL,updated_at=?1
+                 WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4
+                   AND lease_expires_at>?1 AND building_generation=?5
+                   AND building_fence_epoch=?6",
+                params![
+                    now,
+                    store_name,
+                    owner,
+                    lease_token,
+                    authority.generation,
+                    authority.expected_binding.fence_epoch,
+                ],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(stale_generation(store_name));
+        }
+        Ok(())
+    })
+}
+
 fn abort_projection_generation_with_binding(
     path: &Path,
     store_name: &str,
@@ -1421,23 +1632,17 @@ fn abort_projection_generation_with_binding(
         generations_to_quarantine.push(previous.manifest.generation.clone());
     }
     for generation in &generations_to_quarantine {
-        let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
         let authority = if generation == &manifest.generation {
-            destructive_authority_from_evidence(
-                owner,
-                lease_token,
-                ProjectionGenerationRole::Building,
-                lease.fence_epoch,
-                lease.lease_expires_at,
-                &ProjectionArtifactEvidence {
-                    manifest: manifest.clone(),
-                    fingerprint: manifest.fingerprint.clone().unwrap_or_default(),
-                },
-            )
+            let authority = current_building_authority(path, store_name, owner, lease_token)?;
+            if authority.generation != *generation {
+                return Err(stale_generation(store_name));
+            }
+            authority
         } else if let Some(active) = active
             .as_ref()
             .filter(|e| e.manifest.generation == *generation)
         {
+            let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
             destructive_authority_from_evidence(
                 owner,
                 lease_token,
@@ -1450,6 +1655,7 @@ fn abort_projection_generation_with_binding(
             .as_ref()
             .filter(|e| e.manifest.generation == *generation)
         {
+            let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
             destructive_authority_from_evidence(
                 owner,
                 lease_token,
@@ -1620,7 +1826,14 @@ pub fn run_projection_batch_with(
     if batch.items.is_empty() {
         return Ok(batch);
     }
-    match backend.apply_batch(&batch) {
+    let batch_authority = authority_for_generation(
+        path,
+        store_name,
+        owner,
+        lease_token,
+        &batch.target_generation,
+    )?;
+    match backend.apply_batch_with_authority(&batch, &batch_authority) {
         Ok(receipt) => {
             if let Err(error) = acknowledge_projection_batch(path, &batch, &receipt) {
                 fail_projection_batch(path, &batch, &error.to_string(), claim_ttl_ms)?;
@@ -1646,6 +1859,13 @@ pub fn publish_projection_generation_with(
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let prepared = prepared_manifest(path, store_name, owner, lease_token)?;
     validate_backend_binding(backend, &prepared.manifest)?;
+    let publish_authority = authority_for_generation(
+        path,
+        store_name,
+        owner,
+        lease_token,
+        &prepared.manifest.generation,
+    )?;
     let expected_active = active_artifact(path, store_name)?;
     let operation: Result<ProjectionArtifactEvidence> = (|| {
         let receipt = match backend.inspect_active() {
@@ -1653,13 +1873,18 @@ pub fn publish_projection_generation_with(
                 active,
                 retained_previous: inspect_expected_previous(backend, expected_active.as_ref())?,
             },
-            Ok(_) | Err(_) => backend.publish_generation(expected_active.as_ref(), &prepared)?,
+            Ok(_) | Err(_) => backend.publish_generation_with_authority(
+                expected_active.as_ref(),
+                &prepared,
+                &publish_authority,
+            )?,
         };
         let active = validate_publish_receipt(
             backend,
             store_name,
             &prepared,
             expected_active.as_ref(),
+            &publish_authority,
             receipt,
         )?;
         confirm_published_generation(
@@ -1673,7 +1898,14 @@ pub fn publish_projection_generation_with(
         Ok(active)
     })();
     if let Err(error) = &operation {
-        record_projection_error(path, store_name, &error.to_string())?;
+        let error_lease = lease_from_destructive_authority(store_name, &publish_authority);
+        if let Err(record_error) =
+            record_projection_error(path, store_name, &error_lease, &error.to_string())
+        {
+            if !matches!(&record_error, KanbanError::Conflict(_)) {
+                return Err(record_error);
+            }
+        }
     }
     operation
 }
@@ -1689,6 +1921,13 @@ pub fn recover_projection_generation_with(
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let prepared = prepared_manifest(path, store_name, owner, lease_token)?;
     validate_backend_binding(backend, &prepared.manifest)?;
+    let publish_authority = authority_for_generation(
+        path,
+        store_name,
+        owner,
+        lease_token,
+        &prepared.manifest.generation,
+    )?;
     let missing_active = active_artifact(path, store_name)?.ok_or_else(|| {
         KanbanError::Conflict(format!(
             "projection recovery requires a logical active generation for {store_name}"
@@ -1699,13 +1938,26 @@ pub fn recover_projection_generation_with(
         let expected_retained =
             match backend.inspect_generation(&missing_active.manifest.generation) {
                 Ok(Some(actual)) if same_artifact(&actual, &missing_active) => {
+                    let repair_authority = authority_for_generation(
+                        path,
+                        store_name,
+                        owner,
+                        lease_token,
+                        &missing_active.manifest.generation,
+                    )?;
                     if backend
                         .validate_generation_publication(&missing_active)
                         .is_err()
                     {
-                        backend.repair_generation_publication(&missing_active)?;
-                        backend.validate_generation_publication(&missing_active)?;
+                        backend.repair_generation_publication_with_authority(
+                            &missing_active,
+                            &repair_authority,
+                        )?;
                     }
+                    backend.validate_generation_publication_with_authority(
+                        &missing_active,
+                        &repair_authority,
+                    )?;
                     Some(missing_active.clone())
                 }
                 Ok(Some(_)) | Err(KanbanError::Conflict(_)) => {
@@ -1740,6 +1992,7 @@ pub fn recover_projection_generation_with(
                     store_name,
                     &prepared,
                     expected_retained.as_ref(),
+                    &publish_authority,
                     receipt,
                 )?;
                 confirm_published_generation(
@@ -1754,12 +2007,17 @@ pub fn recover_projection_generation_with(
             }
             Ok(active) => active,
             Err(_) => {
-                let receipt = backend.publish_generation(expected_retained.as_ref(), &prepared)?;
+                let receipt = backend.publish_generation_with_authority(
+                    expected_retained.as_ref(),
+                    &prepared,
+                    &publish_authority,
+                )?;
                 let active = validate_publish_receipt(
                     backend,
                     store_name,
                     &prepared,
                     expected_retained.as_ref(),
+                    &publish_authority,
                     receipt,
                 )?;
                 confirm_published_generation(
@@ -1778,12 +2036,17 @@ pub fn recover_projection_generation_with(
                 "projection recovery found an unexpected physical predecessor for {store_name}"
             )));
         }
-        let receipt = backend.publish_generation(expected_retained.as_ref(), &prepared)?;
+        let receipt = backend.publish_generation_with_authority(
+            expected_retained.as_ref(),
+            &prepared,
+            &publish_authority,
+        )?;
         let active = validate_publish_receipt(
             backend,
             store_name,
             &prepared,
             expected_retained.as_ref(),
+            &publish_authority,
             receipt,
         )?;
         confirm_published_generation(
@@ -1797,7 +2060,14 @@ pub fn recover_projection_generation_with(
         Ok(active)
     })();
     if let Err(error) = &operation {
-        record_projection_error(path, store_name, &error.to_string())?;
+        let error_lease = lease_from_destructive_authority(store_name, &publish_authority);
+        if let Err(record_error) =
+            record_projection_error(path, store_name, &error_lease, &error.to_string())
+        {
+            if !matches!(&record_error, KanbanError::Conflict(_)) {
+                return Err(record_error);
+            }
+        }
     }
     operation
 }
@@ -1828,6 +2098,13 @@ pub fn reconcile_projection_generation_with(
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let prepared = prepared_manifest(path, store_name, owner, lease_token)?;
     validate_backend_binding(backend, &prepared.manifest)?;
+    let publish_authority = authority_for_generation(
+        path,
+        store_name,
+        owner,
+        lease_token,
+        &prepared.manifest.generation,
+    )?;
     let operation = (|| {
         let expected_previous = active_artifact(path, store_name)?;
         let receipt = match backend.inspect_active() {
@@ -1845,13 +2122,18 @@ pub fn reconcile_projection_generation_with(
                     "projection store has no published generation to reconcile for {store_name}"
                 )));
             }
-            Err(_) => backend.publish_generation(expected_previous.as_ref(), &prepared)?,
+            Err(_) => backend.publish_generation_with_authority(
+                expected_previous.as_ref(),
+                &prepared,
+                &publish_authority,
+            )?,
         };
         let active = validate_publish_receipt(
             backend,
             store_name,
             &prepared,
             expected_previous.as_ref(),
+            &publish_authority,
             receipt,
         )?;
         confirm_published_generation(
@@ -1865,7 +2147,14 @@ pub fn reconcile_projection_generation_with(
         Ok(active)
     })();
     if let Err(error) = &operation {
-        record_projection_error(path, store_name, &error.to_string())?;
+        let error_lease = lease_from_destructive_authority(store_name, &publish_authority);
+        if let Err(record_error) =
+            record_projection_error(path, store_name, &error_lease, &error.to_string())
+        {
+            if !matches!(&record_error, KanbanError::Conflict(_)) {
+                return Err(record_error);
+            }
+        }
     }
     operation
 }
@@ -2130,17 +2419,42 @@ fn fail_projection_batch(
     })
 }
 
-fn record_projection_error(path: &Path, store_name: &str, error: &str) -> Result<()> {
+fn record_projection_error(
+    path: &Path,
+    store_name: &str,
+    authority: &ProjectionLease,
+    error: &str,
+) -> Result<()> {
+    if authority.store_name != store_name {
+        return Err(KanbanError::Conflict(format!(
+            "projection error authority targets {}",
+            authority.store_name
+        )));
+    }
     let now = SystemClock.now_ms();
     let conn = connect_file(path)?;
-    conn.execute(
-        "UPDATE projection_store_state
-         SET lifecycle_status='error',last_error=?1,updated_at=?2
-         WHERE store_name=?3",
-        params![error, now, store_name],
-    )
-    .map_err(storage)?;
-    Ok(())
+    with_immediate_tx(&conn, || {
+        let changed = conn
+            .execute(
+                "UPDATE projection_store_state
+                 SET lifecycle_status='error',last_error=?1,updated_at=?2
+                 WHERE store_name=?3 AND lease_owner=?4 AND lease_token=?5
+                   AND fence_epoch=?6 AND lease_expires_at>?2",
+                params![
+                    error,
+                    now,
+                    store_name,
+                    authority.owner,
+                    authority.lease_token,
+                    authority.fence_epoch,
+                ],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(projection_lease_conflict(store_name));
+        }
+        Ok(())
+    })
 }
 
 fn confirm_published_generation(
@@ -2565,6 +2879,14 @@ impl ProjectionGenerationBindingSnapshot {
             }
             return Ok(());
         }
+        if phase == "building"
+            && self.phase.as_deref() == Some("snapshotting")
+            && (self.fingerprint.is_some() || self.snapshot_cursor.is_some())
+        {
+            return Err(KanbanError::Storage(format!(
+                "projection store {store_name} snapshotting generation has prepared evidence"
+            )));
+        }
         let prepared_or_published =
             phase != "building" || self.phase.as_deref() != Some("snapshotting");
         if (prepared_or_published && self.fingerprint.is_none())
@@ -2772,7 +3094,10 @@ fn projection_binding_recovery_snapshot(
                     generation: row.get(33)?,
                     fingerprint: row.get(34)?,
                     fence_epoch: row.get(35)?,
-                    snapshot_cursor: None,
+                    snapshot_cursor: match row.get::<_, Option<String>>(46)?.as_deref() {
+                        Some("prepared" | "store_published") => Some(row.get(48)?),
+                        _ => None,
+                    },
                     provider: row.get(36)?,
                     provider_fingerprint: row.get(37)?,
                     canonical_count: row.get(38)?,
@@ -2799,6 +3124,54 @@ fn projection_binding_recovery_snapshot(
     .optional()
     .map_err(storage)?
     .ok_or_else(|| projection_lease_conflict(store_name))
+}
+
+/// Reserve a fresh store fence for incompatible-generation recovery.
+///
+/// The suffix authority lock is held only while this SQLite CAS runs. Child
+/// helper calls must acquire the suffix themselves, so retaining it across a
+/// LanceDB subprocess would be non-reentrant. Bumping the fence before any
+/// physical recovery work invalidates queued requests carrying the previous
+/// same-owner lease fence; the bump is intentionally not rolled back if a
+/// later physical step fails, allowing restart recovery to advance again.
+fn bump_recovery_fence(
+    path: &Path,
+    conn: &Connection,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    expected: &ProjectionBindingRecoverySnapshot,
+) -> Result<ProjectionBindingRecoverySnapshot> {
+    let _authority_guard = acquire_projection_authority_guard(path, store_name)?;
+    let now = SystemClock.now_ms();
+    with_immediate_tx(conn, || {
+        let current =
+            projection_binding_recovery_snapshot(conn, store_name, owner, lease_token, now)?;
+        if !expected.matches_after_lease_heartbeat(&current) {
+            return Err(stale_generation(store_name));
+        }
+        let changed = conn
+            .execute(
+                "UPDATE projection_store_state
+                 SET fence_epoch=fence_epoch+1,updated_at=?1
+                 WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4
+                   AND lease_expires_at>?1 AND fence_epoch=?5
+                   AND control_plane=?6",
+                params![
+                    now,
+                    store_name,
+                    owner,
+                    lease_token,
+                    expected.lease.fence_epoch,
+                    expected.control_plane,
+                ],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(stale_generation(store_name));
+        }
+        projection_binding_recovery_snapshot(conn, store_name, owner, lease_token, now)
+    })
 }
 
 fn push_unique_generation(generations: &mut Vec<String>, generation: Option<&str>) {
@@ -2853,6 +3226,35 @@ fn current_lease_snapshot(
     let now = SystemClock.now_ms();
     let conn = connect_file(path)?;
     current_lease(&conn, store_name, owner, lease_token, now)
+}
+
+fn current_lease_authority(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+) -> Result<ProjectionLease> {
+    let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
+    Ok(ProjectionLease {
+        store_name: store_name.to_owned(),
+        owner: owner.to_owned(),
+        lease_token: lease_token.to_owned(),
+        fence_epoch: lease.fence_epoch,
+        lease_expires_at: lease.lease_expires_at,
+    })
+}
+
+fn lease_from_destructive_authority(
+    store_name: &str,
+    authority: &ProjectionDestructiveAuthority,
+) -> ProjectionLease {
+    ProjectionLease {
+        store_name: store_name.to_owned(),
+        owner: authority.owner.clone(),
+        lease_token: authority.lease_token.clone(),
+        fence_epoch: authority.fence_epoch,
+        lease_expires_at: authority.lease_expires_at,
+    }
 }
 
 fn building_manifest(
@@ -2913,6 +3315,59 @@ fn prepared_manifest(
         manifest,
         fingerprint,
     })
+}
+
+/// Build an exact physical-operation capability from the live SQLite binding.
+/// This is intentionally read immediately before the backend call; the
+/// backend then re-reads and validates the same owner/token/fence/binding while
+/// holding its projection-helper suffix lock.
+fn authority_for_generation(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    generation: &str,
+) -> Result<ProjectionDestructiveAuthority> {
+    let now = SystemClock.now_ms();
+    let conn = connect_file(path)?;
+    let snapshot =
+        projection_binding_recovery_snapshot(&conn, store_name, owner, lease_token, now)?;
+    snapshot.validate_shape(store_name)?;
+    let candidates = [
+        (ProjectionGenerationRole::Building, &snapshot.building),
+        (ProjectionGenerationRole::Active, &snapshot.active),
+        (ProjectionGenerationRole::Previous, &snapshot.previous),
+    ];
+    let (role, binding) = candidates
+        .into_iter()
+        .find(|(_, binding)| binding.generation.as_deref() == Some(generation))
+        .ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "projection generation {generation} has no current SQLite authority for store {store_name}"
+            ))
+        })?;
+    destructive_authority_from_snapshot(&snapshot, store_name, owner, lease_token, role, binding)
+}
+
+fn current_building_authority(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+) -> Result<ProjectionDestructiveAuthority> {
+    let now = SystemClock.now_ms();
+    let conn = connect_file(path)?;
+    let snapshot =
+        projection_binding_recovery_snapshot(&conn, store_name, owner, lease_token, now)?;
+    snapshot.validate_shape(store_name)?;
+    destructive_authority_from_snapshot(
+        &snapshot,
+        store_name,
+        owner,
+        lease_token,
+        ProjectionGenerationRole::Building,
+        &snapshot.building,
+    )
 }
 
 pub(crate) fn active_artifact(
@@ -3855,6 +4310,7 @@ fn validate_publish_receipt(
     store_name: &str,
     prepared: &ProjectionArtifactEvidence,
     expected_previous: Option<&ProjectionArtifactEvidence>,
+    authority: &ProjectionDestructiveAuthority,
     receipt: ProjectionPublishReceipt,
 ) -> Result<ProjectionArtifactEvidence> {
     validate_artifact_evidence(&prepared.manifest, &receipt.active)?;
@@ -3873,7 +4329,7 @@ fn validate_publish_receipt(
             "projection active generation readback mismatch for {store_name}"
         )));
     }
-    backend.validate_generation_publication(&active)?;
+    backend.validate_generation_publication_with_authority(&active, authority)?;
     inspect_expected_previous(backend, expected_previous)?;
     Ok(active)
 }
@@ -4292,7 +4748,7 @@ fn stale_generation(store_name: &str) -> KanbanError {
 
 #[cfg(test)]
 mod read_only_publication_validation_tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use super::*;
     use crate::init::init_database;
@@ -4347,6 +4803,605 @@ mod read_only_publication_validation_tests {
             self.repair_calls.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
+    }
+
+    struct PrepareFailureBackend {
+        db_path: std::path::PathBuf,
+        descriptor: ProjectionStoreDescriptor,
+        fail_once: AtomicBool,
+        rollover_before_abort: AtomicBool,
+        rollover_before_prepare_commit: AtomicBool,
+        rollover_before_publish: AtomicBool,
+        state: std::sync::Mutex<PrepareFailureBackendState>,
+    }
+
+    #[derive(Default)]
+    struct PrepareFailureBackendState {
+        generations: std::collections::BTreeMap<String, ProjectionArtifactEvidence>,
+        active: Option<ProjectionArtifactEvidence>,
+        successor: Option<ProjectionLease>,
+        abort_authority: Option<ProjectionDestructiveAuthority>,
+    }
+
+    impl PrepareFailureBackend {
+        fn new(path: &std::path::Path) -> Self {
+            Self {
+                db_path: path.to_owned(),
+                descriptor: ProjectionStoreDescriptor {
+                    store_name: "tantivy_tasks".to_owned(),
+                    provider: "prepare-failure-fixture".to_owned(),
+                    provider_fingerprint: "prepare-failure-fixture-v1".to_owned(),
+                    corpus: None,
+                },
+                fail_once: AtomicBool::new(true),
+                rollover_before_abort: AtomicBool::new(false),
+                rollover_before_prepare_commit: AtomicBool::new(false),
+                rollover_before_publish: AtomicBool::new(false),
+                state: std::sync::Mutex::new(PrepareFailureBackendState::default()),
+            }
+        }
+
+        fn rollover_before_abort(&self) {
+            self.rollover_before_abort.store(true, Ordering::SeqCst);
+        }
+
+        fn rollover_before_prepare_commit(&self) {
+            self.rollover_before_prepare_commit
+                .store(true, Ordering::SeqCst);
+        }
+
+        fn rollover_before_publish(&self) {
+            self.rollover_before_publish.store(true, Ordering::SeqCst);
+        }
+
+        fn successor_lease(&self) -> ProjectionLease {
+            self.state
+                .lock()
+                .expect("prepare-failure fixture lock")
+                .successor
+                .clone()
+                .expect("successor lease")
+        }
+
+        fn generation_present(&self, generation: &str) -> bool {
+            self.state
+                .lock()
+                .expect("prepare-failure fixture lock")
+                .generations
+                .contains_key(generation)
+        }
+
+        fn abort_authority(&self) -> ProjectionDestructiveAuthority {
+            self.state
+                .lock()
+                .expect("prepare-failure fixture lock")
+                .abort_authority
+                .clone()
+                .expect("fenced abort authority")
+        }
+
+        fn validate_mutating_authority(
+            &self,
+            generation: &str,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            if authority.generation != generation
+                || authority.expected_binding.generation != generation
+                || authority.role == ProjectionGenerationRole::Orphaned
+                || authority.owner.trim().is_empty()
+                || authority.lease_token.trim().is_empty()
+            {
+                return Err(KanbanError::Conflict(
+                    "prepare-failure fixture authority mismatch".to_owned(),
+                ));
+            }
+            Ok(())
+        }
+    }
+
+    impl ProjectionStoreBackend for PrepareFailureBackend {
+        fn descriptor(&self) -> Result<ProjectionStoreDescriptor> {
+            Ok(self.descriptor.clone())
+        }
+
+        fn prepare_snapshot(
+            &self,
+            snapshot: &ProjectionSnapshot,
+        ) -> Result<ProjectionArtifactEvidence> {
+            let generation = snapshot.manifest.generation.clone();
+            let fingerprint = format!("prepare-failure:{generation}");
+            let mut evidence_manifest = snapshot.manifest.clone();
+            evidence_manifest.fingerprint = Some(fingerprint.clone());
+            let evidence = ProjectionArtifactEvidence {
+                manifest: evidence_manifest,
+                fingerprint,
+            };
+            let mut state = self.state.lock().expect("prepare-failure fixture lock");
+            if self.fail_once.swap(false, Ordering::SeqCst) {
+                // Model a provider crash after creating a partial generation.
+                state.generations.insert(generation, evidence);
+                return Err(KanbanError::Storage(
+                    "prepare provider failed after partial materialization".to_owned(),
+                ));
+            }
+            state.generations.insert(generation, evidence.clone());
+            Ok(evidence)
+        }
+
+        fn prepare_snapshot_with_authority(
+            &self,
+            snapshot: &ProjectionSnapshot,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<ProjectionArtifactEvidence> {
+            self.validate_mutating_authority(&snapshot.manifest.generation, authority)?;
+            let evidence = self.prepare_snapshot(snapshot)?;
+            if self
+                .rollover_before_prepare_commit
+                .swap(false, Ordering::SeqCst)
+            {
+                // Force the service's final SQLite CAS to fail after the
+                // provider has prepared physical evidence. The fence bump
+                // keeps owner/token stable, so error persistence must not
+                // replace this original stale-generation failure.
+                let conn = connect_file(&self.db_path)?;
+                let before = projection_binding_recovery_snapshot(
+                    &conn,
+                    &self.descriptor.store_name,
+                    &authority.owner,
+                    &authority.lease_token,
+                    SystemClock.now_ms(),
+                )?;
+                let after = bump_recovery_fence(
+                    &self.db_path,
+                    &conn,
+                    &self.descriptor.store_name,
+                    &authority.owner,
+                    &authority.lease_token,
+                    &before,
+                )?;
+                conn.execute(
+                    "UPDATE projection_store_state
+                     SET building_phase='prepared',updated_at=?1
+                     WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4
+                       AND fence_epoch=?5",
+                    params![
+                        SystemClock.now_ms(),
+                        self.descriptor.store_name,
+                        authority.owner,
+                        authority.lease_token,
+                        after.lease.fence_epoch,
+                    ],
+                )
+                .map_err(storage)?;
+                self.state
+                    .lock()
+                    .expect("prepare-failure fixture lock")
+                    .successor = Some(ProjectionLease {
+                    store_name: self.descriptor.store_name.clone(),
+                    owner: authority.owner.clone(),
+                    lease_token: authority.lease_token.clone(),
+                    fence_epoch: after.lease.fence_epoch,
+                    lease_expires_at: after.lease.lease_expires_at,
+                });
+            }
+            Ok(evidence)
+        }
+
+        fn apply_batch(&self, _batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt> {
+            Err(KanbanError::Conflict(
+                "prepare-failure fixture does not apply batches".to_owned(),
+            ))
+        }
+
+        fn apply_batch_with_authority(
+            &self,
+            batch: &ProjectionBatch,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<ProjectionBatchReceipt> {
+            self.validate_mutating_authority(&batch.target_generation, authority)?;
+            self.apply_batch(batch)
+        }
+
+        fn publish_generation(
+            &self,
+            _expected_active: Option<&ProjectionArtifactEvidence>,
+            prepared: &ProjectionArtifactEvidence,
+        ) -> Result<ProjectionPublishReceipt> {
+            let mut state = self.state.lock().expect("prepare-failure fixture lock");
+            if state.generations.get(&prepared.manifest.generation) != Some(prepared) {
+                return Err(KanbanError::Conflict(
+                    "prepare-failure fixture generation is missing".to_owned(),
+                ));
+            }
+            state.active = Some(prepared.clone());
+            Ok(ProjectionPublishReceipt {
+                active: prepared.clone(),
+                retained_previous: None,
+            })
+        }
+
+        fn publish_generation_with_authority(
+            &self,
+            expected_active: Option<&ProjectionArtifactEvidence>,
+            prepared: &ProjectionArtifactEvidence,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<ProjectionPublishReceipt> {
+            self.validate_mutating_authority(&prepared.manifest.generation, authority)?;
+            if self.rollover_before_publish.swap(false, Ordering::SeqCst) {
+                // Model an in-place recovery fence rollover: the same lease
+                // owner/token survives, but the successor fence invalidates
+                // the authority captured by the failed publish operation.
+                let conn = connect_file(&self.db_path)?;
+                let before = projection_binding_recovery_snapshot(
+                    &conn,
+                    &self.descriptor.store_name,
+                    &authority.owner,
+                    &authority.lease_token,
+                    SystemClock.now_ms(),
+                )?;
+                let after = bump_recovery_fence(
+                    &self.db_path,
+                    &conn,
+                    &self.descriptor.store_name,
+                    &authority.owner,
+                    &authority.lease_token,
+                    &before,
+                )?;
+                let successor = ProjectionLease {
+                    store_name: self.descriptor.store_name.clone(),
+                    owner: authority.owner.clone(),
+                    lease_token: authority.lease_token.clone(),
+                    fence_epoch: after.lease.fence_epoch,
+                    lease_expires_at: after.lease.lease_expires_at,
+                };
+                self.state
+                    .lock()
+                    .expect("prepare-failure fixture lock")
+                    .successor = Some(successor);
+                return Err(KanbanError::Storage(
+                    "prepare-failure fixture publish failed after lease rollover".to_owned(),
+                ));
+            }
+            self.publish_generation(expected_active, prepared)
+        }
+
+        fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>> {
+            Ok(self
+                .state
+                .lock()
+                .expect("prepare-failure fixture lock")
+                .active
+                .clone())
+        }
+
+        fn inspect_generation(
+            &self,
+            generation: &str,
+        ) -> Result<Option<ProjectionArtifactEvidence>> {
+            Ok(self
+                .state
+                .lock()
+                .expect("prepare-failure fixture lock")
+                .generations
+                .get(generation)
+                .cloned())
+        }
+
+        fn abort_generation_fenced(
+            &self,
+            generation: &str,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            self.state
+                .lock()
+                .expect("prepare-failure fixture lock")
+                .abort_authority = Some(authority.clone());
+            if self.rollover_before_abort.swap(false, Ordering::SeqCst) {
+                release_projection_lease(
+                    &self.db_path,
+                    &self.descriptor.store_name,
+                    &authority.owner,
+                    &authority.lease_token,
+                )?;
+                let successor = acquire_projection_lease(
+                    &self.db_path,
+                    "tantivy_tasks",
+                    "prepare-successor",
+                    20_000,
+                )?;
+                self.state
+                    .lock()
+                    .expect("prepare-failure fixture lock")
+                    .successor = Some(successor);
+                return Err(KanbanError::Conflict(
+                    "prepare-failure fixture observed a rolled-over lease".to_owned(),
+                ));
+            }
+            self.state
+                .lock()
+                .expect("prepare-failure fixture lock")
+                .generations
+                .remove(generation);
+            Ok(())
+        }
+
+        fn quarantine_generation_fenced(
+            &self,
+            generation: &str,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            if authority.generation != generation
+                || authority.role != ProjectionGenerationRole::Building
+            {
+                return Err(KanbanError::Conflict(
+                    "prepare-failure fixture fenced quarantine authority mismatch".to_owned(),
+                ));
+            }
+            self.state
+                .lock()
+                .expect("prepare-failure fixture lock")
+                .generations
+                .remove(generation);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn failed_prepare_fenced_abort_cleans_partial_state_and_retry_converges() -> anyhow::Result<()>
+    {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        let backend = PrepareFailureBackend::new(&path);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "prepare-owner", 20_000)?;
+        let first = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "prepare-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+
+        let error = prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "prepare-owner",
+            &lease.lease_token,
+            &backend,
+        )
+        .expect_err("the fixture fails after creating partial physical state");
+        assert!(error.to_string().contains("partial materialization"));
+        assert!(!backend.generation_present(&first.generation));
+        let authority = backend.abort_authority();
+        assert_eq!(authority.owner, "prepare-owner");
+        assert_eq!(authority.lease_token, lease.lease_token);
+        assert_eq!(authority.generation, first.generation);
+
+        let status = projection_status(&path)?;
+        let store = status
+            .stores
+            .iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy projection status");
+        assert!(store.building_generation.is_none());
+        assert_eq!(store.lifecycle_status, "error");
+        assert!(
+            store
+                .last_error
+                .as_deref()
+                .is_some_and(|last_error| last_error.contains("partial materialization"))
+        );
+        let referenced: i64 = connect_file(&path)?.query_row(
+            "SELECT COUNT(*) FROM projection_deliveries
+             WHERE store_name='tantivy_tasks'
+               AND (published_generation=?1 OR claim_generation=?1)",
+            [&first.generation],
+            |row| row.get(0),
+        )?;
+        assert_eq!(referenced, 0, "fenced abort must clear delivery references");
+
+        let retry = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "prepare-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let evidence = prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "prepare-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        assert_eq!(evidence.manifest.generation, retry.generation);
+        assert!(backend.generation_present(&retry.generation));
+        release_projection_lease(&path, "tantivy_tasks", "prepare-owner", &lease.lease_token)?;
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_abort_rollover_leaves_stale_partial_state_for_successor_recovery()
+    -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        let backend = PrepareFailureBackend::new(&path);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "prepare-owner", 20_000)?;
+        let first = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "prepare-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        backend.rollover_before_abort();
+
+        let error = prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "prepare-owner",
+            &lease.lease_token,
+            &backend,
+        )
+        .expect_err("rollover must make the captured abort authority stale");
+        assert!(
+            error
+                .to_string()
+                .contains("fenced recovery could not clean")
+        );
+        assert!(backend.generation_present(&first.generation));
+
+        let successor = backend.successor_lease();
+        let status = projection_status(&path)?;
+        let store = status
+            .stores
+            .iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy projection status");
+        assert_eq!(store.owner.as_deref(), Some("prepare-successor"));
+        assert_eq!(
+            store.building_generation.as_deref(),
+            Some(first.generation.as_str())
+        );
+
+        abort_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "prepare-successor",
+            &successor.lease_token,
+            &backend,
+        )?;
+        assert!(!backend.generation_present(&first.generation));
+        let retry = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "prepare-successor",
+            &successor.lease_token,
+            &backend,
+        )?;
+        let evidence = prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "prepare-successor",
+            &successor.lease_token,
+            &backend,
+        )?;
+        assert_eq!(evidence.manifest.generation, retry.generation);
+        release_projection_lease(
+            &path,
+            "tantivy_tasks",
+            "prepare-successor",
+            &successor.lease_token,
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn publish_failure_does_not_persist_error_under_a_rolled_over_fence() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "publish-owner", 20_000)?;
+        begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "publish-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "publish-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        backend.rollover_before_publish();
+
+        let error = publish_projection_generation_with(
+            &path,
+            "tantivy_tasks",
+            "publish-owner",
+            &lease.lease_token,
+            &backend,
+        )
+        .expect_err("publish failure must surface after the lease rolls over");
+        assert!(
+            error
+                .to_string()
+                .contains("publish failed after lease rollover")
+        );
+
+        let successor = backend.successor_lease();
+        let store = projection_status(&path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy projection status");
+        assert_eq!(store.owner.as_deref(), Some("publish-owner"));
+        assert_eq!(store.fence_epoch, successor.fence_epoch);
+        assert_eq!(store.lifecycle_status, "rebuilding");
+        assert_eq!(store.last_error, None);
+        assert!(store.building_generation.is_some());
+
+        release_projection_lease(
+            &path,
+            "tantivy_tasks",
+            "publish-owner",
+            &successor.lease_token,
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_commit_failure_preserves_original_error_after_fence_rollover() -> anyhow::Result<()>
+    {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "prepare-owner", 20_000)?;
+        begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "prepare-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        backend.rollover_before_prepare_commit();
+
+        let error = prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "prepare-owner",
+            &lease.lease_token,
+            &backend,
+        )
+        .expect_err("the final snapshot CAS must fail after the fence rollover");
+        assert!(error.to_string().contains("projection generation is stale"));
+
+        let successor = backend.successor_lease();
+        let store = projection_status(&path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy projection status");
+        assert_eq!(store.owner.as_deref(), Some("prepare-owner"));
+        assert_eq!(store.fence_epoch, successor.fence_epoch);
+        assert_eq!(store.lifecycle_status, "rebuilding");
+        assert_eq!(store.last_error, None);
+
+        release_projection_lease(
+            &path,
+            "tantivy_tasks",
+            "prepare-owner",
+            &successor.lease_token,
+        )?;
+        Ok(())
     }
 
     #[test]
@@ -4415,6 +5470,189 @@ mod read_only_publication_validation_tests {
         let debug = format!("{authority:?}");
         assert!(debug.contains("[REDACTED]"));
         assert!(!debug.contains("secret-token"));
+    }
+
+    #[test]
+    fn recovery_fence_bump_invalidates_the_pre_bump_snapshot() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "owner", 10_000)?;
+        let conn = connect_file(&path)?;
+        let before = projection_binding_recovery_snapshot(
+            &conn,
+            "tantivy_tasks",
+            "owner",
+            &lease.lease_token,
+            SystemClock.now_ms(),
+        )?;
+
+        let after = bump_recovery_fence(
+            &path,
+            &conn,
+            "tantivy_tasks",
+            "owner",
+            &lease.lease_token,
+            &before,
+        )?;
+        assert_eq!(after.lease.fence_epoch, before.lease.fence_epoch + 1);
+        assert!(
+            bump_recovery_fence(
+                &path,
+                &conn,
+                "tantivy_tasks",
+                "owner",
+                &lease.lease_token,
+                &before,
+            )
+            .is_err()
+        );
+        conn.execute(
+            "UPDATE projection_store_state SET lease_expires_at=0 WHERE store_name=?1",
+            ["tantivy_tasks"],
+        )?;
+        let takeover = acquire_projection_lease(&path, "tantivy_tasks", "new-owner", 10_000)?;
+        assert!(takeover.fence_epoch > after.lease.fence_epoch);
+        assert!(
+            bump_recovery_fence(
+                &path,
+                &conn,
+                "tantivy_tasks",
+                "owner",
+                &lease.lease_token,
+                &after,
+            )
+            .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn prepared_building_recovery_snapshot_retains_the_global_cursor() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "owner", 10_000)?;
+        let building = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let conn = connect_file(&path)?;
+        let snapshotting = projection_binding_recovery_snapshot(
+            &conn,
+            "tantivy_tasks",
+            "owner",
+            &lease.lease_token,
+            SystemClock.now_ms(),
+        )?;
+        assert_eq!(
+            snapshotting.building.generation.as_deref(),
+            Some(building.generation.as_str())
+        );
+        assert_eq!(snapshotting.building.phase.as_deref(), Some("snapshotting"));
+        assert!(snapshotting.building.fingerprint.is_none());
+        assert!(snapshotting.building.snapshot_cursor.is_none());
+
+        let mut cursor_corruption = snapshotting.clone();
+        cursor_corruption.building.snapshot_cursor = Some(snapshotting.snapshot_cursor);
+        let error = cursor_corruption
+            .validate_shape("tantivy_tasks")
+            .expect_err("snapshotting cursor evidence must fail closed");
+        assert!(error.to_string().contains("snapshotting generation"));
+
+        conn.execute(
+            "UPDATE projection_store_state
+             SET building_fingerprint='corrupt'
+             WHERE store_name=?1",
+            ["tantivy_tasks"],
+        )?;
+        let fingerprint_corruption = projection_binding_recovery_snapshot(
+            &conn,
+            "tantivy_tasks",
+            "owner",
+            &lease.lease_token,
+            SystemClock.now_ms(),
+        )?;
+        assert!(fingerprint_corruption.building.snapshot_cursor.is_none());
+        let error = fingerprint_corruption
+            .validate_shape("tantivy_tasks")
+            .expect_err("snapshotting fingerprint evidence must fail closed");
+        assert!(error.to_string().contains("snapshotting generation"));
+        conn.execute(
+            "UPDATE projection_store_state
+             SET building_fingerprint=NULL
+             WHERE store_name=?1",
+            ["tantivy_tasks"],
+        )?;
+
+        let prepared = prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let prepared_snapshot = projection_binding_recovery_snapshot(
+            &conn,
+            "tantivy_tasks",
+            "owner",
+            &lease.lease_token,
+            SystemClock.now_ms(),
+        )?;
+        assert_eq!(
+            prepared_snapshot.building.phase.as_deref(),
+            Some("prepared")
+        );
+        assert_eq!(
+            prepared_snapshot.building.snapshot_cursor,
+            Some(prepared.manifest.snapshot_cursor)
+        );
+        release_projection_lease(&path, "tantivy_tasks", "owner", &lease.lease_token)?;
+        Ok(())
+    }
+
+    #[test]
+    fn projection_error_persistence_rejects_a_handed_off_authority() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        let old = acquire_projection_lease(&path, "tantivy_tasks", "old-owner", 10_000)?;
+        let authority =
+            current_lease_authority(&path, "tantivy_tasks", "old-owner", &old.lease_token)?;
+        release_projection_lease(&path, "tantivy_tasks", "old-owner", &old.lease_token)?;
+        let successor = acquire_projection_lease(&path, "tantivy_tasks", "new-owner", 10_000)?;
+        let before = projection_status(&path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy status");
+
+        let error = record_projection_error(
+            &path,
+            "tantivy_tasks",
+            &authority,
+            "failure from the previous owner",
+        )
+        .expect_err("a handed-off authority must not update the successor");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+
+        let after = projection_status(&path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy status");
+        assert_eq!(after.lifecycle_status, before.lifecycle_status);
+        assert_eq!(after.last_error, before.last_error);
+        assert_eq!(after.owner.as_deref(), Some("new-owner"));
+        assert_eq!(after.fence_epoch, successor.fence_epoch);
+
+        release_projection_lease(&path, "tantivy_tasks", "new-owner", &successor.lease_token)?;
+        Ok(())
     }
 
     #[test]

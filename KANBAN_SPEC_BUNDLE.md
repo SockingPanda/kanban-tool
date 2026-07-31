@@ -7920,8 +7920,13 @@ just schema-audit-closed
   `just`/build-lock/cargo/python/script JSONL trace 另外锁定产品 `fmt`（core）、
   `fmt-full`（core + helper）、`schema-fmt`（contract + leaf）的互斥 package selection，
   full/rust/test 调用图、schema 子 gate、`schema-audit-closed` 内部调用、`release`
-  14 步顺序、Projection release cohort 和 `test-full` 的 nextest/fallback 双分支。mutation tests 必须拒绝
-  workspace-wide fmt、package 漂移、gate 删除、命令旁路与顺序调换。
+  到单进程 cohort wrapper 的唯一入口、Projection release cohort 和 `test-full` 的
+  nextest/fallback 双分支。release wrapper 另以 whole-file SHA-256 和结构化
+  `publish_generation` argv graph 锁定，拒绝 dead branch/environment skip；独立 hermetic
+  fake-git/fake-package 测试使用 default-deny command allowlist，并将 build-lock、Git、
+  `just`、Debian tooling 与 helper identity 写入统一 JSONL，规范化后对 181 行 ordered
+  trace 做 exact SHA-256 比较。mutation tests 必须拒绝 workspace-wide fmt、package 漂移、
+  gate 删除、host `PATH`/direct `cargo` 命令旁路与顺序调换。
 - `schema-dependency-isolation` 先运行该自测，再用结构化 manifest/full locked metadata policy
   检查全部 workspace declaration、resolved identity、真实 `Cargo.lock` 与 committed registry
   approval，再用真实 cargo tree 检查六个产品的传递性 runtime graph 与 leaf tooling graph；
@@ -7949,10 +7954,48 @@ just schema-audit-closed
   `tantivy-backend,oxigraph-backend`，分别执行完整测试和 clippy；默认产品依赖图仍由
   helper isolation gate 证明不携带 Oxigraph/LanceDB 重型 helper，不能用
   `--all-features` 混淆默认隔离与发布能力。
-- `release` 精确依次调用 `affected-self-test`、`schema-contract`、`audit`、`rust-full`、
-  `projection-release-cohort`、`bench-check`、`target-tools`、`cli-package`、`cli-package-layout`、
-  `desktop-package-config`、`desktop-package`、`desktop-package-layout`、`smoke` 与
-  `diff-check`；AST + ordered trace 对删除或重排 fail closed。`cli-package` 使用
+- `release` 只进入单进程 `scripts/release-cohort.sh`。wrapper 在读取 source 状态前获取
+  一次完整 cohort 生命周期的 exclusive Cargo build lock；内部 recipe/build/package/hash
+  通过 reentrant 标记复用同一把锁。任何构建前要求真实 Git root、symbolic `main`、
+  tracked + untracked clean、HEAD/tree 与实时 `origin/main` 完全一致，同时要求 source
+  map、保存的 `origin/derived-projection-v2` tracking tip、实时 derived remote tip
+  三者精确一致，三个 canonical source slice 都是该 tip 的 ancestor、三个 semantic-port
+  commit 都是 `main` ancestor，且 main/source 无 merge base，并生成
+  `KANBAN_BUILD_ID=kanban-tool/<version>;commit=<40sha>;tree=<40sha>;identity=<64sha>`。随后精确依次调用
+  `affected-self-test`、`schema-contract`、`audit`、`rust-full`、
+  `check-windows-p kanban-local`、`projection-release-cohort`、`bench-check`、`target-tools`、
+  `cli-package`、`cli-package-layout`、`desktop-package-config`、`desktop-package`、
+  `desktop-package-layout`、`smoke` 与 `diff-check`；package 内嵌同一 source manifest
+  与无 merge-base 语义移植 source map。六个 artifact 先复制到私有同盘 generation；
+  safe-path 从 root 逐组件 `O_NOFOLLOW` 打开，所有 mutation/rename/fsync 使用 held dirfd
+  的 `*at` 操作并校验 public-path inode identity，拒绝 symlink/hardlink/特殊文件/
+  mount crossing/越界 parent，以及任一 xattr、POSIX ACL、file capability 或不可枚举的
+  metadata。每个 private dir、nested entry、file、chmod metadata 与目录树都有分阶段
+  fsync。artifact manifest 记录 stable copy 的 hash，并再次执行完整 source gate、package
+  payload 比较、两个 helper 的 exact runtime `__build-identity` 验证与 publish 前复哈希。
+  publish 必须取得全部 regular file 的 Linux read lease，且在 lease 内按
+  semantic verify → pinned-fd exact snapshot/digest →
+  `renameat2(RENAME_NOREPLACE)` → parent fsync → published semantic/digest verify 的顺序
+  完成。semantic verifier 的 source/destination 会改写为继承的 pinned tree fd，并校验
+  exact `(st_dev, st_ino)`；受控 helper 子进程只显式传播该 fd。generation rename 前必须
+  durable 创建 `<generation>.publishing` intent，绑定 deterministic source-stage name、
+  destination、tree digest 与 inode identity；只有 intent/tree exact match 才能 recovery，
+  未 journal 或未知 destination 原地保留。最终将同一 intent 以 `RENAME_NOREPLACE` 发布为
+  `<generation>.published` authority marker；读者取得 generation/marker lease 并完成
+  exact revalidation 后才能采用。wrapper 以 `.cohort-stage.<commit>-<tree>-<identity-sha256>` 在
+  existing-generation 检查前恢复真实 crash。writer/lease break、`ENOSYS`、
+  snapshot/xattr/identity drift、parent fsync 或
+  post-publish gate 失败都无 fallback，并在 marker commit 前原子回滚、fsync rollback
+  parent；成功进程持有 pinned fds/leases 直到 flush 后直接退出。单文件 replace 使用
+  `RENAME_EXCHANGE` 保留旧 target 作为私有 rollback copy，最终验证后只按预先 pinned
+  directory identity 清理；commit 前 rewalk public parent/destination，rollback 前双端
+  exact identity gate，drift 时写 retention marker 并保留 failed stage，不递归操作未知
+  pathname。primitive fault injection 与生产 ctypes/fcntl 分支共用 `errno.ENOSYS` 分类和
+  精确诊断。旧 generation 保留；`0555/0444` 只是 seal，不能宣称 lease 结束后的永久
+  kernel immutability。任一
+  source/tree/main 或 derived remote/saved tip、ancestry、
+  merge-base、runtime identity 或 staged hash 漂移都 fail closed。AST + hermetic ordered
+  test 对删除或重排 fail closed。`cli-package` 使用
   `--no-default-features --features tantivy-backend,oxigraph-backend` 构建主 CLI，
   并继续把独立 LanceDB/Oxigraph helper binaries 一并装入发布包。
 

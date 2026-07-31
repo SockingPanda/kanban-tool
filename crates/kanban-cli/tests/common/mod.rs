@@ -243,6 +243,34 @@ impl CmdResult {
         self.json_failure_containing(expected)
     }
 
+    pub fn json_failure_contract_containing(
+        self,
+        expected_exit_code: i32,
+        expected_error_code: &str,
+        expected: &str,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.output.status.code() == Some(expected_exit_code),
+            "expected exit code {expected_exit_code}, got {:?}",
+            self.output.status.code()
+        );
+        let json = self.json_failure()?;
+        anyhow::ensure!(
+            json["error"]["exit_code"] == expected_exit_code,
+            "expected JSON exit_code {expected_exit_code}, got:\n{json}"
+        );
+        anyhow::ensure!(
+            json["error"]["code"] == expected_error_code,
+            "expected JSON error code {expected_error_code:?}, got:\n{json}"
+        );
+        let message = json["error"]["message"].as_str().unwrap_or_default();
+        anyhow::ensure!(
+            contains(expected).eval(message),
+            "expected JSON error message to contain {expected:?}, got:\n{json}"
+        );
+        Ok(())
+    }
+
     pub fn json_failure_containing_any(self, expected: &[&str]) -> anyhow::Result<()> {
         let json = self.json_failure()?;
         let message = json["error"]["message"].as_str().unwrap_or_default();

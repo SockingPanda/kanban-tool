@@ -6,7 +6,7 @@ use kanban_sqlite::db::maintenance_lock_path;
 use pretty_assertions::assert_eq;
 #[cfg(feature = "tantivy-backend")]
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[cfg(feature = "tantivy-backend")]
 #[test]
@@ -206,6 +206,337 @@ fn maintenance_rejects_missing_database() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn maintenance_cleanup_legacy_is_digest_bound_resumable_and_restorable() -> anyhow::Result<()> {
+    let temp = TempDb::new("maintenance_cleanup_legacy")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let legacy_file = temp.dir.join("index/v1/tasks/segment/doc");
+    let database_scoped_v2 = temp
+        .dir
+        .join("index/v2/databases/db_keep/tantivy_tasks/generations/gen_keep");
+    std::fs::create_dir_all(
+        legacy_file
+            .parent()
+            .context("legacy file must have a parent")?,
+    )?;
+    std::fs::write(&legacy_file, b"legacy-task-index")?;
+    std::fs::create_dir_all(&database_scoped_v2)?;
+    std::fs::write(database_scoped_v2.join("keep"), b"v2")?;
+    let backup_parent = tempfile::Builder::new()
+        .prefix("kb-cli-maintenance-cleanup-backup-")
+        .tempdir()
+        .context("create independent backup parent")?;
+    let backup_dir = backup_parent.path().join("projection-v1-backup");
+    checkpoint_sqlite_for_read_only_snapshot(&temp.path)?;
+    let before_inventory_tree = exact_tree_snapshot(&temp.dir)?;
+
+    let inventory = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "inventory",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(
+        exact_tree_snapshot(&temp.dir)?,
+        before_inventory_tree,
+        "cleanup inventory must be strictly read-only across SQLite sidecars and every derived root"
+    );
+    assert_eq!(inventory["data"]["action"], "inventory");
+    assert_eq!(inventory["data"]["dry_run"], true);
+    assert_eq!(inventory["data"]["resumed"], false);
+    assert_eq!(inventory["data"]["backup_dir"], serde_json::Value::Null);
+    let digest = inventory["data"]["inventory_digest"]
+        .as_str()
+        .context("inventory digest")?;
+    assert!(digest.starts_with("sha256:"));
+    assert_eq!(inventory["data"]["roots"].as_array().map(Vec::len), Some(5));
+    assert!(legacy_file.is_file());
+    assert!(!backup_dir.exists());
+
+    kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "apply",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+            "--expected-inventory-digest",
+            "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        ],
+    )?
+    .json_failure_containing("inventory digest mismatch")?;
+    assert!(legacy_file.is_file());
+    assert!(!backup_dir.exists());
+
+    let applied = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "apply",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+            "--expected-inventory-digest",
+            digest,
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(applied["data"]["action"], "apply");
+    assert_eq!(applied["data"]["dry_run"], false);
+    assert_eq!(applied["data"]["resumed"], false);
+    assert!(!legacy_file.exists());
+    assert!(backup_dir.join("roots/tantivy_v1/segment/doc").is_file());
+    assert!(
+        database_scoped_v2.join("keep").is_file(),
+        "cleanup must never walk or move the DB-scoped Projection v2 namespace"
+    );
+
+    kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "apply",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+            "--expected-inventory-digest",
+            digest,
+        ],
+    )?
+    .json_failure_containing("use --resume")?;
+    let resumed = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "apply",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+            "--expected-inventory-digest",
+            digest,
+            "--resume",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(resumed["data"]["action"], "apply");
+    assert_eq!(resumed["data"]["resumed"], true);
+
+    let verified = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "verify",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(verified["data"]["action"], "verify");
+    assert_eq!(verified["data"]["inventory_digest"], digest);
+
+    let restored = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "restore",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(restored["data"]["action"], "restore");
+    assert!(legacy_file.is_file());
+    assert_eq!(std::fs::read(&legacy_file)?, b"legacy-task-index");
+    assert!(database_scoped_v2.join("keep").is_file());
+
+    let owner = kanban_sqlite::db::connect_file(&temp.path)?.query_row(
+        "SELECT owner,lease_token,lease_expires_at
+         FROM projection_maintenance_owner WHERE singleton=1",
+        [],
+        |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+            ))
+        },
+    )?;
+    assert_eq!(owner, (None, None, None));
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn maintenance_cleanup_legacy_preserves_structured_validation_and_storage_errors()
+-> anyhow::Result<()> {
+    let temp = TempDb::new("maintenance_cleanup_legacy_error_contract")?;
+    kanban(&temp.path, &["init"])?.success()?;
+    let legacy_file = temp.dir.join("index/v1/tasks/segment/doc");
+    std::fs::create_dir_all(
+        legacy_file
+            .parent()
+            .context("legacy file must have a parent")?,
+    )?;
+    std::fs::write(&legacy_file, b"legacy-task-index")?;
+    let backup_parent = tempfile::Builder::new()
+        .prefix("kb-cli-maintenance-cleanup-errors-")
+        .tempdir()
+        .context("create independent backup parent")?;
+    let backup_dir = backup_parent.path().join("projection-v1-backup");
+    let inventory = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "inventory",
+        ],
+    )?
+    .success_json()?;
+    let digest = inventory["data"]["inventory_digest"]
+        .as_str()
+        .context("inventory digest")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "apply",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+            "--expected-inventory-digest",
+            "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        ],
+    )?
+    .json_failure_contract_containing(2, "invalid_input", "inventory digest mismatch")?;
+
+    let overlapping_backup = temp.dir.join("cleanup-backup");
+    kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "apply",
+            "--backup-dir",
+            overlapping_backup
+                .to_str()
+                .context("UTF-8 overlapping backup path")?,
+            "--expected-inventory-digest",
+            digest,
+        ],
+    )?
+    .json_failure_contract_containing(
+        2,
+        "invalid_input",
+        "backup path overlaps managed data",
+    )?;
+
+    kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "apply",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+            "--expected-inventory-digest",
+            digest,
+            "--resume",
+        ],
+    )?
+    .json_failure_contract_containing(2, "invalid_input", "no backup state to resume")?;
+
+    kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "apply",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+            "--expected-inventory-digest",
+            digest,
+        ],
+    )?
+    .success_json()?;
+    kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "apply",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+            "--expected-inventory-digest",
+            digest,
+        ],
+    )?
+    .json_failure_contract_containing(2, "invalid_input", "use --resume")?;
+
+    std::fs::write(backup_dir.join("journal.toml"), b"not = [valid toml")?;
+    kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "cleanup-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "verify",
+            "--backup-dir",
+            backup_dir.to_str().context("UTF-8 backup path")?,
+        ],
+    )?
+    .json_failure_contract_containing(1, "storage_error", "journal decoding failed")?;
+    Ok(())
+}
+
 #[test]
 fn maintenance_continuous_partial_capability_refuses_without_claiming_owner() -> anyhow::Result<()>
 {
@@ -305,5 +636,76 @@ fn maintenance_lock_removes_dead_pid() -> anyhow::Result<()> {
 
     kanban(&temp.path, &["--json", "doctor"])?.success_json()?;
     assert!(!lock_path.exists());
+    Ok(())
+}
+
+#[derive(PartialEq, Eq)]
+struct ExactBytes(Vec<u8>);
+
+impl std::fmt::Debug for ExactBytes {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let digest = self.0.iter().fold(0xcbf29ce484222325_u64, |hash, byte| {
+            hash.wrapping_mul(0x100000001b3) ^ u64::from(*byte)
+        });
+        formatter
+            .debug_struct("ExactBytes")
+            .field("len", &self.0.len())
+            .field("fnv64", &format_args!("{digest:016x}"))
+            .finish()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ExactTreeSnapshot(Vec<(PathBuf, &'static str, ExactBytes)>);
+
+fn exact_tree_snapshot(root: &Path) -> anyhow::Result<ExactTreeSnapshot> {
+    fn visit(
+        root: &Path,
+        path: &Path,
+        entries: &mut Vec<(PathBuf, &'static str, ExactBytes)>,
+    ) -> anyhow::Result<()> {
+        let metadata = std::fs::symlink_metadata(path)?;
+        let relative = path
+            .strip_prefix(root)
+            .context("snapshot entry must remain below its root")?
+            .to_path_buf();
+        if metadata.file_type().is_symlink() {
+            let target = std::fs::read_link(path)?;
+            entries.push((
+                relative,
+                "symlink",
+                ExactBytes(target.as_os_str().as_encoded_bytes().to_vec()),
+            ));
+        } else if metadata.is_file() {
+            entries.push((relative, "file", ExactBytes(std::fs::read(path)?)));
+        } else if metadata.is_dir() {
+            entries.push((relative, "directory", ExactBytes(Vec::new())));
+            let mut children = std::fs::read_dir(path)?
+                .map(|entry| entry.map(|entry| entry.path()))
+                .collect::<std::io::Result<Vec<_>>>()?;
+            children.sort();
+            for child in children {
+                visit(root, &child, entries)?;
+            }
+        } else {
+            anyhow::bail!(
+                "unsupported filesystem entry in snapshot: {}",
+                path.display()
+            );
+        }
+        Ok(())
+    }
+
+    let mut entries = Vec::new();
+    visit(root, root, &mut entries)?;
+    Ok(ExactTreeSnapshot(entries))
+}
+
+fn checkpoint_sqlite_for_read_only_snapshot(path: &Path) -> anyhow::Result<()> {
+    let conn = kanban_sqlite::db::connect_file(path)?;
+    let _: (i64, i64, i64) = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    })?;
+    drop(conn);
     Ok(())
 }

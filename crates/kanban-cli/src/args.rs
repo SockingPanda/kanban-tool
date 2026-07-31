@@ -194,6 +194,11 @@ pub(crate) enum MaintenanceCommand {
     Status,
     /// Build and atomically publish a new store generation.
     Rebuild(MaintenanceRebuildArgs),
+    /// Inventory, back up, verify, or restore the fixed legacy projection allowlist.
+    CleanupLegacy {
+        #[command(subcommand)]
+        command: MaintenanceLegacyCleanupCommand,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -218,6 +223,39 @@ pub(crate) struct MaintenanceRebuildArgs {
     /// Rebuild every store currently supported by the unified runtime.
     #[arg(long)]
     pub(crate) all: bool,
+}
+
+#[derive(Debug, Subcommand)]
+#[command(arg_required_else_help = true)]
+pub(crate) enum MaintenanceLegacyCleanupCommand {
+    /// Produce a strictly read-only inventory and digest for the fixed legacy allowlist.
+    Inventory,
+    /// Move the exact inventoried roots into a durable same-filesystem backup.
+    Apply(MaintenanceLegacyCleanupApplyArgs),
+    /// Re-hash and verify a completed cleanup backup.
+    Verify(MaintenanceLegacyCleanupBackupArgs),
+    /// Restore every root from a completed cleanup backup.
+    Restore(MaintenanceLegacyCleanupBackupArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct MaintenanceLegacyCleanupApplyArgs {
+    /// New durable backup directory; it must be on the same filesystem as every present root.
+    #[arg(long)]
+    pub(crate) backup_dir: PathBuf,
+    /// Exact sha256 inventory digest returned by cleanup-legacy inventory.
+    #[arg(long)]
+    pub(crate) expected_inventory_digest: String,
+    /// Resume a compatible interrupted apply journal in an existing backup directory.
+    #[arg(long)]
+    pub(crate) resume: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct MaintenanceLegacyCleanupBackupArgs {
+    /// Existing durable cleanup backup directory.
+    #[arg(long)]
+    pub(crate) backup_dir: PathBuf,
 }
 
 #[derive(Debug, Subcommand)]

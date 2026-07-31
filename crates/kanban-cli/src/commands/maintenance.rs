@@ -14,13 +14,16 @@ use kanban_sqlite::api::lifecycle::begin_database_replace;
 use kanban_sqlite::api::{
     MaintenanceMode, MaintenanceRunOptions, MaintenanceSession, ProjectionRuntimeAvailability,
     backup_database, checkpoint_database, export_jsonl, export_jsonl_to_writer, import_jsonl,
-    maintenance_rebuild_all, maintenance_rebuild_store, maintenance_run_once, maintenance_status,
-    queue_stats, vacuum_database,
+    maintenance_apply_legacy_projection_cleanup, maintenance_inventory_legacy_projections,
+    maintenance_rebuild_all, maintenance_rebuild_store,
+    maintenance_restore_legacy_projection_cleanup, maintenance_run_once, maintenance_status,
+    maintenance_verify_legacy_projection_cleanup, queue_stats, vacuum_database,
 };
 use kanban_sqlite::init::init_database;
 
 use crate::args::{
     BackupArgs, DoctorArgs, ExportArgs, ExportFormatArg, ImportArgs, MaintenanceCommand,
+    MaintenanceLegacyCleanupCommand,
 };
 use crate::commands::common::{invalid_input, is_stdio_path};
 use crate::output::{print_contract_or_human, print_human};
@@ -281,6 +284,40 @@ pub(crate) fn handle_maintenance(
             };
             print_maintenance_report(report, json)
         }
+        MaintenanceCommand::CleanupLegacy { command } => {
+            let report = match command {
+                MaintenanceLegacyCleanupCommand::Inventory => {
+                    maintenance_inventory_legacy_projections(db_path)?
+                }
+                MaintenanceLegacyCleanupCommand::Apply(args) => {
+                    maintenance_apply_legacy_projection_cleanup(
+                        db_path,
+                        actor,
+                        &args.expected_inventory_digest,
+                        &args.backup_dir,
+                        args.resume,
+                        MaintenanceRunOptions::default(),
+                    )?
+                }
+                MaintenanceLegacyCleanupCommand::Verify(args) => {
+                    maintenance_verify_legacy_projection_cleanup(
+                        db_path,
+                        actor,
+                        &args.backup_dir,
+                        MaintenanceRunOptions::default(),
+                    )?
+                }
+                MaintenanceLegacyCleanupCommand::Restore(args) => {
+                    maintenance_restore_legacy_projection_cleanup(
+                        db_path,
+                        actor,
+                        &args.backup_dir,
+                        MaintenanceRunOptions::default(),
+                    )?
+                }
+            };
+            print_legacy_cleanup_report(report, json)
+        }
     }
 }
 
@@ -441,6 +478,58 @@ fn print_maintenance_report(
             stores
         )
     })
+}
+
+fn print_legacy_cleanup_report(
+    report: kanban_sqlite::api::MaintenanceLegacyCleanupReport,
+    json: bool,
+) -> Result<()> {
+    let action = report.action;
+    let human = legacy_cleanup_human_report(&report);
+    let report: kanban_contract::CliMaintenanceLegacyCleanup =
+        serde_json::from_value(serde_json::to_value(report)?)?;
+    let report = serde_json::to_value(report)?;
+    match action {
+        kanban_sqlite::api::MaintenanceLegacyCleanupAction::Inventory => {
+            let report = serde_json::from_value(report)?;
+            let output = kanban_contract::CliMaintenanceLegacyCleanupInventoryOutput::new(report);
+            print_contract_or_human(json, &output, move || human)
+        }
+        kanban_sqlite::api::MaintenanceLegacyCleanupAction::Apply => {
+            let report = serde_json::from_value(report)?;
+            let output = kanban_contract::CliMaintenanceLegacyCleanupApplyOutput::new(report);
+            print_contract_or_human(json, &output, move || human)
+        }
+        kanban_sqlite::api::MaintenanceLegacyCleanupAction::Verify => {
+            let report = serde_json::from_value(report)?;
+            let output = kanban_contract::CliMaintenanceLegacyCleanupVerifyOutput::new(report);
+            print_contract_or_human(json, &output, move || human)
+        }
+        kanban_sqlite::api::MaintenanceLegacyCleanupAction::Restore => {
+            let report = serde_json::from_value(report)?;
+            let output = kanban_contract::CliMaintenanceLegacyCleanupRestoreOutput::new(report);
+            print_contract_or_human(json, &output, move || human)
+        }
+    }
+}
+
+fn legacy_cleanup_human_report(
+    report: &kanban_sqlite::api::MaintenanceLegacyCleanupReport,
+) -> String {
+    let present = report.roots.iter().filter(|root| root.present).count();
+    let bytes = report.roots.iter().map(|root| root.byte_count).sum::<u64>();
+    format!(
+        "action={:?} dry_run={} resumed={} database={} digest={} roots_present={}/{} bytes={} backup={:?}",
+        report.action,
+        report.dry_run,
+        report.resumed,
+        report.database_instance_id,
+        report.inventory_digest,
+        present,
+        report.roots.len(),
+        bytes,
+        report.backup_dir
+    )
 }
 
 pub(crate) fn handle_stats(db_path: &PathBuf, board: &str, json: bool) -> Result<()> {

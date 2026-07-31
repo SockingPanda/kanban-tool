@@ -3,11 +3,14 @@ mod common;
 use anyhow::Context;
 use common::{TempDb, kanban};
 use kanban_contract::{
+    CliMaintenanceLegacyCleanupApplyOutput, CliMaintenanceLegacyCleanupInventoryOutput,
+    CliMaintenanceLegacyCleanupRestoreOutput, CliMaintenanceLegacyCleanupVerifyOutput,
     CliMaintenanceRebuildOutput, CliMaintenanceRunOutput, CliMaintenanceStatusOutput,
 };
 use kanban_sqlite::db::connect_file;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
+use std::path::PathBuf;
 
 fn fixture(operation: &str) -> anyhow::Result<Value> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -16,10 +19,125 @@ fn fixture(operation: &str) -> anyhow::Result<Value> {
     ))?)?)
 }
 
+fn cleanup_fixture(operation: &str) -> anyhow::Result<Value> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    Ok(serde_json::from_str(&std::fs::read_to_string(root.join(
+        format!("schemas/fixtures/cli/maintenance-cleanup-legacy-{operation}-output.v1.valid.json"),
+    ))?)?)
+}
+
 fn setup(name: &str) -> anyhow::Result<TempDb> {
     let temp = TempDb::new(name)?;
     kanban(&temp.path, &["init"])?.success()?;
     Ok(temp)
+}
+
+struct CleanupScenario {
+    temp: TempDb,
+    _backup_parent: tempfile::TempDir,
+    backup_dir: PathBuf,
+    inventory_digest: String,
+}
+
+impl CleanupScenario {
+    fn apply(&self) -> anyhow::Result<Value> {
+        kanban(
+            &self.temp.path,
+            &[
+                "--actor",
+                "fixture-owner",
+                "--json",
+                "maintenance",
+                "cleanup-legacy",
+                "apply",
+                "--backup-dir",
+                self.backup_dir
+                    .to_str()
+                    .context("UTF-8 cleanup backup path")?,
+                "--expected-inventory-digest",
+                &self.inventory_digest,
+            ],
+        )?
+        .success_json()
+    }
+
+    fn verify(&self) -> anyhow::Result<Value> {
+        kanban(
+            &self.temp.path,
+            &[
+                "--actor",
+                "fixture-owner",
+                "--json",
+                "maintenance",
+                "cleanup-legacy",
+                "verify",
+                "--backup-dir",
+                self.backup_dir
+                    .to_str()
+                    .context("UTF-8 cleanup backup path")?,
+            ],
+        )?
+        .success_json()
+    }
+
+    fn restore(&self) -> anyhow::Result<Value> {
+        kanban(
+            &self.temp.path,
+            &[
+                "--actor",
+                "fixture-owner",
+                "--json",
+                "maintenance",
+                "cleanup-legacy",
+                "restore",
+                "--backup-dir",
+                self.backup_dir
+                    .to_str()
+                    .context("UTF-8 cleanup backup path")?,
+            ],
+        )?
+        .success_json()
+    }
+}
+
+fn setup_cleanup_scenario(name: &str) -> anyhow::Result<CleanupScenario> {
+    let temp = setup(name)?;
+    let legacy_file = temp.dir.join("index/v1/tasks/segment/doc");
+    std::fs::create_dir_all(
+        legacy_file
+            .parent()
+            .context("legacy fixture file must have a parent")?,
+    )?;
+    std::fs::write(legacy_file, b"legacy-task-index")?;
+
+    let backup_parent = tempfile::Builder::new()
+        .prefix("kb-cli-cleanup-contract-backup-")
+        .tempdir()
+        .context("create cleanup contract backup parent")?;
+    let backup_dir = backup_parent.path().join("projection-v1-backup");
+    let inventory = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "fixture-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "inventory",
+        ],
+    )?
+    .success_json()?;
+    let inventory_digest = inventory["data"]["inventory_digest"]
+        .as_str()
+        .context("cleanup inventory digest")?
+        .to_owned();
+
+    Ok(CleanupScenario {
+        temp,
+        _backup_parent: backup_parent,
+        backup_dir,
+        inventory_digest,
+    })
 }
 
 fn seed_status_corpus_fixture(temp: &TempDb) -> anyhow::Result<()> {
@@ -138,6 +256,62 @@ fn normalize_run_report(mut output: Value) -> anyhow::Result<Value> {
     Ok(output)
 }
 
+fn normalize_cleanup_report(mut output: Value) -> anyhow::Result<Value> {
+    output["data"]["database_instance_id"] = json!("db_fixture");
+    output["data"]["database_path"] = json!("/fixture/kb.db");
+    if !output["data"]["backup_dir"].is_null() {
+        output["data"]["backup_dir"] = json!("/fixture/backup");
+    }
+    output["data"]["inventory_digest"] = json!("sha256:fixture-inventory");
+    let roots = output["data"]["roots"]
+        .as_array_mut()
+        .context("cleanup roots")?;
+    for root in roots {
+        let relative = root["relative_path"]
+            .as_str()
+            .context("cleanup relative path")?
+            .to_owned();
+        root["absolute_path"] = json!(format!("/fixture/{relative}"));
+        root["digest"] = json!("sha256:fixture-root");
+    }
+    Ok(output)
+}
+
+fn assert_cleanup_fixture(output: Value, operation: &str) -> anyhow::Result<()> {
+    decode_cleanup_fixture(output.clone(), operation)?;
+    assert_eq!(
+        normalize_cleanup_report(output)?,
+        cleanup_fixture(operation)?
+    );
+    Ok(())
+}
+
+fn consume_cleanup_fixture(operation: &str) -> anyhow::Result<()> {
+    let fixture = cleanup_fixture(operation)?;
+    decode_cleanup_fixture(fixture.clone(), operation)?;
+    Ok(())
+}
+
+fn decode_cleanup_fixture(output: Value, operation: &str) -> anyhow::Result<()> {
+    let decoded = match operation {
+        "inventory" => serde_json::to_value(serde_json::from_value::<
+            CliMaintenanceLegacyCleanupInventoryOutput,
+        >(output.clone())?)?,
+        "apply" => serde_json::to_value(serde_json::from_value::<
+            CliMaintenanceLegacyCleanupApplyOutput,
+        >(output.clone())?)?,
+        "verify" => serde_json::to_value(serde_json::from_value::<
+            CliMaintenanceLegacyCleanupVerifyOutput,
+        >(output.clone())?)?,
+        "restore" => serde_json::to_value(serde_json::from_value::<
+            CliMaintenanceLegacyCleanupRestoreOutput,
+        >(output.clone())?)?,
+        other => anyhow::bail!("unknown cleanup fixture operation {other}"),
+    };
+    anyhow::ensure!(decoded == output);
+    Ok(())
+}
+
 #[test]
 fn maintenance_status_output_fixture_is_produced_by_real_cli() -> anyhow::Result<()> {
     let temp = setup("maintenance_status_contract")?;
@@ -224,6 +398,50 @@ fn maintenance_rebuild_output_fixture_is_produced_by_real_cli() -> anyhow::Resul
 }
 
 #[test]
+fn maintenance_cleanup_legacy_inventory_output_fixture_is_produced_by_real_cli()
+-> anyhow::Result<()> {
+    let temp = setup("maintenance_cleanup_legacy_inventory_contract")?;
+    let output = kanban(
+        &temp.path,
+        &[
+            "--actor",
+            "fixture-owner",
+            "--json",
+            "maintenance",
+            "cleanup-legacy",
+            "inventory",
+        ],
+    )?
+    .success_json()?;
+    assert_cleanup_fixture(output, "inventory")
+}
+
+#[test]
+fn maintenance_cleanup_legacy_apply_output_fixture_is_produced_by_real_cli() -> anyhow::Result<()> {
+    let scenario = setup_cleanup_scenario("maintenance_cleanup_legacy_apply_contract")?;
+    let output = scenario.apply()?;
+    assert_cleanup_fixture(output, "apply")
+}
+
+#[test]
+fn maintenance_cleanup_legacy_verify_output_fixture_is_produced_by_real_cli() -> anyhow::Result<()>
+{
+    let scenario = setup_cleanup_scenario("maintenance_cleanup_legacy_verify_contract")?;
+    scenario.apply()?;
+    let output = scenario.verify()?;
+    assert_cleanup_fixture(output, "verify")
+}
+
+#[test]
+fn maintenance_cleanup_legacy_restore_output_fixture_is_produced_by_real_cli() -> anyhow::Result<()>
+{
+    let scenario = setup_cleanup_scenario("maintenance_cleanup_legacy_restore_contract")?;
+    scenario.apply()?;
+    let output = scenario.restore()?;
+    assert_cleanup_fixture(output, "restore")
+}
+
+#[test]
 fn maintenance_status_output_fixture_is_consumed_by_public_contract() -> anyhow::Result<()> {
     let fixture = fixture("maintenance-status")?;
     let decoded = serde_json::from_value::<CliMaintenanceStatusOutput>(fixture.clone())?;
@@ -242,6 +460,30 @@ fn maintenance_run_output_fixture_is_consumed_by_public_contract() -> anyhow::Re
 #[test]
 fn maintenance_rebuild_output_fixture_is_consumed_by_public_contract() -> anyhow::Result<()> {
     consume::<CliMaintenanceRebuildOutput>("maintenance-rebuild")
+}
+
+#[test]
+fn maintenance_cleanup_legacy_inventory_output_fixture_is_consumed_by_public_contract()
+-> anyhow::Result<()> {
+    consume_cleanup_fixture("inventory")
+}
+
+#[test]
+fn maintenance_cleanup_legacy_apply_output_fixture_is_consumed_by_public_contract()
+-> anyhow::Result<()> {
+    consume_cleanup_fixture("apply")
+}
+
+#[test]
+fn maintenance_cleanup_legacy_verify_output_fixture_is_consumed_by_public_contract()
+-> anyhow::Result<()> {
+    consume_cleanup_fixture("verify")
+}
+
+#[test]
+fn maintenance_cleanup_legacy_restore_output_fixture_is_consumed_by_public_contract()
+-> anyhow::Result<()> {
+    consume_cleanup_fixture("restore")
 }
 
 #[test]

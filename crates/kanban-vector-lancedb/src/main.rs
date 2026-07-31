@@ -11,7 +11,8 @@ use kanban_derived_io::{
 use kanban_helper_protocol::HelperEnvelope;
 use kanban_indexer::{LANCEDB_CHUNKS_STORE, LANCEDB_LABEL_ATOMS_STORE};
 use kanban_vector::{
-    EmbeddingProvider, LabelAtomQuery, LabelAtomVectorQuery, VectorQuery, VectorStoreStatus,
+    EmbeddingProvider, LabelAtomQuery, LabelAtomVectorQuery, VectorQuery, VectorStoreBackend,
+    VectorStoreStatus,
 };
 use kanban_vector_lancedb::{
     ActiveLanceProjectionReader, LanceDbConfig, LanceDbStore, OllamaEmbeddingProvider,

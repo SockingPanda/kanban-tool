@@ -1,5 +1,6 @@
 use crate::common::*;
 
+use kanban_sqlite::api::lifecycle::begin_database_replace;
 use kanban_sqlite::api::{
     MaintenanceMode, MaintenanceRunOptions, MaintenanceSession, ProjectionRuntimeAvailability,
     maintenance_status,
@@ -132,6 +133,34 @@ fn maintenance_owner_is_singleton_and_expired_token_cannot_release_successor() -
     assert_eq!(status.maintenance_owner.owner, None);
     assert!(status.maintenance_owner.capabilities.is_empty());
     assert_eq!(status.maintenance_owner.build_identity, None);
+    Ok(())
+}
+
+#[test]
+fn database_replace_rejects_an_active_projection_maintenance_owner() -> anyhow::Result<()> {
+    let temp = TempDb::new("maintenance_owner_blocks_database_replace")?;
+    init_database(&temp.path, "tester")?;
+    let session = MaintenanceSession::start(
+        &temp.path,
+        "cleanup-owner",
+        MaintenanceMode::Once,
+        MaintenanceRunOptions::default(),
+    )?;
+
+    let error = result_err(begin_database_replace(&temp.path))?;
+
+    assert!(matches!(error, KanbanError::InvalidInput(_)));
+    assert!(
+        error
+            .to_string()
+            .contains("active projection maintenance owner")
+    );
+    assert!(
+        !kanban_sqlite::db::maintenance_lock_path(&temp.path).exists(),
+        "failed replacement must remove its namespace fence"
+    );
+    session.finish()?;
+    drop(begin_database_replace(&temp.path)?);
     Ok(())
 }
 

@@ -1,5 +1,6 @@
 use crate::db::{
     connect_file, default_pragmas, maintenance_lock_blocks, maintenance_lock_path,
+    DatabaseConnection,
     runtime_lock_blocks, runtime_lock_path,
 };
 
@@ -23,6 +24,7 @@ use kanban_core::{Clock, KanbanError, Result, SystemClock};
 use kanban_indexer::{
     DERIVED_STORE_SEEDS, OUTBOX_DERIVED_STORE_SEEDS, OutboxTarget, derived_store_for_name,
 };
+use kanban_local::DatabaseLifecycleExclusiveGuard;
 
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -381,7 +383,13 @@ pub fn backup_database(path: impl AsRef<Path>, out_path: impl AsRef<Path>) -> Re
 }
 
 pub fn begin_database_replace(path: impl AsRef<Path>) -> Result<DatabaseReplaceGuard> {
-    let path = path.as_ref();
+    begin_database_replace_with_hook(path.as_ref(), |_| Ok(()))
+}
+
+fn begin_database_replace_with_hook(
+    path: &Path,
+    after_marker_published: impl FnOnce(&Path) -> Result<()>,
+) -> Result<DatabaseReplaceGuard> {
     if let Some(parent) = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -402,30 +410,158 @@ pub fn begin_database_replace(path: impl AsRef<Path>) -> Result<DatabaseReplaceG
             path.display()
         )));
     }
-    let derived_store_guards = DERIVED_STORE_SEEDS
-        .iter()
-        .map(|seed| crate::db::acquire_derived_store_write_guard(path, seed.store_name))
-        .collect::<Result<Vec<_>>>()?;
-    create_lock_file(&lock_path, "maintenance", path)?;
-    let guard = DatabaseReplaceGuard {
-        lock_path,
-        _derived_store_guards: derived_store_guards,
-    };
     if path.exists() && !path.is_file() {
-        drop(guard);
         return Err(KanbanError::InvalidInput(format!(
             "database path is not a file: {}",
             path.display()
         )));
     }
-    if path.exists()
-        && path.is_file()
-        && let Err(error) = assert_database_idle_for_replace(path)
+
+    // Acquisition order is a stable namespace fence, the current inode's
+    // exclusive lifecycle authority, then legacy database-range/sentinel
+    // guards. The composite authority prevents shared lifecycle re-entry.
+    create_lock_file(&lock_path, "maintenance", path)?;
+    let mut guard = DatabaseReplaceGuard {
+        lock_path,
+        staged_authority: None,
+        current_authority: None,
+    };
+    after_marker_published(&guard.lock_path)?;
+    let exclusive = DatabaseLifecycleExclusiveGuard::acquire_or_create_for_replace(path)
+        .map_err(crate::db::lifecycle_storage)?;
+    let authority_marker = maintenance_lock_path(exclusive.path());
+    if authority_marker != guard.lock_path {
+        return Err(KanbanError::Conflict(format!(
+            "database namespace changed after maintenance marker publish: {}",
+            path.display()
+        )));
+    }
+    match fs::symlink_metadata(&guard.lock_path) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(KanbanError::Conflict(
+                "database maintenance namespace fence is missing".to_owned(),
+            ));
+        }
+        Err(error) => return Err(KanbanError::Storage(error.to_string())),
+    }
+    let created_current_authority = exclusive.created_authority_file();
+    let store_names = DERIVED_STORE_SEEDS
+        .iter()
+        .map(|seed| seed.store_name)
+        .collect::<Vec<_>>();
+    guard.current_authority = Some(
+        exclusive
+            .into_derived_store_authority(&store_names)
+            .map_err(crate::db::lifecycle_storage)?,
+    );
+    let current_path = guard
+        .current_authority
+        .as_ref()
+        .expect("replacement authority was installed above")
+        .path()
+        .to_path_buf();
+    if !created_current_authority
+        && let Err(error) = assert_database_idle_for_replace(&current_path)
     {
         drop(guard);
         return Err(error);
     }
     Ok(guard)
+}
+
+impl DatabaseReplaceGuard {
+    /// Revalidates every database namespace currently bound to this guard.
+    ///
+    /// Before publish this checks the current database and, once fenced, the
+    /// staged database. After [`Self::rebind_after_namespace_publish`] it
+    /// checks the previous and newly canonical database paths instead.
+    pub fn validate_database_identities(&self) -> Result<()> {
+        self.current_authority
+            .as_ref()
+            .ok_or_else(|| {
+                KanbanError::Conflict("current database lifecycle authority is not held".to_owned())
+            })?
+            .validate_path_identity()
+            .map_err(crate::db::lifecycle_storage)?;
+        if let Some(staged) = &self.staged_authority {
+            staged
+                .validate_path_identity()
+                .map_err(crate::db::lifecycle_storage)?;
+        }
+        Ok(())
+    }
+
+    /// Fences a fully closed staged SQLite inode before a later atomic publish.
+    ///
+    /// This phase intentionally does not perform the namespace replacement.
+    /// Callers must acquire this seam before renaming the staged file so both
+    /// the previous and replacement inodes remain exclusive across publish.
+    pub fn fence_staged_database_for_replace(&mut self, staged_path: &Path) -> Result<()> {
+        if self.staged_authority.is_some() {
+            return Err(KanbanError::Conflict(
+                "a staged database lifecycle authority is already held".to_owned(),
+            ));
+        }
+        if !self.lock_path.exists() {
+            return Err(KanbanError::Conflict(
+                "database maintenance namespace fence is missing".to_owned(),
+            ));
+        }
+        self.current_authority
+            .as_ref()
+            .ok_or_else(|| {
+                KanbanError::Conflict("current database lifecycle authority is not held".to_owned())
+            })?
+            .validate_path_identity()
+            .map_err(crate::db::lifecycle_storage)?;
+        let staged = DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(staged_path)
+            .map_err(crate::db::lifecycle_storage)?;
+        staged
+            .validate_path_identity()
+            .map_err(crate::db::lifecycle_storage)?;
+        self.staged_authority = Some(staged);
+        Ok(())
+    }
+
+    /// Rebinds both held inode authorities after a caller-controlled publish.
+    ///
+    /// `previous_path` must identify the pre-publish current inode and
+    /// `canonical_path` must identify the pre-fenced staged inode. Both
+    /// mappings are validated before either stored namespace witness changes.
+    /// A failure keeps every lock and the maintenance marker held.
+    pub fn rebind_after_namespace_publish(
+        &mut self,
+        previous_path: &Path,
+        canonical_path: &Path,
+    ) -> Result<()> {
+        let current = self.current_authority.as_mut().ok_or_else(|| {
+            KanbanError::Conflict("current database lifecycle authority is not held".to_owned())
+        })?;
+        let staged = self.staged_authority.as_mut().ok_or_else(|| {
+            KanbanError::Conflict("staged database lifecycle authority is not held".to_owned())
+        })?;
+
+        current
+            .validate_identity_at(previous_path)
+            .map_err(crate::db::lifecycle_storage)?;
+        staged
+            .validate_identity_at(canonical_path)
+            .map_err(crate::db::lifecycle_storage)?;
+        current
+            .rebind_after_rename(previous_path)
+            .map_err(crate::db::lifecycle_storage)?;
+        staged
+            .rebind_after_rename(canonical_path)
+            .map_err(crate::db::lifecycle_storage)?;
+        current
+            .validate_path_identity()
+            .map_err(crate::db::lifecycle_storage)?;
+        staged
+            .validate_path_identity()
+            .map_err(crate::db::lifecycle_storage)?;
+        Ok(())
+    }
 }
 
 pub fn begin_database_runtime(path: impl AsRef<Path>) -> Result<DatabaseRuntimeGuard> {
@@ -571,6 +707,28 @@ pub(crate) fn assert_database_idle_for_replace(path: &Path) -> Result<()> {
     if !table_exists(&conn, "schema_migrations").unwrap_or(false) {
         return Ok(());
     }
+    if table_exists(&conn, "projection_maintenance_owner").unwrap_or(false) {
+        let now = SystemClock.now_ms();
+        let active_owner = conn
+            .query_row(
+                "SELECT owner
+                 FROM projection_maintenance_owner
+                 WHERE singleton=1
+                   AND owner IS NOT NULL
+                   AND lease_token IS NOT NULL
+                   AND lease_expires_at>?1",
+                [now],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(storage)?;
+        if let Some(owner) = active_owner {
+            return Err(KanbanError::InvalidInput(format!(
+                "database has active projection maintenance owner {owner}; stop maintenance before import --replace: {}",
+                path.display()
+            )));
+        }
+    }
     let running_tasks = count_table_status(&conn, "tasks", "running")?;
     let running_runs = count_table_status(&conn, "task_runs", "running")?;
     if running_tasks > 0 || running_runs > 0 {
@@ -616,7 +774,7 @@ pub(crate) fn count_table_status(conn: &Connection, table: &str, status: &str) -
     .map_err(storage)
 }
 
-pub(crate) fn connect_existing_file(path: &Path) -> Result<Connection> {
+pub(crate) fn connect_existing_file(path: &Path) -> Result<DatabaseConnection> {
     if !path.exists() {
         return Err(KanbanError::InvalidInput(format!(
             "database does not exist: {}",
@@ -632,8 +790,15 @@ pub(crate) fn connect_existing_file(path: &Path) -> Result<Connection> {
     connect_file(path)
 }
 
-pub(crate) fn connect_existing_database(path: &Path) -> Result<Connection> {
+pub(crate) fn connect_existing_database(path: &Path) -> Result<DatabaseConnection> {
     let conn = connect_existing_file(path)?;
+    validate_initialized_database(path, conn)
+}
+
+fn validate_initialized_database(
+    path: &Path,
+    conn: DatabaseConnection,
+) -> Result<DatabaseConnection> {
     if !table_exists(&conn, "schema_migrations")? {
         return Err(KanbanError::InvalidInput(format!(
             "database is not initialized: {}",
@@ -2004,4 +2169,38 @@ fn doctor_issue_counts(issues: &[DoctorIssue]) -> (i64, i64) {
         .filter(|issue| issue.severity == "warning")
         .count() as i64;
     (errors, warnings)
+}
+
+#[cfg(test)]
+mod lifecycle_tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn replace_rejects_database_alias_retargeted_after_marker_publish() {
+        use std::os::unix::fs::symlink;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let first = tempdir.path().join("first.db");
+        let second = tempdir.path().join("second.db");
+        let alias = tempdir.path().join("database.db");
+        std::fs::write(&first, b"").unwrap();
+        std::fs::write(&second, b"").unwrap();
+        symlink(&first, &alias).unwrap();
+        let first_marker = maintenance_lock_path(&first);
+        let second_marker = maintenance_lock_path(&second);
+
+        let error = begin_database_replace_with_hook(&alias, |_| {
+            std::fs::remove_file(&alias)
+                .map_err(|error| KanbanError::Storage(error.to_string()))?;
+            symlink(&second, &alias).map_err(|error| KanbanError::Storage(error.to_string()))
+        })
+        .unwrap_err();
+
+        assert!(error.to_string().contains("namespace changed"));
+        assert!(!first_marker.exists());
+        assert!(!second_marker.exists());
+        drop(DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(&first).unwrap());
+        drop(DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(&second).unwrap());
+    }
 }

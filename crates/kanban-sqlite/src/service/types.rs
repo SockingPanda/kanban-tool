@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use kanban_core::TaskStatus;
-use kanban_local::DerivedStoreWriteGuard;
+use kanban_local::{DatabaseLifecycleExclusiveAuthority, DatabaseLifecycleExclusiveGuard};
 use serde::{Deserialize, Serialize};
 
 pub use kanban_application::dto::{
@@ -1543,11 +1543,16 @@ pub struct ImportResult {
 #[derive(Debug)]
 pub struct DatabaseReplaceGuard {
     pub(super) lock_path: PathBuf,
-    pub(super) _derived_store_guards: Vec<DerivedStoreWriteGuard>,
+    pub(super) staged_authority: Option<DatabaseLifecycleExclusiveGuard>,
+    pub(super) current_authority: Option<DatabaseLifecycleExclusiveAuthority>,
 }
 
 impl Drop for DatabaseReplaceGuard {
     fn drop(&mut self) {
+        // Keep the stable maintenance marker until both the replacement inode
+        // and current/legacy authorities have been released.
+        drop(self.staged_authority.take());
+        drop(self.current_authority.take());
         let _ = fs::remove_file(&self.lock_path);
     }
 }

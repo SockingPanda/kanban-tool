@@ -589,7 +589,8 @@ fn label_bootstrap_attaches_task_and_rejects_existing_semantics_replacement() ->
         1,
         "task-label binding is idempotent"
     );
-    assert_eq!(table_count(&connect_file(&temp.path)?, "task_labels")?, 1);
+    let conn = connect_file(&temp.path)?;
+    assert_eq!(table_count(&conn, "task_labels")?, 1);
     Ok(())
 }
 

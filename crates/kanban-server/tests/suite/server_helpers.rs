@@ -229,7 +229,7 @@ args = sys.argv[1:]
 with log.open("a") as handle:
     handle.write(json.dumps(args) + "\n")
 cmd = args[0] if args else ""
-if cmd == "status":
+if cmd in ("status", "label-atoms-status"):
     payload = {{"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[],"dirty":False,"board_dirty":False}}
 elif cmd == "embed-query":
     payload = [1.0, 0.0]

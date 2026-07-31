@@ -1673,6 +1673,11 @@ fn embed_deduplicated<'a>(
         }
         for embedding in &embeddings {
             ensure_dimensions(embedding, provider.dimensions())?;
+            if embedding.iter().any(|coordinate| !coordinate.is_finite()) {
+                return Err(VectorError::Store(
+                    "embedding provider returned a non-finite coordinate".to_owned(),
+                ));
+            }
         }
         unique_embeddings.extend(embeddings);
     }
@@ -1763,6 +1768,24 @@ mod tests {
 
         fn embed(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
             Ok(vec![1.0, 0.0])
+        }
+    }
+
+    struct NonFiniteProvider {
+        coordinate: f32,
+    }
+
+    impl EmbeddingProvider for NonFiniteProvider {
+        fn embedding_model(&self) -> &str {
+            "non-finite-test"
+        }
+
+        fn dimensions(&self) -> usize {
+            3
+        }
+
+        fn embed(&self, _text: &str) -> Result<Vec<f32>, VectorError> {
+            Ok(vec![self.coordinate, 0.0, 0.0])
         }
     }
 
@@ -2443,6 +2466,74 @@ mod tests {
                 actual: 2
             }
         ));
+    }
+
+    #[test]
+    fn lancedb_store_rejects_non_finite_label_atom_embeddings_before_persisting() {
+        for coordinate in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let tempdir = tempfile::tempdir().unwrap();
+            let store = LanceDbStore::connect(LanceDbConfig::new(
+                tempdir.path(),
+                Arc::new(NonFiniteProvider { coordinate }),
+            ))
+            .unwrap();
+
+            let err = store
+                .upsert_label_atoms(&[build_label_atom(
+                    "la_non_finite",
+                    "l_non_finite",
+                    "b_1",
+                    "positive",
+                    "non-finite-test",
+                    "non-finite atom",
+                )])
+                .unwrap_err();
+            assert!(!err.is_retryable());
+            assert!(matches!(
+                err,
+                VectorError::Store(message)
+                    if message == "embedding provider returned a non-finite coordinate"
+            ));
+
+            let hits = store
+                .query_label_atoms_by_vector(&LabelAtomVectorQuery {
+                    vector: vec![1.0, 0.0, 0.0],
+                    limit: 10,
+                    board_id: Some("b_1".to_owned()),
+                    embedding_model: Some("non-finite-test".to_owned()),
+                    polarity: None,
+                    include_vector: false,
+                })
+                .unwrap();
+            assert!(hits.is_empty(), "failed embedding must not persist a row");
+        }
+    }
+
+    #[test]
+    fn lancedb_store_rejects_non_finite_chunk_embeddings_before_persisting() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let store = LanceDbStore::connect(LanceDbConfig::new(
+            tempdir.path(),
+            Arc::new(NonFiniteProvider {
+                coordinate: f32::NAN,
+            }),
+        ))
+        .unwrap();
+        let builder = ChunkBuilder::new("non-finite-test");
+
+        let err = store
+            .upsert(&[build_chunk(&builder, "t_non_finite", "non-finite chunk")])
+            .unwrap_err();
+        assert!(!err.is_retryable());
+        assert!(matches!(
+            err,
+            VectorError::Store(message)
+                if message == "embedding provider returned a non-finite coordinate"
+        ));
+        assert!(
+            store.chunk_projection_content_rows().unwrap().is_empty(),
+            "failed embedding must not persist a chunk row"
+        );
     }
 
     #[test]

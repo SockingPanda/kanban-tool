@@ -901,6 +901,14 @@ fn validate_initialized_database_connection(path: &Path, conn: &Connection) -> R
             path.display()
         )));
     }
+    if migration_version != Some(user_version) {
+        return Err(KanbanError::InvalidInput(format!(
+            "database schema version drift (schema_migrations max {:?}, user_version {}): {}",
+            migration_version,
+            user_version,
+            path.display()
+        )));
+    }
     let missing_tables = doctor_missing_required_tables(conn, migration_version, user_version)?;
     if !missing_tables.is_empty() {
         return Err(KanbanError::InvalidInput(format!(
@@ -2533,6 +2541,26 @@ mod lifecycle_tests {
         assert!(conn.is_autocommit(), "failed COMMIT must be rolled back");
         conn.execute_batch("BEGIN IMMEDIATE; ROLLBACK;")
             .expect("connection must support a fresh transaction after failed COMMIT");
+    }
+
+    #[test]
+    fn replace_rejects_schema_version_drift_without_persisting_changes() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("mismatched.db");
+        crate::init::init_database(&path, "tester").unwrap();
+        let conn = Connection::open(&path).unwrap();
+        conn.pragma_update(None, "user_version", 29).unwrap();
+        drop(conn);
+        let before = std::fs::read(&path).unwrap();
+
+        let error = begin_database_replace(&path).unwrap_err();
+
+        assert!(matches!(
+            error,
+            KanbanError::InvalidInput(message) if message.contains("schema version drift")
+        ));
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert!(!maintenance_lock_path(&path).exists());
     }
 
     #[cfg(unix)]

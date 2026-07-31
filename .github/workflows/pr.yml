@@ -180,6 +180,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Test native durable filesystem primitives
         run: cargo test --locked -p kanban-local durable_
+      - name: Test native database lifecycle locking
+        run: cargo test --locked -p kanban-local --test database_lifecycle
+      - name: Test native guarded SQLite lifecycle
+        run: cargo test --locked -p kanban-sqlite --test lifecycle_connection
+      - name: Audit production raw SQLite openers
+        run: cargo test --locked -p kanban-sqlite --test raw_file_open_audit
       - name: Test native projection backend durability
         run: cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --lib
       - name: Test native maintenance recovery

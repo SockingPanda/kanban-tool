@@ -3580,6 +3580,143 @@ cleanup apply 只移动固定 allowlist；`index/v2/databases/<database_instance
 allowlist。journal 中断时先验证 DB identity、backup binding 和 digest，再按命令契约显式
 使用 resume；不要删除 journal、backup 或 previous generation。
 
+cleanup 的 guard 顺序是固定的：先做 database identity 与 maintenance owner identity
+预检，再取得 shared lifecycle guard 和四个 store 的 exclusive guard；随后在真正移动前
+再次 renew/验证 DB identity、owner/session、lease/fence 与 allowlist inventory digest，
+最后才允许同文件系统 journal move。命令退出后必须先完成 durable backup/manifest verify，
+再次通过 exact idle 与 writer/holder 检查，才可进入下一步；任一顺序或 identity 不匹配都
+fail closed。
+
+如果事故决定必须撤销 cleanup（由值班负责人显式设置 `ROLLBACK_LEGACY_CLEANUP=1`），
+只能在 owner 停止、四项 lease 释放、backup 再次 `verify` 且 database identity 未变时执行
+下面的对称 `restore`。它只恢复五项 legacy allowlist，不替换 canonical SQLite，也不
+回滚 v2 active/previous generation；恢复后仍要重新通过 exact idle、writer/holder、owner
+health gate，任何失败都保持只读并升级。
+
+~~~bash
+if test "${ROLLBACK_LEGACY_CLEANUP:-0}" = 1; then
+  : "${DB_INSTANCE_ID:?DB_INSTANCE_ID must be bound before legacy restore}"
+  : "${LEGACY_DIGEST:?LEGACY_DIGEST must be bound before legacy restore}"
+  : "${EVIDENCE:?EVIDENCE must be bound before legacy restore}"
+  assert_writers_stopped "$CLEANUP_DIR/writers.before-legacy-restore.txt"
+  assert_no_database_holders "$CLEANUP_DIR/database-holders.before-legacy-restore.txt"
+  wait_for_exact_maintenance_release "$CLEANUP_DIR" before-legacy-restore
+  assert_canonical_backup_unchanged cleanup-restore-before
+  bounded_kanban --db "$DB" --actor production-recovery --json \
+    maintenance cleanup-legacy verify \
+    --backup-dir "$EVIDENCE/backup/legacy-projections" \
+    | tee "$CLEANUP_DIR/legacy-cleanup.verify-before-restore.json"
+  jq -e --arg db "$DB_INSTANCE_ID" --arg path "$DB" \
+    --arg backup "$EVIDENCE/backup/legacy-projections" \
+    --arg digest "$LEGACY_DIGEST" '
+    .data.action == "verify" and .data.dry_run == false and
+    .data.resumed == false and .data.format_version == 1 and
+    (.data.database_instance_id | type) == "string" and
+    .data.database_instance_id == $db and .data.database_path == $path and
+    .data.backup_dir == $backup and .data.inventory_digest == $digest and
+    (.data.roots | length) == 5 and
+    ([.data.roots[].relative_path] | sort) ==
+      ["index/v1/graph","index/v1/tasks","index/v1/vectors",
+       "index/v2/oxigraph_relations","index/v2/tantivy_tasks"] and
+    ([.data.roots[] | {kind,relative_path}] | sort_by(.relative_path)) ==
+      [{kind:"oxigraph_v1",relative_path:"index/v1/graph"},
+       {kind:"tantivy_v1",relative_path:"index/v1/tasks"},
+       {kind:"lance_db_v1",relative_path:"index/v1/vectors"},
+       {kind:"oxigraph_unscoped_v2",relative_path:"index/v2/oxigraph_relations"},
+       {kind:"tantivy_unscoped_v2",relative_path:"index/v2/tantivy_tasks"}] and
+    all(.data.roots[];
+      (.kind | type) == "string" and
+      (.absolute_path | type) == "string" and
+      (.relative_path | type) == "string" and
+      (.present | type) == "boolean" and
+      (.file_count | type) == "number" and
+      (.directory_count | type) == "number" and
+      (.byte_count | type) == "number" and
+      (.digest | type) == "string"
+    )
+  ' "$CLEANUP_DIR/legacy-cleanup.verify-before-restore.json" \
+    >"$CLEANUP_DIR/legacy-cleanup.verify-before-restore.ok.txt"
+  wait_for_exact_maintenance_release "$CLEANUP_DIR" after-verify-before-restore
+  assert_canonical_backup_unchanged cleanup-restore-before-destructive-command
+  bounded_kanban --db "$DB" --json maintenance status \
+    >"$CLEANUP_DIR/status.before-legacy-restore.json"
+  assert_status_shape \
+    "$CLEANUP_DIR/status.before-legacy-restore.json" \
+    "$CLEANUP_DIR/status.before-legacy-restore.shape.ok.txt" \
+    "$DB_INSTANCE_ID"
+  write_cleanup_store_identity_snapshot() {
+    local status_file="$1" output_file="$2"
+    jq -e '
+      [.data.stores[] | {
+        store_name,
+        database_instance_id,
+        protocol_version,
+        schema_version,
+        control_plane,
+        active: {
+          generation: .active_generation,
+          fingerprint: .active_fingerprint,
+          fence_epoch: .active_fence_epoch,
+          provider: .active_provider,
+          provider_fingerprint: .active_provider_fingerprint,
+          corpus: .active_corpus
+        },
+        previous: {
+          generation: .previous_generation,
+          fingerprint: .previous_fingerprint,
+          fence_epoch: .previous_fence_epoch,
+          corpus: .previous_corpus
+        },
+        building: {
+          generation: .building_generation,
+          fingerprint: .building_fingerprint,
+          fence_epoch: .building_fence_epoch,
+          provider: .building_provider,
+          provider_fingerprint: .building_provider_fingerprint,
+          corpus: .building_corpus,
+          phase: .building_phase
+        }
+      }] | sort_by(.store_name)
+    ' "$status_file" >"$output_file"
+  }
+  write_cleanup_store_identity_snapshot \
+    "$CLEANUP_DIR/status.before-legacy-restore.json" \
+    "$CLEANUP_DIR/stores.before-legacy-restore.identity.json"
+  bounded_kanban --db "$DB" --actor production-recovery --json \
+    maintenance cleanup-legacy restore \
+    --backup-dir "$EVIDENCE/backup/legacy-projections" \
+    | tee "$CLEANUP_DIR/legacy-cleanup.restore.json"
+  jq -e --arg db "$DB_INSTANCE_ID" --arg path "$DB" \
+    --arg backup "$EVIDENCE/backup/legacy-projections" \
+    --arg digest "$LEGACY_DIGEST" '
+    .data.action == "restore" and .data.dry_run == false and
+    .data.database_instance_id == $db and .data.database_path == $path and
+    .data.backup_dir == $backup and .data.inventory_digest == $digest and
+    (.data.roots | length) == 5 and
+    ([.data.roots[].relative_path] | sort) ==
+      ["index/v1/graph","index/v1/tasks","index/v1/vectors",
+       "index/v2/oxigraph_relations","index/v2/tantivy_tasks"]
+  ' "$CLEANUP_DIR/legacy-cleanup.restore.json" \
+    >"$CLEANUP_DIR/legacy-cleanup.restore.ok.txt"
+  wait_for_exact_maintenance_release "$CLEANUP_DIR" after-legacy-restore
+  assert_writers_stopped "$CLEANUP_DIR/writers.after-legacy-restore.txt"
+  assert_no_database_holders "$CLEANUP_DIR/database-holders.after-legacy-restore.txt"
+  bounded_kanban --db "$DB" --json maintenance status \
+    >"$CLEANUP_DIR/status.after-legacy-restore.json"
+  assert_status_shape \
+    "$CLEANUP_DIR/status.after-legacy-restore.json" \
+    "$CLEANUP_DIR/status.after-legacy-restore.shape.ok.txt" \
+    "$DB_INSTANCE_ID"
+  write_cleanup_store_identity_snapshot \
+    "$CLEANUP_DIR/status.after-legacy-restore.json" \
+    "$CLEANUP_DIR/stores.after-legacy-restore.identity.json"
+  diff -u \
+    "$CLEANUP_DIR/stores.before-legacy-restore.identity.json" \
+    "$CLEANUP_DIR/stores.after-legacy-restore.identity.json" \
+    >"$CLEANUP_DIR/stores.legacy-restore.identity.diff"
+fi
+~~~
+
 cleanup 完成后必须显式重新启动 continuous owner。新 MainPID 必须不同于 cleanup 前 PID；
 readiness 必须证明启动后的 fresh heartbeat/lease、同 cohort build identity、四项 capability
 和四个 store 的 runtime availability。随后原样重跑第 12 节的完整

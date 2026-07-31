@@ -358,6 +358,17 @@ struct LegacyCleanupOwnerIdentity {
     build_identity: String,
 }
 
+type LegacyCleanupOwnerRow = (
+    Option<String>,
+    Option<String>,
+    Option<i64>,
+    Option<String>,
+    Option<i64>,
+    Option<i64>,
+    String,
+    Option<String>,
+);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LegacyCleanupPreflight {
     database_instance_id: String,
@@ -610,16 +621,7 @@ fn validate_maintenance_owner(
         last_heartbeat_at,
         capabilities_json,
         build_identity,
-    ): (
-        Option<String>,
-        Option<String>,
-        Option<i64>,
-        Option<String>,
-        Option<i64>,
-        Option<i64>,
-        String,
-        Option<String>,
-    ) = conn
+    ): LegacyCleanupOwnerRow = conn
         .query_row(
             "SELECT owner,lease_token,lease_expires_at,mode,started_at,
                     last_heartbeat_at,capabilities_json,build_identity
@@ -724,13 +726,12 @@ fn validate_maintenance_owner(
                 capabilities_json: capabilities_json.clone(),
                 build_identity: build_identity.clone().unwrap_or_default(),
             };
-            if let Some(expected) = expected {
-                if &actual != expected {
-                    return Err(KanbanError::Conflict(
-                        "projection maintenance owner lease is stale or identity changed"
-                            .to_owned(),
-                    ));
-                }
+            if let Some(expected) = expected
+                && &actual != expected
+            {
+                return Err(KanbanError::Conflict(
+                    "projection maintenance owner lease is stale or identity changed".to_owned(),
+                ));
             }
             validate_capabilities_json(&capabilities_json, false)?;
             Ok(Some(actual))

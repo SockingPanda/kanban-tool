@@ -1935,9 +1935,31 @@ pub fn label_atoms_corpus_metadata(
     provider: &str,
     model: &str,
     dimensions: usize,
-) -> ProjectionCorpusMetadata {
+) -> Result<ProjectionCorpusMetadata, VectorError> {
+    if provider.trim().is_empty() {
+        return Err(VectorError::Provider {
+            message:
+                "invalid label corpus identity field provider: embedding provider must not be blank"
+                    .to_owned(),
+            retryable: false,
+        });
+    }
+    if model.trim().is_empty() {
+        return Err(VectorError::Provider {
+            message: "invalid label corpus identity field model: embedding model must not be blank"
+                .to_owned(),
+            retryable: false,
+        });
+    }
+    if dimensions == 0 {
+        return Err(VectorError::Provider {
+            message: "invalid label corpus identity field dimensions: embedding dimensions must be greater than zero"
+                .to_owned(),
+            retryable: false,
+        });
+    }
     let provider_fingerprint = embedding_provider_fingerprint(provider, model, dimensions);
-    ProjectionCorpusMetadata {
+    Ok(ProjectionCorpusMetadata {
         corpus_schema: LABEL_ATOMS_CORPUS_SCHEMA.to_owned(),
         corpus_fingerprint: corpus_provider_fingerprint(
             LABEL_ATOMS_CORPUS_SCHEMA,
@@ -1945,7 +1967,7 @@ pub fn label_atoms_corpus_metadata(
         ),
         embedding_model: model.to_owned(),
         embedding_dimensions: dimensions,
-    }
+    })
 }
 
 fn sha256_fingerprint(parts: &[&[u8]]) -> String {
@@ -2868,7 +2890,7 @@ mod tests {
 
     #[test]
     fn label_atoms_corpus_metadata_is_canonical_and_provider_bound() {
-        let metadata = label_atoms_corpus_metadata("ollama", "model-a", 768);
+        let metadata = label_atoms_corpus_metadata("ollama", "model-a", 768).unwrap();
         assert_eq!(metadata.corpus_schema, LABEL_ATOMS_CORPUS_SCHEMA);
         assert_eq!(metadata.embedding_model, "model-a");
         assert_eq!(metadata.embedding_dimensions, 768);
@@ -2881,7 +2903,27 @@ mod tests {
         );
         assert_ne!(
             metadata.corpus_fingerprint,
-            label_atoms_corpus_metadata("other", "model-a", 768).corpus_fingerprint
+            label_atoms_corpus_metadata("other", "model-a", 768)
+                .unwrap()
+                .corpus_fingerprint
         );
+    }
+
+    #[test]
+    fn label_atoms_corpus_metadata_rejects_invalid_identity_inputs() {
+        for (provider, model, dimensions, field) in [
+            ("", "model-a", 768, "provider"),
+            (" \t\n", "model-a", 768, "provider"),
+            ("ollama", "", 768, "model"),
+            ("ollama", " \t\n", 768, "model"),
+            ("ollama", "model-a", 0, "dimensions"),
+        ] {
+            let error = label_atoms_corpus_metadata(provider, model, dimensions).unwrap_err();
+            let VectorError::Provider { message, retryable } = error else {
+                panic!("unexpected validation error for {field}: {error}");
+            };
+            assert!(!retryable);
+            assert!(message.contains(&format!("field {field}:")), "{message}");
+        }
     }
 }

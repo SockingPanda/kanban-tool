@@ -5754,7 +5754,11 @@ mod legacy_binding_recovery_tests {
 #[cfg(all(test, feature = "tantivy-backend"))]
 mod tests {
     use std::{
-        sync::atomic::{AtomicBool, Ordering},
+        collections::{BTreeMap, BTreeSet},
+        sync::{
+            Mutex,
+            atomic::{AtomicBool, Ordering},
+        },
         time::Duration,
     };
 
@@ -5764,27 +5768,62 @@ mod tests {
     use crate::init::init_database;
     use crate::service::{
         CreateTask, ProjectionArtifactEvidence, ProjectionBatch, ProjectionBatchReceipt,
-        ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreDescriptor, create_task,
+        ProjectionDestructiveAuthority, ProjectionPublishReceipt, ProjectionSnapshot,
+        ProjectionStoreDescriptor, create_task,
     };
+
+    #[derive(Debug, Clone, Default, PartialEq, Eq)]
+    struct TransientProjectionState {
+        generations: BTreeMap<String, ProjectionArtifactEvidence>,
+        prepared: Option<ProjectionArtifactEvidence>,
+        active: Option<ProjectionArtifactEvidence>,
+        published: BTreeSet<String>,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum TransientPhysicalMarker {
+        Missing,
+        Exact,
+        Invalid,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct TransientPhysicalGeneration {
+        path: PathBuf,
+        evidence: ProjectionArtifactEvidence,
+        marker: TransientPhysicalMarker,
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum TransientMarkerRequirement {
+        Unpublished,
+        Published,
+        Repairable,
+    }
 
     struct TransientGenerationInspectStore {
         inner: TantivyProjectionStore,
         fail_next_inspect: AtomicBool,
         force_active_conflict: bool,
         descriptor_override: Option<ProjectionStoreDescriptor>,
+        helper_path: Option<PathBuf>,
+        state: Mutex<TransientProjectionState>,
     }
 
     impl TransientGenerationInspectStore {
-        fn new(inner: TantivyProjectionStore) -> Self {
+        fn new(path: &Path, inner: TantivyProjectionStore) -> Self {
             Self {
                 inner,
                 fail_next_inspect: AtomicBool::new(true),
                 force_active_conflict: false,
                 descriptor_override: None,
+                helper_path: Some(path.to_owned()),
+                state: Mutex::new(TransientProjectionState::default()),
             }
         }
 
         fn with_descriptor(
+            path: &Path,
             inner: TantivyProjectionStore,
             descriptor: ProjectionStoreDescriptor,
         ) -> Self {
@@ -5793,10 +5832,13 @@ mod tests {
                 fail_next_inspect: AtomicBool::new(false),
                 force_active_conflict: false,
                 descriptor_override: Some(descriptor),
+                helper_path: Some(path.to_owned()),
+                state: Mutex::new(TransientProjectionState::default()),
             }
         }
 
         fn with_descriptor_and_active_conflict(
+            path: &Path,
             inner: TantivyProjectionStore,
             descriptor: ProjectionStoreDescriptor,
         ) -> Self {
@@ -5805,7 +5847,738 @@ mod tests {
                 fail_next_inspect: AtomicBool::new(false),
                 force_active_conflict: true,
                 descriptor_override: Some(descriptor),
+                helper_path: Some(path.to_owned()),
+                state: Mutex::new(TransientProjectionState::default()),
             }
+        }
+
+        fn acquire_exact_authority_guard(
+            &self,
+            generation: &str,
+            authority: &ProjectionDestructiveAuthority,
+            recovery: bool,
+        ) -> Result<TestExactAuthorityGuard> {
+            let path = self.helper_path.as_deref().ok_or_else(|| {
+                KanbanError::Conflict(
+                    "transient projection fixture authority has no SQLite/helper path".to_owned(),
+                )
+            })?;
+            let descriptor = self.descriptor()?;
+            let policy = if recovery {
+                TestAuthorityProviderPolicy::Recovery(&descriptor)
+            } else {
+                TestAuthorityProviderPolicy::Current(&descriptor)
+            };
+            acquire_test_exact_authority_guard(
+                path,
+                "tantivy_tasks-projection-helper",
+                TANTIVY_TASKS_STORE,
+                generation,
+                authority,
+                policy,
+            )
+        }
+
+        fn acquire_overlay_read_guard(&self) -> Result<kanban_local::DerivedStoreReadGuard> {
+            let path = self.helper_path.as_deref().ok_or_else(|| {
+                KanbanError::Conflict(
+                    "transient projection fixture has no SQLite/helper path".to_owned(),
+                )
+            })?;
+            crate::db::acquire_derived_store_read_guard(path, "tantivy_tasks-projection-helper")
+        }
+
+        fn generation_path_while_helper_locked(&self, generation: &str) -> Result<PathBuf> {
+            let path = self.helper_path.as_deref().ok_or_else(|| {
+                KanbanError::Conflict(
+                    "transient projection fixture has no SQLite/helper path".to_owned(),
+                )
+            })?;
+            let database_instance_id: String = connect_file(path)?
+                .query_row(
+                    "SELECT database_instance_id
+                     FROM projection_store_state WHERE store_name=?1",
+                    [TANTIVY_TASKS_STORE],
+                    |row| row.get(0),
+                )
+                .map_err(storage)?;
+            let generations_root = kanban_local::checked_projection_store_generations_path(
+                path,
+                &database_instance_id,
+                TANTIVY_TASKS_STORE,
+            )
+            .map_err(|error| KanbanError::Storage(error.to_string()))?;
+            kanban_local::projection_generation_path(&generations_root, generation)
+                .map_err(|error| KanbanError::Storage(error.to_string()))
+        }
+
+        fn inspect_physical_generation_while_helper_locked(
+            &self,
+            generation: &str,
+        ) -> Result<Option<TransientPhysicalGeneration>> {
+            let generation_path = self.generation_path_while_helper_locked(generation)?;
+            match std::fs::symlink_metadata(&generation_path) {
+                Ok(metadata) if metadata.is_dir() => {}
+                Ok(_) => {
+                    return Err(KanbanError::Storage(format!(
+                        "transient physical generation path is not a directory: {}",
+                        generation_path.display()
+                    )));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                Err(error) => return Err(KanbanError::Storage(error.to_string())),
+            }
+            let database_instance_id = self
+                .helper_path
+                .as_deref()
+                .ok_or_else(|| {
+                    KanbanError::Conflict(
+                        "transient projection fixture has no SQLite/helper path".to_owned(),
+                    )
+                })
+                .and_then(|path| {
+                    connect_file(path)?
+                        .query_row(
+                            "SELECT database_instance_id
+                             FROM projection_store_state WHERE store_name=?1",
+                            [TANTIVY_TASKS_STORE],
+                            |row| row.get::<_, String>(0),
+                        )
+                        .map_err(storage)
+                })?;
+            let metadata = kanban_search::tantivy_backend::validate_task_projection_generation(
+                &generation_path,
+                &database_instance_id,
+                generation,
+            )
+            .map_err(|error| KanbanError::Storage(error.to_string()))?;
+            let evidence = evidence_from_tantivy_metadata(metadata);
+            let marker_path = generation_path.join("published");
+            let marker = match std::fs::symlink_metadata(&marker_path) {
+                Ok(metadata) if metadata.is_file() => {
+                    let actual = std::fs::read(&marker_path)
+                        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+                    if actual == transient_published_marker_contents(&evidence) {
+                        TransientPhysicalMarker::Exact
+                    } else {
+                        TransientPhysicalMarker::Invalid
+                    }
+                }
+                Ok(_) => TransientPhysicalMarker::Invalid,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    TransientPhysicalMarker::Missing
+                }
+                Err(error) => return Err(KanbanError::Storage(error.to_string())),
+            };
+            Ok(Some(TransientPhysicalGeneration {
+                path: generation_path,
+                evidence,
+                marker,
+            }))
+        }
+
+        fn inspect_physical_published_while_helper_locked(
+            &self,
+        ) -> Result<Vec<ProjectionArtifactEvidence>> {
+            let sentinel_path = self.generation_path_while_helper_locked("gen_sentinel")?;
+            let generations_root = sentinel_path.parent().ok_or_else(|| {
+                KanbanError::Storage(
+                    "transient projection generations root is unavailable".to_owned(),
+                )
+            })?;
+            let entries = match std::fs::read_dir(generations_root) {
+                Ok(entries) => entries,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(Vec::new());
+                }
+                Err(error) => return Err(KanbanError::Storage(error.to_string())),
+            };
+            let mut published = Vec::new();
+            for entry in entries {
+                let entry = entry.map_err(|error| KanbanError::Storage(error.to_string()))?;
+                if entry.file_name().to_string_lossy().starts_with('.') {
+                    continue;
+                }
+                if !entry
+                    .file_type()
+                    .map_err(|error| KanbanError::Storage(error.to_string()))?
+                    .is_dir()
+                {
+                    continue;
+                }
+                let marker_path = entry.path().join("published");
+                match std::fs::symlink_metadata(&marker_path) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(error) => return Err(KanbanError::Storage(error.to_string())),
+                    Ok(metadata) if metadata.is_file() => {}
+                    Ok(_) => {
+                        return Err(KanbanError::Storage(format!(
+                            "transient physical publication marker is not a regular file: {}",
+                            marker_path.display()
+                        )));
+                    }
+                }
+                let generation = entry.file_name().to_string_lossy().into_owned();
+                let physical = self
+                    .inspect_physical_generation_while_helper_locked(&generation)?
+                    .ok_or_else(|| {
+                        KanbanError::Storage(format!(
+                            "transient published physical generation {generation} disappeared"
+                        ))
+                    })?;
+                if physical.marker != TransientPhysicalMarker::Exact {
+                    return Err(KanbanError::Storage(format!(
+                        "transient physical publication marker is invalid for generation {generation}"
+                    )));
+                }
+                published.push(physical.evidence);
+            }
+            published.sort_by(|left, right| {
+                left.manifest
+                    .fence_epoch
+                    .cmp(&right.manifest.fence_epoch)
+                    .then_with(|| left.manifest.generation.cmp(&right.manifest.generation))
+            });
+            Ok(published)
+        }
+
+        fn validate_snapshot_input_while_helper_locked(
+            &self,
+            snapshot: &ProjectionSnapshot,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            let path = self.helper_path.as_deref().ok_or_else(|| {
+                KanbanError::Conflict(
+                    "transient projection fixture has no SQLite/helper path".to_owned(),
+                )
+            })?;
+            let descriptor = self.descriptor()?;
+            let (database_instance_id, protocol_version, schema_version, snapshot_cursor) =
+                connect_file(path)?
+                    .query_row(
+                        "SELECT database_instance_id,protocol_version,schema_version,snapshot_cursor
+                         FROM projection_store_state WHERE store_name=?1",
+                        [TANTIVY_TASKS_STORE],
+                        |row| {
+                            Ok((
+                                row.get::<_, String>(0)?,
+                                row.get::<_, i64>(1)?,
+                                row.get::<_, i64>(2)?,
+                                row.get::<_, i64>(3)?,
+                            ))
+                        },
+                    )
+                    .map_err(storage)?;
+            let manifest = &snapshot.manifest;
+            let binding = &authority.expected_binding;
+            if authority.role != ProjectionGenerationRole::Building
+                || authority.building_phase.as_deref() != Some("snapshotting")
+                || authority.expected_manifest.is_some()
+                || manifest.fingerprint.is_some()
+                || manifest.store_name != descriptor.store_name
+                || manifest.database_instance_id != database_instance_id
+                || manifest.protocol_version != protocol_version
+                || manifest.schema_version != schema_version
+                || manifest.generation != authority.generation
+                || manifest.fence_epoch != binding.fence_epoch
+                || manifest.snapshot_cursor != snapshot_cursor
+                || manifest.provider != descriptor.provider
+                || manifest.provider_fingerprint != descriptor.provider_fingerprint
+                || manifest.corpus != descriptor.corpus
+                || manifest.provider != binding.provider
+                || manifest.provider_fingerprint != binding.provider_fingerprint
+                || manifest.corpus != binding.corpus
+                || manifest.canonical_item_count != binding.canonical_count
+                || manifest.canonical_digest != binding.canonical_digest
+                || manifest.delivery_item_count != binding.delivery_count
+                || manifest.delivery_digest != binding.delivery_digest
+                || binding.fingerprint.is_some()
+                || binding.snapshot_cursor.is_some()
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection snapshot input does not match exact authority for generation {}",
+                    manifest.generation
+                )));
+            }
+            Ok(())
+        }
+
+        fn validate_batch_input_while_helper_locked(
+            &self,
+            batch: &ProjectionBatch,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            let path = self.helper_path.as_deref().ok_or_else(|| {
+                KanbanError::Conflict(
+                    "transient projection fixture has no SQLite/helper path".to_owned(),
+                )
+            })?;
+            let descriptor = self.descriptor()?;
+            let (database_instance_id, protocol_version, schema_version) = connect_file(path)?
+                .query_row(
+                    "SELECT database_instance_id,protocol_version,schema_version
+                     FROM projection_store_state WHERE store_name=?1",
+                    [TANTIVY_TASKS_STORE],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, i64>(1)?,
+                            row.get::<_, i64>(2)?,
+                        ))
+                    },
+                )
+                .map_err(storage)?;
+            if authority.role != ProjectionGenerationRole::Building
+                || authority.building_phase.as_deref() != Some("prepared")
+                || batch.store_name != descriptor.store_name
+                || batch.database_instance_id != database_instance_id
+                || batch.protocol_version != protocol_version
+                || batch.schema_version != schema_version
+                || batch.provider != descriptor.provider
+                || batch.provider_fingerprint != descriptor.provider_fingerprint
+                || batch.corpus != descriptor.corpus
+                || batch.owner != authority.owner
+                || batch.lease_token != authority.lease_token
+                || batch.fence_epoch != authority.fence_epoch
+                || batch.target_generation != authority.generation
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection batch input does not match exact authority for generation {}",
+                    batch.target_generation
+                )));
+            }
+            Ok(())
+        }
+
+        fn validate_evidence_authority_while_helper_locked(
+            &self,
+            evidence: &ProjectionArtifactEvidence,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            let descriptor = self.descriptor()?;
+            if !artifact_matches_descriptor(evidence, &descriptor)
+                || authority.expected_manifest.as_ref() != Some(&evidence.manifest)
+                || authority.expected_binding != binding_for_evidence(evidence)
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection evidence does not match exact authority for generation {}",
+                    evidence.manifest.generation
+                )));
+            }
+            Ok(())
+        }
+
+        fn ensure_prepare_target_absent_while_helper_locked(&self, generation: &str) -> Result<()> {
+            let state = self.state.lock().expect("transient projection state");
+            let overlay_exists = state.generations.contains_key(generation)
+                || state
+                    .prepared
+                    .as_ref()
+                    .is_some_and(|evidence| evidence.manifest.generation == generation)
+                || state
+                    .active
+                    .as_ref()
+                    .is_some_and(|evidence| evidence.manifest.generation == generation)
+                || state.published.contains(generation);
+            drop(state);
+            let generation_path = self.generation_path_while_helper_locked(generation)?;
+            let physical_exists = match std::fs::symlink_metadata(&generation_path) {
+                Ok(_) => true,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                Err(error) => return Err(KanbanError::Storage(error.to_string())),
+            };
+            if overlay_exists || physical_exists {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection generation {generation} already has overlay or physical evidence"
+                )));
+            }
+            Ok(())
+        }
+
+        fn validate_evidence_seam_while_helper_locked(
+            &self,
+            expected: &ProjectionArtifactEvidence,
+            marker_requirement: TransientMarkerRequirement,
+        ) -> Result<Option<TransientPhysicalGeneration>> {
+            let descriptor = self.descriptor()?;
+            if !artifact_matches_descriptor(expected, &descriptor) {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection generation {} does not match the provider descriptor",
+                    expected.manifest.generation
+                )));
+            }
+            let (overlay, overlay_published) = {
+                let state = self.state.lock().expect("transient projection state");
+                (
+                    state
+                        .generations
+                        .get(&expected.manifest.generation)
+                        .cloned(),
+                    state.published.contains(&expected.manifest.generation),
+                )
+            };
+            let physical = self
+                .inspect_physical_generation_while_helper_locked(&expected.manifest.generation)?;
+            if overlay.is_none() && physical.is_none() {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection generation {} has no overlay or physical evidence",
+                    expected.manifest.generation
+                )));
+            }
+            if overlay.as_ref().is_some_and(|actual| actual != expected) {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection overlay evidence changed for generation {}",
+                    expected.manifest.generation
+                )));
+            }
+            if physical
+                .as_ref()
+                .is_some_and(|actual| actual.evidence != *expected)
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection physical evidence conflicts with generation {}",
+                    expected.manifest.generation
+                )));
+            }
+            match marker_requirement {
+                TransientMarkerRequirement::Unpublished => {
+                    if overlay_published
+                        || physical
+                            .as_ref()
+                            .is_some_and(|actual| actual.marker != TransientPhysicalMarker::Missing)
+                    {
+                        return Err(KanbanError::Conflict(format!(
+                            "transient projection prepared generation {} is already published",
+                            expected.manifest.generation
+                        )));
+                    }
+                }
+                TransientMarkerRequirement::Published => {
+                    if overlay.is_some() && !overlay_published {
+                        return Err(KanbanError::Storage(format!(
+                            "transient overlay publication marker is missing for generation {}",
+                            expected.manifest.generation
+                        )));
+                    }
+                    if let Some(physical) = &physical
+                        && physical.marker != TransientPhysicalMarker::Exact
+                    {
+                        return Err(KanbanError::Storage(format!(
+                            "transient physical publication marker is missing or invalid for generation {}",
+                            expected.manifest.generation
+                        )));
+                    }
+                }
+                TransientMarkerRequirement::Repairable => {}
+            }
+            Ok(physical)
+        }
+
+        fn effective_active_while_helper_locked(
+            &self,
+            descriptor: &ProjectionStoreDescriptor,
+        ) -> Result<Option<ProjectionArtifactEvidence>> {
+            let physical = self.inspect_physical_published_while_helper_locked()?;
+            if physical
+                .iter()
+                .any(|evidence| !artifact_matches_descriptor(evidence, descriptor))
+            {
+                return Err(KanbanError::Conflict(
+                    "strict backend found published evidence from another provider".to_owned(),
+                ));
+            }
+            let (overlay, declared_active) = {
+                let state = self.state.lock().expect("transient projection state");
+                let mut overlay = Vec::new();
+                for generation in &state.published {
+                    let evidence = state.generations.get(generation).ok_or_else(|| {
+                        KanbanError::Storage(format!(
+                            "transient published overlay generation {generation} is missing"
+                        ))
+                    })?;
+                    if !artifact_matches_descriptor(evidence, descriptor) {
+                        return Err(KanbanError::Conflict(
+                            "strict backend rejected published overlay evidence from another provider"
+                                .to_owned(),
+                        ));
+                    }
+                    overlay.push(evidence.clone());
+                }
+                overlay.sort_by(|left, right| {
+                    left.manifest
+                        .fence_epoch
+                        .cmp(&right.manifest.fence_epoch)
+                        .then_with(|| left.manifest.generation.cmp(&right.manifest.generation))
+                });
+                (overlay, state.active.clone())
+            };
+            if declared_active != overlay.last().cloned() {
+                return Err(KanbanError::Storage(
+                    "transient overlay active generation is not consistently published".to_owned(),
+                ));
+            }
+            for overlay_evidence in &overlay {
+                self.validate_evidence_seam_while_helper_locked(
+                    overlay_evidence,
+                    TransientMarkerRequirement::Published,
+                )?;
+            }
+            for physical_evidence in &physical {
+                if let Some(overlay_evidence) = overlay.iter().find(|overlay_evidence| {
+                    overlay_evidence.manifest.generation == physical_evidence.manifest.generation
+                }) && overlay_evidence != physical_evidence
+                {
+                    return Err(KanbanError::Conflict(format!(
+                        "transient overlay and physical evidence disagree for generation {}",
+                        physical_evidence.manifest.generation
+                    )));
+                }
+            }
+            let mut candidates = physical;
+            candidates.extend(overlay);
+            candidates.sort_by(|left, right| {
+                left.manifest
+                    .fence_epoch
+                    .cmp(&right.manifest.fence_epoch)
+                    .then_with(|| left.manifest.generation.cmp(&right.manifest.generation))
+            });
+            candidates.dedup();
+            Ok(candidates.pop())
+        }
+
+        fn repair_physical_publication_while_helper_locked(
+            &self,
+            physical: &TransientPhysicalGeneration,
+            expected: &ProjectionArtifactEvidence,
+        ) -> Result<()> {
+            if physical.evidence != *expected {
+                return Err(KanbanError::Conflict(format!(
+                    "transient physical generation {} changed before publication repair",
+                    expected.manifest.generation
+                )));
+            }
+            let marker_path = physical.path.join("published");
+            match physical.marker {
+                TransientPhysicalMarker::Exact => return Ok(()),
+                TransientPhysicalMarker::Missing => {}
+                TransientPhysicalMarker::Invalid => {
+                    kanban_local::durable_quarantine_entry(&marker_path)
+                        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+                }
+            }
+            kanban_local::durable_create_new_file(
+                &marker_path,
+                &transient_published_marker_contents(expected),
+            )
+            .map_err(|error| KanbanError::Storage(error.to_string()))?;
+            let repaired = self
+                .inspect_physical_generation_while_helper_locked(&expected.manifest.generation)?
+                .ok_or_else(|| {
+                    KanbanError::Storage(format!(
+                        "transient physical generation {} disappeared after publication repair",
+                        expected.manifest.generation
+                    ))
+                })?;
+            if repaired.evidence != *expected || repaired.marker != TransientPhysicalMarker::Exact {
+                return Err(KanbanError::Storage(format!(
+                    "transient physical publication repair did not converge for generation {}",
+                    expected.manifest.generation
+                )));
+            }
+            Ok(())
+        }
+
+        fn prepare_snapshot_while_helper_locked(
+            &self,
+            snapshot: &ProjectionSnapshot,
+        ) -> ProjectionArtifactEvidence {
+            let fingerprint = format!("transient:{}", snapshot.manifest.generation);
+            let mut manifest = snapshot.manifest.clone();
+            manifest.fingerprint = Some(fingerprint.clone());
+            let evidence = ProjectionArtifactEvidence {
+                manifest,
+                fingerprint,
+            };
+            let mut state = self.state.lock().expect("transient projection state");
+            state
+                .generations
+                .insert(evidence.manifest.generation.clone(), evidence.clone());
+            state.prepared = Some(evidence.clone());
+            evidence
+        }
+
+        fn apply_batch_while_helper_locked(
+            &self,
+            batch: &ProjectionBatch,
+        ) -> ProjectionBatchReceipt {
+            ProjectionBatchReceipt {
+                store_name: batch.store_name.clone(),
+                database_instance_id: batch.database_instance_id.clone(),
+                protocol_version: batch.protocol_version,
+                schema_version: batch.schema_version,
+                provider: batch.provider.clone(),
+                provider_fingerprint: batch.provider_fingerprint.clone(),
+                target_generation: batch.target_generation.clone(),
+                lease_token: batch.lease_token.clone(),
+                fence_epoch: batch.fence_epoch,
+                claim_token: batch.claim_token.clone(),
+                applied_item_count: batch.items.len(),
+            }
+        }
+
+        fn publish_generation_while_helper_locked(
+            &self,
+            expected_active: Option<&ProjectionArtifactEvidence>,
+            prepared: &ProjectionArtifactEvidence,
+        ) -> Result<ProjectionPublishReceipt> {
+            let descriptor = self.descriptor()?;
+            if expected_active
+                .is_some_and(|evidence| !artifact_matches_descriptor(evidence, &descriptor))
+                || !artifact_matches_descriptor(prepared, &descriptor)
+            {
+                return Err(KanbanError::Conflict(
+                    "strict backend rejected publish evidence from another provider".to_owned(),
+                ));
+            }
+            let mut state = self.state.lock().expect("transient projection state");
+            if state.active.as_ref() != expected_active {
+                return Err(KanbanError::Conflict(
+                    "transient projection active CAS mismatch".to_owned(),
+                ));
+            }
+            if state.prepared.as_ref() != Some(prepared) {
+                return Err(KanbanError::Conflict(
+                    "transient projection prepared evidence mismatch".to_owned(),
+                ));
+            }
+            let retained_previous = state.active.clone();
+            state.active = Some(prepared.clone());
+            state
+                .generations
+                .insert(prepared.manifest.generation.clone(), prepared.clone());
+            state.published.insert(prepared.manifest.generation.clone());
+            Ok(ProjectionPublishReceipt {
+                active: prepared.clone(),
+                retained_previous,
+            })
+        }
+
+        fn validate_publication_while_helper_locked(
+            &self,
+            expected: &ProjectionArtifactEvidence,
+        ) -> Result<()> {
+            let state = self.state.lock().expect("transient projection state");
+            if let Some(actual) = state.generations.get(&expected.manifest.generation)
+                && (actual != expected || !state.published.contains(&expected.manifest.generation))
+            {
+                return Err(KanbanError::Storage(format!(
+                    "transient projection generation {} is not published",
+                    expected.manifest.generation
+                )));
+            }
+            Ok(())
+        }
+
+        fn repair_publication_while_helper_locked(
+            &self,
+            expected: &ProjectionArtifactEvidence,
+        ) -> Result<()> {
+            let mut state = self.state.lock().expect("transient projection state");
+            if let Some(actual) = state.generations.get(&expected.manifest.generation) {
+                if actual != expected {
+                    return Err(KanbanError::Conflict(format!(
+                        "transient projection generation {} evidence changed before marker repair",
+                        expected.manifest.generation
+                    )));
+                }
+                state.published.insert(expected.manifest.generation.clone());
+            }
+            Ok(())
+        }
+
+        fn quarantine_generation_while_helper_locked(&self, generation: &str) -> Result<()> {
+            let generation_path = self.generation_path_while_helper_locked(generation)?;
+            match std::fs::symlink_metadata(&generation_path) {
+                Ok(_) => kanban_local::durable_quarantine_entry(&generation_path)
+                    .map(|_| ())
+                    .map_err(|error| KanbanError::Storage(error.to_string())),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(KanbanError::Storage(error.to_string())),
+            }?;
+            let mut state = self.state.lock().expect("transient projection state");
+            state.generations.remove(generation);
+            if state
+                .prepared
+                .as_ref()
+                .is_some_and(|prepared| prepared.manifest.generation == generation)
+            {
+                state.prepared = None;
+            }
+            if state
+                .active
+                .as_ref()
+                .is_some_and(|active| active.manifest.generation == generation)
+            {
+                state.active = None;
+            }
+            state.published.remove(generation);
+            Ok(())
+        }
+
+        fn abort_generation_while_helper_locked(&self, generation: &str) -> Result<()> {
+            {
+                let state = self.state.lock().expect("transient projection state");
+                if state.published.contains(generation) {
+                    return Err(KanbanError::Conflict(format!(
+                        "cannot abort published transient generation {generation}"
+                    )));
+                }
+            }
+            let generation_path = self.generation_path_while_helper_locked(generation)?;
+            let metadata = match std::fs::symlink_metadata(&generation_path) {
+                Ok(metadata) => Some(metadata),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => return Err(KanbanError::Storage(error.to_string())),
+            };
+            if metadata.is_some() {
+                match std::fs::symlink_metadata(generation_path.join("published")) {
+                    Ok(_) => {
+                        return Err(KanbanError::Conflict(format!(
+                            "cannot abort published transient generation {generation}"
+                        )));
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(KanbanError::Storage(error.to_string())),
+                }
+            }
+            if let Some(metadata) = metadata {
+                if metadata.is_dir() {
+                    kanban_local::durable_remove_directory(&generation_path)
+                        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+                } else {
+                    kanban_local::durable_quarantine_entry(&generation_path)
+                        .map(|_| ())
+                        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+                }
+            }
+            let mut state = self.state.lock().expect("transient projection state");
+            state.generations.remove(generation);
+            if state
+                .prepared
+                .as_ref()
+                .is_some_and(|prepared| prepared.manifest.generation == generation)
+            {
+                state.prepared = None;
+            }
+            if state
+                .active
+                .as_ref()
+                .is_some_and(|active| active.manifest.generation == generation)
+            {
+                state.active = None;
+            }
+            state.published.remove(generation);
+            Ok(())
         }
     }
 
@@ -5820,11 +6593,62 @@ mod tests {
             &self,
             snapshot: &ProjectionSnapshot,
         ) -> Result<ProjectionArtifactEvidence> {
+            if self.descriptor_override.is_some() {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection provider requires authority-bearing snapshot preparation for generation {}",
+                    snapshot.manifest.generation
+                )));
+            }
             self.inner.prepare_snapshot(snapshot)
         }
 
+        fn prepare_snapshot_with_authority(
+            &self,
+            snapshot: &ProjectionSnapshot,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<ProjectionArtifactEvidence> {
+            if self.descriptor_override.is_none() {
+                return self
+                    .inner
+                    .prepare_snapshot_with_authority(snapshot, authority);
+            }
+            let _authority_guard = self.acquire_exact_authority_guard(
+                &snapshot.manifest.generation,
+                authority,
+                false,
+            )?;
+            self.validate_snapshot_input_while_helper_locked(snapshot, authority)?;
+            self.ensure_prepare_target_absent_while_helper_locked(&snapshot.manifest.generation)?;
+            Ok(self.prepare_snapshot_while_helper_locked(snapshot))
+        }
+
         fn apply_batch(&self, batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt> {
+            if self.descriptor_override.is_some() {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection provider requires authority-bearing batch apply for generation {}",
+                    batch.target_generation
+                )));
+            }
             self.inner.apply_batch(batch)
+        }
+
+        fn apply_batch_with_authority(
+            &self,
+            batch: &ProjectionBatch,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<ProjectionBatchReceipt> {
+            if self.descriptor_override.is_none() {
+                return self.inner.apply_batch_with_authority(batch, authority);
+            }
+            let _authority_guard =
+                self.acquire_exact_authority_guard(&batch.target_generation, authority, false)?;
+            self.validate_batch_input_while_helper_locked(batch, authority)?;
+            let expected = evidence_from_authority(authority)?;
+            self.validate_evidence_seam_while_helper_locked(
+                &expected,
+                TransientMarkerRequirement::Unpublished,
+            )?;
+            Ok(self.apply_batch_while_helper_locked(batch))
         }
 
         fn publish_generation(
@@ -5832,16 +6656,78 @@ mod tests {
             expected_active: Option<&ProjectionArtifactEvidence>,
             prepared: &ProjectionArtifactEvidence,
         ) -> Result<ProjectionPublishReceipt> {
-            if let Some(descriptor) = &self.descriptor_override
-                && (expected_active
-                    .is_some_and(|evidence| !artifact_matches_descriptor(evidence, descriptor))
-                    || !artifact_matches_descriptor(prepared, descriptor))
-            {
-                return Err(KanbanError::Conflict(
-                    "strict backend rejected publish evidence from another provider".to_owned(),
-                ));
+            if self.descriptor_override.is_some() {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection provider requires authority-bearing publication for generation {}",
+                    prepared.manifest.generation
+                )));
             }
             self.inner.publish_generation(expected_active, prepared)
+        }
+
+        fn publish_generation_with_authority(
+            &self,
+            expected_active: Option<&ProjectionArtifactEvidence>,
+            prepared: &ProjectionArtifactEvidence,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<ProjectionPublishReceipt> {
+            if self.descriptor_override.is_none() {
+                return self.inner.publish_generation_with_authority(
+                    expected_active,
+                    prepared,
+                    authority,
+                );
+            }
+            let _authority_guard = self.acquire_exact_authority_guard(
+                &prepared.manifest.generation,
+                authority,
+                false,
+            )?;
+            if authority.role != ProjectionGenerationRole::Building
+                || authority.building_phase.as_deref() != Some("prepared")
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection publication requires a prepared building generation {}",
+                    prepared.manifest.generation
+                )));
+            }
+            self.validate_evidence_authority_while_helper_locked(prepared, authority)?;
+            let descriptor = self.descriptor()?;
+            let actual_active = self.effective_active_while_helper_locked(&descriptor)?;
+            if actual_active.as_ref() != expected_active {
+                return Err(KanbanError::Conflict(
+                    "transient projection active generation changed before publish".to_owned(),
+                ));
+            }
+            let physical = self.validate_evidence_seam_while_helper_locked(
+                prepared,
+                TransientMarkerRequirement::Repairable,
+            )?;
+            if let Some(physical) = &physical {
+                self.repair_physical_publication_while_helper_locked(physical, prepared)?;
+            }
+            {
+                let mut state = self.state.lock().expect("transient projection state");
+                if state.prepared.is_none() {
+                    state.prepared = Some(prepared.clone());
+                    state
+                        .generations
+                        .insert(prepared.manifest.generation.clone(), prepared.clone());
+                }
+                if state.active.is_none()
+                    && let Some(expected_active) = expected_active
+                {
+                    state.active = Some(expected_active.clone());
+                    state.generations.insert(
+                        expected_active.manifest.generation.clone(),
+                        expected_active.clone(),
+                    );
+                    state
+                        .published
+                        .insert(expected_active.manifest.generation.clone());
+                }
+            }
+            self.publish_generation_while_helper_locked(expected_active, prepared)
         }
 
         fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>> {
@@ -5851,15 +6737,11 @@ mod tests {
                         .to_owned(),
                 ));
             }
-            let active = self.inner.inspect_active()?;
-            if let (Some(descriptor), Some(evidence)) = (&self.descriptor_override, &active)
-                && !artifact_matches_descriptor(evidence, descriptor)
-            {
-                return Err(KanbanError::Conflict(
-                    "strict backend rejected active evidence from another provider".to_owned(),
-                ));
-            }
-            Ok(active)
+            let Some(descriptor) = &self.descriptor_override else {
+                return self.inner.inspect_active();
+            };
+            let _authority_guard = self.acquire_overlay_read_guard()?;
+            self.effective_active_while_helper_locked(descriptor)
         }
 
         fn inspect_generation(
@@ -5871,41 +6753,238 @@ mod tests {
                     "transient prepared generation inspection failure".to_owned(),
                 ));
             }
-            let evidence = self.inner.inspect_generation(generation)?;
-            if let (Some(descriptor), Some(evidence)) = (&self.descriptor_override, &evidence)
-                && !artifact_matches_descriptor(evidence, descriptor)
+            let Some(descriptor) = &self.descriptor_override else {
+                return self.inner.inspect_generation(generation);
+            };
+            let _authority_guard = self.acquire_overlay_read_guard()?;
+            let overlay = self
+                .state
+                .lock()
+                .expect("transient projection state")
+                .generations
+                .get(generation)
+                .cloned();
+            let physical = self.inspect_physical_generation_while_helper_locked(generation)?;
+            if overlay
+                .as_ref()
+                .is_some_and(|evidence| !artifact_matches_descriptor(evidence, descriptor))
+                || physical.as_ref().is_some_and(|physical| {
+                    !artifact_matches_descriptor(&physical.evidence, descriptor)
+                })
             {
                 return Err(KanbanError::Conflict(
                     "strict backend rejected generation evidence from another provider".to_owned(),
                 ));
             }
-            Ok(evidence)
+            if let (Some(overlay), Some(physical)) = (&overlay, &physical)
+                && *overlay != physical.evidence
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "transient overlay and physical evidence disagree for generation {generation}"
+                )));
+            }
+            Ok(overlay.or_else(|| physical.map(|physical| physical.evidence)))
         }
 
         fn validate_generation_publication(
             &self,
             expected: &ProjectionArtifactEvidence,
         ) -> Result<()> {
-            self.inner.validate_generation_publication(expected)
+            if self.descriptor_override.is_none() {
+                return self.inner.validate_generation_publication(expected);
+            }
+            let _authority_guard = self.acquire_overlay_read_guard()?;
+            self.validate_evidence_seam_while_helper_locked(
+                expected,
+                TransientMarkerRequirement::Published,
+            )?;
+            self.validate_publication_while_helper_locked(expected)
+        }
+
+        fn validate_generation_publication_with_authority(
+            &self,
+            expected: &ProjectionArtifactEvidence,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            if self.descriptor_override.is_none() {
+                return self
+                    .inner
+                    .validate_generation_publication_with_authority(expected, authority);
+            }
+            let _authority_guard = self.acquire_exact_authority_guard(
+                &expected.manifest.generation,
+                authority,
+                false,
+            )?;
+            self.validate_evidence_authority_while_helper_locked(expected, authority)?;
+            self.validate_evidence_seam_while_helper_locked(
+                expected,
+                TransientMarkerRequirement::Published,
+            )?;
+            self.validate_publication_while_helper_locked(expected)
         }
 
         fn repair_generation_publication(
             &self,
             expected: &ProjectionArtifactEvidence,
         ) -> Result<()> {
+            if self.descriptor_override.is_some() {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection provider requires authority-bearing publication repair for generation {}",
+                    expected.manifest.generation
+                )));
+            }
             self.inner.repair_generation_publication(expected)
         }
 
+        fn repair_generation_publication_with_authority(
+            &self,
+            expected: &ProjectionArtifactEvidence,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            if self.descriptor_override.is_none() {
+                return self
+                    .inner
+                    .repair_generation_publication_with_authority(expected, authority);
+            }
+            let _authority_guard = self.acquire_exact_authority_guard(
+                &expected.manifest.generation,
+                authority,
+                false,
+            )?;
+            self.validate_evidence_authority_while_helper_locked(expected, authority)?;
+            let physical = self.validate_evidence_seam_while_helper_locked(
+                expected,
+                TransientMarkerRequirement::Repairable,
+            )?;
+            if let Some(physical) = &physical {
+                self.repair_physical_publication_while_helper_locked(physical, expected)?;
+            }
+            self.repair_publication_while_helper_locked(expected)
+        }
+
         fn validate_active_contents(&self, active: &ProjectionArtifactEvidence) -> Result<()> {
-            self.inner.validate_active_contents(active)
+            if self.descriptor_override.is_none() {
+                return self.inner.validate_active_contents(active);
+            }
+            let _authority_guard = self.acquire_overlay_read_guard()?;
+            let descriptor = self.descriptor()?;
+            if !artifact_matches_descriptor(active, &descriptor) {
+                return Err(KanbanError::Conflict(
+                    "strict backend rejected active evidence from another provider".to_owned(),
+                ));
+            }
+            self.validate_evidence_seam_while_helper_locked(
+                active,
+                TransientMarkerRequirement::Published,
+            )?;
+            if self
+                .effective_active_while_helper_locked(&descriptor)?
+                .as_ref()
+                != Some(active)
+            {
+                return Err(KanbanError::Storage(
+                    "transient projection active contents changed".to_owned(),
+                ));
+            }
+            Ok(())
         }
 
         fn quarantine_generation(&self, generation: &str) -> Result<()> {
+            if self.descriptor_override.is_some() {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection provider requires fenced quarantine for generation {generation}"
+                )));
+            }
             self.inner.quarantine_generation(generation)
         }
 
         fn abort_generation(&self, generation: &str) -> Result<()> {
+            if self.descriptor_override.is_some() {
+                return Err(KanbanError::Conflict(format!(
+                    "transient projection provider requires fenced abort for generation {generation}"
+                )));
+            }
             self.inner.abort_generation(generation)
+        }
+
+        fn quarantine_generation_fenced(
+            &self,
+            generation: &str,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            if self.descriptor_override.is_none() {
+                return self
+                    .inner
+                    .quarantine_generation_fenced(generation, authority);
+            }
+            let authority_guard =
+                self.acquire_exact_authority_guard(generation, authority, true)?;
+            if authority_guard.role == ProjectionGenerationRole::Active
+                && authority_guard.current_provider_binding
+            {
+                let expected = evidence_from_authority(authority)?;
+                let (overlay_present, overlay_exact) = {
+                    let state = self.state.lock().expect("transient projection state");
+                    let active = state
+                        .active
+                        .as_ref()
+                        .filter(|active| active.manifest.generation == generation);
+                    let stored = state.generations.get(generation);
+                    (
+                        active.is_some() || stored.is_some(),
+                        active == Some(&expected) && stored == Some(&expected),
+                    )
+                };
+                let generation_path = self.generation_path_while_helper_locked(generation)?;
+                let physical_present = match std::fs::symlink_metadata(&generation_path) {
+                    Ok(_) => true,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+                    Err(error) => {
+                        return Err(KanbanError::Storage(error.to_string()));
+                    }
+                };
+                let physical_exact = if physical_present {
+                    matches!(
+                        self.inspect_physical_generation_while_helper_locked(generation),
+                        Ok(Some(physical)) if physical.evidence == expected
+                    )
+                } else {
+                    false
+                };
+                if (overlay_present || physical_present)
+                    && (!overlay_present || overlay_exact)
+                    && (!physical_present || physical_exact)
+                {
+                    return Err(KanbanError::Conflict(format!(
+                        "cannot quarantine canonical active transient generation {generation}"
+                    )));
+                }
+            }
+            self.quarantine_generation_while_helper_locked(generation)
+        }
+
+        fn abort_generation_fenced(
+            &self,
+            generation: &str,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            if self.descriptor_override.is_none() {
+                return self.inner.abort_generation_fenced(generation, authority);
+            }
+            let authority_guard =
+                self.acquire_exact_authority_guard(generation, authority, true)?;
+            if authority_guard.role != ProjectionGenerationRole::Building
+                || !matches!(
+                    authority.building_phase.as_deref(),
+                    Some("snapshotting" | "prepared")
+                )
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "cannot abort non-building transient generation {generation}"
+                )));
+            }
+            self.abort_generation_while_helper_locked(generation)
         }
     }
 
@@ -5917,6 +6996,89 @@ mod tests {
             && evidence.manifest.provider == descriptor.provider
             && evidence.manifest.provider_fingerprint == descriptor.provider_fingerprint
             && evidence.manifest.corpus == descriptor.corpus
+    }
+
+    fn binding_for_evidence(evidence: &ProjectionArtifactEvidence) -> ProjectionGenerationBinding {
+        ProjectionGenerationBinding {
+            generation: evidence.manifest.generation.clone(),
+            fingerprint: Some(evidence.fingerprint.clone()),
+            fence_epoch: evidence.manifest.fence_epoch,
+            snapshot_cursor: Some(evidence.manifest.snapshot_cursor),
+            provider: evidence.manifest.provider.clone(),
+            provider_fingerprint: evidence.manifest.provider_fingerprint.clone(),
+            canonical_count: evidence.manifest.canonical_item_count,
+            canonical_digest: evidence.manifest.canonical_digest.clone(),
+            delivery_count: evidence.manifest.delivery_item_count,
+            delivery_digest: evidence.manifest.delivery_digest.clone(),
+            corpus: evidence.manifest.corpus.clone(),
+        }
+    }
+
+    fn evidence_from_authority(
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<ProjectionArtifactEvidence> {
+        let manifest = authority.expected_manifest.clone().ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "transient projection authority has no manifest for generation {}",
+                authority.generation
+            ))
+        })?;
+        let fingerprint = authority
+            .expected_binding
+            .fingerprint
+            .clone()
+            .ok_or_else(|| {
+                KanbanError::Conflict(format!(
+                    "transient projection authority has no fingerprint for generation {}",
+                    authority.generation
+                ))
+            })?;
+        let evidence = ProjectionArtifactEvidence {
+            manifest,
+            fingerprint,
+        };
+        if binding_for_evidence(&evidence) != authority.expected_binding {
+            return Err(KanbanError::Conflict(format!(
+                "transient projection authority evidence is inconsistent for generation {}",
+                authority.generation
+            )));
+        }
+        Ok(evidence)
+    }
+
+    fn evidence_from_tantivy_metadata(
+        metadata: kanban_search::tantivy_backend::TantivyTaskProjectionMetadata,
+    ) -> ProjectionArtifactEvidence {
+        ProjectionArtifactEvidence {
+            fingerprint: metadata.fingerprint.clone(),
+            manifest: ProjectionArtifactManifest {
+                store_name: TANTIVY_TASKS_STORE.to_owned(),
+                database_instance_id: metadata.database_instance_id,
+                protocol_version: metadata.protocol_version,
+                schema_version: metadata.schema_version,
+                generation: metadata.generation,
+                fence_epoch: metadata.fence_epoch,
+                snapshot_cursor: metadata.snapshot_cursor,
+                provider: metadata.provider,
+                provider_fingerprint: metadata.provider_fingerprint,
+                corpus: None,
+                canonical_item_count: metadata.canonical_item_count,
+                canonical_digest: metadata.canonical_digest,
+                delivery_item_count: metadata.delivery_item_count,
+                delivery_digest: metadata.delivery_digest,
+                fingerprint: Some(metadata.fingerprint),
+            },
+        }
+    }
+
+    fn transient_published_marker_contents(evidence: &ProjectionArtifactEvidence) -> Vec<u8> {
+        format!(
+            "database_instance_id={}\ngeneration={}\nfence_epoch={}\n",
+            evidence.manifest.database_instance_id,
+            evidence.manifest.generation,
+            evidence.manifest.fence_epoch
+        )
+        .into_bytes()
     }
 
     fn quarantined_generation_path(generation_path: &Path) -> anyhow::Result<PathBuf> {
@@ -5982,6 +7144,60 @@ mod tests {
             &lease.lease_token,
         )?;
         session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn failure_persistence_rejects_handoff_after_failure_before_persist() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+
+        let old = acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "old-owner", 10_000)?;
+        let renewed = renew_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "old-owner",
+            &old.lease_token,
+            10_000,
+        )?;
+        release_projection_lease(&db_path, TANTIVY_TASKS_STORE, "old-owner", &old.lease_token)?;
+        let successor =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "successor-owner", 10_000)?;
+        let before = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+
+        let error = persist_store_failure(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "Tantivy",
+            &renewed,
+            MaintenanceStoreFailureKind::Backend,
+            KanbanError::Storage("failure from the previous owner".to_owned()),
+        )
+        .expect_err("a handed-off lease must reject stale failure persistence");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+
+        let after = projection_status(&db_path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
+            .expect("Tantivy status");
+        assert_eq!(after.lifecycle_status, before.lifecycle_status);
+        assert_eq!(after.last_error, before.last_error);
+        assert_eq!(after.fallback_reason, before.fallback_reason);
+        assert_eq!(after.owner.as_deref(), Some("successor-owner"));
+        assert_eq!(after.fence_epoch, successor.fence_epoch);
+
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "successor-owner",
+            &successor.lease_token,
+        )?;
         Ok(())
     }
 
@@ -6438,6 +7654,7 @@ mod tests {
         provider_b_descriptor.provider = "tantivy-provider-b".to_owned();
         provider_b_descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
         let provider_b = TransientGenerationInspectStore::with_descriptor(
+            &db_path,
             TantivyProjectionStore::new(&db_path)?,
             provider_b_descriptor.clone(),
         );
@@ -6552,6 +7769,7 @@ mod tests {
         descriptor.provider = "tantivy-provider-b".to_owned();
         descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
         let provider_b = TransientGenerationInspectStore::with_descriptor_and_active_conflict(
+            &db_path,
             TantivyProjectionStore::new(&db_path)?,
             descriptor,
         );
@@ -6618,60 +7836,6 @@ mod tests {
         let building = begin_projection_generation(
             &db_path,
             TANTIVY_TASKS_STORE,
-    #[test]
-    fn failure_persistence_rejects_handoff_after_failure_before_persist() -> anyhow::Result<()> {
-        let temp = tempdir()?;
-        let db_path = temp.path().join("kanban.db");
-        init_database(&db_path, "tester")?;
-
-        let old = acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "old-owner", 10_000)?;
-        let renewed = renew_projection_lease(
-            &db_path,
-            TANTIVY_TASKS_STORE,
-            "old-owner",
-            &old.lease_token,
-            10_000,
-        )?;
-        release_projection_lease(&db_path, TANTIVY_TASKS_STORE, "old-owner", &old.lease_token)?;
-        let successor =
-            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "successor-owner", 10_000)?;
-        let before = projection_status(&db_path)?
-            .stores
-            .into_iter()
-            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
-            .expect("Tantivy status");
-
-        let error = persist_store_failure(
-            &db_path,
-            TANTIVY_TASKS_STORE,
-            "Tantivy",
-            &renewed,
-            MaintenanceStoreFailureKind::Backend,
-            KanbanError::Storage("failure from the previous owner".to_owned()),
-        )
-        .expect_err("a handed-off lease must reject stale failure persistence");
-        assert!(matches!(error, KanbanError::Conflict(_)));
-
-        let after = projection_status(&db_path)?
-            .stores
-            .into_iter()
-            .find(|store| store.store_name == TANTIVY_TASKS_STORE)
-            .expect("Tantivy status");
-        assert_eq!(after.lifecycle_status, before.lifecycle_status);
-        assert_eq!(after.last_error, before.last_error);
-        assert_eq!(after.fallback_reason, before.fallback_reason);
-        assert_eq!(after.owner.as_deref(), Some("successor-owner"));
-        assert_eq!(after.fence_epoch, successor.fence_epoch);
-
-        release_projection_lease(
-            &db_path,
-            TANTIVY_TASKS_STORE,
-            "successor-owner",
-            &successor.lease_token,
-        )?;
-        Ok(())
-    }
-
             "interrupted-owner",
             &lease.lease_token,
             &backend,
@@ -6704,7 +7868,8 @@ mod tests {
             "takeover-owner",
             takeover.options.lease_ttl_ms,
         )?;
-        let backend = TransientGenerationInspectStore::new(TantivyProjectionStore::new(&db_path)?);
+        let backend =
+            TransientGenerationInspectStore::new(&db_path, TantivyProjectionStore::new(&db_path)?);
         let attempt = run_projection_store_operation(
             &mut takeover,
             TANTIVY_TASKS_STORE,

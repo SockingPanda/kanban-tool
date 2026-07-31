@@ -190,6 +190,7 @@ target-tools:
     scripts/test-cargo-target-tools.sh
     scripts/test-helper-cargo-tree.sh
     scripts/test-windows-durability-gate.sh
+    python3 -B scripts/test_windows_durability_gate.py
     python3 -B scripts/test_release_safe_path.py
     scripts/test-release-provenance.sh
     scripts/test-package-cli-linux-safe.sh

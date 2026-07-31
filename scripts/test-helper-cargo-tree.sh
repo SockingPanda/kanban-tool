@@ -73,13 +73,66 @@ assert_tree_includes kanban-vector-lancedb '(^|[[:space:]])lancedb($|[[:space:]]
 assert_tree_includes kanban-vector-lancedb 'arrow'
 assert_tree_includes kanban-graph-oxigraph '(^|[[:space:]])oxigraph($|[[:space:]])'
 
-grep -Fqx '    just feature-p kanban-cli "tantivy-backend,oxigraph-backend"' "$ROOT/justfile" ||
-  fail "projection-release-cohort must test the CLI with Tantivy and Oxigraph"
-grep -Fqx '    just feature-p kanban-server "tantivy-backend,oxigraph-backend"' "$ROOT/justfile" ||
-  fail "projection-release-cohort must test the server with Tantivy and Oxigraph"
-grep -Fqx '    scripts/package-cli-linux.sh --format deb --no-default-features --features "tantivy-backend,oxigraph-backend"' "$ROOT/justfile" ||
-  fail "cli-package must build the explicit Tantivy/Oxigraph release cohort"
-grep -Fqx '    just projection-release-cohort' "$ROOT/justfile" ||
-  fail "release must invoke projection-release-cohort"
+python3 - "$ROOT/justfile" "$ROOT/scripts/release-cohort.sh" <<'PY'
+import pathlib
+import sys
+
+justfile = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+wrapper = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+
+def recipe(name):
+    try:
+        start = justfile.index(f"{name}:")
+    except ValueError as error:
+        raise SystemExit(f"error: missing just recipe: {name}") from error
+    body = []
+    for line in justfile[start + 1 :]:
+        if line.startswith("    "):
+            body.append(line.strip())
+            continue
+        if line == "":
+            break
+        break
+    return body
+
+if recipe("projection-release-cohort") != [
+    'just feature-p kanban-cli "tantivy-backend,oxigraph-backend"',
+    'just feature-p kanban-server "tantivy-backend,oxigraph-backend"',
+]:
+    raise SystemExit(
+        "error: projection-release-cohort must execute the exact CLI/server release feature pair"
+    )
+if recipe("cli-package") != [
+    'scripts/package-cli-linux.sh --format deb --no-default-features --features "tantivy-backend,oxigraph-backend"',
+]:
+    raise SystemExit(
+        "error: cli-package must build the explicit Tantivy/Oxigraph release cohort"
+    )
+if recipe("release") != ["scripts/release-cohort.sh"]:
+    raise SystemExit("error: release must enter the single-process release cohort wrapper")
+
+expected_wrapper_steps = [
+    "just affected-self-test",
+    "just schema-contract",
+    "just audit",
+    "just rust-full",
+    "just check-windows-p kanban-local",
+    "just projection-release-cohort",
+    "just bench-check",
+    "just target-tools",
+    "just cli-package",
+    "just cli-package-layout",
+    "just desktop-package-config",
+    "just desktop-package",
+    "just desktop-package-layout",
+    "just smoke",
+    "just diff-check",
+]
+wrapper_steps = [line.strip() for line in wrapper if line.startswith("just ")]
+if wrapper_steps != expected_wrapper_steps:
+    raise SystemExit(
+        "error: release cohort wrapper must execute the exact canonical recipe sequence"
+    )
+PY
 
 echo "ok: default helper isolation and the explicit projection release cohort are verified"

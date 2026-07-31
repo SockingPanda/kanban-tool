@@ -47,11 +47,16 @@ mutation 或 owner 启动：
 SQLite 或其派生目录的全部 systemd unit，包括 maintenance、API/serve、Desktop embedded
 server、import/replace/vacuum/replacement job；`WRITER_PIDS` 与
 `WRITER_PROCESS_EXES` 一一对应，只列出经过 `/proc/<pid>/exe` 复核的非 systemd writer。
-没有非 systemd writer 时两个数组都保持为空。
+没有非 systemd writer 时两个数组都保持为空。runbook 会在任何 stop 前保存每个存活 PID
+的原始 start-time；后续只有 start-time → executable → start-time 三者仍精确一致时才
+允许发送信号。
 
 `EXPECTED_BINDINGS_SOURCE` 是在恢复前由发布/config owner 审批的 TSV，不能从当前 status
 反向生成。`VECTOR_CONFIG` 为空时使用部署的正常本地配置；非空时必须是同一 release/config
-记录中的绝对路径。
+记录中的绝对路径。所有 `systemctl`、CLI、SQLite、helper 和 root-side `/proc`/signal
+调用都经过同一个 GNU `timeout` wall-clock 边界；`rc=124` 表示 TERM timeout，
+`rc=137` 表示 timeout 后 KILL，其他非零值保持原命令失败语义。所有提权调用固定使用
+`sudo -n`，绝不等待口令或其它交互输入。
 
 ~~~bash
 set -Eeuo pipefail
@@ -72,6 +77,8 @@ export POLL_INTERVAL_SEC=5
 export SLA_TIMEOUT_SEC=120
 export STOP_LEASE_TIMEOUT_SEC=120
 export OWNER_START_TIMEOUT_SEC=120
+export EXTERNAL_COMMAND_TIMEOUT_SEC=20
+export EXTERNAL_KILL_AFTER_SEC=5
 
 export KANBAN_VECTOR_HELPER="$VECTOR_HELPER"
 export KANBAN_GRAPH_HELPER="$GRAPH_HELPER"
@@ -83,6 +90,7 @@ declare -a WRITER_UNITS=(
 )
 declare -a WRITER_PIDS=()
 declare -a WRITER_PROCESS_EXES=()
+declare -A WRITER_START_TIMES=()
 
 for required_path in \
   "$REPO" "$DB" "$COHORT" "$KANBAN_BIN" "$VECTOR_HELPER" "$GRAPH_HELPER" \
@@ -103,6 +111,10 @@ test -f "$EXPECTED_BINDINGS_SOURCE"
 test "${#WRITER_UNITS[@]}" -ge 1
 test "${WRITER_UNITS[0]}" = "$MAINTENANCE_UNIT"
 test "${#WRITER_PIDS[@]}" -eq "${#WRITER_PROCESS_EXES[@]}"
+if test "${#WRITER_PIDS[@]}" -gt 0; then
+  test "$(printf '%s\n' "${WRITER_PIDS[@]}" | sort -u | wc -l)" \
+    -eq "${#WRITER_PIDS[@]}"
+fi
 test "$(printf '%s\n' "${WRITER_UNITS[@]}" | sort -u | wc -l)" \
   -eq "${#WRITER_UNITS[@]}"
 for pid in "${WRITER_PIDS[@]}"; do
@@ -114,6 +126,47 @@ for exe in "${WRITER_PROCESS_EXES[@]}"; do
     *) printf 'writer exe is not absolute: %s\n' "$exe" >&2; exit 1 ;;
   esac
 done
+for seconds in "$EXTERNAL_COMMAND_TIMEOUT_SEC" "$EXTERNAL_KILL_AFTER_SEC"; do
+  [[ "$seconds" =~ ^[1-9][0-9]*$ ]]
+done
+for required_command in timeout sudo python3 systemctl sqlite3; do
+  command -v "$required_command" >/dev/null
+done
+
+bounded_external() {
+  command timeout --signal=TERM \
+    --kill-after="${EXTERNAL_KILL_AFTER_SEC}s" \
+    "${EXTERNAL_COMMAND_TIMEOUT_SEC}s" "$@"
+}
+
+bounded_sudo() {
+  bounded_external sudo -n "$@"
+}
+
+bounded_kanban() {
+  bounded_external "$KANBAN_BIN" "$@"
+}
+
+bounded_sqlite() {
+  bounded_external sqlite3 "$@"
+}
+
+bounded_vector_helper() {
+  bounded_external "$VECTOR_HELPER" "$@"
+}
+
+bounded_graph_helper() {
+  bounded_external "$GRAPH_HELPER" "$@"
+}
+
+external_rc_class() {
+  case "$1" in
+    0) printf 'ok\n' ;;
+    124) printf 'timeout\n' ;;
+    137) printf 'timeout-killed\n' ;;
+    *) printf 'exit\n' ;;
+  esac
+}
 
 test ! -e "$EVIDENCE"
 install -d -m 0700 "$EVIDENCE"
@@ -132,19 +185,20 @@ test "$(stat -c '%a' "$EVIDENCE")" = 700
 ~~~bash
 for unit in "${WRITER_UNITS[@]}"; do
   safe_name="${unit//[^A-Za-z0-9_.@-]/_}"
-  sudo systemctl show "$unit" \
+  bounded_sudo systemctl show "$unit" \
     --property=FragmentPath,ExecStart,User,MainPID,ActiveState,SubState \
     >"$EVIDENCE/preflight/unit.$safe_name.show.txt"
-  sudo systemctl is-enabled "$unit" \
+  bounded_sudo systemctl is-enabled "$unit" \
     >"$EVIDENCE/preflight/unit.$safe_name.enabled.txt"
 done
 
 assert_configured_unit_binding() {
   local raw_environment
   raw_environment="$(
-    sudo systemctl show "$MAINTENANCE_UNIT" --property=Environment --value
+    bounded_sudo systemctl show "$MAINTENANCE_UNIT" \
+      --property=Environment --value
   )"
-  UNIT_ENV_RAW="$raw_environment" python3 - \
+  UNIT_ENV_RAW="$raw_environment" bounded_external python3 - \
     "$KANBAN_VECTOR_HELPER" "$KANBAN_GRAPH_HELPER" \
     >"$EVIDENCE/preflight/maintenance-unit.helper-environment.redacted.json" <<'PY'
 import json
@@ -176,110 +230,271 @@ PY
 复位并要求精确 `inactive`。对每个仍存活的非 systemd PID，先在 stop 前捕获
 `/proc/<pid>/stat` 的 start-time；每次发送 `TERM` 或 `KILL` 前都按
 start-time → executable → start-time 的顺序重新读取并要求两次 start-time、捕获值和
-预期 executable 全部一致。PID 在任一步消失或被复用都 fail closed，绝不向该 PID 发信号。
+预期 executable 全部一致。PID existence 只由同一个 root-side probe 判定为
+`alive`/`absent`/`error`：只有 `kill(2)` 返回 `ESRCH` 且 `/proc/<pid>` 确认不存在才是
+`absent`；`sudo`、`EPERM`、timeout、输出异常或其它执行错误一律是 `error`，记录
+no-signal 并 fail closed。identity 采样期间 PID 消失、被复用或字段漂移也绝不向该 PID
+发信号。
 
 ~~~bash
+root_pid_state() {
+  local pid="$1" output rc
+  if ! [[ "$pid" =~ ^[1-9][0-9]*$ ]]; then
+    printf 'error\n'
+    return 2
+  fi
+  if output="$(
+    bounded_sudo python3 -c '
+import errno
+import os
+import pathlib
+import sys
+
+pid = int(sys.argv[1])
+proc = pathlib.Path(f"/proc/{pid}")
+
+def proc_presence():
+    try:
+        os.stat(proc)
+    except FileNotFoundError:
+        return "absent"
+    except OSError:
+        return "error"
+    return "present"
+
+try:
+    os.kill(pid, 0)
+except ProcessLookupError:
+    if proc_presence() == "absent":
+        print("absent")
+        raise SystemExit(0)
+    print("error")
+    raise SystemExit(3)
+except PermissionError:
+    print("error")
+    raise SystemExit(3)
+except OSError as error:
+    if error.errno == errno.ESRCH and proc_presence() == "absent":
+        print("absent")
+        raise SystemExit(0)
+    print("error")
+    raise SystemExit(3)
+else:
+    if proc_presence() == "present":
+        print("alive")
+        raise SystemExit(0)
+    print("error")
+    raise SystemExit(3)
+' "$pid" 2>/dev/null
+  )"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  if test "$rc" -eq 0 &&
+    { test "$output" = alive || test "$output" = absent; }; then
+    printf '%s\n' "$output"
+    return 0
+  fi
+  printf 'error\n'
+  if test "$rc" -eq 0; then
+    return 2
+  fi
+  return "$rc"
+}
+
 process_start_time() {
-  local pid="$1" stat_line stat_tail
+  local pid="$1" stat_line stat_tail rc
   local -a stat_fields
-  stat_line="$(sudo cat "/proc/$pid/stat")"
+  if stat_line="$(bounded_sudo cat "/proc/$pid/stat" 2>/dev/null)"; then
+    :
+  else
+    rc=$?
+    return "$rc"
+  fi
   stat_tail="${stat_line##*) }"
   read -r -a stat_fields <<<"$stat_tail"
-  test "${#stat_fields[@]}" -ge 20
-  [[ "${stat_fields[19]}" =~ ^[0-9]+$ ]]
+  if test "${#stat_fields[@]}" -lt 20 ||
+    ! [[ "${stat_fields[19]}" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
   printf '%s\n' "${stat_fields[19]}"
 }
 
 assert_same_process_identity() {
   local pid="$1" expected_exe="$2" captured_start="$3"
-  local start_before actual_exe start_after
-  start_before="$(process_start_time "$pid")"
-  actual_exe="$(sudo readlink -f "/proc/$pid/exe")"
-  start_after="$(process_start_time "$pid")"
-  test "$start_before" = "$captured_start"
-  test "$start_after" = "$captured_start"
-  test "$actual_exe" = "$expected_exe"
+  local start_before actual_exe start_after rc
+  if start_before="$(process_start_time "$pid")"; then
+    :
+  else
+    rc=$?
+    return "$rc"
+  fi
+  if actual_exe="$(
+    bounded_sudo readlink -f "/proc/$pid/exe" 2>/dev/null
+  )"; then
+    :
+  else
+    rc=$?
+    return "$rc"
+  fi
+  if start_after="$(process_start_time "$pid")"; then
+    :
+  else
+    rc=$?
+    return "$rc"
+  fi
+  if test "$start_before" != "$captured_start" ||
+    test "$start_after" != "$captured_start" ||
+    test "$actual_exe" != "$expected_exe"; then
+    return 1
+  fi
 }
 
 signal_same_process() {
   local signal="$1" pid="$2" expected_exe="$3" captured_start="$4"
+  local state probe_rc identity_rc signal_rc
   case "$signal" in
     TERM|KILL) ;;
     *) printf 'unsupported signal: %s\n' "$signal" >&2; return 1 ;;
   esac
-  if ! sudo kill -0 "$pid" 2>/dev/null; then
-    return 0
+  if state="$(root_pid_state "$pid")"; then
+    probe_rc=0
+  else
+    probe_rc=$?
+    return "$probe_rc"
   fi
-  assert_same_process_identity "$pid" "$expected_exe" "$captured_start"
-  sudo kill "-$signal" "$pid"
+  case "$state" in
+    absent)
+      printf 'absent-no-signal\n'
+      return 0
+      ;;
+    alive) ;;
+    *) return 2 ;;
+  esac
+  if assert_same_process_identity \
+    "$pid" "$expected_exe" "$captured_start"; then
+    :
+  else
+    identity_rc=$?
+    case "$identity_rc" in
+      124|137) return "$identity_rc" ;;
+      *) return 2 ;;
+    esac
+  fi
+  if bounded_sudo kill "-$signal" "$pid"; then
+    printf 'alive-signaled\n'
+    return 0
+  else
+    signal_rc=$?
+    return "$signal_rc"
+  fi
 }
 
 assert_writers_stopped() {
   local evidence_file="${1:-$EVIDENCE/preflight/writers.assert-stopped.txt}"
-  local unit state pid
+  local unit state pid rc pid_state probe_rc failed=0 timeout_rc=0
   : >"$evidence_file"
   for unit in "${WRITER_UNITS[@]}"; do
-    if state="$(sudo systemctl is-active "$unit" 2>&1)"; then
-      :
+    if state="$(bounded_sudo systemctl is-active "$unit" 2>&1)"; then
+      rc=0
     else
-      :
+      rc=$?
     fi
-    printf 'unit=%s state=%s\n' "$unit" "$state" \
+    printf 'unit=%s state=%s rc=%s rc_class=%s\n' \
+      "$unit" "$state" "$rc" "$(external_rc_class "$rc")" \
       >>"$evidence_file"
-    test "$state" = inactive
+    if test "$state" != inactive || test "$rc" -ne 3; then
+      failed=1
+      case "$rc" in
+        124|137) test "$timeout_rc" -ne 0 || timeout_rc="$rc" ;;
+      esac
+    fi
   done
   for pid in "${WRITER_PIDS[@]}"; do
-    if sudo kill -0 "$pid" 2>/dev/null; then
-      printf 'pid=%s state=alive\n' "$pid" \
-        >>"$evidence_file"
-      return 1
+    if pid_state="$(root_pid_state "$pid")"; then
+      probe_rc=0
+    else
+      probe_rc=$?
+      pid_state=error
     fi
-    printf 'pid=%s state=absent\n' "$pid" \
+    printf 'pid=%s state=%s probe_rc=%s probe_rc_class=%s\n' \
+      "$pid" "$pid_state" "$probe_rc" "$(external_rc_class "$probe_rc")" \
       >>"$evidence_file"
+    if test "$pid_state" != absent; then
+      failed=1
+      case "$probe_rc" in
+        124|137) test "$timeout_rc" -ne 0 || timeout_rc="$probe_rc" ;;
+      esac
+    fi
   done
+  if test "$timeout_rc" -ne 0; then
+    return "$timeout_rc"
+  fi
+  return "$failed"
 }
 
 stop_all_writers() {
-  local index pid expected actual captured_start deadline kill_deadline
-  local -A captured_start_times=()
-  for index in "${!WRITER_PIDS[@]}"; do
-    pid="${WRITER_PIDS[$index]}"
-    expected="${WRITER_PROCESS_EXES[$index]}"
-    if sudo kill -0 "$pid" 2>/dev/null; then
-      captured_start="$(process_start_time "$pid")"
-      actual="$(sudo readlink -f "/proc/$pid/exe")"
-      test "$(process_start_time "$pid")" = "$captured_start"
-      test "$actual" = "$expected"
-      captured_start_times["$pid"]="$captured_start"
-      printf 'pid=%s exe=%s start_time=%s\n' \
-        "$pid" "$actual" "$captured_start" \
-        >>"$EVIDENCE/preflight/non-systemd-writers.before-stop.txt"
-    fi
-  done
-
-  sudo systemctl stop "${WRITER_UNITS[@]}"
+  local index pid expected captured_start deadline kill_deadline pid_state probe_rc
+  local signal_result
+  bounded_sudo systemctl stop "${WRITER_UNITS[@]}"
   for unit in "${WRITER_UNITS[@]}"; do
-    sudo systemctl reset-failed "$unit"
+    bounded_sudo systemctl reset-failed "$unit"
   done
   for index in "${!WRITER_PIDS[@]}"; do
     pid="${WRITER_PIDS[$index]}"
     expected="${WRITER_PROCESS_EXES[$index]}"
-    if sudo kill -0 "$pid" 2>/dev/null; then
-      captured_start="${captured_start_times[$pid]-}"
-      test -n "$captured_start"
-      signal_same_process TERM "$pid" "$expected" "$captured_start"
+    if pid_state="$(root_pid_state "$pid")"; then
+      probe_rc=0
+    else
+      probe_rc=$?
+      return "$probe_rc"
     fi
+    case "$pid_state" in
+      absent) ;;
+      alive)
+        captured_start="${WRITER_START_TIMES[$pid]-}"
+        test -n "$captured_start"
+        if signal_result="$(signal_same_process TERM "$pid" "$expected" "$captured_start")"; then
+          case "$signal_result" in
+            alive-signaled|absent-no-signal) ;;
+            *) return 1 ;;
+          esac
+        else
+          return $?
+        fi
+        ;;
+      *) return 1 ;;
+    esac
   done
 
   deadline=$(( $(date +%s) + 30 ))
   for index in "${!WRITER_PIDS[@]}"; do
     pid="${WRITER_PIDS[$index]}"
     expected="${WRITER_PROCESS_EXES[$index]}"
-    captured_start="${captured_start_times[$pid]-}"
-    while sudo kill -0 "$pid" 2>/dev/null; do
+    captured_start="${WRITER_START_TIMES[$pid]-}"
+    while :; do
+      if pid_state="$(root_pid_state "$pid")"; then
+        probe_rc=0
+      else
+        probe_rc=$?
+        return "$probe_rc"
+      fi
+      case "$pid_state" in
+        absent) break ;;
+        alive) ;;
+        *) return 1 ;;
+      esac
       if test "$(date +%s)" -ge "$deadline"; then
         test -n "$captured_start"
-        signal_same_process KILL "$pid" "$expected" "$captured_start"
+        if signal_result="$(signal_same_process KILL "$pid" "$expected" "$captured_start")"; then
+          case "$signal_result" in
+            alive-signaled|absent-no-signal) ;;
+            *) return 1 ;;
+          esac
+        else
+          return $?
+        fi
         break
       fi
       sleep 1
@@ -287,13 +502,61 @@ stop_all_writers() {
   done
   kill_deadline=$(( $(date +%s) + 10 ))
   for pid in "${WRITER_PIDS[@]}"; do
-    while sudo kill -0 "$pid" 2>/dev/null; do
+    while :; do
+      if pid_state="$(root_pid_state "$pid")"; then
+        probe_rc=0
+      else
+        probe_rc=$?
+        return "$probe_rc"
+      fi
+      case "$pid_state" in
+        absent) break ;;
+        alive) ;;
+        *) return 1 ;;
+      esac
       test "$(date +%s)" -lt "$kill_deadline"
       sleep 1
     done
   done
   assert_writers_stopped
 }
+
+: >"$EVIDENCE/preflight/non-systemd-writers.captured.txt"
+for index in "${!WRITER_PIDS[@]}"; do
+  pid="${WRITER_PIDS[$index]}"
+  expected="${WRITER_PROCESS_EXES[$index]}"
+  if pid_state="$(root_pid_state "$pid")"; then
+    probe_rc=0
+  else
+    probe_rc=$?
+    pid_state=error
+  fi
+  case "$pid_state" in
+    alive)
+      captured_start="$(process_start_time "$pid")"
+      actual="$(bounded_sudo readlink -f "/proc/$pid/exe")"
+      test "$(process_start_time "$pid")" = "$captured_start"
+      test "$actual" = "$expected"
+      WRITER_START_TIMES["$pid"]="$captured_start"
+      printf 'pid=%s exe=%s start_time=%s state=captured\n' \
+        "$pid" "$actual" "$captured_start" \
+        >>"$EVIDENCE/preflight/non-systemd-writers.captured.txt"
+      ;;
+    absent)
+      printf 'pid=%s exe=%s state=absent\n' "$pid" "$expected" \
+        >>"$EVIDENCE/preflight/non-systemd-writers.captured.txt"
+      ;;
+    *)
+      if test "$probe_rc" -eq 0; then
+        probe_rc=2
+      fi
+      printf 'pid=%s exe=%s state=error probe_rc=%s probe_rc_class=%s\n' \
+        "$pid" "$expected" "$probe_rc" "$(external_rc_class "$probe_rc")" \
+        >>"$EVIDENCE/preflight/non-systemd-writers.captured.txt"
+      exit "$probe_rc"
+      ;;
+  esac
+done
 
 assert_no_database_holders() {
   local evidence_file="${1:-$EVIDENCE/preflight/database-holders.after-stop.txt}"
@@ -305,21 +568,26 @@ assert_no_database_holders() {
       targets+=("$sidecar")
     fi
   done
-  if output="$(sudo fuser "${targets[@]}" 2>&1)"; then
+  if output="$(bounded_sudo fuser "${targets[@]}" 2>&1)"; then
     status=0
   else
     status=$?
   fi
   printf '%s\n' "$output" >"$evidence_file"
-  test "$status" -eq 1
-  test -z "$output"
+  if test "$status" -eq 1 && test -z "$output"; then
+    return 0
+  fi
+  case "$status" in
+    0|1) return 1 ;;
+    *) return "$status" ;;
+  esac
 }
 
 wait_for_lease_expiry() {
   local deadline now_ms
   deadline=$(( $(date +%s) + STOP_LEASE_TIMEOUT_SEC ))
   while :; do
-    "$KANBAN_BIN" --db "$DB" --json maintenance status \
+    bounded_kanban --db "$DB" --json maintenance status \
       >"$EVIDENCE/preflight/maintenance-status.waiting-for-expiry.json"
     now_ms=$(( $(date +%s) * 1000 ))
     if jq -e --argjson now "$now_ms" '
@@ -345,6 +613,58 @@ wait_for_lease_expiry() {
     )
   ' "$EVIDENCE/preflight/maintenance-status.leases-expired.json" \
     >"$EVIDENCE/preflight/leases-expired.ok.txt"
+}
+
+wait_for_exact_maintenance_release() {
+  local output_dir="$1" phase="$2" deadline current rc
+  install -d -m 0700 "$output_dir" || return 1
+  current="$output_dir/$phase.maintenance-status.current.json"
+  deadline=$(( $(date +%s) + STOP_LEASE_TIMEOUT_SEC ))
+  while :; do
+    if bounded_kanban --db "$DB" --json maintenance status >"$current"; then
+      :
+    else
+      rc=$?
+      return "$rc"
+    fi
+    if jq -e '
+      .data.maintenance_owner.active == false and
+      .data.maintenance_owner.owner == null and
+      .data.maintenance_owner.mode == null and
+      .data.maintenance_owner.capabilities == [] and
+      .data.maintenance_owner.build_identity == null and
+      .data.maintenance_owner.lease_expires_at == null and
+      .data.maintenance_owner.last_heartbeat_at == null and
+      (.data.stores | length) == 4 and
+      ([.data.stores[].store_name] | sort) ==
+        ["lancedb_chunks","lancedb_label_atoms",
+         "oxigraph_relations","tantivy_tasks"] and
+      all(.data.stores[];
+        .owner == null and .lease_expires_at == null
+      )
+    ' "$current" >/dev/null; then
+      break
+    fi
+    if test "$(date +%s)" -ge "$deadline"; then
+      cp --no-preserve=mode "$current" \
+        "$output_dir/$phase.maintenance-status.timeout.json" 2>/dev/null
+      return 1
+    fi
+    sleep 1 || return 1
+  done
+  cp --no-preserve=mode "$current" \
+    "$output_dir/$phase.maintenance-status.released.json" || return 1
+  jq -e '
+    .data.maintenance_owner.active == false and
+    .data.maintenance_owner.owner == null and
+    .data.maintenance_owner.mode == null and
+    .data.maintenance_owner.capabilities == [] and
+    .data.maintenance_owner.build_identity == null and
+    .data.maintenance_owner.lease_expires_at == null and
+    .data.maintenance_owner.last_heartbeat_at == null and
+    all(.data.stores[]; .owner == null and .lease_expires_at == null)
+  ' "$output_dir/$phase.maintenance-status.released.json" \
+    >"$output_dir/$phase.exact-idle.ok.txt"
 }
 ~~~
 
@@ -446,7 +766,7 @@ assert_release_binding() {
   generation="$(jq -r '.generation_key' "$source")"
   build_id="$(jq -r '.build_id' "$source")"
   test "$(basename "$COHORT")" = "$generation"
-  python3 "$REPO/scripts/release-safe-path.py" validate-published-dir \
+  bounded_external python3 "$REPO/scripts/release-safe-path.py" validate-published-dir \
     --root "$(dirname "$COHORT")" --path "$COHORT" --marker "$marker"
   printf 'marker=%s\nvalidated=true\n' "$marker" \
     >"$dir/published-marker-tree.ok.txt"
@@ -499,13 +819,13 @@ assert_release_binding() {
       >>"$dir/artifact-bindings.tsv"
   done
 
-  "$VECTOR_HELPER" __build-identity \
+  bounded_vector_helper __build-identity \
     >"$dir/vector-helper.build-identity.txt"
-  "$GRAPH_HELPER" __build-identity \
+  bounded_graph_helper __build-identity \
     >"$dir/graph-helper.build-identity.txt"
   test "$(tr -d '\n' <"$dir/vector-helper.build-identity.txt")" = "$build_id"
   test "$(tr -d '\n' <"$dir/graph-helper.build-identity.txt")" = "$build_id"
-  "$KANBAN_BIN" --version >"$dir/kanban.version.txt"
+  bounded_kanban --version >"$dir/kanban.version.txt"
   printf '%s\n' "$build_id" >"$dir/expected-build-identity.txt"
 }
 
@@ -516,11 +836,11 @@ assert_release_binding pre-mutation
 待恢复状态，所以不能用当前 derived readiness 反向定义预期 binding。
 
 ~~~bash
-"$KANBAN_BIN" --db "$DB" --json maintenance status \
+bounded_kanban --db "$DB" --json maintenance status \
   >"$EVIDENCE/preflight/maintenance-status.before-stop.json"
-"$KANBAN_BIN" --db "$DB" --json doctor \
+bounded_kanban --db "$DB" --json doctor \
   >"$EVIDENCE/preflight/doctor.before-stop.json"
-"$KANBAN_BIN" --db "$DB" --json outbox list --limit 1000 \
+bounded_kanban --db "$DB" --json outbox list --limit 1000 \
   >"$EVIDENCE/preflight/outbox.before-stop.json"
 jq -e '
   .data.integrity_check == "ok" and
@@ -543,18 +863,18 @@ assert_no_database_holders
 wait_for_lease_expiry
 assert_writers_stopped
 
-"$KANBAN_BIN" --db "$DB" --json maintenance status \
+bounded_kanban --db "$DB" --json maintenance status \
   >"$EVIDENCE/preflight/maintenance-status.after-stop.json"
-"$KANBAN_BIN" --db "$DB" --json doctor \
+bounded_kanban --db "$DB" --json doctor \
   >"$EVIDENCE/preflight/doctor.after-stop.json"
-"$KANBAN_BIN" --db "$DB" --json outbox list --limit 1000 \
+bounded_kanban --db "$DB" --json outbox list --limit 1000 \
   >"$EVIDENCE/preflight/outbox.after-stop.json"
 ~~~
 
 用正常 CLI checkpoint，硬性要求 `busy=0`。失败时不要删除 WAL/SHM。
 
 ~~~bash
-"$KANBAN_BIN" --db "$DB" --json checkpoint \
+bounded_kanban --db "$DB" --json checkpoint \
   | tee "$EVIDENCE/checkpoint/checkpoint.json"
 jq -e '.data.busy == 0' "$EVIDENCE/checkpoint/checkpoint.json" \
   >"$EVIDENCE/checkpoint/checkpoint.busy.ok.txt"
@@ -573,7 +893,7 @@ checkpoint 成功后才创建新的 canonical backup。backup 和 hash 均明确
 
 ~~~bash
 test ! -e "$EVIDENCE/backup/canonical.sqlite"
-"$KANBAN_BIN" --db "$DB" --json backup \
+bounded_kanban --db "$DB" --json backup \
   --out "$EVIDENCE/backup/canonical.sqlite" \
   | tee "$EVIDENCE/backup/backup.json"
 chmod 0600 "$EVIDENCE/backup/canonical.sqlite"
@@ -586,7 +906,8 @@ chmod 0600 "$EVIDENCE/backup/canonical.sqlite.sha256"
   cd "$EVIDENCE/backup"
   sha256sum --check canonical.sqlite.sha256
 ) | tee "$EVIDENCE/backup/canonical.sqlite.sha256.check.txt"
-sqlite3 -readonly "$EVIDENCE/backup/canonical.sqlite" 'PRAGMA integrity_check;' \
+bounded_sqlite -readonly "$EVIDENCE/backup/canonical.sqlite" \
+  'PRAGMA integrity_check;' \
   | tee "$EVIDENCE/backup/integrity_check.txt"
 test "$(tr -d '[:space:]' <"$EVIDENCE/backup/integrity_check.txt")" = ok
 test "$(stat -c '%a' "$EVIDENCE/backup/canonical.sqlite")" = 600
@@ -602,7 +923,7 @@ backup 后、任何 rebuild 前继续使用只读 legacy inventory；保存精�
 WAL/journal 会令 inventory fail closed；不要删 sidecar，也不要提前调用 cleanup apply。
 
 ~~~bash
-"$KANBAN_BIN" --db "$DB" --json maintenance cleanup-legacy inventory \
+bounded_kanban --db "$DB" --json maintenance cleanup-legacy inventory \
   | tee "$EVIDENCE/preflight/legacy-inventory.json"
 LEGACY_DIGEST="$(
   jq -er '.data.inventory_digest | select(length > 0)' \
@@ -632,11 +953,11 @@ chmod 0600 "$EVIDENCE/restore-drill/kb.db.sha256"
 test "$(awk '{print $1}' "$EVIDENCE/backup/canonical.sqlite.sha256")" = \
   "$(awk '{print $1}' "$EVIDENCE/restore-drill/kb.db.sha256")"
 
-"$KANBAN_BIN" --db "$DRILL_DB" --json doctor \
+bounded_kanban --db "$DRILL_DB" --json doctor \
   | tee "$EVIDENCE/restore-drill/doctor.json"
-"$KANBAN_BIN" --db "$DRILL_DB" --json maintenance status \
+bounded_kanban --db "$DRILL_DB" --json maintenance status \
   | tee "$EVIDENCE/restore-drill/maintenance-status.json"
-"$KANBAN_BIN" --db "$DRILL_DB" --json outbox list --limit 1000 \
+bounded_kanban --db "$DRILL_DB" --json outbox list --limit 1000 \
   >"$EVIDENCE/restore-drill/outbox.json"
 jq -e '
   .data.integrity_check == "ok" and
@@ -646,7 +967,7 @@ jq -e '
 ' "$EVIDENCE/restore-drill/doctor.json" \
   >"$EVIDENCE/restore-drill/doctor.canonical.ok.txt"
 
-"$KANBAN_BIN" --db "$DB" --json board list --include-archived \
+bounded_kanban --db "$DB" --json board list --include-archived \
   | tee "$EVIDENCE/restore-drill/boards.production.json"
 jq -e '[.data[] | select(.archived_at == null)] | length == 9' \
   "$EVIDENCE/restore-drill/boards.production.json" \
@@ -656,9 +977,9 @@ jq -r '.data[] | select(.archived_at == null) | [.slug,.id] | @tsv' \
   >"$EVIDENCE/restore-drill/boards.tsv"
 
 while IFS=$'\t' read -r BOARD BOARD_ID; do
-  "$KANBAN_BIN" --db "$DB" --board "$BOARD" --json stats \
+  bounded_kanban --db "$DB" --board "$BOARD" --json stats \
     >"$EVIDENCE/restore-drill/stats.production.$BOARD.json"
-  "$KANBAN_BIN" --db "$DRILL_DB" --board "$BOARD" --json stats \
+  bounded_kanban --db "$DRILL_DB" --board "$BOARD" --json stats \
     >"$EVIDENCE/restore-drill/stats.restore.$BOARD.json"
   jq 'del(.data.generated_at)' \
     "$EVIDENCE/restore-drill/stats.production.$BOARD.json" \
@@ -844,7 +1165,7 @@ assert_final_store_state() {
     >"$diff_file"
 }
 
-"$KANBAN_BIN" --db "$DB" --json maintenance status \
+bounded_kanban --db "$DB" --json maintenance status \
   | tee "$EVIDENCE/compatibility/maintenance-status.pre-admissibility.json"
 DB_INSTANCE_ID="$(
   jq -er '.data.database_instance_id' \
@@ -854,7 +1175,7 @@ assert_status_shape \
   "$EVIDENCE/compatibility/maintenance-status.pre-admissibility.json" \
   "$EVIDENCE/compatibility/pre-admissibility.status-shape.ok.txt" \
   "$DB_INSTANCE_ID"
-sqlite3 -readonly "$DB" 'PRAGMA user_version;' \
+bounded_sqlite -readonly "$DB" 'PRAGMA user_version;' \
   | tee "$EVIDENCE/compatibility/sqlite.user_version.txt"
 test "$(tr -d '[:space:]' <"$EVIDENCE/compatibility/sqlite.user_version.txt")" = 30
 assert_writers_stopped
@@ -885,7 +1206,7 @@ test "$(IFS=,; printf '%s' "${REBUILD_STORES[*]}")" = \
 
 for store in "${REBUILD_STORES[@]}"; do
   assert_writers_stopped
-  "$KANBAN_BIN" --db "$DB" --json maintenance status \
+  bounded_kanban --db "$DB" --json maintenance status \
     >"$EVIDENCE/compatibility/status.before-dry-run.$store.json"
   building="$(
     jq -r --arg store "$store" \
@@ -896,14 +1217,14 @@ for store in "${REBUILD_STORES[@]}"; do
     mode=fresh
     expected_action=dry_run_rebuild
     rebuild_args=(
-      "$KANBAN_BIN" --db "$DB" --actor production-recovery --json
+      bounded_kanban --db "$DB" --actor production-recovery --json
       maintenance rebuild "$store" --dry-run
     )
   else
     mode=resume
     expected_action=dry_run_resume
     rebuild_args=(
-      "$KANBAN_BIN" --db "$DB" --actor production-recovery --json
+      bounded_kanban --db "$DB" --actor production-recovery --json
       maintenance rebuild "$store" --resume --dry-run
     )
   fi
@@ -949,13 +1270,13 @@ for store in "${REBUILD_STORES[@]}"; do
   case "$mode" in
     fresh)
       rebuild_args=(
-        "$KANBAN_BIN" --db "$DB" --actor production-recovery --json
+        bounded_kanban --db "$DB" --actor production-recovery --json
         maintenance rebuild "$store"
       )
       ;;
     resume)
       rebuild_args=(
-        "$KANBAN_BIN" --db "$DB" --actor production-recovery --json
+        bounded_kanban --db "$DB" --actor production-recovery --json
         maintenance rebuild "$store" --resume
       )
       ;;
@@ -972,15 +1293,15 @@ for store in "${REBUILD_STORES[@]}"; do
     .[0].result.status == "succeeded"
   ' "$EVIDENCE/compatibility/rebuild.$store.json" \
     >"$EVIDENCE/compatibility/rebuild.$store.ok.txt"
-  "$KANBAN_BIN" --db "$DB" --json maintenance status \
+  bounded_kanban --db "$DB" --json maintenance status \
     >"$EVIDENCE/compatibility/status.after.$store.json"
-  "$KANBAN_BIN" --db "$DB" --json outbox list --limit 1000 \
+  bounded_kanban --db "$DB" --json outbox list --limit 1000 \
     >"$EVIDENCE/compatibility/outbox.after.$store.json"
   wait_for_lease_expiry
   assert_writers_stopped
 done
 
-"$KANBAN_BIN" --db "$DB" --json maintenance status \
+bounded_kanban --db "$DB" --json maintenance status \
   | tee "$EVIDENCE/compatibility/maintenance-status.after-rebuild.json"
 assert_final_store_state after-rebuild \
   "$EVIDENCE/compatibility/maintenance-status.after-rebuild.json"
@@ -1000,55 +1321,479 @@ singleton lease、fresh heartbeat、同 cohort build identity、精确四项 cap
 四个 store 都由当前 runtime 提供。`hard_stop` 和 `ERR` trap 必须在第一次
 `systemctl start` 之前安装；此 trap 从 owner readiness 开始，连续覆盖 helper 检查、
 全部 canary、SLA、restart、post-restart mutation、最终 doctor/binding/matrix/delivery
-以及 cleanup 后的重新验收，中间不得卸载。
+以及 cleanup 后的重新验收，中间不得卸载。`hard_stop` 首先永久卸载当前 shell 的
+`ERR` trap，避免递归；随后停止全部 unit，并只对原始捕获 identity 仍匹配的非 systemd
+writer 执行 TERM → timeout → KILL。identity drift 永远只记录、不 signal。最后必须精确
+证明全部 writer inactive/absent、数据库无 holder、singleton 与四项 store lease exact
+idle；任一单个 stop、probe 或证据命令 timeout 都累计失败，但仍继续其余 target 和
+cleanup。status/doctor/outbox 证据采集结束后，必须紧邻 result 再次执行 bounded
+writer、database-holder 和 exact-idle 三项断言，封闭诊断窗口内 writer 重启的竞态；
+任一清理或证据命令失败仍保留已有证据并以失败关闭。
 
 ~~~bash
+hard_stop_non_systemd_writers() {
+  local evidence_file="$1" index pid expected captured rc pid_state
+  local probe_rc identity_rc deadline kill_deadline failed=0 timeout_rc=0
+  local signal_result
+  : >"$evidence_file" || return 1
+
+  for index in "${!WRITER_PIDS[@]}"; do
+    pid="${WRITER_PIDS[$index]}"
+    expected="${WRITER_PROCESS_EXES[$index]}"
+    if pid_state="$(root_pid_state "$pid")"; then
+      probe_rc=0
+    else
+      probe_rc=$?
+      pid_state=error
+    fi
+    case "$pid_state" in
+      absent)
+        printf 'pid=%s exe=%s state=absent signal=none\n' \
+          "$pid" "$expected" >>"$evidence_file"
+        continue
+        ;;
+      error)
+        printf 'pid=%s exe=%s state=error signal=none probe_rc=%s probe_rc_class=%s\n' \
+          "$pid" "$expected" "$probe_rc" \
+          "$(external_rc_class "$probe_rc")" >>"$evidence_file"
+        case "$probe_rc" in
+          124|137) test "$timeout_rc" -ne 0 || timeout_rc="$probe_rc" ;;
+        esac
+        failed=1
+        continue
+        ;;
+      alive) ;;
+      *)
+        printf 'pid=%s exe=%s state=error signal=none\n' \
+          "$pid" "$expected" >>"$evidence_file"
+        failed=1
+        continue
+        ;;
+    esac
+    captured="${WRITER_START_TIMES[$pid]-}"
+    if test -z "$captured"; then
+      printf 'pid=%s exe=%s state=alive identity=uncaptured signal=none\n' \
+        "$pid" "$expected" >>"$evidence_file"
+      failed=1
+      continue
+    fi
+    if assert_same_process_identity "$pid" "$expected" "$captured"; then
+      :
+    else
+      identity_rc=$?
+      printf 'pid=%s exe=%s start_time=%s state=alive identity=drift-or-error signal=none rc=%s rc_class=%s\n' \
+        "$pid" "$expected" "$captured" "$identity_rc" \
+        "$(external_rc_class "$identity_rc")" >>"$evidence_file"
+      case "$identity_rc" in
+        124|137) test "$timeout_rc" -ne 0 || timeout_rc="$identity_rc" ;;
+      esac
+      failed=1
+      continue
+    fi
+    if signal_result="$(signal_same_process TERM "$pid" "$expected" "$captured")"; then
+      case "$signal_result" in
+        alive-signaled)
+          printf 'pid=%s exe=%s start_time=%s identity=match signal=TERM\n' \
+            "$pid" "$expected" "$captured" >>"$evidence_file"
+          ;;
+        absent-no-signal)
+          printf 'pid=%s exe=%s state=absent signal=none\n' \
+            "$pid" "$expected" >>"$evidence_file"
+          ;;
+        *)
+          printf 'pid=%s exe=%s start_time=%s identity=unverified signal=none result=%s\n' \
+            "$pid" "$expected" "$captured" "$signal_result" >>"$evidence_file"
+          failed=1
+          ;;
+      esac
+    else
+      rc=$?
+      printf 'pid=%s exe=%s start_time=%s identity=unverified signal=none rc=%s rc_class=%s\n' \
+        "$pid" "$expected" "$captured" "$rc" \
+        "$(external_rc_class "$rc")" >>"$evidence_file"
+      case "$rc" in
+        124|137) test "$timeout_rc" -ne 0 || timeout_rc="$rc" ;;
+      esac
+      failed=1
+    fi
+  done
+
+  deadline=$(( $(date +%s) + 30 ))
+  for index in "${!WRITER_PIDS[@]}"; do
+    pid="${WRITER_PIDS[$index]}"
+    expected="${WRITER_PROCESS_EXES[$index]}"
+    captured="${WRITER_START_TIMES[$pid]-}"
+    while :; do
+      if pid_state="$(root_pid_state "$pid")"; then
+        probe_rc=0
+      else
+        probe_rc=$?
+        printf 'pid=%s exe=%s state=error phase=term-wait signal=none probe_rc=%s probe_rc_class=%s\n' \
+          "$pid" "$expected" "$probe_rc" \
+          "$(external_rc_class "$probe_rc")" >>"$evidence_file"
+        case "$probe_rc" in
+          124|137) test "$timeout_rc" -ne 0 || timeout_rc="$probe_rc" ;;
+        esac
+        failed=1
+        break
+      fi
+      case "$pid_state" in
+        absent) break ;;
+        alive) ;;
+        *)
+          printf 'pid=%s exe=%s state=error phase=term-wait signal=none\n' \
+            "$pid" "$expected" >>"$evidence_file"
+          failed=1
+          break
+          ;;
+      esac
+      if test -z "$captured"; then
+        failed=1
+        break
+      fi
+      if assert_same_process_identity "$pid" "$expected" "$captured"; then
+        :
+      else
+        identity_rc=$?
+        printf 'pid=%s exe=%s start_time=%s state=alive identity=drift-or-error signal=none rc=%s rc_class=%s\n' \
+          "$pid" "$expected" "$captured" "$identity_rc" \
+          "$(external_rc_class "$identity_rc")" >>"$evidence_file"
+        case "$identity_rc" in
+          124|137) test "$timeout_rc" -ne 0 || timeout_rc="$identity_rc" ;;
+        esac
+        failed=1
+        break
+      fi
+      if test "$(date +%s)" -ge "$deadline"; then
+        if signal_result="$(signal_same_process KILL "$pid" "$expected" "$captured")"; then
+          case "$signal_result" in
+            alive-signaled)
+              printf 'pid=%s exe=%s start_time=%s identity=match signal=KILL\n' \
+                "$pid" "$expected" "$captured" >>"$evidence_file"
+              ;;
+            absent-no-signal)
+              printf 'pid=%s exe=%s state=absent signal=none\n' \
+                "$pid" "$expected" >>"$evidence_file"
+              ;;
+            *)
+              printf 'pid=%s exe=%s start_time=%s identity=unverified signal=none result=%s\n' \
+                "$pid" "$expected" "$captured" "$signal_result" >>"$evidence_file"
+              failed=1
+              ;;
+          esac
+        else
+          rc=$?
+          printf 'pid=%s exe=%s start_time=%s identity=unverified signal=none rc=%s rc_class=%s\n' \
+            "$pid" "$expected" "$captured" "$rc" \
+            "$(external_rc_class "$rc")" >>"$evidence_file"
+          case "$rc" in
+            124|137) test "$timeout_rc" -ne 0 || timeout_rc="$rc" ;;
+          esac
+          failed=1
+        fi
+        break
+      fi
+      if ! sleep 1; then
+        failed=1
+        break
+      fi
+    done
+  done
+
+  kill_deadline=$(( $(date +%s) + 10 ))
+  for index in "${!WRITER_PIDS[@]}"; do
+    pid="${WRITER_PIDS[$index]}"
+    expected="${WRITER_PROCESS_EXES[$index]}"
+    captured="${WRITER_START_TIMES[$pid]-}"
+    while :; do
+      if pid_state="$(root_pid_state "$pid")"; then
+        probe_rc=0
+      else
+        probe_rc=$?
+        printf 'pid=%s exe=%s state=error phase=kill-wait signal=none probe_rc=%s probe_rc_class=%s\n' \
+          "$pid" "$expected" "$probe_rc" \
+          "$(external_rc_class "$probe_rc")" >>"$evidence_file"
+        case "$probe_rc" in
+          124|137) test "$timeout_rc" -ne 0 || timeout_rc="$probe_rc" ;;
+        esac
+        failed=1
+        break
+      fi
+      case "$pid_state" in
+        absent) break ;;
+        alive) ;;
+        *)
+          printf 'pid=%s exe=%s state=error phase=kill-wait signal=none\n' \
+            "$pid" "$expected" >>"$evidence_file"
+          failed=1
+          break
+          ;;
+      esac
+      if test -z "$captured"; then
+        failed=1
+        break
+      fi
+      if assert_same_process_identity "$pid" "$expected" "$captured"; then
+        :
+      else
+        identity_rc=$?
+        printf 'pid=%s exe=%s start_time=%s state=alive identity=drift-or-error signal=none rc=%s rc_class=%s\n' \
+          "$pid" "$expected" "$captured" "$identity_rc" \
+          "$(external_rc_class "$identity_rc")" >>"$evidence_file"
+        case "$identity_rc" in
+          124|137) test "$timeout_rc" -ne 0 || timeout_rc="$identity_rc" ;;
+        esac
+        failed=1
+        break
+      fi
+      if test "$(date +%s)" -ge "$kill_deadline"; then
+        failed=1
+        break
+      fi
+      if ! sleep 1; then
+        failed=1
+        break
+      fi
+    done
+    if pid_state="$(root_pid_state "$pid")"; then
+      probe_rc=0
+    else
+      probe_rc=$?
+      pid_state=error
+    fi
+    case "$pid_state" in
+      absent)
+        printf 'pid=%s exe=%s state=absent final=stopped\n' \
+          "$pid" "$expected" >>"$evidence_file"
+        ;;
+      alive|error)
+        printf 'pid=%s exe=%s state=%s final=failed probe_rc=%s probe_rc_class=%s\n' \
+          "$pid" "$expected" "$pid_state" "$probe_rc" \
+          "$(external_rc_class "$probe_rc")" >>"$evidence_file"
+        case "$probe_rc" in
+          124|137) test "$timeout_rc" -ne 0 || timeout_rc="$probe_rc" ;;
+        esac
+        failed=1
+        ;;
+      *)
+        printf 'pid=%s exe=%s state=error final=failed\n' \
+          "$pid" "$expected" >>"$evidence_file"
+        failed=1
+        ;;
+    esac
+  done
+  if test "$timeout_rc" -ne 0; then
+    return "$timeout_rc"
+  fi
+  return "$failed"
+}
+
 hard_stop() {
-  local reason="$1" unit state
+  local reason="$1" unit state rc failed=0
   trap - ERR
+  set +E
   set +e
+  if test "${HARD_STOP_ACTIVE:-0}" -eq 1; then
+    exit 1
+  fi
+  HARD_STOP_ACTIVE=1
   printf 'reason=%s epoch=%s\n' "$reason" "$(date +%s)" \
     >"$EVIDENCE/sla/hard-stop.reason.txt"
-  sudo systemctl stop "${WRITER_UNITS[@]}"
+  : >"$EVIDENCE/sla/hard-stop.units.txt"
+  : >"$EVIDENCE/sla/hard-stop.commands.txt"
   for unit in "${WRITER_UNITS[@]}"; do
-    sudo systemctl reset-failed "$unit"
-    state="$(sudo systemctl is-active "$unit" 2>&1)"
-    printf 'unit=%s state=%s\n' "$unit" "$state" \
+    if bounded_sudo systemctl stop "$unit"; then
+      rc=0
+    else
+      rc=$?
+    fi
+    printf 'unit=%s action=stop rc=%s rc_class=%s\n' \
+      "$unit" "$rc" "$(external_rc_class "$rc")" \
       >>"$EVIDENCE/sla/hard-stop.units.txt"
+    if test "$rc" -ne 0; then
+      failed=1
+    fi
+    if bounded_sudo systemctl reset-failed "$unit"; then
+      rc=0
+    else
+      rc=$?
+    fi
+    printf 'unit=%s action=reset-failed rc=%s rc_class=%s\n' \
+      "$unit" "$rc" "$(external_rc_class "$rc")" \
+      >>"$EVIDENCE/sla/hard-stop.units.txt"
+    if test "$rc" -ne 0; then
+      failed=1
+    fi
+    if state="$(bounded_sudo systemctl is-active "$unit" 2>&1)"; then
+      rc=0
+    else
+      rc=$?
+    fi
+    printf 'unit=%s state=%s is-active-rc=%s rc_class=%s\n' \
+      "$unit" "$state" "$rc" "$(external_rc_class "$rc")" \
+      >>"$EVIDENCE/sla/hard-stop.units.txt"
+    if test "$state" != inactive || test "$rc" -ne 3; then
+      failed=1
+    fi
   done
-  "$KANBAN_BIN" --db "$DB" --json maintenance status \
-    >"$EVIDENCE/sla/hard-stop.maintenance-status.json"
-  "$KANBAN_BIN" --db "$DB" --json doctor \
-    >"$EVIDENCE/sla/hard-stop.doctor.json"
-  "$KANBAN_BIN" --db "$DB" --json outbox list --limit 1000 \
-    >"$EVIDENCE/sla/hard-stop.outbox.json"
+  if hard_stop_non_systemd_writers \
+    "$EVIDENCE/sla/hard-stop.non-systemd-writers.txt"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  printf 'target=non-systemd-writers rc=%s rc_class=%s\n' \
+    "$rc" "$(external_rc_class "$rc")" \
+    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "$rc" -ne 0; then
+    failed=1
+  fi
+  if assert_writers_stopped \
+    "$EVIDENCE/sla/hard-stop.writers.assert-stopped.txt"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  printf 'target=writers-initial rc=%s rc_class=%s\n' \
+    "$rc" "$(external_rc_class "$rc")" \
+    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "$rc" -ne 0; then
+    failed=1
+  fi
+  if assert_no_database_holders \
+    "$EVIDENCE/sla/hard-stop.database-holders.txt"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  printf 'target=database-holders-initial rc=%s rc_class=%s\n' \
+    "$rc" "$(external_rc_class "$rc")" \
+    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "$rc" -ne 0; then
+    failed=1
+  fi
+  if wait_for_exact_maintenance_release "$EVIDENCE/sla" hard-stop; then
+    rc=0
+  else
+    rc=$?
+  fi
+  printf 'target=maintenance-exact-idle-initial rc=%s rc_class=%s\n' \
+    "$rc" "$(external_rc_class "$rc")" \
+    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "$rc" -ne 0; then
+    failed=1
+  fi
+  if bounded_kanban --db "$DB" --json maintenance status \
+    >"$EVIDENCE/sla/hard-stop.maintenance-status.json"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  printf 'target=maintenance-status rc=%s rc_class=%s\n' \
+    "$rc" "$(external_rc_class "$rc")" \
+    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "$rc" -ne 0; then
+    failed=1
+  fi
+  if bounded_kanban --db "$DB" --json doctor \
+    >"$EVIDENCE/sla/hard-stop.doctor.json"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  printf 'target=doctor rc=%s rc_class=%s\n' \
+    "$rc" "$(external_rc_class "$rc")" \
+    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "$rc" -ne 0; then
+    failed=1
+  fi
+  if bounded_kanban --db "$DB" --json outbox list --limit 1000 \
+    >"$EVIDENCE/sla/hard-stop.outbox.json"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  printf 'target=outbox rc=%s rc_class=%s\n' \
+    "$rc" "$(external_rc_class "$rc")" \
+    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "$rc" -ne 0; then
+    failed=1
+  fi
+  if assert_writers_stopped \
+    "$EVIDENCE/sla/hard-stop.final.writers.assert-stopped.txt"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  printf 'target=writers-final rc=%s rc_class=%s\n' \
+    "$rc" "$(external_rc_class "$rc")" \
+    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "$rc" -ne 0; then
+    failed=1
+  fi
+  if assert_no_database_holders \
+    "$EVIDENCE/sla/hard-stop.final.database-holders.txt"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  printf 'target=database-holders-final rc=%s rc_class=%s\n' \
+    "$rc" "$(external_rc_class "$rc")" \
+    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "$rc" -ne 0; then
+    failed=1
+  fi
+  if wait_for_exact_maintenance_release "$EVIDENCE/sla" hard-stop-final; then
+    rc=0
+  else
+    rc=$?
+  fi
+  printf 'target=maintenance-exact-idle-final rc=%s rc_class=%s\n' \
+    "$rc" "$(external_rc_class "$rc")" \
+    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "$rc" -ne 0; then
+    failed=1
+  fi
+  printf 'cleanup_complete=%s exit=1\n' "$(( failed == 0 ))" \
+    >"$EVIDENCE/sla/hard-stop.result.txt"
   exit 1
 }
 
 trap 'hard_stop "fatal-command-error line=$LINENO"' ERR
 
 assert_non_owner_writers_stopped() {
-  local unit state
+  local unit state rc pid pid_state probe_rc
   for unit in "${WRITER_UNITS[@]}"; do
     if test "$unit" = "$MAINTENANCE_UNIT"; then
       continue
     fi
-    if state="$(sudo systemctl is-active "$unit" 2>&1)"; then
-      :
+    if state="$(bounded_sudo systemctl is-active "$unit" 2>&1)"; then
+      rc=0
     else
-      :
+      rc=$?
     fi
-    test "$state" = inactive
+    if test "$state" != inactive || test "$rc" -ne 3; then
+      case "$rc" in
+        124|137) return "$rc" ;;
+        *) return 1 ;;
+      esac
+    fi
   done
   for pid in "${WRITER_PIDS[@]}"; do
-    ! sudo kill -0 "$pid" 2>/dev/null
+    if pid_state="$(root_pid_state "$pid")"; then
+      probe_rc=0
+    else
+      probe_rc=$?
+      return "$probe_rc"
+    fi
+    test "$pid_state" = absent
   done
 }
 
 assert_live_unit_binding() {
   local pid="$1" output_file="$2"
   [[ "$pid" =~ ^[1-9][0-9]*$ ]]
-  sudo python3 - "$pid" "$KANBAN_BIN" \
+  bounded_sudo python3 - "$pid" "$KANBAN_BIN" \
     "$KANBAN_VECTOR_HELPER" "$KANBAN_GRAPH_HELPER" \
     >"$output_file" <<'PY'
 import json
@@ -1086,13 +1831,14 @@ PY
 
 assert_non_owner_writers_stopped
 OWNER_START_MS=$(( $(date +%s) * 1000 ))
-sudo systemctl start "$MAINTENANCE_UNIT"
+bounded_sudo systemctl start "$MAINTENANCE_UNIT"
 OWNER_START_DEADLINE=$(( $(date +%s) + OWNER_START_TIMEOUT_SEC ))
 while :; do
   OWNER_PID="$(
-    sudo systemctl show "$MAINTENANCE_UNIT" --property=MainPID --value
+    bounded_sudo systemctl show "$MAINTENANCE_UNIT" \
+      --property=MainPID --value
   )"
-  "$KANBAN_BIN" --db "$DB" --json maintenance status \
+  bounded_kanban --db "$DB" --json maintenance status \
     >"$EVIDENCE/canaries/owner-start.status.current.json"
   now_ms=$(( $(date +%s) * 1000 ))
   if [[ "$OWNER_PID" =~ ^[1-9][0-9]*$ ]] &&
@@ -1121,7 +1867,7 @@ done
 cp --no-preserve=mode "$EVIDENCE/canaries/owner-start.status.current.json" \
   "$EVIDENCE/canaries/owner-start.status.ready.json"
 printf '%s\n' "$OWNER_PID" >"$EVIDENCE/canaries/owner-start.main-pid.txt"
-sudo systemctl is-active --quiet "$MAINTENANCE_UNIT"
+bounded_sudo systemctl is-active --quiet "$MAINTENANCE_UNIT"
 assert_non_owner_writers_stopped
 assert_live_unit_binding "$OWNER_PID" \
   "$EVIDENCE/canaries/owner-start.live-helper-environment.redacted.json"
@@ -1134,7 +1880,7 @@ label-semantics mutation。每个 board 在 mutation 前后使用 `sqlite3 -read
 保存精确 event/outbox/delivery ID；这里只读查询 canonical control data，不写数据库。
 
 ~~~bash
-"$KANBAN_BIN" --db "$DB" --json board list --include-archived \
+bounded_kanban --db "$DB" --json board list --include-archived \
   | tee "$EVIDENCE/canaries/boards.json"
 jq -e '[.data[] | select(.archived_at == null)] | length == 9' \
   "$EVIDENCE/canaries/boards.json" \
@@ -1152,7 +1898,7 @@ while IFS=$'\t' read -r BOARD BOARD_ID; do
   LABEL_NAME="projection-v2-label-canary-$RECOVERY_ID-$BOARD"
   LABEL_TEXT="projv2labelatomcanary${RECOVERY_ID//[^A-Za-z0-9]/}${BOARD//[^A-Za-z0-9]/}"
 
-  "$KANBAN_BIN" --db "$DB" --board "$BOARD" \
+  bounded_kanban --db "$DB" --board "$BOARD" \
     --actor production-recovery --json \
     task create "$TASK_TEXT" --description "$TASK_TEXT canonical task canary" \
     >"$EVIDENCE/canaries/$BOARD.task-create.json"
@@ -1168,7 +1914,7 @@ while IFS=$'\t' read -r BOARD BOARD_ID; do
   )"
   [[ "$TASK_ID" =~ ^t_[A-Za-z0-9]+$ ]]
 
-  sqlite3 -readonly -json "$DB" "
+  bounded_sqlite -readonly -json "$DB" "
     SELECT
       e.id AS event_row_id,e.event_id,o.id AS outbox_id,
       d.id AS delivery_id,d.store_name,d.board_id,d.source_event_id,
@@ -1200,7 +1946,7 @@ while IFS=$'\t' read -r BOARD BOARD_ID; do
   ' "$EVIDENCE/canaries/$BOARD.task-delivery-ids.json" \
     >"$EVIDENCE/canaries/$BOARD.task-delivery-ids.ok.txt"
 
-  "$KANBAN_BIN" --db "$DB" --board "$BOARD" \
+  bounded_kanban --db "$DB" --board "$BOARD" \
     --actor production-recovery --json \
     label create "$LABEL_NAME" \
     >"$EVIDENCE/canaries/$BOARD.label-create.json"
@@ -1211,7 +1957,7 @@ while IFS=$'\t' read -r BOARD BOARD_ID; do
   ' "$EVIDENCE/canaries/$BOARD.label-create.json" \
     >"$EVIDENCE/canaries/$BOARD.label-identity.ok.txt"
 
-  sqlite3 -readonly -json "$DB" \
+  bounded_sqlite -readonly -json "$DB" \
     'SELECT COALESCE(MAX(id),0) AS max_id FROM index_outbox;' \
     >"$EVIDENCE/canaries/$BOARD.label-outbox-baseline.json"
   LABEL_OUTBOX_BASELINE="$(
@@ -1220,7 +1966,7 @@ while IFS=$'\t' read -r BOARD BOARD_ID; do
   )"
   [[ "$LABEL_OUTBOX_BASELINE" =~ ^[0-9]+$ ]]
 
-  "$KANBAN_BIN" --db "$DB" --board "$BOARD" \
+  bounded_kanban --db "$DB" --board "$BOARD" \
     --actor production-recovery --json \
     label semantics upsert "$LABEL_NAME" --replace \
       --description "$LABEL_TEXT" \
@@ -1237,7 +1983,7 @@ while IFS=$'\t' read -r BOARD BOARD_ID; do
   ' "$EVIDENCE/canaries/$BOARD.label-semantics-upsert.json" \
     >"$EVIDENCE/canaries/$BOARD.label-semantics-identity.ok.txt"
 
-  sqlite3 -readonly -json "$DB" "
+  bounded_sqlite -readonly -json "$DB" "
     SELECT
       o.id AS outbox_id,d.id AS delivery_id,d.store_name,d.board_id,
       d.source_event_id,d.cursor,d.entity_uri,o.projection_store,
@@ -1265,12 +2011,12 @@ while IFS=$'\t' read -r BOARD BOARD_ID; do
   ' "$EVIDENCE/canaries/$BOARD.label-delivery-id.json" \
     >"$EVIDENCE/canaries/$BOARD.label-delivery-id.ok.txt"
 
-  "$KANBAN_BIN" --db "$DB" --board "$BOARD" \
+  bounded_kanban --db "$DB" --board "$BOARD" \
     --actor production-recovery --json events \
     >"$EVIDENCE/canaries/$BOARD.events.after-canary.json"
 done <"$EVIDENCE/canaries/boards.tsv"
 
-"$KANBAN_BIN" --db "$DB" --json outbox list --limit 1000 \
+bounded_kanban --db "$DB" --json outbox list --limit 1000 \
   >"$EVIDENCE/canaries/outbox.after-all-canaries.json"
 ~~~
 
@@ -1326,7 +2072,7 @@ run_query_matrix() {
     )" || return 2
 
     board_file="$output_dir/$BOARD.0-board-resolution.json"
-    "$KANBAN_BIN" --db "$DB" --json board show "$BOARD" >"$board_file" \
+    bounded_kanban --db "$DB" --json board show "$BOARD" >"$board_file" \
       || return 2
     jq -e --arg requested "$BOARD" --arg resolved "$BOARD_ID" '
       .data.slug == $requested and .data.id == $resolved
@@ -1335,7 +2081,7 @@ run_query_matrix() {
     resolved="$(jq -er '.data.id' "$board_file")" || return 2
 
     search_file="$output_dir/$BOARD.1-tantivy_tasks.json"
-    "$KANBAN_BIN" --db "$DB" --board "$BOARD" --json \
+    bounded_kanban --db "$DB" --board "$BOARD" --json \
       search "$TASK_TEXT" --limit 20 >"$search_file" || return 2
     jq -e '
       (.data.hits | type) == "array" and
@@ -1374,7 +2120,7 @@ run_query_matrix() {
       "$hit_count" "$target_hits" "$cross_hits" "$pass" >>"$matrix"
 
     graph_file="$output_dir/$BOARD.2-oxigraph_relations.json"
-    "$KANBAN_BIN" --db "$DB" --board "$BOARD" --json \
+    bounded_kanban --db "$DB" --board "$BOARD" --json \
       graph neighbors "kb://task/$TASK_ID" \
       --predicate belongs_to_board --limit 20 >"$graph_file" || return 2
     jq -e '(.data | type) == "array"' "$graph_file" >/dev/null || return 2
@@ -1409,12 +2155,12 @@ run_query_matrix() {
       "$hit_count" "$target_hits" "$cross_hits" "$pass" >>"$matrix"
 
     chunks_file="$output_dir/$BOARD.3-lancedb_chunks.json"
-    "$KANBAN_BIN" --db "$DB" --board "$BOARD" --json \
+    bounded_kanban --db "$DB" --board "$BOARD" --json \
       vector query-chunks "$TASK_TEXT" --limit 20 \
       "${vector_config_args[@]}" >"$chunks_file" || return 2
     jq -e '(.data | type) == "array"' "$chunks_file" >/dev/null || return 2
     helper_file="$output_dir/$BOARD.3-lancedb_chunks.board-guard-helper.json"
-    "$KANBAN_VECTOR_HELPER" query-chunks \
+    bounded_vector_helper query-chunks \
       --db "$DB" --board "$BOARD" --board-id "$BOARD_ID" \
       --text "$TASK_TEXT" --limit 20 "${vector_config_args[@]}" \
       >"$helper_file" || return 2
@@ -1427,7 +2173,7 @@ run_query_matrix() {
     while IFS= read -r uri; do
       [[ "$uri" =~ ^kb://task/t_[A-Za-z0-9]+$ ]] || return 2
       row="$(
-        sqlite3 -readonly -noheader -separator $'\t' "$DB" \
+        bounded_sqlite -readonly -noheader -separator $'\t' "$DB" \
           "SELECT uri,board_id FROM entities WHERE uri='$uri';"
       )" || return 2
       test -n "$row" || return 2
@@ -1464,7 +2210,7 @@ run_query_matrix() {
       "$hit_count" "$target_hits" "$cross_hits" "$pass" >>"$matrix"
 
     labels_file="$output_dir/$BOARD.4-lancedb_label_atoms.json"
-    "$KANBAN_BIN" --db "$DB" --board "$BOARD" --json \
+    bounded_kanban --db "$DB" --board "$BOARD" --json \
       vector query-label-atoms "$LABEL_TEXT" \
       --board-id "$BOARD_ID" --limit 20 "${vector_config_args[@]}" \
       >"$labels_file" || return 2
@@ -1545,7 +2291,7 @@ run_delivery_proof() {
     [[ "$LABEL_OUTBOX_ID" =~ ^[1-9][0-9]*$ ]] || return 2
     actual="$output_dir/$BOARD.delivery-proof.json"
 
-    sqlite3 -readonly -json "$DB" "
+    bounded_sqlite -readonly -json "$DB" "
       SELECT
         'task' AS canary_kind,e.id AS event_row_id,e.event_id,
         o.id AS outbox_id,d.id AS delivery_id,d.store_name,d.board_id,
@@ -1657,16 +2403,23 @@ while :; do
   poll=$((poll + 1))
   prefix="$EVIDENCE/sla/poll-$(printf '%03d' "$poll")"
   install -d -m 0700 "$prefix"
-  "$KANBAN_BIN" --db "$DB" --json maintenance status \
+  bounded_kanban --db "$DB" --json maintenance status \
     >"$prefix/maintenance-status.json"
-  "$KANBAN_BIN" --db "$DB" --json outbox list --limit 1000 \
+  bounded_kanban --db "$DB" --json outbox list --limit 1000 \
     >"$prefix/outbox.json"
 
   status_ready=0
+  now_ms=$(( $(date +%s) * 1000 ))
   if jq -e --arg build_id \
-    "$(jq -r '.build_id' "$COHORT/source-provenance.json")" '
+    "$(jq -r '.build_id' "$COHORT/source-provenance.json")" \
+    --argjson started "$OWNER_START_MS" --argjson now "$now_ms" '
     .data.maintenance_owner.active == true and
+    .data.maintenance_owner.mode == "continuous" and
     .data.maintenance_owner.build_identity == $build_id and
+    (.data.maintenance_owner.last_heartbeat_at | type) == "number" and
+    .data.maintenance_owner.last_heartbeat_at >= $started and
+    .data.maintenance_owner.last_heartbeat_at <= $now and
+    .data.maintenance_owner.lease_expires_at > $now and
     (.data.maintenance_owner.capabilities | sort) ==
       ["lancedb_chunks","lancedb_label_atoms",
        "oxigraph_relations","tantivy_tasks"] and
@@ -1755,10 +2508,11 @@ restart 前只保存基线；mutation 必须发生在新 PID、fresh heartbeat �
 命中和 exact task/ref/board/value 收敛作为 restart 验收。
 
 ~~~bash
-"$KANBAN_BIN" --db "$DB" --json maintenance status \
+bounded_kanban --db "$DB" --json maintenance status \
   >"$EVIDENCE/restart/status.before.json"
 OLD_PID="$(
-  sudo systemctl show "$MAINTENANCE_UNIT" --property=MainPID --value
+  bounded_sudo systemctl show "$MAINTENANCE_UNIT" \
+    --property=MainPID --value
 )"
 [[ "$OLD_PID" =~ ^[1-9][0-9]*$ ]]
 printf '%s\n' "$OLD_PID" >"$EVIDENCE/restart/main-pid.before.txt"
@@ -1768,24 +2522,28 @@ OLD_HEARTBEAT="$(
 )"
 [[ "$OLD_HEARTBEAT" =~ ^[0-9]+$ ]]
 
-sudo systemctl restart "$MAINTENANCE_UNIT"
+RESTART_STARTED_MS=$(( $(date +%s) * 1000 ))
+bounded_sudo systemctl restart "$MAINTENANCE_UNIT"
 RESTART_DEADLINE=$(( $(date +%s) + OWNER_START_TIMEOUT_SEC ))
 while :; do
   NEW_PID="$(
-    sudo systemctl show "$MAINTENANCE_UNIT" --property=MainPID --value
+    bounded_sudo systemctl show "$MAINTENANCE_UNIT" \
+      --property=MainPID --value
   )"
-  "$KANBAN_BIN" --db "$DB" --json maintenance status \
+  bounded_kanban --db "$DB" --json maintenance status \
     >"$EVIDENCE/restart/status.after.current.json"
   now_ms=$(( $(date +%s) * 1000 ))
   if [[ "$NEW_PID" =~ ^[1-9][0-9]*$ ]] &&
     test "$NEW_PID" != "$OLD_PID" &&
     jq -e --arg build_id \
       "$(jq -r '.build_id' "$COHORT/source-provenance.json")" \
-      --argjson old_heartbeat "$OLD_HEARTBEAT" --argjson now "$now_ms" '
+      --argjson started "$RESTART_STARTED_MS" --argjson now "$now_ms" '
       .data.maintenance_owner.active == true and
       .data.maintenance_owner.mode == "continuous" and
       .data.maintenance_owner.build_identity == $build_id and
-      .data.maintenance_owner.last_heartbeat_at > $old_heartbeat and
+      (.data.maintenance_owner.last_heartbeat_at | type) == "number" and
+      .data.maintenance_owner.last_heartbeat_at >= $started and
+      .data.maintenance_owner.last_heartbeat_at <= $now and
       .data.maintenance_owner.lease_expires_at > $now and
       (.data.maintenance_owner.capabilities | sort) ==
         ["lancedb_chunks","lancedb_label_atoms",
@@ -1813,7 +2571,7 @@ RESTART_TASK_REF="$(
 )"
 [[ "$RESTART_BOARD_ID" =~ ^b_[A-Za-z0-9]+$ ]]
 [[ "$RESTART_TASK_ID" =~ ^t_[A-Za-z0-9]+$ ]]
-sqlite3 -readonly -json "$DB" \
+bounded_sqlite -readonly -json "$DB" \
   'SELECT COALESCE(MAX(id),0) AS max_id FROM task_events;' \
   >"$EVIDENCE/restart/event-baseline.json"
 RESTART_EVENT_BASELINE="$(
@@ -1822,7 +2580,7 @@ RESTART_EVENT_BASELINE="$(
 [[ "$RESTART_EVENT_BASELINE" =~ ^[0-9]+$ ]]
 RESTART_VALUE="ownerrestartcanary${RECOVERY_ID//[^A-Za-z0-9]/}$(date +%s%N)"
 
-"$KANBAN_BIN" --db "$DB" --board "$RESTART_BOARD" \
+bounded_kanban --db "$DB" --board "$RESTART_BOARD" \
   --actor production-recovery --json \
   task update "$RESTART_TASK_REF" --description "$RESTART_VALUE" \
   >"$EVIDENCE/restart/task-update.json"
@@ -1833,7 +2591,7 @@ jq -e --arg id "$RESTART_TASK_ID" --arg ref "$RESTART_TASK_REF" \
 ' "$EVIDENCE/restart/task-update.json" \
   >"$EVIDENCE/restart/task-update.changed.ok.txt"
 
-sqlite3 -readonly -json "$DB" "
+bounded_sqlite -readonly -json "$DB" "
   SELECT
     e.id AS event_row_id,e.event_id,o.id AS outbox_id,
     d.id AS delivery_id,d.store_name,d.board_id,d.source_event_id,
@@ -1876,16 +2634,16 @@ while :; do
   restart_poll=$((restart_poll + 1))
   prefix="$EVIDENCE/restart/poll-$(printf '%03d' "$restart_poll")"
   install -d -m 0700 "$prefix"
-  "$KANBAN_BIN" --db "$DB" --json maintenance status \
+  bounded_kanban --db "$DB" --json maintenance status \
     >"$prefix/maintenance-status.json"
-  "$KANBAN_BIN" --db "$DB" --board "$RESTART_BOARD" --json \
+  bounded_kanban --db "$DB" --board "$RESTART_BOARD" --json \
     search "$RESTART_VALUE" --limit 20 >"$prefix/task-search.json"
 
   RESTART_EVENT_ROW_ID="$(
     jq -er '.[0].event_row_id' "$EVIDENCE/restart/delivery-ids.json"
   )"
   [[ "$RESTART_EVENT_ROW_ID" =~ ^[1-9][0-9]*$ ]]
-  sqlite3 -readonly -json "$DB" "
+  bounded_sqlite -readonly -json "$DB" "
     SELECT
       e.id AS event_row_id,e.event_id,o.id AS outbox_id,
       d.id AS delivery_id,d.store_name,d.board_id,d.source_event_id,
@@ -1924,10 +2682,13 @@ while :; do
   owner_ready=0
   if jq -e --arg build_id \
     "$(jq -r '.build_id' "$COHORT/source-provenance.json")" \
-    --argjson old_heartbeat "$OLD_HEARTBEAT" --argjson now "$now_ms" '
+    --argjson started "$RESTART_STARTED_MS" --argjson now "$now_ms" '
     .data.maintenance_owner.active == true and
+    .data.maintenance_owner.mode == "continuous" and
     .data.maintenance_owner.build_identity == $build_id and
-    .data.maintenance_owner.last_heartbeat_at > $old_heartbeat and
+    (.data.maintenance_owner.last_heartbeat_at | type) == "number" and
+    .data.maintenance_owner.last_heartbeat_at >= $started and
+    .data.maintenance_owner.last_heartbeat_at <= $now and
     .data.maintenance_owner.lease_expires_at > $now and
     (.data.maintenance_owner.capabilities | sort) ==
       ["lancedb_chunks","lancedb_label_atoms",
@@ -1990,7 +2751,8 @@ while :; do
   fi
 
   current_pid="$(
-    sudo systemctl show "$MAINTENANCE_UNIT" --property=MainPID --value
+    bounded_sudo systemctl show "$MAINTENANCE_UNIT" \
+      --property=MainPID --value
   )"
   test "$current_pid" = "$NEW_PID"
   now="$(date +%s)"
@@ -2031,20 +2793,21 @@ run_final_owner_binding_health_gate() {
   local phase="$1" output_dir="$2" owner_pid
   install -d -m 0700 "$output_dir"
 
-  sudo systemctl is-active --quiet "$MAINTENANCE_UNIT"
+  bounded_sudo systemctl is-active --quiet "$MAINTENANCE_UNIT"
   owner_pid="$(
-    sudo systemctl show "$MAINTENANCE_UNIT" --property=MainPID --value
+    bounded_sudo systemctl show "$MAINTENANCE_UNIT" \
+      --property=MainPID --value
   )"
   [[ "$owner_pid" =~ ^[1-9][0-9]*$ ]]
   assert_non_owner_writers_stopped
   assert_live_unit_binding "$owner_pid" \
     "$output_dir/live-helper-environment.redacted.json"
 
-  "$KANBAN_BIN" --db "$DB" --json doctor --strict-derived \
+  bounded_kanban --db "$DB" --json doctor --strict-derived \
     | tee "$output_dir/doctor.strict-derived.json"
-  "$KANBAN_BIN" --db "$DB" --json maintenance status \
+  bounded_kanban --db "$DB" --json maintenance status \
     | tee "$output_dir/maintenance-status.json"
-  "$KANBAN_BIN" --db "$DB" --json outbox list --limit 1000 \
+  bounded_kanban --db "$DB" --json outbox list --limit 1000 \
     | tee "$output_dir/outbox.json"
 
   jq -e '
@@ -2097,9 +2860,10 @@ run_final_owner_binding_health_gate() {
   run_delivery_proof "$output_dir/deliveries"
   assert_release_binding "$phase"
   test "$(
-    sudo systemctl show "$MAINTENANCE_UNIT" --property=MainPID --value
+    bounded_sudo systemctl show "$MAINTENANCE_UNIT" \
+      --property=MainPID --value
   )" = "$owner_pid"
-  sudo systemctl is-active --quiet "$MAINTENANCE_UNIT"
+  bounded_sudo systemctl is-active --quiet "$MAINTENANCE_UNIT"
   assert_non_owner_writers_stopped
   assert_live_unit_binding "$owner_pid" \
     "$output_dir/live-helper-environment.after-gate.redacted.json"
@@ -2119,57 +2883,15 @@ continuous owner 持有 singleton 时绝不能直接调用 cleanup。必须先�
 再次证明 session/lease 已回到 exact idle，才能继续。
 
 ~~~bash
-wait_for_exact_maintenance_release() {
-  local output_dir="$1" phase="$2" deadline current
-  install -d -m 0700 "$output_dir"
-  current="$output_dir/$phase.maintenance-status.current.json"
-  deadline=$(( $(date +%s) + STOP_LEASE_TIMEOUT_SEC ))
-  while :; do
-    "$KANBAN_BIN" --db "$DB" --json maintenance status >"$current"
-    if jq -e '
-      .data.maintenance_owner.active == false and
-      .data.maintenance_owner.owner == null and
-      .data.maintenance_owner.mode == null and
-      .data.maintenance_owner.capabilities == [] and
-      .data.maintenance_owner.build_identity == null and
-      .data.maintenance_owner.lease_expires_at == null and
-      .data.maintenance_owner.last_heartbeat_at == null and
-      (.data.stores | length) == 4 and
-      ([.data.stores[].store_name] | sort) ==
-        ["lancedb_chunks","lancedb_label_atoms",
-         "oxigraph_relations","tantivy_tasks"] and
-      all(.data.stores[];
-        .owner == null and .lease_expires_at == null
-      )
-    ' "$current" >/dev/null; then
-      break
-    fi
-    test "$(date +%s)" -lt "$deadline"
-    sleep 1
-  done
-  cp --no-preserve=mode "$current" \
-    "$output_dir/$phase.maintenance-status.released.json"
-  jq -e '
-    .data.maintenance_owner.active == false and
-    .data.maintenance_owner.owner == null and
-    .data.maintenance_owner.mode == null and
-    .data.maintenance_owner.capabilities == [] and
-    .data.maintenance_owner.build_identity == null and
-    .data.maintenance_owner.lease_expires_at == null and
-    .data.maintenance_owner.last_heartbeat_at == null and
-    all(.data.stores[]; .owner == null and .lease_expires_at == null)
-  ' "$output_dir/$phase.maintenance-status.released.json" \
-    >"$output_dir/$phase.exact-idle.ok.txt"
-}
-
 CLEANUP_DIR="$EVIDENCE/final/cleanup"
 install -d -m 0700 "$CLEANUP_DIR"
-sudo systemctl is-active --quiet "$MAINTENANCE_UNIT"
+bounded_sudo systemctl is-active --quiet "$MAINTENANCE_UNIT"
 CLEANUP_OLD_PID="$(
-  sudo systemctl show "$MAINTENANCE_UNIT" --property=MainPID --value
+  bounded_sudo systemctl show "$MAINTENANCE_UNIT" \
+    --property=MainPID --value
 )"
 [[ "$CLEANUP_OLD_PID" =~ ^[1-9][0-9]*$ ]]
-"$KANBAN_BIN" --db "$DB" --json maintenance status \
+bounded_kanban --db "$DB" --json maintenance status \
   >"$CLEANUP_DIR/continuous-owner.before-stop.json"
 jq -e --arg build_id \
   "$(jq -r '.build_id' "$COHORT/source-provenance.json")" \
@@ -2186,14 +2908,14 @@ jq -e --arg build_id \
 assert_live_unit_binding "$CLEANUP_OLD_PID" \
   "$CLEANUP_DIR/continuous-owner.live-binding.before-stop.json"
 
-sudo systemctl stop "$MAINTENANCE_UNIT"
-sudo systemctl reset-failed "$MAINTENANCE_UNIT"
+bounded_sudo systemctl stop "$MAINTENANCE_UNIT"
+bounded_sudo systemctl reset-failed "$MAINTENANCE_UNIT"
 assert_writers_stopped "$CLEANUP_DIR/writers.after-owner-stop.txt"
 wait_for_exact_maintenance_release "$CLEANUP_DIR" after-owner-stop
 assert_writers_stopped "$CLEANUP_DIR/writers.after-owner-release.txt"
 assert_no_database_holders "$CLEANUP_DIR/database-holders.after-owner-stop.txt"
 
-"$KANBAN_BIN" --db "$DB" --actor production-recovery --json \
+bounded_kanban --db "$DB" --actor production-recovery --json \
   maintenance cleanup-legacy apply \
   --backup-dir "$EVIDENCE/backup/legacy-projections" \
   --expected-inventory-digest "$LEGACY_DIGEST" \
@@ -2215,7 +2937,7 @@ wait_for_exact_maintenance_release "$CLEANUP_DIR" after-apply-once
 assert_writers_stopped "$CLEANUP_DIR/writers.after-apply-once.txt"
 assert_no_database_holders "$CLEANUP_DIR/database-holders.after-apply-once.txt"
 
-"$KANBAN_BIN" --db "$DB" --actor production-recovery --json \
+bounded_kanban --db "$DB" --actor production-recovery --json \
   maintenance cleanup-legacy verify \
   --backup-dir "$EVIDENCE/backup/legacy-projections" \
   | tee "$CLEANUP_DIR/legacy-cleanup.verify.json"
@@ -2256,13 +2978,14 @@ owner/binding/health gate；这里不得只检查 `systemctl is-active`。
 ~~~bash
 assert_writers_stopped "$CLEANUP_DIR/writers.before-owner-restart.txt"
 CLEANUP_RESTART_STARTED_MS=$(( $(date +%s) * 1000 ))
-sudo systemctl start "$MAINTENANCE_UNIT"
+bounded_sudo systemctl start "$MAINTENANCE_UNIT"
 CLEANUP_RESTART_DEADLINE=$(( $(date +%s) + OWNER_START_TIMEOUT_SEC ))
 while :; do
   CLEANUP_RESTART_PID="$(
-    sudo systemctl show "$MAINTENANCE_UNIT" --property=MainPID --value
+    bounded_sudo systemctl show "$MAINTENANCE_UNIT" \
+      --property=MainPID --value
   )"
-  "$KANBAN_BIN" --db "$DB" --json maintenance status \
+  bounded_kanban --db "$DB" --json maintenance status \
     >"$CLEANUP_DIR/owner-restart.status.current.json"
   now_ms=$(( $(date +%s) * 1000 ))
   if [[ "$CLEANUP_RESTART_PID" =~ ^[1-9][0-9]*$ ]] &&
@@ -2297,7 +3020,7 @@ cp --no-preserve=mode "$CLEANUP_DIR/owner-restart.status.current.json" \
   "$CLEANUP_DIR/owner-restart.status.ready.json"
 printf '%s\n' "$CLEANUP_RESTART_PID" \
   >"$CLEANUP_DIR/owner-restart.main-pid.txt"
-sudo systemctl is-active --quiet "$MAINTENANCE_UNIT"
+bounded_sudo systemctl is-active --quiet "$MAINTENANCE_UNIT"
 assert_non_owner_writers_stopped
 assert_live_unit_binding "$CLEANUP_RESTART_PID" \
   "$CLEANUP_DIR/owner-restart.live-binding.json"

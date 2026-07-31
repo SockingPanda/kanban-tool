@@ -1046,12 +1046,15 @@ pub(crate) fn validate_task_runs_foreign_key(conn: &Connection) -> Result<()> {
         let pairs: Vec<_> = fks
             .iter()
             .filter(|(candidate, ..)| candidate == id)
-            .map(|(_, seq, from, to, on_delete)| (*seq, from.as_str(), to.as_str(), on_delete.as_str()))
+            .map(|(_, seq, from, to, on_delete)| {
+                (*seq, from.as_str(), to.as_str(), on_delete.as_str())
+            })
             .collect();
-        pairs == [
-            (0, "task_id", "id", "CASCADE"),
-            (1, "board_id", "board_id", "CASCADE"),
-        ]
+        pairs
+            == [
+                (0, "task_id", "id", "CASCADE"),
+                (1, "board_id", "board_id", "CASCADE"),
+            ]
     });
     if !task_runs_has_task_fk {
         return Err(KanbanError::Storage(

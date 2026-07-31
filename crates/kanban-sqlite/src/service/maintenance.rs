@@ -2702,11 +2702,19 @@ mod lifecycle_tests {
         let pragma_rows: Vec<(i64, i64, String, String)> = conn
             .prepare("SELECT id, seq, \"from\", \"to\" FROM pragma_foreign_key_list('task_runs')")
             .unwrap()
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
             .unwrap()
             .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap();
-        assert_eq!(pragma_rows, vec![(0, 0, "board_id".into(), "board_id".into()), (0, 1, "task_id".into(), "id".into())]);
+        assert_eq!(
+            pragma_rows,
+            vec![
+                (0, 0, "board_id".into(), "board_id".into()),
+                (0, 1, "task_id".into(), "id".into())
+            ]
+        );
         let error = crate::init::validate_task_runs_foreign_key(&conn).unwrap_err();
         assert!(matches!(error, KanbanError::Storage(message) if message.contains("foreign key")));
     }
@@ -2727,17 +2735,32 @@ mod lifecycle_tests {
     #[test]
     fn read_only_opener_rejects_migration_ledger_corruption() {
         for (label, mutation) in [
-            ("name", "UPDATE schema_migrations SET name='wrong' WHERE version=1"),
-            ("checksum", "UPDATE schema_migrations SET checksum='wrong' WHERE version=1"),
-            ("extra", "INSERT INTO schema_migrations(version,name,checksum,applied_at) VALUES (0,'extra','extra',0)"),
+            (
+                "name",
+                "UPDATE schema_migrations SET name='wrong' WHERE version=1",
+            ),
+            (
+                "checksum",
+                "UPDATE schema_migrations SET checksum='wrong' WHERE version=1",
+            ),
+            (
+                "extra",
+                "INSERT INTO schema_migrations(version,name,checksum,applied_at) VALUES (0,'extra','extra',0)",
+            ),
             ("missing", "DELETE FROM schema_migrations WHERE version=1"),
         ] {
             let tempdir = tempfile::tempdir().unwrap();
             let path = tempdir.path().join(format!("ledger-{label}.db"));
             crate::init::init_database(&path, "tester").unwrap();
-            Connection::open(&path).unwrap().execute_batch(mutation).unwrap();
+            Connection::open(&path)
+                .unwrap()
+                .execute_batch(mutation)
+                .unwrap();
             let error = connect_existing_database_read_only(&path).unwrap_err();
-            assert!(matches!(error, KanbanError::Storage(ref message) if message.contains("migration")), "{label}: {error}");
+            assert!(
+                matches!(error, KanbanError::Storage(ref message) if message.contains("migration")),
+                "{label}: {error}"
+            );
         }
     }
 
@@ -2773,8 +2796,11 @@ mod lifecycle_tests {
         let path = tempdir.path().join("expression-index.db");
         crate::init::init_database(&path, "tester").unwrap();
         let conn = Connection::open(&path).unwrap();
-        conn.execute("CREATE UNIQUE INDEX tasks_expression_unique ON tasks(lower(title))", [])
-            .unwrap();
+        conn.execute(
+            "CREATE UNIQUE INDEX tasks_expression_unique ON tasks(lower(title))",
+            [],
+        )
+        .unwrap();
         drop(conn);
         let connection = connect_existing_database_read_only(&path).unwrap();
         drop(connection);

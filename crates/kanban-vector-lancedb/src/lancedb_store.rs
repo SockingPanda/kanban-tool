@@ -1383,12 +1383,8 @@ fn batches_to_label_atom_vector_hits(
                     text: required_string(text, row, "text")?.to_owned(),
                     ordinal: required_i64(ordinal, row, "ordinal")?,
                     content_hash: required_string(content_hash, row, "content_hash")?.to_owned(),
-                    embedding_model: required_string(
-                        embedding_model,
-                        row,
-                        "embedding_model",
-                    )?
-                    .to_owned(),
+                    embedding_model: required_string(embedding_model, row, "embedding_model")?
+                        .to_owned(),
                     distance: required_f32(distance, row, "_distance")?,
                 },
                 vector: vectors
@@ -2605,14 +2601,31 @@ mod tests {
             1
         );
         for name in [
-            "chunk_key", "entity_uri", "chunk_uri", "kind", "source_table", "source_id",
-            "text", "embedding_model", "created_at", "updated_at", "metadata_json", "ordinal",
+            "chunk_key",
+            "entity_uri",
+            "chunk_uri",
+            "kind",
+            "source_table",
+            "source_id",
+            "text",
+            "embedding_model",
+            "created_at",
+            "updated_at",
+            "metadata_json",
+            "ordinal",
         ] {
             let index = batch.schema().index_of(name).unwrap();
             let mut columns = batch.columns().to_vec();
             columns[index] = new_null_array(batch.schema().field(index).data_type(), 1);
             let mut fields = batch.schema().fields().to_vec();
-            fields[index] = Arc::new(batch.schema().field(index).as_ref().clone().with_nullable(true));
+            fields[index] = Arc::new(
+                batch
+                    .schema()
+                    .field(index)
+                    .as_ref()
+                    .clone()
+                    .with_nullable(true),
+            );
             let invalid = RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).unwrap();
             let error = super::chunk_batches_to_projection_rows(&[invalid]).unwrap_err();
             assert!(matches!(error, VectorError::Store(message) if message.contains(name)));
@@ -2643,14 +2656,32 @@ mod tests {
             1
         );
         for name in [
-            "atom_key", "atom_id", "label_id", "label_name", "board_id", "polarity", "kind",
-            "text", "ordinal", "content_hash", "embedding_model", "created_at", "updated_at",
+            "atom_key",
+            "atom_id",
+            "label_id",
+            "label_name",
+            "board_id",
+            "polarity",
+            "kind",
+            "text",
+            "ordinal",
+            "content_hash",
+            "embedding_model",
+            "created_at",
+            "updated_at",
         ] {
             let index = batch.schema().index_of(name).unwrap();
             let mut columns = batch.columns().to_vec();
             columns[index] = new_null_array(batch.schema().field(index).data_type(), 1);
             let mut fields = batch.schema().fields().to_vec();
-            fields[index] = Arc::new(batch.schema().field(index).as_ref().clone().with_nullable(true));
+            fields[index] = Arc::new(
+                batch
+                    .schema()
+                    .field(index)
+                    .as_ref()
+                    .clone()
+                    .with_nullable(true),
+            );
             let invalid = RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).unwrap();
             let error = super::label_atom_batches_to_projection_rows(&[invalid]).unwrap_err();
             assert!(matches!(error, VectorError::Store(message) if message.contains(name)));
@@ -2739,7 +2770,9 @@ mod tests {
         ] {
             let invalid = batch_with_null_cell(&batch, name);
             let error = super::batches_to_label_atom_vector_hits(&[invalid], true).unwrap_err();
-            assert!(matches!(error, VectorError::Store(message) if message.contains("null") || message.contains(name)));
+            assert!(
+                matches!(error, VectorError::Store(message) if message.contains("null") || message.contains(name))
+            );
         }
     }
 

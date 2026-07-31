@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process};
+use std::{io::Write, path::PathBuf, process};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -10,8 +10,9 @@ use kanban_derived_io::{
 use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
 use kanban_graph::{GraphStoreStatus, RelationGraph};
 use kanban_graph_oxigraph::{
-    OxigraphStore, graph_helper_error_response, graph_helper_handshake_response,
-    graph_helper_neighbors_response, graph_helper_query_response, graph_helper_status_response,
+    OxigraphStore, graph_helper_build_identity, graph_helper_error_response,
+    graph_helper_handshake_response, graph_helper_neighbors_response, graph_helper_query_response,
+    graph_helper_status_response,
 };
 use kanban_helper_protocol::HelperEnvelope;
 use kanban_indexer::OXIGRAPH_RELATIONS_STORE;
@@ -27,6 +28,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    #[command(name = "__build-identity", hide = true)]
+    BuildIdentity,
     Handshake,
     Status(StoreArgs),
     Rebuild(StoreArgs),
@@ -80,6 +83,16 @@ fn main() {
 fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Command::BuildIdentity => {
+            let mut stdout = std::io::stdout().lock();
+            stdout
+                .write_all(graph_helper_build_identity().as_bytes())
+                .context("failed to write helper build identity")?;
+            stdout
+                .flush()
+                .context("failed to flush helper build identity")?;
+            Ok(())
+        }
         Command::Handshake => {
             print_payload(graph_helper_handshake_response(env!("CARGO_PKG_VERSION")))
         }
@@ -309,12 +322,16 @@ fn active_projection(conn: &rusqlite::Connection) -> Result<Option<ActiveProject
         anyhow::bail!("Oxigraph projection v2 is not readable: rebuilding, failed, or lagging");
     }
     let required = || anyhow::anyhow!("Oxigraph projection v2 active evidence is incomplete");
+    let fingerprint = fingerprint.ok_or_else(required)?;
+    if fingerprint.trim().is_empty() {
+        anyhow::bail!("Oxigraph projection v2 active generation fingerprint is blank");
+    }
     let active = ActiveProjection {
         database_instance_id,
         protocol_version,
         schema_version,
         generation: generation.ok_or_else(required)?,
-        fingerprint: fingerprint.ok_or_else(required)?,
+        fingerprint,
         fence_epoch: fence_epoch.ok_or_else(required)?,
         snapshot_cursor: snapshot_cursor.ok_or_else(required)?,
         provider: provider.ok_or_else(required)?,
@@ -709,6 +726,21 @@ mod tests {
         .expect("pending delivery");
         let error = active_projection(&conn).expect_err("lag must fail closed");
         assert!(error.to_string().contains("not readable"));
+    }
+
+    #[test]
+    fn active_projection_rejects_blank_generation_fingerprint() {
+        let conn = projection_connection();
+        conn.execute(
+            "UPDATE projection_store_state
+             SET active_fingerprint='   '
+             WHERE store_name='oxigraph_relations'",
+            [],
+        )
+        .expect("blank fingerprint fixture");
+
+        let error = active_projection(&conn).expect_err("blank fingerprint must fail closed");
+        assert!(error.to_string().contains("fingerprint"), "{error}");
     }
 
     #[test]

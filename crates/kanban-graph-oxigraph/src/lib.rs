@@ -10,6 +10,20 @@ use kanban_graph::{GraphQueryRow, GraphStoreStatus};
 
 pub use oxigraph_backend::OxigraphStore;
 
+pub const GRAPH_HELPER_BUILD_IDENTITY: &str = match option_env!("KANBAN_BUILD_ID") {
+    Some(build_id) => build_id,
+    None => concat!(
+        "dev:",
+        env!("CARGO_PKG_NAME"),
+        "@",
+        env!("CARGO_PKG_VERSION")
+    ),
+};
+
+pub const fn graph_helper_build_identity() -> &'static str {
+    GRAPH_HELPER_BUILD_IDENTITY
+}
+
 pub fn graph_helper_handshake_response(version: &str) -> GraphHelperHandshakeResponse {
     GraphHelperHandshakeResponse {
         helper: "kanban-graph-oxigraph".to_owned(),

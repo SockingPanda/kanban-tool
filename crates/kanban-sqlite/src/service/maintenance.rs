@@ -2416,6 +2416,28 @@ mod lifecycle_tests {
         assert!(transaction_started);
     }
 
+    #[test]
+    fn replace_rejects_fake_marker_without_persisting_pragmas() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("fake.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "PRAGMA journal_mode=DELETE;
+             CREATE TABLE schema_migrations(version INTEGER);
+             INSERT INTO schema_migrations(version) VALUES (1);
+             PRAGMA user_version=1;",
+        )
+        .unwrap();
+        drop(conn);
+        let before = std::fs::read(&path).unwrap();
+        let error = begin_database_replace(&path).unwrap_err();
+        assert!(
+            matches!(error, KanbanError::InvalidInput(message) if message.contains("schema is incomplete"))
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert!(!path.with_extension("db-wal").exists());
+    }
+
     #[cfg(unix)]
     #[test]
     fn replace_rejects_database_alias_retargeted_after_marker_publish() {

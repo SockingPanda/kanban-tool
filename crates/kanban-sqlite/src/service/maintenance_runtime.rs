@@ -4370,6 +4370,10 @@ mod legacy_binding_recovery_tests {
             "tester",
             CreateTask::ready("prepared abort authority"),
         )?;
+        let initial_snapshot = canonical_control_plane_snapshot(&path)?;
+        assert_eq!(initial_snapshot.pending_deliveries, initial_snapshot.delivery_count);
+        assert_eq!(initial_snapshot.checkpoint_cursor, 0);
+        assert_eq!(initial_snapshot.legacy_checkpoint_cursor, 0);
         let backend = RecoveryBackend::empty_with_helper_path(&path);
         let lease = acquire_projection_lease(&path, STORE, "prepared-abort-owner", 20_000)?;
         let generation = begin_projection_generation(
@@ -4388,6 +4392,24 @@ mod legacy_binding_recovery_tests {
             &backend,
         )?;
 
+        let state_value = |rows: &[(String, String)], name: &str| {
+            rows.iter()
+                .find_map(|(column, value)| (column == name).then_some(value.clone()))
+                .unwrap_or_else(|| panic!("missing projection_store_state column {name}"))
+        };
+        let before_abort = canonical_control_plane_snapshot(&path)?;
+        let prepared_store = lance_store_status(&path)?;
+        assert_eq!(prepared_store.building_generation.as_deref(), Some(generation.as_str()));
+        assert_eq!(prepared_store.building_phase.as_deref(), Some("prepared"));
+        assert_eq!(before_abort.delivery_count, 1);
+        assert_eq!(before_abort.pending_deliveries, 0);
+        assert!(before_abort.published_deliveries > 0);
+        assert!(before_abort.checkpoint_cursor > 0);
+        assert!(
+            state_value(&before_abort.store_state_row, "last_success_at") != "null",
+            "prepare must advance last_success_at"
+        );
+
         abort_projection_generation(
             &path,
             STORE,
@@ -4395,6 +4417,105 @@ mod legacy_binding_recovery_tests {
             &lease.lease_token,
             &backend,
         )?;
+
+        let after_abort = canonical_control_plane_snapshot(&path)?;
+        assert_eq!(after_abort.outbox_rows, initial_snapshot.outbox_rows);
+        assert_eq!(after_abort.derived_store_row.len(), initial_snapshot.derived_store_row.len());
+        for ((name, before), (_, after)) in initial_snapshot
+            .derived_store_row
+            .iter()
+            .zip(&after_abort.derived_store_row)
+        {
+            assert!(
+                matches!(name.as_str(), "last_sync_at" | "last_error" | "updated_at")
+                    || before == after,
+                "derived_store_state canonical column {name} changed: {before:?} -> {after:?}"
+            );
+        }
+        assert_eq!(after_abort.derived_store.0, initial_snapshot.derived_store.0);
+        assert_eq!(after_abort.derived_store.1, initial_snapshot.derived_store.1);
+        assert_eq!(after_abort.delivery_count, initial_snapshot.delivery_count);
+        assert_eq!(after_abort.pending_deliveries, initial_snapshot.pending_deliveries);
+        assert_eq!(after_abort.published_deliveries, initial_snapshot.published_deliveries);
+        assert_eq!(after_abort.claimed_deliveries, initial_snapshot.claimed_deliveries);
+        assert_eq!(after_abort.checkpoint_cursor, initial_snapshot.checkpoint_cursor);
+        assert_eq!(
+            after_abort.legacy_checkpoint_cursor,
+            initial_snapshot.legacy_checkpoint_cursor
+        );
+        assert_eq!(after_abort.delivery_invariants, initial_snapshot.delivery_invariants);
+        assert_eq!(after_abort.delivery_rows.len(), initial_snapshot.delivery_rows.len());
+        for (row_index, (before, after)) in initial_snapshot
+            .delivery_rows
+            .iter()
+            .zip(&after_abort.delivery_rows)
+            .enumerate()
+        {
+            assert_eq!(before.len(), after.len());
+            for ((name, before), (_, after)) in before.iter().zip(after) {
+                assert!(
+                    matches!(name.as_str(), "last_error" | "updated_at") || before == after,
+                    "projection_deliveries row {row_index} canonical column {name} changed: {before:?} -> {after:?}"
+                );
+            }
+        }
+        assert_eq!(after_abort.store_state_row.len(), initial_snapshot.store_state_row.len());
+        for ((name, before), (_, after)) in initial_snapshot
+            .store_state_row
+            .iter()
+            .zip(&after_abort.store_state_row)
+        {
+            assert!(
+                name.starts_with("building_")
+                    || matches!(
+                        name.as_str(),
+                        "lease_owner"
+                            | "lease_token"
+                            | "lease_expires_at"
+                            | "control_plane"
+                            | "snapshot_cursor"
+                            | "fence_epoch"
+                            | "last_success_at"
+                            | "last_error"
+                            | "updated_at"
+                    )
+                    || before == after,
+                "projection_store_state canonical column {name} changed: {before:?} -> {after:?}"
+            );
+        }
+        let after_store = lance_store_status(&path)?;
+        assert_eq!(after_store.building_generation, None);
+        assert_eq!(after_store.building_phase, None);
+        assert_eq!(state_value(&after_abort.store_state_row, "control_plane"), "text:v2");
+        assert_eq!(
+            state_value(&after_abort.store_state_row, "snapshot_cursor"),
+            state_value(&before_abort.store_state_row, "snapshot_cursor")
+        );
+        assert_eq!(
+            state_value(&after_abort.store_state_row, "fence_epoch"),
+            format!("integer:{}", lease.fence_epoch)
+        );
+        assert_eq!(
+            state_value(&after_abort.store_state_row, "lease_owner"),
+            "text:prepared-abort-owner"
+        );
+        assert_eq!(
+            state_value(&after_abort.store_state_row, "lease_token"),
+            format!("text:{}", lease.lease_token)
+        );
+        assert_eq!(
+            state_value(&after_abort.store_state_row, "lease_expires_at"),
+            format!("integer:{}", lease.lease_expires_at)
+        );
+        assert_eq!(
+            state_value(&after_abort.store_state_row, "last_success_at"),
+            state_value(&before_abort.store_state_row, "last_success_at")
+        );
+        for (name, value) in &after_abort.store_state_row {
+            if name.starts_with("building_") {
+                assert_eq!(value, "null", "abort must clear {name}");
+            }
+        }
 
         assert!(
             backend.inspect_generation(&generation)?.is_none(),
@@ -5674,10 +5795,26 @@ mod legacy_binding_recovery_tests {
             .collect()
     }
 
+    fn sqlite_named_row_snapshot(
+        row: &rusqlite::Row<'_>,
+        column_count: usize,
+    ) -> rusqlite::Result<Vec<(String, String)>> {
+        let values = sqlite_row_snapshot(row, column_count)?;
+        values
+            .into_iter()
+            .enumerate()
+            .map(|(index, value)| {
+                Ok((row.as_ref().column_name(index)?.to_owned(), value))
+            })
+            .collect()
+    }
+
     #[derive(Debug, PartialEq, Eq)]
     struct CanonicalControlPlaneSnapshot {
         outbox: Vec<(i64, String, Option<String>, i64)>,
+        outbox_rows: Vec<Vec<(String, String)>>,
         derived_store: (i64, Option<i64>, Option<i64>, Option<String>, i64),
+        derived_store_row: Vec<(String, String)>,
         delivery_count: i64,
         pending_deliveries: i64,
         published_deliveries: i64,
@@ -5685,6 +5822,9 @@ mod legacy_binding_recovery_tests {
         checkpoint_cursor: i64,
         legacy_checkpoint_cursor: i64,
         delivery_controls: Vec<(i64, i64, i64, Option<String>)>,
+        store_state_row: Vec<(String, String)>,
+        delivery_rows: Vec<Vec<(String, String)>>,
+        delivery_invariants: Vec<Vec<(String, String)>>,
     }
 
     fn canonical_control_plane_snapshot(
@@ -5697,6 +5837,11 @@ mod legacy_binding_recovery_tests {
             .query_map([], |row| {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
             })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut outbox_rows_statement = conn.prepare("SELECT * FROM index_outbox ORDER BY id")?;
+        let outbox_column_count = outbox_rows_statement.column_count();
+        let outbox_rows = outbox_rows_statement
+            .query_map([], |row| sqlite_named_row_snapshot(row, outbox_column_count))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         let derived_store = conn.query_row(
             "SELECT dirty,last_event_id,last_sync_at,last_error,updated_at
@@ -5712,6 +5857,13 @@ mod legacy_binding_recovery_tests {
                 ))
             },
         )?;
+        let mut derived_store_statement = conn.prepare(
+            "SELECT * FROM derived_store_state WHERE store_name=?1",
+        )?;
+        let derived_store_column_count = derived_store_statement.column_count();
+        let derived_store_row = derived_store_statement.query_row([STORE], |row| {
+            sqlite_named_row_snapshot(row, derived_store_column_count)
+        })?;
         let (delivery_count, pending_deliveries, published_deliveries, claimed_deliveries) = conn
             .query_row(
             "SELECT COUNT(*),
@@ -5728,6 +5880,13 @@ mod legacy_binding_recovery_tests {
             [STORE],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
+        let mut store_state_statement = conn.prepare(
+            "SELECT * FROM projection_store_state WHERE store_name=?1",
+        )?;
+        let store_state_column_count = store_state_statement.column_count();
+        let store_state_row = store_state_statement.query_row([STORE], |row| {
+            sqlite_named_row_snapshot(row, store_state_column_count)
+        })?;
         let mut delivery_control_statement = conn.prepare(
             "SELECT id,attempts,next_attempt_at,last_error
              FROM projection_deliveries WHERE store_name=?1 ORDER BY id",
@@ -5737,9 +5896,30 @@ mod legacy_binding_recovery_tests {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut delivery_rows_statement = conn.prepare(
+            "SELECT * FROM projection_deliveries WHERE store_name=?1 ORDER BY id",
+        )?;
+        let delivery_column_count = delivery_rows_statement.column_count();
+        let delivery_rows = delivery_rows_statement
+            .query_map([STORE], |row| sqlite_named_row_snapshot(row, delivery_column_count))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut delivery_invariants_statement = conn.prepare(
+            "SELECT id,status,attempts,next_attempt_at,claim_owner,claim_token,
+                    claim_lease_token,claim_fence_epoch,claim_generation,
+                    claim_expires_at,published_generation
+             FROM projection_deliveries WHERE store_name=?1 ORDER BY id",
+        )?;
+        let delivery_invariants_column_count = delivery_invariants_statement.column_count();
+        let delivery_invariants = delivery_invariants_statement
+            .query_map([STORE], |row| {
+                sqlite_named_row_snapshot(row, delivery_invariants_column_count)
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(CanonicalControlPlaneSnapshot {
             outbox,
+            outbox_rows,
             derived_store,
+            derived_store_row,
             delivery_count,
             pending_deliveries,
             published_deliveries,
@@ -5747,6 +5927,9 @@ mod legacy_binding_recovery_tests {
             checkpoint_cursor,
             legacy_checkpoint_cursor,
             delivery_controls,
+            store_state_row,
+            delivery_rows,
+            delivery_invariants,
         })
     }
 }

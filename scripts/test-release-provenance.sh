@@ -645,6 +645,85 @@ assert_live_source_gate_mutation_is_ignored() {
   # fixture manually only as cleanup for that safe case.
 }
 
+assert_live_safe_path_mutation_is_ignored_on_published_resume() {
+  local repo="$TMPROOT/cohort-live-safe-path-resume-repo"
+  local target="$TMPROOT/cohort-live-safe-path-resume-target"
+  local state="$TMPROOT/cohort-live-safe-path-resume-state"
+  local log="$TMPROOT/cohort-live-safe-path-resume.log"
+  local output="$TMPROOT/cohort-live-safe-path-resume.output"
+  local live_safe_path="$repo/scripts/release-safe-path.py"
+  make_fake_repo "$repo"
+  initialize_git_state "$state"
+  mkdir -p "$target"
+
+  # First create an authoritative published generation whose .release-tools
+  # directory contains the immutable safe-path helper used by resume.
+  run_wrapper "$repo" "$target" "$state" "$log" env
+  local published_safe_path
+  published_safe_path="$(find "$target/release/bundle/cohort" -type f \
+    -path '*/.release-tools/scripts/release-safe-path.py' -print -quit)"
+  [[ -n "$published_safe_path" ]] ||
+    fail "published resume fixture did not persist sealed safe-path tooling"
+
+  cp "$live_safe_path" "$state/live-safe-path-original"
+  python3 - "$live_safe_path" "$state" <<'PY'
+import pathlib
+import sys
+
+live = pathlib.Path(sys.argv[1])
+state = pathlib.Path(sys.argv[2])
+original = state / "live-safe-path-original"
+bypass = (
+    "#!/usr/bin/env python3\n"
+    "import pathlib, shutil\n"
+    f"state = pathlib.Path({str(state)!r})\n"
+    f"original = pathlib.Path({str(original)!r})\n"
+    "live = pathlib.Path(__file__).resolve()\n"
+    "(state / 'live-safe-path-invoked').touch()\n"
+    "shutil.copy2(original, live)\n"
+    "(state / 'live-safe-path-restored').touch()\n"
+    "print('0' * 64)\n"
+)
+proxy = (
+    "#!/usr/bin/env python3\n"
+    "import pathlib, subprocess, sys\n"
+    f"live = pathlib.Path({str(live)!r})\n"
+    f"state = pathlib.Path({str(state)!r})\n"
+    f"original = pathlib.Path({str(original)!r})\n"
+    "result = subprocess.run(['/usr/bin/python3', str(original), *sys.argv[1:]])\n"
+    "if result.returncode == 0 and sys.argv[1:2] == ['validate-file'] and any(\n"
+    "    str(value).endswith('/release-safe-path.py') for value in sys.argv[1:]\n"
+    "):\n"
+    f"    live.write_text({bypass!r}, encoding='utf-8')\n"
+    "    live.chmod(0o755)\n"
+    "    (state / 'live-safe-path-mutated').touch()\n"
+    "sys.exit(result.returncode)\n"
+)
+live.write_text(proxy, encoding="utf-8")
+live.chmod(0o755)
+PY
+
+  set +e
+  run_wrapper "$repo" "$target" "$state" "$log" env >"$output" 2>&1
+  local status=$?
+  set -e
+  if [[ -f "$state/live-safe-path-original" ]]; then
+    cp "$state/live-safe-path-original" "$live_safe_path"
+  fi
+  [[ "$status" -eq 0 ]] || {
+    cat "$output" >&2
+    fail "live safe-path replacement affected sealed published resume"
+  }
+  [[ -e "$state/live-safe-path-mutated" ]] ||
+    fail "live safe-path mutation fixture did not run"
+  [[ ! -e "$state/live-safe-path-invoked" ]] ||
+    fail "published resume executed a mutable live safe-path helper"
+  [[ ! -e "$state/live-safe-path-restored" ]] ||
+    fail "sealed published resume unexpectedly entered the live helper bypass"
+  cmp -s "$state/live-safe-path-original" "$live_safe_path" ||
+    fail "live safe-path mutation fixture did not restore its source helper"
+}
+
 assert_cohort_wrapper() {
   local repo="$TMPROOT/cohort-wrapper"
   local target="$TMPROOT/cohort-target"
@@ -2644,6 +2723,7 @@ assert_source_gate
 assert_cohort_wrapper
 assert_live_embed_mutation_is_ignored
 assert_live_source_gate_mutation_is_ignored
+assert_live_safe_path_mutation_is_ignored_on_published_resume
 assert_release_identity_resume_binding
 assert_cli_package_embeds_cohort
 assert_desktop_embed_rejects_hostile_paths

@@ -501,6 +501,12 @@ elif [[ "$RESUME_PUBLISHED" == "1" ]]; then
   bind_sealed_release_tools
 fi
 
+# Every post-bind safe-path operation must use the immutable copy selected
+# above.  The live source root remains exported separately for Git/source
+# evidence, but a mutable live helper must never control validation or
+# publication after the sealed tooling boundary.
+SAFE_PATH="$SEALED_SAFE_PATH"
+
 # All checks after the immutable snapshot is bound use the sealed source-gate
 # code while explicitly pointing it at the live tree for Git/source evidence.
 # This keeps a live script replacement out of both the recheck and the final

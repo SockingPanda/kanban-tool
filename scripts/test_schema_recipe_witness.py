@@ -42,7 +42,7 @@ TOOL_PACKAGE = "kanban-schema-tool"
 CONTRACT_PACKAGE = "kanban-contract"
 PROJECTION_RELEASE_FEATURES = "tantivy-backend,oxigraph-backend"
 RELEASE_WRAPPER_SHA256 = (
-    "20b6b07ebabd88dbef592a1a2ec1ce88eb579f6cd004582b6a52cd07a615f6d3"
+    "787bfbcdc6cd42099f2cd3a85e767336b42692ffc0a068c85a4c613978a5296a"
 )
 Event = dict[str, object]
 ExpectedBuilder = Callable[[Path, bool], list[Event]]
@@ -153,6 +153,7 @@ def _verify_sealed_release_tooling(wrapper: str) -> None:
         )
     bound_tail = wrapper[wrapper.index(bind_dispatch) + len(bind_dispatch) :]
     source_gate_binding = bound_tail.find('SOURCE_GATE="$SEALED_SOURCE_GATE"')
+    safe_path_local_binding = bound_tail.find('SAFE_PATH="$SEALED_SAFE_PATH"')
     safe_path_binding = bound_tail.find(
         'export KANBAN_RELEASE_SAFE_PATH="$SEALED_SAFE_PATH"'
     )
@@ -160,7 +161,7 @@ def _verify_sealed_release_tooling(wrapper: str) -> None:
         '"$SOURCE_GATE" verify --manifest "$STAGE_DIR/source-provenance.json"'
     )
     if not (
-        0 <= source_gate_binding < safe_path_binding < first_sealed_verify
+        0 <= safe_path_local_binding < source_gate_binding < safe_path_binding < first_sealed_verify
     ):
         raise RecipeWitnessError(
             "release wrapper 未在 post-snapshot verify 前绑定 sealed source/safe-path tooling"
@@ -2135,6 +2136,10 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
                 'SOURCE_GATE="$ROOT/scripts/release-source-gate.sh"',
             ),
             (
+                'SAFE_PATH="$SEALED_SAFE_PATH"',
+                'SAFE_PATH="$ROOT/scripts/release-safe-path.py"',
+            ),
+            (
                 '--verify-command "$ARTIFACT_MANIFEST" verify-final \\\n'
                 '        --manifest "$PUBLISHED_DIR/release-artifacts.json"',
                 '--manifest "$PUBLISHED_DIR/release-artifacts.json"',
@@ -2152,6 +2157,9 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
             with self.subTest(sealed_original=original):
                 mutation = wrapper.replace(original, replacement, 1)
                 self.assertNotEqual(mutation, wrapper)
+                # Deliberately bypass the whole-file hash here so these cases
+                # prove that the sealed-tooling semantic witness also fails
+                # closed after an otherwise-approved hash refresh.
                 with self.assertRaises(RecipeWitnessError):
                     _verify_sealed_release_tooling(mutation)
 

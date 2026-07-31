@@ -751,7 +751,7 @@ mod tests {
                     std::mem::forget(connection);
                     panic!("forced close panic");
                 },
-                |lifecycle| drop(lifecycle),
+                drop,
             );
         }));
 

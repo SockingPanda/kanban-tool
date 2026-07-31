@@ -9,9 +9,15 @@ use std::{
 };
 
 use kanban_core::{Clock, KanbanError, Result, SystemClock, new_typed_id};
+#[cfg(test)]
+use kanban_indexer::DERIVED_STORE_SCHEMA_VERSION;
 use kanban_indexer::{
     LANCEDB_CHUNKS_STORE, LANCEDB_LABEL_ATOMS_STORE, OXIGRAPH_RELATIONS_STORE, TANTIVY_TASKS_STORE,
 };
+#[cfg(test)]
+use kanban_local::DerivedStoreWriteGuard;
+#[cfg(test)]
+use rusqlite::OptionalExtension;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +30,11 @@ use super::lancedb_projection::{
 use super::oxigraph_projection::OxigraphProjectionStore;
 #[cfg(feature = "tantivy-backend")]
 use super::tantivy_projection::TantivyProjectionStore;
+#[cfg(test)]
+use super::{
+    ProjectionArtifactManifest, ProjectionDestructiveAuthority, ProjectionGenerationBinding,
+    ProjectionGenerationRole,
+};
 use super::{
     ProjectionCorpusMetadata, ProjectionLease, ProjectionRuntimeAvailability, ProjectionStatus,
     ProjectionStoreDescriptor, ProjectionStoreStatus, projection_status,
@@ -2640,10 +2651,376 @@ mod unleased_failure_tests {
 }
 
 #[cfg(test)]
+#[derive(Debug, Clone, Copy)]
+enum TestAuthorityProviderPolicy<'a> {
+    Current(&'a ProjectionStoreDescriptor),
+    Recovery(&'a ProjectionStoreDescriptor),
+}
+
+#[cfg(test)]
+struct TestExactAuthorityGuard {
+    _helper_guard: DerivedStoreWriteGuard,
+    role: ProjectionGenerationRole,
+    current_provider_binding: bool,
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone)]
+struct TestSqliteGenerationBinding {
+    generation: Option<String>,
+    fingerprint: Option<String>,
+    fence_epoch: Option<i64>,
+    snapshot_cursor: Option<i64>,
+    provider: Option<String>,
+    provider_fingerprint: Option<String>,
+    canonical_count: Option<i64>,
+    canonical_digest: Option<String>,
+    delivery_count: Option<i64>,
+    delivery_digest: Option<String>,
+    corpus_schema: Option<String>,
+    corpus_fingerprint: Option<String>,
+    embedding_model: Option<String>,
+    embedding_dimensions: Option<i64>,
+}
+
+#[cfg(test)]
+impl TestSqliteGenerationBinding {
+    fn from_row(row: &rusqlite::Row<'_>, offset: usize) -> rusqlite::Result<Self> {
+        Ok(Self {
+            generation: row.get(offset)?,
+            fingerprint: row.get(offset + 1)?,
+            fence_epoch: row.get(offset + 2)?,
+            snapshot_cursor: row.get(offset + 3)?,
+            provider: row.get(offset + 4)?,
+            provider_fingerprint: row.get(offset + 5)?,
+            canonical_count: row.get(offset + 6)?,
+            canonical_digest: row.get(offset + 7)?,
+            delivery_count: row.get(offset + 8)?,
+            delivery_digest: row.get(offset + 9)?,
+            corpus_schema: row.get(offset + 10)?,
+            corpus_fingerprint: row.get(offset + 11)?,
+            embedding_model: row.get(offset + 12)?,
+            embedding_dimensions: row.get(offset + 13)?,
+        })
+    }
+
+    fn exact_binding(
+        &self,
+        store_name: &str,
+        snapshot_cursor: Option<i64>,
+    ) -> Result<ProjectionGenerationBinding> {
+        let conflict = |field: &str| {
+            test_authority_conflict(store_name, format!("live {field} binding is absent"))
+        };
+        Ok(ProjectionGenerationBinding {
+            generation: self
+                .generation
+                .clone()
+                .ok_or_else(|| conflict("generation"))?,
+            fingerprint: self.fingerprint.clone(),
+            fence_epoch: self.fence_epoch.ok_or_else(|| conflict("fence"))?,
+            snapshot_cursor,
+            provider: self.provider.clone().ok_or_else(|| conflict("provider"))?,
+            provider_fingerprint: self
+                .provider_fingerprint
+                .clone()
+                .ok_or_else(|| conflict("provider fingerprint"))?,
+            canonical_count: self
+                .canonical_count
+                .ok_or_else(|| conflict("canonical count"))?,
+            canonical_digest: self
+                .canonical_digest
+                .clone()
+                .ok_or_else(|| conflict("canonical digest"))?,
+            delivery_count: self
+                .delivery_count
+                .ok_or_else(|| conflict("delivery count"))?,
+            delivery_digest: self
+                .delivery_digest
+                .clone()
+                .ok_or_else(|| conflict("delivery digest"))?,
+            corpus: super::projection_v2::projection_corpus_from_values(
+                self.corpus_schema.clone(),
+                self.corpus_fingerprint.clone(),
+                self.embedding_model.clone(),
+                self.embedding_dimensions,
+                store_name,
+                "test destructive authority",
+            )
+            .map_err(|_| test_authority_conflict(store_name, "live corpus binding is invalid"))?,
+        })
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone)]
+struct TestSqliteAuthorityState {
+    canonical_database_instance_id: String,
+    canonical_protocol_version: i64,
+    store_database_instance_id: String,
+    store_protocol_version: i64,
+    schema_version: i64,
+    control_plane: String,
+    fence_epoch: i64,
+    lease_owner: Option<String>,
+    lease_token: Option<String>,
+    lease_expires_at: Option<i64>,
+    active: TestSqliteGenerationBinding,
+    previous: TestSqliteGenerationBinding,
+    building: TestSqliteGenerationBinding,
+    snapshot_cursor: i64,
+    building_phase: Option<String>,
+}
+
+#[cfg(test)]
+fn test_authority_conflict(store_name: &str, message: impl Into<String>) -> KanbanError {
+    KanbanError::Conflict(format!(
+        "test projection store {store_name} destructive authority is stale or inconsistent: {}",
+        message.into()
+    ))
+}
+
+#[cfg(test)]
+fn acquire_test_exact_authority_guard(
+    path: &Path,
+    helper_lock_name: &str,
+    store_name: &str,
+    generation: &str,
+    authority: &ProjectionDestructiveAuthority,
+    provider_policy: TestAuthorityProviderPolicy<'_>,
+) -> Result<TestExactAuthorityGuard> {
+    let helper_guard = crate::db::acquire_derived_store_write_guard(path, helper_lock_name)?;
+    let now = SystemClock.now_ms();
+    if generation.trim().is_empty()
+        || authority.generation != generation
+        || authority.owner.trim().is_empty()
+        || authority.lease_token.trim().is_empty()
+        || authority.fence_epoch < 0
+        || authority.lease_expires_at <= now
+    {
+        return Err(test_authority_conflict(
+            store_name,
+            "capability is incomplete or expired",
+        ));
+    }
+
+    let conn = connect_file(path)?;
+    let state = conn
+        .query_row(
+            "SELECT database.database_instance_id,database.protocol_version,
+                    store.database_instance_id,store.protocol_version,store.schema_version,
+                    store.control_plane,store.fence_epoch,store.lease_owner,store.lease_token,
+                    store.lease_expires_at,
+                    store.active_generation,store.active_fingerprint,store.active_fence_epoch,
+                    store.active_snapshot_cursor,store.active_provider,
+                    store.active_provider_fingerprint,store.active_canonical_count,
+                    store.active_canonical_digest,store.active_delivery_count,
+                    store.active_delivery_digest,store.active_corpus_schema,
+                    store.active_corpus_fingerprint,store.active_embedding_model,
+                    store.active_embedding_dimensions,
+                    store.previous_generation,store.previous_fingerprint,
+                    store.previous_fence_epoch,store.previous_snapshot_cursor,
+                    store.previous_provider,store.previous_provider_fingerprint,
+                    store.previous_canonical_count,store.previous_canonical_digest,
+                    store.previous_delivery_count,store.previous_delivery_digest,
+                    store.previous_corpus_schema,store.previous_corpus_fingerprint,
+                    store.previous_embedding_model,store.previous_embedding_dimensions,
+                    store.building_generation,store.building_fingerprint,
+                    store.building_fence_epoch,store.snapshot_cursor,store.building_provider,
+                    store.building_provider_fingerprint,store.building_canonical_count,
+                    store.building_canonical_digest,store.building_delivery_count,
+                    store.building_delivery_digest,store.building_corpus_schema,
+                    store.building_corpus_fingerprint,store.building_embedding_model,
+                    store.building_embedding_dimensions,store.snapshot_cursor,
+                    store.building_phase
+             FROM projection_database AS database
+             JOIN projection_store_state AS store ON store.store_name=?1
+             WHERE database.singleton=1",
+            [store_name],
+            |row| {
+                Ok(TestSqliteAuthorityState {
+                    canonical_database_instance_id: row.get(0)?,
+                    canonical_protocol_version: row.get(1)?,
+                    store_database_instance_id: row.get(2)?,
+                    store_protocol_version: row.get(3)?,
+                    schema_version: row.get(4)?,
+                    control_plane: row.get(5)?,
+                    fence_epoch: row.get(6)?,
+                    lease_owner: row.get(7)?,
+                    lease_token: row.get(8)?,
+                    lease_expires_at: row.get(9)?,
+                    active: TestSqliteGenerationBinding::from_row(row, 10)?,
+                    previous: TestSqliteGenerationBinding::from_row(row, 24)?,
+                    building: TestSqliteGenerationBinding::from_row(row, 38)?,
+                    snapshot_cursor: row.get(52)?,
+                    building_phase: row.get(53)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(storage)?
+        .ok_or_else(|| test_authority_conflict(store_name, "SQLite authority row is absent"))?;
+
+    if state.canonical_database_instance_id != state.store_database_instance_id
+        || state.canonical_protocol_version != super::projection_v2::PROJECTION_PROTOCOL_VERSION
+        || state.store_protocol_version != super::projection_v2::PROJECTION_PROTOCOL_VERSION
+        || state.schema_version != DERIVED_STORE_SCHEMA_VERSION
+        || state.control_plane != "v2"
+        || state.fence_epoch != authority.fence_epoch
+        || state.lease_owner.as_deref() != Some(authority.owner.as_str())
+        || state.lease_token.as_deref() != Some(authority.lease_token.as_str())
+        || state
+            .lease_expires_at
+            .is_none_or(|lease_expires_at| lease_expires_at <= now)
+    {
+        return Err(test_authority_conflict(
+            store_name,
+            "database, protocol, schema, control-plane, owner, token, lease, or fence changed",
+        ));
+    }
+
+    let mut live_role = None;
+    for (role, candidate) in [
+        (
+            ProjectionGenerationRole::Active,
+            state.active.generation.as_deref(),
+        ),
+        (
+            ProjectionGenerationRole::Previous,
+            state.previous.generation.as_deref(),
+        ),
+        (
+            ProjectionGenerationRole::Building,
+            state.building.generation.as_deref(),
+        ),
+    ] {
+        if candidate == Some(generation) {
+            if live_role.is_some() {
+                return Err(test_authority_conflict(
+                    store_name,
+                    "generation is bound to more than one live role",
+                ));
+            }
+            live_role = Some(role);
+        }
+    }
+    let live_role = live_role.ok_or_else(|| {
+        test_authority_conflict(
+            store_name,
+            "generation is not bound to an active, previous, or building role",
+        )
+    })?;
+    if authority.role == ProjectionGenerationRole::Orphaned || authority.role != live_role {
+        return Err(test_authority_conflict(
+            store_name,
+            "generation role does not match SQLite",
+        ));
+    }
+
+    let (sqlite_binding, live_phase) = match live_role {
+        ProjectionGenerationRole::Active => (
+            state
+                .active
+                .exact_binding(store_name, state.active.snapshot_cursor)?,
+            None,
+        ),
+        ProjectionGenerationRole::Previous => (
+            state
+                .previous
+                .exact_binding(store_name, state.previous.snapshot_cursor)?,
+            None,
+        ),
+        ProjectionGenerationRole::Building => {
+            let phase = state.building_phase.clone();
+            if !matches!(
+                phase.as_deref(),
+                Some("snapshotting" | "prepared" | "store_published")
+            ) {
+                return Err(test_authority_conflict(
+                    store_name,
+                    "building phase is invalid",
+                ));
+            }
+            let binding_cursor = if phase.as_deref() == Some("snapshotting") {
+                None
+            } else {
+                Some(state.snapshot_cursor)
+            };
+            (
+                state.building.exact_binding(store_name, binding_cursor)?,
+                phase,
+            )
+        }
+        ProjectionGenerationRole::Orphaned => unreachable!("orphaned role is rejected above"),
+    };
+    if sqlite_binding.generation != generation
+        || sqlite_binding != authority.expected_binding
+        || authority.building_phase != live_phase
+        || sqlite_binding.fence_epoch < 0
+        || sqlite_binding.fence_epoch > state.fence_epoch
+    {
+        return Err(test_authority_conflict(
+            store_name,
+            "generation binding, role phase, or binding fence does not match SQLite",
+        ));
+    }
+
+    let sqlite_manifest = sqlite_binding
+        .fingerprint
+        .as_ref()
+        .map(|_| ProjectionArtifactManifest {
+            store_name: store_name.to_owned(),
+            database_instance_id: state.store_database_instance_id.clone(),
+            protocol_version: state.store_protocol_version,
+            schema_version: state.schema_version,
+            generation: sqlite_binding.generation.clone(),
+            fence_epoch: sqlite_binding.fence_epoch,
+            snapshot_cursor: sqlite_binding
+                .snapshot_cursor
+                .unwrap_or(state.snapshot_cursor),
+            provider: sqlite_binding.provider.clone(),
+            provider_fingerprint: sqlite_binding.provider_fingerprint.clone(),
+            corpus: sqlite_binding.corpus.clone(),
+            canonical_item_count: sqlite_binding.canonical_count,
+            canonical_digest: sqlite_binding.canonical_digest.clone(),
+            delivery_item_count: sqlite_binding.delivery_count,
+            delivery_digest: sqlite_binding.delivery_digest.clone(),
+            fingerprint: sqlite_binding.fingerprint.clone(),
+        });
+    if authority.expected_manifest != sqlite_manifest {
+        return Err(test_authority_conflict(
+            store_name,
+            "manifest does not match the exact SQLite binding",
+        ));
+    }
+    let descriptor = match provider_policy {
+        TestAuthorityProviderPolicy::Current(descriptor)
+        | TestAuthorityProviderPolicy::Recovery(descriptor) => descriptor,
+    };
+    let current_provider_binding = descriptor.store_name == store_name
+        && sqlite_binding.provider == descriptor.provider
+        && sqlite_binding.provider_fingerprint == descriptor.provider_fingerprint
+        && sqlite_binding.corpus == descriptor.corpus;
+    if matches!(provider_policy, TestAuthorityProviderPolicy::Current(_))
+        && !current_provider_binding
+    {
+        return Err(test_authority_conflict(
+            store_name,
+            "provider or corpus binding is not current",
+        ));
+    }
+
+    Ok(TestExactAuthorityGuard {
+        _helper_guard: helper_guard,
+        role: live_role,
+        current_provider_binding,
+    })
+}
+
+#[cfg(test)]
 mod legacy_binding_recovery_tests {
     use std::{
         collections::{BTreeMap, BTreeSet},
-        io::ErrorKind,
         path::{Path, PathBuf},
         sync::{Arc, Mutex, mpsc},
         thread,
@@ -2659,7 +3036,8 @@ mod legacy_binding_recovery_tests {
         init::init_database,
         service::{
             CreateTask, ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
-            ProjectionBatchReceipt, ProjectionPublishReceipt, ProjectionSnapshot, create_task,
+            ProjectionBatchReceipt, ProjectionDestructiveAuthority, ProjectionGenerationBinding,
+            ProjectionGenerationRole, ProjectionPublishReceipt, ProjectionSnapshot, create_task,
         },
     };
 
@@ -2673,16 +3051,21 @@ mod legacy_binding_recovery_tests {
         generations: BTreeMap<String, ProjectionArtifactEvidence>,
         active: Option<ProjectionArtifactEvidence>,
         prepared: Option<ProjectionArtifactEvidence>,
+        published: BTreeSet<String>,
         quarantined: BTreeMap<String, ProjectionArtifactEvidence>,
         quarantine_attempts: Vec<String>,
         after_prepare: Option<Box<dyn FnOnce() + Send>>,
         before_active_inspect: Option<Box<dyn FnOnce() + Send>>,
+        after_active_inspect: Option<Box<dyn FnOnce() + Send>>,
         promote_after_active_quarantine: Option<String>,
+        fail_next_quarantine: Option<String>,
+        fail_next_active_inspect: Option<String>,
     }
 
     struct RecoveryBackend {
         descriptor: ProjectionStoreDescriptor,
         state: Mutex<RecoveryBackendState>,
+        helper_path: Option<PathBuf>,
     }
 
     impl RecoveryBackend {
@@ -2690,6 +3073,15 @@ mod legacy_binding_recovery_tests {
             Self {
                 descriptor: current_descriptor(),
                 state: Mutex::new(RecoveryBackendState::default()),
+                helper_path: None,
+            }
+        }
+
+        fn empty_with_helper_path(path: &Path) -> Self {
+            Self {
+                descriptor: current_descriptor(),
+                state: Mutex::new(RecoveryBackendState::default()),
+                helper_path: Some(path.to_owned()),
             }
         }
 
@@ -2699,7 +3091,7 @@ mod legacy_binding_recovery_tests {
             previous: bool,
             building: bool,
         ) -> anyhow::Result<Self> {
-            let backend = Self::empty();
+            let backend = Self::empty_with_helper_path(path);
             let mut state = backend.state.lock().expect("recovery backend lock");
             if active {
                 let evidence = legacy_evidence(path, ACTIVE, 7)?;
@@ -2707,11 +3099,13 @@ mod legacy_binding_recovery_tests {
                     .generations
                     .insert(ACTIVE.to_owned(), evidence.clone());
                 state.active = Some(evidence);
+                state.published.insert(ACTIVE.to_owned());
             }
             if previous {
                 state
                     .generations
                     .insert(PREVIOUS.to_owned(), legacy_evidence(path, PREVIOUS, 6)?);
+                state.published.insert(PREVIOUS.to_owned());
             }
             if building {
                 let evidence = legacy_evidence(path, BUILDING, 8)?;
@@ -2724,6 +3118,39 @@ mod legacy_binding_recovery_tests {
             Ok(backend)
         }
 
+        fn acquire_helper_guard(&self) -> Result<Option<DerivedStoreWriteGuard>> {
+            self.helper_path
+                .as_deref()
+                .map(|path| {
+                    crate::db::acquire_derived_store_write_guard(
+                        path,
+                        &format!("{STORE}-projection-helper"),
+                    )
+                })
+                .transpose()
+        }
+
+        fn acquire_exact_authority_guard(
+            &self,
+            generation: &str,
+            authority: &ProjectionDestructiveAuthority,
+            provider_policy: TestAuthorityProviderPolicy<'_>,
+        ) -> Result<TestExactAuthorityGuard> {
+            let path = self.helper_path.as_deref().ok_or_else(|| {
+                KanbanError::Conflict(
+                    "recovery fake authority has no SQLite/helper path".to_owned(),
+                )
+            })?;
+            acquire_test_exact_authority_guard(
+                path,
+                &format!("{STORE}-projection-helper"),
+                STORE,
+                generation,
+                authority,
+                provider_policy,
+            )
+        }
+
         fn install_unknown_active(&self, path: &Path, generation: &str) -> anyhow::Result<()> {
             let evidence = evidence_for_descriptor(path, generation, 99, &self.descriptor)?;
             let mut state = self.state.lock().expect("recovery backend lock");
@@ -2731,6 +3158,7 @@ mod legacy_binding_recovery_tests {
                 .generations
                 .insert(generation.to_owned(), evidence.clone());
             state.active = Some(evidence);
+            state.published.insert(generation.to_owned());
             Ok(())
         }
 
@@ -2773,11 +3201,32 @@ mod legacy_binding_recovery_tests {
                 .before_active_inspect = Some(Box::new(hook));
         }
 
+        fn set_after_active_inspect(&self, hook: impl FnOnce() + Send + 'static) {
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .after_active_inspect = Some(Box::new(hook));
+        }
+
         fn set_after_prepare(&self, hook: impl FnOnce() + Send + 'static) {
             self.state
                 .lock()
                 .expect("recovery backend lock")
                 .after_prepare = Some(Box::new(hook));
+        }
+
+        fn fail_next_quarantine(&self, message: impl Into<String>) {
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .fail_next_quarantine = Some(message.into());
+        }
+
+        fn fail_next_active_inspect(&self, message: impl Into<String>) {
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .fail_next_active_inspect = Some(message.into());
         }
 
         fn quarantined_ids(&self) -> BTreeSet<String> {
@@ -2798,6 +3247,22 @@ mod legacy_binding_recovery_tests {
                 .clone()
         }
 
+        fn published_ids(&self) -> BTreeSet<String> {
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .published
+                .clone()
+        }
+
+        fn mark_published(&self, generation: &str) {
+            self.state
+                .lock()
+                .expect("recovery backend lock")
+                .published
+                .insert(generation.to_owned());
+        }
+
         fn corrupt_generation_fingerprint(&self, generation: &str) {
             let mut state = self.state.lock().expect("recovery backend lock");
             let evidence = state
@@ -2815,17 +3280,11 @@ mod legacy_binding_recovery_tests {
                 state.prepared = Some(corrupted);
             }
         }
-    }
 
-    impl ProjectionStoreBackend for RecoveryBackend {
-        fn descriptor(&self) -> Result<ProjectionStoreDescriptor> {
-            Ok(self.descriptor.clone())
-        }
-
-        fn prepare_snapshot(
+        fn prepare_snapshot_while_helper_locked(
             &self,
             snapshot: &ProjectionSnapshot,
-        ) -> Result<ProjectionArtifactEvidence> {
+        ) -> ProjectionArtifactEvidence {
             let fingerprint = format!("fake:{}", snapshot.manifest.generation);
             let mut manifest = snapshot.manifest.clone();
             manifest.fingerprint = Some(fingerprint.clone());
@@ -2844,11 +3303,14 @@ mod legacy_binding_recovery_tests {
             if let Some(hook) = hook {
                 hook();
             }
-            Ok(evidence)
+            evidence
         }
 
-        fn apply_batch(&self, batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt> {
-            Ok(ProjectionBatchReceipt {
+        fn apply_batch_while_helper_locked(
+            &self,
+            batch: &ProjectionBatch,
+        ) -> ProjectionBatchReceipt {
+            ProjectionBatchReceipt {
                 store_name: batch.store_name.clone(),
                 database_instance_id: batch.database_instance_id.clone(),
                 protocol_version: batch.protocol_version,
@@ -2860,10 +3322,10 @@ mod legacy_binding_recovery_tests {
                 fence_epoch: batch.fence_epoch,
                 claim_token: batch.claim_token.clone(),
                 applied_item_count: batch.items.len(),
-            })
+            }
         }
 
-        fn publish_generation(
+        fn publish_generation_while_helper_locked(
             &self,
             expected_active: Option<&ProjectionArtifactEvidence>,
             prepared: &ProjectionArtifactEvidence,
@@ -2884,49 +3346,14 @@ mod legacy_binding_recovery_tests {
             state
                 .generations
                 .insert(prepared.manifest.generation.clone(), prepared.clone());
+            state.published.insert(prepared.manifest.generation.clone());
             Ok(ProjectionPublishReceipt {
                 active: prepared.clone(),
                 retained_previous,
             })
         }
 
-        fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>> {
-            let (active, hook) = {
-                let mut state = self.state.lock().expect("recovery backend lock");
-                (state.active.clone(), state.before_active_inspect.take())
-            };
-            if let Some(hook) = hook {
-                hook();
-            }
-            Ok(active)
-        }
-
-        fn inspect_generation(
-            &self,
-            generation: &str,
-        ) -> Result<Option<ProjectionArtifactEvidence>> {
-            Ok(self
-                .state
-                .lock()
-                .expect("recovery backend lock")
-                .generations
-                .get(generation)
-                .cloned())
-        }
-
-        fn validate_generation_publication(
-            &self,
-            expected: &ProjectionArtifactEvidence,
-        ) -> Result<()> {
-            match self.inspect_generation(&expected.manifest.generation)? {
-                Some(actual) if actual == *expected => Ok(()),
-                _ => Err(KanbanError::Storage(
-                    "recovery fake generation is not published".to_owned(),
-                )),
-            }
-        }
-
-        fn quarantine_generation(&self, generation: &str) -> Result<()> {
+        fn quarantine_generation_while_helper_locked(&self, generation: &str) {
             let mut state = self.state.lock().expect("recovery backend lock");
             state.quarantine_attempts.push(generation.to_owned());
             let evidence = state.generations.remove(generation).or_else(|| {
@@ -2950,6 +3377,7 @@ mod legacy_binding_recovery_tests {
             {
                 state.prepared = None;
             }
+            state.published.remove(generation);
             if let Some(evidence) = evidence {
                 state.quarantined.insert(generation.to_owned(), evidence);
             }
@@ -2957,8 +3385,722 @@ mod legacy_binding_recovery_tests {
             {
                 state.active = state.generations.get(&promoted).cloned();
             }
+        }
+
+        fn abort_generation_while_helper_locked(&self, generation: &str) {
+            let mut state = self.state.lock().expect("recovery backend lock");
+            state.generations.remove(generation);
+            if state
+                .prepared
+                .as_ref()
+                .is_some_and(|prepared| prepared.manifest.generation == generation)
+            {
+                state.prepared = None;
+            }
+        }
+    }
+
+    impl ProjectionStoreBackend for RecoveryBackend {
+        fn descriptor(&self) -> Result<ProjectionStoreDescriptor> {
+            Ok(self.descriptor.clone())
+        }
+
+        fn prepare_snapshot(
+            &self,
+            snapshot: &ProjectionSnapshot,
+        ) -> Result<ProjectionArtifactEvidence> {
+            let _helper_guard = self.acquire_helper_guard()?;
+            Ok(self.prepare_snapshot_while_helper_locked(snapshot))
+        }
+
+        fn prepare_snapshot_with_authority(
+            &self,
+            snapshot: &ProjectionSnapshot,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<ProjectionArtifactEvidence> {
+            let _authority_guard = self.acquire_exact_authority_guard(
+                &snapshot.manifest.generation,
+                authority,
+                TestAuthorityProviderPolicy::Current(&self.descriptor),
+            )?;
+            Ok(self.prepare_snapshot_while_helper_locked(snapshot))
+        }
+
+        fn apply_batch(&self, batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt> {
+            let _helper_guard = self.acquire_helper_guard()?;
+            Ok(self.apply_batch_while_helper_locked(batch))
+        }
+
+        fn apply_batch_with_authority(
+            &self,
+            batch: &ProjectionBatch,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<ProjectionBatchReceipt> {
+            let _authority_guard = self.acquire_exact_authority_guard(
+                &batch.target_generation,
+                authority,
+                TestAuthorityProviderPolicy::Current(&self.descriptor),
+            )?;
+            Ok(self.apply_batch_while_helper_locked(batch))
+        }
+
+        fn publish_generation(
+            &self,
+            expected_active: Option<&ProjectionArtifactEvidence>,
+            prepared: &ProjectionArtifactEvidence,
+        ) -> Result<ProjectionPublishReceipt> {
+            let _helper_guard = self.acquire_helper_guard()?;
+            self.publish_generation_while_helper_locked(expected_active, prepared)
+        }
+
+        fn publish_generation_with_authority(
+            &self,
+            expected_active: Option<&ProjectionArtifactEvidence>,
+            prepared: &ProjectionArtifactEvidence,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<ProjectionPublishReceipt> {
+            let _authority_guard = self.acquire_exact_authority_guard(
+                &prepared.manifest.generation,
+                authority,
+                TestAuthorityProviderPolicy::Current(&self.descriptor),
+            )?;
+            self.publish_generation_while_helper_locked(expected_active, prepared)
+        }
+
+        fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>> {
+            let helper_guard = self.acquire_helper_guard()?;
+            let (active, before_hook, after_hook, failure) = {
+                let mut state = self.state.lock().expect("recovery backend lock");
+                (
+                    state.active.clone(),
+                    state.before_active_inspect.take(),
+                    state.after_active_inspect.take(),
+                    state.fail_next_active_inspect.take(),
+                )
+            };
+            if let Some(hook) = before_hook {
+                hook();
+            }
+            drop(helper_guard);
+            if let Some(hook) = after_hook {
+                hook();
+            }
+            if let Some(message) = failure {
+                return Err(KanbanError::Storage(message));
+            }
+            Ok(active)
+        }
+
+        fn inspect_generation(
+            &self,
+            generation: &str,
+        ) -> Result<Option<ProjectionArtifactEvidence>> {
+            let _helper_guard = self.acquire_helper_guard()?;
+            Ok(self
+                .state
+                .lock()
+                .expect("recovery backend lock")
+                .generations
+                .get(generation)
+                .cloned())
+        }
+
+        fn validate_generation_publication(
+            &self,
+            expected: &ProjectionArtifactEvidence,
+        ) -> Result<()> {
+            match self.inspect_generation(&expected.manifest.generation)? {
+                Some(actual) if actual == *expected => Ok(()),
+                _ => Err(KanbanError::Storage(
+                    "recovery fake generation is not published".to_owned(),
+                )),
+            }
+        }
+
+        fn quarantine_generation(&self, generation: &str) -> Result<()> {
+            let _helper_guard = self.acquire_helper_guard()?;
+            self.quarantine_generation_while_helper_locked(generation);
             Ok(())
         }
+
+        fn abort_generation(&self, generation: &str) -> Result<()> {
+            let _helper_guard = self.acquire_helper_guard()?;
+            let state = self.state.lock().expect("recovery backend lock");
+            if state
+                .active
+                .as_ref()
+                .is_some_and(|active| active.manifest.generation == generation)
+                || state.published.contains(generation)
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "recovery fake cannot abort published generation {generation}"
+                )));
+            }
+            drop(state);
+            self.abort_generation_while_helper_locked(generation);
+            Ok(())
+        }
+
+        fn quarantine_generation_fenced(
+            &self,
+            generation: &str,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            let authority_guard = self.acquire_exact_authority_guard(
+                generation,
+                authority,
+                TestAuthorityProviderPolicy::Recovery(&self.descriptor),
+            )?;
+            if authority_guard.role == ProjectionGenerationRole::Active
+                && authority_guard.current_provider_binding
+            {
+                let state = self.state.lock().expect("recovery backend lock");
+                let exact_canonical_active = state.active.as_ref().is_some_and(|active| {
+                    authority.expected_manifest.as_ref() == Some(&active.manifest)
+                        && authority.expected_binding.fingerprint.as_deref()
+                            == Some(active.fingerprint.as_str())
+                });
+                if exact_canonical_active {
+                    return Err(KanbanError::Conflict(format!(
+                        "cannot quarantine canonical active recovery fake generation {generation}"
+                    )));
+                }
+            }
+            if let Some(message) = self
+                .state
+                .lock()
+                .expect("recovery backend lock")
+                .fail_next_quarantine
+                .take()
+            {
+                return Err(KanbanError::Storage(message));
+            }
+            self.quarantine_generation_while_helper_locked(generation);
+            Ok(())
+        }
+
+        fn abort_generation_fenced(
+            &self,
+            generation: &str,
+            authority: &ProjectionDestructiveAuthority,
+        ) -> Result<()> {
+            let authority_guard = self.acquire_exact_authority_guard(
+                generation,
+                authority,
+                TestAuthorityProviderPolicy::Recovery(&self.descriptor),
+            )?;
+            let published = self
+                .state
+                .lock()
+                .expect("recovery backend lock")
+                .published
+                .contains(generation);
+            if authority_guard.role != ProjectionGenerationRole::Building
+                || !matches!(
+                    authority.building_phase.as_deref(),
+                    Some("snapshotting" | "prepared")
+                )
+                || published
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "recovery fake can only abort an unpublished building generation: {generation}"
+                )));
+            }
+            self.abort_generation_while_helper_locked(generation);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn recovery_authority_without_a_helper_path_fails_closed() {
+        let backend = RecoveryBackend::empty();
+        let authority = ProjectionDestructiveAuthority {
+            owner: "missing-helper-owner".to_owned(),
+            lease_token: "missing-helper-token".to_owned(),
+            fence_epoch: 1,
+            lease_expires_at: SystemClock.now_ms() + 20_000,
+            role: ProjectionGenerationRole::Active,
+            generation: ACTIVE.to_owned(),
+            expected_manifest: None,
+            expected_binding: ProjectionGenerationBinding {
+                generation: ACTIVE.to_owned(),
+                fingerprint: None,
+                fence_epoch: 1,
+                snapshot_cursor: Some(0),
+                provider: "fake-lance".to_owned(),
+                provider_fingerprint: "fake-lance-v2".to_owned(),
+                canonical_count: 0,
+                canonical_digest: "canonical".to_owned(),
+                delivery_count: 0,
+                delivery_digest: "delivery".to_owned(),
+                corpus: None,
+            },
+            building_phase: None,
+        };
+
+        let error = backend
+            .quarantine_generation_fenced(ACTIVE, &authority)
+            .expect_err("an authority-bearing fake mutation requires a live helper path");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert!(backend.quarantine_attempts().is_empty());
+    }
+
+    #[test]
+    fn recovery_authority_rejects_a_wrong_live_role_without_physical_mutation() -> anyhow::Result<()>
+    {
+        let (_temp, path) = v29_lance_fixture(true, false, false)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, false, false)?;
+        let lease = acquire_projection_lease(&path, STORE, "wrong-role-owner", 20_000)?;
+        let mut authority = authority_for_evidence(
+            &legacy_evidence(&path, ACTIVE, 7)?,
+            "wrong-role-owner",
+            &lease.lease_token,
+            lease.fence_epoch,
+            lease.lease_expires_at,
+            ProjectionGenerationRole::Active,
+        );
+        authority.role = ProjectionGenerationRole::Previous;
+
+        let before = backend.inspect_generation(ACTIVE)?;
+        let error = backend
+            .quarantine_generation_fenced(ACTIVE, &authority)
+            .expect_err("the exact live SQLite role is part of destructive authority");
+
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert_eq!(backend.inspect_generation(ACTIVE)?, before);
+        assert!(backend.quarantine_attempts().is_empty());
+        Ok(())
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum RecoveryAuthorityDrift {
+        EmptyGeneration,
+        EmptyOwner,
+        EmptyToken,
+        NegativeAuthorityFence,
+        ExpiredAuthority,
+        SameIdentityFenceRollover,
+        OwnerTokenHandoff,
+        ExpiredLiveLease,
+        FutureBindingFence,
+        WrongRole,
+        WrongPhase,
+        WrongBinding,
+        WrongManifest,
+        DatabaseMismatch,
+        ProtocolMismatch,
+        SchemaMismatch,
+        ControlPlaneMismatch,
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum RecoveryFencedOperation {
+        Quarantine,
+        Abort,
+    }
+
+    #[test]
+    fn recovery_exact_authority_negative_matrix_preserves_physical_state() -> anyhow::Result<()> {
+        for operation in [
+            RecoveryFencedOperation::Quarantine,
+            RecoveryFencedOperation::Abort,
+        ] {
+            let (_temp, path) = v29_lance_fixture(true, false, false)?;
+            let backend = RecoveryBackend::from_legacy_sqlite(&path, true, false, false)?;
+            let owner = "negative-matrix-owner";
+            let lease = acquire_projection_lease(&path, STORE, owner, 20_000)?;
+            let base_authority = authority_for_evidence(
+                &legacy_evidence(&path, ACTIVE, 7)?,
+                owner,
+                &lease.lease_token,
+                lease.fence_epoch,
+                lease.lease_expires_at,
+                ProjectionGenerationRole::Active,
+            );
+            let database_instance_id = base_authority
+                .expected_manifest
+                .as_ref()
+                .expect("active manifest")
+                .database_instance_id
+                .clone();
+            let physical_before = backend.inspect_generation(ACTIVE)?;
+            let published_before = backend.published_ids();
+            for drift in [
+                RecoveryAuthorityDrift::EmptyGeneration,
+                RecoveryAuthorityDrift::EmptyOwner,
+                RecoveryAuthorityDrift::EmptyToken,
+                RecoveryAuthorityDrift::NegativeAuthorityFence,
+                RecoveryAuthorityDrift::ExpiredAuthority,
+                RecoveryAuthorityDrift::SameIdentityFenceRollover,
+                RecoveryAuthorityDrift::OwnerTokenHandoff,
+                RecoveryAuthorityDrift::ExpiredLiveLease,
+                RecoveryAuthorityDrift::FutureBindingFence,
+                RecoveryAuthorityDrift::WrongRole,
+                RecoveryAuthorityDrift::WrongPhase,
+                RecoveryAuthorityDrift::WrongBinding,
+                RecoveryAuthorityDrift::WrongManifest,
+                RecoveryAuthorityDrift::DatabaseMismatch,
+                RecoveryAuthorityDrift::ProtocolMismatch,
+                RecoveryAuthorityDrift::SchemaMismatch,
+                RecoveryAuthorityDrift::ControlPlaneMismatch,
+            ] {
+                let mut authority = base_authority.clone();
+
+                match drift {
+                    RecoveryAuthorityDrift::EmptyGeneration => authority.generation.clear(),
+                    RecoveryAuthorityDrift::EmptyOwner => authority.owner.clear(),
+                    RecoveryAuthorityDrift::EmptyToken => authority.lease_token.clear(),
+                    RecoveryAuthorityDrift::NegativeAuthorityFence => authority.fence_epoch = -1,
+                    RecoveryAuthorityDrift::ExpiredAuthority => authority.lease_expires_at = 0,
+                    RecoveryAuthorityDrift::SameIdentityFenceRollover => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET fence_epoch=fence_epoch+1
+                             WHERE store_name=?1",
+                            [STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::OwnerTokenHandoff => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET lease_owner='successor-owner',
+                                 lease_token='please_successor_token',
+                                 lease_expires_at=?1,fence_epoch=fence_epoch+1
+                             WHERE store_name=?2",
+                            params![SystemClock.now_ms() + 20_000, STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::ExpiredLiveLease => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET lease_expires_at=0
+                             WHERE store_name=?1",
+                            [STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::FutureBindingFence => {
+                        let future_fence = lease.fence_epoch + 1;
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET active_fence_epoch=?1
+                             WHERE store_name=?2",
+                            params![future_fence, STORE],
+                        )?;
+                        authority.expected_binding.fence_epoch = future_fence;
+                        authority
+                            .expected_manifest
+                            .as_mut()
+                            .expect("active manifest")
+                            .fence_epoch = future_fence;
+                    }
+                    RecoveryAuthorityDrift::WrongRole => {
+                        authority.role = ProjectionGenerationRole::Previous;
+                    }
+                    RecoveryAuthorityDrift::WrongPhase => {
+                        authority.building_phase = Some("prepared".to_owned());
+                    }
+                    RecoveryAuthorityDrift::WrongBinding => {
+                        authority.expected_binding.provider = "wrong-provider".to_owned();
+                    }
+                    RecoveryAuthorityDrift::WrongManifest => {
+                        authority
+                            .expected_manifest
+                            .as_mut()
+                            .expect("active manifest")
+                            .database_instance_id = "db_wrong_manifest".to_owned();
+                    }
+                    RecoveryAuthorityDrift::DatabaseMismatch => {
+                        let conn = connect_file(&path)?;
+                        conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+                        conn.execute(
+                            "UPDATE projection_store_state
+                             SET database_instance_id='db_mismatched_store'
+                             WHERE store_name=?1",
+                            [STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::ProtocolMismatch => {
+                        let conn = connect_file(&path)?;
+                        conn.execute_batch("PRAGMA ignore_check_constraints=ON;")?;
+                        conn.execute(
+                            "UPDATE projection_store_state
+                             SET protocol_version=3
+                             WHERE store_name=?1",
+                            [STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::SchemaMismatch => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET schema_version=2
+                             WHERE store_name=?1",
+                            [STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::ControlPlaneMismatch => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET control_plane='legacy'
+                             WHERE store_name=?1",
+                            [STORE],
+                        )?;
+                    }
+                }
+
+                let result = match operation {
+                    RecoveryFencedOperation::Quarantine => {
+                        backend.quarantine_generation_fenced(ACTIVE, &authority)
+                    }
+                    RecoveryFencedOperation::Abort => {
+                        backend.abort_generation_fenced(ACTIVE, &authority)
+                    }
+                };
+                let error =
+                    result.expect_err("every stale or incomplete authority must fail closed");
+                assert!(
+                    matches!(error, KanbanError::Conflict(_)),
+                    "{operation:?}/{drift:?} returned {error:?}"
+                );
+                assert_eq!(
+                    backend.inspect_generation(ACTIVE)?,
+                    physical_before,
+                    "{operation:?}/{drift:?} changed physical evidence"
+                );
+                assert_eq!(
+                    backend.published_ids(),
+                    published_before,
+                    "{operation:?}/{drift:?} changed published-marker evidence"
+                );
+                assert!(
+                    backend.quarantine_attempts().is_empty(),
+                    "{operation:?}/{drift:?} reached the physical mutator"
+                );
+                match drift {
+                    RecoveryAuthorityDrift::SameIdentityFenceRollover => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET fence_epoch=?1
+                             WHERE store_name=?2",
+                            params![lease.fence_epoch, STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::OwnerTokenHandoff => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET lease_owner=?1,lease_token=?2,lease_expires_at=?3,
+                                 fence_epoch=?4
+                             WHERE store_name=?5",
+                            params![
+                                owner,
+                                lease.lease_token,
+                                lease.lease_expires_at,
+                                lease.fence_epoch,
+                                STORE
+                            ],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::ExpiredLiveLease => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET lease_expires_at=?1
+                             WHERE store_name=?2",
+                            params![lease.lease_expires_at, STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::FutureBindingFence => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET active_fence_epoch=7
+                             WHERE store_name=?1",
+                            [STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::DatabaseMismatch => {
+                        let conn = connect_file(&path)?;
+                        conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+                        conn.execute(
+                            "UPDATE projection_store_state
+                             SET database_instance_id=?1
+                             WHERE store_name=?2",
+                            params![database_instance_id, STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::ProtocolMismatch => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET protocol_version=2
+                             WHERE store_name=?1",
+                            [STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::SchemaMismatch => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET schema_version=1
+                             WHERE store_name=?1",
+                            [STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::ControlPlaneMismatch => {
+                        connect_file(&path)?.execute(
+                            "UPDATE projection_store_state
+                             SET control_plane='v2'
+                             WHERE store_name=?1",
+                            [STORE],
+                        )?;
+                    }
+                    RecoveryAuthorityDrift::EmptyGeneration
+                    | RecoveryAuthorityDrift::EmptyOwner
+                    | RecoveryAuthorityDrift::EmptyToken
+                    | RecoveryAuthorityDrift::NegativeAuthorityFence
+                    | RecoveryAuthorityDrift::ExpiredAuthority
+                    | RecoveryAuthorityDrift::WrongRole
+                    | RecoveryAuthorityDrift::WrongPhase
+                    | RecoveryAuthorityDrift::WrongBinding
+                    | RecoveryAuthorityDrift::WrongManifest => {}
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_exact_historical_authority_allows_production_recovery_mutations()
+    -> anyhow::Result<()> {
+        for (role, generation, artifact_fence) in [
+            (ProjectionGenerationRole::Active, ACTIVE, 7),
+            (ProjectionGenerationRole::Previous, PREVIOUS, 6),
+            (ProjectionGenerationRole::Building, BUILDING, 8),
+        ] {
+            let (_temp, path) = v29_lance_fixture(true, true, true)?;
+            let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
+            let owner = "historical-quarantine-owner";
+            let lease = acquire_projection_lease(&path, STORE, owner, 20_000)?;
+            let mut authority = authority_for_evidence(
+                &legacy_evidence(&path, generation, artifact_fence)?,
+                owner,
+                &lease.lease_token,
+                lease.fence_epoch,
+                lease.lease_expires_at,
+                role,
+            );
+            if role == ProjectionGenerationRole::Building {
+                authority.building_phase = Some("prepared".to_owned());
+            }
+
+            backend.quarantine_generation_fenced(generation, &authority)?;
+            assert!(backend.inspect_generation(generation)?.is_none());
+            assert!(backend.quarantined_ids().contains(generation));
+        }
+
+        let (_temp, path) = v29_lance_fixture(false, false, true)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, false, false, true)?;
+        let owner = "prepared-abort-owner";
+        let lease = acquire_projection_lease(&path, STORE, owner, 20_000)?;
+        let mut authority = authority_for_evidence(
+            &legacy_evidence(&path, BUILDING, 8)?,
+            owner,
+            &lease.lease_token,
+            lease.fence_epoch,
+            lease.lease_expires_at,
+            ProjectionGenerationRole::Building,
+        );
+        authority.building_phase = Some("prepared".to_owned());
+        backend.abort_generation_fenced(BUILDING, &authority)?;
+        assert!(backend.inspect_generation(BUILDING)?.is_none());
+        assert!(!backend.quarantined_ids().contains(BUILDING));
+        assert!(!backend.published_ids().contains(BUILDING));
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_fenced_mutators_protect_canonical_or_published_generations() -> anyhow::Result<()> {
+        for (role, generation, artifact_fence) in [
+            (ProjectionGenerationRole::Active, ACTIVE, 7),
+            (ProjectionGenerationRole::Previous, PREVIOUS, 6),
+        ] {
+            let (_temp, path) = v29_lance_fixture(true, true, false)?;
+            let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, false)?;
+            let owner = "published-abort-owner";
+            let lease = acquire_projection_lease(&path, STORE, owner, 20_000)?;
+            let authority = authority_for_evidence(
+                &legacy_evidence(&path, generation, artifact_fence)?,
+                owner,
+                &lease.lease_token,
+                lease.fence_epoch,
+                lease.lease_expires_at,
+                role,
+            );
+            let physical_before = backend.inspect_generation(generation)?;
+            let active_before = backend.inspect_active()?;
+            let published_before = backend.published_ids();
+
+            let error = backend
+                .abort_generation_fenced(generation, &authority)
+                .expect_err("active/previous generations are not abortable");
+            assert!(matches!(error, KanbanError::Conflict(_)));
+            assert_eq!(backend.inspect_generation(generation)?, physical_before);
+            assert_eq!(backend.inspect_active()?, active_before);
+            assert_eq!(backend.published_ids(), published_before);
+            assert!(backend.quarantine_attempts().is_empty());
+        }
+
+        let (_temp, path) = v29_lance_fixture(false, false, true)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, false, false, true)?;
+        let owner = "store-published-abort-owner";
+        let lease = acquire_projection_lease(&path, STORE, owner, 20_000)?;
+        connect_file(&path)?.execute(
+            "UPDATE projection_store_state
+             SET building_phase='store_published'
+             WHERE store_name=?1",
+            [STORE],
+        )?;
+        backend.mark_published(BUILDING);
+        let mut authority = authority_for_evidence(
+            &legacy_evidence(&path, BUILDING, 8)?,
+            owner,
+            &lease.lease_token,
+            lease.fence_epoch,
+            lease.lease_expires_at,
+            ProjectionGenerationRole::Building,
+        );
+        authority.building_phase = Some("store_published".to_owned());
+        let physical_before = backend.inspect_generation(BUILDING)?;
+        let published_before = backend.published_ids();
+        let error = backend
+            .abort_generation_fenced(BUILDING, &authority)
+            .expect_err("a store-published building generation is not abortable");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert_eq!(backend.inspect_generation(BUILDING)?, physical_before);
+        assert_eq!(backend.published_ids(), published_before);
+        assert!(backend.quarantine_attempts().is_empty());
+
+        let (_temp, path) = v29_lance_fixture(true, false, false)?;
+        bind_phase_to_current_corpus(&path, "active")?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, false, false)?;
+        backend.bind_active_to_current_descriptor(&path)?;
+        let owner = "canonical-active-quarantine-owner";
+        let lease = acquire_projection_lease(&path, STORE, owner, 20_000)?;
+        let authority = authority_for_evidence(
+            &evidence_for_descriptor(&path, ACTIVE, 7, &current_descriptor())?,
+            owner,
+            &lease.lease_token,
+            lease.fence_epoch,
+            lease.lease_expires_at,
+            ProjectionGenerationRole::Active,
+        );
+        let physical_before = backend.inspect_generation(ACTIVE)?;
+        let active_before = backend.inspect_active()?;
+        let published_before = backend.published_ids();
+        let error = backend
+            .quarantine_generation_fenced(ACTIVE, &authority)
+            .expect_err("an exact current canonical active generation is protected");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert_eq!(backend.inspect_generation(ACTIVE)?, physical_before);
+        assert_eq!(backend.inspect_active()?, active_before);
+        assert_eq!(backend.published_ids(), published_before);
+        assert!(backend.quarantine_attempts().is_empty());
+        Ok(())
     }
 
     #[test]
@@ -3064,7 +4206,7 @@ mod legacy_binding_recovery_tests {
             "tester",
             CreateTask::ready("explicit resume invariant"),
         )?;
-        let backend = RecoveryBackend::empty();
+        let backend = RecoveryBackend::empty_with_helper_path(&path);
         let seed = MaintenanceSession::start(
             &path,
             "resume-seed-owner",
@@ -3146,7 +4288,7 @@ mod legacy_binding_recovery_tests {
             "tester",
             CreateTask::ready("present before snapshot"),
         )?;
-        let backend = RecoveryBackend::empty();
+        let backend = RecoveryBackend::empty_with_helper_path(&path);
         let mutation_path = path.clone();
         backend.set_after_prepare(move || {
             create_task(
@@ -3217,6 +4359,61 @@ mod legacy_binding_recovery_tests {
     }
 
     #[test]
+    fn prepared_exact_abort_uses_the_persisted_building_phase_and_leaves_no_candidate()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let path = temp.path().join("prepared-exact-abort.db");
+        init_database(&path, "tester")?;
+        create_task(
+            &path,
+            "default",
+            "tester",
+            CreateTask::ready("prepared abort authority"),
+        )?;
+        let backend = RecoveryBackend::empty_with_helper_path(&path);
+        let lease = acquire_projection_lease(&path, STORE, "prepared-abort-owner", 20_000)?;
+        let generation = begin_projection_generation(
+            &path,
+            STORE,
+            "prepared-abort-owner",
+            &lease.lease_token,
+            &backend,
+        )?
+        .generation;
+        prepare_projection_snapshot_with(
+            &path,
+            STORE,
+            "prepared-abort-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+
+        abort_projection_generation(
+            &path,
+            STORE,
+            "prepared-abort-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+
+        assert!(
+            backend.inspect_generation(&generation)?.is_none(),
+            "prepared physical candidate must be removed"
+        );
+        assert!(
+            backend.quarantined_ids().contains(&generation),
+            "the service-level exact abort intentionally quarantines recoverable evidence"
+        );
+        assert!(!backend.published_ids().contains(&generation));
+        assert!(
+            lance_store_status(&path)?.building_generation.is_none(),
+            "prepared SQLite building binding must be cleared"
+        );
+        release_projection_lease(&path, STORE, "prepared-abort-owner", &lease.lease_token)?;
+        Ok(())
+    }
+
+    #[test]
     fn explicit_resume_preserves_an_obsolete_snapshot_generation_for_automatic_recovery()
     -> anyhow::Result<()> {
         let temp = tempdir()?;
@@ -3228,7 +4425,7 @@ mod legacy_binding_recovery_tests {
             "tester",
             CreateTask::ready("resume baseline"),
         )?;
-        let backend = RecoveryBackend::empty();
+        let backend = RecoveryBackend::empty_with_helper_path(&path);
         let seed = MaintenanceSession::start(
             &path,
             "resume-seed-owner",
@@ -3294,7 +4491,7 @@ mod legacy_binding_recovery_tests {
     #[test]
     fn aliased_generation_ids_fail_before_any_physical_mutation() -> anyhow::Result<()> {
         let (_temp, path) = v29_lance_fixture_with_building_id(true, true, true, PREVIOUS)?;
-        let backend = RecoveryBackend::empty();
+        let backend = RecoveryBackend::empty_with_helper_path(&path);
         let lease = acquire_projection_lease(&path, STORE, "alias-owner", 20_000)?;
         let before = sqlite_recovery_control_snapshot(&path)?;
 
@@ -3319,11 +4516,11 @@ mod legacy_binding_recovery_tests {
         let (_temp, path) = v29_lance_fixture(true, true, false)?;
         let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, false)?;
         backend.set_before_active_inspect(|| {
-            thread::sleep(Duration::from_millis(450));
+            thread::sleep(Duration::from_millis(1_500));
         });
         let options = MaintenanceRunOptions {
-            lease_ttl_ms: 300,
-            claim_ttl_ms: 100,
+            lease_ttl_ms: 1_000,
+            claim_ttl_ms: 300,
             batch_size: 25,
         };
         let mut session = MaintenanceSession::start(
@@ -3386,28 +4583,36 @@ mod legacy_binding_recovery_tests {
     #[test]
     fn late_helper_writer_cannot_cross_the_final_sqlite_cas_fence() -> anyhow::Result<()> {
         let (_temp, path) = v29_lance_fixture(true, true, false)?;
-        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, false)?;
+        let backend = Arc::new(RecoveryBackend::from_legacy_sqlite(
+            &path, true, true, false,
+        )?);
         let lease = acquire_projection_lease(&path, STORE, "late-writer-owner", 20_000)?;
+        let stale_authority = authority_for_evidence(
+            &legacy_evidence(&path, ACTIVE, 7)?,
+            "late-writer-owner",
+            &lease.lease_token,
+            lease.fence_epoch,
+            lease.lease_expires_at,
+            ProjectionGenerationRole::Active,
+        );
         let (attempted_tx, attempted_rx) = mpsc::channel();
-        let (observed_tx, observed_rx) = mpsc::channel();
-        let writer_path = path.clone();
+        let (outcome_tx, outcome_rx) = mpsc::channel();
+        let writer_backend = Arc::clone(&backend);
+        let writer_authority = stale_authority.clone();
         backend.set_before_active_inspect(move || {
             thread::spawn(move || {
                 let deadline = std::time::Instant::now() + Duration::from_secs(5);
                 let mut reported_block = false;
                 loop {
-                    match DerivedStoreWriteGuard::acquire(
-                        &writer_path,
-                        &format!("{STORE}-projection-helper"),
-                    ) {
-                        Ok(_guard) => {
-                            observed_tx
-                                .send(sqlite_generation_ids(&writer_path).expect("writer readback"))
-                                .expect("writer observation receiver");
+                    match writer_backend.quarantine_generation_fenced(ACTIVE, &writer_authority) {
+                        Ok(()) => {
+                            outcome_tx
+                                .send("unexpected stale helper mutation succeeded".to_owned())
+                                .expect("writer outcome receiver");
                             return;
                         }
                         Err(error)
-                            if error.kind() == ErrorKind::WouldBlock
+                            if error.to_string().contains("active physical writer")
                                 && std::time::Instant::now() < deadline =>
                         {
                             if !reported_block {
@@ -3416,7 +4621,12 @@ mod legacy_binding_recovery_tests {
                             }
                             thread::sleep(Duration::from_millis(2));
                         }
-                        Err(error) => panic!("late helper writer lock failed: {error}"),
+                        Err(error) => {
+                            outcome_tx
+                                .send(error.to_string())
+                                .expect("writer outcome receiver");
+                            return;
+                        }
                     }
                 }
             });
@@ -3424,20 +4634,195 @@ mod legacy_binding_recovery_tests {
                 .recv_timeout(Duration::from_secs(2))
                 .expect("late helper writer must block behind recovery");
         });
+        backend.set_after_active_inspect(move || {
+            let writer_outcome = outcome_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("queued helper must finish before final SQLite CAS");
+            assert!(
+                writer_outcome.contains("stale"),
+                "queued pre-bump helper must fail closed after the recovery fence bump: {writer_outcome}"
+            );
+        });
 
         assert!(recover_incompatible_projection_bindings(
             &path,
             STORE,
             "late-writer-owner",
             &lease.lease_token,
-            &backend,
+            backend.as_ref(),
         )?);
 
         assert_eq!(
-            observed_rx.recv_timeout(Duration::from_secs(2))?,
-            (None, None, None),
-            "the queued helper writer may acquire only after SQLite commits the recovery CAS"
+            backend.quarantine_attempts(),
+            vec![ACTIVE.to_owned(), PREVIOUS.to_owned()]
         );
+        assert_eq!(sqlite_generation_ids(&path)?, (None, None, None));
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_fence_bump_survives_failure_before_physical_quarantine() -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, true)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
+        let owner = "pre-quarantine-crash-owner";
+        let lease = acquire_projection_lease(&path, STORE, owner, 20_000)?;
+        let old_fence = lease.fence_epoch;
+        let stale_authority = authority_for_evidence(
+            &legacy_evidence(&path, BUILDING, 8)?,
+            owner,
+            &lease.lease_token,
+            old_fence,
+            lease.lease_expires_at,
+            ProjectionGenerationRole::Building,
+        );
+        let before = canonical_control_plane_snapshot(&path)?;
+        backend.fail_next_quarantine("simulated crash before physical quarantine");
+
+        let error = recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            owner,
+            &lease.lease_token,
+            &backend,
+        )
+        .expect_err("failure before the first physical quarantine must surface");
+        assert!(error.to_string().contains("simulated crash"));
+        assert_eq!(canonical_control_plane_snapshot(&path)?, before);
+        let fence_after_failure: i64 = connect_file(&path)?.query_row(
+            "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
+            [STORE],
+            |row| row.get(0),
+        )?;
+        assert_eq!(fence_after_failure, old_fence + 1);
+        assert_eq!(
+            sqlite_generation_ids(&path)?,
+            (
+                Some(ACTIVE.to_owned()),
+                Some(PREVIOUS.to_owned()),
+                Some(BUILDING.to_owned()),
+            )
+        );
+        assert!(backend.quarantine_attempts().is_empty());
+        let stale_error = backend
+            .quarantine_generation_fenced(BUILDING, &stale_authority)
+            .expect_err("pre-bump helper authority must be rejected after the bump");
+        assert!(stale_error.to_string().contains("stale"));
+        assert!(backend.inspect_generation(BUILDING)?.is_some());
+        assert!(backend.quarantine_attempts().is_empty());
+
+        assert!(recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            owner,
+            &lease.lease_token,
+            &backend,
+        )?);
+        let fence_after_retry: i64 = connect_file(&path)?.query_row(
+            "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
+            [STORE],
+            |row| row.get(0),
+        )?;
+        assert_eq!(fence_after_retry, old_fence + 2);
+        assert_eq!(sqlite_generation_ids(&path)?, (None, None, None));
+        assert_eq!(
+            backend.quarantine_attempts(),
+            vec![BUILDING.to_owned(), ACTIVE.to_owned(), PREVIOUS.to_owned()]
+        );
+        let after = canonical_control_plane_snapshot(&path)?;
+        assert_eq!(after.outbox, before.outbox);
+        assert_eq!(after.derived_store, before.derived_store);
+        assert_eq!(after.delivery_count, before.delivery_count);
+        assert_eq!(
+            after.legacy_checkpoint_cursor,
+            before.legacy_checkpoint_cursor
+        );
+        assert_eq!(after.pending_deliveries, after.delivery_count);
+        assert_eq!(after.checkpoint_cursor, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_retry_after_physical_quarantine_before_final_cas_is_idempotent()
+    -> anyhow::Result<()> {
+        let (_temp, path) = v29_lance_fixture(true, true, true)?;
+        let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
+        let owner = "post-quarantine-crash-owner";
+        let lease = acquire_projection_lease(&path, STORE, owner, 20_000)?;
+        let old_fence = lease.fence_epoch;
+        let before = canonical_control_plane_snapshot(&path)?;
+        backend.fail_next_active_inspect("simulated crash after physical quarantine");
+
+        let error = recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            owner,
+            &lease.lease_token,
+            &backend,
+        )
+        .expect_err("failure after physical quarantine must surface before SQLite CAS");
+        assert!(
+            error
+                .to_string()
+                .contains("simulated crash after physical quarantine")
+        );
+        assert_eq!(canonical_control_plane_snapshot(&path)?, before);
+        let fence_after_failure: i64 = connect_file(&path)?.query_row(
+            "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
+            [STORE],
+            |row| row.get(0),
+        )?;
+        assert_eq!(fence_after_failure, old_fence + 1);
+        assert_eq!(
+            sqlite_generation_ids(&path)?,
+            (
+                Some(ACTIVE.to_owned()),
+                Some(PREVIOUS.to_owned()),
+                Some(BUILDING.to_owned()),
+            )
+        );
+        assert_eq!(
+            backend.quarantine_attempts(),
+            vec![BUILDING.to_owned(), ACTIVE.to_owned(), PREVIOUS.to_owned()]
+        );
+        assert!(backend.inspect_generation(ACTIVE)?.is_none());
+        assert!(backend.inspect_generation(PREVIOUS)?.is_none());
+        assert!(backend.inspect_generation(BUILDING)?.is_none());
+
+        assert!(recover_incompatible_projection_bindings(
+            &path,
+            STORE,
+            owner,
+            &lease.lease_token,
+            &backend,
+        )?);
+        let fence_after_retry: i64 = connect_file(&path)?.query_row(
+            "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
+            [STORE],
+            |row| row.get(0),
+        )?;
+        assert_eq!(fence_after_retry, old_fence + 2);
+        assert_eq!(sqlite_generation_ids(&path)?, (None, None, None));
+        assert_eq!(
+            backend.quarantine_attempts(),
+            vec![
+                BUILDING.to_owned(),
+                ACTIVE.to_owned(),
+                PREVIOUS.to_owned(),
+                BUILDING.to_owned(),
+                ACTIVE.to_owned(),
+                PREVIOUS.to_owned(),
+            ]
+        );
+        let after = canonical_control_plane_snapshot(&path)?;
+        assert_eq!(after.outbox, before.outbox);
+        assert_eq!(after.derived_store, before.derived_store);
+        assert_eq!(after.delivery_count, before.delivery_count);
+        assert_eq!(
+            after.legacy_checkpoint_cursor,
+            before.legacy_checkpoint_cursor
+        );
+        assert_eq!(after.pending_deliveries, after.delivery_count);
+        assert_eq!(after.checkpoint_cursor, 0);
         Ok(())
     }
 
@@ -3512,7 +4897,7 @@ mod legacy_binding_recovery_tests {
         let backend = RecoveryBackend::from_legacy_sqlite(&path, true, true, true)?;
         backend.bind_active_to_current_descriptor(&path)?;
         let lease = acquire_projection_lease(&path, STORE, "retained-previous-owner", 20_000)?;
-        let before = sqlite_recovery_control_snapshot(&path)?;
+        let mut before = sqlite_recovery_control_snapshot(&path)?;
 
         recover_incompatible_projection_bindings(
             &path,
@@ -3523,7 +4908,31 @@ mod legacy_binding_recovery_tests {
         )
         .expect_err("mismatched retained previous evidence must fail closed");
 
-        assert_eq!(sqlite_recovery_control_snapshot(&path)?, before);
+        let mut after_failure = sqlite_recovery_control_snapshot(&path)?;
+        let conn = connect_file(&path)?;
+        let statement = conn.prepare("SELECT * FROM projection_store_state WHERE store_name=?1")?;
+        let column_names = statement.column_names();
+        let fence_index = column_names
+            .iter()
+            .position(|name| *name == "fence_epoch")
+            .expect("fence_epoch column");
+        let updated_at_index = column_names
+            .iter()
+            .position(|name| *name == "updated_at")
+            .expect("updated_at column");
+        let fence_after_failure: i64 = conn.query_row(
+            "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
+            [STORE],
+            |row| row.get(0),
+        )?;
+        assert_eq!(fence_after_failure, lease.fence_epoch + 1);
+        for snapshot in [&mut before, &mut after_failure] {
+            snapshot.store_state[fence_index] = "normalized:recovery-fence".to_owned();
+            snapshot.store_state[updated_at_index] = "normalized:updated-at".to_owned();
+        }
+        assert_eq!(after_failure, before);
+        drop(statement);
+        drop(conn);
         backend.bind_previous_to_current_descriptor(&path)?;
         assert!(recover_incompatible_projection_bindings(
             &path,
@@ -3780,7 +5189,12 @@ mod legacy_binding_recovery_tests {
         let corpus = current_descriptor().corpus.expect("Lance corpus binding");
         let mut conn = connect_file(path)?;
         let snapshot_select = if phase == "building" {
-            "NULL".to_owned()
+            // v29 has no building-scoped cursor column.  The v2 protocol
+            // keeps the unfinished generation's cursor in the global
+            // `snapshot_cursor` field, so carry that authority through the
+            // corpus-binding upgrade fixture instead of manufacturing an
+            // incomplete prepared binding.
+            "snapshot_cursor".to_owned()
         } else {
             format!("{phase}_snapshot_cursor")
         };
@@ -3832,18 +5246,20 @@ mod legacy_binding_recovery_tests {
             tx.execute(
                 "UPDATE projection_store_state
                  SET building_generation=?1,building_fingerprint=?2,
-                     building_fence_epoch=?3,building_provider=?4,
-                     building_provider_fingerprint=?5,
-                     building_canonical_count=?6,building_canonical_digest=?7,
-                     building_delivery_count=?8,building_delivery_digest=?9,
-                     building_phase=?10,building_corpus_schema=?11,
-                     building_corpus_fingerprint=?12,building_embedding_model=?13,
-                     building_embedding_dimensions=?14
-                 WHERE store_name=?15",
+                     building_fence_epoch=?3,snapshot_cursor=?4,
+                     building_provider=?5,
+                     building_provider_fingerprint=?6,
+                     building_canonical_count=?7,building_canonical_digest=?8,
+                     building_delivery_count=?9,building_delivery_digest=?10,
+                     building_phase=?11,building_corpus_schema=?12,
+                     building_corpus_fingerprint=?13,building_embedding_model=?14,
+                     building_embedding_dimensions=?15
+                 WHERE store_name=?16",
                 rusqlite::params![
                     generation.0,
                     generation.1,
                     generation.2,
+                    generation.3,
                     generation.4,
                     generation.5,
                     generation.6,
@@ -4023,6 +5439,40 @@ mod legacy_binding_recovery_tests {
         })
     }
 
+    fn authority_for_evidence(
+        evidence: &ProjectionArtifactEvidence,
+        owner: &str,
+        lease_token: &str,
+        fence_epoch: i64,
+        lease_expires_at: i64,
+        role: ProjectionGenerationRole,
+    ) -> ProjectionDestructiveAuthority {
+        let manifest = &evidence.manifest;
+        ProjectionDestructiveAuthority {
+            owner: owner.to_owned(),
+            lease_token: lease_token.to_owned(),
+            fence_epoch,
+            lease_expires_at,
+            role,
+            generation: manifest.generation.clone(),
+            expected_manifest: Some(manifest.clone()),
+            expected_binding: ProjectionGenerationBinding {
+                generation: manifest.generation.clone(),
+                fingerprint: manifest.fingerprint.clone(),
+                fence_epoch: manifest.fence_epoch,
+                snapshot_cursor: Some(manifest.snapshot_cursor),
+                provider: manifest.provider.clone(),
+                provider_fingerprint: manifest.provider_fingerprint.clone(),
+                canonical_count: manifest.canonical_item_count,
+                canonical_digest: manifest.canonical_digest.clone(),
+                delivery_count: manifest.delivery_item_count,
+                delivery_digest: manifest.delivery_digest.clone(),
+                corpus: manifest.corpus.clone(),
+            },
+            building_phase: None,
+        }
+    }
+
     fn v29_lance_fixture(
         active: bool,
         previous: bool,
@@ -4076,7 +5526,7 @@ mod legacy_binding_recovery_tests {
         conn.execute(
             "UPDATE projection_store_state
              SET control_plane='v2',lifecycle_status='ready',
-                 legacy_checkpoint_cursor=777,last_success_at=4242
+                 fence_epoch=8,legacy_checkpoint_cursor=777,last_success_at=4242
              WHERE store_name=?1",
             [STORE],
         )?;
@@ -4114,7 +5564,10 @@ mod legacy_binding_recovery_tests {
         fence_epoch: i64,
     ) -> anyhow::Result<()> {
         let snapshot_column = if phase == "building" {
-            String::new()
+            // The building cursor is global in projection_store_state.  Make
+            // the legacy prepared fixture explicit so destructive authority
+            // reconstruction sees the same cursor as the physical evidence.
+            ",snapshot_cursor=0".to_owned()
         } else {
             format!(",{phase}_snapshot_cursor=0")
         };

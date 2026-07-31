@@ -5852,6 +5852,20 @@ mod tests {
             }
         }
 
+        fn with_descriptor_without_helper_path(
+            inner: TantivyProjectionStore,
+            descriptor: ProjectionStoreDescriptor,
+        ) -> Self {
+            Self {
+                inner,
+                fail_next_inspect: AtomicBool::new(false),
+                force_active_conflict: false,
+                descriptor_override: Some(descriptor),
+                helper_path: None,
+                state: Mutex::new(TransientProjectionState::default()),
+            }
+        }
+
         fn acquire_exact_authority_guard(
             &self,
             generation: &str,
@@ -7101,6 +7115,737 @@ mod tests {
             matches.len()
         );
         Ok(matches.into_iter().next().expect("one quarantine sibling"))
+    }
+
+    fn snapshotting_authority(
+        manifest: &ProjectionArtifactManifest,
+        lease: &ProjectionLease,
+    ) -> ProjectionDestructiveAuthority {
+        ProjectionDestructiveAuthority {
+            owner: lease.owner.clone(),
+            lease_token: lease.lease_token.clone(),
+            fence_epoch: lease.fence_epoch,
+            lease_expires_at: lease.lease_expires_at,
+            role: ProjectionGenerationRole::Building,
+            generation: manifest.generation.clone(),
+            expected_manifest: None,
+            expected_binding: ProjectionGenerationBinding {
+                generation: manifest.generation.clone(),
+                fingerprint: None,
+                fence_epoch: manifest.fence_epoch,
+                snapshot_cursor: None,
+                provider: manifest.provider.clone(),
+                provider_fingerprint: manifest.provider_fingerprint.clone(),
+                canonical_count: manifest.canonical_item_count,
+                canonical_digest: manifest.canonical_digest.clone(),
+                delivery_count: manifest.delivery_item_count,
+                delivery_digest: manifest.delivery_digest.clone(),
+                corpus: manifest.corpus.clone(),
+            },
+            building_phase: Some("snapshotting".to_owned()),
+        }
+    }
+
+    fn evidence_authority(
+        evidence: &ProjectionArtifactEvidence,
+        lease: &ProjectionLease,
+        role: ProjectionGenerationRole,
+        building_phase: Option<&str>,
+    ) -> ProjectionDestructiveAuthority {
+        ProjectionDestructiveAuthority {
+            owner: lease.owner.clone(),
+            lease_token: lease.lease_token.clone(),
+            fence_epoch: lease.fence_epoch,
+            lease_expires_at: lease.lease_expires_at,
+            role,
+            generation: evidence.manifest.generation.clone(),
+            expected_manifest: Some(evidence.manifest.clone()),
+            expected_binding: binding_for_evidence(evidence),
+            building_phase: building_phase.map(str::to_owned),
+        }
+    }
+
+    fn empty_projection_batch(
+        manifest: &ProjectionArtifactManifest,
+        lease: &ProjectionLease,
+    ) -> ProjectionBatch {
+        ProjectionBatch {
+            store_name: manifest.store_name.clone(),
+            database_instance_id: manifest.database_instance_id.clone(),
+            protocol_version: manifest.protocol_version,
+            schema_version: manifest.schema_version,
+            provider: manifest.provider.clone(),
+            provider_fingerprint: manifest.provider_fingerprint.clone(),
+            corpus: manifest.corpus.clone(),
+            owner: lease.owner.clone(),
+            lease_token: lease.lease_token.clone(),
+            fence_epoch: lease.fence_epoch,
+            target_generation: manifest.generation.clone(),
+            claim_token: "transient-test-claim-token".to_owned(),
+            claim_expires_at: lease.lease_expires_at,
+            items: Vec::new(),
+        }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum TransientAuthorityDrift {
+        EmptyGeneration,
+        EmptyOwner,
+        EmptyToken,
+        NegativeAuthorityFence,
+        ExpiredAuthority,
+        SameIdentityFenceRollover,
+        OwnerTokenHandoff,
+        ExpiredLiveLease,
+        FutureBindingFence,
+        WrongRole,
+        WrongPhase,
+        WrongBinding,
+        WrongManifest,
+        DatabaseMismatch,
+        ProtocolMismatch,
+        SchemaMismatch,
+        ControlPlaneMismatch,
+    }
+
+    const TRANSIENT_AUTHORITY_DRIFTS: [TransientAuthorityDrift; 17] = [
+        TransientAuthorityDrift::EmptyGeneration,
+        TransientAuthorityDrift::EmptyOwner,
+        TransientAuthorityDrift::EmptyToken,
+        TransientAuthorityDrift::NegativeAuthorityFence,
+        TransientAuthorityDrift::ExpiredAuthority,
+        TransientAuthorityDrift::SameIdentityFenceRollover,
+        TransientAuthorityDrift::OwnerTokenHandoff,
+        TransientAuthorityDrift::ExpiredLiveLease,
+        TransientAuthorityDrift::FutureBindingFence,
+        TransientAuthorityDrift::WrongRole,
+        TransientAuthorityDrift::WrongPhase,
+        TransientAuthorityDrift::WrongBinding,
+        TransientAuthorityDrift::WrongManifest,
+        TransientAuthorityDrift::DatabaseMismatch,
+        TransientAuthorityDrift::ProtocolMismatch,
+        TransientAuthorityDrift::SchemaMismatch,
+        TransientAuthorityDrift::ControlPlaneMismatch,
+    ];
+
+    fn apply_transient_building_drift(
+        path: &Path,
+        manifest: &ProjectionArtifactManifest,
+        lease: &ProjectionLease,
+        live_phase: &str,
+        authority: &mut ProjectionDestructiveAuthority,
+        drift: TransientAuthorityDrift,
+    ) -> anyhow::Result<()> {
+        match drift {
+            TransientAuthorityDrift::EmptyGeneration => authority.generation.clear(),
+            TransientAuthorityDrift::EmptyOwner => authority.owner.clear(),
+            TransientAuthorityDrift::EmptyToken => authority.lease_token.clear(),
+            TransientAuthorityDrift::NegativeAuthorityFence => authority.fence_epoch = -1,
+            TransientAuthorityDrift::ExpiredAuthority => authority.lease_expires_at = 0,
+            TransientAuthorityDrift::SameIdentityFenceRollover => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET fence_epoch=fence_epoch+1
+                     WHERE store_name=?1",
+                    [TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::OwnerTokenHandoff => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET lease_owner='successor-owner',
+                         lease_token='please_successor_token',
+                         lease_expires_at=?1,fence_epoch=fence_epoch+1
+                     WHERE store_name=?2",
+                    params![SystemClock.now_ms() + 120_000, TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::ExpiredLiveLease => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET lease_expires_at=0
+                     WHERE store_name=?1",
+                    [TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::FutureBindingFence => {
+                let future_fence = lease.fence_epoch + 1;
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET building_fence_epoch=?1
+                     WHERE store_name=?2",
+                    params![future_fence, TANTIVY_TASKS_STORE],
+                )?;
+                authority.expected_binding.fence_epoch = future_fence;
+                if let Some(expected_manifest) = &mut authority.expected_manifest {
+                    expected_manifest.fence_epoch = future_fence;
+                }
+            }
+            TransientAuthorityDrift::WrongRole => {
+                authority.role = ProjectionGenerationRole::Active;
+            }
+            TransientAuthorityDrift::WrongPhase => {
+                authority.building_phase = Some(
+                    if live_phase == "snapshotting" {
+                        "prepared"
+                    } else {
+                        "snapshotting"
+                    }
+                    .to_owned(),
+                );
+            }
+            TransientAuthorityDrift::WrongBinding => {
+                authority.expected_binding.provider = "wrong-provider".to_owned();
+            }
+            TransientAuthorityDrift::WrongManifest => {
+                if let Some(expected_manifest) = &mut authority.expected_manifest {
+                    expected_manifest.database_instance_id = "db_wrong_manifest".to_owned();
+                } else {
+                    authority.expected_manifest = Some(manifest.clone());
+                }
+            }
+            TransientAuthorityDrift::DatabaseMismatch => {
+                let conn = connect_file(path)?;
+                conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+                conn.execute(
+                    "UPDATE projection_store_state
+                     SET database_instance_id='db_mismatched_store'
+                     WHERE store_name=?1",
+                    [TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::ProtocolMismatch => {
+                let conn = connect_file(path)?;
+                conn.execute_batch("PRAGMA ignore_check_constraints=ON;")?;
+                conn.execute(
+                    "UPDATE projection_store_state
+                     SET protocol_version=?1
+                     WHERE store_name=?2",
+                    params![manifest.protocol_version + 1, TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::SchemaMismatch => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET schema_version=?1
+                     WHERE store_name=?2",
+                    params![manifest.schema_version + 1, TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::ControlPlaneMismatch => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET control_plane='legacy'
+                     WHERE store_name=?1",
+                    [TANTIVY_TASKS_STORE],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn restore_transient_building_drift(
+        path: &Path,
+        manifest: &ProjectionArtifactManifest,
+        lease: &ProjectionLease,
+        drift: TransientAuthorityDrift,
+    ) -> anyhow::Result<()> {
+        match drift {
+            TransientAuthorityDrift::SameIdentityFenceRollover => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET fence_epoch=?1
+                     WHERE store_name=?2",
+                    params![lease.fence_epoch, TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::OwnerTokenHandoff => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET lease_owner=?1,lease_token=?2,lease_expires_at=?3,
+                         fence_epoch=?4
+                    WHERE store_name=?5",
+                    params![
+                        lease.owner.as_str(),
+                        lease.lease_token.as_str(),
+                        lease.lease_expires_at,
+                        lease.fence_epoch,
+                        TANTIVY_TASKS_STORE
+                    ],
+                )?;
+            }
+            TransientAuthorityDrift::ExpiredLiveLease => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET lease_expires_at=?1
+                     WHERE store_name=?2",
+                    params![lease.lease_expires_at, TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::FutureBindingFence => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET building_fence_epoch=?1
+                     WHERE store_name=?2",
+                    params![manifest.fence_epoch, TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::DatabaseMismatch => {
+                let conn = connect_file(path)?;
+                conn.execute_batch("PRAGMA foreign_keys=OFF;")?;
+                conn.execute(
+                    "UPDATE projection_store_state
+                     SET database_instance_id=?1
+                     WHERE store_name=?2",
+                    params![manifest.database_instance_id.as_str(), TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::ProtocolMismatch => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET protocol_version=?1
+                     WHERE store_name=?2",
+                    params![manifest.protocol_version, TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::SchemaMismatch => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET schema_version=?1
+                     WHERE store_name=?2",
+                    params![manifest.schema_version, TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::ControlPlaneMismatch => {
+                connect_file(path)?.execute(
+                    "UPDATE projection_store_state
+                     SET control_plane='v2'
+                     WHERE store_name=?1",
+                    [TANTIVY_TASKS_STORE],
+                )?;
+            }
+            TransientAuthorityDrift::EmptyGeneration
+            | TransientAuthorityDrift::EmptyOwner
+            | TransientAuthorityDrift::EmptyToken
+            | TransientAuthorityDrift::NegativeAuthorityFence
+            | TransientAuthorityDrift::ExpiredAuthority
+            | TransientAuthorityDrift::WrongRole
+            | TransientAuthorityDrift::WrongPhase
+            | TransientAuthorityDrift::WrongBinding
+            | TransientAuthorityDrift::WrongManifest => {}
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn transient_authority_rejects_same_identity_fence_rollover_before_prepare_mutation()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-authority-red.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let mut descriptor = provider_a.descriptor()?;
+        descriptor.provider = "tantivy-provider-b".to_owned();
+        descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let backend = TransientGenerationInspectStore::with_descriptor(
+            &db_path,
+            provider_a,
+            descriptor.clone(),
+        );
+        let lease = acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "same-owner", 20_000)?;
+        let manifest = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "same-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let snapshot = ProjectionSnapshot {
+            manifest: manifest.clone(),
+            records: Vec::new(),
+        };
+        let authority = snapshotting_authority(&manifest, &lease);
+        connect_file(&db_path)?.execute(
+            "UPDATE projection_store_state
+             SET fence_epoch=fence_epoch+1
+             WHERE store_name=?1",
+            [TANTIVY_TASKS_STORE],
+        )?;
+
+        let error = backend
+            .prepare_snapshot_with_authority(&snapshot, &authority)
+            .expect_err("same-owner/token fence rollover must reject stale prepare authority");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert!(
+            backend
+                .inner
+                .inspect_generation(&manifest.generation)?
+                .is_none(),
+            "stale authority must not create physical generation evidence"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn transient_current_authority_negative_matrix_preserves_physical_state() -> anyhow::Result<()>
+    {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-current-authority-matrix.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let mut descriptor = provider_a.descriptor()?;
+        descriptor.provider = "tantivy-provider-b".to_owned();
+        descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let backend =
+            TransientGenerationInspectStore::with_descriptor(&db_path, provider_a, descriptor);
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "matrix-owner", 120_000)?;
+        let manifest = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &backend,
+        )?;
+        let snapshot = ProjectionSnapshot {
+            manifest: manifest.clone(),
+            records: Vec::new(),
+        };
+        let base_authority = snapshotting_authority(&manifest, &lease);
+
+        for drift in TRANSIENT_AUTHORITY_DRIFTS {
+            let mut authority = base_authority.clone();
+            apply_transient_building_drift(
+                &db_path,
+                &manifest,
+                &lease,
+                "snapshotting",
+                &mut authority,
+                drift,
+            )?;
+
+            let error = backend
+                .prepare_snapshot_with_authority(&snapshot, &authority)
+                .expect_err("every stale or incomplete current authority must fail closed");
+            assert!(
+                matches!(error, KanbanError::Conflict(_)),
+                "{drift:?} returned {error:?}"
+            );
+            assert!(
+                backend
+                    .state
+                    .lock()
+                    .expect("transient projection state")
+                    .generations
+                    .is_empty(),
+                "{drift:?} reached the transient mutator"
+            );
+            assert!(
+                backend
+                    .inner
+                    .inspect_generation(&manifest.generation)?
+                    .is_none(),
+                "{drift:?} changed physical generation evidence"
+            );
+
+            restore_transient_building_drift(&db_path, &manifest, &lease, drift)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn transient_authority_surface_matrix_rejects_stale_fence_before_mutation() -> anyhow::Result<()>
+    {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-authority-surface-matrix.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let mut descriptor = provider_a.descriptor()?;
+        descriptor.provider = "tantivy-provider-b".to_owned();
+        descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let backend =
+            TransientGenerationInspectStore::with_descriptor(&db_path, provider_a, descriptor);
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "surface-owner", 120_000)?;
+        let manifest = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &backend,
+        )?;
+        let snapshot = ProjectionSnapshot {
+            manifest: manifest.clone(),
+            records: Vec::new(),
+        };
+        let snapshotting_authority = snapshotting_authority(&manifest, &lease);
+        let evidence = prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &backend,
+        )?;
+        let batch = empty_projection_batch(&evidence.manifest, &lease);
+        let prepared_authority = evidence_authority(
+            &evidence,
+            &lease,
+            ProjectionGenerationRole::Building,
+            Some("prepared"),
+        );
+        let (generations_before, prepared_before, active_before, published_before) = {
+            let state = backend.state.lock().expect("transient projection state");
+            (
+                state.generations.clone(),
+                state.prepared.clone(),
+                state.active.clone(),
+                state.published.clone(),
+            )
+        };
+        connect_file(&db_path)?.execute(
+            "UPDATE projection_store_state
+             SET fence_epoch=fence_epoch+1
+             WHERE store_name=?1",
+            [TANTIVY_TASKS_STORE],
+        )?;
+
+        macro_rules! assert_stale_conflict {
+            ($label:literal, $operation:expr) => {
+                let error = $operation.expect_err(concat!(
+                    $label,
+                    " must reject stale exact authority before mutation"
+                ));
+                assert!(
+                    matches!(error, KanbanError::Conflict(_)),
+                    "{} returned {error:?}",
+                    $label
+                );
+            };
+        }
+
+        assert_stale_conflict!(
+            "prepare",
+            backend.prepare_snapshot_with_authority(&snapshot, &snapshotting_authority)
+        );
+        assert_stale_conflict!(
+            "apply",
+            backend.apply_batch_with_authority(&batch, &prepared_authority)
+        );
+        assert_stale_conflict!(
+            "publish",
+            backend.publish_generation_with_authority(None, &evidence, &prepared_authority)
+        );
+        assert_stale_conflict!(
+            "validate publication",
+            backend.validate_generation_publication_with_authority(&evidence, &prepared_authority)
+        );
+        assert_stale_conflict!(
+            "repair publication",
+            backend.repair_generation_publication_with_authority(&evidence, &prepared_authority)
+        );
+        assert_stale_conflict!(
+            "quarantine",
+            backend.quarantine_generation_fenced(&manifest.generation, &prepared_authority)
+        );
+        assert_stale_conflict!(
+            "abort",
+            backend.abort_generation_fenced(&manifest.generation, &prepared_authority)
+        );
+        let state = backend.state.lock().expect("transient projection state");
+        assert_eq!(state.generations, generations_before);
+        assert_eq!(state.prepared, prepared_before);
+        assert_eq!(state.active, active_before);
+        assert_eq!(state.published, published_before);
+        drop(state);
+        assert!(
+            backend
+                .inner
+                .inspect_generation(&manifest.generation)?
+                .is_none()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn transient_authority_without_helper_path_fails_closed() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-authority-no-helper.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let mut descriptor = provider_a.descriptor()?;
+        descriptor.provider = "tantivy-provider-b".to_owned();
+        descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let backend = TransientGenerationInspectStore::with_descriptor_without_helper_path(
+            provider_a, descriptor,
+        );
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "no-helper-owner", 120_000)?;
+        let manifest = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &backend,
+        )?;
+        let snapshot = ProjectionSnapshot {
+            manifest: manifest.clone(),
+            records: Vec::new(),
+        };
+        let authority = snapshotting_authority(&manifest, &lease);
+
+        let error = backend
+            .prepare_snapshot_with_authority(&snapshot, &authority)
+            .expect_err("authority mutation without a helper path must fail closed");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert!(
+            backend
+                .state
+                .lock()
+                .expect("transient projection state")
+                .generations
+                .is_empty()
+        );
+        assert!(
+            backend
+                .inner
+                .inspect_generation(&manifest.generation)?
+                .is_none()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn transient_current_authority_rejects_live_provider_mismatch() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-current-provider-mismatch.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "provider-a-owner", 120_000)?;
+        let manifest = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_a,
+        )?;
+        let snapshot = ProjectionSnapshot {
+            manifest: manifest.clone(),
+            records: Vec::new(),
+        };
+        let authority = snapshotting_authority(&manifest, &lease);
+
+        let mut provider_b_descriptor = provider_a.descriptor()?;
+        provider_b_descriptor.provider = "tantivy-provider-b".to_owned();
+        provider_b_descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let provider_b = TransientGenerationInspectStore::with_descriptor(
+            &db_path,
+            TantivyProjectionStore::new(&db_path)?,
+            provider_b_descriptor,
+        );
+        let error = provider_b
+            .prepare_snapshot_with_authority(&snapshot, &authority)
+            .expect_err("current authority must not adopt another live provider binding");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert!(
+            provider_b
+                .state
+                .lock()
+                .expect("transient projection state")
+                .generations
+                .is_empty()
+        );
+        assert!(
+            provider_b
+                .inner
+                .inspect_generation(&manifest.generation)?
+                .is_none()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn transient_abort_rejects_store_published_and_any_physical_marker_entry() -> anyhow::Result<()>
+    {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-abort-published.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let provider_a_lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "provider-a-owner", 120_000)?;
+        let manifest = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &provider_a_lease.owner,
+            &provider_a_lease.lease_token,
+            &provider_a,
+        )?;
+        let evidence = prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &provider_a_lease.owner,
+            &provider_a_lease.lease_token,
+            &provider_a,
+        )?;
+        let status = projection_status(&db_path)?;
+        let generation_path = kanban_local::projection_store_root_path(
+            &db_path,
+            &status.database_instance_id,
+            TANTIVY_TASKS_STORE,
+        )?
+        .join("generations")
+        .join(&manifest.generation);
+        let marker_path = generation_path.join("published");
+        std::fs::create_dir(&marker_path)?;
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &provider_a_lease.owner,
+            &provider_a_lease.lease_token,
+        )?;
+
+        let mut descriptor = provider_a.descriptor()?;
+        descriptor.provider = "tantivy-provider-b".to_owned();
+        descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let provider_b = TransientGenerationInspectStore::with_descriptor(
+            &db_path,
+            TantivyProjectionStore::new(&db_path)?,
+            descriptor,
+        );
+        let provider_b_lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "provider-b-owner", 120_000)?;
+        let prepared_authority = evidence_authority(
+            &evidence,
+            &provider_b_lease,
+            ProjectionGenerationRole::Building,
+            Some("prepared"),
+        );
+        let marker_error = provider_b
+            .abort_generation_fenced(&manifest.generation, &prepared_authority)
+            .expect_err("any physical publication marker entry must block abort");
+        assert!(matches!(marker_error, KanbanError::Conflict(_)));
+        assert!(generation_path.is_dir());
+        assert!(std::fs::symlink_metadata(&marker_path)?.is_dir());
+
+        connect_file(&db_path)?.execute(
+            "UPDATE projection_store_state
+             SET building_phase='store_published'
+             WHERE store_name=?1",
+            [TANTIVY_TASKS_STORE],
+        )?;
+        let store_published_authority = evidence_authority(
+            &evidence,
+            &provider_b_lease,
+            ProjectionGenerationRole::Building,
+            Some("store_published"),
+        );
+        let phase_error = provider_b
+            .abort_generation_fenced(&manifest.generation, &store_published_authority)
+            .expect_err("store-published building evidence must not be abortable");
+        assert!(matches!(phase_error, KanbanError::Conflict(_)));
+        assert!(generation_path.is_dir());
+        assert!(std::fs::symlink_metadata(&marker_path)?.is_dir());
+        Ok(())
     }
 
     #[test]

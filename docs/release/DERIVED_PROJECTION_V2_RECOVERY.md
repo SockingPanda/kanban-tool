@@ -165,6 +165,19 @@ bounded_graph_helper() {
   bounded_external "$GRAPH_HELPER" "$@"
 }
 
+bounded_external_or_hard_stop() {
+  local label="$1"; shift
+  if bounded_external "$@"; then
+    return 0
+  else
+    local rc=$?
+  fi
+  case "$rc" in
+    124|137) hard_stop "bounded-external-timeout label=$label rc=$rc" ;;
+    *) return "$rc" ;;
+  esac
+}
+
 evidence_write_failed=0
 record_evidence_write_failure() {
   evidence_write_failed=1
@@ -1500,8 +1513,11 @@ assert_writers_stopped
 每个命令前必须保存该 store 的 active/previous generation、fingerprint、fence 和 corpus
 原始快照；成功后 active generation 必须改变，并且只能命中下列 conditional outcome：
 bootstrap 保持 previous 为空；正常兼容 rotation 将发布前 active 全量身份精确保留为
-previous；descriptor incompatibility reset 清空 previous；physical-unavailable recovery
-则精确保留发布前 active 或已有 previous，若没有 predecessor 则 previous 仍为空。发布前
+previous；descriptor incompatibility reset 只有在恢复前记录 active provider、
+provider_fingerprint，以及 Lance store 的完整 corpus，并与批准 bindings 产生明确
+`incompatibility_witness` 时才可清空 previous；没有该 witness 时强制
+`new.previous == old.active`；physical-unavailable recovery 则精确保留发布前 active
+或已有 previous，若没有 predecessor 则 previous 仍为空。发布前
 更老的 previous 只保留在证据快照中，不得误断言它继续占用 `previous` role。
 
 ~~~bash
@@ -1535,6 +1551,8 @@ write_store_generation_snapshot() {
           generation: .active_generation,
           fingerprint: .active_fingerprint,
           fence_epoch: .active_fence_epoch,
+          provider: .active_provider,
+          provider_fingerprint: .active_provider_fingerprint,
           corpus: .active_corpus
         },
         previous: {
@@ -1548,9 +1566,68 @@ write_store_generation_snapshot() {
   ' "$status_file" >"$output_file"
 }
 
+write_descriptor_reset_witness() {
+  local status_file="$1" store="$2" output_file="$3"
+  jq -e --arg store "$store" \
+    --rawfile expected "$EVIDENCE/compatibility/expected-active-bindings.tsv" '
+    def complete_corpus:
+      . != null and
+      (.corpus_schema | type) == "string" and (.corpus_schema | length) > 0 and
+      (.corpus_fingerprint | type) == "string" and (.corpus_fingerprint | length) > 0 and
+      (.embedding_model | type) == "string" and (.embedding_model | length) > 0 and
+      (.embedding_dimensions | type) == "number" and .embedding_dimensions > 0;
+    ([.data.stores[] | select(.store_name == $store)]) as $matches |
+    ($expected | split("\n") | map(select(length > 0) | split("\t"))
+      | map(select(.[0] == $store)) | .[0]) as $approved |
+    if ($matches | length) != 1 or $approved == null then
+      error("missing descriptor-reset witness inputs")
+    else
+      $matches[0] as $active |
+      if $active.active_generation == null then
+        {store_name: $store, incompatibility_witness: false, reason: "bootstrap"}
+      elif
+         ($active.active_provider | type) != "string" or
+         ($active.active_provider | length) == 0 or
+         ($active.active_provider_fingerprint | type) != "string" or
+         ($active.active_provider_fingerprint | length) == 0 or
+         (($store | startswith("lancedb_")) and
+           (($active.active_corpus | complete_corpus) | not)) then
+        error("incomplete active descriptor/corpus")
+      else
+        {
+          store_name: $store,
+          active: {
+            generation: $active.active_generation,
+            provider: $active.active_provider,
+            provider_fingerprint: $active.active_provider_fingerprint,
+            corpus: $active.active_corpus
+          },
+          approved: {
+            provider: $approved[2],
+            provider_fingerprint: $approved[3],
+            corpus_schema: $approved[4],
+            corpus_fingerprint: $approved[5],
+            embedding_model: $approved[6],
+            embedding_dimensions: $approved[7]
+          },
+          incompatibility_witness:
+            ($active.active_provider != $approved[2] or
+             $active.active_provider_fingerprint != $approved[3] or
+             (($store | startswith("lancedb_")) and
+              ($active.active_corpus.corpus_schema != $approved[4] or
+               $active.active_corpus.corpus_fingerprint != $approved[5] or
+               $active.active_corpus.embedding_model != $approved[6] or
+               (($active.active_corpus.embedding_dimensions | tostring) != $approved[7])))
+        }
+      end
+    end
+  ' "$status_file" >"$output_file"
+}
+
 assert_store_generation_transition() {
-  local before_file="$1" after_file="$2" store="$3" output_file="$4"
-  jq -e --arg store "$store" --slurpfile before "$before_file" '
+  local before_file="$1" after_file="$2" store="$3" witness_file="$4" output_file="$5"
+  jq -e --arg store "$store" --slurpfile before "$before_file" \
+    --slurpfile witness "$witness_file" '
     $before[0] as $old |
     ([.data.stores[] | select(.store_name == $store)]) as $matches |
     ($matches | .[0]) as $new |
@@ -1581,6 +1658,7 @@ assert_store_generation_transition() {
            $new.previous_corpus == $old.active.corpus then
         "normal_rotation"
       elif $old.transition_family == "compatible_or_descriptor_reset" and
+           ($witness[0].incompatibility_witness == true) and
            $new.previous_generation == null and
            $new.previous_fingerprint == null and
            $new.previous_fence_epoch == null and
@@ -1615,6 +1693,7 @@ assert_store_generation_transition() {
            $new.previous_corpus == $old.previous.corpus then
         "physical_recovery_previous_retained"
       elif $old.transition_family == "reset" and
+           ($witness[0].incompatibility_witness == true) and
            $old.active.fence_epoch != null and
            $new.active_fence_epoch > $old.active.fence_epoch and
            $new.previous_generation == null and
@@ -1671,6 +1750,9 @@ for store in "${REBUILD_STORES[@]}"; do
   write_store_generation_snapshot \
     "$EVIDENCE/compatibility/status.before-rebuild.$store.json" "$store" \
     "$EVIDENCE/compatibility/generations.before-rebuild.$store.json"
+  write_descriptor_reset_witness \
+    "$EVIDENCE/compatibility/status.before-rebuild.$store.json" "$store" \
+    "$EVIDENCE/compatibility/descriptor-reset-witness.$store.json"
   # transition_family is derived from authoritative pre-mutation status;
   # the exact disposition is emitted only after matching the postcondition.
   jq -e '.transition_family != null' \
@@ -1693,6 +1775,7 @@ for store in "${REBUILD_STORES[@]}"; do
   assert_store_generation_transition \
     "$EVIDENCE/compatibility/generations.before-rebuild.$store.json" \
     "$EVIDENCE/compatibility/status.after.$store.json" "$store" \
+    "$EVIDENCE/compatibility/descriptor-reset-witness.$store.json" \
     "$EVIDENCE/compatibility/generations.transition.$store.ok.txt"
   bounded_kanban --db "$DB" --json outbox list --limit 1000 \
     >"$EVIDENCE/compatibility/outbox.after.$store.json"
@@ -1709,7 +1792,9 @@ assert_writers_stopped
 
 这一步的 empty diff 只比较真实 active provider/corpus 字段。`previous_generation` 不被
 伪造为 final expected；它由逐 store transition assertion 按记录的 conditional disposition
-精确绑定为发布前 active、已有 previous 或 null，并由后续 status shape 持续检查其闭合性。
+精确绑定为发布前 active、已有 previous 或 null；descriptor reset 还必须由同一份
+`descriptor-reset-witness.<store>.json` 证明 provider/provider_fingerprint（以及 Lance
+完整 corpus）相对批准 bindings 不兼容，并由后续 status shape 持续检查其闭合性。
 
 ## 9. 启动 continuous owner 后建立 9×4 canary
 
@@ -3032,7 +3117,8 @@ while :; do
     test "$now" -le "$SLA_DEADLINE_EPOCH"; then
     cp --no-preserve=mode "$prefix/matrix.assertions.tsv" \
       "$EVIDENCE/queries/matrix.assertions.tsv"
-    cp -R --no-preserve=mode "$prefix/queries/." "$EVIDENCE/queries/"
+    bounded_external_or_hard_stop "sla-copy-queries" \
+      cp -R --no-preserve=mode "$prefix/queries/." "$EVIDENCE/queries/"
     printf 'met_sla=true poll=%03d elapsed_sec=%s\n' \
       "$poll" "$((now - SLA_STARTED_EPOCH))" \
       | tee "$EVIDENCE/sla/result.txt"
@@ -3793,37 +3879,45 @@ Projection v2 没有 previous-generation republish API：
 随后生成的自校验文件，避免自引用。
 
 ~~~bash
-(
-  cd "$EVIDENCE/backup"
+bounded_external_or_hard_stop "canonical-backup-hash-check" bash -c '
+  set -Eeuo pipefail
+  cd "$1"
   sha256sum --check canonical.sqlite.sha256
-) | tee "$EVIDENCE/backup/canonical.sqlite.sha256.check.final.txt"
+' _ "$EVIDENCE/backup" \
+  | tee "$EVIDENCE/backup/canonical.sqlite.sha256.check.final.txt"
 
-find "$EVIDENCE" -type d -exec chmod 0700 {} +
-find "$EVIDENCE" -type f -exec chmod 0600 {} +
+bounded_external_or_hard_stop "evidence-chmod-directories" \
+  find "$EVIDENCE" -type d -exec chmod 0700 {} +
+bounded_external_or_hard_stop "evidence-chmod-files" \
+  find "$EVIDENCE" -type f -exec chmod 0600 {} +
 test "$(stat -c '%a' "$EVIDENCE")" = 700
 test "$(stat -c '%a' "$EVIDENCE/backup/canonical.sqlite")" = 600
 test "$(stat -c '%a' "$EVIDENCE/backup/canonical.sqlite.sha256")" = 600
-find "$EVIDENCE" -type d ! -perm 0700 -print \
+bounded_external_or_hard_stop "evidence-find-directories" \
+  find "$EVIDENCE" -type d ! -perm 0700 -print \
   >"$EVIDENCE/final/non-0700-directories.txt"
-find "$EVIDENCE" -type f ! -perm 0600 -print \
+bounded_external_or_hard_stop "evidence-find-files" \
+  find "$EVIDENCE" -type f ! -perm 0600 -print \
   >"$EVIDENCE/final/non-0600-files.txt"
 test ! -s "$EVIDENCE/final/non-0700-directories.txt"
 test ! -s "$EVIDENCE/final/non-0600-files.txt"
 
-(
-  cd "$EVIDENCE"
+bounded_external_or_hard_stop "evidence-hash-closure" bash -c '
+  set -Eeuo pipefail
+  cd "$1"
   find . -type f \
     ! -name evidence.sha256 \
     ! -name evidence.sha256.check.txt \
     -print0 \
     | sort -z \
-    | while IFS= read -r -d '' file; do sha256sum "$file"; done
-) >"$EVIDENCE/evidence.sha256"
+    | while IFS= read -r -d "" file; do sha256sum "$file"; done
+' _ "$EVIDENCE" >"$EVIDENCE/evidence.sha256"
 chmod 0600 "$EVIDENCE/evidence.sha256"
-(
-  cd "$EVIDENCE"
+bounded_external_or_hard_stop "evidence-hash-check" bash -c '
+  set -Eeuo pipefail
+  cd "$1"
   sha256sum --check evidence.sha256
-) | tee "$EVIDENCE/evidence.sha256.check.txt"
+' _ "$EVIDENCE" | tee "$EVIDENCE/evidence.sha256.check.txt"
 chmod 0600 "$EVIDENCE/evidence.sha256.check.txt"
 ~~~
 

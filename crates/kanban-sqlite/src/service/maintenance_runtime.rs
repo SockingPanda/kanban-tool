@@ -2323,7 +2323,7 @@ mod unleased_failure_tests {
             .expect("Tantivy status");
 
         let later_store_ran = Cell::new(false);
-        let stores = vec![
+        let stores = [
             failed_store_run_without_store_lease(
                 &session,
                 TANTIVY_TASKS_STORE,
@@ -8005,13 +8005,12 @@ mod tests {
                 TransientCoexistSurface::Quarantine | TransientCoexistSurface::Abort => {
                     result?;
                     assert!(
-                        provider_b
+                        !provider_b
                             .state
                             .lock()
                             .expect("transient projection state")
                             .generations
-                            .get(&manifest.generation)
-                            .is_none(),
+                            .contains_key(&manifest.generation),
                         "{surface:?} left overlay evidence behind"
                     );
                     assert!(

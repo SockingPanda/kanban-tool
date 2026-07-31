@@ -24,9 +24,26 @@ use kanban_vector::{
 
 const VECTOR_COLUMN: &str = "vector";
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct ProjectionContentRow {
+    pub key: String,
+    pub content_json: String,
+    pub vector_bits: Option<Vec<u32>>,
+}
+
 pub struct LanceDbStore {
     config: LanceDbConfig,
     provider: Option<Arc<dyn EmbeddingProvider + Send + Sync>>,
+    runtime: Runtime,
+}
+
+/// Existing-table-only projection reader used by validation and recovery.
+///
+/// This type exposes no mutation traits and its table accessor never calls an
+/// `ensure_*`/create path. Missing or incomplete historical tables are errors.
+pub(crate) struct LanceDbProjectionReader {
+    config: LanceDbConfig,
+    dimensions: usize,
     runtime: Runtime,
 }
 
@@ -84,6 +101,431 @@ impl LanceDbStore {
             ensure_label_atom_table(&connection, &table_name, dimensions).await
         })
     }
+
+    pub(crate) fn ensure_label_atom_projection_table(&self) -> Result<(), VectorError> {
+        let provider = self.provider()?;
+        self.label_atom_table(provider.dimensions()).map(|_| ())
+    }
+
+    pub(crate) fn chunk_projection_content_rows(
+        &self,
+    ) -> Result<Vec<ProjectionContentRow>, VectorError> {
+        let provider = self.provider()?;
+        let table = self.table(provider.dimensions())?;
+        let batches = self.runtime.block_on(async {
+            table
+                .query()
+                .select(Select::columns(&[
+                    "chunk_key",
+                    "entity_uri",
+                    "chunk_uri",
+                    "kind",
+                    "project_id",
+                    "board_id",
+                    "task_id",
+                    "source_table",
+                    "source_id",
+                    "text",
+                    "summary",
+                    "embedding_model",
+                    "content_hash",
+                    "created_at",
+                    "updated_at",
+                    "source_event_id",
+                    "metadata_json",
+                    "ordinal",
+                    VECTOR_COLUMN,
+                ]))
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(map_lancedb_error)
+        })?;
+        chunk_batches_to_projection_rows(&batches)
+    }
+
+    pub(crate) fn label_atom_projection_content_rows(
+        &self,
+    ) -> Result<Vec<ProjectionContentRow>, VectorError> {
+        let provider = self.provider()?;
+        let table = self.label_atom_table(provider.dimensions())?;
+        let batches = self.runtime.block_on(async {
+            table
+                .query()
+                .select(Select::columns(&[
+                    "atom_key",
+                    "atom_id",
+                    "label_id",
+                    "label_name",
+                    "board_id",
+                    "polarity",
+                    "kind",
+                    "text",
+                    "ordinal",
+                    "content_hash",
+                    "embedding_model",
+                    "created_at",
+                    "updated_at",
+                    VECTOR_COLUMN,
+                ]))
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(map_lancedb_error)
+        })?;
+        label_atom_batches_to_projection_rows(&batches)
+    }
+}
+
+impl LanceDbProjectionReader {
+    pub(crate) fn open_existing(
+        path: impl Into<std::path::PathBuf>,
+        dimensions: usize,
+    ) -> Result<Self, VectorError> {
+        if dimensions == 0 {
+            return Err(VectorError::Store(
+                "historical projection dimensions must be non-zero".to_owned(),
+            ));
+        }
+        Ok(Self {
+            config: LanceDbConfig::degraded(path),
+            dimensions,
+            runtime: Runtime::new().map_err(|error| VectorError::Store(error.to_string()))?,
+        })
+    }
+
+    fn table(&self, table_name: &str) -> Result<Table, VectorError> {
+        let path = path_string(&self.config)?;
+        self.runtime.block_on(async {
+            let connection = lancedb::connect(&path)
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?;
+            open_existing_table(&connection, table_name, self.dimensions).await
+        })
+    }
+
+    pub(crate) fn validate_chunk_projection_table(&self) -> Result<(), VectorError> {
+        self.table(&self.config.table_name).map(|_| ())
+    }
+
+    pub(crate) fn validate_label_atom_projection_table(&self) -> Result<(), VectorError> {
+        self.table(&self.config.label_atom_table_name).map(|_| ())
+    }
+
+    pub(crate) fn chunk_projection_content_rows(
+        &self,
+    ) -> Result<Vec<ProjectionContentRow>, VectorError> {
+        let table = self.table(&self.config.table_name)?;
+        let batches = self.runtime.block_on(async {
+            table
+                .query()
+                .select(Select::columns(&[
+                    "chunk_key",
+                    "entity_uri",
+                    "chunk_uri",
+                    "kind",
+                    "project_id",
+                    "board_id",
+                    "task_id",
+                    "source_table",
+                    "source_id",
+                    "text",
+                    "summary",
+                    "embedding_model",
+                    "content_hash",
+                    "created_at",
+                    "updated_at",
+                    "source_event_id",
+                    "metadata_json",
+                    "ordinal",
+                    VECTOR_COLUMN,
+                ]))
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(map_lancedb_error)
+        })?;
+        chunk_batches_to_projection_rows(&batches)
+    }
+
+    pub(crate) fn label_atom_projection_content_rows(
+        &self,
+    ) -> Result<Vec<ProjectionContentRow>, VectorError> {
+        let table = self.table(&self.config.label_atom_table_name)?;
+        let batches = self.runtime.block_on(async {
+            table
+                .query()
+                .select(Select::columns(&[
+                    "atom_key",
+                    "atom_id",
+                    "label_id",
+                    "label_name",
+                    "board_id",
+                    "polarity",
+                    "kind",
+                    "text",
+                    "ordinal",
+                    "content_hash",
+                    "embedding_model",
+                    "created_at",
+                    "updated_at",
+                    VECTOR_COLUMN,
+                ]))
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(map_lancedb_error)
+        })?;
+        label_atom_batches_to_projection_rows(&batches)
+    }
+
+    pub(crate) fn query_chunks(
+        &self,
+        provider: &(dyn EmbeddingProvider + Send + Sync),
+        query: &VectorQuery,
+    ) -> Result<Vec<VectorHit>, VectorError> {
+        if query.limit == 0 {
+            return Ok(Vec::new());
+        }
+        let embedding = provider.embed(&query.text)?;
+        ensure_dimensions(&embedding, self.dimensions)?;
+        let table = self.table(&self.config.table_name)?;
+        let provider_model = provider.embedding_model().to_owned();
+        let board_id = query.board_id.clone();
+        self.runtime.block_on(async {
+            let filter = col("embedding_model")
+                .eq(lit(provider_model))
+                .and(col("board_id").eq(lit(board_id)));
+            let stream = table
+                .query()
+                .nearest_to(embedding)
+                .map_err(map_lancedb_error)?
+                .column(VECTOR_COLUMN)
+                .only_if_expr(filter)
+                .limit(query.limit)
+                .select(Select::columns(&[
+                    "chunk_uri",
+                    "entity_uri",
+                    "ordinal",
+                    "content_hash",
+                    "text",
+                    "summary",
+                    "_distance",
+                ]))
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?;
+            let batches = stream
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(map_lancedb_error)?;
+            batches_to_hits(&batches)
+        })
+    }
+
+    pub(crate) fn query_label_atoms(
+        &self,
+        provider: &(dyn EmbeddingProvider + Send + Sync),
+        query: &LabelAtomQuery,
+    ) -> Result<Vec<LabelAtomHit>, VectorError> {
+        if query.limit == 0 {
+            return Ok(Vec::new());
+        }
+        let embedding_model = query
+            .embedding_model
+            .as_deref()
+            .unwrap_or(provider.embedding_model());
+        if embedding_model != provider.embedding_model() {
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: provider.embedding_model().to_owned(),
+                actual: embedding_model.to_owned(),
+            });
+        }
+        let embedding = provider.embed(&query.text)?;
+        ensure_dimensions(&embedding, self.dimensions)?;
+        let table = self.table(&self.config.label_atom_table_name)?;
+        let embedding_model = embedding_model.to_owned();
+        let board_id = query.board_id.clone();
+        let polarity = query.polarity.clone();
+        self.runtime.block_on(async {
+            let mut filter = col("embedding_model").eq(lit(embedding_model));
+            if let Some(board_id) = board_id {
+                filter = filter.and(col("board_id").eq(lit(board_id)));
+            }
+            if let Some(polarity) = polarity {
+                filter = filter.and(col("polarity").eq(lit(polarity)));
+            }
+            let stream = table
+                .query()
+                .nearest_to(embedding)
+                .map_err(map_lancedb_error)?
+                .column(VECTOR_COLUMN)
+                .only_if_expr(filter)
+                .limit(query.limit)
+                .select(Select::columns(&[
+                    "atom_id",
+                    "label_id",
+                    "label_name",
+                    "board_id",
+                    "polarity",
+                    "kind",
+                    "text",
+                    "ordinal",
+                    "content_hash",
+                    "embedding_model",
+                    "_distance",
+                ]))
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?;
+            let batches = stream
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(map_lancedb_error)?;
+            batches_to_label_atom_hits(&batches)
+        })
+    }
+
+    pub(crate) fn query_label_atoms_by_vector(
+        &self,
+        provider: &(dyn EmbeddingProvider + Send + Sync),
+        query: &LabelAtomVectorQuery,
+    ) -> Result<Vec<LabelAtomVectorHit>, VectorError> {
+        if query.limit == 0 {
+            return Ok(Vec::new());
+        }
+        let embedding_model = query
+            .embedding_model
+            .as_deref()
+            .unwrap_or(provider.embedding_model());
+        if embedding_model != provider.embedding_model() {
+            return Err(VectorError::EmbeddingModelMismatch {
+                expected: provider.embedding_model().to_owned(),
+                actual: embedding_model.to_owned(),
+            });
+        }
+        ensure_dimensions(&query.vector, self.dimensions)?;
+        let table = self.table(&self.config.label_atom_table_name)?;
+        let embedding_model = embedding_model.to_owned();
+        let board_id = query.board_id.clone();
+        let polarity = query.polarity.clone();
+        let vector = query.vector.clone();
+        let mut columns = vec![
+            "atom_id",
+            "label_id",
+            "label_name",
+            "board_id",
+            "polarity",
+            "kind",
+            "text",
+            "ordinal",
+            "content_hash",
+            "embedding_model",
+            "_distance",
+        ];
+        if query.include_vector {
+            columns.push(VECTOR_COLUMN);
+        }
+        self.runtime.block_on(async {
+            let mut filter = col("embedding_model").eq(lit(embedding_model));
+            if let Some(board_id) = board_id {
+                filter = filter.and(col("board_id").eq(lit(board_id)));
+            }
+            if let Some(polarity) = polarity {
+                filter = filter.and(col("polarity").eq(lit(polarity)));
+            }
+            let stream = table
+                .query()
+                .nearest_to(vector)
+                .map_err(map_lancedb_error)?
+                .column(VECTOR_COLUMN)
+                .only_if_expr(filter)
+                .limit(query.limit)
+                .select(Select::columns(&columns))
+                .execute()
+                .await
+                .map_err(map_lancedb_error)?;
+            let batches = stream
+                .try_collect::<Vec<_>>()
+                .await
+                .map_err(map_lancedb_error)?;
+            batches_to_label_atom_vector_hits(&batches, query.include_vector)
+        })
+    }
+}
+
+pub(crate) fn expected_chunk_projection_content_rows(
+    chunks: &[EmbeddingChunk],
+) -> Result<Vec<ProjectionContentRow>, VectorError> {
+    normalize_projection_rows(
+        chunks
+            .iter()
+            .map(|chunk| ProjectionContentRow {
+                key: chunk.chunk_key(),
+                content_json: serde_json::json!({
+                    "chunk_key": chunk.chunk_key(),
+                    "entity_uri": chunk.chunk.entity_uri.as_str(),
+                    "chunk_uri": chunk.chunk.uri.as_str(),
+                    "kind": &chunk.kind,
+                    "project_id": &chunk.project_id,
+                    "board_id": &chunk.board_id,
+                    "task_id": &chunk.task_id,
+                    "source_table": &chunk.source_table,
+                    "source_id": &chunk.source_id,
+                    "text": &chunk.text,
+                    "summary": &chunk.summary,
+                    "embedding_model": &chunk.embedding_model,
+                    "content_hash": &chunk.chunk.content_hash,
+                    "created_at": chunk.created_at,
+                    "updated_at": chunk.updated_at,
+                    "source_event_id": chunk.source_event_id,
+                    "metadata_json": &chunk.metadata_json,
+                    "ordinal": chunk.chunk.ordinal,
+                })
+                .to_string(),
+                vector_bits: None,
+            })
+            .collect(),
+    )
+}
+
+pub(crate) fn expected_label_atom_projection_content_rows(
+    atoms: &[LabelAtomVector],
+) -> Result<Vec<ProjectionContentRow>, VectorError> {
+    normalize_projection_rows(
+        atoms
+            .iter()
+            .map(|atom| ProjectionContentRow {
+                key: atom.atom_key(),
+                content_json: serde_json::json!({
+                    "atom_key": atom.atom_key(),
+                    "atom_id": &atom.atom_id,
+                    "label_id": &atom.label_id,
+                    "label_name": &atom.label_name,
+                    "board_id": &atom.board_id,
+                    "polarity": &atom.polarity,
+                    "kind": &atom.kind,
+                    "text": &atom.text,
+                    "ordinal": atom.ordinal,
+                    "content_hash": &atom.content_hash,
+                    "embedding_model": &atom.embedding_model,
+                    "created_at": atom.created_at,
+                    "updated_at": atom.updated_at,
+                })
+                .to_string(),
+                vector_bits: None,
+            })
+            .collect(),
+    )
 }
 
 impl VectorStoreBackend for LanceDbStore {
@@ -483,6 +925,20 @@ async fn ensure_table(
         }
         Err(err) => Err(map_lancedb_error(err)),
     }
+}
+
+async fn open_existing_table(
+    connection: &lancedb::Connection,
+    table_name: &str,
+    dimensions: usize,
+) -> Result<Table, VectorError> {
+    let table = connection
+        .open_table(table_name)
+        .execute()
+        .await
+        .map_err(map_lancedb_error)?;
+    validate_vector_schema(&table, dimensions).await?;
+    Ok(table)
 }
 
 async fn ensure_label_atom_table(
@@ -906,6 +1362,128 @@ fn batches_to_label_atom_vector_hits(
     Ok(hits)
 }
 
+fn chunk_batches_to_projection_rows(
+    batches: &[RecordBatch],
+) -> Result<Vec<ProjectionContentRow>, VectorError> {
+    let mut rows = Vec::new();
+    for batch in batches {
+        let chunk_key = string_column(batch, "chunk_key")?;
+        let entity_uri = string_column(batch, "entity_uri")?;
+        let chunk_uri = string_column(batch, "chunk_uri")?;
+        let kind = string_column(batch, "kind")?;
+        let project_id = string_column(batch, "project_id")?;
+        let board_id = string_column(batch, "board_id")?;
+        let task_id = string_column(batch, "task_id")?;
+        let source_table = string_column(batch, "source_table")?;
+        let source_id = string_column(batch, "source_id")?;
+        let text = string_column(batch, "text")?;
+        let summary = string_column(batch, "summary")?;
+        let embedding_model = string_column(batch, "embedding_model")?;
+        let content_hash = string_column(batch, "content_hash")?;
+        let created_at = int64_column(batch, "created_at")?;
+        let updated_at = int64_column(batch, "updated_at")?;
+        let source_event_id = int64_column(batch, "source_event_id")?;
+        let metadata_json = string_column(batch, "metadata_json")?;
+        let ordinal = int64_column(batch, "ordinal")?;
+        let vectors = fixed_size_list_column(batch, VECTOR_COLUMN)?;
+        for row in 0..batch.num_rows() {
+            rows.push(ProjectionContentRow {
+                key: chunk_key.value(row).to_owned(),
+                content_json: serde_json::json!({
+                    "chunk_key": chunk_key.value(row),
+                    "entity_uri": entity_uri.value(row),
+                    "chunk_uri": chunk_uri.value(row),
+                    "kind": kind.value(row),
+                    "project_id": optional_string(project_id, row),
+                    "board_id": optional_string(board_id, row),
+                    "task_id": optional_string(task_id, row),
+                    "source_table": source_table.value(row),
+                    "source_id": source_id.value(row),
+                    "text": text.value(row),
+                    "summary": optional_string(summary, row),
+                    "embedding_model": embedding_model.value(row),
+                    "content_hash": optional_string(content_hash, row),
+                    "created_at": created_at.value(row),
+                    "updated_at": updated_at.value(row),
+                    "source_event_id": optional_i64(source_event_id, row),
+                    "metadata_json": metadata_json.value(row),
+                    "ordinal": ordinal.value(row),
+                })
+                .to_string(),
+                vector_bits: Some(
+                    fixed_size_list_value(vectors, row)?
+                        .into_iter()
+                        .map(f32::to_bits)
+                        .collect(),
+                ),
+            });
+        }
+    }
+    normalize_projection_rows(rows)
+}
+
+fn label_atom_batches_to_projection_rows(
+    batches: &[RecordBatch],
+) -> Result<Vec<ProjectionContentRow>, VectorError> {
+    let mut rows = Vec::new();
+    for batch in batches {
+        let atom_key = string_column(batch, "atom_key")?;
+        let atom_id = string_column(batch, "atom_id")?;
+        let label_id = string_column(batch, "label_id")?;
+        let label_name = string_column(batch, "label_name")?;
+        let board_id = string_column(batch, "board_id")?;
+        let polarity = string_column(batch, "polarity")?;
+        let kind = string_column(batch, "kind")?;
+        let text = string_column(batch, "text")?;
+        let ordinal = int64_column(batch, "ordinal")?;
+        let content_hash = string_column(batch, "content_hash")?;
+        let embedding_model = string_column(batch, "embedding_model")?;
+        let created_at = int64_column(batch, "created_at")?;
+        let updated_at = int64_column(batch, "updated_at")?;
+        let vectors = fixed_size_list_column(batch, VECTOR_COLUMN)?;
+        for row in 0..batch.num_rows() {
+            rows.push(ProjectionContentRow {
+                key: atom_key.value(row).to_owned(),
+                content_json: serde_json::json!({
+                    "atom_key": atom_key.value(row),
+                    "atom_id": atom_id.value(row),
+                    "label_id": label_id.value(row),
+                    "label_name": label_name.value(row),
+                    "board_id": board_id.value(row),
+                    "polarity": polarity.value(row),
+                    "kind": kind.value(row),
+                    "text": text.value(row),
+                    "ordinal": ordinal.value(row),
+                    "content_hash": content_hash.value(row),
+                    "embedding_model": embedding_model.value(row),
+                    "created_at": created_at.value(row),
+                    "updated_at": updated_at.value(row),
+                })
+                .to_string(),
+                vector_bits: Some(
+                    fixed_size_list_value(vectors, row)?
+                        .into_iter()
+                        .map(f32::to_bits)
+                        .collect(),
+                ),
+            });
+        }
+    }
+    normalize_projection_rows(rows)
+}
+
+fn normalize_projection_rows(
+    mut rows: Vec<ProjectionContentRow>,
+) -> Result<Vec<ProjectionContentRow>, VectorError> {
+    rows.sort();
+    if rows.windows(2).any(|pair| pair[0].key == pair[1].key) {
+        return Err(VectorError::Store(
+            "projection table contains duplicate stable row keys".to_owned(),
+        ));
+    }
+    Ok(rows)
+}
+
 fn string_column<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a StringArray, VectorError> {
     batch
         .column_by_name(name)
@@ -938,16 +1516,30 @@ fn fixed_size_list_column<'a>(
 }
 
 fn fixed_size_list_value(array: &FixedSizeListArray, row: usize) -> Result<Vec<f32>, VectorError> {
+    if array.is_null(row) {
+        return Err(VectorError::Store(
+            "projection vector row contains a null vector".to_owned(),
+        ));
+    }
     let value = array.value(row);
     let values = value
         .as_any()
         .downcast_ref::<Float32Array>()
         .ok_or_else(|| VectorError::Store("label atom vector values are not float32".to_owned()))?;
+    if values.null_count() != 0 {
+        return Err(VectorError::Store(
+            "projection vector row contains a null coordinate".to_owned(),
+        ));
+    }
     Ok((0..values.len()).map(|index| values.value(index)).collect())
 }
 
 fn optional_string(array: &StringArray, row: usize) -> Option<String> {
     (!array.is_null(row)).then(|| array.value(row).to_owned())
+}
+
+fn optional_i64(array: &Int64Array, row: usize) -> Option<i64> {
+    (!array.is_null(row)).then(|| array.value(row))
 }
 
 fn path_string(config: &LanceDbConfig) -> Result<String, VectorError> {
@@ -1786,6 +2378,29 @@ mod tests {
                 expected,
                 actual
             } if expected == "static-test" && actual == "other-model"
+        ));
+    }
+
+    #[test]
+    fn projection_vector_reader_rejects_outer_and_coordinate_nulls() {
+        let coordinate_null = arrow_array::FixedSizeListArray::from_iter_primitive::<
+            arrow_array::types::Float32Type,
+            _,
+            _,
+        >(vec![Some(vec![Some(1.0_f32), None])], 2);
+        assert!(matches!(
+            super::fixed_size_list_value(&coordinate_null, 0),
+            Err(VectorError::Store(message)) if message.contains("null")
+        ));
+
+        let outer_null = arrow_array::FixedSizeListArray::from_iter_primitive::<
+            arrow_array::types::Float32Type,
+            _,
+            _,
+        >(vec![None::<Vec<Option<f32>>>], 2);
+        assert!(matches!(
+            super::fixed_size_list_value(&outer_null, 0),
+            Err(VectorError::Store(message)) if message.contains("null")
         ));
     }
 

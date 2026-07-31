@@ -93,6 +93,20 @@ pub struct DerivedStoreReadGuard {
     _guard: DerivedStorePhysicalGuard,
 }
 
+/// Open-handle identity guard for an existing real directory.
+///
+/// This does not lock the directory against replacement. Callers use
+/// [`validate_path_identity`](Self::validate_path_identity) immediately before
+/// and after path-based third-party opens, and retain the guard for as long as
+/// those third-party handles may reopen path-relative data.
+#[derive(Debug)]
+pub struct DirectoryIdentityGuard {
+    file: std::fs::File,
+    path: PathBuf,
+    canonical_path: PathBuf,
+    identity: DerivedLockFileIdentity,
+}
+
 #[derive(Debug)]
 struct DerivedStorePhysicalGuard {
     _store_locks: DerivedStoreLockSet,
@@ -181,6 +195,43 @@ impl DatabaseLifecycleSharedGuard {
     /// Revalidates that the public path still resolves to the held inode.
     pub fn validate_path_identity(&self) -> io::Result<()> {
         self.guard.validate_path_identity()
+    }
+}
+
+impl DirectoryIdentityGuard {
+    pub fn acquire(path: &Path) -> io::Result<Self> {
+        let file = open_existing_directory(path)?;
+        let identity = snapshot_open_directory(path, &file)?;
+        let canonical_path = fs::canonicalize(path)?;
+        let guard = Self {
+            file,
+            path: path.to_path_buf(),
+            canonical_path,
+            identity,
+        };
+        guard.validate_path_identity()?;
+        Ok(guard)
+    }
+
+    pub fn canonical_path(&self) -> &Path {
+        &self.canonical_path
+    }
+
+    pub fn validate_path_identity(&self) -> io::Result<()> {
+        let handle_identity = snapshot_open_directory(&self.path, &self.file)?;
+        let current = open_existing_directory(&self.path)?;
+        let path_identity = snapshot_open_directory(&self.path, &current)?;
+        let canonical_path = fs::canonicalize(&self.path)?;
+        if handle_identity != self.identity
+            || path_identity != self.identity
+            || canonical_path != self.canonical_path
+        {
+            return Err(unsafe_directory_path(
+                &self.path,
+                "directory path no longer identifies the opened authority",
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -855,10 +906,77 @@ fn create_new_database_lock_file(_path: &Path) -> io::Result<std::fs::File> {
     ))
 }
 
+#[cfg(unix)]
+fn open_existing_directory(path: &Path) -> io::Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+
+    let mut options = std::fs::OpenOptions::new();
+    options
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK);
+    options.open(path)
+}
+
+#[cfg(windows)]
+fn open_existing_directory(path: &Path) -> io::Result<std::fs::File> {
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE,
+        FILE_SHARE_READ, FILE_SHARE_WRITE,
+    };
+
+    let mut options = std::fs::OpenOptions::new();
+    options
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT);
+    options.open(path)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn open_existing_directory(_path: &Path) -> io::Result<std::fs::File> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "directory identity guards require Unix or Windows file identities",
+    ))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DerivedLockFileIdentity {
     volume: u64,
     file_id: [u8; 16],
+}
+
+fn snapshot_open_directory(
+    path: &Path,
+    file: &std::fs::File,
+) -> io::Result<DerivedLockFileIdentity> {
+    if !file.metadata()?.is_dir() {
+        return Err(unsafe_directory_path(
+            path,
+            "opened authority is not a directory",
+        ));
+    }
+    let snapshot = snapshot_open_lock_file(file)?;
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+
+        if snapshot.attributes & u64::from(FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+            return Err(unsafe_directory_path(
+                path,
+                "opened authority is a reparse directory",
+            ));
+        }
+    }
+    Ok(snapshot.identity)
+}
+
+fn unsafe_directory_path(path: &Path, reason: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("unsafe directory path {}: {reason}", path.display()),
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2225,6 +2343,28 @@ pub mod sqlite_connection;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_identity_guard_detects_a_deterministic_path_swap() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let guarded = tempdir.path().join("generation");
+        let displaced = tempdir.path().join("generation.displaced");
+        let replacement = tempdir.path().join("replacement");
+        fs::create_dir(&guarded).unwrap();
+        fs::create_dir(&replacement).unwrap();
+        let guard = DirectoryIdentityGuard::acquire(&guarded).unwrap();
+
+        fs::rename(&guarded, &displaced).unwrap();
+        fs::rename(&replacement, &guarded).unwrap();
+
+        let error = guard.validate_path_identity().unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+
+        fs::rename(&guarded, &replacement).unwrap();
+        fs::rename(&displaced, &guarded).unwrap();
+        guard.validate_path_identity().unwrap();
+    }
 
     #[test]
     fn durable_file_replace_syncs_and_atomically_replaces_contents() {

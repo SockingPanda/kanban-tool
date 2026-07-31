@@ -196,6 +196,63 @@ pub struct ProjectionPublishReceipt {
     pub retained_previous: Option<ProjectionArtifactEvidence>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectionGenerationRole {
+    Active,
+    Previous,
+    Building,
+    Orphaned,
+}
+
+/// The SQLite snapshot that authorizes a destructive physical mutation.
+///
+/// The lease token is intentionally redacted from `Debug`; it is an opaque
+/// capability and must never appear in logs or diagnostics.
+#[derive(Clone, PartialEq, Eq)]
+pub struct ProjectionDestructiveAuthority {
+    pub owner: String,
+    pub lease_token: String,
+    pub fence_epoch: i64,
+    pub lease_expires_at: i64,
+    pub role: ProjectionGenerationRole,
+    pub generation: String,
+    pub expected_manifest: Option<ProjectionArtifactManifest>,
+    pub expected_binding: ProjectionGenerationBinding,
+    pub building_phase: Option<String>,
+}
+
+impl fmt::Debug for ProjectionDestructiveAuthority {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProjectionDestructiveAuthority")
+            .field("owner", &self.owner)
+            .field("lease_token", &"[REDACTED]")
+            .field("fence_epoch", &self.fence_epoch)
+            .field("role", &self.role)
+            .field("generation", &self.generation)
+            .field("expected_manifest", &self.expected_manifest)
+            .field("expected_binding", &self.expected_binding)
+            .field("building_phase", &self.building_phase)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectionGenerationBinding {
+    pub generation: String,
+    pub fingerprint: Option<String>,
+    pub fence_epoch: i64,
+    pub snapshot_cursor: Option<i64>,
+    pub provider: String,
+    pub provider_fingerprint: String,
+    pub canonical_count: i64,
+    pub canonical_digest: String,
+    pub delivery_count: i64,
+    pub delivery_digest: String,
+    pub corpus: Option<ProjectionCorpusMetadata>,
+}
+
 pub trait ProjectionStoreBackend {
     fn descriptor(&self) -> Result<ProjectionStoreDescriptor>;
 
@@ -252,6 +309,26 @@ pub trait ProjectionStoreBackend {
     fn abort_generation(&self, generation: &str) -> Result<()> {
         Err(KanbanError::Conflict(format!(
             "projection backend cannot abort generation {generation}"
+        )))
+    }
+
+    fn quarantine_generation_fenced(
+        &self,
+        generation: &str,
+        _authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        Err(KanbanError::Conflict(format!(
+            "projection backend must implement fenced quarantine for generation {generation}"
+        )))
+    }
+
+    fn abort_generation_fenced(
+        &self,
+        generation: &str,
+        _authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        Err(KanbanError::Conflict(format!(
+            "projection backend must implement fenced abort for generation {generation}"
         )))
     }
 }
@@ -1000,7 +1077,25 @@ pub(crate) fn recover_incompatible_projection_bindings(
     }
 
     for generation in &generations_to_quarantine {
-        backend.quarantine_generation(generation)?;
+        let (role, binding) = if snapshot.building.generation.as_deref() == Some(generation) {
+            (ProjectionGenerationRole::Building, &snapshot.building)
+        } else if snapshot.active.generation.as_deref() == Some(generation) {
+            (ProjectionGenerationRole::Active, &snapshot.active)
+        } else {
+            (ProjectionGenerationRole::Previous, &snapshot.previous)
+        };
+        let mut authority = destructive_authority_from_snapshot(
+            &snapshot,
+            store_name,
+            owner,
+            lease_token,
+            role,
+            binding,
+        )?;
+        let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
+        authority.fence_epoch = lease.fence_epoch;
+        authority.lease_expires_at = lease.lease_expires_at;
+        backend.quarantine_generation_fenced(generation, &authority)?;
     }
 
     // Lance helpers mutate generation directories under a separate process
@@ -1269,7 +1364,49 @@ fn abort_projection_generation_with_binding(
         generations_to_quarantine.push(previous.manifest.generation.clone());
     }
     for generation in &generations_to_quarantine {
-        backend.quarantine_generation(generation)?;
+        let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
+        let authority = if generation == &manifest.generation {
+            destructive_authority_from_evidence(
+                owner,
+                lease_token,
+                ProjectionGenerationRole::Building,
+                lease.fence_epoch,
+                lease.lease_expires_at,
+                &ProjectionArtifactEvidence {
+                    manifest: manifest.clone(),
+                    fingerprint: manifest.fingerprint.clone().unwrap_or_default(),
+                },
+            )
+        } else if let Some(active) = active
+            .as_ref()
+            .filter(|e| e.manifest.generation == *generation)
+        {
+            destructive_authority_from_evidence(
+                owner,
+                lease_token,
+                ProjectionGenerationRole::Active,
+                lease.fence_epoch,
+                lease.lease_expires_at,
+                active,
+            )
+        } else if let Some(previous) = previous
+            .as_ref()
+            .filter(|e| e.manifest.generation == *generation)
+        {
+            destructive_authority_from_evidence(
+                owner,
+                lease_token,
+                ProjectionGenerationRole::Previous,
+                lease.fence_epoch,
+                lease.lease_expires_at,
+                previous,
+            )
+        } else {
+            return Err(KanbanError::Storage(format!(
+                "projection generation {generation} has no destructive authority binding"
+            )));
+        };
+        backend.quarantine_generation_fenced(generation, &authority)?;
         if backend.inspect_generation(generation)?.is_some() {
             return Err(KanbanError::Storage(format!(
                 "abandoned projection generation {generation} remained addressable after quarantine"
@@ -1515,7 +1652,20 @@ pub fn recover_projection_generation_with(
                     Some(missing_active.clone())
                 }
                 Ok(Some(_)) | Err(KanbanError::Conflict(_)) => {
-                    quarantine_unreadable_generation(backend, &missing_active.manifest.generation)?;
+                    let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
+                    let authority = destructive_authority_from_evidence(
+                        owner,
+                        lease_token,
+                        ProjectionGenerationRole::Active,
+                        lease.fence_epoch,
+                        lease.lease_expires_at,
+                        &missing_active,
+                    );
+                    quarantine_unreadable_generation(
+                        backend,
+                        &missing_active.manifest.generation,
+                        &authority,
+                    )?;
                     expected_previous
                 }
                 Ok(None) => expected_previous,
@@ -1598,13 +1748,16 @@ pub fn recover_projection_generation_with(
 fn quarantine_unreadable_generation(
     backend: &(impl ProjectionStoreBackend + ?Sized),
     generation: &str,
+    authority: &ProjectionDestructiveAuthority,
 ) -> Result<()> {
-    backend.quarantine_generation(generation).map_err(|error| {
-        KanbanError::Storage(format!(
-            "projection backend could not non-destructively quarantine unreadable generation \
+    backend
+        .quarantine_generation_fenced(generation, authority)
+        .map_err(|error| {
+            KanbanError::Storage(format!(
+                "projection backend could not non-destructively quarantine unreadable generation \
              {generation}: {error}"
-        ))
-    })
+            ))
+        })
 }
 
 pub fn reconcile_projection_generation_with(
@@ -2139,6 +2292,81 @@ impl ProjectionBindingRecoverySnapshot {
     }
 }
 
+fn destructive_authority_from_snapshot(
+    snapshot: &ProjectionBindingRecoverySnapshot,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    role: ProjectionGenerationRole,
+    binding: &ProjectionGenerationBindingSnapshot,
+) -> Result<ProjectionDestructiveAuthority> {
+    let expected_manifest = if binding.fingerprint.is_some() {
+        binding
+            .evidence(
+                store_name,
+                match role {
+                    ProjectionGenerationRole::Active => "active",
+                    ProjectionGenerationRole::Previous => "previous",
+                    ProjectionGenerationRole::Building | ProjectionGenerationRole::Orphaned => {
+                        "building"
+                    }
+                },
+                &snapshot.lease.database_instance_id,
+                snapshot.lease.protocol_version,
+                snapshot.lease.schema_version,
+            )?
+            .map(|evidence| evidence.manifest)
+    } else {
+        None
+    };
+    let expected_binding = binding.destructive_binding(store_name)?;
+    Ok(ProjectionDestructiveAuthority {
+        owner: owner.to_owned(),
+        lease_token: lease_token.to_owned(),
+        fence_epoch: snapshot.lease.fence_epoch,
+        lease_expires_at: snapshot.lease.lease_expires_at,
+        role,
+        generation: expected_binding.generation.clone(),
+        expected_manifest,
+        expected_binding,
+        building_phase: binding.phase.clone(),
+    })
+}
+
+fn destructive_authority_from_evidence(
+    owner: &str,
+    lease_token: &str,
+    role: ProjectionGenerationRole,
+    current_lease_fence_epoch: i64,
+    current_lease_expires_at: i64,
+    evidence: &ProjectionArtifactEvidence,
+) -> ProjectionDestructiveAuthority {
+    let manifest = &evidence.manifest;
+    ProjectionDestructiveAuthority {
+        owner: owner.to_owned(),
+        lease_token: lease_token.to_owned(),
+        fence_epoch: current_lease_fence_epoch,
+        lease_expires_at: current_lease_expires_at,
+        role,
+        generation: manifest.generation.clone(),
+        expected_manifest: Some(manifest.clone()),
+        expected_binding: ProjectionGenerationBinding {
+            generation: manifest.generation.clone(),
+            fingerprint: manifest.fingerprint.clone(),
+            fence_epoch: manifest.fence_epoch,
+            snapshot_cursor: Some(manifest.snapshot_cursor),
+            provider: manifest.provider.clone(),
+            provider_fingerprint: manifest.provider_fingerprint.clone(),
+            canonical_count: manifest.canonical_item_count,
+            canonical_digest: manifest.canonical_digest.clone(),
+            delivery_count: manifest.delivery_item_count,
+            delivery_digest: manifest.delivery_digest.clone(),
+            corpus: manifest.corpus.clone(),
+        },
+        building_phase: None,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ProjectionGenerationBindingSnapshot {
     generation: Option<String>,
@@ -2156,6 +2384,72 @@ struct ProjectionGenerationBindingSnapshot {
     embedding_model: Option<String>,
     embedding_dimensions: Option<i64>,
     phase: Option<String>,
+}
+
+impl ProjectionGenerationBindingSnapshot {
+    fn destructive_binding(&self, store_name: &str) -> Result<ProjectionGenerationBinding> {
+        let generation = self.generation.clone().ok_or_else(|| {
+            KanbanError::Storage(format!(
+                "projection store {store_name} has no generation binding"
+            ))
+        })?;
+        let fence_epoch = self.fence_epoch.ok_or_else(|| {
+            KanbanError::Storage(format!(
+                "projection store {store_name} has no generation fence"
+            ))
+        })?;
+        let provider = self.provider.clone().ok_or_else(|| {
+            KanbanError::Storage(format!(
+                "projection store {store_name} has no generation provider"
+            ))
+        })?;
+        let provider_fingerprint = self.provider_fingerprint.clone().ok_or_else(|| {
+            KanbanError::Storage(format!(
+                "projection store {store_name} has no provider fingerprint"
+            ))
+        })?;
+        let canonical_count = self.canonical_count.ok_or_else(|| {
+            KanbanError::Storage(format!(
+                "projection store {store_name} has no canonical count"
+            ))
+        })?;
+        let canonical_digest = self.canonical_digest.clone().ok_or_else(|| {
+            KanbanError::Storage(format!(
+                "projection store {store_name} has no canonical digest"
+            ))
+        })?;
+        let delivery_count = self.delivery_count.ok_or_else(|| {
+            KanbanError::Storage(format!(
+                "projection store {store_name} has no delivery count"
+            ))
+        })?;
+        let delivery_digest = self.delivery_digest.clone().ok_or_else(|| {
+            KanbanError::Storage(format!(
+                "projection store {store_name} has no delivery digest"
+            ))
+        })?;
+        let corpus = projection_corpus_from_values(
+            self.corpus_schema.clone(),
+            self.corpus_fingerprint.clone(),
+            self.embedding_model.clone(),
+            self.embedding_dimensions,
+            store_name,
+            "destructive authority",
+        )?;
+        Ok(ProjectionGenerationBinding {
+            generation,
+            fingerprint: self.fingerprint.clone(),
+            fence_epoch,
+            snapshot_cursor: self.snapshot_cursor,
+            provider,
+            provider_fingerprint,
+            canonical_count,
+            canonical_digest,
+            delivery_count,
+            delivery_digest,
+            corpus,
+        })
+    }
 }
 
 impl ProjectionGenerationBindingSnapshot {
@@ -2491,6 +2785,17 @@ fn require_current_lease(
     now: i64,
 ) -> Result<()> {
     current_lease(conn, store_name, owner, lease_token, now).map(|_| ())
+}
+
+fn current_lease_snapshot(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+) -> Result<CurrentLease> {
+    let now = SystemClock.now_ms();
+    let conn = connect_file(path)?;
+    current_lease(&conn, store_name, owner, lease_token, now)
 }
 
 fn building_manifest(
@@ -4023,5 +4328,129 @@ mod read_only_publication_validation_tests {
         assert!(error.to_string().contains("corrupt publication marker"));
         assert_eq!(backend.repair_calls.load(Ordering::SeqCst), 0);
         Ok(())
+    }
+
+    #[test]
+    fn destructive_authority_debug_redacts_lease_token() {
+        let authority = ProjectionDestructiveAuthority {
+            owner: "owner-a".to_owned(),
+            lease_token: "secret-token".to_owned(),
+            fence_epoch: 9,
+            lease_expires_at: 100,
+            role: ProjectionGenerationRole::Building,
+            generation: "gen-a".to_owned(),
+            expected_manifest: None,
+            expected_binding: ProjectionGenerationBinding {
+                generation: "gen-a".to_owned(),
+                fingerprint: None,
+                fence_epoch: 9,
+                snapshot_cursor: None,
+                provider: "provider".to_owned(),
+                provider_fingerprint: "provider-v1".to_owned(),
+                canonical_count: 0,
+                canonical_digest: "digest".to_owned(),
+                delivery_count: 0,
+                delivery_digest: "digest".to_owned(),
+                corpus: None,
+            },
+            building_phase: Some("snapshotting".to_owned()),
+        };
+        let debug = format!("{authority:?}");
+        assert!(debug.contains("[REDACTED]"));
+        assert!(!debug.contains("secret-token"));
+    }
+
+    #[test]
+    fn fenced_destructive_defaults_fail_closed() -> anyhow::Result<()> {
+        let backend = CorruptMarkerBackend {
+            generation: ProjectionArtifactEvidence {
+                manifest: ProjectionArtifactManifest {
+                    store_name: "tantivy_tasks".to_owned(),
+                    database_instance_id: "db".to_owned(),
+                    protocol_version: 2,
+                    schema_version: 1,
+                    generation: "gen".to_owned(),
+                    fence_epoch: 7,
+                    snapshot_cursor: 0,
+                    provider: "fake".to_owned(),
+                    provider_fingerprint: "fake-v1".to_owned(),
+                    corpus: None,
+                    canonical_item_count: 0,
+                    canonical_digest: "d".to_owned(),
+                    delivery_item_count: 0,
+                    delivery_digest: "d".to_owned(),
+                    fingerprint: Some("f".to_owned()),
+                },
+                fingerprint: "f".to_owned(),
+            },
+            repair_calls: AtomicUsize::new(0),
+        };
+        let authority = ProjectionDestructiveAuthority {
+            owner: "owner".to_owned(),
+            lease_token: "token".to_owned(),
+            fence_epoch: 9,
+            lease_expires_at: 100,
+            role: ProjectionGenerationRole::Building,
+            generation: "gen".to_owned(),
+            expected_manifest: None,
+            expected_binding: ProjectionGenerationBinding {
+                generation: "gen".to_owned(),
+                fingerprint: None,
+                fence_epoch: 7,
+                snapshot_cursor: None,
+                provider: "fake".to_owned(),
+                provider_fingerprint: "fake-v1".to_owned(),
+                canonical_count: 0,
+                canonical_digest: "d".to_owned(),
+                delivery_count: 0,
+                delivery_digest: "d".to_owned(),
+                corpus: None,
+            },
+            building_phase: None,
+        };
+        let error = backend
+            .quarantine_generation_fenced("gen", &authority)
+            .expect_err("default fenced destructive operation must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("must implement fenced quarantine")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn destructive_authority_uses_current_lease_fence_separately_from_artifact_fence() {
+        let evidence = ProjectionArtifactEvidence {
+            manifest: ProjectionArtifactManifest {
+                store_name: "tantivy_tasks".to_owned(),
+                database_instance_id: "db".to_owned(),
+                protocol_version: 2,
+                schema_version: 1,
+                generation: "gen".to_owned(),
+                fence_epoch: 7,
+                snapshot_cursor: 0,
+                provider: "fake".to_owned(),
+                provider_fingerprint: "fake-v1".to_owned(),
+                corpus: None,
+                canonical_item_count: 0,
+                canonical_digest: "d".to_owned(),
+                delivery_item_count: 0,
+                delivery_digest: "d".to_owned(),
+                fingerprint: Some("f".to_owned()),
+            },
+            fingerprint: "f".to_owned(),
+        };
+        let authority = destructive_authority_from_evidence(
+            "owner",
+            "token",
+            ProjectionGenerationRole::Active,
+            9,
+            100,
+            &evidence,
+        );
+        assert_eq!(authority.fence_epoch, 9);
+        assert_eq!(authority.lease_expires_at, 100);
+        assert_eq!(authority.expected_binding.fence_epoch, 7);
     }
 }

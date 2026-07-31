@@ -9,7 +9,8 @@ use std::{
 use kanban_core::{KanbanError, Result};
 use kanban_local::{
     DatabaseLifecycleExclusiveAuthority, DatabaseLifecycleExclusiveGuard,
-    DatabaseLifecycleSharedGuard, DerivedStoreWriteGuard, database_maintenance_lock_path,
+    DatabaseLifecycleSharedGuard, DerivedStoreReadGuard, DerivedStoreWriteGuard,
+    database_maintenance_lock_path,
 };
 use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior};
 
@@ -504,6 +505,23 @@ pub fn acquire_derived_store_write_guard(
     store_name: &str,
 ) -> Result<DerivedStoreWriteGuard> {
     DerivedStoreWriteGuard::acquire(path, store_name).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::WouldBlock {
+            KanbanError::Conflict(error.to_string())
+        } else {
+            KanbanError::Storage(error.to_string())
+        }
+    })
+}
+
+/// Acquire the shared physical suffix authority for a projection reader.
+/// Recovery/quarantine takes the matching exclusive guard, so a reader never
+/// observes a generation while its directory is being moved aside. A busy
+/// suffix is surfaced as a transient conflict for callers to retry.
+pub fn acquire_derived_store_read_guard(
+    path: &Path,
+    store_name: &str,
+) -> Result<DerivedStoreReadGuard> {
+    DerivedStoreReadGuard::acquire(path, store_name).map_err(|error| {
         if error.kind() == std::io::ErrorKind::WouldBlock {
             KanbanError::Conflict(error.to_string())
         } else {

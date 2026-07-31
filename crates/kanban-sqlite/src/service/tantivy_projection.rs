@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use kanban_core::{KanbanError, Result};
+use kanban_core::{Clock, KanbanError, Result, SystemClock};
 use kanban_indexer::TANTIVY_TASKS_STORE;
 use kanban_local::{durable_create_new_file, durable_quarantine_entry, durable_remove_directory};
 use kanban_search::{
@@ -15,16 +15,18 @@ use kanban_search::{
         sync_task_projection_generation, validate_task_projection_generation,
     },
 };
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::{
     ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
-    ProjectionBatchReceipt, ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreBackend,
+    ProjectionBatchReceipt, ProjectionDestructiveAuthority, ProjectionGenerationBinding,
+    ProjectionGenerationRole, ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreBackend,
     ProjectionStoreDescriptor, task_search_documents_for_task_ids,
 };
 
 pub(crate) const TANTIVY_PROJECTION_PROVIDER: &str = "tantivy";
 pub(crate) const TANTIVY_PROJECTION_PROVIDER_FINGERPRINT: &str = "tantivy-tasks-v2";
+const TANTIVY_PROJECTION_HELPER_LOCK: &str = "tantivy_tasks-projection-helper";
 const GENERATIONS_DIR: &str = "generations";
 const PUBLISHED_MARKER: &str = "published";
 
@@ -96,6 +98,10 @@ impl TantivyProjectionStore {
         expected: &ProjectionArtifactEvidence,
         query: &kanban_search::SearchQuery,
     ) -> Result<(Vec<kanban_search::SearchHit>, kanban_search::SearchMeta)> {
+        let _authority_guard = crate::db::acquire_derived_store_read_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
         self.validate_managed_ancestors(false)?;
         if expected.manifest.database_instance_id != self.database_instance_id {
             return Err(KanbanError::Conflict(
@@ -126,6 +132,14 @@ impl TantivyProjectionStore {
     }
 
     fn inspect_published(&self) -> Result<Vec<ProjectionArtifactEvidence>> {
+        let _authority_guard = crate::db::acquire_derived_store_read_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.inspect_published_while_helper_locked()
+    }
+
+    fn inspect_published_while_helper_locked(&self) -> Result<Vec<ProjectionArtifactEvidence>> {
         self.validate_managed_ancestors(false)?;
         let generations_root = self.generations_root();
         let root_metadata = match fs::symlink_metadata(&generations_root) {
@@ -158,7 +172,7 @@ impl TantivyProjectionStore {
                 Err(error) => return Err(KanbanError::Storage(error.to_string())),
             }
             let generation = entry.file_name().to_string_lossy().into_owned();
-            let evidence = match self.inspect_generation(&generation) {
+            let evidence = match self.inspect_generation_while_helper_locked(&generation) {
                 Ok(Some(evidence)) => evidence,
                 Ok(None) | Err(_) => continue,
             };
@@ -175,19 +189,8 @@ impl TantivyProjectionStore {
         });
         Ok(published)
     }
-}
 
-impl ProjectionStoreBackend for TantivyProjectionStore {
-    fn descriptor(&self) -> Result<ProjectionStoreDescriptor> {
-        Ok(ProjectionStoreDescriptor {
-            store_name: TANTIVY_TASKS_STORE.to_owned(),
-            provider: TANTIVY_PROJECTION_PROVIDER.to_owned(),
-            provider_fingerprint: TANTIVY_PROJECTION_PROVIDER_FINGERPRINT.to_owned(),
-            corpus: None,
-        })
-    }
-
-    fn prepare_snapshot(
+    fn prepare_snapshot_while_helper_locked(
         &self,
         snapshot: &ProjectionSnapshot,
     ) -> Result<ProjectionArtifactEvidence> {
@@ -228,41 +231,33 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
         let generation_path = self.checked_generation_path(generation)?;
         match fs::symlink_metadata(&generation_path) {
             Ok(metadata) if !metadata.is_dir() => {
-                durable_quarantine_entry(&generation_path)
-                    .map_err(|error| KanbanError::Storage(error.to_string()))?;
+                return Err(KanbanError::Conflict(format!(
+                    "Tantivy generation {generation} has a non-directory entry; fenced recovery is required before prepare"
+                )));
             }
             Ok(_) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(KanbanError::Storage(error.to_string())),
         }
-        if let Err(error) =
-            prepare_task_projection_generation(&generation_path, &metadata, &documents)
-        {
-            let generation_metadata = match fs::symlink_metadata(&generation_path) {
-                Ok(metadata) => Some(metadata),
-                Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => None,
-                Err(io_error) => return Err(KanbanError::Storage(io_error.to_string())),
-            };
-            let marker_absent = match fs::symlink_metadata(self.published_marker(generation)) {
-                Ok(_) => false,
-                Err(marker_error) if marker_error.kind() == std::io::ErrorKind::NotFound => true,
-                Err(marker_error) => {
-                    return Err(KanbanError::Storage(marker_error.to_string()));
-                }
-            };
-            let can_rebuild =
-                generation_metadata.is_some_and(|metadata| metadata.is_dir()) && marker_absent;
-            if !can_rebuild {
-                return Err(search_storage(error));
-            }
-            self.abort_generation(generation)?;
-            prepare_task_projection_generation(&generation_path, &metadata, &documents)
-                .map_err(search_storage)?;
-        }
+        // A failed prepare may leave a partial generation behind. It is
+        // deliberately left in place as recovery evidence: this method has no
+        // opaque owner/token capability with which to authorize a destructive
+        // quarantine. The service retries through the fenced abort/quarantine
+        // API before starting a replacement generation.
+        prepare_task_projection_generation(&generation_path, &metadata, &documents).map_err(
+            |error| {
+                KanbanError::Conflict(format!(
+                    "Tantivy generation {generation} is not safely reusable; fenced recovery is required: {error}"
+                ))
+            },
+        )?;
         Ok(evidence)
     }
 
-    fn apply_batch(&self, batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt> {
+    fn apply_batch_while_helper_locked(
+        &self,
+        batch: &ProjectionBatch,
+    ) -> Result<ProjectionBatchReceipt> {
         self.validate_managed_ancestors(false)?;
         if batch.database_instance_id != self.database_instance_id {
             return Err(KanbanError::Conflict(
@@ -276,7 +271,7 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
         }
         let generation_path = self.checked_generation_path(&batch.target_generation)?;
         let evidence = self
-            .inspect_generation(&batch.target_generation)?
+            .inspect_generation_while_helper_locked(&batch.target_generation)?
             .ok_or_else(|| {
                 KanbanError::Conflict(format!(
                     "Tantivy target generation {} does not exist",
@@ -323,7 +318,7 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
         })
     }
 
-    fn publish_generation(
+    fn publish_generation_while_helper_locked(
         &self,
         expected_active: Option<&ProjectionArtifactEvidence>,
         prepared: &ProjectionArtifactEvidence,
@@ -338,13 +333,17 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
                 "Tantivy publish evidence belongs to another database".to_owned(),
             ));
         }
-        if self.inspect_active()?.as_ref() != expected_active {
+        if self
+            .inspect_published_while_helper_locked()?
+            .last()
+            != expected_active
+        {
             return Err(KanbanError::Conflict(
                 "Tantivy active generation changed before publish".to_owned(),
             ));
         }
         let stored = self
-            .inspect_generation(&prepared.manifest.generation)?
+            .inspect_generation_while_helper_locked(&prepared.manifest.generation)?
             .ok_or_else(|| {
                 KanbanError::Conflict("prepared Tantivy generation is missing".to_owned())
             })?;
@@ -356,10 +355,13 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
         let generation_path = self.checked_generation_path(&prepared.manifest.generation)?;
         kanban_search::tantivy_backend::sync_task_projection_generation_files(&generation_path)
             .map_err(search_storage)?;
-        self.repair_generation_publication(prepared)?;
-        let active = self.inspect_active()?.ok_or_else(|| {
-            KanbanError::Storage("published Tantivy generation is not discoverable".to_owned())
-        })?;
+        self.repair_generation_publication_while_helper_locked(prepared)?;
+        let active = self
+            .inspect_published_while_helper_locked()?
+            .pop()
+            .ok_or_else(|| {
+                KanbanError::Storage("published Tantivy generation is not discoverable".to_owned())
+            })?;
         if active != *prepared {
             return Err(KanbanError::Conflict(
                 "a newer Tantivy generation won the publish fence".to_owned(),
@@ -371,11 +373,10 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
         })
     }
 
-    fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>> {
-        Ok(self.inspect_published()?.pop())
-    }
-
-    fn inspect_generation(&self, generation: &str) -> Result<Option<ProjectionArtifactEvidence>> {
+    fn inspect_generation_while_helper_locked(
+        &self,
+        generation: &str,
+    ) -> Result<Option<ProjectionArtifactEvidence>> {
         self.validate_managed_ancestors(false)?;
         let path = self.checked_generation_path(generation)?;
         let metadata = match fs::symlink_metadata(&path) {
@@ -405,11 +406,16 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
         Ok(Some(evidence))
     }
 
-    fn validate_generation_publication(&self, expected: &ProjectionArtifactEvidence) -> Result<()> {
+    fn validate_generation_publication_while_helper_locked(
+        &self,
+        expected: &ProjectionArtifactEvidence,
+    ) -> Result<()> {
         let generation = &expected.manifest.generation;
-        let stored = self.inspect_generation(generation)?.ok_or_else(|| {
-            KanbanError::Storage(format!("Tantivy generation {generation} is missing"))
-        })?;
+        let stored = self
+            .inspect_generation_while_helper_locked(generation)?
+            .ok_or_else(|| {
+                KanbanError::Storage(format!("Tantivy generation {generation} is missing"))
+            })?;
         if stored != *expected {
             return Err(KanbanError::Storage(format!(
                 "Tantivy generation {generation} evidence mismatch"
@@ -427,13 +433,18 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
         validate_published_marker(&marker, expected)
     }
 
-    fn repair_generation_publication(&self, expected: &ProjectionArtifactEvidence) -> Result<()> {
+    fn repair_generation_publication_while_helper_locked(
+        &self,
+        expected: &ProjectionArtifactEvidence,
+    ) -> Result<()> {
         let generation = &expected.manifest.generation;
-        let stored = self.inspect_generation(generation)?.ok_or_else(|| {
-            KanbanError::Storage(format!(
-                "Tantivy generation {generation} is missing during marker repair"
-            ))
-        })?;
+        let stored = self
+            .inspect_generation_while_helper_locked(generation)?
+            .ok_or_else(|| {
+                KanbanError::Storage(format!(
+                    "Tantivy generation {generation} is missing during marker repair"
+                ))
+            })?;
         if stored != *expected {
             return Err(KanbanError::Conflict(format!(
                 "Tantivy generation {generation} evidence mismatch during marker repair"
@@ -457,8 +468,535 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
             .map_err(|error| KanbanError::Storage(error.to_string()))?;
         validate_published_marker(&marker, expected)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TantivySqliteGenerationBinding {
+    generation: Option<String>,
+    fingerprint: Option<String>,
+    fence_epoch: Option<i64>,
+    snapshot_cursor: Option<i64>,
+    provider: Option<String>,
+    provider_fingerprint: Option<String>,
+    canonical_item_count: Option<i64>,
+    canonical_digest: Option<String>,
+    delivery_item_count: Option<i64>,
+    delivery_digest: Option<String>,
+    corpus_schema: Option<String>,
+    corpus_fingerprint: Option<String>,
+    embedding_model: Option<String>,
+    embedding_dimensions: Option<i64>,
+}
+
+impl TantivySqliteGenerationBinding {
+    fn from_row(row: &Row<'_>, offset: usize) -> rusqlite::Result<Self> {
+        Ok(Self {
+            generation: row.get(offset)?,
+            fingerprint: row.get(offset + 1)?,
+            fence_epoch: row.get(offset + 2)?,
+            snapshot_cursor: row.get(offset + 3)?,
+            provider: row.get(offset + 4)?,
+            provider_fingerprint: row.get(offset + 5)?,
+            canonical_item_count: row.get(offset + 6)?,
+            canonical_digest: row.get(offset + 7)?,
+            delivery_item_count: row.get(offset + 8)?,
+            delivery_digest: row.get(offset + 9)?,
+            corpus_schema: row.get(offset + 10)?,
+            corpus_fingerprint: row.get(offset + 11)?,
+            embedding_model: row.get(offset + 12)?,
+            embedding_dimensions: row.get(offset + 13)?,
+        })
+    }
+
+    fn to_binding(
+        &self,
+        store_name: &str,
+        snapshot_cursor: Option<i64>,
+    ) -> Result<ProjectionGenerationBinding> {
+        let generation = self.generation.clone().ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "Tantivy projection store {store_name} has no generation binding"
+            ))
+        })?;
+        let fence_epoch = self.fence_epoch.ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "Tantivy projection store {store_name} has no generation fence"
+            ))
+        })?;
+        let provider = self.provider.clone().ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "Tantivy projection store {store_name} has no generation provider"
+            ))
+        })?;
+        let provider_fingerprint = self.provider_fingerprint.clone().ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "Tantivy projection store {store_name} has no provider fingerprint"
+            ))
+        })?;
+        let canonical_item_count = self.canonical_item_count.ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "Tantivy projection store {store_name} has no canonical count"
+            ))
+        })?;
+        let canonical_digest = self.canonical_digest.clone().ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "Tantivy projection store {store_name} has no canonical digest"
+            ))
+        })?;
+        let delivery_item_count = self.delivery_item_count.ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "Tantivy projection store {store_name} has no delivery count"
+            ))
+        })?;
+        let delivery_digest = self.delivery_digest.clone().ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "Tantivy projection store {store_name} has no delivery digest"
+            ))
+        })?;
+        let corpus = super::projection_v2::projection_corpus_from_values(
+            self.corpus_schema.clone(),
+            self.corpus_fingerprint.clone(),
+            self.embedding_model.clone(),
+            self.embedding_dimensions,
+            store_name,
+            "Tantivy destructive authority",
+        )?;
+        Ok(ProjectionGenerationBinding {
+            generation,
+            fingerprint: self.fingerprint.clone(),
+            fence_epoch,
+            snapshot_cursor,
+            provider,
+            provider_fingerprint,
+            canonical_count: canonical_item_count,
+            canonical_digest,
+            delivery_count: delivery_item_count,
+            delivery_digest,
+            corpus,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct TantivySqliteAuthorityState {
+    database_instance_id: String,
+    protocol_version: i64,
+    schema_version: i64,
+    control_plane: String,
+    fence_epoch: i64,
+    lease_owner: Option<String>,
+    lease_token: Option<String>,
+    lease_expires_at: Option<i64>,
+    active: TantivySqliteGenerationBinding,
+    previous: TantivySqliteGenerationBinding,
+    building: TantivySqliteGenerationBinding,
+    snapshot_cursor: i64,
+    building_phase: Option<String>,
+}
+
+impl TantivySqliteAuthorityState {
+    fn load(conn: &Connection) -> Result<Self> {
+        conn.query_row(
+            "SELECT database_instance_id,protocol_version,schema_version,control_plane,
+                    fence_epoch,lease_owner,lease_token,lease_expires_at,
+                    active_generation,active_fingerprint,active_fence_epoch,active_snapshot_cursor,
+                    active_provider,active_provider_fingerprint,active_canonical_count,
+                    active_canonical_digest,active_delivery_count,active_delivery_digest,
+                    active_corpus_schema,active_corpus_fingerprint,active_embedding_model,
+                    active_embedding_dimensions,
+                    previous_generation,previous_fingerprint,previous_fence_epoch,
+                    previous_snapshot_cursor,previous_provider,previous_provider_fingerprint,
+                    previous_canonical_count,previous_canonical_digest,previous_delivery_count,
+                    previous_delivery_digest,previous_corpus_schema,previous_corpus_fingerprint,
+                    previous_embedding_model,previous_embedding_dimensions,
+                    building_generation,building_fingerprint,building_fence_epoch,snapshot_cursor,
+                    building_provider,building_provider_fingerprint,building_canonical_count,
+                    building_canonical_digest,building_delivery_count,building_delivery_digest,
+                    building_corpus_schema,building_corpus_fingerprint,building_embedding_model,
+                    building_embedding_dimensions,snapshot_cursor,building_phase
+             FROM projection_store_state WHERE store_name=?1",
+            [TANTIVY_TASKS_STORE],
+            |row| {
+                Ok(Self {
+                    database_instance_id: row.get(0)?,
+                    protocol_version: row.get(1)?,
+                    schema_version: row.get(2)?,
+                    control_plane: row.get(3)?,
+                    fence_epoch: row.get(4)?,
+                    lease_owner: row.get(5)?,
+                    lease_token: row.get(6)?,
+                    lease_expires_at: row.get(7)?,
+                    active: TantivySqliteGenerationBinding::from_row(row, 8)?,
+                    previous: TantivySqliteGenerationBinding::from_row(row, 22)?,
+                    building: TantivySqliteGenerationBinding::from_row(row, 36)?,
+                    snapshot_cursor: row.get(50)?,
+                    building_phase: row.get(51)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| KanbanError::Storage(error.to_string()))?
+        .ok_or_else(|| {
+            KanbanError::Conflict("Tantivy projection store has no SQLite authority row".to_owned())
+        })
+    }
+
+    fn binding_for(
+        &self,
+        role: ProjectionGenerationRole,
+        store_name: &str,
+    ) -> Result<ProjectionGenerationBinding> {
+        match role {
+            ProjectionGenerationRole::Active => self
+                .active
+                .to_binding(store_name, self.active.snapshot_cursor),
+            ProjectionGenerationRole::Previous => self
+                .previous
+                .to_binding(store_name, self.previous.snapshot_cursor),
+            ProjectionGenerationRole::Building => {
+                let snapshot_cursor = if self.building_phase.as_deref() == Some("snapshotting") {
+                    None
+                } else {
+                    Some(self.snapshot_cursor)
+                };
+                self.building.to_binding(store_name, snapshot_cursor)
+            }
+            ProjectionGenerationRole::Orphaned => Err(KanbanError::Conflict(
+                "Tantivy projection orphaned generations have no SQLite authority".to_owned(),
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct TantivyDestructiveValidation {
+    role: ProjectionGenerationRole,
+    current_provider_binding: bool,
+}
+
+fn tantivy_authority_error(message: impl Into<String>) -> KanbanError {
+    KanbanError::Conflict(format!(
+        "Tantivy projection destructive authority is stale or inconsistent: {}",
+        message.into()
+    ))
+}
+
+impl TantivyProjectionStore {
+    /// Validate the opaque capability and every SQLite generation binding before
+    /// touching a physical generation. The caller may hold the generic store
+    /// guard; this backend also holds its distinct helper authority guard.
+    fn validate_destructive_authority(
+        &self,
+        generation: &str,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<TantivyDestructiveValidation> {
+        let validation = self.validate_exact_destructive_authority(generation, authority)?;
+        if !validation.current_provider_binding {
+            return Err(tantivy_authority_error(
+                "provider or corpus binding does not match Tantivy",
+            ));
+        }
+        Ok(validation)
+    }
+
+    /// Recovery is authorized by the exact historical SQLite binding, not by
+    /// the provider compiled into this process. This still validates the live
+    /// owner/token/lease/fence and the exact role, phase, manifest, and binding
+    /// before any physical mutation.
+    fn validate_recovery_destructive_authority(
+        &self,
+        generation: &str,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<TantivyDestructiveValidation> {
+        self.validate_exact_destructive_authority(generation, authority)
+    }
+
+    fn validate_exact_destructive_authority(
+        &self,
+        generation: &str,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<TantivyDestructiveValidation> {
+        let now = SystemClock.now_ms();
+        if generation.trim().is_empty()
+            || authority.generation != generation
+            || authority.owner.trim().is_empty()
+            || authority.lease_token.trim().is_empty()
+            || authority.fence_epoch < 0
+            || authority.lease_expires_at <= now
+        {
+            return Err(tantivy_authority_error(
+                "capability is incomplete or expired",
+            ));
+        }
+        let conn = crate::db::connect_file(&self.db_path)?;
+        let state = TantivySqliteAuthorityState::load(&conn)?;
+        if state.database_instance_id != self.database_instance_id
+            || state.protocol_version != 2
+            || state.schema_version != 1
+            || state.control_plane != "v2"
+            || state.fence_epoch != authority.fence_epoch
+            || state.lease_owner.as_deref() != Some(authority.owner.as_str())
+            || state.lease_token.as_deref() != Some(authority.lease_token.as_str())
+            || state
+                .lease_expires_at
+                .is_none_or(|expires_at| expires_at <= now)
+        {
+            return Err(tantivy_authority_error(
+                "owner, token, lease, database, protocol, or fence changed",
+            ));
+        }
+
+        let candidates = [
+            (
+                ProjectionGenerationRole::Active,
+                state.active.generation.as_deref(),
+            ),
+            (
+                ProjectionGenerationRole::Previous,
+                state.previous.generation.as_deref(),
+            ),
+            (
+                ProjectionGenerationRole::Building,
+                state.building.generation.as_deref(),
+            ),
+        ];
+        let mut matched_role = None;
+        for (role, candidate) in candidates {
+            if candidate == Some(generation) {
+                if matched_role.is_some() {
+                    return Err(tantivy_authority_error(
+                        "generation is bound to more than one SQLite role",
+                    ));
+                }
+                matched_role = Some(role);
+            }
+        }
+        let role = matched_role.ok_or_else(|| {
+            tantivy_authority_error(
+                "generation is not bound to an active, previous, or building role",
+            )
+        })?;
+        if role != authority.role || authority.role == ProjectionGenerationRole::Orphaned {
+            return Err(tantivy_authority_error(
+                "generation role does not match SQLite",
+            ));
+        }
+        let binding = state.binding_for(role, TANTIVY_TASKS_STORE)?;
+        if binding.generation != generation || binding != authority.expected_binding {
+            return Err(tantivy_authority_error(
+                "generation binding does not match SQLite",
+            ));
+        }
+        let phase = if role == ProjectionGenerationRole::Building {
+            let phase = state.building_phase.as_deref();
+            if !matches!(phase, Some("snapshotting" | "prepared" | "store_published")) {
+                return Err(tantivy_authority_error("building phase is invalid"));
+            }
+            phase.map(str::to_owned)
+        } else {
+            None
+        };
+        if authority.building_phase != phase {
+            return Err(tantivy_authority_error(
+                "building phase does not match SQLite",
+            ));
+        }
+        let expected_manifest = if binding.fingerprint.is_some() {
+            Some(ProjectionArtifactManifest {
+                store_name: TANTIVY_TASKS_STORE.to_owned(),
+                database_instance_id: state.database_instance_id.clone(),
+                protocol_version: state.protocol_version,
+                schema_version: state.schema_version,
+                generation: binding.generation.clone(),
+                fence_epoch: binding.fence_epoch,
+                snapshot_cursor: binding.snapshot_cursor.unwrap_or(state.snapshot_cursor),
+                provider: binding.provider.clone(),
+                provider_fingerprint: binding.provider_fingerprint.clone(),
+                corpus: binding.corpus.clone(),
+                canonical_item_count: binding.canonical_count,
+                canonical_digest: binding.canonical_digest.clone(),
+                delivery_item_count: binding.delivery_count,
+                delivery_digest: binding.delivery_digest.clone(),
+                fingerprint: binding.fingerprint.clone(),
+            })
+        } else {
+            None
+        };
+        if authority.expected_manifest != expected_manifest {
+            return Err(tantivy_authority_error(
+                "manifest does not match SQLite binding",
+            ));
+        }
+        let current_provider_binding = binding.provider == TANTIVY_PROJECTION_PROVIDER
+            && binding.provider_fingerprint == TANTIVY_PROJECTION_PROVIDER_FINGERPRINT
+            && binding.corpus.is_none();
+        Ok(TantivyDestructiveValidation {
+            role,
+            current_provider_binding,
+        })
+    }
+}
+
+impl ProjectionStoreBackend for TantivyProjectionStore {
+    fn descriptor(&self) -> Result<ProjectionStoreDescriptor> {
+        Ok(ProjectionStoreDescriptor {
+            store_name: TANTIVY_TASKS_STORE.to_owned(),
+            provider: TANTIVY_PROJECTION_PROVIDER.to_owned(),
+            provider_fingerprint: TANTIVY_PROJECTION_PROVIDER_FINGERPRINT.to_owned(),
+            corpus: None,
+        })
+    }
+
+    fn prepare_snapshot(
+        &self,
+        snapshot: &ProjectionSnapshot,
+    ) -> Result<ProjectionArtifactEvidence> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.prepare_snapshot_while_helper_locked(snapshot)
+    }
+
+    fn prepare_snapshot_with_authority(
+        &self,
+        snapshot: &ProjectionSnapshot,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<ProjectionArtifactEvidence> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.validate_destructive_authority(&snapshot.manifest.generation, authority)?;
+        self.prepare_snapshot_while_helper_locked(snapshot)
+    }
+
+    fn apply_batch(&self, batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.apply_batch_while_helper_locked(batch)
+    }
+
+    fn apply_batch_with_authority(
+        &self,
+        batch: &ProjectionBatch,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<ProjectionBatchReceipt> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.validate_destructive_authority(&batch.target_generation, authority)?;
+        self.apply_batch_while_helper_locked(batch)
+    }
+
+    fn publish_generation(
+        &self,
+        expected_active: Option<&ProjectionArtifactEvidence>,
+        prepared: &ProjectionArtifactEvidence,
+    ) -> Result<ProjectionPublishReceipt> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.publish_generation_while_helper_locked(expected_active, prepared)
+    }
+
+    fn publish_generation_with_authority(
+        &self,
+        expected_active: Option<&ProjectionArtifactEvidence>,
+        prepared: &ProjectionArtifactEvidence,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<ProjectionPublishReceipt> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.validate_destructive_authority(&prepared.manifest.generation, authority)?;
+        self.publish_generation_while_helper_locked(expected_active, prepared)
+    }
+
+    fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>> {
+        Ok(self.inspect_published()?.pop())
+    }
+
+    fn inspect_generation(&self, generation: &str) -> Result<Option<ProjectionArtifactEvidence>> {
+        let _authority_guard = crate::db::acquire_derived_store_read_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.inspect_generation_while_helper_locked(generation)
+    }
+
+    fn validate_generation_publication(&self, expected: &ProjectionArtifactEvidence) -> Result<()> {
+        let generation = &expected.manifest.generation;
+        let _authority_guard = crate::db::acquire_derived_store_read_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        let stored = self
+            .inspect_generation_while_helper_locked(generation)?
+            .ok_or_else(|| {
+                KanbanError::Storage(format!("Tantivy generation {generation} is missing"))
+            })?;
+        if stored != *expected {
+            return Err(KanbanError::Storage(format!(
+                "Tantivy generation {generation} evidence mismatch"
+            )));
+        }
+        let marker = self.published_marker(generation);
+        let metadata = fs::symlink_metadata(&marker)
+            .map_err(|error| KanbanError::Storage(error.to_string()))?;
+        if !metadata.is_file() {
+            return Err(KanbanError::Storage(format!(
+                "Tantivy published marker is not a regular file: {}",
+                marker.display()
+            )));
+        }
+        validate_published_marker(&marker, expected)
+    }
+
+    fn validate_generation_publication_with_authority(
+        &self,
+        expected: &ProjectionArtifactEvidence,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        let _authority_guard = crate::db::acquire_derived_store_read_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.validate_destructive_authority(&expected.manifest.generation, authority)?;
+        self.validate_generation_publication_while_helper_locked(expected)
+    }
+
+    fn repair_generation_publication(&self, expected: &ProjectionArtifactEvidence) -> Result<()> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.repair_generation_publication_while_helper_locked(expected)
+    }
+
+    fn repair_generation_publication_with_authority(
+        &self,
+        expected: &ProjectionArtifactEvidence,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.validate_destructive_authority(&expected.manifest.generation, authority)?;
+        self.repair_generation_publication_while_helper_locked(expected)
+    }
 
     fn quarantine_generation(&self, generation: &str) -> Result<()> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
         self.validate_managed_ancestors(false)?;
         let generation_path = self.checked_generation_path(generation)?;
         match fs::symlink_metadata(&generation_path) {
@@ -472,6 +1010,10 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
     }
 
     fn abort_generation(&self, generation: &str) -> Result<()> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
         self.validate_managed_ancestors(false)?;
         let path = self.checked_generation_path(generation)?;
         let metadata = match fs::symlink_metadata(&path) {
@@ -492,6 +1034,94 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(KanbanError::Storage(error.to_string())),
+        }
+        durable_remove_directory(&path).map_err(|error| KanbanError::Storage(error.to_string()))?;
+        Ok(())
+    }
+
+    fn quarantine_generation_fenced(
+        &self,
+        generation: &str,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.validate_managed_ancestors(false)?;
+        let path = self.checked_generation_path(generation)?;
+        let validation = self.validate_recovery_destructive_authority(generation, authority)?;
+
+        // An active generation that still reads back as the exact canonical
+        // artifact is protected. A corrupt/mismatched artifact is precisely
+        // what this recovery operation is allowed to move aside.
+        if validation.current_provider_binding
+            && validation.role == ProjectionGenerationRole::Active
+            && let Some(expected_manifest) = &authority.expected_manifest
+            && let Ok(Some(actual)) = self.inspect_generation_while_helper_locked(generation)
+            && actual.manifest == *expected_manifest
+            && actual.fingerprint
+                == authority
+                    .expected_binding
+                    .fingerprint
+                    .clone()
+                    .unwrap_or_default()
+        {
+            return Err(KanbanError::Conflict(format!(
+                "cannot quarantine canonical active Tantivy generation {generation}"
+            )));
+        }
+
+        match fs::symlink_metadata(&path) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(KanbanError::Storage(error.to_string())),
+        }
+        // `_authority_guard` is the backend-specific physical write fence;
+        // keep the authority check immediately adjacent to this durable move
+        // so no unfenced legacy path can be substituted.
+        durable_quarantine_entry(&path)
+            .map(|_| ())
+            .map_err(|error| KanbanError::Storage(error.to_string()))
+    }
+
+    fn abort_generation_fenced(
+        &self,
+        generation: &str,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        let _authority_guard = crate::db::acquire_derived_store_write_guard(
+            &self.db_path,
+            TANTIVY_PROJECTION_HELPER_LOCK,
+        )?;
+        self.validate_managed_ancestors(false)?;
+        let path = self.checked_generation_path(generation)?;
+        let validation = self.validate_recovery_destructive_authority(generation, authority)?;
+        if validation.role == ProjectionGenerationRole::Active {
+            return Err(KanbanError::Conflict(format!(
+                "cannot abort canonical active Tantivy generation {generation}"
+            )));
+        }
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(KanbanError::Storage(error.to_string())),
+        };
+        match fs::symlink_metadata(self.published_marker(generation)) {
+            Ok(_) => {
+                return Err(KanbanError::Conflict(format!(
+                    "cannot abort published Tantivy generation {generation}"
+                )));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(KanbanError::Storage(error.to_string())),
+        }
+        // See the fenced quarantine path above: this delete is made while the
+        // backend-specific authority guard remains held.
+        if !metadata.is_dir() {
+            durable_quarantine_entry(&path)
+                .map_err(|error| KanbanError::Storage(error.to_string()))?;
+            return Ok(());
         }
         durable_remove_directory(&path).map_err(|error| KanbanError::Storage(error.to_string()))?;
         Ok(())
@@ -671,10 +1301,20 @@ mod tests {
     use super::*;
     use crate::service::{ProjectionSnapshotRecord, ProjectionStoreBackend};
     use kanban_core::TaskStatus;
+    use rusqlite::params;
 
     fn store(temp: &tempfile::TempDir) -> TantivyProjectionStore {
-        TantivyProjectionStore::new_bound(temp.path().join("kanban.db"), "db_test".to_owned())
-            .unwrap()
+        let db_path = temp.path().join("kanban.db");
+        crate::init::init_database(&db_path, "tantivy-projection-test").unwrap();
+        let store = TantivyProjectionStore::new_bound(db_path, "db_test".to_owned()).unwrap();
+        drop(
+            crate::db::acquire_derived_store_write_guard(
+                &store.db_path,
+                TANTIVY_PROJECTION_HELPER_LOCK,
+            )
+            .unwrap(),
+        );
+        store
     }
 
     fn snapshot(generation: &str) -> ProjectionSnapshot {
@@ -719,6 +1359,340 @@ mod tests {
                 content_hash: "fnv64:record".to_owned(),
             }],
         }
+    }
+
+    fn fenced_fixture(
+        temp: &tempfile::TempDir,
+        generation: &str,
+    ) -> (
+        TantivyProjectionStore,
+        ProjectionArtifactEvidence,
+        ProjectionDestructiveAuthority,
+    ) {
+        let db_path = temp.path().join("kanban.db");
+        crate::init::init_database(&db_path, "tantivy-fenced-test").unwrap();
+        let conn = crate::db::connect_file(&db_path).unwrap();
+        let database_instance_id: String = conn
+            .query_row(
+                "SELECT database_instance_id FROM projection_database WHERE singleton=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let store =
+            TantivyProjectionStore::new_bound(db_path, database_instance_id.clone()).unwrap();
+        let mut snapshot = snapshot(generation);
+        snapshot.manifest.database_instance_id = database_instance_id;
+        let evidence = store.prepare_snapshot(&snapshot).unwrap();
+        conn.execute(
+            "UPDATE projection_store_state
+             SET control_plane='v2',fence_epoch=?1,lease_owner=?2,lease_token=?3,
+                 lease_expires_at=?4,building_generation=?5,building_fingerprint=?6,
+                 building_fence_epoch=?7,building_provider=?8,
+                 building_provider_fingerprint=?9,building_canonical_count=?10,
+                 building_canonical_digest=?11,building_delivery_count=?12,
+                 building_delivery_digest=?13,snapshot_cursor=?14,building_phase='prepared'
+             WHERE store_name=?15",
+            params![
+                9_i64,
+                "fenced-owner",
+                "fenced-token",
+                i64::MAX,
+                evidence.manifest.generation,
+                evidence.fingerprint,
+                evidence.manifest.fence_epoch,
+                evidence.manifest.provider,
+                evidence.manifest.provider_fingerprint,
+                evidence.manifest.canonical_item_count,
+                evidence.manifest.canonical_digest,
+                evidence.manifest.delivery_item_count,
+                evidence.manifest.delivery_digest,
+                evidence.manifest.snapshot_cursor,
+                TANTIVY_TASKS_STORE,
+            ],
+        )
+        .unwrap();
+        let manifest = evidence.manifest.clone();
+        let authority = ProjectionDestructiveAuthority {
+            owner: "fenced-owner".to_owned(),
+            lease_token: "fenced-token".to_owned(),
+            fence_epoch: 9,
+            lease_expires_at: i64::MAX,
+            role: ProjectionGenerationRole::Building,
+            generation: manifest.generation.clone(),
+            expected_manifest: Some(manifest.clone()),
+            expected_binding: ProjectionGenerationBinding {
+                generation: manifest.generation.clone(),
+                fingerprint: manifest.fingerprint.clone(),
+                fence_epoch: manifest.fence_epoch,
+                snapshot_cursor: Some(manifest.snapshot_cursor),
+                provider: manifest.provider.clone(),
+                provider_fingerprint: manifest.provider_fingerprint.clone(),
+                canonical_count: manifest.canonical_item_count,
+                canonical_digest: manifest.canonical_digest.clone(),
+                delivery_count: manifest.delivery_item_count,
+                delivery_digest: manifest.delivery_digest.clone(),
+                corpus: None,
+            },
+            building_phase: Some("prepared".to_owned()),
+        };
+        (store, evidence, authority)
+    }
+
+    fn historical_fenced_authority(
+        store: &TantivyProjectionStore,
+        mut authority: ProjectionDestructiveAuthority,
+        provider_fingerprint: &str,
+        corpus: Option<crate::service::ProjectionCorpusMetadata>,
+    ) -> ProjectionDestructiveAuthority {
+        let embedding_dimensions = corpus
+            .as_ref()
+            .map(|binding| i64::try_from(binding.embedding_dimensions).unwrap());
+        let conn = crate::db::connect_file(&store.db_path).unwrap();
+        if corpus.is_some() {
+            conn.pragma_update(None, "ignore_check_constraints", true)
+                .unwrap();
+        }
+        conn.execute(
+            "UPDATE projection_store_state
+             SET building_provider_fingerprint=?1,building_corpus_schema=?2,
+                 building_corpus_fingerprint=?3,building_embedding_model=?4,
+                 building_embedding_dimensions=?5
+             WHERE store_name=?6",
+            params![
+                provider_fingerprint,
+                corpus.as_ref().map(|binding| binding.corpus_schema.as_str()),
+                corpus
+                    .as_ref()
+                    .map(|binding| binding.corpus_fingerprint.as_str()),
+                corpus.as_ref().map(|binding| binding.embedding_model.as_str()),
+                embedding_dimensions,
+                TANTIVY_TASKS_STORE,
+            ],
+        )
+        .unwrap();
+        if corpus.is_some() {
+            conn.pragma_update(None, "ignore_check_constraints", false)
+                .unwrap();
+        }
+        if let Some(expected) = &corpus {
+            let persisted: (String, String, String, i64) =
+                crate::db::connect_file(&store.db_path)
+                    .unwrap()
+                    .query_row(
+                        "SELECT building_corpus_schema,building_corpus_fingerprint,
+                                building_embedding_model,building_embedding_dimensions
+                         FROM projection_store_state WHERE store_name=?1",
+                        [TANTIVY_TASKS_STORE],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                    )
+                    .unwrap();
+            assert_eq!(
+                persisted,
+                (
+                    expected.corpus_schema.clone(),
+                    expected.corpus_fingerprint.clone(),
+                    expected.embedding_model.clone(),
+                    i64::try_from(expected.embedding_dimensions).unwrap(),
+                )
+            );
+        }
+        authority.expected_binding.provider_fingerprint = provider_fingerprint.to_owned();
+        authority.expected_binding.corpus = corpus.clone();
+        let expected_manifest = authority
+            .expected_manifest
+            .as_mut()
+            .expect("prepared generation manifest");
+        expected_manifest.provider_fingerprint = provider_fingerprint.to_owned();
+        expected_manifest.corpus = corpus;
+        authority
+    }
+
+    fn historical_corpus() -> crate::service::ProjectionCorpusMetadata {
+        crate::service::ProjectionCorpusMetadata {
+            corpus_schema: "historical-tantivy-corpus-v1".to_owned(),
+            corpus_fingerprint: "historical-tantivy-corpus-fingerprint".to_owned(),
+            embedding_model: "historical-tantivy-embedding".to_owned(),
+            embedding_dimensions: 3,
+        }
+    }
+
+    #[test]
+    fn fenced_quarantine_and_abort_are_authorized_and_retry_idempotently() {
+        let temp = tempfile::tempdir().unwrap();
+        let (store, evidence, authority) = fenced_fixture(&temp, "gen_fenced_quarantine");
+        store
+            .quarantine_generation_fenced(&evidence.manifest.generation, &authority)
+            .unwrap();
+        assert!(
+            fs::symlink_metadata(store.generation_path(&evidence.manifest.generation)).is_err()
+        );
+        store
+            .quarantine_generation_fenced(&evidence.manifest.generation, &authority)
+            .unwrap();
+
+        let temp_abort = tempfile::tempdir().unwrap();
+        let (store, evidence, authority) = fenced_fixture(&temp_abort, "gen_fenced_abort");
+        store
+            .abort_generation_fenced(&evidence.manifest.generation, &authority)
+            .unwrap();
+        assert!(
+            fs::symlink_metadata(store.generation_path(&evidence.manifest.generation)).is_err()
+        );
+        store
+            .abort_generation_fenced(&evidence.manifest.generation, &authority)
+            .unwrap();
+    }
+
+    #[test]
+    fn fenced_quarantine_rejects_stale_capabilities_without_physical_mutation() {
+        let mutators: &[fn(&mut ProjectionDestructiveAuthority)] = &[
+            |authority: &mut ProjectionDestructiveAuthority| {
+                authority.owner = "stale-owner".to_owned()
+            },
+            |authority: &mut ProjectionDestructiveAuthority| {
+                authority.lease_token = "stale-token".to_owned()
+            },
+            |authority: &mut ProjectionDestructiveAuthority| authority.fence_epoch += 1,
+            |authority: &mut ProjectionDestructiveAuthority| {
+                authority.role = ProjectionGenerationRole::Previous
+            },
+            |authority: &mut ProjectionDestructiveAuthority| {
+                authority.expected_binding.delivery_digest = "stale-delivery".to_owned()
+            },
+            |authority: &mut ProjectionDestructiveAuthority| authority.lease_expires_at = 1,
+        ];
+        for mutate in mutators {
+            let temp = tempfile::tempdir().unwrap();
+            let (store, evidence, mut authority) = fenced_fixture(&temp, "gen_fenced_stale");
+            mutate(&mut authority);
+            let error = store
+                .quarantine_generation_fenced(&evidence.manifest.generation, &authority)
+                .unwrap_err();
+            assert!(
+                error.to_string().contains("destructive authority"),
+                "{error}"
+            );
+            assert!(
+                store
+                    .generation_path(&evidence.manifest.generation)
+                    .is_dir()
+            );
+            assert!(
+                fs::read_dir(store.generations_root())
+                    .unwrap()
+                    .flatten()
+                    .all(|entry| !entry.file_name().to_string_lossy().contains(".quarantine."))
+            );
+        }
+    }
+
+    #[test]
+    fn historical_provider_fingerprint_requires_exact_authority_for_fenced_quarantine() {
+        let temp = tempfile::tempdir().unwrap();
+        let (store, evidence, authority) =
+            fenced_fixture(&temp, "gen_historical_provider_quarantine");
+        let authority = historical_fenced_authority(
+            &store,
+            authority,
+            "tantivy-provider-historical-v0",
+            None,
+        );
+        let generation = evidence.manifest.generation.as_str();
+        let mut mismatched = authority.clone();
+        mismatched.expected_binding.provider_fingerprint =
+            "tantivy-provider-mismatched".to_owned();
+
+        let error = store
+            .quarantine_generation_fenced(generation, &mismatched)
+            .expect_err("mismatched historical authority must fail closed");
+        assert!(error.to_string().contains("destructive authority"), "{error}");
+        assert!(store.generation_path(generation).is_dir());
+        assert!(
+            fs::read_dir(store.generations_root())
+                .unwrap()
+                .flatten()
+                .all(|entry| !entry.file_name().to_string_lossy().contains(".quarantine."))
+        );
+
+        let error = store
+            .repair_generation_publication_with_authority(&evidence, &authority)
+            .expect_err("repair must continue to require the current provider binding");
+        assert!(error.to_string().contains("provider or corpus"), "{error}");
+        assert!(store.generation_path(generation).is_dir());
+
+        store
+            .quarantine_generation_fenced(generation, &authority)
+            .expect("exact historical SQLite binding authorizes recovery quarantine");
+        assert!(fs::symlink_metadata(store.generation_path(generation)).is_err());
+    }
+
+    #[test]
+    fn historical_corpus_requires_exact_authority_for_fenced_abort() {
+        let temp = tempfile::tempdir().unwrap();
+        let (store, evidence, authority) =
+            fenced_fixture(&temp, "gen_historical_corpus_abort");
+        let authority = historical_fenced_authority(
+            &store,
+            authority,
+            TANTIVY_PROJECTION_PROVIDER_FINGERPRINT,
+            Some(historical_corpus()),
+        );
+        let generation = evidence.manifest.generation.as_str();
+        let mut mismatched = authority.clone();
+        mismatched
+            .expected_binding
+            .corpus
+            .as_mut()
+            .expect("historical corpus")
+            .corpus_fingerprint = "mismatched-corpus".to_owned();
+
+        let error = store
+            .abort_generation_fenced(generation, &mismatched)
+            .expect_err("mismatched historical corpus authority must fail closed");
+        assert!(error.to_string().contains("destructive authority"), "{error}");
+        assert!(store.generation_path(generation).is_dir());
+
+        let error = store
+            .repair_generation_publication_with_authority(&evidence, &authority)
+            .expect_err("repair must continue to reject a historical corpus binding");
+        assert!(error.to_string().contains("provider or corpus"), "{error}");
+        assert!(store.generation_path(generation).is_dir());
+
+        store
+            .abort_generation_fenced(generation, &authority)
+            .expect("exact historical SQLite corpus binding authorizes fenced abort");
+        assert!(fs::symlink_metadata(store.generation_path(generation)).is_err());
+    }
+
+    #[test]
+    fn fenced_abort_protects_published_generation() {
+        let temp = tempfile::tempdir().unwrap();
+        let (store, evidence, mut authority) = fenced_fixture(&temp, "gen_fenced_published");
+        store.publish_generation(None, &evidence).unwrap();
+        let error = store
+            .abort_generation_fenced(&evidence.manifest.generation, &authority)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("cannot abort published"),
+            "{error}"
+        );
+        assert!(
+            store
+                .generation_path(&evidence.manifest.generation)
+                .is_dir()
+        );
+
+        authority.role = ProjectionGenerationRole::Active;
+        let error = store
+            .quarantine_generation_fenced(&evidence.manifest.generation, &authority)
+            .unwrap_err();
+        assert!(error.to_string().contains("generation role"), "{error}");
+        assert!(
+            store
+                .generation_path(&evidence.manifest.generation)
+                .is_dir()
+        );
     }
 
     #[test]
@@ -870,7 +1844,7 @@ mod tests {
     }
 
     #[test]
-    fn prepare_rebuilds_a_corrupt_unpublished_generation() {
+    fn prepare_leaves_a_corrupt_unpublished_generation_for_fenced_recovery() {
         let temp = tempfile::tempdir().unwrap();
         let store = store(&temp);
         let snapshot = snapshot("gen_retry");
@@ -883,11 +1857,19 @@ mod tests {
         )
         .unwrap();
 
-        let rebuilt = store.prepare_snapshot(&snapshot).unwrap();
-
+        let error = store.prepare_snapshot(&snapshot).unwrap_err();
+        assert!(
+            error.to_string().contains("fenced recovery is required"),
+            "{error}"
+        );
         assert_eq!(
-            store.inspect_generation("gen_retry").unwrap(),
-            Some(rebuilt)
+            fs::read(
+                store
+                    .generation_path("gen_retry")
+                    .join("kb-projection-meta.json")
+            )
+            .unwrap(),
+            b"{not-json"
         );
     }
 
@@ -920,7 +1902,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn prepare_recovers_non_directory_generation_entries_without_following_symlinks() {
+    fn prepare_rejects_non_directory_generation_entries_without_following_symlinks() {
         use std::os::unix::fs::symlink;
 
         let temp = tempfile::tempdir().unwrap();
@@ -931,10 +1913,14 @@ mod tests {
             b"not-a-generation-directory",
         )
         .unwrap();
-        let file_evidence = store.prepare_snapshot(&snapshot("gen_file")).unwrap();
+        let error = store.prepare_snapshot(&snapshot("gen_file")).unwrap_err();
+        assert!(
+            error.to_string().contains("fenced recovery is required"),
+            "{error}"
+        );
         assert_eq!(
-            store.inspect_generation("gen_file").unwrap(),
-            Some(file_evidence)
+            fs::read(store.generation_path("gen_file")).unwrap(),
+            b"not-a-generation-directory"
         );
 
         let external = temp.path().join("external-generation");
@@ -942,11 +1928,19 @@ mod tests {
         let sentinel = external.join("sentinel");
         fs::write(&sentinel, b"outside").unwrap();
         symlink(&external, store.generation_path("gen_symlink")).unwrap();
-        let symlink_evidence = store.prepare_snapshot(&snapshot("gen_symlink")).unwrap();
+        let error = store
+            .prepare_snapshot(&snapshot("gen_symlink"))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("fenced recovery is required"),
+            "{error}"
+        );
         assert_eq!(fs::read(&sentinel).unwrap(), b"outside");
-        assert_eq!(
-            store.inspect_generation("gen_symlink").unwrap(),
-            Some(symlink_evidence)
+        assert!(
+            fs::symlink_metadata(store.generation_path("gen_symlink"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
         );
     }
 
@@ -991,11 +1985,22 @@ mod tests {
     #[test]
     fn physical_generations_are_isolated_by_database_instance_id() {
         let temp = tempfile::tempdir().unwrap();
+        let db_a_path = temp.path().join("a.db");
+        let db_b_path = temp.path().join("b.db");
+        crate::init::init_database(&db_a_path, "tantivy-isolation-a").unwrap();
+        crate::init::init_database(&db_b_path, "tantivy-isolation-b").unwrap();
         let db_a =
-            TantivyProjectionStore::new_bound(temp.path().join("a.db"), "db_a".to_owned()).unwrap();
+            TantivyProjectionStore::new_bound(db_a_path, "db_a".to_owned()).unwrap();
         let db_b =
-            TantivyProjectionStore::new_bound(temp.path().join("b.db"), "db_b".to_owned()).unwrap();
+            TantivyProjectionStore::new_bound(db_b_path, "db_b".to_owned()).unwrap();
         assert_ne!(db_a.root, db_b.root);
+        drop(
+            crate::db::acquire_derived_store_write_guard(
+                &db_b.db_path,
+                TANTIVY_PROJECTION_HELPER_LOCK,
+            )
+            .unwrap(),
+        );
 
         let mut snapshot_a = snapshot("gen_shared");
         snapshot_a.manifest.database_instance_id = "db_a".to_owned();
@@ -1030,7 +2035,7 @@ mod tests {
         fs::create_dir_all(&alias_parent).unwrap();
         let real_db = real_parent.join("kanban.db");
         let alias_db = alias_parent.join("kanban.db");
-        fs::write(&real_db, b"sqlite-placeholder").unwrap();
+        crate::init::init_database(&real_db, "tantivy-alias-test").unwrap();
         symlink(&real_db, &alias_db).unwrap();
         let real = TantivyProjectionStore::new_bound(real_db, "db_test".to_owned()).unwrap();
         let alias = TantivyProjectionStore::new_bound(alias_db, "db_test".to_owned()).unwrap();

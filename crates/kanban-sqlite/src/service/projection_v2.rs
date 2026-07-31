@@ -3176,7 +3176,7 @@ fn projection_corpus_from_row(
     })
 }
 
-fn projection_corpus_from_values(
+pub(super) fn projection_corpus_from_values(
     corpus_schema: Option<String>,
     corpus_fingerprint: Option<String>,
     embedding_model: Option<String>,

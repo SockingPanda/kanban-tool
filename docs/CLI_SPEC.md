@@ -1875,7 +1875,8 @@ JSONL `event.data.payload` 仍按不透明 JSON 保存；39 种类型的联合�
 和其他持有活动运行锁的进程；如果检测到活动运行锁会直接拒绝。导入会在同一 SQLite 事务内
 执行插入与最终 `doctor` 门禁：基础关系表会校验 `task_labels`、`task_dependencies`、
 `task_runs`、`task_comments`、`task_events`、`task_attachments` 的记录看板与所引用的
-任务/标签/运行记录看板一致；失败时整个替换事务回滚，不提交部分数据。
+任务/标签/运行记录看板一致；失败时整个替换事务回滚，不提交部分数据。所选目标数据库
+不存在时，成功的替换会创建它；导入或最终门禁失败时不会留下临时 placeholder 作为目标数据库。
 
 本体导入会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与
 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用记录的偶然顺序；
@@ -1975,6 +1976,44 @@ continuous `maintenance run` 只有在当前运行制品声明全部 projection 
 store 局部失败不会阻止同一 pass 尝试后续已编译 store；数据库、owner、lease/fence
 或 shutdown 的全局失败仍使命令失败。脚本必须根据 `result.status` 和结构化 `kind`
 判断，不解析 `message` 文案。
+
+`maintenance rebuild` 还提供显式的预检与恢复边界：
+
+- `--dry-run` 在数据库 lifecycle 独占边界内读取一个 checkpointed、immutable SQLite
+  snapshot，并只结合当前 binary 的 runtime capability 返回 `dry_run_rebuild` 或
+  `dry_run_resume` action；它不打开物理 backend、不领取 singleton/store lease、
+  不 claim/ACK outbox、不创建或发布 generation。若存在非空 WAL/journal，命令
+  fail closed；操作者必须先停止 writer 并通过正常 `kanban checkpoint` 收敛，而不是
+  删除 sidecar；
+- 若所选 store 已有 `building_generation`，普通 rebuild 与普通 dry-run 都拒绝并提示
+  `--resume`，不能静默覆盖或另起 generation；
+- `--resume` 只适用于单个 store，且该 store 必须已有 unfinished generation；
+  `--all --resume` 在 clap parse-time 拒绝；
+- continuous owner 的正常 pass 仍会自动恢复 fenced unfinished generation，
+  操作者不得直接清理 SQLite building evidence。
+
+`kanban maintenance cleanup-legacy` 只管理固定五项 allowlist：
+`index/v1/tasks`、`index/v1/graph`、`index/v1/vectors`、
+`index/v2/tantivy_tasks`、`index/v2/oxigraph_relations`。
+DB-scoped `index/v2/databases` 不在 allowlist 内，也不能通过递归发现加入。
+
+- `cleanup-legacy inventory` 是严格只读 dry-run：它在同一 checkpointed、immutable
+  SQLite snapshot 与 database lifecycle 独占边界内读取 database binding，再遍历五项
+  root，返回 inventory 与 `inventory_digest`；非空 WAL/journal 同样 fail closed；
+- `cleanup-legacy apply --backup-dir <PATH> --expected-inventory-digest <SHA256>`
+  只在 maintenance owner exclusion、全部物理 writer guard、同 filesystem、
+  exact digest 与安全路径检查通过后，以 crash-resumable journal 移动 root；
+- 已存在 backup 时 apply 必须显式 `--resume`，不存在 backup 时 `--resume` 也会拒绝；
+- `verify` 重新 hash 完整 backup；`restore` 使用同一 journal 对称恢复；
+- 四个 leaf JSON 输出分别使用
+  `urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-{inventory|apply|verify|restore}-output:v1`
+  ExactSurface contract；每个 root 是独立闭合 DTO，`action` 与 `dry_run` 分别固定为
+  `inventory`/`true`、`apply`/`false`、`verify`/`false`、`restore`/`false`，其余字段包含
+  `resumed`、database/backup binding、digest 与 roots。`backup_dir` 必须存在但可为 `null`，
+  调用方不能把字段缺失解释为 `null`。
+
+生产顺序、backup、previous generation、九 board 隔离、outbox SLA 与 owner restart
+验收见 `docs/release/DERIVED_PROJECTION_V2_RECOVERY.md`。
 
 上述 status/run/rebuild machine contract 都是破坏性替换后的 v2 schema root；旧 v1
 artifact 已移除，不提供新旧输出双轨。

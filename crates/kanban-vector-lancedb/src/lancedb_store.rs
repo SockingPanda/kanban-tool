@@ -968,19 +968,50 @@ async fn ensure_label_atom_table(
 
 async fn validate_vector_schema(table: &Table, expected: usize) -> Result<(), VectorError> {
     let schema = table.schema().await.map_err(map_lancedb_error)?;
-    let field = schema
-        .field_with_name(VECTOR_COLUMN)
-        .map_err(|err| VectorError::Store(err.to_string()))?;
-    match field.data_type() {
-        DataType::FixedSizeList(_, actual) if *actual as usize == expected => Ok(()),
-        DataType::FixedSizeList(_, actual) => Err(VectorError::DimensionMismatch {
-            expected,
-            actual: *actual as usize,
-        }),
-        data_type => Err(VectorError::Store(format!(
-            "vector column has non-vector type {data_type:?}"
-        ))),
+    validate_projection_schema(&schema, expected)
+}
+
+fn validate_projection_schema(schema: &Schema, expected: usize) -> Result<(), VectorError> {
+    let is_chunks = schema.field_with_name("chunk_key").is_ok();
+    let expected_schema = if is_chunks {
+        vector_schema(expected)
+    } else if schema.field_with_name("atom_key").is_ok() {
+        label_atom_schema(expected)
+    } else {
+        return Err(VectorError::Store(
+            "projection table is missing its stable key column".to_owned(),
+        ));
+    };
+    if schema.fields().len() != expected_schema.fields().len() {
+        return Err(VectorError::Store(format!(
+            "projection schema has {} fields, expected {}",
+            schema.fields().len(),
+            expected_schema.fields().len()
+        )));
     }
+    for (actual, expected_field) in schema.fields().iter().zip(expected_schema.fields()) {
+        if actual.name() != expected_field.name()
+            || actual.data_type() != expected_field.data_type()
+            || actual.is_nullable() != expected_field.is_nullable()
+        {
+            if actual.name() == VECTOR_COLUMN {
+                if let DataType::FixedSizeList(_, actual_dim) = actual.data_type()
+                    && let DataType::FixedSizeList(_, expected_dim) = expected_field.data_type()
+                    && actual_dim != expected_dim
+                {
+                    return Err(VectorError::DimensionMismatch {
+                        expected: *expected_dim as usize,
+                        actual: *actual_dim as usize,
+                    });
+                }
+            }
+            return Err(VectorError::Store(format!(
+                "projection schema field mismatch for {}",
+                expected_field.name()
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn vector_schema(dimensions: usize) -> SchemaRef {
@@ -1683,6 +1714,7 @@ fn embed_batch_with_retry(
 
 #[cfg(test)]
 mod tests {
+    use super::{validate_projection_schema, vector_schema};
     use arrow_array::{ArrayRef, Float32Array, RecordBatch, new_null_array};
     use arrow_schema::{DataType, Field, Schema};
     use std::sync::{
@@ -2729,6 +2761,57 @@ mod tests {
             embedding_model: embedding_model.to_owned(),
             created_at: 1,
             updated_at: 2,
+        }
+    }
+
+    #[test]
+    fn projection_schema_rejects_missing_required_column() {
+        let mut fields = vector_schema(2).fields().to_vec();
+        fields.retain(|field| field.name() != "chunk_key");
+        let schema = Schema::new(fields);
+        assert!(validate_projection_schema(&schema, 2).is_err());
+    }
+
+    #[test]
+    fn projection_schema_rejects_nullable_stable_key() {
+        let mut fields = vector_schema(2).fields().to_vec();
+        fields[0] = Arc::new(Field::new("chunk_key", DataType::Utf8, true));
+        let schema = Schema::new(fields);
+        assert!(validate_projection_schema(&schema, 2).is_err());
+    }
+
+    #[test]
+    fn reader_open_boundary_rejects_nullable_and_malformed_required_schema() {
+        for expected in [vector_schema(2), super::label_atom_schema(2)] {
+            assert!(validate_projection_schema(expected.as_ref(), 2).is_ok());
+            for (index, field) in expected.fields().iter().enumerate() {
+                if field.is_nullable() {
+                    continue;
+                }
+                let mut fields = expected.fields().to_vec();
+                fields[index] = Arc::new(field.as_ref().clone().with_nullable(true));
+                let error = validate_projection_schema(&Schema::new(fields), 2).unwrap_err();
+                assert!(
+                    matches!(error, VectorError::Store(message) if message.contains(field.name()))
+                );
+            }
+
+            let malformed_index = expected
+                .fields()
+                .iter()
+                .position(|field| field.data_type() == &DataType::Utf8 && !field.is_nullable())
+                .unwrap();
+            let malformed_field = &expected.fields()[malformed_index];
+            let mut fields = expected.fields().to_vec();
+            fields[malformed_index] = Arc::new(Field::new(
+                malformed_field.name(),
+                DataType::LargeUtf8,
+                false,
+            ));
+            let error = validate_projection_schema(&Schema::new(fields), 2).unwrap_err();
+            assert!(
+                matches!(error, VectorError::Store(message) if message.contains(malformed_field.name()))
+            );
         }
     }
 }

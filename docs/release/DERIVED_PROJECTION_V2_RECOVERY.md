@@ -2855,9 +2855,39 @@ jq -e '
 ~~~
 
 restart convergence 仍使用相同 5s/120s 界限；任何命令错误或 timeout 调用上一节
-`hard_stop` 并非零退出。
+`hard_stop` 并非零退出。delivery identity comparison 必须在条件上下文中显式分类
+`diff`：rc=0 表示 exact match，rc=1 只是尚未收敛并继续 poll，rc=2 表示比较命令错误，
+rc=3 表示 diff artifact 无法打开/写入；后两者都必须立即 hard-stop。artifact 的父目录
+不可写、目标是目录或 shell 重定向失败不得被 rc=1 当成尚未收敛继续 poll；不得让正常
+rc=1 落入全局 `ERR` trap。
 
 ~~~bash
+compare_restart_delivery_ids() {
+  local expected_file="$1" actual_file="$2" diff_file="$3" rc diff_fd
+
+  # 先显式打开 evidence artifact，再运行 diff；否则 shell 在重定向失败时也会
+  # 返回 1，无法与正常的内容 mismatch 区分。fd 关闭后的 diff rc 仍在条件上下文
+  # 中捕获，避免 mismatch 触发全局 ERR trap。
+  if ! exec {diff_fd}>"$diff_file"; then
+    return 3
+  fi
+  # diff 本身也必须受同一 external-command wall-clock 边界约束；124/137 timeout
+  # 以及其它非零（含底层 I/O/write error）统一映射为 command-error，不能继续 poll。
+  if bounded_external diff -u "$expected_file" "$actual_file" >&"$diff_fd"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  if ! exec {diff_fd}>&-; then
+    return 3
+  fi
+  case "$rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
 RESTART_SLA_STARTED="$(date +%s)"
 RESTART_SLA_DEADLINE=$((RESTART_SLA_STARTED + SLA_TIMEOUT_SEC))
 restart_poll=0
@@ -2906,8 +2936,27 @@ while :; do
     }) | sort_by(.store_name)
   ' "$EVIDENCE/restart/delivery-ids.json" \
     >"$prefix/delivery-ids.expected.json"
-  diff -u "$prefix/delivery-ids.expected.json" \
-    "$prefix/delivery-ids.actual.json" >"$prefix/delivery-ids.diff"
+  if compare_restart_delivery_ids \
+    "$prefix/delivery-ids.expected.json" \
+    "$prefix/delivery-ids.actual.json" \
+    "$prefix/delivery-ids.diff"; then
+    delivery_identity_rc=0
+  else
+    delivery_identity_rc=$?
+  fi
+  case "$delivery_identity_rc" in
+    0) ;;
+    1) ;;
+    2|3)
+      hard_stop \
+        "restart-delivery-identity-diff-command-error poll=$restart_poll \
+diff_file=$prefix/delivery-ids.diff"
+      ;;
+    *)
+      hard_stop \
+        "restart-delivery-identity-unexpected-rc=$delivery_identity_rc poll=$restart_poll"
+      ;;
+  esac
 
   now_ms=$(( $(date +%s) * 1000 ))
   owner_ready=0
@@ -2936,7 +2985,8 @@ while :; do
   fi
 
   delivery_ready=0
-  if jq -e '
+  if test "$delivery_identity_rc" -eq 0 &&
+    jq -e '
     length == 3 and
     ([.[].store_name] | sort) ==
       ["lancedb_chunks","oxigraph_relations","tantivy_tasks"] and
@@ -2987,9 +3037,10 @@ while :; do
   )"
   test "$current_pid" = "$NEW_PID"
   now="$(date +%s)"
-  printf 'poll=%03d epoch=%s owner=%s delivery=%s fence=%s search=%s\n' \
-    "$restart_poll" "$now" "$owner_ready" "$delivery_ready" \
-    "$fence_ready" "$search_ready" >>"$EVIDENCE/restart/polls.txt"
+  printf 'poll=%03d epoch=%s identity_diff_rc=%s owner=%s delivery=%s fence=%s search=%s\n' \
+    "$restart_poll" "$now" "$delivery_identity_rc" "$owner_ready" \
+    "$delivery_ready" "$fence_ready" "$search_ready" \
+    >>"$EVIDENCE/restart/polls.txt"
   if test "$owner_ready" -eq 1 &&
     test "$delivery_ready" -eq 1 &&
     test "$fence_ready" -eq 1 &&

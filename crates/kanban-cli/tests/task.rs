@@ -456,7 +456,7 @@ fn label_suggest_uses_vector_helper_adapter_successfully() -> anyhow::Result<()>
 import json, sys
 args = sys.argv[1:]
 cmd = args[0]
-if cmd == "status":
+if cmd in ("status", "label-atoms-status"):
     payload = {"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[],"dirty":False,"board_dirty":False}
 elif cmd == "embed-query":
     payload = [1.0, 0.0]
@@ -1092,7 +1092,7 @@ fn label_bootstrap_verify_uses_vector_helper_adapter_successfully() -> anyhow::R
 import json, sys
 args = sys.argv[1:]
 cmd = args[0]
-if cmd == "status":
+if cmd in ("status", "label-atoms-status"):
     payload = {"backend":"test-vector-helper","enabled":True,"message":"ok","diagnostics":[],"dirty":False,"board_dirty":False}
 elif cmd == "embed-query":
     payload = [1.0, 0.0]

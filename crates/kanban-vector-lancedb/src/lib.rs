@@ -14,9 +14,13 @@ use kanban_vector::{LabelAtomHit, LabelAtomVectorHit, VectorHit, VectorStoreStat
 
 mod lancedb_store;
 mod ollama;
+mod projection_backend;
 
 pub use lancedb_store::LanceDbStore;
 pub use ollama::OllamaEmbeddingProvider;
+pub use projection_backend::{
+    ActiveLanceProjectionReader, VectorProjectionBackend, VectorProjectionBackendError,
+};
 
 pub const VECTOR_HELPER_BUILD_IDENTITY: &str = match option_env!("KANBAN_BUILD_ID") {
     Some(build_id) => build_id,

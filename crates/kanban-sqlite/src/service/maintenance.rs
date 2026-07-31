@@ -783,12 +783,38 @@ fn assert_database_idle_with_connection(conn: &Connection, path: &Path) -> Resul
             path.display()
         ))
     });
-    match (result, commit) {
-        (Ok(()), Ok(())) => Ok(()),
-        (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
-        (Err(probe_error), Err(commit_error)) => Err(KanbanError::Storage(format!(
+    let Err(commit_error) = commit else {
+        return match result {
+            Ok(()) => Ok(()),
+            Err(error) => Err(error),
+        };
+    };
+
+    // A denied/failed COMMIT leaves BEGIN IMMEDIATE active. Explicitly roll
+    // it back before returning so callers never inherit a live transaction.
+    // Keep rollback evidence as a third failure when the authorizer also
+    // rejects ROLLBACK (fail closed rather than relying on connection drop).
+    let rollback = conn.execute_batch("ROLLBACK;");
+    match (result, rollback) {
+        (Ok(()), Ok(())) if conn.is_autocommit() => Err(commit_error),
+        (Err(probe_error), Ok(())) if conn.is_autocommit() => Err(KanbanError::Storage(format!(
             "replacement inspection failed: {probe_error}; transaction commit failed: {commit_error}"
         ))),
+        (probe_result, rollback_result) => {
+            let probe_detail = probe_result
+                .err()
+                .map(|error| format!("replacement inspection failed: {error}; "))
+                .unwrap_or_default();
+            let rollback_detail = rollback_result
+                .err()
+                .map(|error| format!("transaction rollback failed: {error}; "))
+                .unwrap_or_else(|| {
+                    "transaction rollback failed: rollback did not restore autocommit; ".to_owned()
+                });
+            Err(KanbanError::Storage(format!(
+                "{probe_detail}transaction commit failed: {commit_error}; {rollback_detail}"
+            )))
+        }
     }
 }
 
@@ -2504,6 +2530,9 @@ mod lifecycle_tests {
         let message = error.to_string();
         assert!(message.contains("replacement inspection failed"));
         assert!(message.contains("transaction commit failed"));
+        assert!(conn.is_autocommit(), "failed COMMIT must be rolled back");
+        conn.execute_batch("BEGIN IMMEDIATE; ROLLBACK;")
+            .expect("connection must support a fresh transaction after failed COMMIT");
     }
 
     #[cfg(unix)]

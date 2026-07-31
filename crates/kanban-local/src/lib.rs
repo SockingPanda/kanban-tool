@@ -771,10 +771,33 @@ fn try_lock_derived_store_sentinel(
     file: &std::fs::File,
     mode: DerivedStoreLockMode,
 ) -> io::Result<bool> {
-    match mode {
+    let result = match mode {
         DerivedStoreLockMode::Shared => fs4::fs_std::FileExt::try_lock_shared(file),
         DerivedStoreLockMode::Exclusive => fs4::fs_std::FileExt::try_lock_exclusive(file),
+    };
+    match result {
+        Ok(locked) => Ok(locked),
+        Err(error) if is_lock_contention_error(&error) => Ok(false),
+        Err(error) => Err(error),
     }
+}
+
+/// `fs4` exposes the Win32 code from `LockFileEx` directly. Rust currently
+/// classifies `ERROR_LOCK_VIOLATION` as `Uncategorized`, but this code means
+/// exactly the same non-blocking contention as the direct range-lock path.
+#[cfg(windows)]
+fn is_lock_contention_error(error: &io::Error) -> bool {
+    use windows_sys::Win32::Foundation::{ERROR_IO_PENDING, ERROR_LOCK_VIOLATION};
+
+    matches!(
+        error.raw_os_error(),
+        Some(code) if code == ERROR_LOCK_VIOLATION as i32 || code == ERROR_IO_PENDING as i32
+    )
+}
+
+#[cfg(not(windows))]
+fn is_lock_contention_error(_error: &io::Error) -> bool {
+    false
 }
 
 #[cfg(any(target_os = "linux", windows))]
@@ -1186,7 +1209,6 @@ fn platform_try_lock_database_range(
 ) -> io::Result<bool> {
     use std::os::windows::io::AsRawHandle as _;
     use windows_sys::Win32::{
-        Foundation::{ERROR_IO_PENDING, ERROR_LOCK_VIOLATION},
         Storage::FileSystem::{LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx},
         System::IO::OVERLAPPED,
     };
@@ -1206,11 +1228,10 @@ fn platform_try_lock_database_range(
         return Ok(true);
     }
     let error = io::Error::last_os_error();
-    match error.raw_os_error() {
-        Some(code) if code == ERROR_LOCK_VIOLATION as i32 || code == ERROR_IO_PENDING as i32 => {
-            Ok(false)
-        }
-        _ => Err(error),
+    if is_lock_contention_error(&error) {
+        Ok(false)
+    } else {
+        Err(error)
     }
 }
 
@@ -3026,6 +3047,21 @@ mod tests {
         assert!(DerivedStoreReadGuard::acquire(&db_path, "tantivy_tasks").is_err());
         assert_eq!(fs::read(&target).unwrap(), b"must-not-change");
         assert!(fs::symlink_metadata(&sentinel).unwrap().is_symlink());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_lock_contention_codes_are_normalized_for_sentinel_authority() {
+        use windows_sys::Win32::Foundation::{
+            ERROR_ACCESS_DENIED, ERROR_IO_PENDING, ERROR_LOCK_VIOLATION,
+        };
+
+        for code in [ERROR_LOCK_VIOLATION, ERROR_IO_PENDING] {
+            assert!(is_lock_contention_error(&io::Error::from_raw_os_error(code as i32)));
+        }
+        assert!(!is_lock_contention_error(&io::Error::from_raw_os_error(
+            ERROR_ACCESS_DENIED as i32
+        )));
     }
 
     #[cfg(any(target_os = "linux", windows))]

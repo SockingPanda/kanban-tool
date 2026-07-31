@@ -148,9 +148,13 @@ fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::BuildIdentity => {
-            std::io::stdout()
+            let mut stdout = std::io::stdout().lock();
+            stdout
                 .write_all(vector_helper_build_identity().as_bytes())
                 .context("failed to write helper build identity")?;
+            stdout
+                .flush()
+                .context("failed to flush helper build identity")?;
             Ok(())
         }
         Command::Handshake => {

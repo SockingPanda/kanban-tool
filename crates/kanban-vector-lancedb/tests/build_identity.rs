@@ -29,6 +29,7 @@ fn helper_reports_the_exact_compile_time_identity_used_by_projection_descriptors
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    assert!(output.stderr.is_empty());
     assert_eq!(output.stdout, expected.as_bytes());
 
     let response = vector_projection_descriptor_response("req_build_identity");

@@ -415,6 +415,168 @@ class ReleaseSafePathTests(unittest.TestCase):
                     rejected.stderr,
                 )
 
+    def test_publish_file_binds_retained_source_parent_identity(self) -> None:
+        output = self.root / "output"
+        output.mkdir()
+        created = self.run_helper(
+            "private-dir",
+            "--root",
+            self.root,
+            "--parent",
+            self.root,
+            "--prefix",
+            ".publish-stage.",
+            "--print-identity",
+        )
+        self.assertEqual(created.returncode, 0, msg=created.stderr)
+        token = created.stdout.splitlines()
+        self.assertEqual(len(token), 3, msg=created.stdout)
+        stage = pathlib.Path(token[0])
+        expected_dev = int(token[1])
+        expected_ino = int(token[2])
+        source = stage / "artifact"
+        destination = output / "artifact"
+        source.write_bytes(b"original artifact\n")
+
+        prechecked = self.run_helper(
+            "dir-identity",
+            "--root",
+            self.root,
+            "--path",
+            stage,
+            "--expected-dev",
+            str(expected_dev),
+            "--expected-ino",
+            str(expected_ino),
+        )
+        self.assertEqual(prechecked.returncode, 0, msg=prechecked.stderr)
+
+        detached = self.root / "original-stage"
+        stage.rename(detached)
+        stage.mkdir(mode=0o700)
+        source.write_bytes(b"replacement artifact\n")
+
+        rejected = self.assert_rejected(
+            "publish-file",
+            "--root",
+            self.root,
+            "--source",
+            source,
+            "--destination",
+            destination,
+            "--expected-source-parent-dev",
+            str(expected_dev),
+            "--expected-source-parent-ino",
+            str(expected_ino),
+        )
+        self.assertIn(
+            "publish source parent identity does not match expected "
+            "identity observation token",
+            rejected.stderr,
+        )
+        self.assertEqual(source.read_bytes(), b"replacement artifact\n")
+        self.assertEqual(
+            (detached / "artifact").read_bytes(),
+            b"original artifact\n",
+        )
+        self.assertFalse(destination.exists())
+
+    def test_publish_file_source_parent_identity_arguments(self) -> None:
+        output = self.root / "publish-output"
+        output.mkdir()
+        created = self.run_helper(
+            "private-dir",
+            "--root",
+            self.root,
+            "--parent",
+            self.root,
+            "--prefix",
+            ".valid-publish-stage.",
+            "--print-identity",
+        )
+        self.assertEqual(created.returncode, 0, msg=created.stderr)
+        token = created.stdout.splitlines()
+        self.assertEqual(len(token), 3, msg=created.stdout)
+        stage = pathlib.Path(token[0])
+        source = stage / "artifact"
+        destination = output / "bound-artifact"
+        source.write_bytes(b"bound artifact\n")
+
+        published = self.run_helper(
+            "publish-file",
+            "--root",
+            self.root,
+            "--source",
+            source,
+            "--destination",
+            destination,
+            "--expected-source-parent-dev",
+            token[1],
+            "--expected-source-parent-ino",
+            token[2],
+        )
+        self.assertEqual(published.returncode, 0, msg=published.stderr)
+        self.assertFalse(source.exists())
+        self.assertEqual(destination.read_bytes(), b"bound artifact\n")
+
+        unbound_stage = self.root / "unbound-publish-stage"
+        unbound_stage.mkdir(mode=0o700)
+        unbound_source = unbound_stage / "artifact"
+        unbound_destination = output / "unbound-artifact"
+        unbound_source.write_bytes(b"unbound compatibility artifact\n")
+        unbound = self.run_helper(
+            "publish-file",
+            "--root",
+            self.root,
+            "--source",
+            unbound_source,
+            "--destination",
+            unbound_destination,
+        )
+        self.assertEqual(unbound.returncode, 0, msg=unbound.stderr)
+        self.assertFalse(unbound_source.exists())
+        self.assertEqual(
+            unbound_destination.read_bytes(),
+            b"unbound compatibility artifact\n",
+        )
+
+        invalid_stage = self.root / "invalid-publish-stage"
+        invalid_stage.mkdir(mode=0o700)
+        invalid_source = invalid_stage / "artifact"
+        invalid_source.write_bytes(b"invalid token artifact\n")
+        for arguments, expected_message in (
+            (
+                ("--expected-source-parent-dev", "1"),
+                "requires both --expected-source-parent-dev",
+            ),
+            (
+                (
+                    "--expected-source-parent-dev",
+                    "-1",
+                    "--expected-source-parent-ino",
+                    "1",
+                ),
+                "identity values must be non-negative",
+            ),
+        ):
+            with self.subTest(arguments=arguments):
+                rejected = self.assert_rejected(
+                    "publish-file",
+                    "--root",
+                    self.root,
+                    "--source",
+                    invalid_source,
+                    "--destination",
+                    output / "invalid-artifact",
+                    *arguments,
+                )
+                self.assertIn(expected_message, rejected.stderr)
+                self.assertEqual(
+                    invalid_source.read_bytes(),
+                    b"invalid token artifact\n",
+                )
+                self.assertFalse((output / "invalid-artifact").exists())
+
     def test_copy_fails_closed_when_public_parent_is_replaced(self) -> None:
         source = self.base / "source"
         source.write_bytes(b"race payload\n")

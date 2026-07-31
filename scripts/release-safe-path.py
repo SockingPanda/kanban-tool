@@ -1922,7 +1922,27 @@ def publish_file(
     source: pathlib.Path,
     destination: pathlib.Path,
     replace: bool,
+    expected_source_parent_dev: int | None = None,
+    expected_source_parent_ino: int | None = None,
 ) -> None:
+    if (expected_source_parent_dev is None) != (
+        expected_source_parent_ino is None
+    ):
+        raise UnsafePath(
+            "expected publish source parent identity requires both "
+            "--expected-source-parent-dev and --expected-source-parent-ino"
+        )
+    if (
+        expected_source_parent_dev is not None
+        and expected_source_parent_ino is not None
+        and (
+            expected_source_parent_dev < 0
+            or expected_source_parent_ino < 0
+        )
+    ):
+        raise UnsafePath(
+            "expected publish source parent identity values must be non-negative"
+        )
     source_parent, source_name, source_parent_path = root.open_parent(
         source, "publish source"
     )
@@ -1935,6 +1955,23 @@ def publish_file(
     published = False
     exchanged = False
     try:
+        source_parent_identity = os.fstat(source_parent)
+        if (
+            expected_source_parent_dev is not None
+            and expected_source_parent_ino is not None
+            and (
+                source_parent_identity.st_dev,
+                source_parent_identity.st_ino,
+            )
+            != (
+                expected_source_parent_dev,
+                expected_source_parent_ino,
+            )
+        ):
+            raise UnsafePath(
+                "publish source parent identity does not match expected "
+                f"identity observation token: {source_parent_path}"
+            )
         source_descriptor, source_metadata = open_regular_at(
             source_parent, source_name, source, single_link=True
         )
@@ -3175,6 +3212,8 @@ def parser() -> argparse.ArgumentParser:
     publish.add_argument("--source", required=True)
     publish.add_argument("--destination", required=True)
     publish.add_argument("--replace", action="store_true")
+    publish.add_argument("--expected-source-parent-dev", type=int)
+    publish.add_argument("--expected-source-parent-ino", type=int)
 
     publish_dir = subcommands.add_parser("publish-dir")
     publish_dir.add_argument("--root", required=True)
@@ -3258,6 +3297,8 @@ def main() -> int:
                 absolute(arguments.source, "publish source"),
                 absolute(arguments.destination, "publish destination"),
                 arguments.replace,
+                arguments.expected_source_parent_dev,
+                arguments.expected_source_parent_ino,
             )
         elif arguments.command == "publish-dir":
             if len(arguments.expected_tree_sha256) != 64 or any(

@@ -315,8 +315,17 @@ pub struct ProjectionStatus {
 }
 
 pub fn projection_status(path: impl AsRef<Path>) -> Result<ProjectionStatus> {
+    let conn = super::maintenance::connect_existing_database_read_only(path.as_ref())?;
+    projection_status_conn(conn)
+}
+
+pub(crate) fn projection_status_quiescent(path: &Path) -> Result<ProjectionStatus> {
+    let conn = super::maintenance::connect_existing_database_quiescent_read_only(path)?;
+    projection_status_conn(conn)
+}
+
+fn projection_status_conn(conn: crate::db::DatabaseConnection) -> Result<ProjectionStatus> {
     let now = SystemClock.now_ms();
-    let conn = super::maintenance::connect_existing_database(path.as_ref())?;
     let (database_instance_id, protocol_version) = conn
         .query_row(
             "SELECT database_instance_id,protocol_version \

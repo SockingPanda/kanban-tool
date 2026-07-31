@@ -26,16 +26,17 @@ use super::oxigraph_projection::OxigraphProjectionStore;
 use super::tantivy_projection::TantivyProjectionStore;
 use super::{
     ProjectionCorpusMetadata, ProjectionRuntimeAvailability, ProjectionStatus,
-    ProjectionStoreDescriptor, ProjectionStoreStatus, projection_status, storage,
-    with_immediate_tx,
+    ProjectionStoreDescriptor, ProjectionStoreStatus, projection_status,
+    projection_status_quiescent, storage, with_immediate_tx,
 };
 use super::{
-    ProjectionStoreBackend, abort_incompatible_projection_generation, abort_projection_generation,
+    ProjectionStoreBackend,
+    abort_incompatible_projection_generation, abort_projection_generation,
     acquire_projection_lease, begin_projection_generation, prepare_projection_snapshot_with,
-    publish_projection_generation_with, reconcile_projection_generation_with,
-    recover_incompatible_projection_bindings, recover_projection_generation_with,
-    release_projection_lease, renew_projection_lease, run_projection_batch_with,
-    validate_backend_for_target, validate_physical_active_artifact_with,
+    publish_projection_generation_with,
+    reconcile_projection_generation_with, recover_incompatible_projection_bindings,
+    recover_projection_generation_with, release_projection_lease, renew_projection_lease,
+    run_projection_batch_with, validate_backend_for_target, validate_physical_active_artifact_with,
     validate_physical_previous_artifact_with,
 };
 
@@ -49,6 +50,34 @@ const MAX_REBUILD_CATCH_UP_BATCHES: usize = 10_000;
 pub enum MaintenanceMode {
     Once,
     Continuous,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MaintenanceRebuildIntent {
+    Fresh,
+    Resume,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MaintenanceStoreRunIntent {
+    Automatic,
+    Fresh,
+    Resume,
+}
+
+impl From<MaintenanceRebuildIntent> for MaintenanceStoreRunIntent {
+    fn from(intent: MaintenanceRebuildIntent) -> Self {
+        match intent {
+            MaintenanceRebuildIntent::Fresh => Self::Fresh,
+            MaintenanceRebuildIntent::Resume => Self::Resume,
+        }
+    }
+}
+
+impl MaintenanceStoreRunIntent {
+    fn force_rebuild(self) -> bool {
+        matches!(self, Self::Fresh | Self::Resume)
+    }
 }
 
 impl MaintenanceMode {
@@ -227,31 +256,50 @@ impl MaintenanceSession {
         renew_maintenance_owner(self)?;
         let stores = vec![
             #[cfg(feature = "tantivy-backend")]
-            run_tantivy_once(self, false)?,
+            run_tantivy_once(self, MaintenanceStoreRunIntent::Automatic)?,
             #[cfg(feature = "oxigraph-backend")]
-            run_oxigraph_once(self, false)?,
+            run_oxigraph_once(self, MaintenanceStoreRunIntent::Automatic)?,
             run_lancedb_once(
                 self,
                 LANCEDB_LABEL_ATOMS_STORE,
                 "LanceDB label atoms",
-                false,
+                MaintenanceStoreRunIntent::Automatic,
             )?,
-            run_lancedb_once(self, LANCEDB_CHUNKS_STORE, "LanceDB task chunks", false)?,
+            run_lancedb_once(
+                self,
+                LANCEDB_CHUNKS_STORE,
+                "LanceDB task chunks",
+                MaintenanceStoreRunIntent::Automatic,
+            )?,
         ];
         renew_maintenance_owner(self)?;
         self.report(stores)
     }
 
     pub fn rebuild(&mut self, store_name: &str) -> Result<MaintenanceRunReport> {
+        self.rebuild_with_intent(store_name, MaintenanceRebuildIntent::Fresh)
+    }
+
+    pub fn resume_rebuild(&mut self, store_name: &str) -> Result<MaintenanceRunReport> {
+        self.rebuild_with_intent(store_name, MaintenanceRebuildIntent::Resume)
+    }
+
+    fn rebuild_with_intent(
+        &mut self,
+        store_name: &str,
+        intent: MaintenanceRebuildIntent,
+    ) -> Result<MaintenanceRunReport> {
         renew_maintenance_owner(self)?;
+        validate_rebuild_intent(&self.db_path, store_name, intent)?;
+        let run_intent = MaintenanceStoreRunIntent::from(intent);
         let store = match store_name {
-            TANTIVY_TASKS_STORE => run_tantivy_once(self, true)?,
-            OXIGRAPH_RELATIONS_STORE => run_oxigraph_once(self, true)?,
+            TANTIVY_TASKS_STORE => run_tantivy_once(self, run_intent)?,
+            OXIGRAPH_RELATIONS_STORE => run_oxigraph_once(self, run_intent)?,
             LANCEDB_LABEL_ATOMS_STORE => {
-                run_lancedb_once(self, store_name, "LanceDB label atoms", true)?
+                run_lancedb_once(self, store_name, "LanceDB label atoms", run_intent)?
             }
             LANCEDB_CHUNKS_STORE => {
-                run_lancedb_once(self, store_name, "LanceDB task chunks", true)?
+                run_lancedb_once(self, store_name, "LanceDB task chunks", run_intent)?
             }
             _ => {
                 return Err(KanbanError::InvalidInput(format!(
@@ -265,13 +313,26 @@ impl MaintenanceSession {
 
     pub fn rebuild_all(&mut self) -> Result<MaintenanceRunReport> {
         renew_maintenance_owner(self)?;
+        for store_name in compiled_capabilities() {
+            validate_rebuild_intent(&self.db_path, &store_name, MaintenanceRebuildIntent::Fresh)?;
+        }
         let stores = vec![
             #[cfg(feature = "tantivy-backend")]
-            run_tantivy_once(self, true)?,
+            run_tantivy_once(self, MaintenanceStoreRunIntent::Fresh)?,
             #[cfg(feature = "oxigraph-backend")]
-            run_oxigraph_once(self, true)?,
-            run_lancedb_once(self, LANCEDB_LABEL_ATOMS_STORE, "LanceDB label atoms", true)?,
-            run_lancedb_once(self, LANCEDB_CHUNKS_STORE, "LanceDB task chunks", true)?,
+            run_oxigraph_once(self, MaintenanceStoreRunIntent::Fresh)?,
+            run_lancedb_once(
+                self,
+                LANCEDB_LABEL_ATOMS_STORE,
+                "LanceDB label atoms",
+                MaintenanceStoreRunIntent::Fresh,
+            )?,
+            run_lancedb_once(
+                self,
+                LANCEDB_CHUNKS_STORE,
+                "LanceDB task chunks",
+                MaintenanceStoreRunIntent::Fresh,
+            )?,
         ];
         renew_maintenance_owner(self)?;
         self.report(stores)
@@ -279,6 +340,62 @@ impl MaintenanceSession {
 
     pub fn heartbeat(&mut self) -> Result<()> {
         renew_maintenance_owner(self)
+    }
+
+    pub(super) fn run_with_owner_heartbeat<T>(
+        &self,
+        operation: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        renew_maintenance_owner(self)?;
+        let interval_ms = (self.options.lease_ttl_ms / 3).clamp(1, 60_000) as u64;
+        thread::scope(|scope| {
+            let (stop_tx, stop_rx) = mpsc::channel();
+            let heartbeat = scope.spawn(move || {
+                loop {
+                    match stop_rx.recv_timeout(Duration::from_millis(interval_ms)) {
+                        Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(()),
+                        Err(mpsc::RecvTimeoutError::Timeout) => renew_maintenance_owner(self)?,
+                    }
+                }
+            });
+            let operation_result = operation();
+            let _ = stop_tx.send(());
+            let heartbeat_result = heartbeat.join().map_err(|_| {
+                KanbanError::Storage("projection maintenance heartbeat thread panicked".to_owned())
+            })?;
+            match (operation_result, heartbeat_result) {
+                (Err(error), _) => Err(error),
+                (Ok(_), Err(error)) => Err(error),
+                (Ok(value), Ok(())) => Ok(value),
+            }
+        })
+    }
+
+    pub(super) fn renew_and_validate_database_identity(
+        &self,
+        expected_database_instance_id: &str,
+    ) -> Result<()> {
+        let now = SystemClock.now_ms();
+        let expires_at = checked_expiry(now, self.options.lease_ttl_ms)?;
+        let conn = connect_file(&self.db_path)?;
+        with_immediate_tx(&conn, || {
+            renew_maintenance_owner_on_connection(self, &conn, now, expires_at)?;
+            let actual_database_instance_id = conn
+                .query_row(
+                    "SELECT database_instance_id
+                     FROM projection_database
+                     WHERE singleton=1",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .map_err(storage)?;
+            if actual_database_instance_id != expected_database_instance_id {
+                return Err(KanbanError::Conflict(format!(
+                    "projection database identity changed while maintenance owner was active: expected {expected_database_instance_id}, got {actual_database_instance_id}"
+                )));
+            }
+            Ok(())
+        })
     }
 
     pub fn lease_ttl_ms(&self) -> i64 {
@@ -547,6 +664,18 @@ pub fn maintenance_rebuild_store(
     Ok(report)
 }
 
+pub fn maintenance_resume_rebuild_store(
+    path: impl AsRef<Path>,
+    owner: &str,
+    store_name: &str,
+    options: MaintenanceRunOptions,
+) -> Result<MaintenanceRunReport> {
+    let mut session = MaintenanceSession::start(path, owner, MaintenanceMode::Once, options)?;
+    let report = session.resume_rebuild(store_name)?;
+    session.finish()?;
+    Ok(report)
+}
+
 pub fn maintenance_rebuild_all(
     path: impl AsRef<Path>,
     owner: &str,
@@ -556,6 +685,129 @@ pub fn maintenance_rebuild_all(
     let report = session.rebuild_all()?;
     session.finish()?;
     Ok(report)
+}
+
+pub fn maintenance_plan_rebuild_store(
+    path: impl AsRef<Path>,
+    owner: &str,
+    store_name: &str,
+    intent: MaintenanceRebuildIntent,
+) -> Result<MaintenanceRunReport> {
+    let path = path.as_ref();
+    let status = maintenance_plan_status(path)?;
+    validate_rebuild_intent_in_status(&status, store_name, intent)?;
+    let store = status
+        .stores
+        .iter()
+        .find(|store| store.store_name == store_name)
+        .ok_or_else(|| {
+            KanbanError::InvalidInput(format!(
+                "projection store {store_name} is not yet wired to the unified maintenance runtime"
+            ))
+        })?;
+    Ok(MaintenanceRunReport {
+        database_instance_id: status.database_instance_id,
+        protocol_version: status.protocol_version,
+        owner: owner.to_owned(),
+        mode: MaintenanceMode::Once,
+        stores: vec![planned_rebuild_store(store, intent)],
+    })
+}
+
+pub fn maintenance_plan_rebuild_all(
+    path: impl AsRef<Path>,
+    owner: &str,
+) -> Result<MaintenanceRunReport> {
+    let path = path.as_ref();
+    let store_names = compiled_capabilities();
+    let status = maintenance_plan_status(path)?;
+    for store_name in &store_names {
+        validate_rebuild_intent_in_status(&status, store_name, MaintenanceRebuildIntent::Fresh)?;
+    }
+    let stores = store_names
+        .iter()
+        .map(|store_name| {
+            status
+                .stores
+                .iter()
+                .find(|store| store.store_name == *store_name)
+                .map(|store| planned_rebuild_store(store, MaintenanceRebuildIntent::Fresh))
+                .ok_or_else(|| {
+                    KanbanError::Storage(format!("projection store {store_name} state is missing"))
+                })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(MaintenanceRunReport {
+        database_instance_id: status.database_instance_id,
+        protocol_version: status.protocol_version,
+        owner: owner.to_owned(),
+        mode: MaintenanceMode::Once,
+        stores,
+    })
+}
+
+fn maintenance_plan_status(path: &Path) -> Result<ProjectionStatus> {
+    let mut status = projection_status_quiescent(path)?;
+    apply_runtime_availability(&mut status);
+    Ok(status)
+}
+
+fn validate_rebuild_intent(
+    path: &Path,
+    store_name: &str,
+    intent: MaintenanceRebuildIntent,
+) -> Result<()> {
+    let status = projection_status(path)?;
+    validate_rebuild_intent_in_status(&status, store_name, intent)
+}
+
+fn validate_rebuild_intent_in_status(
+    status: &ProjectionStatus,
+    store_name: &str,
+    intent: MaintenanceRebuildIntent,
+) -> Result<()> {
+    if !compiled_capability(store_name) {
+        return Err(KanbanError::InvalidInput(format!(
+            "projection store {store_name} is not available in this maintenance runtime"
+        )));
+    }
+    let store = status
+        .stores
+        .iter()
+        .find(|store| store.store_name == store_name)
+        .ok_or_else(|| {
+            KanbanError::Storage(format!("projection store {store_name} state is missing"))
+        })?;
+    match (intent, store.building_generation.as_deref()) {
+        (MaintenanceRebuildIntent::Fresh, Some(generation)) => {
+            Err(KanbanError::InvalidInput(format!(
+                "projection store {store_name} has unfinished generation {generation}; use --resume"
+            )))
+        }
+        (MaintenanceRebuildIntent::Resume, None) => Err(KanbanError::InvalidInput(format!(
+            "projection store {store_name} has no unfinished generation to resume"
+        ))),
+        _ => Ok(()),
+    }
+}
+
+fn planned_rebuild_store(
+    store: &ProjectionStoreStatus,
+    intent: MaintenanceRebuildIntent,
+) -> MaintenanceStoreRun {
+    MaintenanceStoreRun {
+        store_name: store.store_name.clone(),
+        result: MaintenanceStoreResult::Succeeded {
+            action: match intent {
+                MaintenanceRebuildIntent::Fresh => "dry_run_rebuild",
+                MaintenanceRebuildIntent::Resume => "dry_run_resume",
+            }
+            .to_owned(),
+            processed: 0,
+        },
+        lifecycle_status: store.lifecycle_status.clone(),
+        fallback_reason: store.fallback_reason.clone(),
+    }
 }
 
 fn validate_continuous_capabilities(
@@ -650,6 +902,40 @@ fn renew_maintenance_owner_lease(
     let now = SystemClock.now_ms();
     let expires_at = checked_expiry(now, ttl_ms)?;
     let conn = connect_file(path)?;
+    renew_maintenance_owner_lease_on_connection(
+        &conn,
+        owner,
+        lease_token,
+        identity,
+        now,
+        expires_at,
+    )
+}
+
+fn renew_maintenance_owner_on_connection(
+    session: &MaintenanceSession,
+    conn: &rusqlite::Connection,
+    now: i64,
+    expires_at: i64,
+) -> Result<()> {
+    renew_maintenance_owner_lease_on_connection(
+        conn,
+        &session.owner,
+        &session.lease_token,
+        &session.identity,
+        now,
+        expires_at,
+    )
+}
+
+fn renew_maintenance_owner_lease_on_connection(
+    conn: &rusqlite::Connection,
+    owner: &str,
+    lease_token: &str,
+    identity: &MaintenanceRuntimeIdentity,
+    now: i64,
+    expires_at: i64,
+) -> Result<()> {
     let changed = conn
         .execute(
             "UPDATE projection_maintenance_owner
@@ -710,7 +996,7 @@ fn release_maintenance_owner(
 
 fn run_tantivy_once(
     session: &mut MaintenanceSession,
-    force_rebuild: bool,
+    intent: MaintenanceStoreRunIntent,
 ) -> Result<MaintenanceStoreRun> {
     #[cfg(feature = "tantivy-backend")]
     {
@@ -726,17 +1012,11 @@ fn run_tantivy_once(
                 );
             }
         };
-        run_projection_store_once(
-            session,
-            TANTIVY_TASKS_STORE,
-            "Tantivy",
-            &backend,
-            force_rebuild,
-        )
+        run_projection_store_once(session, TANTIVY_TASKS_STORE, "Tantivy", &backend, intent)
     }
     #[cfg(not(feature = "tantivy-backend"))]
     {
-        let _ = (session, force_rebuild);
+        let _ = (session, intent);
         Err(KanbanError::InvalidInput(
             "unified Tantivy maintenance requires the tantivy-backend feature".to_owned(),
         ))
@@ -745,7 +1025,7 @@ fn run_tantivy_once(
 
 fn run_oxigraph_once(
     session: &mut MaintenanceSession,
-    force_rebuild: bool,
+    intent: MaintenanceStoreRunIntent,
 ) -> Result<MaintenanceStoreRun> {
     #[cfg(feature = "oxigraph-backend")]
     {
@@ -766,12 +1046,12 @@ fn run_oxigraph_once(
             OXIGRAPH_RELATIONS_STORE,
             "Oxigraph",
             &backend,
-            force_rebuild,
+            intent,
         )
     }
     #[cfg(not(feature = "oxigraph-backend"))]
     {
-        let _ = (session, force_rebuild);
+        let _ = (session, intent);
         Err(KanbanError::InvalidInput(
             "unified Oxigraph maintenance requires the oxigraph-backend feature".to_owned(),
         ))
@@ -782,7 +1062,7 @@ fn run_lancedb_once(
     session: &mut MaintenanceSession,
     store_name: &str,
     display_name: &str,
-    force_rebuild: bool,
+    intent: MaintenanceStoreRunIntent,
 ) -> Result<MaintenanceStoreRun> {
     let backend = match LanceDbProjectionStore::connect_resolved(&session.db_path, store_name) {
         Ok(backend) => backend,
@@ -801,7 +1081,7 @@ fn run_lancedb_once(
             );
         }
     };
-    run_projection_store_once(session, store_name, display_name, &backend, force_rebuild)
+    run_projection_store_once(session, store_name, display_name, &backend, intent)
 }
 
 #[derive(Debug)]
@@ -830,12 +1110,35 @@ fn target_validation_disposition(error: &KanbanError) -> TargetValidationDisposi
 
 type MaintenanceStoreAttempt<T> = std::result::Result<T, MaintenanceStoreAttemptError>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ExplicitResumeInvariant {
+    generation: String,
+    descriptor: ProjectionStoreDescriptor,
+}
+
+fn require_explicit_resume_invariant(
+    store: &ProjectionStoreStatus,
+    invariant: &ExplicitResumeInvariant,
+) -> MaintenanceStoreAttempt<()> {
+    if store.building_generation.as_deref() != Some(invariant.generation.as_str())
+        || !building_binding_matches_descriptor(store, &invariant.descriptor)
+    {
+        return Err(MaintenanceStoreAttemptError::Fatal(KanbanError::Conflict(
+            format!(
+                "explicit resume for projection store {} no longer matches unfinished generation {}; refusing to replace it",
+                store.store_name, invariant.generation
+            ),
+        )));
+    }
+    Ok(())
+}
+
 fn run_projection_store_once(
     session: &mut MaintenanceSession,
     store_name: &str,
     display_name: &str,
     backend: &impl ProjectionStoreBackend,
-    force_rebuild: bool,
+    intent: MaintenanceStoreRunIntent,
 ) -> Result<MaintenanceStoreRun> {
     let lease = acquire_projection_lease(
         &session.db_path,
@@ -845,13 +1148,13 @@ fn run_projection_store_once(
     )?;
     let heartbeat = ProjectionLeaseHeartbeat::new(session, store_name, &lease.lease_token);
     let operation = heartbeat.run(|| {
-        run_projection_store_operation(
+        run_projection_store_operation_with_intent(
             session,
             store_name,
             display_name,
             &lease.lease_token,
             backend,
-            force_rebuild,
+            intent,
         )
     });
     let operation = match operation {
@@ -897,6 +1200,7 @@ fn classify_store_failure(
     }
 }
 
+#[cfg(test)]
 fn run_projection_store_operation(
     session: &mut MaintenanceSession,
     store_name: &str,
@@ -905,29 +1209,88 @@ fn run_projection_store_operation(
     backend: &impl ProjectionStoreBackend,
     force_rebuild: bool,
 ) -> MaintenanceStoreAttempt<MaintenanceStoreRun> {
+    run_projection_store_operation_with_intent(
+        session,
+        store_name,
+        display_name,
+        lease_token,
+        backend,
+        if force_rebuild {
+            MaintenanceStoreRunIntent::Fresh
+        } else {
+            MaintenanceStoreRunIntent::Automatic
+        },
+    )
+}
+
+fn run_projection_store_operation_with_intent(
+    session: &mut MaintenanceSession,
+    store_name: &str,
+    display_name: &str,
+    lease_token: &str,
+    backend: &impl ProjectionStoreBackend,
+    intent: MaintenanceStoreRunIntent,
+) -> MaintenanceStoreAttempt<MaintenanceStoreRun> {
     let mut action = "idle".to_owned();
     let initial_status =
         maintenance_status(&session.db_path).map_err(MaintenanceStoreAttemptError::Fatal)?;
-    if initial_status
+    let initial_store = initial_status
         .stores
         .iter()
-        .all(|store| store.store_name != store_name)
-    {
-        return Err(MaintenanceStoreAttemptError::Fatal(KanbanError::Storage(
-            format!("{display_name} projection state is missing"),
-        )));
-    }
-    let incompatible_binding_reset = recover_incompatible_projection_bindings(
-        &session.db_path,
-        store_name,
-        &session.owner,
-        lease_token,
-        backend,
-    )
-    .map_err(|error| MaintenanceStoreAttemptError::Store {
-        kind: classify_store_failure(store_name, &error, MaintenanceStoreFailureKind::Backend),
-        error,
-    })?;
+        .find(|store| store.store_name == store_name)
+        .ok_or_else(|| {
+            MaintenanceStoreAttemptError::Fatal(KanbanError::Storage(format!(
+                "{display_name} projection state is missing"
+            )))
+        })?;
+    let resume_invariant = match intent {
+        MaintenanceStoreRunIntent::Automatic => None,
+        MaintenanceStoreRunIntent::Fresh => {
+            if let Some(generation) = initial_store.building_generation.as_deref() {
+                return Err(MaintenanceStoreAttemptError::Fatal(
+                    KanbanError::InvalidInput(format!(
+                        "projection store {store_name} has unfinished generation {generation}; use --resume"
+                    )),
+                ));
+            }
+            None
+        }
+        MaintenanceStoreRunIntent::Resume => {
+            let generation = initial_store.building_generation.clone().ok_or_else(|| {
+                MaintenanceStoreAttemptError::Fatal(KanbanError::InvalidInput(format!(
+                    "projection store {store_name} has no unfinished generation to resume"
+                )))
+            })?;
+            let descriptor =
+                backend
+                    .descriptor()
+                    .map_err(|error| MaintenanceStoreAttemptError::Store {
+                        kind: MaintenanceStoreFailureKind::Backend,
+                        error,
+                    })?;
+            let invariant = ExplicitResumeInvariant {
+                generation,
+                descriptor,
+            };
+            require_explicit_resume_invariant(initial_store, &invariant)?;
+            Some(invariant)
+        }
+    };
+    let incompatible_binding_reset = if resume_invariant.is_some() {
+        false
+    } else {
+        recover_incompatible_projection_bindings(
+            &session.db_path,
+            store_name,
+            &session.owner,
+            lease_token,
+            backend,
+        )
+        .map_err(|error| MaintenanceStoreAttemptError::Store {
+            kind: classify_store_failure(store_name, &error, MaintenanceStoreFailureKind::Backend),
+            error,
+        })?
+    };
     let status = if incompatible_binding_reset {
         maintenance_status(&session.db_path).map_err(MaintenanceStoreAttemptError::Fatal)?
     } else {
@@ -946,7 +1309,7 @@ fn run_projection_store_operation(
         store.fallback_reason.as_deref(),
         Some("physical_generation_unavailable" | "corpus_binding_upgrade_required")
     ) || incompatible_binding_reset;
-    if force_rebuild
+    if intent.force_rebuild()
         || physical_rebuild
         || store.active_generation.is_none()
         || store.building_generation.is_some()
@@ -975,6 +1338,9 @@ fn run_projection_store_operation(
                     "{display_name} projection state is missing"
                 )))
             })?;
+        if let Some(invariant) = resume_invariant.as_ref() {
+            require_explicit_resume_invariant(store, invariant)?;
+        }
         if store.building_generation.is_some() {
             let descriptor =
                 backend
@@ -984,6 +1350,14 @@ fn run_projection_store_operation(
                         error,
                     })?;
             if !building_binding_matches_descriptor(store, &descriptor) {
+                if let Some(invariant) = resume_invariant.as_ref() {
+                    return Err(MaintenanceStoreAttemptError::Fatal(KanbanError::Conflict(
+                        format!(
+                            "explicit resume for projection store {store_name} cannot replace unfinished generation {} after its binding changed",
+                            invariant.generation
+                        ),
+                    )));
+                }
                 abort_incompatible_projection_generation(
                     &session.db_path,
                     store_name,
@@ -1049,6 +1423,14 @@ fn run_projection_store_operation(
                     lease_token,
                     backend,
                 ) {
+                    if let Some(invariant) = resume_invariant.as_ref() {
+                        return Err(MaintenanceStoreAttemptError::Fatal(KanbanError::Conflict(
+                            format!(
+                                "explicit resume for projection store {store_name} cannot replace unfinished generation {} after target validation failed: {error}",
+                                invariant.generation
+                            ),
+                        )));
+                    }
                     if target_validation_disposition(&error) == TargetValidationDisposition::Retry {
                         return Err(MaintenanceStoreAttemptError::Store {
                             kind: MaintenanceStoreFailureKind::Backend,
@@ -1130,6 +1512,9 @@ fn run_projection_store_operation(
                     "{display_name} projection state is missing"
                 )))
             })?;
+        if let Some(invariant) = resume_invariant.as_ref() {
+            require_explicit_resume_invariant(store, invariant)?;
+        }
         let physical_active = backend.inspect_active();
         let building_is_physically_active = store
             .building_generation
@@ -1758,6 +2143,24 @@ mod legacy_binding_recovery_tests {
                 .quarantine_attempts
                 .clone()
         }
+
+        fn corrupt_generation_fingerprint(&self, generation: &str) {
+            let mut state = self.state.lock().expect("recovery backend lock");
+            let evidence = state
+                .generations
+                .get_mut(generation)
+                .expect("generation evidence to corrupt");
+            evidence.fingerprint = "fake:corrupt-resume-target".to_owned();
+            evidence.manifest.fingerprint = Some(evidence.fingerprint.clone());
+            let corrupted = evidence.clone();
+            if state
+                .prepared
+                .as_ref()
+                .is_some_and(|prepared| prepared.manifest.generation == generation)
+            {
+                state.prepared = Some(corrupted);
+            }
+        }
     }
 
     impl ProjectionStoreBackend for RecoveryBackend {
@@ -1990,6 +2393,87 @@ mod legacy_binding_recovery_tests {
     }
 
     #[test]
+    fn explicit_resume_never_replaces_its_bound_generation_after_target_validation_failure()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let path = temp.path().join("explicit-resume.db");
+        init_database(&path, "tester")?;
+        create_task(
+            &path,
+            "default",
+            "tester",
+            CreateTask::ready("explicit resume invariant"),
+        )?;
+        let backend = RecoveryBackend::empty();
+        let seed = MaintenanceSession::start(
+            &path,
+            "resume-seed-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease =
+            acquire_projection_lease(&path, STORE, "resume-seed-owner", seed.options.lease_ttl_ms)?;
+        let building = begin_projection_generation(
+            &path,
+            STORE,
+            "resume-seed-owner",
+            &lease.lease_token,
+            &backend,
+        )?
+        .generation;
+        prepare_projection_snapshot_with(
+            &path,
+            STORE,
+            "resume-seed-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        release_projection_lease(&path, STORE, "resume-seed-owner", &lease.lease_token)?;
+        seed.finish()?;
+        backend.corrupt_generation_fingerprint(&building);
+
+        let mut takeover = MaintenanceSession::start(
+            &path,
+            "resume-takeover-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease = acquire_projection_lease(
+            &path,
+            STORE,
+            "resume-takeover-owner",
+            takeover.options.lease_ttl_ms,
+        )?;
+        let attempt = run_projection_store_operation_with_intent(
+            &mut takeover,
+            STORE,
+            "LanceDB task chunks",
+            &lease.lease_token,
+            &backend,
+            MaintenanceStoreRunIntent::Resume,
+        );
+        let Err(MaintenanceStoreAttemptError::Fatal(error)) = attempt else {
+            anyhow::bail!("explicit resume must fail closed instead of replacing its generation");
+        };
+        assert!(error.to_string().contains("explicit resume"));
+        assert!(error.to_string().contains(&building));
+        assert_eq!(
+            lance_store_status(&path)?.building_generation.as_deref(),
+            Some(building.as_str())
+        );
+        assert!(
+            backend.quarantine_attempts().is_empty(),
+            "explicit resume must not quarantine or replace its bound generation"
+        );
+        assert!(
+            backend.inspect_generation(&building)?.is_some(),
+            "explicit resume failure must retain the physical target for operator recovery"
+        );
+        release_projection_lease(&path, STORE, "resume-takeover-owner", &lease.lease_token)?;
+        takeover.finish()?;
+        Ok(())
+    }
+
     fn aliased_generation_ids_fail_before_any_physical_mutation() -> anyhow::Result<()> {
         let (_temp, path) = v29_lance_fixture_with_building_id(true, true, true, PREVIOUS)?;
         let backend = RecoveryBackend::empty();
@@ -2031,8 +2515,13 @@ mod legacy_binding_recovery_tests {
             options,
         )?;
 
-        let run =
-            run_projection_store_once(&mut session, STORE, "LanceDB task chunks", &backend, false)?;
+        let run = run_projection_store_once(
+            &mut session,
+            STORE,
+            "LanceDB task chunks",
+            &backend,
+            MaintenanceStoreRunIntent::Automatic,
+        )?;
 
         assert!(matches!(
             run.result,

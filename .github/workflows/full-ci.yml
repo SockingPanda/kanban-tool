@@ -109,9 +109,9 @@ jobs:
       - name: Test native projection backend durability
         run: cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --lib
       - name: Test native maintenance recovery
-        run: cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --test all suite::maintenance_runtime::
+        run: "cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --test all suite::maintenance_runtime::"
       - name: Test native generation fencing
-        run: cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --test all suite::projection_v2::
+        run: "cargo test --locked -p kanban-sqlite --features 'tantivy-backend,oxigraph-backend' --test all suite::projection_v2::"
 
   desktop:
     name: Desktop build and Tauri

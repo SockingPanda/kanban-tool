@@ -291,8 +291,10 @@ pub fn apply_legacy_projection_cleanup(
 ) -> Result<LegacyProjectionCleanupOutcome, LegacyProjectionCleanupError> {
     guard.validate(db_path.as_ref())?;
     apply_legacy_projection_cleanup_inner(
-        guard,
-        db_path.as_ref(),
+        CleanupApplyTarget {
+            guard,
+            db_path: db_path.as_ref(),
+        },
         database_instance_id,
         expected_inventory_digest,
         backup_dir.as_ref(),
@@ -323,8 +325,10 @@ pub fn apply_legacy_projection_cleanup_with_resume_decision(
 ) -> Result<LegacyProjectionCleanupOutcome, LegacyProjectionCleanupError> {
     guard.validate(db_path.as_ref())?;
     apply_legacy_projection_cleanup_inner(
-        guard,
-        db_path.as_ref(),
+        CleanupApplyTarget {
+            guard,
+            db_path: db_path.as_ref(),
+        },
         database_instance_id,
         expected_inventory_digest,
         backup_dir.as_ref(),
@@ -392,8 +396,7 @@ fn apply_legacy_projection_cleanup_with_after_move(
     after_move: impl FnMut(LegacyProjectionRootKind) -> Result<(), LegacyProjectionCleanupError>,
 ) -> Result<LegacyProjectionCleanupOutcome, LegacyProjectionCleanupError> {
     apply_legacy_projection_cleanup_inner(
-        guard,
-        db_path,
+        CleanupApplyTarget { guard, db_path },
         database_instance_id,
         expected_inventory_digest,
         backup_dir,
@@ -420,8 +423,7 @@ fn apply_legacy_projection_cleanup_with_before_initial_publish(
     ) -> Result<(), LegacyProjectionCleanupError>,
 ) -> Result<LegacyProjectionCleanupOutcome, LegacyProjectionCleanupError> {
     apply_legacy_projection_cleanup_inner(
-        guard,
-        db_path,
+        CleanupApplyTarget { guard, db_path },
         database_instance_id,
         expected_inventory_digest,
         backup_dir,
@@ -449,8 +451,7 @@ fn apply_legacy_projection_cleanup_with_before_move(
     ) -> Result<(), LegacyProjectionCleanupError>,
 ) -> Result<LegacyProjectionCleanupOutcome, LegacyProjectionCleanupError> {
     apply_legacy_projection_cleanup_inner(
-        guard,
-        db_path,
+        CleanupApplyTarget { guard, db_path },
         database_instance_id,
         expected_inventory_digest,
         backup_dir,
@@ -475,8 +476,7 @@ fn apply_legacy_projection_cleanup_with_filesystem_id(
     filesystem_id: impl for<'path> FnMut(&'path Path) -> Result<u64, LegacyProjectionCleanupError>,
 ) -> Result<LegacyProjectionCleanupOutcome, LegacyProjectionCleanupError> {
     apply_legacy_projection_cleanup_inner(
-        guard,
-        db_path,
+        CleanupApplyTarget { guard, db_path },
         database_instance_id,
         expected_inventory_digest,
         backup_dir,
@@ -1850,14 +1850,18 @@ struct ApplyHooks<BeforeInitialPublish, BeforeMove, AfterMove> {
     after_move: AfterMove,
 }
 
+struct CleanupApplyTarget<'a> {
+    guard: &'a LegacyProjectionCleanupGuard,
+    db_path: &'a Path,
+}
+
 fn apply_legacy_projection_cleanup_inner<
     BeforeInitialPublish,
     BeforeMove,
     AfterMove,
     FilesystemId,
 >(
-    guard: &LegacyProjectionCleanupGuard,
-    db_path: &Path,
+    target: CleanupApplyTarget<'_>,
     database_instance_id: &str,
     expected_inventory_digest: &str,
     backup_dir: &Path,
@@ -1875,9 +1879,9 @@ where
     AfterMove: FnMut(LegacyProjectionRootKind) -> Result<(), LegacyProjectionCleanupError>,
     FilesystemId: for<'path> FnMut(&'path Path) -> Result<u64, LegacyProjectionCleanupError>,
 {
-    guard.validate(db_path)?;
+    target.guard.validate(target.db_path)?;
     validate_database_instance_id(database_instance_id)?;
-    let database_path = canonical_database_path(db_path)?;
+    let database_path = canonical_database_path(target.db_path)?;
     let backup_exists = match fs::symlink_metadata(backup_dir) {
         Ok(_) => true,
         Err(error) if error.kind() == io::ErrorKind::NotFound => false,
@@ -1956,9 +1960,9 @@ where
     }
 
     for index in 0..journal.roots.len() {
-        guard.validate(&database_path)?;
+        target.guard.validate(&database_path)?;
         apply_one_root(
-            guard,
+            target.guard,
             &database_path,
             &mut journal,
             index,
@@ -1967,10 +1971,10 @@ where
             &mut hooks.after_move,
         )?;
     }
-    guard.validate(&database_path)?;
+    target.guard.validate(&database_path)?;
     let manifest = manifest_from_journal(&journal);
     write_or_validate_manifest(&backup_dir, &manifest)?;
-    guard.validate(&database_path)?;
+    target.guard.validate(&database_path)?;
     journal.phase = CleanupPhase::Completed;
     write_journal(&backup_dir, &journal)?;
     validate_completed_backup(&journal, &backup_dir)?;

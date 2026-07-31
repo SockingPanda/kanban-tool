@@ -6,6 +6,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -39,12 +41,255 @@ HELPER_PACKAGES = ("kanban-vector-lancedb", "kanban-graph-oxigraph")
 TOOL_PACKAGE = "kanban-schema-tool"
 CONTRACT_PACKAGE = "kanban-contract"
 PROJECTION_RELEASE_FEATURES = "tantivy-backend,oxigraph-backend"
+RELEASE_WRAPPER_SHA256 = (
+    "20b6b07ebabd88dbef592a1a2ec1ce88eb579f6cd004582b6a52cd07a615f6d3"
+)
 Event = dict[str, object]
 ExpectedBuilder = Callable[[Path, bool], list[Event]]
 
 
 class RecipeWitnessError(RuntimeError):
     """recipe 实际执行序列偏离 canonical 调用图。"""
+
+
+def _bash_function_body(wrapper: str, name: str) -> str:
+    match = re.search(
+        rf"(?ms)^{re.escape(name)}\(\) \{{\n(.*?)^\}}\n",
+        wrapper,
+    )
+    if match is None:
+        raise RecipeWitnessError(f"release wrapper 缺少 canonical function: {name}")
+    return match.group(1)
+
+
+def _release_safe_publish_graph(wrapper: str) -> tuple[tuple[str, ...], ...]:
+    collapsed = re.sub(
+        r"\\\n[ \t]*",
+        " ",
+        _bash_function_body(wrapper, "publish_generation"),
+    )
+    commands: list[tuple[str, ...]] = []
+    for line in collapsed.splitlines():
+        marker = 'python3 "$SAFE_PATH" '
+        position = line.find(marker)
+        if position < 0:
+            continue
+        command_text = line[position:].strip()
+        if command_text.endswith(')"'):
+            command_text = command_text[:-2].rstrip()
+        argv = shlex.split(command_text)
+        if len(argv) < 3 or argv[:2] != ["python3", "$SAFE_PATH"]:
+            raise RecipeWitnessError(
+                f"release safe publish command 无法结构化解析: {command_text!r}"
+            )
+        commands.append(tuple(argv[2:]))
+    return tuple(commands)
+
+
+def _verify_sealed_release_tooling(wrapper: str) -> None:
+    """锁定 fresh/resume 共用的 sealed release tooling，禁止回退 live wrapper。"""
+
+    bind_body = _bash_function_body(wrapper, "bind_sealed_release_tools")
+    bind_fragments = (
+        'if [[ -d "$SOURCE_SNAPSHOT_ROOT" && ! -L "$SOURCE_SNAPSHOT_ROOT" ]]; then',
+        'tools_root="$SOURCE_SNAPSHOT_ROOT"',
+        'elif [[ "$RESUME_RELEASE" == "1" && -d "$STAGE_DIR/.release-tools"',
+        'tools_root="$STAGE_DIR/.release-tools"',
+        'elif [[ "$RESUME_PUBLISHED" == "1" && -d "$PUBLISHED_DIR/.release-tools"',
+        'tools_root="$PUBLISHED_DIR/.release-tools"',
+        'fail "immutable release tooling snapshot is unavailable"',
+        'SEALED_ARTIFACT_MANIFEST="$tools_root/scripts/release-artifact-manifest.sh"',
+        'SEALED_EMBED_DEB="$tools_root/scripts/embed-release-provenance-deb.sh"',
+        'SEALED_SOURCE_GATE="$tools_root/scripts/release-source-gate.sh"',
+        'SEALED_SAFE_PATH="$tools_root/scripts/release-safe-path.py"',
+        'python3 "$SAFE_PATH" validate-file --root "$TARGET_ROOT" --path "$tool"',
+        '[[ -x "$tool" ]] || fail "sealed release tool is not executable: $tool"',
+        'ARTIFACT_MANIFEST="$SEALED_ARTIFACT_MANIFEST"',
+        'EMBED_DEB="$SEALED_EMBED_DEB"',
+    )
+    cursor = 0
+    for fragment in bind_fragments:
+        position = bind_body.find(fragment, cursor)
+        if position < 0:
+            raise RecipeWitnessError(
+                "release wrapper sealed tooling 缺少或重排 fail-closed boundary: "
+                f"{fragment!r}"
+            )
+        cursor = position + len(fragment)
+
+    persist_body = _bash_function_body(wrapper, "persist_sealed_release_tools")
+    persist_fragments = (
+        '[[ "$SEALED_TOOLS_DIR" == "$STAGE_DIR/.release-tools" ]]',
+        '--destination "$SEALED_TOOLS_DIR/scripts/release-artifact-manifest.sh" --mode 0555',
+        '--destination "$SEALED_TOOLS_DIR/scripts/embed-release-provenance-deb.sh" --mode 0555',
+        "for dependency in cargo-build-lock.sh release-safe-path.py release-source-gate.sh; do",
+        '--source "$SOURCE_SNAPSHOT_ROOT/scripts/$dependency"',
+        '--destination "$SEALED_TOOLS_DIR/scripts/$dependency" --mode 0555',
+    )
+    cursor = 0
+    for fragment in persist_fragments:
+        position = persist_body.find(fragment, cursor)
+        if position < 0:
+            raise RecipeWitnessError(
+                "release wrapper sealed tooling persistence 不完整或重排: "
+                f"{fragment!r}"
+            )
+        cursor = position + len(fragment)
+
+    bind_dispatch = (
+        'if [[ "$RESUME_PUBLISHED" != "1" && "$RESUME_RELEASE" != "1" ]]; then\n'
+        "  create_source_snapshot\n"
+        "  bind_sealed_release_tools\n"
+        "  persist_sealed_release_tools\n"
+        'elif [[ "$RESUME_RELEASE" == "1" ]]; then\n'
+        "  bind_sealed_release_tools\n"
+        'elif [[ "$RESUME_PUBLISHED" == "1" ]]; then\n'
+        "  bind_sealed_release_tools\n"
+        "fi"
+    )
+    if wrapper.count(bind_dispatch) != 1:
+        raise RecipeWitnessError(
+            "release wrapper fresh/resume 必须先绑定一次 canonical sealed tooling"
+        )
+    bound_tail = wrapper[wrapper.index(bind_dispatch) + len(bind_dispatch) :]
+    source_gate_binding = bound_tail.find('SOURCE_GATE="$SEALED_SOURCE_GATE"')
+    safe_path_binding = bound_tail.find(
+        'export KANBAN_RELEASE_SAFE_PATH="$SEALED_SAFE_PATH"'
+    )
+    first_sealed_verify = bound_tail.find(
+        '"$SOURCE_GATE" verify --manifest "$STAGE_DIR/source-provenance.json"'
+    )
+    if not (
+        0 <= source_gate_binding < safe_path_binding < first_sealed_verify
+    ):
+        raise RecipeWitnessError(
+            "release wrapper 未在 post-snapshot verify 前绑定 sealed source/safe-path tooling"
+        )
+
+    resume_body = _bash_function_body(wrapper, "resume_published_generation")
+    resume_fragments = (
+        'python3 "$SAFE_PATH" validate-published-dir --root "$TARGET_ROOT"',
+        '--path "$PUBLISHED_DIR" --marker "$PUBLISHED_MARKER"',
+        '--verify-command "$ARTIFACT_MANIFEST" verify-final',
+        '--manifest "$PUBLISHED_DIR/release-artifacts.json"',
+        '--stage-dir "$PUBLISHED_DIR"',
+        '[[ "$generation_sha256" =~ ^[0-9a-f]{64}$ ]]',
+    )
+    cursor = 0
+    for fragment in resume_fragments:
+        position = resume_body.find(fragment, cursor)
+        if position < 0:
+            raise RecipeWitnessError(
+                "release wrapper published resume 缺少 sealed verification boundary: "
+                f"{fragment!r}"
+            )
+        cursor = position + len(fragment)
+    published_resume = (
+        'if [[ "$RESUME_PUBLISHED" == "1" ]]; then\n'
+        "  resume_published_generation\n"
+        "  finish_release\n"
+        "  exit 0\n"
+        "fi"
+    )
+    if wrapper.count(published_resume) != 1:
+        raise RecipeWitnessError(
+            "release wrapper published resume 必须执行 sealed artifact verification"
+        )
+
+
+def _verify_release_wrapper_semantics(wrapper: str) -> None:
+    """锁定 release wrapper 的 fail-closed semantic→digest→publish 顺序。"""
+
+    actual_hash = hashlib.sha256(wrapper.encode()).hexdigest()
+    if actual_hash != RELEASE_WRAPPER_SHA256:
+        raise RecipeWitnessError(
+            "release wrapper whole-file hash drifted: "
+            f"expected={RELEASE_WRAPPER_SHA256} actual={actual_hash}"
+        )
+    for forbidden in (
+        'mv -f "$ARTIFACT_MANIFEST_PENDING"',
+        'cp -f "$ARTIFACT_MANIFEST_PENDING"',
+        'rm -f "$ARTIFACT_MANIFEST_FINAL"',
+    ):
+        if forbidden in wrapper:
+            raise RecipeWitnessError(
+                f"release wrapper 使用了非 safe-path manifest publish: {forbidden}"
+            )
+    expected_graph = (
+        (
+            "tree-digest",
+            "--root",
+            "$TARGET_ROOT",
+            "--path",
+            "$STAGE_DIR",
+            "--require-sealed",
+        ),
+        (
+            "publish-dir",
+            "--root",
+            "$TARGET_ROOT",
+            "--source",
+            "$STAGE_DIR",
+            "--destination",
+            "$PUBLISHED_DIR",
+            "--expected-tree-sha256",
+            "$GENERATION_SHA256",
+            "--verify-command",
+            "$ARTIFACT_MANIFEST",
+            "verify-final",
+            "--manifest",
+            "$ARTIFACT_MANIFEST_FINAL",
+            "--stage-dir",
+            "$STAGE_DIR",
+        ),
+        (
+            "validate-published-dir",
+            "--root",
+            "$TARGET_ROOT",
+            "--path",
+            "$PUBLISHED_DIR",
+            "--marker",
+            "$PUBLISHED_MARKER",
+            "--expected-tree-sha256",
+            "$GENERATION_SHA256",
+        ),
+    )
+    actual_graph = _release_safe_publish_graph(wrapper)
+    if actual_graph != expected_graph:
+        raise RecipeWitnessError(
+            "release safe publish structured command graph drifted: "
+            f"expected={expected_graph!r} actual={actual_graph!r}"
+        )
+    normal_tail = wrapper[wrapper.index('"$ARTIFACT_MANIFEST" prepare') :]
+    ordered_fragments = (
+        '"$ARTIFACT_MANIFEST" prepare',
+        '"$SOURCE_GATE" verify --manifest "$SOURCE_MANIFEST"',
+        '--manifest "$ARTIFACT_MANIFEST_PENDING"',
+        'python3 "$SAFE_PATH" publish-file',
+        'python3 "$SAFE_PATH" seal-tree',
+        "publish_generation\nfinish_release",
+    )
+    cursor = 0
+    for fragment in ordered_fragments:
+        position = normal_tail.find(fragment, cursor)
+        if position < 0:
+            raise RecipeWitnessError(
+                "release wrapper normal path 缺少或重排 canonical boundary: "
+                f"{fragment!r}"
+            )
+        cursor = position + len(fragment)
+    resume_block = (
+        'if [[ "$RESUME_RELEASE" == "1" ]]; then\n'
+        "  publish_generation\n"
+        "  finish_release\n"
+        "  exit 0\n"
+        "fi"
+    )
+    if wrapper.count(resume_block) != 1:
+        raise RecipeWitnessError(
+            "release wrapper resume path 必须无条件执行一次 canonical publish"
+        )
+    _verify_sealed_release_tooling(wrapper)
 
 
 def _event(root: Path, kind: str, argv: list[str]) -> Event:
@@ -475,24 +720,14 @@ def _schema_audit_closed(root: Path, _: bool) -> list[Event]:
 
 
 def _release(root: Path, _: bool) -> list[Event]:
-    calls = (
-        ("affected-self-test",),
-        ("schema-contract",),
-        ("audit",),
-        ("rust-full",),
-        ("check-windows-p", "kanban-local"),
-        ("projection-release-cohort",),
-        ("bench-check",),
-        ("target-tools",),
-        ("cli-package",),
-        ("cli-package-layout",),
-        ("desktop-package-config",),
-        ("desktop-package",),
-        ("desktop-package-layout",),
-        ("smoke",),
-        ("diff-check",),
-    )
-    return [_event(root, "just", list(call)) for call in calls]
+    return [
+        {
+            "kind": "script",
+            "argv": [],
+            "invoked_as": str(root / "scripts/release-cohort.sh"),
+            "cwd": str(root),
+        }
+    ]
 
 
 CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
@@ -606,7 +841,7 @@ PROTECTED_RECIPE_AST_SHA256 = {
     "schema-surface-audit": "bf65e600ecefe5b05dddcf9ae165be6e5b00b54148f1d7abd0a7996041e786b0",
     "schema-contract": "5d0d2d21d1bc9a4543a9f938f8211a3387ec34812948c91cff6d7dee6e5521c7",
     "schema-audit-closed": "7f2f8074b1bf51095c5119ea342ad412fb50f667b59f970f68ef9239bda54f45",
-    "release": "eefd37aeb14435a92fc1d46b99bc42476864f5a50a6b41349c1440280f53f56b",
+    "release": "1dae2a83fb1776567c134c61e610556f3fc39cc21d9642beeaa3ee7b226d8a4d",
 }
 AST_ONLY_RECIPE_NAMES = {"check-p", "test-p"}
 PROTECTED_JUST_GLOBALS_SHA256 = (
@@ -1185,6 +1420,7 @@ def verify_case(
             root / "scripts/test-schema-cargo-tree.sh",
             FAKE_DIRECT,
         )
+        _write_executable(root / "scripts/release-cohort.sh", FAKE_DIRECT)
         env = os.environ.copy()
         env.update(
             {
@@ -1800,56 +2036,124 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
 
     def test_release_cannot_omit_or_reorder_schema_contract(self) -> None:
         self.assert_mutation_rejected(
-            "    just schema-contract\n",
-            "    echo schema contract omitted\n",
+            "    scripts/release-cohort.sh\n",
+            "    echo release cohort omitted\n",
             "release",
             _release,
             delegate=False,
         )
         self.assert_mutation_rejected(
-            "    just affected-self-test\n    just schema-contract\n",
-            "    just schema-contract\n    just affected-self-test\n",
+            "    scripts/release-cohort.sh\n",
+            "    scripts/release-source-gate.sh\n",
             "release",
             _release,
             delegate=False,
         )
 
     def test_release_nested_gate_order_is_exact(self) -> None:
-        self.assert_mutation_rejected(
-            "    just check-windows-p kanban-local\n",
-            "    echo Windows cross-check omitted\n",
-            "release",
-            _release,
-            delegate=False,
+        wrapper = (ROOT / "scripts/release-cohort.sh").read_text(encoding="utf-8")
+        _verify_release_wrapper_semantics(wrapper)
+        self.assertIn("just schema-contract", wrapper)
+        self.assertLess(
+            wrapper.index("just check-windows-p kanban-local"),
+            wrapper.index("just projection-release-cohort"),
         )
-        self.assert_mutation_rejected(
-            "    just rust-full\n    just check-windows-p kanban-local\n",
-            "    just check-windows-p kanban-local\n    just rust-full\n",
-            "release",
-            _release,
-            delegate=False,
+        self.assertLess(
+            wrapper.index("just desktop-package"),
+            wrapper.index("just desktop-package-layout"),
         )
-        self.assert_mutation_rejected(
-            "    just check-windows-p kanban-local\n    just projection-release-cohort\n",
-            "    just check-windows-p kanban-local\n    echo projection release cohort omitted\n",
-            "release",
-            _release,
-            delegate=False,
+
+    def test_release_safe_publish_witness_rejects_negative_mutations(self) -> None:
+        wrapper = (ROOT / "scripts/release-cohort.sh").read_text(encoding="utf-8")
+        _verify_release_wrapper_semantics(wrapper)
+        mutations = (
+            (
+                'python3 "$SAFE_PATH" seal-tree --root "$TARGET_ROOT" --path "$STAGE_DIR"',
+                'chmod -R a-w "$STAGE_DIR"',
+            ),
+            (
+                '--source "$ARTIFACT_MANIFEST_PENDING" \\\n'
+                '  --destination "$ARTIFACT_MANIFEST_FINAL"',
+                'mv -f "$ARTIFACT_MANIFEST_PENDING" "$ARTIFACT_MANIFEST_FINAL"',
+            ),
+            (
+                '    --expected-tree-sha256 "$GENERATION_SHA256" \\\n'
+                '    --verify-command "$ARTIFACT_MANIFEST" verify-final',
+                '--expected-tree-sha256 "$GENERATION_SHA256"',
+            ),
+            (
+                'python3 "$SAFE_PATH" tree-digest --root "$TARGET_ROOT"',
+                'printf "%064d\\n" 0',
+            ),
+            (
+                'python3 "$SAFE_PATH" seal-tree --root "$TARGET_ROOT" --path "$STAGE_DIR"',
+                'python3 "$SAFE_PATH" seal-tree --root "$TARGET_ROOT" --path "$STAGE_DIR"\n'
+                'python3 "$SAFE_PATH" validate-file --root "$TARGET_ROOT" '
+                '--path "$ARTIFACT_MANIFEST_FINAL"',
+            ),
+            (
+                '''  python3 "$SAFE_PATH" publish-dir --root "$TARGET_ROOT" \\
+    --source "$STAGE_DIR" --destination "$PUBLISHED_DIR" \\
+    --expected-tree-sha256 "$GENERATION_SHA256" \\
+    --verify-command "$ARTIFACT_MANIFEST" verify-final \\
+      --manifest "$ARTIFACT_MANIFEST_FINAL" --stage-dir "$STAGE_DIR"''',
+                '''  if false; then
+    python3 "$SAFE_PATH" publish-dir --root "$TARGET_ROOT" \\
+      --source "$STAGE_DIR" --destination "$PUBLISHED_DIR" \\
+      --expected-tree-sha256 "$GENERATION_SHA256" \\
+      --verify-command "$ARTIFACT_MANIFEST" verify-final \\
+        --manifest "$ARTIFACT_MANIFEST_FINAL" --stage-dir "$STAGE_DIR"
+  fi''',
+            ),
+            (
+                "if [[ \"$RESUME_RELEASE\" == \"1\" ]]; then\n"
+                "  publish_generation\n",
+                "if [[ \"$RESUME_RELEASE\" == \"1\" ]]; then\n"
+                "  if [[ \"${KANBAN_RELEASE_SKIP_PUBLISH:-0}\" != \"1\" ]]; then\n"
+                "    publish_generation\n"
+                "  fi\n",
+            ),
         )
-        self.assert_mutation_rejected(
-            "    just check-windows-p kanban-local\n    just projection-release-cohort\n",
-            "    just projection-release-cohort\n    just check-windows-p kanban-local\n",
-            "release",
-            _release,
-            delegate=False,
+        for original, replacement in mutations:
+            with self.subTest(original=original):
+                mutation = wrapper.replace(original, replacement, 1)
+                self.assertNotEqual(mutation, wrapper)
+                with self.assertRaises(RecipeWitnessError):
+                    _verify_release_wrapper_semantics(mutation)
+        sealed_mutations = (
+            (
+                'tools_root="$PUBLISHED_DIR/.release-tools"',
+                'tools_root="$ROOT"',
+            ),
+            (
+                "for dependency in cargo-build-lock.sh release-safe-path.py "
+                "release-source-gate.sh; do",
+                "for dependency in cargo-build-lock.sh release-safe-path.py; do",
+            ),
+            (
+                'SOURCE_GATE="$SEALED_SOURCE_GATE"',
+                'SOURCE_GATE="$ROOT/scripts/release-source-gate.sh"',
+            ),
+            (
+                '--verify-command "$ARTIFACT_MANIFEST" verify-final \\\n'
+                '        --manifest "$PUBLISHED_DIR/release-artifacts.json"',
+                '--manifest "$PUBLISHED_DIR/release-artifacts.json"',
+            ),
+            (
+                'if [[ "$RESUME_PUBLISHED" == "1" ]]; then\n'
+                "  resume_published_generation\n",
+                'if [[ "$RESUME_PUBLISHED" == "1" ]]; then\n'
+                '  if [[ "${KANBAN_RELEASE_SKIP_VERIFY:-0}" != "1" ]]; then\n'
+                "    resume_published_generation\n"
+                "  fi\n",
+            ),
         )
-        self.assert_mutation_rejected(
-            "    just bench-check\n    just target-tools\n",
-            "    just target-tools\n    just bench-check\n",
-            "release",
-            _release,
-            delegate=False,
-        )
+        for original, replacement in sealed_mutations:
+            with self.subTest(sealed_original=original):
+                mutation = wrapper.replace(original, replacement, 1)
+                self.assertNotEqual(mutation, wrapper)
+                with self.assertRaises(RecipeWitnessError):
+                    _verify_sealed_release_tooling(mutation)
 
     def test_projection_release_cohort_cannot_drop_a_backend(self) -> None:
         self.assert_mutation_rejected(

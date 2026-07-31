@@ -711,15 +711,13 @@ pub(crate) fn assert_database_idle_for_replace(guard: &mut DatabaseReplaceGuard)
 }
 
 fn assert_database_idle_with_connection(conn: &Connection, path: &Path) -> Result<()> {
-    if default_pragmas(conn).is_err() {
-        return Ok(());
-    }
+    default_pragmas(conn)?;
     conn.busy_timeout(Duration::from_millis(0))
         .map_err(storage)?;
-    if !table_exists(&conn, "schema_migrations").unwrap_or(false) {
+    if !table_exists(conn, "schema_migrations")? {
         return Ok(());
     }
-    if table_exists(&conn, "projection_maintenance_owner").unwrap_or(false) {
+    if table_exists(conn, "projection_maintenance_owner")? {
         let now = SystemClock.now_ms();
         let active_owner = conn
             .query_row(
@@ -2205,6 +2203,77 @@ fn doctor_issue_counts(issues: &[DoctorIssue]) -> (i64, i64) {
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
+
+    unsafe extern "C" fn deny_table_probe_reads(
+        _: *mut std::ffi::c_void,
+        action: std::ffi::c_int,
+        _: *const std::ffi::c_char,
+        _: *const std::ffi::c_char,
+        _: *const std::ffi::c_char,
+        _: *const std::ffi::c_char,
+    ) -> std::ffi::c_int {
+        if action == rusqlite::ffi::SQLITE_READ {
+            rusqlite::ffi::SQLITE_DENY
+        } else {
+            rusqlite::ffi::SQLITE_OK
+        }
+    }
+
+    #[test]
+    fn replace_does_not_publish_or_retain_authority_when_inspection_pragmas_fail() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("database.db");
+        let setup = Connection::open(&path).unwrap();
+        setup
+            .execute_batch("CREATE TABLE replacement_probe(value TEXT); INSERT INTO replacement_probe VALUES ('before');")
+            .unwrap();
+        drop(setup);
+        let bytes_before = std::fs::read(&path).unwrap();
+
+        // This raw external connection deliberately bypasses the lifecycle
+        // protocol to model a conflicting SQLite writer. It keeps the
+        // inspection connection from switching the database to WAL mode.
+        let blocker = Connection::open(&path).unwrap();
+        blocker
+            .execute_batch("PRAGMA journal_mode=DELETE; BEGIN EXCLUSIVE;")
+            .unwrap();
+
+        let error = begin_database_replace(&path).unwrap_err();
+
+        assert!(matches!(error, KanbanError::Storage(_)), "error: {error}");
+        assert_eq!(std::fs::read(&path).unwrap(), bytes_before);
+        assert!(
+            !maintenance_lock_path(&path).exists(),
+            "failed inspection must not publish a replacement fence"
+        );
+        drop(blocker);
+        drop(DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(&path).unwrap());
+    }
+
+    #[test]
+    fn replace_inspection_propagates_table_probe_errors() {
+        let conn = Connection::open_in_memory().unwrap();
+        default_pragmas(&conn).unwrap();
+        conn.execute_batch("CREATE TABLE schema_migrations(version INTEGER);")
+            .unwrap();
+        // SAFETY: the callback has no state and stays installed only for this
+        // connection, which is dropped before the test returns.
+        assert_eq!(
+            unsafe {
+                rusqlite::ffi::sqlite3_set_authorizer(
+                    conn.handle(),
+                    Some(deny_table_probe_reads),
+                    std::ptr::null_mut(),
+                )
+            },
+            rusqlite::ffi::SQLITE_OK
+        );
+
+        let error =
+            assert_database_idle_with_connection(&conn, Path::new("database.db")).unwrap_err();
+
+        assert!(matches!(error, KanbanError::Storage(_)), "error: {error}");
+    }
 
     #[cfg(unix)]
     #[test]

@@ -851,6 +851,29 @@ pub(crate) fn connect_existing_database(path: &Path) -> Result<DatabaseConnectio
     validate_initialized_database(path, conn)
 }
 
+/// Opens an existing, initialized database read-only while retaining the
+/// shared lifecycle guard for the connection's complete lifetime.
+///
+/// Unlike the low-level `db::connect_existing_read_only` constructor, this
+/// service boundary also fail-closes missing, non-file, uninitialized, and
+/// incomplete database paths before handing the connection to callers.
+pub fn connect_existing_database_read_only(path: &Path) -> Result<DatabaseConnection> {
+    if !path.exists() {
+        return Err(KanbanError::InvalidInput(format!(
+            "database does not exist: {}",
+            path.display()
+        )));
+    }
+    if !path.is_file() {
+        return Err(KanbanError::InvalidInput(format!(
+            "database path is not a file: {}",
+            path.display()
+        )));
+    }
+    let conn = connect_existing_read_only(path)?;
+    validate_initialized_database(path, conn)
+}
+
 pub(crate) fn connect_existing_database_quiescent_read_only(
     path: &Path,
 ) -> Result<DatabaseConnection> {
@@ -2561,6 +2584,57 @@ mod lifecycle_tests {
         ));
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert!(!maintenance_lock_path(&path).exists());
+    }
+
+    #[test]
+    fn existing_read_only_database_opener_rejects_missing_and_uninitialized_paths() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let missing = tempdir.path().join("missing.db");
+
+        let missing_error = connect_existing_database_read_only(&missing).unwrap_err();
+        assert!(matches!(
+            missing_error,
+            KanbanError::InvalidInput(message) if message.contains("database does not exist")
+        ));
+        assert!(!missing.exists());
+
+        let uninitialized = tempdir.path().join("uninitialized.db");
+        drop(Connection::open(&uninitialized).unwrap());
+
+        let uninitialized_error = connect_existing_database_read_only(&uninitialized).unwrap_err();
+        assert!(matches!(
+            uninitialized_error,
+            KanbanError::InvalidInput(message) if message.contains("database is not initialized")
+        ));
+        drop(
+            DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(&uninitialized).unwrap(),
+        );
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn existing_read_only_database_opener_retains_lifecycle_guard_and_rejects_writes() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("initialized.db");
+        crate::init::init_database(&path, "tester").unwrap();
+
+        let connection = connect_existing_database_read_only(&path).unwrap();
+        let write_error = connection
+            .execute_batch("CREATE TABLE must_not_be_written(value INTEGER);")
+            .unwrap_err();
+        assert_eq!(
+            write_error.sqlite_error_code(),
+            Some(rusqlite::ErrorCode::ReadOnly)
+        );
+        assert_eq!(
+            DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(&path)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::WouldBlock
+        );
+
+        drop(connection);
+        drop(DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(&path).unwrap());
     }
 
     #[cfg(unix)]

@@ -29,6 +29,7 @@ pub mod provider {
         LabelProposalProvider, LabelSuggestionOptions, LabelSuggestionResult,
         ManualLabelProposalProvider, ProjectionArtifactEvidence, ProjectionArtifactManifest,
         ProjectionBatch, ProjectionBatchReceipt, ProjectionCorpusMetadata, ProjectionDelivery,
+        ProjectionDestructiveAuthority, ProjectionGenerationBinding, ProjectionGenerationRole,
         ProjectionPublishReceipt, ProjectionSnapshot, ProjectionSnapshotRecord,
         ProjectionStoreBackend, ProjectionStoreDescriptor, begin_projection_generation,
         build_context_pack_with_vector_store, label_atom_index_status_with,

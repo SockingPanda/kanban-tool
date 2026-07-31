@@ -3,6 +3,7 @@
 use kanban_sqlite::api::provider::{
     ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
     ProjectionBatchReceipt, ProjectionCorpusMetadata, ProjectionDelivery,
+    ProjectionDestructiveAuthority, ProjectionGenerationBinding, ProjectionGenerationRole,
     ProjectionPublishReceipt, ProjectionSnapshot, ProjectionSnapshotRecord,
     ProjectionStoreBackend, ProjectionStoreDescriptor,
     begin_projection_generation, prepare_projection_snapshot_with,

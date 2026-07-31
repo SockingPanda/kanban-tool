@@ -259,13 +259,51 @@ pub trait ProjectionStoreBackend {
     fn prepare_snapshot(&self, snapshot: &ProjectionSnapshot)
     -> Result<ProjectionArtifactEvidence>;
 
+    /// Prepare physical state under the exact SQLite lease capability.
+    /// Backends that participate in the maintenance service must explicitly
+    /// implement this entry point; silently dropping the capability would let
+    /// a legacy mutator run after lease rollover.
+    fn prepare_snapshot_with_authority(
+        &self,
+        snapshot: &ProjectionSnapshot,
+        _authority: &ProjectionDestructiveAuthority,
+    ) -> Result<ProjectionArtifactEvidence> {
+        Err(KanbanError::Conflict(format!(
+            "projection backend must implement authority-bearing snapshot preparation for generation {}",
+            snapshot.manifest.generation
+        )))
+    }
+
     fn apply_batch(&self, batch: &ProjectionBatch) -> Result<ProjectionBatchReceipt>;
+
+    fn apply_batch_with_authority(
+        &self,
+        batch: &ProjectionBatch,
+        _authority: &ProjectionDestructiveAuthority,
+    ) -> Result<ProjectionBatchReceipt> {
+        Err(KanbanError::Conflict(format!(
+            "projection backend must implement authority-bearing batch apply for generation {}",
+            batch.target_generation
+        )))
+    }
 
     fn publish_generation(
         &self,
         expected_active: Option<&ProjectionArtifactEvidence>,
         prepared: &ProjectionArtifactEvidence,
     ) -> Result<ProjectionPublishReceipt>;
+
+    fn publish_generation_with_authority(
+        &self,
+        _expected_active: Option<&ProjectionArtifactEvidence>,
+        prepared: &ProjectionArtifactEvidence,
+        _authority: &ProjectionDestructiveAuthority,
+    ) -> Result<ProjectionPublishReceipt> {
+        Err(KanbanError::Conflict(format!(
+            "projection backend must implement authority-bearing publication for generation {}",
+            prepared.manifest.generation
+        )))
+    }
 
     fn inspect_active(&self) -> Result<Option<ProjectionArtifactEvidence>>;
 
@@ -289,9 +327,28 @@ pub trait ProjectionStoreBackend {
         Ok(())
     }
 
+    fn validate_generation_publication_with_authority(
+        &self,
+        expected: &ProjectionArtifactEvidence,
+        _authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        self.validate_generation_publication(expected)
+    }
+
     fn repair_generation_publication(&self, expected: &ProjectionArtifactEvidence) -> Result<()> {
         Err(KanbanError::Conflict(format!(
             "projection backend cannot repair publication for generation {}",
+            expected.manifest.generation
+        )))
+    }
+
+    fn repair_generation_publication_with_authority(
+        &self,
+        expected: &ProjectionArtifactEvidence,
+        _authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        Err(KanbanError::Conflict(format!(
+            "projection backend must implement authority-bearing publication repair for generation {}",
             expected.manifest.generation
         )))
     }

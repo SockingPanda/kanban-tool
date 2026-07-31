@@ -7095,6 +7095,26 @@ mod tests {
         .into_bytes()
     }
 
+    fn tantivy_metadata_for_evidence(
+        evidence: &ProjectionArtifactEvidence,
+    ) -> kanban_search::tantivy_backend::TantivyTaskProjectionMetadata {
+        kanban_search::tantivy_backend::TantivyTaskProjectionMetadata {
+            database_instance_id: evidence.manifest.database_instance_id.clone(),
+            protocol_version: evidence.manifest.protocol_version,
+            schema_version: evidence.manifest.schema_version,
+            generation: evidence.manifest.generation.clone(),
+            fence_epoch: evidence.manifest.fence_epoch,
+            snapshot_cursor: evidence.manifest.snapshot_cursor,
+            provider: evidence.manifest.provider.clone(),
+            provider_fingerprint: evidence.manifest.provider_fingerprint.clone(),
+            canonical_item_count: evidence.manifest.canonical_item_count,
+            canonical_digest: evidence.manifest.canonical_digest.clone(),
+            delivery_item_count: evidence.manifest.delivery_item_count,
+            delivery_digest: evidence.manifest.delivery_digest.clone(),
+            fingerprint: evidence.fingerprint.clone(),
+        }
+    }
+
     fn quarantined_generation_path(generation_path: &Path) -> anyhow::Result<PathBuf> {
         let parent = generation_path
             .parent()
@@ -7845,6 +7865,615 @@ mod tests {
         assert!(matches!(phase_error, KanbanError::Conflict(_)));
         assert!(generation_path.is_dir());
         assert!(std::fs::symlink_metadata(&marker_path)?.is_dir());
+        Ok(())
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum TransientCoexistSurface {
+        Prepare,
+        Apply,
+        Publish,
+        Validate,
+        Repair,
+        Quarantine,
+        Abort,
+    }
+
+    #[test]
+    fn transient_authority_surface_matrix_reconciles_overlay_and_foreign_physical_coexistence()
+    -> anyhow::Result<()> {
+        for surface in [
+            TransientCoexistSurface::Prepare,
+            TransientCoexistSurface::Apply,
+            TransientCoexistSurface::Publish,
+            TransientCoexistSurface::Validate,
+            TransientCoexistSurface::Repair,
+            TransientCoexistSurface::Quarantine,
+            TransientCoexistSurface::Abort,
+        ] {
+            let temp = tempdir()?;
+            let db_path = temp
+                .path()
+                .join(format!("transient-coexist-{surface:?}.db"));
+            init_database(&db_path, "tester")?;
+            let provider_a = TantivyProjectionStore::new(&db_path)?;
+            let provider_a_descriptor = provider_a.descriptor()?;
+            let mut provider_b_descriptor = provider_a_descriptor.clone();
+            provider_b_descriptor.provider = "tantivy-provider-b".to_owned();
+            provider_b_descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+            let provider_b = TransientGenerationInspectStore::with_descriptor(
+                &db_path,
+                provider_a,
+                provider_b_descriptor,
+            );
+            let lease =
+                acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "coexist-owner", 120_000)?;
+            let manifest = begin_projection_generation(
+                &db_path,
+                TANTIVY_TASKS_STORE,
+                &lease.owner,
+                &lease.lease_token,
+                &provider_b,
+            )?;
+            let snapshot = ProjectionSnapshot {
+                manifest: manifest.clone(),
+                records: Vec::new(),
+            };
+            let snapshotting_authority = snapshotting_authority(&manifest, &lease);
+            let prepared = if matches!(surface, TransientCoexistSurface::Prepare) {
+                None
+            } else {
+                Some(prepare_projection_snapshot_with(
+                    &db_path,
+                    TANTIVY_TASKS_STORE,
+                    &lease.owner,
+                    &lease.lease_token,
+                    &provider_b,
+                )?)
+            };
+            let prepared_authority = prepared.as_ref().map(|evidence| {
+                evidence_authority(
+                    evidence,
+                    &lease,
+                    ProjectionGenerationRole::Building,
+                    Some("prepared"),
+                )
+            });
+            if matches!(surface, TransientCoexistSurface::Validate) {
+                provider_b
+                    .state
+                    .lock()
+                    .expect("transient projection state")
+                    .published
+                    .insert(manifest.generation.clone());
+            }
+
+            let mut foreign_manifest = manifest.clone();
+            foreign_manifest.provider = provider_a_descriptor.provider;
+            foreign_manifest.provider_fingerprint = provider_a_descriptor.provider_fingerprint;
+            let foreign = provider_b.inner.prepare_snapshot(&ProjectionSnapshot {
+                manifest: foreign_manifest,
+                records: Vec::new(),
+            })?;
+            let overlay_before = provider_b
+                .state
+                .lock()
+                .expect("transient projection state")
+                .clone();
+
+            let result = match surface {
+                TransientCoexistSurface::Prepare => provider_b
+                    .prepare_snapshot_with_authority(&snapshot, &snapshotting_authority)
+                    .map(|_| ()),
+                TransientCoexistSurface::Apply => provider_b
+                    .apply_batch_with_authority(
+                        &empty_projection_batch(
+                            &prepared.as_ref().expect("prepared evidence").manifest,
+                            &lease,
+                        ),
+                        prepared_authority.as_ref().expect("prepared authority"),
+                    )
+                    .map(|_| ()),
+                TransientCoexistSurface::Publish => provider_b
+                    .publish_generation_with_authority(
+                        None,
+                        prepared.as_ref().expect("prepared evidence"),
+                        prepared_authority.as_ref().expect("prepared authority"),
+                    )
+                    .map(|_| ()),
+                TransientCoexistSurface::Validate => provider_b
+                    .validate_generation_publication_with_authority(
+                        prepared.as_ref().expect("prepared evidence"),
+                        prepared_authority.as_ref().expect("prepared authority"),
+                    ),
+                TransientCoexistSurface::Repair => provider_b
+                    .repair_generation_publication_with_authority(
+                        prepared.as_ref().expect("prepared evidence"),
+                        prepared_authority.as_ref().expect("prepared authority"),
+                    ),
+                TransientCoexistSurface::Quarantine => provider_b.quarantine_generation_fenced(
+                    &manifest.generation,
+                    prepared_authority.as_ref().expect("prepared authority"),
+                ),
+                TransientCoexistSurface::Abort => provider_b.abort_generation_fenced(
+                    &manifest.generation,
+                    prepared_authority.as_ref().expect("prepared authority"),
+                ),
+            };
+
+            match surface {
+                TransientCoexistSurface::Quarantine | TransientCoexistSurface::Abort => {
+                    result?;
+                    assert!(
+                        provider_b
+                            .state
+                            .lock()
+                            .expect("transient projection state")
+                            .generations
+                            .get(&manifest.generation)
+                            .is_none(),
+                        "{surface:?} left overlay evidence behind"
+                    );
+                    assert!(
+                        provider_b
+                            .inner
+                            .inspect_generation(&manifest.generation)?
+                            .is_none(),
+                        "{surface:?} left foreign physical evidence behind"
+                    );
+                }
+                _ => {
+                    let error = result
+                        .expect_err("foreign physical evidence must fail closed before write");
+                    assert!(
+                        matches!(error, KanbanError::Conflict(_) | KanbanError::Storage(_)),
+                        "{surface:?} returned {error:?}"
+                    );
+                    assert_eq!(
+                        *provider_b.state.lock().expect("transient projection state"),
+                        overlay_before,
+                        "{surface:?} changed overlay state"
+                    );
+                    assert_eq!(
+                        provider_b.inner.inspect_generation(&manifest.generation)?,
+                        Some(foreign),
+                        "{surface:?} changed foreign physical evidence"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn transient_quarantine_protects_exact_physical_active_without_overlay_or_marker()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-physical-active.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let mut provider_b_descriptor = provider_a.descriptor()?;
+        provider_b_descriptor.provider = "tantivy-provider-b".to_owned();
+        provider_b_descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let provider_b = TransientGenerationInspectStore::with_descriptor(
+            &db_path,
+            provider_a,
+            provider_b_descriptor,
+        );
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "physical-owner", 120_000)?;
+        let manifest = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_b,
+        )?;
+        let snapshot = ProjectionSnapshot {
+            manifest,
+            records: Vec::new(),
+        };
+        prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_b,
+        )?;
+        let active = publish_projection_generation_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_b,
+        )?;
+        provider_b.inner.prepare_snapshot(&snapshot)?;
+        let status = projection_status(&db_path)?;
+        let generation_path = kanban_local::projection_store_root_path(
+            &db_path,
+            &status.database_instance_id,
+            TANTIVY_TASKS_STORE,
+        )?
+        .join("generations")
+        .join(&active.manifest.generation);
+        std::fs::write(
+            generation_path.join("kb-projection-meta.json"),
+            serde_json::to_vec(&tantivy_metadata_for_evidence(&active))?,
+        )?;
+        let coexist_error = provider_b
+            .inspect_active()
+            .expect_err("published overlay must not hide a matching physical marker gap");
+        assert!(matches!(
+            coexist_error,
+            KanbanError::Conflict(_) | KanbanError::Storage(_)
+        ));
+        *provider_b.state.lock().expect("transient projection state") =
+            TransientProjectionState::default();
+        assert!(
+            std::fs::symlink_metadata(generation_path.join("published")).is_err(),
+            "the exact physical active intentionally has no publication marker"
+        );
+        let authority = evidence_authority(&active, &lease, ProjectionGenerationRole::Active, None);
+
+        let error = provider_b
+            .quarantine_generation_fenced(&active.manifest.generation, &authority)
+            .expect_err("exact physical active metadata must be protected without an overlay");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert!(generation_path.is_dir());
+        assert_eq!(
+            provider_b
+                .inner
+                .inspect_generation(&active.manifest.generation)?,
+            Some(active)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn transient_overlay_read_validation_rejects_foreign_descriptor_evidence() -> anyhow::Result<()>
+    {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-overlay-descriptor.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let mut provider_b_descriptor = provider_a.descriptor()?;
+        provider_b_descriptor.provider = "tantivy-provider-b".to_owned();
+        provider_b_descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let provider_b = TransientGenerationInspectStore::with_descriptor(
+            &db_path,
+            provider_a,
+            provider_b_descriptor,
+        );
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "descriptor-owner", 120_000)?;
+        begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_b,
+        )?;
+        let mut foreign = prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_b,
+        )?;
+        foreign.manifest.provider = "foreign-provider".to_owned();
+        foreign.manifest.provider_fingerprint = "foreign-provider-v1".to_owned();
+        {
+            let mut state = provider_b.state.lock().expect("transient projection state");
+            state
+                .generations
+                .insert(foreign.manifest.generation.clone(), foreign.clone());
+            state.active = Some(foreign.clone());
+            state.published.insert(foreign.manifest.generation.clone());
+        }
+
+        let active_error = provider_b
+            .validate_active_contents(&foreign)
+            .expect_err("active validation must enforce the provider descriptor");
+        assert!(matches!(active_error, KanbanError::Conflict(_)));
+        let publication_error = provider_b
+            .validate_generation_publication(&foreign)
+            .expect_err("non-authority publication validation must enforce the descriptor");
+        assert!(matches!(publication_error, KanbanError::Conflict(_)));
+        Ok(())
+    }
+
+    #[test]
+    fn transient_physical_active_scan_fails_closed_for_malformed_marker_entries()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-malformed-marker.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "marker-owner", 120_000)?;
+        let manifest = begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_a,
+        )?;
+        prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_a,
+        )?;
+        let status = projection_status(&db_path)?;
+        let marker_path = kanban_local::projection_store_root_path(
+            &db_path,
+            &status.database_instance_id,
+            TANTIVY_TASKS_STORE,
+        )?
+        .join("generations")
+        .join(&manifest.generation)
+        .join("published");
+        std::fs::create_dir(&marker_path)?;
+        let mut provider_b_descriptor = provider_a.descriptor()?;
+        provider_b_descriptor.provider = "tantivy-provider-b".to_owned();
+        provider_b_descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let provider_b = TransientGenerationInspectStore::with_descriptor(
+            &db_path,
+            TantivyProjectionStore::new(&db_path)?,
+            provider_b_descriptor,
+        );
+
+        let directory_error = provider_b
+            .inspect_active()
+            .expect_err("a marker directory must fail closed");
+        assert!(matches!(directory_error, KanbanError::Storage(_)));
+
+        #[cfg(unix)]
+        {
+            std::fs::remove_dir(&marker_path)?;
+            std::os::unix::fs::symlink("missing-marker-target", &marker_path)?;
+            let symlink_error = provider_b
+                .inspect_active()
+                .expect_err("a marker symlink must fail closed");
+            assert!(matches!(symlink_error, KanbanError::Storage(_)));
+        }
+        Ok(())
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum TransientRecoveryOperation {
+        Quarantine,
+        Abort,
+    }
+
+    #[test]
+    fn transient_recovery_authority_matrix_preserves_then_mutates_exact_historical_evidence()
+    -> anyhow::Result<()> {
+        for operation in [
+            TransientRecoveryOperation::Quarantine,
+            TransientRecoveryOperation::Abort,
+        ] {
+            let temp = tempdir()?;
+            let db_path = temp
+                .path()
+                .join(format!("transient-recovery-{operation:?}.db"));
+            init_database(&db_path, "tester")?;
+            let provider_a = TantivyProjectionStore::new(&db_path)?;
+            let provider_a_lease = acquire_projection_lease(
+                &db_path,
+                TANTIVY_TASKS_STORE,
+                "provider-a-owner",
+                120_000,
+            )?;
+            let manifest = begin_projection_generation(
+                &db_path,
+                TANTIVY_TASKS_STORE,
+                &provider_a_lease.owner,
+                &provider_a_lease.lease_token,
+                &provider_a,
+            )?;
+            let evidence = prepare_projection_snapshot_with(
+                &db_path,
+                TANTIVY_TASKS_STORE,
+                &provider_a_lease.owner,
+                &provider_a_lease.lease_token,
+                &provider_a,
+            )?;
+            let status = projection_status(&db_path)?;
+            let generation_path = kanban_local::projection_store_root_path(
+                &db_path,
+                &status.database_instance_id,
+                TANTIVY_TASKS_STORE,
+            )?
+            .join("generations")
+            .join(&manifest.generation);
+            release_projection_lease(
+                &db_path,
+                TANTIVY_TASKS_STORE,
+                &provider_a_lease.owner,
+                &provider_a_lease.lease_token,
+            )?;
+
+            let mut descriptor = provider_a.descriptor()?;
+            descriptor.provider = "tantivy-provider-b".to_owned();
+            descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+            let provider_b = TransientGenerationInspectStore::with_descriptor(
+                &db_path,
+                TantivyProjectionStore::new(&db_path)?,
+                descriptor,
+            );
+            let provider_b_lease = acquire_projection_lease(
+                &db_path,
+                TANTIVY_TASKS_STORE,
+                "provider-b-owner",
+                120_000,
+            )?;
+            let base_authority = evidence_authority(
+                &evidence,
+                &provider_b_lease,
+                ProjectionGenerationRole::Building,
+                Some("prepared"),
+            );
+            let physical_before = provider_a
+                .inspect_generation(&manifest.generation)?
+                .expect("provider A prepared evidence");
+
+            for drift in TRANSIENT_AUTHORITY_DRIFTS {
+                let mut authority = base_authority.clone();
+                apply_transient_building_drift(
+                    &db_path,
+                    &manifest,
+                    &provider_b_lease,
+                    "prepared",
+                    &mut authority,
+                    drift,
+                )?;
+                let result = match operation {
+                    TransientRecoveryOperation::Quarantine => {
+                        provider_b.quarantine_generation_fenced(&manifest.generation, &authority)
+                    }
+                    TransientRecoveryOperation::Abort => {
+                        provider_b.abort_generation_fenced(&manifest.generation, &authority)
+                    }
+                };
+                let error = result
+                    .expect_err("stale historical authority must fail before physical change");
+                assert!(
+                    matches!(error, KanbanError::Conflict(_)),
+                    "{operation:?}/{drift:?} returned {error:?}"
+                );
+                assert_eq!(
+                    provider_a.inspect_generation(&manifest.generation)?,
+                    Some(physical_before.clone()),
+                    "{operation:?}/{drift:?} changed historical physical evidence"
+                );
+                assert!(
+                    generation_path.is_dir(),
+                    "{operation:?}/{drift:?} removed the generation directory"
+                );
+                restore_transient_building_drift(&db_path, &manifest, &provider_b_lease, drift)?;
+            }
+
+            match operation {
+                TransientRecoveryOperation::Quarantine => {
+                    provider_b
+                        .quarantine_generation_fenced(&manifest.generation, &base_authority)?;
+                    let quarantined = quarantined_generation_path(&generation_path)?;
+                    assert!(
+                        quarantined.join("kb-projection-meta.json").is_file(),
+                        "exact historical quarantine must preserve provider A evidence"
+                    );
+                }
+                TransientRecoveryOperation::Abort => {
+                    provider_b.abort_generation_fenced(&manifest.generation, &base_authority)?;
+                }
+            }
+            assert!(
+                provider_a
+                    .inspect_generation(&manifest.generation)?
+                    .is_none(),
+                "exact historical authority must remove the canonical physical entry"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn transient_new_provider_publishes_and_only_protects_exact_canonical_active()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("transient-provider-b-success.db");
+        init_database(&db_path, "tester")?;
+        let provider_a = TantivyProjectionStore::new(&db_path)?;
+        let mut descriptor = provider_a.descriptor()?;
+        descriptor.provider = "tantivy-provider-b".to_owned();
+        descriptor.provider_fingerprint = "tantivy-provider-b-v1".to_owned();
+        let provider_b =
+            TransientGenerationInspectStore::with_descriptor(&db_path, provider_a, descriptor);
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "provider-b-owner", 120_000)?;
+        begin_projection_generation(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_b,
+        )?;
+        let prepared = prepare_projection_snapshot_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_b,
+        )?;
+        let batch = empty_projection_batch(&prepared.manifest, &lease);
+        let prepared_authority = evidence_authority(
+            &prepared,
+            &lease,
+            ProjectionGenerationRole::Building,
+            Some("prepared"),
+        );
+        let receipt = provider_b.apply_batch_with_authority(&batch, &prepared_authority)?;
+        assert_eq!(receipt.target_generation, prepared.manifest.generation);
+        assert_eq!(receipt.applied_item_count, 0);
+        let active = publish_projection_generation_with(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &lease.owner,
+            &lease.lease_token,
+            &provider_b,
+        )?;
+        assert_eq!(active, prepared);
+        assert_eq!(provider_b.inspect_active()?, Some(active.clone()));
+
+        let authority = evidence_authority(&active, &lease, ProjectionGenerationRole::Active, None);
+        provider_b
+            .state
+            .lock()
+            .expect("transient projection state")
+            .published
+            .remove(&active.manifest.generation);
+        let inspect_error = provider_b
+            .inspect_active()
+            .expect_err("an active without a publication marker must not read as active");
+        assert!(matches!(inspect_error, KanbanError::Storage(_)));
+        let active_validation_error = provider_b
+            .validate_active_contents(&active)
+            .expect_err("active validation must reject a missing publication marker");
+        assert!(matches!(active_validation_error, KanbanError::Storage(_)));
+        let validation_error = provider_b
+            .validate_generation_publication_with_authority(&active, &authority)
+            .expect_err("missing transient publication marker must be detected");
+        assert!(matches!(validation_error, KanbanError::Storage(_)));
+        provider_b.repair_generation_publication_with_authority(&active, &authority)?;
+        provider_b.validate_generation_publication_with_authority(&active, &authority)?;
+
+        let error = provider_b
+            .quarantine_generation_fenced(&active.manifest.generation, &authority)
+            .expect_err("an exact provider B canonical active must be protected");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert_eq!(
+            provider_b.inspect_generation(&active.manifest.generation)?,
+            Some(active.clone())
+        );
+
+        provider_b
+            .state
+            .lock()
+            .expect("transient projection state")
+            .active
+            .as_mut()
+            .expect("transient active")
+            .fingerprint
+            .push_str("-corrupt");
+        provider_b.quarantine_generation_fenced(&active.manifest.generation, &authority)?;
+        assert!(
+            provider_b
+                .inspect_generation(&active.manifest.generation)?
+                .is_none(),
+            "a corrupt provider B active must remain recoverable"
+        );
         Ok(())
     }
 

@@ -226,14 +226,11 @@ fn database_lifecycle_shared_coexist_probe_child() {
     let Some(db_path) = std::env::var_os("KANBAN_LIFECYCLE_SHARED_COEXIST_DB") else {
         return;
     };
-    let ready_path = PathBuf::from(
-        std::env::var_os("KANBAN_LIFECYCLE_SHARED_COEXIST_READY").unwrap(),
-    );
-    let release_path = PathBuf::from(
-        std::env::var_os("KANBAN_LIFECYCLE_SHARED_COEXIST_RELEASE").unwrap(),
-    );
-    let _guard =
-        DatabaseLifecycleSharedGuard::acquire_existing(Path::new(&db_path)).unwrap();
+    let ready_path =
+        PathBuf::from(std::env::var_os("KANBAN_LIFECYCLE_SHARED_COEXIST_READY").unwrap());
+    let release_path =
+        PathBuf::from(std::env::var_os("KANBAN_LIFECYCLE_SHARED_COEXIST_RELEASE").unwrap());
+    let _guard = DatabaseLifecycleSharedGuard::acquire_existing(Path::new(&db_path)).unwrap();
     std::fs::write(ready_path, b"ready").unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while !release_path.exists() {

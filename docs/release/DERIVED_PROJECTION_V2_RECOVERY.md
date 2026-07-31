@@ -129,7 +129,7 @@ done
 for seconds in "$EXTERNAL_COMMAND_TIMEOUT_SEC" "$EXTERNAL_KILL_AFTER_SEC"; do
   [[ "$seconds" =~ ^[1-9][0-9]*$ ]]
 done
-for required_command in timeout sudo python3 systemctl sqlite3; do
+for required_command in timeout sudo python3 systemctl sqlite3 flock; do
   command -v "$required_command" >/dev/null
 done
 
@@ -159,6 +159,38 @@ bounded_graph_helper() {
   bounded_external "$GRAPH_HELPER" "$@"
 }
 
+evidence_write_failed=0
+record_evidence_write_failure() {
+  evidence_write_failed=1
+  hard_stop_evidence_failed=1 2>/dev/null || true
+  printf 'evidence write failed: %s\n' "$1" >&2
+}
+
+evidence_truncate() {
+  if ! : >"$1"; then
+    record_evidence_write_failure "$1"
+    return 1
+  fi
+}
+
+evidence_append() {
+  local evidence_file="$1"; shift
+  if ! printf "$@" >>"$evidence_file"; then
+    record_evidence_write_failure "$evidence_file"
+    return 1
+  fi
+}
+
+evidence_capture() {
+  local evidence_file="$1"; shift
+  if "$@" >"$evidence_file"; then
+    return 0
+  fi
+  local rc=$?
+  record_evidence_write_failure "$evidence_file"
+  return "$rc"
+}
+
 external_rc_class() {
   case "$1" in
     0) printf 'ok\n' ;;
@@ -176,6 +208,20 @@ do
   install -d -m 0700 "$EVIDENCE/$subdir"
 done
 test "$(stat -c '%a' "$EVIDENCE")" = 700
+
+# 在任何 stop/start/mutation 之前建立并持有跨 subshell 的 guard；guard 初始化失败时
+# 立即 hard-stop，不能进入生产动作。后续 evidence 目录即使不可写，已持有的 lock
+# 仍用于 parent/subshell 的一次性协调。
+export HARD_STOP_GUARD_FILE="$EVIDENCE/sla/.hard-stop.guard"
+if ! exec {HARD_STOP_GUARD_FD}>"$HARD_STOP_GUARD_FILE"; then
+  printf 'hard-stop guard initialization failed: %s\n' "$HARD_STOP_GUARD_FILE" >&2
+  exit 1
+fi
+if ! flock -n "$HARD_STOP_GUARD_FD"; then
+  printf 'hard-stop guard lock acquisition failed: %s\n' "$HARD_STOP_GUARD_FILE" >&2
+  exit 1
+fi
+export HARD_STOP_OWNER_BASHPID="$BASHPID"
 ~~~
 
 只保存 unit 的非秘密属性；`Environment` 原文只保留在 shell 变量中，先筛选为两个 helper
@@ -394,7 +440,7 @@ signal_same_process() {
 assert_writers_stopped() {
   local evidence_file="${1:-$EVIDENCE/preflight/writers.assert-stopped.txt}"
   local unit state pid rc pid_state probe_rc failed=0 timeout_rc=0
-  : >"$evidence_file"
+  evidence_truncate "$evidence_file" || failed=1
   for unit in "${WRITER_UNITS[@]}"; do
     if state="$(bounded_sudo systemctl is-active "$unit" 2>&1)"; then
       rc=0
@@ -403,7 +449,7 @@ assert_writers_stopped() {
     fi
     printf 'unit=%s state=%s rc=%s rc_class=%s\n' \
       "$unit" "$state" "$rc" "$(external_rc_class "$rc")" \
-      >>"$evidence_file"
+      >>"$evidence_file" || record_evidence_write_failure "$evidence_file"
     if test "$state" != inactive || test "$rc" -ne 3; then
       failed=1
       case "$rc" in
@@ -420,7 +466,7 @@ assert_writers_stopped() {
     fi
     printf 'pid=%s state=%s probe_rc=%s probe_rc_class=%s\n' \
       "$pid" "$pid_state" "$probe_rc" "$(external_rc_class "$probe_rc")" \
-      >>"$evidence_file"
+      >>"$evidence_file" || record_evidence_write_failure "$evidence_file"
     if test "$pid_state" != absent; then
       failed=1
       case "$probe_rc" in
@@ -573,7 +619,10 @@ assert_no_database_holders() {
   else
     status=$?
   fi
-  printf '%s\n' "$output" >"$evidence_file"
+  if ! printf '%s\n' "$output" >"$evidence_file"; then
+    record_evidence_write_failure "$evidence_file"
+    return 1
+  fi
   if test "$status" -eq 1 && test -z "$output"; then
     return 0
   fi
@@ -584,11 +633,16 @@ assert_no_database_holders() {
 }
 
 wait_for_lease_expiry() {
-  local deadline now_ms
+  local deadline now_ms rc
   deadline=$(( $(date +%s) + STOP_LEASE_TIMEOUT_SEC ))
   while :; do
-    bounded_kanban --db "$DB" --json maintenance status \
-      >"$EVIDENCE/preflight/maintenance-status.waiting-for-expiry.json"
+    if evidence_capture "$EVIDENCE/preflight/maintenance-status.waiting-for-expiry.json" \
+      bounded_kanban --db "$DB" --json maintenance status; then
+      :
+    else
+      rc=$?
+      return "$rc"
+    fi
     now_ms=$(( $(date +%s) * 1000 ))
     if jq -e --argjson now "$now_ms" '
       .data.maintenance_owner.active == false and
@@ -602,17 +656,24 @@ wait_for_lease_expiry() {
     test "$(date +%s)" -lt "$deadline"
     sleep 1
   done
-  cp --no-preserve=mode \
+  if ! cp --no-preserve=mode \
     "$EVIDENCE/preflight/maintenance-status.waiting-for-expiry.json" \
-    "$EVIDENCE/preflight/maintenance-status.leases-expired.json"
-  jq -e --argjson now "$(( $(date +%s) * 1000 ))" '
+    "$EVIDENCE/preflight/maintenance-status.leases-expired.json"; then
+    record_evidence_write_failure \
+      "$EVIDENCE/preflight/maintenance-status.leases-expired.json"
+    return 1
+  fi
+  if ! jq -e --argjson now "$(( $(date +%s) * 1000 ))" '
     .data.maintenance_owner.active == false and
     all(.data.stores[];
       (.owner == null) or
       (.lease_expires_at != null and .lease_expires_at <= $now)
     )
   ' "$EVIDENCE/preflight/maintenance-status.leases-expired.json" \
-    >"$EVIDENCE/preflight/leases-expired.ok.txt"
+    >"$EVIDENCE/preflight/leases-expired.ok.txt"; then
+    record_evidence_write_failure "$EVIDENCE/preflight/leases-expired.ok.txt"
+    return 1
+  fi
 }
 
 wait_for_exact_maintenance_release() {
@@ -621,7 +682,7 @@ wait_for_exact_maintenance_release() {
   current="$output_dir/$phase.maintenance-status.current.json"
   deadline=$(( $(date +%s) + STOP_LEASE_TIMEOUT_SEC ))
   while :; do
-    if bounded_kanban --db "$DB" --json maintenance status >"$current"; then
+    if evidence_capture "$current" bounded_kanban --db "$DB" --json maintenance status; then
       :
     else
       rc=$?
@@ -646,15 +707,20 @@ wait_for_exact_maintenance_release() {
       break
     fi
     if test "$(date +%s)" -ge "$deadline"; then
-      cp --no-preserve=mode "$current" \
-        "$output_dir/$phase.maintenance-status.timeout.json" 2>/dev/null
+      if ! cp --no-preserve=mode "$current" \
+        "$output_dir/$phase.maintenance-status.timeout.json" 2>/dev/null; then
+        record_evidence_write_failure "$output_dir/$phase.maintenance-status.timeout.json"
+      fi
       return 1
     fi
     sleep 1 || return 1
   done
-  cp --no-preserve=mode "$current" \
-    "$output_dir/$phase.maintenance-status.released.json" || return 1
-  jq -e '
+  if ! cp --no-preserve=mode "$current" \
+    "$output_dir/$phase.maintenance-status.released.json"; then
+    record_evidence_write_failure "$output_dir/$phase.maintenance-status.released.json"
+    return 1
+  fi
+  if ! jq -e '
     .data.maintenance_owner.active == false and
     .data.maintenance_owner.owner == null and
     .data.maintenance_owner.mode == null and
@@ -664,7 +730,10 @@ wait_for_exact_maintenance_release() {
     .data.maintenance_owner.last_heartbeat_at == null and
     all(.data.stores[]; .owner == null and .lease_expires_at == null)
   ' "$output_dir/$phase.maintenance-status.released.json" \
-    >"$output_dir/$phase.exact-idle.ok.txt"
+    >"$output_dir/$phase.exact-idle.ok.txt"; then
+    record_evidence_write_failure "$output_dir/$phase.exact-idle.ok.txt"
+    return 1
+  fi
 }
 ~~~
 
@@ -1322,11 +1391,22 @@ singleton lease、fresh heartbeat、同 cohort build identity、精确四项 cap
 `systemctl start` 之前安装；此 trap 从 owner readiness 开始，连续覆盖 helper 检查、
 全部 canary、SLA、restart、post-restart mutation、最终 doctor/binding/matrix/delivery
 以及 cleanup 后的重新验收，中间不得卸载。`hard_stop` 首先永久卸载当前 shell 的
-`ERR` trap，避免递归；随后停止全部 unit，并只对原始捕获 identity 仍匹配的非 systemd
-writer 执行 TERM → timeout → KILL。identity drift 永远只记录、不 signal。最后必须精确
-证明全部 writer inactive/absent、数据库无 holder、singleton 与四项 store lease exact
-idle；任一单个 stop、probe 或证据命令 timeout 都累计失败，但仍继续其余 target 和
-cleanup。status/doctor/outbox 证据采集结束后，必须紧邻 result 再次执行 bounded
+`ERR` trap，避免递归；并以 `mkdir "$EVIDENCE/sla/.hard-stop-active"` 作为跨
+parent/subshell 的一次性闸门：成功创建 marker 的调用执行 cleanup，已存在 marker
+的重入只向 stderr 报告并以非零退出，不能再次 stop、signal 或覆盖 result；marker 创建
+失败的调用进入 fail-closed cleanup 路径。随后停止全部
+unit，并只对原始捕获 identity 仍匹配的非 systemd writer 执行 TERM → timeout → KILL。
+若 marker 创建本身失败，不得提前退出：记录 `marker_state=unavailable`、stderr fallback
+和 evidence failure 后仍执行全部 bounded stop/probe/idle cleanup；同一 shell 的
+初始化阶段已预先打开并持有 `HARD_STOP_GUARD_FD` 的 `flock`；child 通过
+`BASHPID != HARD_STOP_OWNER_BASHPID` 只退出并把 ERR 交还 parent，不能重复 cleanup。
+`HARD_STOP_ACTIVE` 导出变量仍抑制同 shell 重入，最终以非零关闭。
+identity drift 永远只记录、不 signal。最后必须精确证明全部 writer inactive/absent、数据库无
+holder、singleton 与四项 store lease exact idle；任一单个 stop、probe 或证据命令 timeout
+都累计失败，但仍继续其余 target 和 cleanup。每一次 truncate、append、capture 都必须
+检查写入返回值；失败时保留已有证据、设置 `hard_stop_evidence_failed=1` 并向 stderr
+输出 fallback，最终 `hard-stop.result.txt` 以 `evidence_write_failed=1` 且非零退出关闭。
+status/doctor/outbox 证据采集结束后，必须紧邻 result 再次执行 bounded
 writer、database-holder 和 exact-idle 三项断言，封闭诊断窗口内 writer 重启的竞态；
 任一清理或证据命令失败仍保留已有证据并以失败关闭。
 
@@ -1335,7 +1415,10 @@ hard_stop_non_systemd_writers() {
   local evidence_file="$1" index pid expected captured rc pid_state
   local probe_rc identity_rc deadline kill_deadline failed=0 timeout_rc=0
   local signal_result
-  : >"$evidence_file" || return 1
+  if ! : >"$evidence_file"; then
+    hard_stop_write_failed "$evidence_file"
+    return 1
+  fi
 
   for index in "${!WRITER_PIDS[@]}"; do
     pid="${WRITER_PIDS[$index]}"
@@ -1349,13 +1432,13 @@ hard_stop_non_systemd_writers() {
     case "$pid_state" in
       absent)
         printf 'pid=%s exe=%s state=absent signal=none\n' \
-          "$pid" "$expected" >>"$evidence_file"
+          "$pid" "$expected" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
         continue
         ;;
       error)
         printf 'pid=%s exe=%s state=error signal=none probe_rc=%s probe_rc_class=%s\n' \
           "$pid" "$expected" "$probe_rc" \
-          "$(external_rc_class "$probe_rc")" >>"$evidence_file"
+          "$(external_rc_class "$probe_rc")" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
         case "$probe_rc" in
           124|137) test "$timeout_rc" -ne 0 || timeout_rc="$probe_rc" ;;
         esac
@@ -1365,7 +1448,7 @@ hard_stop_non_systemd_writers() {
       alive) ;;
       *)
         printf 'pid=%s exe=%s state=error signal=none\n' \
-          "$pid" "$expected" >>"$evidence_file"
+          "$pid" "$expected" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
         failed=1
         continue
         ;;
@@ -1373,7 +1456,7 @@ hard_stop_non_systemd_writers() {
     captured="${WRITER_START_TIMES[$pid]-}"
     if test -z "$captured"; then
       printf 'pid=%s exe=%s state=alive identity=uncaptured signal=none\n' \
-        "$pid" "$expected" >>"$evidence_file"
+        "$pid" "$expected" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
       failed=1
       continue
     fi
@@ -1383,7 +1466,7 @@ hard_stop_non_systemd_writers() {
       identity_rc=$?
       printf 'pid=%s exe=%s start_time=%s state=alive identity=drift-or-error signal=none rc=%s rc_class=%s\n' \
         "$pid" "$expected" "$captured" "$identity_rc" \
-        "$(external_rc_class "$identity_rc")" >>"$evidence_file"
+        "$(external_rc_class "$identity_rc")" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
       case "$identity_rc" in
         124|137) test "$timeout_rc" -ne 0 || timeout_rc="$identity_rc" ;;
       esac
@@ -1394,15 +1477,15 @@ hard_stop_non_systemd_writers() {
       case "$signal_result" in
         alive-signaled)
           printf 'pid=%s exe=%s start_time=%s identity=match signal=TERM\n' \
-            "$pid" "$expected" "$captured" >>"$evidence_file"
+            "$pid" "$expected" "$captured" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
           ;;
         absent-no-signal)
           printf 'pid=%s exe=%s state=absent signal=none\n' \
-            "$pid" "$expected" >>"$evidence_file"
+            "$pid" "$expected" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
           ;;
         *)
           printf 'pid=%s exe=%s start_time=%s identity=unverified signal=none result=%s\n' \
-            "$pid" "$expected" "$captured" "$signal_result" >>"$evidence_file"
+            "$pid" "$expected" "$captured" "$signal_result" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
           failed=1
           ;;
       esac
@@ -1410,7 +1493,7 @@ hard_stop_non_systemd_writers() {
       rc=$?
       printf 'pid=%s exe=%s start_time=%s identity=unverified signal=none rc=%s rc_class=%s\n' \
         "$pid" "$expected" "$captured" "$rc" \
-        "$(external_rc_class "$rc")" >>"$evidence_file"
+        "$(external_rc_class "$rc")" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
       case "$rc" in
         124|137) test "$timeout_rc" -ne 0 || timeout_rc="$rc" ;;
       esac
@@ -1430,7 +1513,7 @@ hard_stop_non_systemd_writers() {
         probe_rc=$?
         printf 'pid=%s exe=%s state=error phase=term-wait signal=none probe_rc=%s probe_rc_class=%s\n' \
           "$pid" "$expected" "$probe_rc" \
-          "$(external_rc_class "$probe_rc")" >>"$evidence_file"
+          "$(external_rc_class "$probe_rc")" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
         case "$probe_rc" in
           124|137) test "$timeout_rc" -ne 0 || timeout_rc="$probe_rc" ;;
         esac
@@ -1442,7 +1525,7 @@ hard_stop_non_systemd_writers() {
         alive) ;;
         *)
           printf 'pid=%s exe=%s state=error phase=term-wait signal=none\n' \
-            "$pid" "$expected" >>"$evidence_file"
+            "$pid" "$expected" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
           failed=1
           break
           ;;
@@ -1457,7 +1540,7 @@ hard_stop_non_systemd_writers() {
         identity_rc=$?
         printf 'pid=%s exe=%s start_time=%s state=alive identity=drift-or-error signal=none rc=%s rc_class=%s\n' \
           "$pid" "$expected" "$captured" "$identity_rc" \
-          "$(external_rc_class "$identity_rc")" >>"$evidence_file"
+            "$(external_rc_class "$identity_rc")" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
         case "$identity_rc" in
           124|137) test "$timeout_rc" -ne 0 || timeout_rc="$identity_rc" ;;
         esac
@@ -1469,15 +1552,15 @@ hard_stop_non_systemd_writers() {
           case "$signal_result" in
             alive-signaled)
               printf 'pid=%s exe=%s start_time=%s identity=match signal=KILL\n' \
-                "$pid" "$expected" "$captured" >>"$evidence_file"
+                "$pid" "$expected" "$captured" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
               ;;
             absent-no-signal)
               printf 'pid=%s exe=%s state=absent signal=none\n' \
-                "$pid" "$expected" >>"$evidence_file"
+                "$pid" "$expected" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
               ;;
             *)
               printf 'pid=%s exe=%s start_time=%s identity=unverified signal=none result=%s\n' \
-                "$pid" "$expected" "$captured" "$signal_result" >>"$evidence_file"
+                "$pid" "$expected" "$captured" "$signal_result" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
               failed=1
               ;;
           esac
@@ -1485,7 +1568,7 @@ hard_stop_non_systemd_writers() {
           rc=$?
           printf 'pid=%s exe=%s start_time=%s identity=unverified signal=none rc=%s rc_class=%s\n' \
             "$pid" "$expected" "$captured" "$rc" \
-            "$(external_rc_class "$rc")" >>"$evidence_file"
+            "$(external_rc_class "$rc")" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
           case "$rc" in
             124|137) test "$timeout_rc" -ne 0 || timeout_rc="$rc" ;;
           esac
@@ -1512,7 +1595,7 @@ hard_stop_non_systemd_writers() {
         probe_rc=$?
         printf 'pid=%s exe=%s state=error phase=kill-wait signal=none probe_rc=%s probe_rc_class=%s\n' \
           "$pid" "$expected" "$probe_rc" \
-          "$(external_rc_class "$probe_rc")" >>"$evidence_file"
+          "$(external_rc_class "$probe_rc")" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
         case "$probe_rc" in
           124|137) test "$timeout_rc" -ne 0 || timeout_rc="$probe_rc" ;;
         esac
@@ -1524,7 +1607,7 @@ hard_stop_non_systemd_writers() {
         alive) ;;
         *)
           printf 'pid=%s exe=%s state=error phase=kill-wait signal=none\n' \
-            "$pid" "$expected" >>"$evidence_file"
+            "$pid" "$expected" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
           failed=1
           break
           ;;
@@ -1539,7 +1622,7 @@ hard_stop_non_systemd_writers() {
         identity_rc=$?
         printf 'pid=%s exe=%s start_time=%s state=alive identity=drift-or-error signal=none rc=%s rc_class=%s\n' \
           "$pid" "$expected" "$captured" "$identity_rc" \
-          "$(external_rc_class "$identity_rc")" >>"$evidence_file"
+            "$(external_rc_class "$identity_rc")" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
         case "$identity_rc" in
           124|137) test "$timeout_rc" -ne 0 || timeout_rc="$identity_rc" ;;
         esac
@@ -1564,12 +1647,12 @@ hard_stop_non_systemd_writers() {
     case "$pid_state" in
       absent)
         printf 'pid=%s exe=%s state=absent final=stopped\n' \
-          "$pid" "$expected" >>"$evidence_file"
+          "$pid" "$expected" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
         ;;
       alive|error)
         printf 'pid=%s exe=%s state=%s final=failed probe_rc=%s probe_rc_class=%s\n' \
           "$pid" "$expected" "$pid_state" "$probe_rc" \
-          "$(external_rc_class "$probe_rc")" >>"$evidence_file"
+          "$(external_rc_class "$probe_rc")" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
         case "$probe_rc" in
           124|137) test "$timeout_rc" -ne 0 || timeout_rc="$probe_rc" ;;
         esac
@@ -1577,7 +1660,7 @@ hard_stop_non_systemd_writers() {
         ;;
       *)
         printf 'pid=%s exe=%s state=error final=failed\n' \
-          "$pid" "$expected" >>"$evidence_file"
+          "$pid" "$expected" >>"$evidence_file" || hard_stop_write_failed "$evidence_file"
         failed=1
         ;;
     esac
@@ -1588,19 +1671,72 @@ hard_stop_non_systemd_writers() {
   return "$failed"
 }
 
+hard_stop_evidence_failed=0
+
+hard_stop_record() {
+  local evidence_file="$1"; shift
+  if ! printf "$@" >>"$evidence_file"; then
+    hard_stop_evidence_failed=1
+    printf 'hard-stop evidence write failed: %s\n' "$evidence_file" >&2
+    return 1
+  fi
+}
+
+hard_stop_capture() {
+  local evidence_file="$1"; shift
+  if "$@" >"$evidence_file"; then
+    return 0
+  fi
+  local rc=$?
+  hard_stop_evidence_failed=1
+  printf 'hard-stop evidence capture failed: %s rc=%s\n' "$evidence_file" "$rc" >&2
+  return "$rc"
+}
+
+hard_stop_write_failed() {
+  hard_stop_evidence_failed=1
+  printf 'hard-stop evidence append failed: %s\n' "$1" >&2
+  return 0
+}
+
 hard_stop() {
-  local reason="$1" unit state rc failed=0
+  local reason="$1" unit state rc failed=0 marker marker_state=unavailable
   trap - ERR
   set +E
   set +e
-  if test "${HARD_STOP_ACTIVE:-0}" -eq 1; then
+  if test "${HARD_STOP_OWNER_BASHPID:-$BASHPID}" != "$BASHPID"; then
+    printf 'hard-stop delegated from child BASHPID=%s to owner BASHPID=%s\n' \
+      "$BASHPID" "${HARD_STOP_OWNER_BASHPID:-unknown}" >&2
     exit 1
   fi
-  HARD_STOP_ACTIVE=1
-  printf 'reason=%s epoch=%s\n' "$reason" "$(date +%s)" \
-    >"$EVIDENCE/sla/hard-stop.reason.txt"
-  : >"$EVIDENCE/sla/hard-stop.units.txt"
-  : >"$EVIDENCE/sla/hard-stop.commands.txt"
+  if test "${HARD_STOP_ACTIVE:-0}" -eq 1; then
+    printf 'hard-stop already active; suppressing re-entry\n' >&2
+    exit 1
+  fi
+  export HARD_STOP_ACTIVE=1
+  marker="$EVIDENCE/sla/.hard-stop-active"
+  if mkdir "$marker" 2>/dev/null; then
+    marker_state=owned
+  elif test -d "$marker"; then
+    printf 'hard-stop already active; suppressing re-entry\n' >&2
+    exit 1
+  else
+    hard_stop_evidence_failed=1
+    printf 'hard-stop re-entry guard could not be created; continuing fail-closed cleanup: %s\n' "$marker" >&2
+    failed=1
+  fi
+  hard_stop_record "$EVIDENCE/sla/hard-stop.reason.txt" \
+    'reason=%s epoch=%s\n' "$reason" "$(date +%s)" || failed=1
+  if ! : >"$EVIDENCE/sla/hard-stop.units.txt"; then
+    hard_stop_evidence_failed=1
+    printf 'hard-stop evidence truncate failed: %s\n' "$EVIDENCE/sla/hard-stop.units.txt" >&2
+    failed=1
+  fi
+  if ! : >"$EVIDENCE/sla/hard-stop.commands.txt"; then
+    hard_stop_evidence_failed=1
+    printf 'hard-stop evidence truncate failed: %s\n' "$EVIDENCE/sla/hard-stop.commands.txt" >&2
+    failed=1
+  fi
   for unit in "${WRITER_UNITS[@]}"; do
     if bounded_sudo systemctl stop "$unit"; then
       rc=0
@@ -1609,7 +1745,7 @@ hard_stop() {
     fi
     printf 'unit=%s action=stop rc=%s rc_class=%s\n' \
       "$unit" "$rc" "$(external_rc_class "$rc")" \
-      >>"$EVIDENCE/sla/hard-stop.units.txt"
+      >>"$EVIDENCE/sla/hard-stop.units.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.units.txt"
     if test "$rc" -ne 0; then
       failed=1
     fi
@@ -1620,7 +1756,7 @@ hard_stop() {
     fi
     printf 'unit=%s action=reset-failed rc=%s rc_class=%s\n' \
       "$unit" "$rc" "$(external_rc_class "$rc")" \
-      >>"$EVIDENCE/sla/hard-stop.units.txt"
+      >>"$EVIDENCE/sla/hard-stop.units.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.units.txt"
     if test "$rc" -ne 0; then
       failed=1
     fi
@@ -1631,7 +1767,7 @@ hard_stop() {
     fi
     printf 'unit=%s state=%s is-active-rc=%s rc_class=%s\n' \
       "$unit" "$state" "$rc" "$(external_rc_class "$rc")" \
-      >>"$EVIDENCE/sla/hard-stop.units.txt"
+      >>"$EVIDENCE/sla/hard-stop.units.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.units.txt"
     if test "$state" != inactive || test "$rc" -ne 3; then
       failed=1
     fi
@@ -1644,7 +1780,7 @@ hard_stop() {
   fi
   printf 'target=non-systemd-writers rc=%s rc_class=%s\n' \
     "$rc" "$(external_rc_class "$rc")" \
-    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+    >>"$EVIDENCE/sla/hard-stop.commands.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.commands.txt"
   if test "$rc" -ne 0; then
     failed=1
   fi
@@ -1656,7 +1792,7 @@ hard_stop() {
   fi
   printf 'target=writers-initial rc=%s rc_class=%s\n' \
     "$rc" "$(external_rc_class "$rc")" \
-    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+    >>"$EVIDENCE/sla/hard-stop.commands.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.commands.txt"
   if test "$rc" -ne 0; then
     failed=1
   fi
@@ -1668,7 +1804,7 @@ hard_stop() {
   fi
   printf 'target=database-holders-initial rc=%s rc_class=%s\n' \
     "$rc" "$(external_rc_class "$rc")" \
-    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+    >>"$EVIDENCE/sla/hard-stop.commands.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.commands.txt"
   if test "$rc" -ne 0; then
     failed=1
   fi
@@ -1679,43 +1815,43 @@ hard_stop() {
   fi
   printf 'target=maintenance-exact-idle-initial rc=%s rc_class=%s\n' \
     "$rc" "$(external_rc_class "$rc")" \
-    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+    >>"$EVIDENCE/sla/hard-stop.commands.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.commands.txt"
   if test "$rc" -ne 0; then
     failed=1
   fi
-  if bounded_kanban --db "$DB" --json maintenance status \
-    >"$EVIDENCE/sla/hard-stop.maintenance-status.json"; then
+  if hard_stop_capture "$EVIDENCE/sla/hard-stop.maintenance-status.json" \
+    bounded_kanban --db "$DB" --json maintenance status; then
     rc=0
   else
     rc=$?
   fi
   printf 'target=maintenance-status rc=%s rc_class=%s\n' \
     "$rc" "$(external_rc_class "$rc")" \
-    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+    >>"$EVIDENCE/sla/hard-stop.commands.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.commands.txt"
   if test "$rc" -ne 0; then
     failed=1
   fi
-  if bounded_kanban --db "$DB" --json doctor \
-    >"$EVIDENCE/sla/hard-stop.doctor.json"; then
+  if hard_stop_capture "$EVIDENCE/sla/hard-stop.doctor.json" \
+    bounded_kanban --db "$DB" --json doctor; then
     rc=0
   else
     rc=$?
   fi
   printf 'target=doctor rc=%s rc_class=%s\n' \
     "$rc" "$(external_rc_class "$rc")" \
-    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+    >>"$EVIDENCE/sla/hard-stop.commands.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.commands.txt"
   if test "$rc" -ne 0; then
     failed=1
   fi
-  if bounded_kanban --db "$DB" --json outbox list --limit 1000 \
-    >"$EVIDENCE/sla/hard-stop.outbox.json"; then
+  if hard_stop_capture "$EVIDENCE/sla/hard-stop.outbox.json" \
+    bounded_kanban --db "$DB" --json outbox list --limit 1000; then
     rc=0
   else
     rc=$?
   fi
   printf 'target=outbox rc=%s rc_class=%s\n' \
     "$rc" "$(external_rc_class "$rc")" \
-    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+    >>"$EVIDENCE/sla/hard-stop.commands.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.commands.txt"
   if test "$rc" -ne 0; then
     failed=1
   fi
@@ -1727,7 +1863,7 @@ hard_stop() {
   fi
   printf 'target=writers-final rc=%s rc_class=%s\n' \
     "$rc" "$(external_rc_class "$rc")" \
-    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+    >>"$EVIDENCE/sla/hard-stop.commands.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.commands.txt"
   if test "$rc" -ne 0; then
     failed=1
   fi
@@ -1739,7 +1875,7 @@ hard_stop() {
   fi
   printf 'target=database-holders-final rc=%s rc_class=%s\n' \
     "$rc" "$(external_rc_class "$rc")" \
-    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+    >>"$EVIDENCE/sla/hard-stop.commands.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.commands.txt"
   if test "$rc" -ne 0; then
     failed=1
   fi
@@ -1750,12 +1886,18 @@ hard_stop() {
   fi
   printf 'target=maintenance-exact-idle-final rc=%s rc_class=%s\n' \
     "$rc" "$(external_rc_class "$rc")" \
-    >>"$EVIDENCE/sla/hard-stop.commands.txt"
+    >>"$EVIDENCE/sla/hard-stop.commands.txt" || hard_stop_write_failed "$EVIDENCE/sla/hard-stop.commands.txt"
   if test "$rc" -ne 0; then
     failed=1
   fi
-  printf 'cleanup_complete=%s exit=1\n' "$(( failed == 0 ))" \
-    >"$EVIDENCE/sla/hard-stop.result.txt"
+  if test "$hard_stop_evidence_failed" -ne 0; then
+    failed=1
+  fi
+  if ! hard_stop_record "$EVIDENCE/sla/hard-stop.result.txt" \
+    'cleanup_complete=%s exit=1 evidence_write_failed=%s marker_state=%s\n' \
+    "$(( failed == 0 ))" "$hard_stop_evidence_failed" "$marker_state"; then
+    printf 'hard-stop result evidence unavailable; cleanup_complete=0 exit=1\n' >&2
+  fi
   exit 1
 }
 

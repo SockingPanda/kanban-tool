@@ -191,6 +191,8 @@ target-tools:
     scripts/test-helper-cargo-tree.sh
     scripts/test-windows-durability-gate.sh
     python3 -B scripts/test_release_safe_path.py
+    scripts/test-release-provenance.sh
+    scripts/test-package-cli-linux-safe.sh
 
 diff-check:
     git diff --check

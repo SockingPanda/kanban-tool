@@ -2496,17 +2496,10 @@ mod lifecycle_tests {
 
     #[test]
     fn replace_rechecks_statuses_after_acquiring_sqlite_write_lock() {
-        let conn = Connection::open_in_memory().unwrap();
-        default_pragmas(&conn).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE schema_migrations(version INTEGER);
-             INSERT INTO schema_migrations(version) VALUES (1);
-             CREATE TABLE task_dependencies(id INTEGER);
-             CREATE TABLE tasks(status TEXT);
-             CREATE TABLE task_runs(status TEXT);
-             PRAGMA user_version=1;",
-        )
-        .unwrap();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("database.db");
+        crate::init::init_database(&path, "tester").unwrap();
+        let conn = Connection::open(&path).unwrap();
         let mut transaction_started = false;
         assert_eq!(
             unsafe {
@@ -2519,7 +2512,7 @@ mod lifecycle_tests {
             rusqlite::ffi::SQLITE_OK
         );
 
-        assert_database_idle_with_connection(&conn, Path::new("database.db")).unwrap();
+        assert_database_idle_with_connection(&conn, &path).unwrap();
         assert!(transaction_started);
     }
 
@@ -2547,17 +2540,10 @@ mod lifecycle_tests {
 
     #[test]
     fn replace_preserves_probe_and_commit_failures() {
-        let conn = Connection::open_in_memory().unwrap();
-        default_pragmas(&conn).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE schema_migrations(version INTEGER);
-             INSERT INTO schema_migrations(version) VALUES (1);
-             CREATE TABLE task_dependencies(id INTEGER);
-             CREATE TABLE tasks(status TEXT);
-             CREATE TABLE task_runs(status TEXT);
-             PRAGMA user_version=1;",
-        )
-        .unwrap();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("database.db");
+        crate::init::init_database(&path, "tester").unwrap();
+        let conn = Connection::open(&path).unwrap();
         let mut began = false;
         assert_eq!(
             unsafe {
@@ -2569,8 +2555,7 @@ mod lifecycle_tests {
             },
             rusqlite::ffi::SQLITE_OK
         );
-        let error =
-            assert_database_idle_with_connection(&conn, Path::new("database.db")).unwrap_err();
+        let error = assert_database_idle_with_connection(&conn, &path).unwrap_err();
         let message = error.to_string();
         assert!(message.contains("replacement inspection failed"));
         assert!(message.contains("transaction commit failed"));

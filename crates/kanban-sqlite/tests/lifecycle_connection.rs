@@ -9,6 +9,7 @@ use std::{
 use kanban_local::DatabaseLifecycleExclusiveGuard;
 use kanban_sqlite::api::lifecycle::begin_database_replace;
 use kanban_sqlite::db::{DatabaseConnection, connect_existing_read_only, connect_file};
+use kanban_sqlite::init::init_database;
 
 #[test]
 fn guarded_read_only_constructor_does_not_create_a_missing_database() {
@@ -208,6 +209,7 @@ fn wait_for_path_or_child_exit(path: &Path, child: &mut std::process::Child) {
 fn database_replace_marker_then_exclusive_rejects_live_connection_and_cleans_marker() {
     let tempdir = tempfile::tempdir().unwrap();
     let db_path = tempdir.path().join("kanban.db");
+    init_database(&db_path, "tester").unwrap();
     let connection = connect_file(&db_path).unwrap();
 
     let error = begin_database_replace(&db_path).unwrap_err();
@@ -225,8 +227,8 @@ fn database_replace_can_fence_staged_inode_before_namespace_publish() {
     let db_path = tempdir.path().join("kanban.db");
     let staged_path = tempdir.path().join("staged.db");
     let previous_path = tempdir.path().join("previous.db");
-    drop(connect_file(&db_path).unwrap());
-    drop(connect_file(&staged_path).unwrap());
+    init_database(&db_path, "tester").unwrap();
+    init_database(&staged_path, "tester").unwrap();
     let mut replace = begin_database_replace(&db_path).unwrap();
 
     replace
@@ -262,5 +264,21 @@ fn database_replace_missing_target_uses_and_cleans_a_fenced_placeholder() {
     replace.validate_database_identities().unwrap();
     drop(replace);
     assert!(!db_path.exists());
+    assert!(!kanban_sqlite::db::maintenance_lock_path(&db_path).exists());
+}
+
+#[test]
+fn database_replace_rejects_existing_unknown_sqlite_schema() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let db_path = tempdir.path().join("unknown.db");
+    let conn = rusqlite::Connection::open(&db_path).unwrap();
+    conn.execute_batch("CREATE TABLE unrelated(value TEXT);")
+        .unwrap();
+    drop(conn);
+
+    let error = begin_database_replace(&db_path).unwrap_err();
+
+    assert!(error.to_string().contains("not initialized"), "{error}");
+    assert!(db_path.exists());
     assert!(!kanban_sqlite::db::maintenance_lock_path(&db_path).exists());
 }

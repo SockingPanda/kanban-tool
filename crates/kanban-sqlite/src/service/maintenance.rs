@@ -715,35 +715,8 @@ fn assert_database_idle_with_connection(conn: &Connection, path: &Path) -> Resul
     conn.busy_timeout(Duration::from_millis(0))
         .map_err(storage)?;
     if !table_exists(conn, "schema_migrations")? {
-        return Ok(());
-    }
-    if table_exists(conn, "projection_maintenance_owner")? {
-        let now = SystemClock.now_ms();
-        let active_owner = conn
-            .query_row(
-                "SELECT owner
-                 FROM projection_maintenance_owner
-                 WHERE singleton=1
-                   AND owner IS NOT NULL
-                   AND lease_token IS NOT NULL
-                   AND lease_expires_at>?1",
-                [now],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(storage)?;
-        if let Some(owner) = active_owner {
-            return Err(KanbanError::InvalidInput(format!(
-                "database has active projection maintenance owner {owner}; stop maintenance before import --replace: {}",
-                path.display()
-            )));
-        }
-    }
-    let running_tasks = count_table_status(&conn, "tasks", "running")?;
-    let running_runs = count_table_status(&conn, "task_runs", "running")?;
-    if running_tasks > 0 || running_runs > 0 {
         return Err(KanbanError::InvalidInput(format!(
-            "database has running work; stop kanban serve/dispatch before import --replace: {}",
+            "database is not initialized; refusing replacement: {}",
             path.display()
         )));
     }

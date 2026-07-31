@@ -191,6 +191,8 @@ pub enum LegacyProjectionCleanupError {
     },
     #[error("legacy projection cleanup backup directory conflicts with existing state: {0}")]
     BackupConflict(PathBuf),
+    #[error("legacy projection cleanup resume decision is invalid: {0}")]
+    ResumeDecision(String),
     #[error("legacy projection cleanup journal is incompatible: {0}")]
     JournalConflict(String),
     #[error("legacy projection cleanup manifest is incompatible: {0}")]
@@ -294,6 +296,39 @@ pub fn apply_legacy_projection_cleanup(
         database_instance_id,
         expected_inventory_digest,
         backup_dir.as_ref(),
+        None,
+        ApplyHooks {
+            before_initial_publish: noop_cleanup_before_initial_publish
+                as CleanupBeforeInitialPublishHook,
+            before_move: noop_cleanup_before_move as CleanupBeforeMoveHook,
+            after_move: noop_cleanup_after_move,
+        },
+        filesystem_id as CleanupFilesystemIdHook,
+    )
+}
+
+/// Applies cleanup only when the backup namespace matches the caller's
+/// explicit fresh/resume decision.
+///
+/// This check is performed inside the same fail-closed path that observes and
+/// opens the backup namespace, so a preflight-to-apply race cannot silently
+/// turn a fresh operation into journal resume.
+pub fn apply_legacy_projection_cleanup_with_resume_decision(
+    guard: &LegacyProjectionCleanupGuard,
+    db_path: impl AsRef<Path>,
+    database_instance_id: &str,
+    expected_inventory_digest: &str,
+    backup_dir: impl AsRef<Path>,
+    resume: bool,
+) -> Result<LegacyProjectionCleanupOutcome, LegacyProjectionCleanupError> {
+    guard.validate(db_path.as_ref())?;
+    apply_legacy_projection_cleanup_inner(
+        guard,
+        db_path.as_ref(),
+        database_instance_id,
+        expected_inventory_digest,
+        backup_dir.as_ref(),
+        Some(resume),
         ApplyHooks {
             before_initial_publish: noop_cleanup_before_initial_publish
                 as CleanupBeforeInitialPublishHook,
@@ -362,6 +397,7 @@ fn apply_legacy_projection_cleanup_with_after_move(
         database_instance_id,
         expected_inventory_digest,
         backup_dir,
+        None,
         ApplyHooks {
             before_initial_publish: noop_cleanup_before_initial_publish
                 as CleanupBeforeInitialPublishHook,
@@ -389,6 +425,7 @@ fn apply_legacy_projection_cleanup_with_before_initial_publish(
         database_instance_id,
         expected_inventory_digest,
         backup_dir,
+        None,
         ApplyHooks {
             before_initial_publish,
             before_move: noop_cleanup_before_move as CleanupBeforeMoveHook,
@@ -417,6 +454,7 @@ fn apply_legacy_projection_cleanup_with_before_move(
         database_instance_id,
         expected_inventory_digest,
         backup_dir,
+        None,
         ApplyHooks {
             before_initial_publish: noop_cleanup_before_initial_publish
                 as CleanupBeforeInitialPublishHook,
@@ -442,6 +480,7 @@ fn apply_legacy_projection_cleanup_with_filesystem_id(
         database_instance_id,
         expected_inventory_digest,
         backup_dir,
+        None,
         ApplyHooks {
             before_initial_publish: noop_cleanup_before_initial_publish
                 as CleanupBeforeInitialPublishHook,
@@ -1822,6 +1861,7 @@ fn apply_legacy_projection_cleanup_inner<
     database_instance_id: &str,
     expected_inventory_digest: &str,
     backup_dir: &Path,
+    resume_decision: Option<bool>,
     mut hooks: ApplyHooks<BeforeInitialPublish, BeforeMove, AfterMove>,
     mut filesystem_id: FilesystemId,
 ) -> Result<LegacyProjectionCleanupOutcome, LegacyProjectionCleanupError>
@@ -1843,6 +1883,21 @@ where
         Err(error) if error.kind() == io::ErrorKind::NotFound => false,
         Err(error) => return Err(error.into()),
     };
+    match (resume_decision, backup_exists) {
+        (Some(false), true) => {
+            return Err(LegacyProjectionCleanupError::ResumeDecision(format!(
+                "legacy cleanup backup already exists at {}; use --resume only after verifying its binding",
+                backup_dir.display()
+            )));
+        }
+        (Some(true), false) => {
+            return Err(LegacyProjectionCleanupError::ResumeDecision(format!(
+                "legacy cleanup has no backup state to resume at {}",
+                backup_dir.display()
+            )));
+        }
+        _ => {}
+    }
     let backup_dir = validate_backup_path(&database_path, backup_dir, backup_exists)?;
     ensure_atomic_cleanup_supported()?;
     let (mut journal, resumed) = if backup_exists {
@@ -3598,6 +3653,74 @@ mod tests {
             error,
             LegacyProjectionCleanupError::CrossFilesystem { .. }
         ));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn legacy_cleanup_apply_enforces_the_explicit_resume_decision_inside_the_guarded_path() {
+        let (_temp, db, backup) = fixture();
+        seed_all_roots(&db);
+        let inventory = inventory_legacy_projection_roots(&db, "db_fixture").expect("inventory");
+        let guard = acquire_legacy_projection_cleanup_guard(&db).expect("cleanup physical guards");
+
+        let missing = apply_legacy_projection_cleanup_with_resume_decision(
+            &guard,
+            &db,
+            "db_fixture",
+            &inventory.inventory_digest,
+            &backup,
+            true,
+        )
+        .expect_err("resume cannot create a fresh backup");
+        assert!(
+            matches!(missing, LegacyProjectionCleanupError::ResumeDecision(message)
+                if message.contains("no backup state to resume"))
+        );
+        assert!(!backup.exists());
+        assert!(
+            inventory
+                .roots
+                .iter()
+                .filter(|root| root.present)
+                .all(|root| root.absolute_path.is_dir())
+        );
+
+        let applied = apply_legacy_projection_cleanup_with_resume_decision(
+            &guard,
+            &db,
+            "db_fixture",
+            &inventory.inventory_digest,
+            &backup,
+            false,
+        )
+        .expect("fresh cleanup");
+        assert!(!applied.resumed);
+
+        let implicit = apply_legacy_projection_cleanup_with_resume_decision(
+            &guard,
+            &db,
+            "db_fixture",
+            &inventory.inventory_digest,
+            &backup,
+            false,
+        )
+        .expect_err("existing backup requires explicit resume");
+        assert!(
+            matches!(implicit, LegacyProjectionCleanupError::ResumeDecision(message)
+                if message.contains("use --resume"))
+        );
+
+        let resumed = apply_legacy_projection_cleanup_with_resume_decision(
+            &guard,
+            &db,
+            "db_fixture",
+            &inventory.inventory_digest,
+            &backup,
+            true,
+        )
+        .expect("explicit completed-journal resume");
+        assert!(resumed.resumed);
+        assert_eq!(resumed.manifest, applied.manifest);
     }
 
     #[cfg(target_os = "linux")]

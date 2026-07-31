@@ -20,8 +20,8 @@ pub use legacy_cleanup::{
     LegacyProjectionCleanupGuard, LegacyProjectionCleanupInventory, LegacyProjectionCleanupOutcome,
     LegacyProjectionRootInventory, LegacyProjectionRootKind,
     acquire_legacy_projection_cleanup_guard, apply_legacy_projection_cleanup,
-    inventory_legacy_projection_roots, restore_legacy_projection_backup,
-    verify_legacy_projection_backup,
+    apply_legacy_projection_cleanup_with_resume_decision, inventory_legacy_projection_roots,
+    restore_legacy_projection_backup, verify_legacy_projection_backup,
 };
 
 pub use kanban_contract::{

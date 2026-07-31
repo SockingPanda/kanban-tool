@@ -21,6 +21,7 @@ mod label_proposals;
 mod label_semantics;
 mod label_suggestions;
 mod lancedb_projection;
+mod legacy_projection_cleanup;
 mod maintenance;
 mod maintenance_runtime;
 #[cfg(feature = "oxigraph-backend")]
@@ -65,6 +66,7 @@ pub use label_ontology::*;
 pub use label_proposals::*;
 pub use label_semantics::*;
 pub use label_suggestions::*;
+pub use legacy_projection_cleanup::*;
 pub use maintenance::*;
 pub use maintenance_runtime::*;
 pub use projection_v2::*;

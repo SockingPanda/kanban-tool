@@ -1,5 +1,6 @@
 use crate::db::{
     connect_file, default_pragmas, maintenance_lock_blocks, maintenance_lock_path,
+    connect_existing_quiescent_read_only,
     DatabaseConnection,
     runtime_lock_blocks, runtime_lock_path,
     open_database_with_exclusive_authority,
@@ -803,6 +804,25 @@ pub(crate) fn connect_existing_file(path: &Path) -> Result<DatabaseConnection> {
 
 pub(crate) fn connect_existing_database(path: &Path) -> Result<DatabaseConnection> {
     let conn = connect_existing_file(path)?;
+    validate_initialized_database(path, conn)
+}
+
+pub(crate) fn connect_existing_database_quiescent_read_only(
+    path: &Path,
+) -> Result<DatabaseConnection> {
+    if !path.exists() {
+        return Err(KanbanError::InvalidInput(format!(
+            "database does not exist: {}",
+            path.display()
+        )));
+    }
+    if !path.is_file() {
+        return Err(KanbanError::InvalidInput(format!(
+            "database path is not a file: {}",
+            path.display()
+        )));
+    }
+    let conn = connect_existing_quiescent_read_only(path)?;
     validate_initialized_database(path, conn)
 }
 

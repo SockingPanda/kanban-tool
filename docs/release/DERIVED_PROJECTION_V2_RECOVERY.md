@@ -9,6 +9,12 @@ canonical truth；Tantivy、Oxigraph、LanceDB task chunks 和 LanceDB label ato
 `<generation>.published` marker 的完整 release cohort。运行本流程前，值班人员必须在
 同一个受控 shell 中依次执行所有代码块；不要把函数或变量拆到状态不明的第二个 shell。
 
+本 runbook 的命令示例是 Linux/Debian 生产操作程序（例如 `systemctl`、`fuser`、GNU
+`stat` 与文件租约）；它不构成 Windows runtime 已在本机验证的证据。Windows
+`LockFileEx`/per-store range-lock 路径必须由独立的 native 环境与 reviewer 按
+`just check-windows-p kanban-local` 等门禁另行验收；在没有该证据时不得把 Windows
+标为“本机已验证”，也不得以本 runbook 的 Linux 结果替代该验收。
+
 ## 1. 硬停止条件和禁止事项
 
 以下任一项不满足时，保持生产只读，不执行 rebuild、legacy cleanup、服务替换、canary

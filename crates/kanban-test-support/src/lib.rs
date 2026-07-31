@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use rusqlite::Connection;
+use kanban_sqlite::db::DatabaseConnection;
 
 /// Temporary SQLite database initialized with the canonical kanban schema.
 pub struct TempDb {
@@ -27,12 +27,12 @@ impl TempDb {
         &self.path
     }
 
-    pub fn connect(&self) -> kanban_core::Result<Connection> {
+    pub fn connect(&self) -> kanban_core::Result<DatabaseConnection> {
         kanban_sqlite::db::connect_file(&self.path)
     }
 }
 
 /// Open a test database for raw SQL inspection.
-pub fn connect_file(path: impl AsRef<Path>) -> kanban_core::Result<Connection> {
+pub fn connect_file(path: impl AsRef<Path>) -> kanban_core::Result<DatabaseConnection> {
     kanban_sqlite::db::connect_file(path.as_ref())
 }

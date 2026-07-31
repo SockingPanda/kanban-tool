@@ -702,7 +702,7 @@ pub fn prepare_projection_snapshot_with(
         ProjectionSnapshotPrepareDisposition::Prepared(evidence) => Ok(evidence),
         ProjectionSnapshotPrepareDisposition::CoverageChanged => {
             Err(KanbanError::Conflict(format!(
-                "projection snapshot coverage changed for store {store_name}; automatic maintenance may rebase it"
+                "projection snapshot coverage changed for store {store_name} (canonical snapshot coverage changed); automatic maintenance may rebase it"
             )))
         }
     }

@@ -120,7 +120,7 @@ pub struct ProjectionArtifactEvidence {
 /// canonical or delivery coverage no longer matches its persisted manifest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProjectionSnapshotPrepareDisposition {
-    Prepared(ProjectionArtifactEvidence),
+    Prepared(Box<ProjectionArtifactEvidence>),
     CoverageChanged,
 }
 
@@ -869,7 +869,7 @@ pub fn prepare_projection_snapshot_with(
         lease_token,
         backend,
     )? {
-        ProjectionSnapshotPrepareDisposition::Prepared(evidence) => Ok(evidence),
+        ProjectionSnapshotPrepareDisposition::Prepared(evidence) => Ok(*evidence),
         ProjectionSnapshotPrepareDisposition::CoverageChanged => {
             Err(KanbanError::Conflict(format!(
                 "projection snapshot coverage changed for store {store_name} (canonical snapshot coverage changed); automatic maintenance may rebase it"
@@ -963,10 +963,9 @@ pub(crate) fn prepare_projection_snapshot_with_disposition(
             let error_lease = lease_from_destructive_authority(store_name, &prepare_authority);
             if let Err(record_error) =
                 record_projection_error(path, store_name, &error_lease, &result_error.to_string())
+                && !matches!(&record_error, KanbanError::Conflict(_))
             {
-                if !matches!(&record_error, KanbanError::Conflict(_)) {
-                    return Err(record_error);
-                }
+                return Err(record_error);
             }
             return Err(result_error);
         }
@@ -1033,7 +1032,9 @@ pub(crate) fn prepare_projection_snapshot_with_disposition(
             error,
         );
     }
-    Ok(ProjectionSnapshotPrepareDisposition::Prepared(evidence))
+    Ok(ProjectionSnapshotPrepareDisposition::Prepared(Box::new(
+        evidence,
+    )))
 }
 
 fn classify_snapshot_prepare_error(
@@ -1047,10 +1048,9 @@ fn classify_snapshot_prepare_error(
 ) -> Result<ProjectionSnapshotPrepareDisposition> {
     if let Err(record_error) =
         record_projection_error(path, store_name, authority, &error.to_string())
+        && !matches!(&record_error, KanbanError::Conflict(_))
     {
-        if !matches!(&record_error, KanbanError::Conflict(_)) {
-            return Err(record_error);
-        }
+        return Err(record_error);
     }
     match snapshot_prepare_disposition(path, store_name, owner, lease_token, manifest)? {
         SnapshotPrepareDisposition::CoverageChanged => {
@@ -1901,10 +1901,9 @@ pub fn publish_projection_generation_with(
         let error_lease = lease_from_destructive_authority(store_name, &publish_authority);
         if let Err(record_error) =
             record_projection_error(path, store_name, &error_lease, &error.to_string())
+            && !matches!(&record_error, KanbanError::Conflict(_))
         {
-            if !matches!(&record_error, KanbanError::Conflict(_)) {
-                return Err(record_error);
-            }
+            return Err(record_error);
         }
     }
     operation
@@ -2063,10 +2062,9 @@ pub fn recover_projection_generation_with(
         let error_lease = lease_from_destructive_authority(store_name, &publish_authority);
         if let Err(record_error) =
             record_projection_error(path, store_name, &error_lease, &error.to_string())
+            && !matches!(&record_error, KanbanError::Conflict(_))
         {
-            if !matches!(&record_error, KanbanError::Conflict(_)) {
-                return Err(record_error);
-            }
+            return Err(record_error);
         }
     }
     operation
@@ -2150,10 +2148,9 @@ pub fn reconcile_projection_generation_with(
         let error_lease = lease_from_destructive_authority(store_name, &publish_authority);
         if let Err(record_error) =
             record_projection_error(path, store_name, &error_lease, &error.to_string())
+            && !matches!(&record_error, KanbanError::Conflict(_))
         {
-            if !matches!(&record_error, KanbanError::Conflict(_)) {
-                return Err(record_error);
-            }
+            return Err(record_error);
         }
     }
     operation

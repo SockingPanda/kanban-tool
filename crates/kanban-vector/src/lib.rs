@@ -369,6 +369,13 @@ impl ChunkVectorStore for DisabledVectorStore {
 
 impl LabelAtomVectorStore for DisabledVectorStore {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VectorStatusScope {
+    #[default]
+    Chunks,
+    LabelAtoms,
+}
+
 #[derive(Debug, Clone)]
 pub struct SubprocessVectorStore {
     helper_path: PathBuf,
@@ -376,6 +383,7 @@ pub struct SubprocessVectorStore {
     board: String,
     vector_config_path: Option<PathBuf>,
     embedding_model: Option<String>,
+    status_scope: VectorStatusScope,
 }
 
 impl SubprocessVectorStore {
@@ -391,12 +399,25 @@ impl SubprocessVectorStore {
             board: board.into(),
             vector_config_path,
             embedding_model: None,
+            status_scope: VectorStatusScope::Chunks,
         }
     }
 
     pub fn with_embedding_model(mut self, embedding_model: impl Into<String>) -> Self {
         self.embedding_model = Some(embedding_model.into());
         self
+    }
+
+    pub fn with_status_scope(mut self, status_scope: VectorStatusScope) -> Self {
+        self.status_scope = status_scope;
+        self
+    }
+
+    fn status_command(&self) -> &'static str {
+        match self.status_scope {
+            VectorStatusScope::Chunks => "status",
+            VectorStatusScope::LabelAtoms => "label-atoms-status",
+        }
     }
 
     fn helper_args(&self, command_args: &[String]) -> Vec<String> {
@@ -1684,8 +1705,9 @@ impl VectorStoreBackend for SubprocessVectorStore {
     }
 
     fn status(&self) -> VectorStoreStatus {
+        let command = self.status_command().to_owned();
         match self
-            .run_helper::<VectorHelperStatusResponse>(&["status".to_owned()])
+            .run_helper::<VectorHelperStatusResponse>(&[command])
             .map(vector_store_status)
         {
             Ok(status) => status,
@@ -2653,6 +2675,22 @@ mod tests {
             Vec::new()
         );
         assert!(!store.status().enabled);
+    }
+
+    #[test]
+    fn subprocess_status_scope_selects_independent_store_commands() {
+        let chunks = crate::SubprocessVectorStore::new(
+            "/tmp/vector-helper",
+            "/tmp/kanban.db",
+            "default",
+            None,
+        );
+        let labels = chunks
+            .clone()
+            .with_status_scope(crate::VectorStatusScope::LabelAtoms);
+
+        assert_eq!(chunks.status_command(), "status");
+        assert_eq!(labels.status_command(), "label-atoms-status");
     }
 
     #[test]

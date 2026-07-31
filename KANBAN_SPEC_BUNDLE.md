@@ -133,7 +133,12 @@ kanban search "项目首页"
 kanban doctor
 kanban maintenance status
 kanban maintenance run --once
+kanban maintenance rebuild tantivy_tasks --dry-run
+kanban maintenance cleanup-legacy inventory
 ```
+
+生产级 Projection v2 恢复、backup、串行 rebuild、九 board 隔离与 owner restart 验收见
+[`docs/release/DERIVED_PROJECTION_V2_RECOVERY.md`](docs/release/DERIVED_PROJECTION_V2_RECOVERY.md)。
 
 ## 三种使用方式
 
@@ -171,6 +176,11 @@ kanban init --db .kb/kb.db
 ```
 
 SQLite 始终是最终事实来源；搜索、图和向量能力都可以从它重新构建。项目不支持把同一个 SQLite 文件放在 NFS、Dropbox、iCloud Drive 等同步目录中由多台机器共同写入。
+
+文件数据库连接会在 SQLite 打开前取得数据库生命周期 guard，并在 SQLite 已证明关闭后才
+释放。Linux/Windows 使用位于 SQLite 最大文件边界之外的专用 byte-range lock；其他 Unix
+平台使用安全但更保守的 whole-file `flock` fallback。按派生 store 隔离的 range lock 仍只在
+Linux/Windows 提供，因此其他 Unix 平台上的派生写入与数据库替换会失败关闭，而不是无锁继续。
 
 ## 当前边界
 

@@ -2353,10 +2353,11 @@ mod lifecycle_tests {
         _: *const std::ffi::c_char,
     ) -> std::ffi::c_int {
         let state = unsafe { &mut *(context.cast::<bool>()) };
-        if action == rusqlite::ffi::SQLITE_TRANSACTION {
-            if !arg1.is_null() && unsafe { std::ffi::CStr::from_ptr(arg1).to_bytes() } == b"BEGIN" {
-                *state = true;
-            }
+        if action == rusqlite::ffi::SQLITE_TRANSACTION
+            && !arg1.is_null()
+            && unsafe { std::ffi::CStr::from_ptr(arg1).to_bytes() } == b"BEGIN"
+        {
+            *state = true;
         }
         if action == rusqlite::ffi::SQLITE_READ
             && !arg2.is_null()

@@ -490,6 +490,13 @@ struct SqliteDeliveryClaim {
     claim_expires_at: Option<i64>,
 }
 
+enum DeliverySourceEvent {
+    Legacy,
+    Board,
+    Task { task_id: String },
+    Run { run_id: String, task_id: String },
+}
+
 impl SqliteGenerationAuthority {
     fn wire_binding(&self) -> Option<VectorProjectionGenerationBinding> {
         let corpus = match (
@@ -2485,26 +2492,48 @@ impl VectorProjectionBackend {
         conn: &Connection,
         delivery: &ProjectionDelivery,
     ) -> Result<String, VectorProjectionBackendError> {
-        let event_task = match delivery.source_event_id {
-            Some(source_event_id) => conn
-                .query_row(
-                    "SELECT COALESCE(e.task_id,r.task_id)
-                     FROM task_events e
-                     LEFT JOIN task_runs r ON r.board_id=e.board_id AND r.id=e.run_id
-                     WHERE e.id=?1 AND e.board_id=?2",
-                    params![source_event_id, delivery.board_id],
-                    |row| row.get::<_, Option<String>>(0),
-                )
-                .optional()
-                .map_err(backend_sql)?
-                .ok_or_else(|| {
-                    VectorProjectionBackendError::Delivery(format!(
-                        "delivery {} source event is missing or belongs to another board",
-                        delivery.id
-                    ))
-                })?,
-            None => None,
+        let event_target = match delivery.source_event_id {
+            Some(source_event_id) => {
+                let source = conn
+                    .query_row(
+                        "SELECT e.task_id,e.run_id,r.task_id
+                         FROM task_events e
+                         LEFT JOIN task_runs r ON r.board_id=e.board_id AND r.id=e.run_id
+                         WHERE e.id=?1 AND e.board_id=?2",
+                        params![source_event_id, delivery.board_id],
+                        |row| {
+                            Ok((
+                                row.get::<_, Option<String>>(0)?,
+                                row.get::<_, Option<String>>(1)?,
+                                row.get::<_, Option<String>>(2)?,
+                            ))
+                        },
+                    )
+                    .optional()
+                    .map_err(backend_sql)?;
+                match source {
+                    Some((Some(task_id), _, _)) => DeliverySourceEvent::Task { task_id },
+                    Some((None, Some(run_id), Some(task_id))) => {
+                        DeliverySourceEvent::Run { run_id, task_id }
+                    }
+                    Some((None, Some(_), None)) => {
+                        return Err(VectorProjectionBackendError::Delivery(format!(
+                            "delivery {} source event run is missing or belongs to another board",
+                            delivery.id
+                        )));
+                    }
+                    Some((None, None, _)) => DeliverySourceEvent::Board,
+                    None => {
+                        return Err(VectorProjectionBackendError::Delivery(format!(
+                            "delivery {} source event is missing or belongs to another board",
+                            delivery.id
+                        )));
+                    }
+                }
+            }
+            None => DeliverySourceEvent::Legacy,
         };
+
         if let Some(task_id) = delivery
             .entity_uri
             .strip_prefix("kb://task/")
@@ -2519,30 +2548,83 @@ impl VectorProjectionBackend {
             if canonical_board
                 .as_deref()
                 .is_some_and(|board_id| board_id != delivery.board_id)
-                || (canonical_board.is_none() && event_task.as_deref() != Some(task_id))
+                || (canonical_board.is_none()
+                    && !matches!(&event_target, DeliverySourceEvent::Task { task_id: event_task } if event_task.as_str() == task_id))
             {
                 return Err(VectorProjectionBackendError::Delivery(format!(
                     "delivery {} task cannot be proven to belong to its board",
                     delivery.id
                 )));
             }
-            if event_task
-                .as_deref()
-                .is_some_and(|event_task| event_task != task_id)
-            {
-                return Err(VectorProjectionBackendError::Delivery(format!(
-                    "delivery {} entity does not match its source event",
-                    delivery.id
-                )));
+            match &event_target {
+                DeliverySourceEvent::Task {
+                    task_id: event_task,
+                } if event_task.as_str() == task_id => {}
+                DeliverySourceEvent::Legacy
+                    if canonical_board.as_deref() == Some(delivery.board_id.as_str()) => {}
+                _ => {
+                    return Err(VectorProjectionBackendError::Delivery(format!(
+                        "delivery {} entity does not match its source event",
+                        delivery.id
+                    )));
+                }
             }
             return Ok(task_id.to_owned());
         }
-        event_task.ok_or_else(|| {
-            VectorProjectionBackendError::Delivery(format!(
-                "delivery {} cannot be mapped to a board-scoped task",
-                delivery.id
-            ))
-        })
+
+        if let Some(run_id) = delivery
+            .entity_uri
+            .strip_prefix("kb://run/")
+            .filter(|run_id| !run_id.is_empty() && !run_id.contains('/'))
+        {
+            let run = conn
+                .query_row(
+                    "SELECT r.board_id,r.task_id,t.board_id
+                     FROM task_runs r
+                     LEFT JOIN tasks t ON t.id=r.task_id
+                     WHERE r.id=?1",
+                    [run_id],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, Option<String>>(1)?,
+                            row.get::<_, Option<String>>(2)?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(backend_sql)?;
+            let Some((run_board, Some(task_id), Some(task_board))) = run else {
+                return Err(VectorProjectionBackendError::Delivery(format!(
+                    "delivery {} run cannot be proven to belong to its board",
+                    delivery.id
+                )));
+            };
+            if run_board != delivery.board_id || task_board != delivery.board_id {
+                return Err(VectorProjectionBackendError::Delivery(format!(
+                    "delivery {} run cannot be proven to belong to its board",
+                    delivery.id
+                )));
+            }
+            match &event_target {
+                DeliverySourceEvent::Run {
+                    run_id: event_run,
+                    task_id: event_task,
+                } if event_run.as_str() == run_id && event_task == &task_id => {}
+                _ => {
+                    return Err(VectorProjectionBackendError::Delivery(format!(
+                        "delivery {} run does not match its source event",
+                        delivery.id
+                    )));
+                }
+            }
+            return Ok(task_id);
+        }
+
+        Err(VectorProjectionBackendError::Delivery(format!(
+            "delivery {} cannot be mapped to a board-scoped task",
+            delivery.id
+        )))
     }
 
     fn apply_label_deliveries(

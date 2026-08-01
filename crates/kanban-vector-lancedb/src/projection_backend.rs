@@ -474,39 +474,6 @@ impl SqliteGenerationAuthority {
         })
     }
 
-    fn matches_binding(&self, binding: &VectorProjectionGenerationBinding) -> bool {
-        self.generation.as_deref() == Some(binding.generation.as_str())
-            && self.fingerprint == binding.fingerprint
-            && self.fence_epoch == Some(binding.fence_epoch)
-            && self.snapshot_cursor == binding.snapshot_cursor
-            && self.provider.as_deref() == Some(binding.provider.as_str())
-            && self.provider_fingerprint.as_deref() == Some(binding.provider_fingerprint.as_str())
-            && self.canonical_item_count == Some(binding.canonical_count)
-            && self.canonical_digest.as_deref() == Some(binding.canonical_digest.as_str())
-            && self.delivery_item_count == Some(binding.delivery_count)
-            && self.delivery_digest.as_deref() == Some(binding.delivery_digest.as_str())
-            && self.corpus_schema.as_deref()
-                == binding
-                    .corpus
-                    .as_ref()
-                    .map(|corpus| corpus.corpus_schema.as_str())
-            && self.corpus_fingerprint.as_deref()
-                == binding
-                    .corpus
-                    .as_ref()
-                    .map(|corpus| corpus.corpus_fingerprint.as_str())
-            && self.embedding_model.as_deref()
-                == binding
-                    .corpus
-                    .as_ref()
-                    .map(|corpus| corpus.embedding_model.as_str())
-            && self.embedding_dimensions
-                == binding
-                    .corpus
-                    .as_ref()
-                    .and_then(|corpus| i64::try_from(corpus.embedding_dimensions).ok())
-    }
-
     fn matches_manifest(
         &self,
         manifest: &ProjectionArtifactManifest,

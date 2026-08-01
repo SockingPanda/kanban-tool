@@ -107,78 +107,6 @@ impl LanceDbStore {
         self.label_atom_table(provider.dimensions()).map(|_| ())
     }
 
-    pub(crate) fn chunk_projection_content_rows(
-        &self,
-    ) -> Result<Vec<ProjectionContentRow>, VectorError> {
-        let provider = self.provider()?;
-        let table = self.table(provider.dimensions())?;
-        let batches = self.runtime.block_on(async {
-            table
-                .query()
-                .select(Select::columns(&[
-                    "chunk_key",
-                    "entity_uri",
-                    "chunk_uri",
-                    "kind",
-                    "project_id",
-                    "board_id",
-                    "task_id",
-                    "source_table",
-                    "source_id",
-                    "text",
-                    "summary",
-                    "embedding_model",
-                    "content_hash",
-                    "created_at",
-                    "updated_at",
-                    "source_event_id",
-                    "metadata_json",
-                    "ordinal",
-                    VECTOR_COLUMN,
-                ]))
-                .execute()
-                .await
-                .map_err(map_lancedb_error)?
-                .try_collect::<Vec<_>>()
-                .await
-                .map_err(map_lancedb_error)
-        })?;
-        chunk_batches_to_projection_rows(&batches)
-    }
-
-    pub(crate) fn label_atom_projection_content_rows(
-        &self,
-    ) -> Result<Vec<ProjectionContentRow>, VectorError> {
-        let provider = self.provider()?;
-        let table = self.label_atom_table(provider.dimensions())?;
-        let batches = self.runtime.block_on(async {
-            table
-                .query()
-                .select(Select::columns(&[
-                    "atom_key",
-                    "atom_id",
-                    "label_id",
-                    "label_name",
-                    "board_id",
-                    "polarity",
-                    "kind",
-                    "text",
-                    "ordinal",
-                    "content_hash",
-                    "embedding_model",
-                    "created_at",
-                    "updated_at",
-                    VECTOR_COLUMN,
-                ]))
-                .execute()
-                .await
-                .map_err(map_lancedb_error)?
-                .try_collect::<Vec<_>>()
-                .await
-                .map_err(map_lancedb_error)
-        })?;
-        label_atom_batches_to_projection_rows(&batches)
-    }
 }
 
 impl LanceDbProjectionReader {
@@ -994,16 +922,15 @@ fn validate_projection_schema(schema: &Schema, expected: usize) -> Result<(), Ve
             || actual.data_type() != expected_field.data_type()
             || actual.is_nullable() != expected_field.is_nullable()
         {
-            if actual.name() == VECTOR_COLUMN {
-                if let DataType::FixedSizeList(_, actual_dim) = actual.data_type()
-                    && let DataType::FixedSizeList(_, expected_dim) = expected_field.data_type()
-                    && actual_dim != expected_dim
-                {
-                    return Err(VectorError::DimensionMismatch {
-                        expected: *expected_dim as usize,
-                        actual: *actual_dim as usize,
-                    });
-                }
+            if actual.name() == VECTOR_COLUMN
+                && let DataType::FixedSizeList(_, actual_dim) = actual.data_type()
+                && let DataType::FixedSizeList(_, expected_dim) = expected_field.data_type()
+                && actual_dim != expected_dim
+            {
+                return Err(VectorError::DimensionMismatch {
+                    expected: *expected_dim as usize,
+                    actual: *actual_dim as usize,
+                });
             }
             return Err(VectorError::Store(format!(
                 "projection schema field mismatch for {}",
@@ -1422,28 +1349,28 @@ fn chunk_batches_to_projection_rows(
         let ordinal = int64_column(batch, "ordinal")?;
         let vectors = fixed_size_list_column(batch, VECTOR_COLUMN)?;
         for row in 0..batch.num_rows() {
-            let chunk_key_value = required_string(&chunk_key, row, "chunk_key")?;
+            let chunk_key_value = required_string(chunk_key, row, "chunk_key")?;
             rows.push(ProjectionContentRow {
                 key: chunk_key_value.to_owned(),
                 content_json: serde_json::json!({
                     "chunk_key": chunk_key_value,
-                    "entity_uri": required_string(&entity_uri, row, "entity_uri")?,
-                    "chunk_uri": required_string(&chunk_uri, row, "chunk_uri")?,
-                    "kind": required_string(&kind, row, "kind")?,
+                    "entity_uri": required_string(entity_uri, row, "entity_uri")?,
+                    "chunk_uri": required_string(chunk_uri, row, "chunk_uri")?,
+                    "kind": required_string(kind, row, "kind")?,
                     "project_id": optional_string(project_id, row),
                     "board_id": optional_string(board_id, row),
                     "task_id": optional_string(task_id, row),
-                    "source_table": required_string(&source_table, row, "source_table")?,
-                    "source_id": required_string(&source_id, row, "source_id")?,
-                    "text": required_string(&text, row, "text")?,
+                    "source_table": required_string(source_table, row, "source_table")?,
+                    "source_id": required_string(source_id, row, "source_id")?,
+                    "text": required_string(text, row, "text")?,
                     "summary": optional_string(summary, row),
-                    "embedding_model": required_string(&embedding_model, row, "embedding_model")?,
+                    "embedding_model": required_string(embedding_model, row, "embedding_model")?,
                     "content_hash": optional_string(content_hash, row),
-                    "created_at": required_i64(&created_at, row, "created_at")?,
-                    "updated_at": required_i64(&updated_at, row, "updated_at")?,
+                    "created_at": required_i64(created_at, row, "created_at")?,
+                    "updated_at": required_i64(updated_at, row, "updated_at")?,
                     "source_event_id": optional_i64(source_event_id, row),
-                    "metadata_json": required_string(&metadata_json, row, "metadata_json")?,
-                    "ordinal": required_i64(&ordinal, row, "ordinal")?,
+                    "metadata_json": required_string(metadata_json, row, "metadata_json")?,
+                    "ordinal": required_i64(ordinal, row, "ordinal")?,
                 })
                 .to_string(),
                 vector_bits: Some(
@@ -1478,23 +1405,23 @@ fn label_atom_batches_to_projection_rows(
         let updated_at = int64_column(batch, "updated_at")?;
         let vectors = fixed_size_list_column(batch, VECTOR_COLUMN)?;
         for row in 0..batch.num_rows() {
-            let atom_key_value = required_string(&atom_key, row, "atom_key")?;
+            let atom_key_value = required_string(atom_key, row, "atom_key")?;
             rows.push(ProjectionContentRow {
                 key: atom_key_value.to_owned(),
                 content_json: serde_json::json!({
                     "atom_key": atom_key_value,
-                    "atom_id": required_string(&atom_id, row, "atom_id")?,
-                    "label_id": required_string(&label_id, row, "label_id")?,
-                    "label_name": required_string(&label_name, row, "label_name")?,
-                    "board_id": required_string(&board_id, row, "board_id")?,
-                    "polarity": required_string(&polarity, row, "polarity")?,
-                    "kind": required_string(&kind, row, "kind")?,
-                    "text": required_string(&text, row, "text")?,
-                    "ordinal": required_i64(&ordinal, row, "ordinal")?,
-                    "content_hash": required_string(&content_hash, row, "content_hash")?,
-                    "embedding_model": required_string(&embedding_model, row, "embedding_model")?,
-                    "created_at": required_i64(&created_at, row, "created_at")?,
-                    "updated_at": required_i64(&updated_at, row, "updated_at")?,
+                    "atom_id": required_string(atom_id, row, "atom_id")?,
+                    "label_id": required_string(label_id, row, "label_id")?,
+                    "label_name": required_string(label_name, row, "label_name")?,
+                    "board_id": required_string(board_id, row, "board_id")?,
+                    "polarity": required_string(polarity, row, "polarity")?,
+                    "kind": required_string(kind, row, "kind")?,
+                    "text": required_string(text, row, "text")?,
+                    "ordinal": required_i64(ordinal, row, "ordinal")?,
+                    "content_hash": required_string(content_hash, row, "content_hash")?,
+                    "embedding_model": required_string(embedding_model, row, "embedding_model")?,
+                    "created_at": required_i64(created_at, row, "created_at")?,
+                    "updated_at": required_i64(updated_at, row, "updated_at")?,
                 })
                 .to_string(),
                 vector_bits: Some(
@@ -1715,7 +1642,7 @@ fn embed_batch_with_retry(
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_projection_schema, vector_schema};
+    use super::{LanceDbProjectionReader, validate_projection_schema, vector_schema};
     use arrow_array::{ArrayRef, Float32Array, RecordBatch, new_null_array};
     use arrow_schema::{DataType, Field, Schema};
     use std::sync::{
@@ -2527,7 +2454,11 @@ mod tests {
                 if message == "embedding provider returned a non-finite coordinate"
         ));
         assert!(
-            store.chunk_projection_content_rows().unwrap().is_empty(),
+            LanceDbProjectionReader::open_existing(tempdir.path(), 3)
+                .unwrap()
+                .chunk_projection_content_rows()
+                .unwrap()
+                .is_empty(),
             "failed embedding must not persist a chunk row"
         );
     }

@@ -792,10 +792,27 @@ pub fn release_projection_lease(
     owner: &str,
     lease_token: &str,
 ) -> Result<()> {
-    let _authority_guard = acquire_projection_authority_guard(path.as_ref(), store_name)?;
-    let now = SystemClock.now_ms();
-    let conn = connect_file(path.as_ref())?;
+    release_projection_lease_with_before_transaction(
+        path.as_ref(),
+        store_name,
+        owner,
+        lease_token,
+        || {},
+    )
+}
+
+fn release_projection_lease_with_before_transaction(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    before_transaction: impl FnOnce(),
+) -> Result<()> {
+    let _authority_guard = acquire_projection_authority_guard(path, store_name)?;
+    before_transaction();
+    let conn = connect_file(path)?;
     with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
         require_current_lease(&conn, store_name, owner, lease_token, now)?;
         conn.execute(
             "UPDATE projection_deliveries \
@@ -5839,6 +5856,206 @@ mod read_only_publication_validation_tests {
         assert_eq!(authority.fence_epoch, 9);
         assert_eq!(authority.lease_expires_at, 100);
         assert_eq!(authority.expected_binding.fence_epoch, 7);
+    }
+
+    #[test]
+    fn projection_lease_release_rejects_expired_owner_after_writer_delay() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("release delay target"),
+        )?;
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "release-owner", 10_000)?;
+        let delivery_id: i64 = connect_file(&path)?.query_row(
+            "SELECT id FROM projection_deliveries WHERE store_name=?1 ORDER BY id LIMIT 1",
+            ["tantivy_tasks"],
+            |row| row.get(0),
+        )?;
+        let claim_expires_at = SystemClock.now_ms() + 5_000;
+        let conn = connect_file(&path)?;
+        with_immediate_tx(&conn, || {
+            let changed = conn
+                .execute(
+                    "UPDATE projection_deliveries
+                     SET status='running',claim_owner=?1,claim_token='release-claim',
+                         claim_lease_token=?2,claim_fence_epoch=?3,
+                         claim_generation='release-generation',claim_expires_at=?4
+                     WHERE id=?5 AND status='pending'",
+                    params![
+                        "release-owner",
+                        lease.lease_token,
+                        lease.fence_epoch,
+                        claim_expires_at,
+                        delivery_id
+                    ],
+                )
+                .map_err(storage)?;
+            if changed != 1 {
+                return Err(KanbanError::Storage(
+                    "test failed to seed running projection delivery".to_owned(),
+                ));
+            }
+            Ok(())
+        })?;
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let release_path = path.clone();
+        let release_token = lease.lease_token.clone();
+        let release = std::thread::spawn(move || {
+            release_projection_lease_with_before_transaction(
+                &release_path,
+                "tantivy_tasks",
+                "release-owner",
+                &release_token,
+                || {
+                    entered_tx
+                        .send(())
+                        .expect("test observes lease release at pre-transaction barrier");
+                    resume_rx
+                        .recv()
+                        .expect("test resumes lease release against writer lock");
+                },
+            )
+        });
+        entered_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .expect("projection lease release reached pre-transaction barrier");
+
+        let expires_at = SystemClock.now_ms() + 75;
+        let conn = connect_file(&path)?;
+        with_immediate_tx(&conn, || {
+            let changed = conn
+                .execute(
+                    "UPDATE projection_store_state SET lease_expires_at=?1
+                     WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                    params![
+                        expires_at,
+                        "tantivy_tasks",
+                        "release-owner",
+                        lease.lease_token
+                    ],
+                )
+                .map_err(storage)?;
+            if changed != 1 {
+                return Err(KanbanError::Storage(
+                    "test failed to shorten projection lease before release".to_owned(),
+                ));
+            }
+            Ok(())
+        })?;
+        let conn = connect_file(&path)?;
+        let store_before: (Option<String>, Option<String>, i64, Option<i64>, i64) = conn
+            .query_row(
+                "SELECT lease_owner,lease_token,fence_epoch,lease_expires_at,updated_at
+                 FROM projection_store_state WHERE store_name=?1",
+                ["tantivy_tasks"],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )?;
+        let delivery_before: (
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            i64,
+        ) = conn.query_row(
+            "SELECT status,claim_owner,claim_token,claim_lease_token,claim_fence_epoch,
+                    claim_generation,claim_expires_at,last_error,updated_at
+             FROM projection_deliveries WHERE id=?1",
+            [delivery_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                ))
+            },
+        )?;
+
+        let writer = connect_file(&path)?;
+        writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+        resume_tx
+            .send(())
+            .expect("resume projection lease release against held writer lock");
+        while SystemClock.now_ms() <= expires_at {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        writer.execute_batch("COMMIT").map_err(storage)?;
+
+        let error = release
+            .join()
+            .expect("projection lease release thread must not panic")
+            .expect_err("release delayed beyond expiry must reject stale owner");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+
+        let conn = connect_file(&path)?;
+        let store_after: (Option<String>, Option<String>, i64, Option<i64>, i64) = conn.query_row(
+            "SELECT lease_owner,lease_token,fence_epoch,lease_expires_at,updated_at
+             FROM projection_store_state WHERE store_name=?1",
+            ["tantivy_tasks"],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )?;
+        let delivery_after: (
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            i64,
+        ) = conn.query_row(
+            "SELECT status,claim_owner,claim_token,claim_lease_token,claim_fence_epoch,
+                    claim_generation,claim_expires_at,last_error,updated_at
+             FROM projection_deliveries WHERE id=?1",
+            [delivery_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                ))
+            },
+        )?;
+        assert_eq!(store_after, store_before);
+        assert_eq!(delivery_after, delivery_before);
+        Ok(())
     }
 
     #[test]

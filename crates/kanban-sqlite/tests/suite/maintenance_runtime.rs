@@ -400,6 +400,320 @@ fn maintenance_bootstraps_db_scoped_multi_board_tantivy_and_catches_up() -> anyh
 
 #[cfg(all(feature = "tantivy-backend", feature = "oxigraph-backend"))]
 #[test]
+fn maintenance_board_rebuild_rehydrates_both_stores_without_cross_board_leakage()
+-> anyhow::Result<()> {
+    use kanban_search::SearchQuery;
+    use kanban_sqlite::api::{maintenance_run_once, maintenance_status, search_tasks};
+
+    let temp = TempDb::new("maintenance_board_rebuild_authority")?;
+    init_database(&temp.path, "tester")?;
+    insert_board(&temp.path, "other", "b_other")?;
+    let keep = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("replace-import keep old"),
+    )?;
+    let stale = create_task(
+        &temp.path,
+        "default",
+        "tester",
+        CreateTask::ready("replace-import stale"),
+    )?;
+    let other = create_task(
+        &temp.path,
+        "other",
+        "tester",
+        CreateTask::ready("replace-import other board"),
+    )?;
+    maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+
+    let before = maintenance_status(&temp.path)?;
+    let before_checkpoints = before
+        .stores
+        .iter()
+        .filter(|store| {
+            matches!(
+                store.store_name.as_str(),
+                "tantivy_tasks" | "oxigraph_relations"
+            )
+        })
+        .map(|store| (store.store_name.clone(), store.checkpoint_cursor))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    let conn = connect_file(&temp.path)?;
+    conn.execute(
+        "UPDATE tasks SET title='replace-import keep new' WHERE id=?1",
+        [&keep.id],
+    )?;
+    conn.execute("DELETE FROM tasks WHERE id=?1", [&stale.id])?;
+    let board_id = keep.board_id.clone();
+    conn.execute(
+        "INSERT INTO index_outbox(
+           source_event_id,target,entity_uri,action,payload_json,status,attempts,last_error,
+           created_at,updated_at
+         ) VALUES(NULL,'all',?1,'rebuild','{}','pending',0,NULL,1,1)",
+        [format!("kb://board/{board_id}")],
+    )?;
+    let board_rebuild_outbox_id = conn.last_insert_rowid();
+    let pending: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM projection_deliveries
+         WHERE board_id=?1 AND action='rebuild' AND source_event_id IS NULL
+           AND store_name IN ('tantivy_tasks','oxigraph_relations')
+           AND status='pending'",
+        [&board_id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(pending, 2);
+    drop(conn);
+
+    let report =
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    for store_name in ["tantivy_tasks", "oxigraph_relations"] {
+        let store_report = report
+            .stores
+            .iter()
+            .find(|store| store.store_name == store_name)
+            .expect("enabled projection store report");
+        assert!(
+            matches!(
+                &store_report.result,
+                MaintenanceStoreResult::Succeeded { action, processed }
+                    if action == "batch_applied" && *processed > 0
+            ),
+            "{store_name}: {:?}",
+            store_report.result
+        );
+    }
+
+    let after = maintenance_status(&temp.path)?;
+    for store_name in ["tantivy_tasks", "oxigraph_relations"] {
+        let store = after
+            .stores
+            .iter()
+            .find(|store| store.store_name == store_name)
+            .expect("enabled projection store status");
+        assert_eq!(store.pending, 0, "{store_name}");
+        assert_eq!(store.failed, 0, "{store_name}");
+        assert!(
+            store.checkpoint_cursor > before_checkpoints[store_name],
+            "{store_name} checkpoint must advance"
+        );
+    }
+    let conn = connect_file(&temp.path)?;
+    let done_deliveries: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM projection_deliveries
+         WHERE outbox_id=?1 AND store_name IN ('tantivy_tasks','oxigraph_relations')
+           AND status='done'",
+        [board_rebuild_outbox_id],
+        |row| row.get(0),
+    )?;
+    assert_eq!(
+        done_deliveries, 2,
+        "import rebuild deliveries must be ACKed"
+    );
+    drop(conn);
+
+    let query = |text: &str| SearchQuery {
+        board: board_id.clone(),
+        q: Some(text.to_owned()),
+        statuses: Vec::new(),
+        labels: Vec::new(),
+        assignee: None,
+        include_archived: false,
+        limit: 20,
+        offset: 0,
+    };
+    let keep_hits = search_tasks(&temp.path, query("keep new"))?;
+    assert_eq!(keep_hits.meta.backend, "tantivy");
+    assert_eq!(
+        keep_hits
+            .hits
+            .iter()
+            .map(|hit| hit.task_id.as_str())
+            .collect::<Vec<_>>(),
+        [keep.id.as_str()]
+    );
+    let stale_hits = search_tasks(&temp.path, query("stale"))?;
+    assert!(stale_hits.hits.is_empty());
+    let other_hits = search_tasks(
+        &temp.path,
+        SearchQuery {
+            board: other.board_id.clone(),
+            q: Some("other board".to_owned()),
+            statuses: Vec::new(),
+            labels: Vec::new(),
+            assignee: None,
+            include_archived: false,
+            limit: 20,
+            offset: 0,
+        },
+    )?;
+    assert_eq!(
+        other_hits
+            .hits
+            .iter()
+            .map(|hit| hit.task_id.as_str())
+            .collect::<Vec<_>>(),
+        [other.id.as_str()]
+    );
+
+    let oxigraph = after
+        .stores
+        .iter()
+        .find(|store| store.store_name == "oxigraph_relations")
+        .expect("Oxigraph status");
+    let root = projection_store_root(&temp.path, "oxigraph_relations")?;
+    let relations_path = root
+        .join("generations")
+        .join(
+            oxigraph
+                .active_generation
+                .as_deref()
+                .expect("active generation"),
+        )
+        .join("relations.json");
+    let relations: Vec<serde_json::Value> =
+        serde_json::from_slice(&std::fs::read(&relations_path)?)?;
+    assert!(relations.iter().any(|relation| {
+        relation["subject_uri"] == format!("kb://task/{}", keep.id)
+            && relation["object_uri"] == format!("kb://board/{board_id}")
+    }));
+    assert!(
+        !relations
+            .iter()
+            .any(|relation| { relation["subject_uri"] == format!("kb://task/{}", stale.id) })
+    );
+    assert!(relations.iter().any(|relation| {
+        relation["subject_uri"] == format!("kb://task/{}", other.id)
+            && relation["object_uri"] == format!("kb://board/{}", other.board_id)
+    }));
+
+    // The mixed batch below has a valid board rebuild first and a malformed
+    // task rebuild second.  Its canonical changes would alter both physical
+    // stores if the implementation mutated before validating the full batch.
+    let relations_before_mixed = std::fs::read(&relations_path)?;
+    let conn = connect_file(&temp.path)?;
+    let source_event_id: i64 = conn.query_row(
+        "SELECT id FROM task_events WHERE board_id=?1 AND task_id=?2 ORDER BY id LIMIT 1",
+        params![keep.board_id, keep.id],
+        |row| row.get(0),
+    )?;
+    conn.execute(
+        "UPDATE tasks SET title='replace-import mixed new' WHERE id=?1",
+        [&keep.id],
+    )?;
+    conn.execute(
+        "DELETE FROM entity_relations
+         WHERE subject_uri=?1 AND predicate='belongs_to_board'",
+        [format!("kb://task/{}", keep.id)],
+    )?;
+    conn.execute(
+        "INSERT INTO index_outbox(
+           source_event_id,target,entity_uri,action,payload_json,status,attempts,last_error,
+           created_at,updated_at
+         ) VALUES(NULL,'all',?1,'rebuild','{}','pending',0,NULL,3,3)",
+        [format!("kb://board/{board_id}")],
+    )?;
+    let mixed_board_outbox_id = conn.last_insert_rowid();
+    conn.execute(
+        "INSERT INTO index_outbox(
+           source_event_id,target,entity_uri,action,payload_json,status,attempts,last_error,
+           created_at,updated_at
+         ) VALUES(?1,'all',?2,'rebuild','{}','pending',0,NULL,4,4)",
+        params![source_event_id, format!("kb://task/{}", keep.id)],
+    )?;
+    let mixed_invalid_outbox_id = conn.last_insert_rowid();
+    drop(conn);
+    let before_invalid = maintenance_status(&temp.path)?;
+    let before_invalid_checkpoints = before_invalid
+        .stores
+        .iter()
+        .filter(|store| {
+            matches!(
+                store.store_name.as_str(),
+                "tantivy_tasks" | "oxigraph_relations"
+            )
+        })
+        .map(|store| (store.store_name.clone(), store.checkpoint_cursor))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let invalid_report =
+        maintenance_run_once(&temp.path, "runtime-test", MaintenanceRunOptions::default())?;
+    for store_name in ["tantivy_tasks", "oxigraph_relations"] {
+        let message = failed_store_message(
+            &invalid_report,
+            store_name,
+            MaintenanceStoreFailureKind::Delivery,
+        );
+        assert!(
+            message.contains("cannot be mapped"),
+            "{store_name}: {message}"
+        );
+        let store = maintenance_status(&temp.path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == store_name)
+            .expect("enabled projection store status");
+        assert_eq!(store.failed, 2, "{store_name}");
+        assert_eq!(
+            store.checkpoint_cursor, before_invalid_checkpoints[store_name],
+            "{store_name} checkpoint must not cross failed delivery"
+        );
+    }
+    let tantivy_store = before_invalid
+        .stores
+        .iter()
+        .find(|store| store.store_name == "tantivy_tasks")
+        .expect("Tantivy status");
+    let tantivy_generation = tantivy_store
+        .active_generation
+        .as_deref()
+        .expect("Tantivy active generation");
+    let tantivy_generation_path = projection_store_root(&temp.path, "tantivy_tasks")?
+        .join("generations")
+        .join(tantivy_generation);
+    let (old_hits, _) = kanban_search::tantivy_backend::search_task_projection_generation(
+        &tantivy_generation_path,
+        &before_invalid.database_instance_id,
+        tantivy_generation,
+        &query("keep new"),
+    )?;
+    assert_eq!(
+        old_hits
+            .iter()
+            .map(|hit| hit.task_id.as_str())
+            .collect::<Vec<_>>(),
+        [keep.id.as_str()]
+    );
+    let (mixed_hits, _) = kanban_search::tantivy_backend::search_task_projection_generation(
+        &tantivy_generation_path,
+        &before_invalid.database_instance_id,
+        tantivy_generation,
+        &query("mixed new"),
+    )?;
+    assert!(mixed_hits.is_empty());
+    assert_eq!(
+        std::fs::read(&relations_path)?,
+        relations_before_mixed,
+        "Oxigraph physical state must remain byte-identical after preflight failure"
+    );
+    let conn = connect_file(&temp.path)?;
+    for outbox_id in [mixed_board_outbox_id, mixed_invalid_outbox_id] {
+        let failed_deliveries: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM projection_deliveries
+             WHERE outbox_id=?1 AND store_name IN ('tantivy_tasks','oxigraph_relations')
+               AND status='failed'",
+            [outbox_id],
+            |row| row.get(0),
+        )?;
+        assert_eq!(failed_deliveries, 2, "mixed delivery must not be ACKed");
+    }
+    drop(conn);
+    Ok(())
+}
+
+#[cfg(all(feature = "tantivy-backend", feature = "oxigraph-backend"))]
+#[test]
 fn maintenance_run_reports_every_enabled_db_scoped_store() -> anyhow::Result<()> {
     use kanban_sqlite::api::maintenance_run_once;
 

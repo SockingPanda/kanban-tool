@@ -1297,7 +1297,8 @@ fn affected_task_keys(
                 } if event_task.as_str() == task_id.as_str() && event_run.as_str() == run_id => {}
                 SourceEventTarget::Legacy
                 | SourceEventTarget::Board
-                | SourceEventTarget::Task { .. } => {
+                | SourceEventTarget::Task { .. }
+                | SourceEventTarget::Run { .. } => {
                     return Err(KanbanError::Conflict(format!(
                         "Tantivy delivery {} run does not match its source event",
                         item.id

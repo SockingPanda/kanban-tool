@@ -283,6 +283,33 @@ pub(crate) fn open_database_with_exclusive_authority(
     Ok(guarded)
 }
 
+/// Opens an exclusively fenced database through SQLite's immutable read-only
+/// URI. Unlike the normal inspection opener this cannot create WAL/SHM
+/// sidecars while the replacement protocol revalidates a staged inode.
+pub(crate) fn open_database_with_exclusive_authority_immutable(
+    authority: DatabaseLifecycleExclusiveAuthority,
+) -> Result<DatabaseExclusiveAuthorityConnection> {
+    authority
+        .validate_path_identity()
+        .map_err(lifecycle_storage)?;
+    let uri = immutable_sqlite_uri(authority.path())?;
+    let connection = Connection::open_with_flags(
+        uri,
+        OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX
+            | OpenFlags::SQLITE_OPEN_URI,
+    )
+    .map_err(|error| KanbanError::Storage(error.to_string()))?;
+    let guarded = DatabaseExclusiveAuthorityConnection::new(connection, authority);
+    guarded
+        .authority
+        .as_ref()
+        .expect("replacement inspection authority is installed above")
+        .validate_path_identity()
+        .map_err(lifecycle_storage)?;
+    Ok(guarded)
+}
+
 pub fn connect_file(path: &Path) -> Result<DatabaseConnection> {
     connect_file_with_setup(path, default_pragmas)
 }

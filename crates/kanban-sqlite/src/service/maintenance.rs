@@ -18,7 +18,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{self, OpenOptions},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -27,7 +27,7 @@ use kanban_core::{Clock, KanbanError, Result, SystemClock};
 use kanban_indexer::{
     DERIVED_STORE_SEEDS, OUTBOX_DERIVED_STORE_SEEDS, OutboxTarget, derived_store_for_name,
 };
-use kanban_local::DatabaseLifecycleExclusiveGuard;
+use kanban_local::{DatabaseLifecycleExclusiveAuthority, DatabaseLifecycleExclusiveGuard};
 
 use rusqlite::{Connection, ErrorCode, OptionalExtension, params};
 
@@ -487,6 +487,191 @@ impl DatabaseReplaceGuard {
         Ok(())
     }
 
+    /// Verifies that `path` still names the current database inode held by
+    /// this replacement guard. Namespace publication must perform this check
+    /// before it uses a caller-supplied canonical path.
+    pub fn validate_current_database_identity_at(&self, path: &Path) -> Result<()> {
+        self.current_authority
+            .as_ref()
+            .ok_or_else(|| {
+                KanbanError::Conflict("current database lifecycle authority is not held".to_owned())
+            })?
+            .validate_identity_at(path)
+            .map_err(crate::db::lifecycle_storage)
+    }
+
+    /// Verifies that the guard's current authority was acquired for exactly
+    /// the normalized canonical path supplied by a recovery journal. This
+    /// check is valid even when the path is a restart-created placeholder
+    /// whose old inode has already moved to the journal's previous path.
+    pub fn validate_current_database_path_binding(&self, path: &Path) -> Result<()> {
+        let expected = normalize_replace_binding_path(path)?;
+        let actual = self
+            .current_authority
+            .as_ref()
+            .ok_or_else(|| {
+                KanbanError::Conflict("current database lifecycle authority is not held".to_owned())
+            })?
+            .path()
+            .to_path_buf();
+        if actual != expected {
+            return Err(KanbanError::Conflict(format!(
+                "replacement journal canonical path does not match held database authority: expected {}, held {}",
+                expected.display(),
+                actual.display()
+            )));
+        }
+        Ok(())
+    }
+
+    /// Reports whether this guard began with a missing canonical target.
+    pub fn current_database_was_created_for_replace(&self) -> Result<bool> {
+        Ok(self
+            .current_authority
+            .as_ref()
+            .ok_or_else(|| {
+                KanbanError::Conflict("current database lifecycle authority is not held".to_owned())
+            })?
+            .created_authority_file())
+    }
+
+    /// Removes a retained missing-target placeholder after an identity check
+    /// and durable parent-directory sync. Cleanup is synchronous so a later
+    /// path swap cannot be silently ignored by the authority destructor.
+    pub fn mark_current_database_for_drop_if_identity_at(&mut self, path: &Path) -> Result<()> {
+        let current = self.current_authority.as_mut().ok_or_else(|| {
+            KanbanError::Conflict("current database lifecycle authority is not held".to_owned())
+        })?;
+        remove_current_placeholder_if_identity_with_hook(current, path, |_| {})
+    }
+
+    /// Removes a missing-target placeholder retained at `path` after an
+    /// abrupt process loss. The path is opened without following symlinks,
+    /// rebound to an exclusive lifecycle authority, and compared with the
+    /// journal identity before identity-checked drop and parent fsync.
+    pub(super) fn remove_placeholder_previous_if_identity(
+        &mut self,
+        path: &Path,
+        expected: &super::database_replace::FileIdentity,
+    ) -> Result<()> {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.is_file() => {}
+            Ok(_) => {
+                return Err(KanbanError::Conflict(
+                    "replacement placeholder previous path is not a regular file".to_owned(),
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(crate::db::lifecycle_storage(error)),
+        };
+        let mut previous = DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(path)
+            .map_err(crate::db::lifecycle_storage)?;
+        previous
+            .validate_path_identity()
+            .map_err(crate::db::lifecycle_storage)?;
+        let metadata = fs::symlink_metadata(path).map_err(crate::db::lifecycle_storage)?;
+        if !metadata.is_file() {
+            return Err(KanbanError::Conflict(
+                "replacement placeholder previous path changed to a non-regular file".to_owned(),
+            ));
+        }
+        let actual = super::database_replace::identity_from_metadata(&metadata);
+        if !super::database_replace::same_file_identity(expected, &actual) {
+            return Err(KanbanError::Conflict(
+                "replacement placeholder previous identity no longer matches journal evidence"
+                    .to_owned(),
+            ));
+        }
+        previous
+            .remove_file_now_if_identity(path)
+            .map_err(crate::db::lifecycle_storage)?;
+        verify_placeholder_previous_absent(path)
+    }
+
+    /// Revalidates the staged inode held by this guard, if any.
+    pub fn validate_staged_database_identities(&self) -> Result<()> {
+        self.staged_authority
+            .as_ref()
+            .ok_or_else(|| {
+                KanbanError::Conflict("staged database lifecycle authority is not held".to_owned())
+            })?
+            .validate_path_identity()
+            .map_err(crate::db::lifecycle_storage)
+    }
+
+    /// Returns whether this guard still owns the staged lifecycle authority.
+    pub(crate) fn has_staged_database_authority(&self) -> bool {
+        self.staged_authority.is_some()
+    }
+
+    /// Rebinds the current held inode immediately after it was moved from the
+    /// canonical path to the durable previous path.
+    pub fn rebind_current_database_after_previous_publish(
+        &mut self,
+        previous_path: &Path,
+    ) -> Result<()> {
+        self.current_authority
+            .as_mut()
+            .ok_or_else(|| {
+                KanbanError::Conflict("current database lifecycle authority is not held".to_owned())
+            })?
+            .rebind_after_rename(previous_path)
+            .map_err(crate::db::lifecycle_storage)
+    }
+
+    /// Opens the fenced staged database under its exclusive authority for a
+    /// read-only inspection, then restores that authority to this guard only
+    /// after SQLite has closed successfully.
+    pub(crate) fn inspect_staged_database<F>(&mut self, inspect: F) -> Result<()>
+    where
+        F: FnOnce(&rusqlite::Connection) -> Result<()>,
+    {
+        let staged = self.staged_authority.take().ok_or_else(|| {
+            KanbanError::Conflict("staged database lifecycle authority is not held".to_owned())
+        })?;
+        let store_names = DERIVED_STORE_SEEDS
+            .iter()
+            .map(|seed| seed.store_name)
+            .collect::<Vec<_>>();
+        let authority = staged
+            .into_derived_store_authority(&store_names)
+            .map_err(crate::db::lifecycle_storage)?;
+        let connection = crate::db::open_database_with_exclusive_authority_immutable(authority)?;
+        let result = inspect(&connection);
+        match connection.close() {
+            Ok(authority) => {
+                self.staged_authority = Some(authority.into_lifecycle_guard());
+                result
+            }
+            Err((_connection, error)) => Err(KanbanError::Storage(error.to_string())),
+        }
+    }
+
+    /// During recovery, replaces the restart-created canonical placeholder
+    /// authority with the old inode retained at `previous_path`. The
+    /// placeholder is dropped only after the maintenance marker remains held;
+    /// the existing previous inode is then acquired with normal retention
+    /// semantics.
+    pub fn rebind_current_authority_from_previous(&mut self, previous_path: &Path) -> Result<()> {
+        let current = self.current_authority.take().ok_or_else(|| {
+            KanbanError::Conflict("current database lifecycle authority is not held".to_owned())
+        })?;
+        drop(current);
+
+        let exclusive =
+            DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(previous_path)
+                .map_err(crate::db::lifecycle_storage)?;
+        let store_names = DERIVED_STORE_SEEDS
+            .iter()
+            .map(|seed| seed.store_name)
+            .collect::<Vec<_>>();
+        let authority = exclusive
+            .into_derived_store_authority(&store_names)
+            .map_err(crate::db::lifecycle_storage)?;
+        self.current_authority = Some(authority);
+        self.validate_database_identities()
+    }
+
     /// Fences a fully closed staged SQLite inode before a later atomic publish.
     ///
     /// This phase intentionally does not perform the namespace replacement.
@@ -557,6 +742,54 @@ impl DatabaseReplaceGuard {
             .map_err(crate::db::lifecycle_storage)?;
         Ok(())
     }
+}
+
+fn remove_current_placeholder_if_identity_with_hook<F>(
+    current: &mut DatabaseLifecycleExclusiveAuthority,
+    path: &Path,
+    after_remove: F,
+) -> Result<()>
+where
+    F: FnOnce(&Path),
+{
+    if current.validate_identity_at(path).is_err() {
+        return Err(KanbanError::Conflict(
+            "replacement placeholder previous identity changed during cleanup".to_owned(),
+        ));
+    }
+    current
+        .remove_file_now_if_identity(path)
+        .map_err(crate::db::lifecycle_storage)?;
+    after_remove(path);
+    verify_placeholder_previous_absent(path)
+}
+
+fn verify_placeholder_previous_absent(path: &Path) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Ok(metadata) if metadata.is_file() => Err(KanbanError::Conflict(
+            "replacement placeholder previous evidence remained after cleanup".to_owned(),
+        )),
+        Ok(_) => Err(KanbanError::Conflict(
+            "replacement placeholder previous path was recreated as a non-regular entry".to_owned(),
+        )),
+        Err(error) => Err(crate::db::lifecycle_storage(error)),
+    }
+}
+
+fn normalize_replace_binding_path(path: &Path) -> Result<PathBuf> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let parent = fs::canonicalize(parent).map_err(crate::db::lifecycle_storage)?;
+    let name = path.file_name().ok_or_else(|| {
+        KanbanError::InvalidInput(format!(
+            "database replacement path has no final component: {}",
+            path.display()
+        ))
+    })?;
+    Ok(parent.join(name))
 }
 
 pub fn begin_database_runtime(path: impl AsRef<Path>) -> Result<DatabaseRuntimeGuard> {
@@ -2355,6 +2588,28 @@ mod lifecycle_tests {
             let error = rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(code), None);
             assert!(!is_replaceable_sqlite_corruption(&error), "code={code}");
         }
+    }
+
+    #[test]
+    fn placeholder_cleanup_rejects_replaced_evidence_before_completion() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("placeholder.db");
+        fs::write(&path, b"placeholder").unwrap();
+        let exclusive =
+            DatabaseLifecycleExclusiveGuard::acquire_existing_for_replace(&path).unwrap();
+        let mut authority = exclusive.into_derived_store_authority(&[]).unwrap();
+
+        let error =
+            remove_current_placeholder_if_identity_with_hook(&mut authority, &path, |path| {
+                fs::write(path, b"foreign replacement").unwrap()
+            })
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            KanbanError::Conflict(message)
+                if message.contains("evidence remained after cleanup")
+        ));
+        assert_eq!(fs::read(&path).unwrap(), b"foreign replacement");
     }
 
     fn seed_readable_integrity_diagnostic(conn: &Connection) {

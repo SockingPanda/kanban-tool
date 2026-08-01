@@ -3666,6 +3666,95 @@ fn deliveries_require_exact_board_scoped_shapes_and_canonical_task_membership() 
 }
 
 #[test]
+fn run_only_deliveries_require_exact_run_identity_and_restore_parent_task_chunks() {
+    let (_temp, db, backend) = backend();
+    let chunks = prepare(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_run_delivery_identity",
+        1,
+    );
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch(
+        "INSERT INTO tasks(
+             id,board_id,seq,title,description,status,archived_at,created_at,updated_at
+         ) VALUES ('t_one','b_one',1,'run parent',NULL,'todo',NULL,1,1);
+         INSERT INTO task_runs(id,board_id,task_id,summary,error,started_at)
+         VALUES
+           ('r_one','b_one','t_one',NULL,NULL,2),
+           ('r_other','b_one','t_one',NULL,NULL,3);
+         INSERT INTO task_events(id,board_id,task_id,run_id,kind,payload_json)
+         VALUES
+           (501,'b_one',NULL,'r_one','run.updated','{}'),
+           (502,'b_one',NULL,'r_one','run.finished','{}');",
+    )
+    .unwrap();
+    drop(conn);
+
+    let mut run_upsert = delivery(&chunks, 501, 2, ProjectionDeliveryAction::Upsert);
+    run_upsert.entity_uri = "kb://run/r_one".to_owned();
+    run_upsert.source_event_id = Some(501);
+    apply(&backend, &db, &chunks, run_upsert);
+    let initial_fingerprints = chunk_fingerprints(&db, &chunks, "b_one");
+    assert_eq!(
+        chunk_entity_uris(&db, &chunks, "b_one"),
+        vec!["kb://task/t_one"],
+        "a run-only source event maps its canonical parent task into the chunk corpus"
+    );
+
+    let mut forged_parent = delivery(&chunks, 502, 3, ProjectionDeliveryAction::Upsert);
+    forged_parent.entity_uri = "kb://task/t_one".to_owned();
+    forged_parent.source_event_id = Some(501);
+    assert_apply_delivery_error(&backend, &db, &chunks, forged_parent);
+    assert_eq!(
+        chunk_fingerprints(&db, &chunks, "b_one"),
+        initial_fingerprints,
+        "a run-only event cannot mutate through its parent task URI"
+    );
+
+    let mut wrong_run = delivery(&chunks, 503, 4, ProjectionDeliveryAction::Upsert);
+    wrong_run.entity_uri = "kb://run/r_other".to_owned();
+    wrong_run.source_event_id = Some(501);
+    assert_apply_delivery_error(&backend, &db, &chunks, wrong_run);
+    assert_eq!(
+        chunk_fingerprints(&db, &chunks, "b_one"),
+        initial_fingerprints,
+        "a run event cannot mutate through a different run URI"
+    );
+
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute(
+        "UPDATE tasks SET status='archived',archived_at=3,updated_at=3 WHERE id='t_one'",
+        [],
+    )
+    .unwrap();
+    drop(conn);
+    let mut run_delete = delivery(&chunks, 504, 5, ProjectionDeliveryAction::Delete);
+    run_delete.entity_uri = "kb://run/r_one".to_owned();
+    run_delete.source_event_id = Some(502);
+    apply(&backend, &db, &chunks, run_delete);
+    assert!(chunk_entity_uris(&db, &chunks, "b_one").is_empty());
+
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute(
+        "UPDATE tasks SET status='todo',archived_at=NULL,updated_at=4 WHERE id='t_one'",
+        [],
+    )
+    .unwrap();
+    drop(conn);
+    let mut run_restore = delivery(&chunks, 505, 6, ProjectionDeliveryAction::Upsert);
+    run_restore.entity_uri = "kb://run/r_one".to_owned();
+    run_restore.source_event_id = Some(502);
+    apply(&backend, &db, &chunks, run_restore);
+    assert_eq!(
+        chunk_entity_uris(&db, &chunks, "b_one"),
+        vec!["kb://task/t_one"],
+        "a valid run delivery still supports archive/delete/restore convergence"
+    );
+}
+
+#[test]
 fn taskless_board_upsert_returns_bound_ack_without_mutating_rows_or_blocking_later_task() {
     let (_temp, db, backend) = backend();
     let conn = rusqlite::Connection::open(&db).unwrap();

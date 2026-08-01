@@ -1675,10 +1675,9 @@ fn embed_batch_with_retry(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        LanceDbProjectionReader, LanceDbStore, normalize_lancedb_path, path_string,
-        validate_projection_schema, vector_schema,
-    };
+    use super::{LanceDbProjectionReader, LanceDbStore, validate_projection_schema, vector_schema};
+    #[cfg(windows)]
+    use super::{normalize_lancedb_path, path_string};
     use arrow_array::{ArrayRef, Float32Array, RecordBatch, new_null_array};
     use arrow_schema::{DataType, Field, Schema};
     use std::sync::{

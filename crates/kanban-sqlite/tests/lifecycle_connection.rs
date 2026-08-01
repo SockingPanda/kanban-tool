@@ -273,9 +273,12 @@ fn database_replace_publishes_staged_file_atomically_and_retains_evidence() {
     )
     .unwrap();
 
-    assert_eq!(report.canonical_path, db_path);
-    assert_eq!(report.previous_path, previous_path);
-    assert_eq!(report.journal_path, journal_path);
+    let expected_canonical_path = std::fs::canonicalize(&db_path).unwrap();
+    let expected_previous_path = std::fs::canonicalize(&previous_path).unwrap();
+    let expected_journal_path = std::fs::canonicalize(&journal_path).unwrap();
+    assert_eq!(report.canonical_path, expected_canonical_path);
+    assert_eq!(report.previous_path, expected_previous_path);
+    assert_eq!(report.journal_path, expected_journal_path);
     assert!(db_path.is_file());
     assert!(previous_path.is_file());
     assert!(!staged_path.exists());

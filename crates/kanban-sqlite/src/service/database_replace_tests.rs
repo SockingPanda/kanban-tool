@@ -72,7 +72,10 @@ fn resume_after_previous_publish_recovery_completes_without_rollback() {
 
     let mut restarted = super::super::begin_database_replace(&canonical).unwrap();
     let report = resume_staged_database_replace(&mut restarted, &journal).unwrap();
-    assert_eq!(report.canonical_path, canonical);
+    assert_eq!(
+        report.canonical_path,
+        fs::canonicalize(&canonical).unwrap()
+    );
     assert!(canonical.is_file());
     assert!(previous.is_file());
     assert!(!staged.exists());

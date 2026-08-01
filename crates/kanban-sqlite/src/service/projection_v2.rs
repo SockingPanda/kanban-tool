@@ -5993,6 +5993,8 @@ mod read_only_publication_validation_tests {
         binding: ProjectionBindingRecoverySnapshot,
         deliveries: String,
         outbox: String,
+        derived_store_state: String,
+        label_atom_index_boards: String,
         tasks: String,
         events: String,
         entities: String,
@@ -6029,6 +6031,26 @@ mod read_only_publication_validation_tests {
                 'attempts',attempts,'last_error',last_error,'created_at',created_at,
                 'updated_at',updated_at)), '[]')
              FROM (SELECT * FROM index_outbox ORDER BY id)",
+            [],
+            |row| row.get(0),
+        )?;
+        let derived_store_state = conn.query_row(
+            "SELECT COALESCE(json_group_array(json_object(
+                'store_name',store_name,'schema_version',schema_version,
+                'last_event_id',last_event_id,'dirty',dirty,
+                'last_rebuild_at',last_rebuild_at,'last_sync_at',last_sync_at,
+                'last_error',last_error,'updated_at',updated_at)), '[]')
+             FROM (SELECT * FROM derived_store_state ORDER BY store_name)",
+            [],
+            |row| row.get(0),
+        )?;
+        let label_atom_index_boards = conn.query_row(
+            "SELECT COALESCE(json_group_array(json_object(
+                'store_name',store_name,'board_id',board_id,'dirty',dirty,
+                'last_rebuild_at',last_rebuild_at,'last_error',last_error,
+                'updated_at',updated_at)), '[]')
+             FROM (SELECT * FROM label_atom_index_boards
+                   ORDER BY store_name,board_id)",
             [],
             |row| row.get(0),
         )?;
@@ -6073,6 +6095,8 @@ mod read_only_publication_validation_tests {
             binding,
             deliveries,
             outbox,
+            derived_store_state,
+            label_atom_index_boards,
             tasks,
             events,
             entities,
@@ -6087,6 +6111,224 @@ mod read_only_publication_validation_tests {
     ) -> Result<ProjectionBatch> {
         let _write_guard = crate::db::acquire_derived_store_write_guard(path, "tantivy_tasks")?;
         claim_projection_batch(path, "tantivy_tasks", owner, lease_token, claim_ttl_ms, 10)
+    }
+
+    fn batch_receipt(batch: &ProjectionBatch) -> ProjectionBatchReceipt {
+        ProjectionBatchReceipt {
+            store_name: batch.store_name.clone(),
+            database_instance_id: batch.database_instance_id.clone(),
+            protocol_version: batch.protocol_version,
+            schema_version: batch.schema_version,
+            provider: batch.provider.clone(),
+            provider_fingerprint: batch.provider_fingerprint.clone(),
+            target_generation: batch.target_generation.clone(),
+            lease_token: batch.lease_token.clone(),
+            fence_epoch: batch.fence_epoch,
+            claim_token: batch.claim_token.clone(),
+            applied_item_count: batch.items.len(),
+        }
+    }
+
+    enum BatchFinalize<'a> {
+        Acknowledge(&'a ProjectionBatchReceipt),
+        Fail { error: &'a str, retry_delay_ms: i64 },
+    }
+
+    fn finalize_batch_with_barrier<T>(
+        path: &std::path::Path,
+        batch: &ProjectionBatch,
+        operation: BatchFinalize<'_>,
+        after_barrier: impl FnOnce(&std::sync::mpsc::Sender<()>) -> anyhow::Result<T>,
+    ) -> anyhow::Result<(T, Result<()>)> {
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| -> anyhow::Result<(T, Result<()>)> {
+            let finalize = scope.spawn(move || {
+                let _write_guard =
+                    crate::db::acquire_derived_store_write_guard(path, "tantivy_tasks")?;
+                let before_final_transaction = move || {
+                    entered_tx
+                        .send(())
+                        .expect("projection batch finalization reached final transaction barrier");
+                    resume_rx
+                        .recv()
+                        .expect("resume projection batch finalization against held writer lock");
+                };
+                match operation {
+                    BatchFinalize::Acknowledge(receipt) => {
+                        acknowledge_projection_batch_with_before_final_transaction(
+                            path,
+                            batch,
+                            receipt,
+                            before_final_transaction,
+                        )
+                        .map(|_| ())
+                    }
+                    BatchFinalize::Fail {
+                        error,
+                        retry_delay_ms,
+                    } => fail_projection_batch_with_before_final_transaction(
+                        path,
+                        batch,
+                        error,
+                        retry_delay_ms,
+                        before_final_transaction,
+                    ),
+                }
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("projection batch finalization reached final transaction barrier");
+            let value = match after_barrier(&resume_tx) {
+                Ok(value) => value,
+                Err(error) => {
+                    let _ = resume_tx.send(());
+                    let _ = finalize.join();
+                    return Err(error);
+                }
+            };
+            let result = finalize
+                .join()
+                .expect("projection batch finalization thread must not panic");
+            Ok((value, result))
+        })
+    }
+
+    fn shorten_claim_and_lease(
+        path: &std::path::Path,
+        batch: &ProjectionBatch,
+        expires_at: i64,
+    ) -> anyhow::Result<()> {
+        let conn = connect_file(path)?;
+        with_immediate_tx(&conn, || {
+            let lease_changed = conn
+                .execute(
+                    "UPDATE projection_store_state SET lease_expires_at=?1
+                     WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                    params![expires_at, batch.store_name, batch.owner, batch.lease_token],
+                )
+                .map_err(storage)?;
+            if lease_changed != 1 {
+                return Err(KanbanError::Storage(
+                    "test failed to shorten projection lease before batch finalization".to_owned(),
+                ));
+            }
+            shorten_claim_expiry_on_conn(&conn, batch, expires_at)?;
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    fn shorten_claim_expiry_only(
+        path: &std::path::Path,
+        batch: &ProjectionBatch,
+        expires_at: i64,
+    ) -> anyhow::Result<()> {
+        let conn = connect_file(path)?;
+        with_immediate_tx(&conn, || {
+            shorten_claim_expiry_on_conn(&conn, batch, expires_at)
+        })?;
+        Ok(())
+    }
+
+    fn shorten_claim_expiry_on_conn(
+        conn: &rusqlite::Connection,
+        batch: &ProjectionBatch,
+        expires_at: i64,
+    ) -> Result<()> {
+        let claim_changed = conn
+            .execute(
+                "UPDATE projection_deliveries SET claim_expires_at=?1
+                 WHERE store_name=?2 AND claim_owner=?3 AND claim_token=?4
+                   AND claim_lease_token=?5 AND claim_fence_epoch=?6
+                   AND status='running'",
+                params![
+                    expires_at,
+                    batch.store_name,
+                    batch.owner,
+                    batch.claim_token,
+                    batch.lease_token,
+                    batch.fence_epoch
+                ],
+            )
+            .map_err(storage)?;
+        if claim_changed != batch.items.len() {
+            return Err(KanbanError::Storage(
+                "test failed to shorten projection claim before batch finalization".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn assert_store_lease_valid(
+        path: &std::path::Path,
+        batch: &ProjectionBatch,
+    ) -> anyhow::Result<()> {
+        let now = SystemClock.now_ms();
+        let lease = connect_file(path)?.query_row(
+            "SELECT lease_owner,lease_token,lease_expires_at
+             FROM projection_store_state WHERE store_name=?1",
+            [&batch.store_name],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                ))
+            },
+        )?;
+        assert_eq!(lease.0.as_deref(), Some(batch.owner.as_str()));
+        assert_eq!(lease.1.as_deref(), Some(batch.lease_token.as_str()));
+        assert!(lease.2.is_some_and(|expires_at| expires_at > now));
+        Ok(())
+    }
+
+    fn finalize_claim_only_expiry_with_barrier(
+        path: &std::path::Path,
+        batch: &ProjectionBatch,
+        operation: BatchFinalize<'_>,
+    ) -> anyhow::Result<((ClaimProjectionState, i64), Result<()>)> {
+        const CLAIM_DELAY_MS: i64 = 250;
+        finalize_batch_with_barrier(path, batch, operation, |resume_tx| {
+            let expires_at = SystemClock.now_ms() + CLAIM_DELAY_MS;
+            shorten_claim_expiry_only(path, batch, expires_at)?;
+            let before = claim_state_snapshot(path, &batch.owner, &batch.lease_token)?;
+            assert_store_lease_valid(path, batch)?;
+            let writer = connect_file(path)?;
+            writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+            resume_tx
+                .send(())
+                .expect("resume claim-only expiry against held writer lock");
+            while SystemClock.now_ms() <= expires_at {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            writer.execute_batch("COMMIT").map_err(storage)?;
+            Ok((before, expires_at))
+        })
+    }
+
+    fn assert_batch_recovery_claim(
+        path: &std::path::Path,
+        batch: &ProjectionBatch,
+        successor: &ProjectionLease,
+    ) -> anyhow::Result<()> {
+        let _ = recover_batch_claim(path, batch, successor)?;
+        Ok(())
+    }
+
+    fn recover_batch_claim(
+        path: &std::path::Path,
+        batch: &ProjectionBatch,
+        successor: &ProjectionLease,
+    ) -> anyhow::Result<ProjectionBatch> {
+        let retry = claim_with_guard(path, &successor.owner, &successor.lease_token, 1_000)?;
+        assert_eq!(retry.owner, successor.owner);
+        assert_eq!(retry.lease_token, successor.lease_token);
+        assert_eq!(retry.fence_epoch, successor.fence_epoch);
+        assert_eq!(retry.items.len(), batch.items.len());
+        assert_claim_running(path)?;
+        assert_claim_delivery_matches_batch(path, &retry)?;
+        Ok(retry)
     }
 
     fn assert_claim_running(path: &std::path::Path) -> anyhow::Result<()> {
@@ -6127,6 +6369,18 @@ mod read_only_publication_validation_tests {
         assert_eq!(claim.3.as_deref(), Some(batch.target_generation.as_str()));
         assert_eq!(claim.4.as_deref(), Some(batch.claim_token.as_str()));
         Ok(())
+    }
+
+    fn assert_delivery_identity(expected: &ProjectionDelivery, actual: &ProjectionDelivery) {
+        assert_eq!(actual.id, expected.id);
+        assert_eq!(actual.outbox_id, expected.outbox_id);
+        assert_eq!(actual.store_name, expected.store_name);
+        assert_eq!(actual.board_id, expected.board_id);
+        assert_eq!(actual.source_event_id, expected.source_event_id);
+        assert_eq!(actual.cursor, expected.cursor);
+        assert_eq!(actual.action, expected.action);
+        assert_eq!(actual.entity_uri, expected.entity_uri);
+        assert_eq!(actual.payload_json, expected.payload_json);
     }
 
     fn claim_with_barrier<T>(
@@ -6283,6 +6537,196 @@ mod read_only_publication_validation_tests {
         assert_eq!(retry.items.len(), 1);
         assert_claim_running(&path)?;
         assert_claim_delivery_matches_batch(&path, &retry)?;
+        Ok(())
+    }
+
+    #[test]
+    fn acknowledge_rejects_expired_claim_after_write_lock_delay() -> anyhow::Result<()> {
+        let (temp, lease) = claim_fixture()?;
+        let path = temp.path().join("kanban.db");
+        let batch = claim_with_guard(&path, &lease.owner, &lease.lease_token, 1_000)?;
+        let receipt = batch_receipt(&batch);
+        const LEASE_DELAY_MS: i64 = 250;
+        let ((before, expires_at), result) = finalize_batch_with_barrier(
+            &path,
+            &batch,
+            BatchFinalize::Acknowledge(&receipt),
+            |resume_tx| {
+                let expires_at = SystemClock.now_ms() + LEASE_DELAY_MS;
+                shorten_claim_and_lease(&path, &batch, expires_at)?;
+                let before = claim_state_snapshot(&path, &batch.owner, &batch.lease_token)?;
+                let writer = connect_file(&path)?;
+                writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+                resume_tx
+                    .send(())
+                    .expect("resume acknowledgement against held writer lock");
+                while SystemClock.now_ms() <= expires_at {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                writer.execute_batch("COMMIT").map_err(storage)?;
+                Ok((before, expires_at))
+            },
+        )?;
+        let error = result.expect_err("expired acknowledgement must reject delayed claim");
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(
+            claim_state_snapshot(&path, &batch.owner, &batch.lease_token)?,
+            before
+        );
+
+        let successor = acquire_projection_lease(&path, "tantivy_tasks", "ack-successor", 10_000)?;
+        assert_batch_recovery_claim(&path, &batch, &successor)?;
+        assert!(expires_at < SystemClock.now_ms());
+        Ok(())
+    }
+
+    #[test]
+    fn fail_rejects_expired_claim_after_write_lock_delay() -> anyhow::Result<()> {
+        let (temp, lease) = claim_fixture()?;
+        let path = temp.path().join("kanban.db");
+        let batch = claim_with_guard(&path, &lease.owner, &lease.lease_token, 1_000)?;
+        const LEASE_DELAY_MS: i64 = 250;
+        let ((before, expires_at), result) = finalize_batch_with_barrier(
+            &path,
+            &batch,
+            BatchFinalize::Fail {
+                error: "backend failed",
+                retry_delay_ms: 1,
+            },
+            |resume_tx| {
+                let expires_at = SystemClock.now_ms() + LEASE_DELAY_MS;
+                shorten_claim_and_lease(&path, &batch, expires_at)?;
+                let before = claim_state_snapshot(&path, &batch.owner, &batch.lease_token)?;
+                let writer = connect_file(&path)?;
+                writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+                resume_tx
+                    .send(())
+                    .expect("resume failure against held writer lock");
+                while SystemClock.now_ms() <= expires_at {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                writer.execute_batch("COMMIT").map_err(storage)?;
+                Ok((before, expires_at))
+            },
+        )?;
+        let error = result.expect_err("expired failure must reject delayed claim");
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(
+            claim_state_snapshot(&path, &batch.owner, &batch.lease_token)?,
+            before
+        );
+
+        let successor = acquire_projection_lease(&path, "tantivy_tasks", "fail-successor", 10_000)?;
+        let retry = recover_batch_claim(&path, &batch, &successor)?;
+        assert_eq!(retry.items[0].attempts, batch.items[0].attempts + 1);
+
+        const RETRY_DELAY_MS: i64 = 250;
+        let (held_until, result) = finalize_batch_with_barrier(
+            &path,
+            &retry,
+            BatchFinalize::Fail {
+                error: "handoff failure",
+                retry_delay_ms: RETRY_DELAY_MS,
+            },
+            |resume_tx| {
+                let writer = connect_file(&path)?;
+                writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+                resume_tx
+                    .send(())
+                    .expect("resume handoff failure against held writer lock");
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                let held_until = SystemClock.now_ms();
+                writer.execute_batch("COMMIT").map_err(storage)?;
+                Ok(held_until)
+            },
+        )?;
+        result.expect("successor claim should persist a fresh failure");
+
+        let conn = connect_file(&path)?;
+        let failed_delivery = binding_abort_delivery_state(&conn, &batch.store_name)?
+            .into_iter()
+            .find(|delivery| delivery.id == retry.items[0].id)
+            .expect("failed handoff delivery");
+        assert_eq!(failed_delivery.status, "failed");
+        assert_eq!(failed_delivery.attempts, retry.items[0].attempts);
+        assert!(failed_delivery.next_attempt_at >= held_until + RETRY_DELAY_MS);
+        let after_fail_now = SystemClock.now_ms();
+        assert!(failed_delivery.next_attempt_at <= after_fail_now + RETRY_DELAY_MS);
+        assert_eq!(
+            failed_delivery.last_error.as_deref(),
+            Some("handoff failure")
+        );
+        assert_eq!(failed_delivery.claim_owner, None);
+        assert_eq!(failed_delivery.claim_token, None);
+        assert_eq!(failed_delivery.claim_lease_token, None);
+        assert_eq!(failed_delivery.claim_fence_epoch, None);
+        assert_eq!(failed_delivery.claim_generation, None);
+        assert_eq!(failed_delivery.claim_expires_at, None);
+        let store = binding_abort_store_state(&conn, &batch.store_name)?;
+        assert_eq!(store.lifecycle_status, "error");
+        assert_eq!(store.last_error.as_deref(), Some("handoff failure"));
+
+        let deadline = SystemClock.now_ms() + 5_000;
+        while SystemClock.now_ms() < failed_delivery.next_attempt_at
+            && SystemClock.now_ms() < deadline
+        {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(SystemClock.now_ms() >= failed_delivery.next_attempt_at);
+        let retry_again = claim_with_guard(&path, &successor.owner, &successor.lease_token, 1_000)?;
+        assert_eq!(retry_again.items.len(), 1);
+        assert_delivery_identity(&retry.items[0], &retry_again.items[0]);
+        assert_eq!(retry_again.items[0].attempts, failed_delivery.attempts + 1);
+        assert_claim_running(&path)?;
+        assert_claim_delivery_matches_batch(&path, &retry_again)?;
+        assert!(expires_at < SystemClock.now_ms());
+        Ok(())
+    }
+
+    #[test]
+    fn acknowledge_rejects_claim_expiry_with_live_store_after_write_lock_delay()
+    -> anyhow::Result<()> {
+        let (temp, lease) = claim_fixture()?;
+        let path = temp.path().join("kanban.db");
+        let batch = claim_with_guard(&path, &lease.owner, &lease.lease_token, 1_000)?;
+        let receipt = batch_receipt(&batch);
+        let ((before, expires_at), result) = finalize_claim_only_expiry_with_barrier(
+            &path,
+            &batch,
+            BatchFinalize::Acknowledge(&receipt),
+        )?;
+        let error = result.expect_err("expired claim must reject acknowledgement");
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(
+            claim_state_snapshot(&path, &batch.owner, &batch.lease_token)?,
+            before
+        );
+        assert_store_lease_valid(&path, &batch)?;
+        assert!(expires_at < SystemClock.now_ms());
+        Ok(())
+    }
+
+    #[test]
+    fn fail_rejects_claim_expiry_with_live_store_after_write_lock_delay() -> anyhow::Result<()> {
+        let (temp, lease) = claim_fixture()?;
+        let path = temp.path().join("kanban.db");
+        let batch = claim_with_guard(&path, &lease.owner, &lease.lease_token, 1_000)?;
+        let ((before, expires_at), result) = finalize_claim_only_expiry_with_barrier(
+            &path,
+            &batch,
+            BatchFinalize::Fail {
+                error: "backend failed",
+                retry_delay_ms: 1,
+            },
+        )?;
+        let error = result.expect_err("expired claim must reject failure");
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(
+            claim_state_snapshot(&path, &batch.owner, &batch.lease_token)?,
+            before
+        );
+        assert_store_lease_valid(&path, &batch)?;
+        assert!(expires_at < SystemClock.now_ms());
         Ok(())
     }
 

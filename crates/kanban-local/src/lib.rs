@@ -411,7 +411,13 @@ impl DatabaseLifecyclePhysicalGuard {
     }
 
     fn rebind_after_rename(&mut self, path: &Path) -> io::Result<()> {
-        self.normalized_path = self.validate_identity_at(path)?;
+        let normalized_path = self.validate_identity_at(path)?;
+        self.normalized_path = normalized_path;
+        // Rebinding after a caller-controlled rename transfers namespace
+        // ownership to the new path. Placeholder cleanup is explicit and
+        // identity-checked; never let the destructor remove the rebound path
+        // after a later publication failure.
+        self.remove_created_file_on_drop = false;
         Ok(())
     }
 }

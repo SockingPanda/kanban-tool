@@ -14,6 +14,52 @@ fn restart_phase_matrix_converges_for_existing_and_missing_targets() {
 }
 
 #[test]
+fn missing_target_failure_after_previous_publish_retains_placeholder_for_recovery() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let canonical = tempdir.path().join("canonical.db");
+    let staged = tempdir.path().join("staged.db");
+    let previous = tempdir.path().join("previous.db");
+    let journal = tempdir.path().join("replace.journal");
+    init_database(&staged, "tester").unwrap();
+
+    let mut guard = super::super::begin_database_replace(&canonical).unwrap();
+    let error = publish_staged_database_with_hook(
+        &mut guard,
+        &canonical,
+        &staged,
+        &previous,
+        &journal,
+        DatabaseReplaceOptions::default(),
+        |point| {
+            if point == PublishFailpoint::StagedDurable {
+                Err(KanbanError::Storage("simulated process loss".to_owned()))
+            } else {
+                Ok(())
+            }
+        },
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("simulated process loss"));
+    drop(guard);
+
+    assert!(!canonical.exists());
+    assert!(previous.is_file());
+    assert!(staged.is_file());
+    assert!(
+        fs::read_to_string(&journal)
+            .unwrap()
+            .contains("previous_published")
+    );
+
+    let mut restarted = super::super::begin_database_replace(&canonical).unwrap();
+    resume_staged_database_replace(&mut restarted, &journal).unwrap();
+    assert!(canonical.is_file());
+    assert!(!staged.exists());
+    assert!(!previous.exists());
+    drop(restarted);
+}
+
+#[test]
 fn completed_journal_rejects_replaced_previous_evidence() {
     let tempdir = tempfile::tempdir().unwrap();
     let canonical = tempdir.path().join("canonical.db");

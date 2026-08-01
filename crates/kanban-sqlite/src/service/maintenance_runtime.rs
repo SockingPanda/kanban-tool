@@ -16,7 +16,6 @@ use kanban_indexer::{
 };
 #[cfg(test)]
 use kanban_local::DerivedStoreWriteGuard;
-#[cfg(test)]
 use rusqlite::OptionalExtension;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -1234,7 +1233,7 @@ fn run_projection_store_once(
         &session.owner,
         session.options.lease_ttl_ms,
     )?;
-    let heartbeat = ProjectionLeaseHeartbeat::new(session, store_name, &lease.lease_token);
+    let heartbeat = ProjectionLeaseHeartbeat::new(session, &lease);
     let operation = heartbeat.run(|| {
         run_projection_store_operation_with_intent(
             session,
@@ -1731,6 +1730,13 @@ fn projection_binding_matches_descriptor(
         && corpus == descriptor.corpus.as_ref()
 }
 
+#[cfg(test)]
+#[derive(Debug)]
+struct ProjectionHeartbeatRenewBarrier {
+    entered_tx: mpsc::Sender<()>,
+    resume_rx: std::sync::Mutex<mpsc::Receiver<()>>,
+}
+
 #[derive(Clone)]
 struct ProjectionLeaseHeartbeat {
     db_path: PathBuf,
@@ -1740,6 +1746,8 @@ struct ProjectionLeaseHeartbeat {
     store_name: String,
     store_lease_token: String,
     ttl_ms: i64,
+    #[cfg(test)]
+    before_transaction: Option<std::sync::Arc<ProjectionHeartbeatRenewBarrier>>,
 }
 
 impl fmt::Debug for ProjectionLeaseHeartbeat {
@@ -1758,34 +1766,73 @@ impl fmt::Debug for ProjectionLeaseHeartbeat {
 }
 
 impl ProjectionLeaseHeartbeat {
-    fn new(session: &MaintenanceSession, store_name: &str, store_lease_token: &str) -> Self {
+    fn new(session: &MaintenanceSession, store_lease: &ProjectionLease) -> Self {
         Self {
             db_path: session.db_path.clone(),
             owner: session.owner.clone(),
             maintenance_lease_token: session.lease_token.clone(),
             maintenance_identity: session.identity.clone(),
-            store_name: store_name.to_owned(),
-            store_lease_token: store_lease_token.to_owned(),
+            store_name: store_lease.store_name.clone(),
+            store_lease_token: store_lease.lease_token.clone(),
             ttl_ms: session.options.lease_ttl_ms,
+            #[cfg(test)]
+            before_transaction: None,
         }
     }
 
+    #[cfg(test)]
+    fn pause_before_transaction_for_test(
+        &mut self,
+        entered_tx: mpsc::Sender<()>,
+        resume_rx: mpsc::Receiver<()>,
+    ) {
+        self.before_transaction = Some(std::sync::Arc::new(ProjectionHeartbeatRenewBarrier {
+            entered_tx,
+            resume_rx: std::sync::Mutex::new(resume_rx),
+        }));
+    }
+
+    #[cfg(test)]
+    fn wait_before_transaction_for_test(&self) {
+        let Some(barrier) = &self.before_transaction else {
+            return;
+        };
+        barrier
+            .entered_tx
+            .send(())
+            .expect("test waits for heartbeat renewal before transaction");
+        barrier
+            .resume_rx
+            .lock()
+            .expect("test heartbeat barrier lock")
+            .recv()
+            .expect("test resumes heartbeat renewal transaction");
+    }
+
     fn renew(&self) -> Result<()> {
-        renew_maintenance_owner_lease(
-            &self.db_path,
-            &self.owner,
-            &self.maintenance_lease_token,
-            self.ttl_ms,
-            &self.maintenance_identity,
-        )?;
-        renew_projection_lease(
-            &self.db_path,
-            &self.store_name,
-            &self.owner,
-            &self.store_lease_token,
-            self.ttl_ms,
-        )
-        .map(|_| ())
+        #[cfg(test)]
+        self.wait_before_transaction_for_test();
+        let conn = connect_file(&self.db_path)?;
+        with_immediate_tx(&conn, || {
+            let now = SystemClock.now_ms();
+            let expires_at = checked_expiry(now, self.ttl_ms)?;
+            renew_maintenance_owner_lease_on_connection(
+                &conn,
+                &self.owner,
+                &self.maintenance_lease_token,
+                &self.maintenance_identity,
+                now,
+                expires_at,
+            )?;
+            renew_projection_lease_for_heartbeat_on_connection(
+                &conn,
+                &self.store_name,
+                &self.owner,
+                &self.store_lease_token,
+                now,
+                expires_at,
+            )
+        })
     }
 
     fn run<T>(
@@ -1811,10 +1858,61 @@ impl ProjectionLeaseHeartbeat {
             })?;
             match heartbeat_result {
                 Err(error) => Err(error),
-                Ok(()) => Ok(operation_result),
+                // The timer can have last renewed up to one interval before the
+                // physical operation returns. Renew synchronously at that
+                // completion boundary so a successful operation is never
+                // reported while either authority has already expired.
+                Ok(()) => {
+                    self.renew()?;
+                    Ok(operation_result)
+                }
             }
         })
     }
+}
+
+fn renew_projection_lease_for_heartbeat_on_connection(
+    conn: &rusqlite::Connection,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    now: i64,
+    expires_at: i64,
+) -> Result<()> {
+    // A recovery operation may advance its own fence while retaining the same
+    // owner/token lease. Capture that current fence under this immediate
+    // transaction, then use it in the renewal CAS so the two authority
+    // renewals share one indivisible snapshot without accepting a successor.
+    let fence_epoch: i64 = conn
+        .query_row(
+            "SELECT fence_epoch FROM projection_store_state
+             WHERE store_name=?1 AND lease_owner=?2 AND lease_token=?3
+               AND lease_expires_at>?4",
+            params![store_name, owner, lease_token, now],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(storage)?
+        .ok_or_else(|| {
+            KanbanError::Conflict(format!(
+                "projection lease is not owned by this worker for store {store_name}"
+            ))
+        })?;
+    let changed = conn
+        .execute(
+            "UPDATE projection_store_state
+             SET lease_expires_at=?1,updated_at=?2
+             WHERE store_name=?3 AND lease_owner=?4 AND lease_token=?5
+               AND fence_epoch=?6 AND lease_expires_at>?2",
+            params![expires_at, now, store_name, owner, lease_token, fence_epoch],
+        )
+        .map_err(storage)?;
+    if changed != 1 {
+        return Err(KanbanError::Conflict(format!(
+            "projection lease is not owned by this worker for store {store_name}"
+        )));
+    }
+    Ok(())
 }
 
 fn catch_up_generation(
@@ -8727,21 +8825,26 @@ mod tests {
             MaintenanceSession::start(&db_path, "heartbeat-owner", MaintenanceMode::Once, options)?;
         let lease =
             acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "heartbeat-owner", 1_000)?;
-        let heartbeat =
-            ProjectionLeaseHeartbeat::new(&session, TANTIVY_TASKS_STORE, &lease.lease_token);
+        let heartbeat = ProjectionLeaseHeartbeat::new(&session, &lease);
 
-        heartbeat
+        let operation_completed_at = heartbeat
             .run(|| {
                 thread::sleep(Duration::from_millis(2_500));
                 let conflict =
                     acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "competitor", 1_000)
                         .expect_err("heartbeat must prevent a competing store lease");
                 assert!(matches!(conflict, KanbanError::Conflict(_)));
-                Ok(())
+                Ok(SystemClock.now_ms())
             })?
             .map_err(|error| anyhow::anyhow!("{error:?}"))?;
         let status = projection_status(&db_path)?;
         assert!(status.maintenance_owner.active);
+        assert!(
+            status
+                .maintenance_owner
+                .last_heartbeat_at
+                .is_some_and(|heartbeat_at| heartbeat_at >= operation_completed_at)
+        );
         assert_eq!(
             status.maintenance_owner.owner.as_deref(),
             Some("heartbeat-owner")
@@ -8752,6 +8855,285 @@ mod tests {
             TANTIVY_TASKS_STORE,
             "heartbeat-owner",
             &lease.lease_token,
+        )?;
+        session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn heartbeat_renew_does_not_revive_expired_authorities_after_writer_delay() -> anyhow::Result<()>
+    {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let options = MaintenanceRunOptions {
+            lease_ttl_ms: 1_000,
+            claim_ttl_ms: 250,
+            batch_size: 1,
+        };
+        let session =
+            MaintenanceSession::start(&db_path, "heartbeat-owner", MaintenanceMode::Once, options)?;
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "heartbeat-owner", 1_000)?;
+        let mut heartbeat = ProjectionLeaseHeartbeat::new(&session, &lease);
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        heartbeat.pause_before_transaction_for_test(entered_tx, resume_rx);
+
+        let renewal = thread::spawn(move || heartbeat.renew());
+        entered_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("heartbeat reached pre-transaction barrier");
+
+        let expires_at = SystemClock.now_ms() + 75;
+        let conn = connect_file(&db_path)?;
+        with_immediate_tx(&conn, || {
+            let owner_changed = conn
+                .execute(
+                    "UPDATE projection_maintenance_owner SET lease_expires_at=?1
+                     WHERE singleton=1 AND owner=?2 AND lease_token=?3",
+                    params![expires_at, "heartbeat-owner", session.lease_token.as_str()],
+                )
+                .map_err(storage)?;
+            let store_changed = conn
+                .execute(
+                    "UPDATE projection_store_state SET lease_expires_at=?1
+                     WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                    params![
+                        expires_at,
+                        TANTIVY_TASKS_STORE,
+                        "heartbeat-owner",
+                        lease.lease_token.as_str()
+                    ],
+                )
+                .map_err(storage)?;
+            if owner_changed != 1 || store_changed != 1 {
+                return Err(KanbanError::Storage(
+                    "test failed to shorten both heartbeat authorities".to_owned(),
+                ));
+            }
+            Ok(())
+        })?;
+
+        let writer = connect_file(&db_path)?;
+        writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+        resume_tx
+            .send(())
+            .expect("resume heartbeat renewal against held writer lock");
+        while SystemClock.now_ms() <= expires_at {
+            thread::sleep(Duration::from_millis(1));
+        }
+        writer.execute_batch("COMMIT").map_err(storage)?;
+
+        let error = renewal
+            .join()
+            .expect("heartbeat renewal thread must not panic")
+            .expect_err("renewal delayed beyond expiry must not revive old authorities");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+
+        let conn = connect_file(&db_path)?;
+        let owner_expiry: i64 = conn.query_row(
+            "SELECT lease_expires_at FROM projection_maintenance_owner WHERE singleton=1",
+            [],
+            |row| row.get(0),
+        )?;
+        let store_expiry: i64 = conn.query_row(
+            "SELECT lease_expires_at FROM projection_store_state WHERE store_name=?1",
+            [TANTIVY_TASKS_STORE],
+            |row| row.get(0),
+        )?;
+        assert_eq!(owner_expiry, expires_at);
+        assert_eq!(store_expiry, expires_at);
+        Ok(())
+    }
+
+    #[test]
+    fn physical_operation_final_renew_rejects_maintenance_owner_handoff() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let lease_ttl_ms = 10_000;
+        let options = MaintenanceRunOptions {
+            lease_ttl_ms,
+            claim_ttl_ms: 250,
+            batch_size: 1,
+        };
+        let session =
+            MaintenanceSession::start(&db_path, "heartbeat-owner", MaintenanceMode::Once, options)?;
+        let lease = acquire_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "heartbeat-owner",
+            lease_ttl_ms,
+        )?;
+        let heartbeat = ProjectionLeaseHeartbeat::new(&session, &lease);
+        let successor_identity = heartbeat.maintenance_identity.clone();
+        let operation_completed = AtomicBool::new(false);
+        let mut store_expires_before_handoff = None;
+        let mut successor_token = None;
+
+        let error = heartbeat
+            .run(|| {
+                let conn = connect_file(&db_path).expect("open test database");
+                store_expires_before_handoff = Some(
+                    conn.query_row(
+                        "SELECT lease_expires_at FROM projection_store_state WHERE store_name=?1",
+                        [TANTIVY_TASKS_STORE],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .expect("read store expiry before maintenance handoff"),
+                );
+                with_immediate_tx(&conn, || {
+                    conn.execute(
+                        "UPDATE projection_maintenance_owner SET lease_expires_at=0 \
+                         WHERE singleton=1 AND owner=?1 AND lease_token=?2",
+                        params!["heartbeat-owner", session.lease_token.as_str()],
+                    )
+                    .map_err(storage)?;
+                    Ok(())
+                })
+                .expect("expire old maintenance lease before lawful takeover");
+                successor_token = Some(
+                    acquire_maintenance_owner(
+                        &db_path,
+                        "successor-owner",
+                        MaintenanceMode::Once,
+                        lease_ttl_ms,
+                        &successor_identity,
+                    )
+                    .expect("successor acquires expired maintenance lease"),
+                );
+                operation_completed.store(true, Ordering::SeqCst);
+                Ok(())
+            })
+            .expect_err("final heartbeat renewal must fail after maintenance ownership changes");
+
+        assert!(operation_completed.load(Ordering::SeqCst));
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        let status = projection_status(&db_path)?;
+        assert!(status.maintenance_owner.active);
+        assert_eq!(
+            status.maintenance_owner.owner.as_deref(),
+            Some("successor-owner")
+        );
+        let conn = connect_file(&db_path)?;
+        let store_expires_after_handoff: i64 = conn.query_row(
+            "SELECT lease_expires_at FROM projection_store_state WHERE store_name=?1",
+            [TANTIVY_TASKS_STORE],
+            |row| row.get(0),
+        )?;
+        assert_eq!(
+            store_expires_after_handoff,
+            store_expires_before_handoff.expect("store expiry before handoff"),
+            "a rejected maintenance renewal must not extend the paired store lease"
+        );
+
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "heartbeat-owner",
+            &lease.lease_token,
+        )?;
+        release_maintenance_owner(
+            &db_path,
+            "successor-owner",
+            successor_token.as_deref().expect("successor token"),
+            &successor_identity,
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn physical_operation_final_renew_rejects_store_successor_without_reporting_success()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let lease_ttl_ms = 10_000;
+        let options = MaintenanceRunOptions {
+            lease_ttl_ms,
+            claim_ttl_ms: 250,
+            batch_size: 1,
+        };
+        let session =
+            MaintenanceSession::start(&db_path, "heartbeat-owner", MaintenanceMode::Once, options)?;
+        let lease = acquire_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "heartbeat-owner",
+            lease_ttl_ms,
+        )?;
+        let heartbeat = ProjectionLeaseHeartbeat::new(&session, &lease);
+        let operation_completed = AtomicBool::new(false);
+        let mut maintenance_expires_before_handoff = None;
+        let mut successor = None;
+
+        let error = heartbeat
+            .run(|| {
+                let conn = connect_file(&db_path).expect("open test database");
+                maintenance_expires_before_handoff = Some(
+                    conn.query_row(
+                        "SELECT lease_expires_at FROM projection_maintenance_owner WHERE singleton=1",
+                        [],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .expect("read maintenance expiry before store handoff"),
+                );
+                with_immediate_tx(&conn, || {
+                    conn.execute(
+                        "UPDATE projection_store_state SET lease_expires_at=0 \
+                         WHERE store_name=?1 AND lease_owner='heartbeat-owner' AND lease_token=?2",
+                        params![TANTIVY_TASKS_STORE, lease.lease_token],
+                    )
+                    .map_err(storage)?;
+                    Ok(())
+                })
+                .expect("expire old store lease before lawful takeover");
+                successor = Some(
+                    acquire_projection_lease(
+                        &db_path,
+                        TANTIVY_TASKS_STORE,
+                        "successor-owner",
+                        lease_ttl_ms,
+                    )
+                    .expect("successor acquires expired store lease"),
+                );
+                thread::sleep(Duration::from_millis(20));
+                operation_completed.store(true, Ordering::SeqCst);
+                Ok(())
+            })
+            .expect_err("final heartbeat renewal must fail after store ownership changes");
+
+        assert!(operation_completed.load(Ordering::SeqCst));
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        let successor = successor.expect("successor store lease");
+        assert_eq!(successor.fence_epoch, lease.fence_epoch + 1);
+        let conn = connect_file(&db_path)?;
+        let maintenance_expires_after_handoff: i64 = conn.query_row(
+            "SELECT lease_expires_at FROM projection_maintenance_owner WHERE singleton=1",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(
+            maintenance_expires_after_handoff,
+            maintenance_expires_before_handoff.expect("maintenance expiry before handoff"),
+            "a rejected store renewal must roll back the paired maintenance extension"
+        );
+        let (owner, token, fence_epoch): (Option<String>, Option<String>, i64) = conn.query_row(
+            "SELECT lease_owner,lease_token,fence_epoch \
+             FROM projection_store_state WHERE store_name=?1",
+            [TANTIVY_TASKS_STORE],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        assert_eq!(owner.as_deref(), Some("successor-owner"));
+        assert_eq!(token.as_deref(), Some(successor.lease_token.as_str()));
+        assert_eq!(fence_epoch, successor.fence_epoch);
+
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "successor-owner",
+            &successor.lease_token,
         )?;
         session.finish()?;
         Ok(())
@@ -9858,8 +10240,7 @@ mod tests {
             "debug-owner",
             MaintenanceRunOptions::default().lease_ttl_ms,
         )?;
-        let heartbeat =
-            ProjectionLeaseHeartbeat::new(&session, TANTIVY_TASKS_STORE, &lease.lease_token);
+        let heartbeat = ProjectionLeaseHeartbeat::new(&session, &lease);
 
         let rendered = format!("{heartbeat:?}");
 

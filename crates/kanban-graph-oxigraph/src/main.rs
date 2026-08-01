@@ -406,7 +406,7 @@ fn validate_active_generation(
     validate_physical_evidence(&active_path, active)?;
 
     let mut highest = None;
-    for entry in std::fs::read_dir(&generations)
+    for entry in std::fs::read_dir(generations)
         .context("Oxigraph projection v2 generations are unavailable")?
     {
         let entry = entry?;

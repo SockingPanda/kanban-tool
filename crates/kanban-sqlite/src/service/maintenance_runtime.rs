@@ -1828,7 +1828,7 @@ impl ProjectionLeaseHeartbeat {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "tantivy-backend"))]
     fn pause_before_transaction_for_test(
         &mut self,
         entered_tx: mpsc::Sender<()>,

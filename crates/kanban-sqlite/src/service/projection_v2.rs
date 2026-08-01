@@ -6444,32 +6444,11 @@ mod read_only_publication_validation_tests {
                 .map_err(storage)?;
                 Ok(())
             })?;
-            let snapshot_connection = connect_file(&path)?;
-            let before = projection_binding_recovery_snapshot(
-                &snapshot_connection,
+            let (before, delivery_outbox_before) = binding_abort_snapshot(
+                &path,
                 "tantivy_tasks",
                 "recovery-owner",
                 &lease.lease_token,
-                0,
-            )?;
-            let delivery_outbox_before: (String, String) = snapshot_connection.query_row(
-                "SELECT
-                   (SELECT COALESCE(json_group_array(json_object(
-                      'id',id,'status',status,'published_generation',published_generation,
-                      'claim_owner',claim_owner,'claim_token',claim_token,
-                      'claim_lease_token',claim_lease_token,
-                      'claim_fence_epoch',claim_fence_epoch,
-                      'claim_generation',claim_generation,
-                      'claim_expires_at',claim_expires_at,
-                      'last_error',last_error,'updated_at',updated_at)), '[]')
-                    FROM (SELECT * FROM projection_deliveries
-                          WHERE store_name='tantivy_tasks' ORDER BY id)),
-                   (SELECT COALESCE(json_group_array(json_object(
-                      'id',id,'status',status,'attempts',attempts,
-                      'last_error',last_error,'updated_at',updated_at)), '[]')
-                    FROM (SELECT * FROM index_outbox ORDER BY id))",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
             )?;
             let writer = connect_file(&path)?;
             writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
@@ -6484,34 +6463,13 @@ mod read_only_publication_validation_tests {
                 .expect("recovery thread must not panic")
                 .expect_err("expired recovery lease must reject final SQLite commit");
             assert!(matches!(error, KanbanError::Conflict(_)));
-            let snapshot_connection = connect_file(&path)?;
-            let after = projection_binding_recovery_snapshot(
-                &snapshot_connection,
+            let (after, delivery_outbox_after) = binding_abort_snapshot(
+                &path,
                 "tantivy_tasks",
                 "recovery-owner",
                 &lease.lease_token,
-                0,
             )?;
             assert_eq!(after, before);
-            let delivery_outbox_after: (String, String) = snapshot_connection.query_row(
-                "SELECT
-                   (SELECT COALESCE(json_group_array(json_object(
-                      'id',id,'status',status,'published_generation',published_generation,
-                      'claim_owner',claim_owner,'claim_token',claim_token,
-                      'claim_lease_token',claim_lease_token,
-                      'claim_fence_epoch',claim_fence_epoch,
-                      'claim_generation',claim_generation,
-                      'claim_expires_at',claim_expires_at,
-                      'last_error',last_error,'updated_at',updated_at)), '[]')
-                    FROM (SELECT * FROM projection_deliveries
-                          WHERE store_name='tantivy_tasks' ORDER BY id)),
-                   (SELECT COALESCE(json_group_array(json_object(
-                      'id',id,'status',status,'attempts',attempts,
-                      'last_error',last_error,'updated_at',updated_at)), '[]')
-                    FROM (SELECT * FROM index_outbox ORDER BY id))",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )?;
             assert_eq!(delivery_outbox_after, delivery_outbox_before);
             assert!(
                 !backend.generation_present(&manifest.generation),
@@ -7062,34 +7020,8 @@ mod read_only_publication_validation_tests {
                 .map_err(storage)?;
                 Ok(())
             })?;
-            let snapshot_connection = connect_file(&path)?;
-            let before = projection_binding_recovery_snapshot(
-                &snapshot_connection,
-                "tantivy_tasks",
-                "abort-owner",
-                &lease.lease_token,
-                0,
-            )?;
-            let delivery_outbox_before: (String, String) = snapshot_connection.query_row(
-                "SELECT
-                   (SELECT COALESCE(json_group_array(json_object(
-                      'id',id,'status',status,'published_generation',published_generation,
-                      'claim_owner',claim_owner,'claim_token',claim_token,
-                      'claim_lease_token',claim_lease_token,
-                      'claim_fence_epoch',claim_fence_epoch,
-                      'claim_generation',claim_generation,
-                      'claim_expires_at',claim_expires_at,
-                      'attempts',attempts,'next_attempt_at',next_attempt_at,
-                      'last_error',last_error,'updated_at',updated_at)), '[]')
-                    FROM (SELECT * FROM projection_deliveries
-                          WHERE store_name='tantivy_tasks' ORDER BY id)),
-                   (SELECT COALESCE(json_group_array(json_object(
-                      'id',id,'status',status,'attempts',attempts,
-                      'last_error',last_error,'updated_at',updated_at)), '[]')
-                    FROM (SELECT * FROM index_outbox ORDER BY id))",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )?;
+            let (before, delivery_outbox_before) =
+                binding_abort_snapshot(&path, "tantivy_tasks", "abort-owner", &lease.lease_token)?;
             let writer = connect_file(&path)?;
             writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
             resume_tx.send(()).expect("resume final abort commit");
@@ -7102,35 +7034,9 @@ mod read_only_publication_validation_tests {
                 .expect("abort thread must not panic")
                 .expect_err("expired abort lease must reject final SQLite commit");
             assert!(matches!(error, KanbanError::Conflict(_)));
-            let snapshot_connection = connect_file(&path)?;
-            let after = projection_binding_recovery_snapshot(
-                &snapshot_connection,
-                "tantivy_tasks",
-                "abort-owner",
-                &lease.lease_token,
-                0,
-            )?;
+            let (after, delivery_outbox_after) =
+                binding_abort_snapshot(&path, "tantivy_tasks", "abort-owner", &lease.lease_token)?;
             assert_eq!(after, before);
-            let delivery_outbox_after: (String, String) = snapshot_connection.query_row(
-                "SELECT
-                   (SELECT COALESCE(json_group_array(json_object(
-                      'id',id,'status',status,'published_generation',published_generation,
-                      'claim_owner',claim_owner,'claim_token',claim_token,
-                      'claim_lease_token',claim_lease_token,
-                      'claim_fence_epoch',claim_fence_epoch,
-                      'claim_generation',claim_generation,
-                      'claim_expires_at',claim_expires_at,
-                      'attempts',attempts,'next_attempt_at',next_attempt_at,
-                      'last_error',last_error,'updated_at',updated_at)), '[]')
-                    FROM (SELECT * FROM projection_deliveries
-                          WHERE store_name='tantivy_tasks' ORDER BY id)),
-                   (SELECT COALESCE(json_group_array(json_object(
-                      'id',id,'status',status,'attempts',attempts,
-                      'last_error',last_error,'updated_at',updated_at)), '[]')
-                    FROM (SELECT * FROM index_outbox ORDER BY id))",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )?;
             assert_eq!(delivery_outbox_after, delivery_outbox_before);
             assert!(
                 !backend.generation_present(&manifest.generation),

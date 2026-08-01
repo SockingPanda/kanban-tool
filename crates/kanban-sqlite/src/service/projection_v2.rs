@@ -6114,6 +6114,51 @@ mod read_only_publication_validation_tests {
         })
     }
 
+    fn record_projection_error_with_barrier<T>(
+        path: &std::path::Path,
+        authority: &ProjectionLease,
+        error: &str,
+        after_barrier: impl FnOnce(&std::sync::mpsc::Sender<()>) -> anyhow::Result<T>,
+    ) -> anyhow::Result<(T, Result<()>)> {
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| -> anyhow::Result<(T, Result<()>)> {
+            let record = scope.spawn(move || {
+                let _write_guard =
+                    crate::db::acquire_derived_store_write_guard(path, &authority.store_name)?;
+                record_projection_error_with_before_final_transaction(
+                    path,
+                    &authority.store_name,
+                    authority,
+                    error,
+                    move || {
+                        entered_tx
+                            .send(())
+                            .expect("projection error reached final transaction barrier");
+                        resume_rx
+                            .recv()
+                            .expect("resume projection error against held writer lock");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("projection error reached final transaction barrier");
+            let value = match after_barrier(&resume_tx) {
+                Ok(value) => value,
+                Err(error) => {
+                    let _ = resume_tx.send(());
+                    let _ = record.join();
+                    return Err(error);
+                }
+            };
+            let result = record
+                .join()
+                .expect("projection error thread must not panic");
+            Ok((value, result))
+        })
+    }
+
     fn claim_with_guard(
         path: &std::path::Path,
         owner: &str,
@@ -8081,6 +8126,116 @@ mod read_only_publication_validation_tests {
         assert_eq!(after.fence_epoch, successor.fence_epoch);
 
         release_projection_lease(&path, "tantivy_tasks", "new-owner", &successor.lease_token)?;
+        Ok(())
+    }
+
+    #[test]
+    fn projection_error_rejects_expired_lease_after_write_lock_delay() -> anyhow::Result<()> {
+        const LEASE_DELAY_MS: i64 = 250;
+        let (temp, lease) = claim_fixture()?;
+        let path = temp.path().join("kanban.db");
+        let authority =
+            current_lease_authority(&path, "tantivy_tasks", &lease.owner, &lease.lease_token)?;
+        let ((before, expires_at), result) = record_projection_error_with_barrier(
+            &path,
+            &authority,
+            "delayed projection failure",
+            |resume_tx| {
+                let expires_at = SystemClock.now_ms() + LEASE_DELAY_MS;
+                let conn = connect_file(&path)?;
+                with_immediate_tx(&conn, || {
+                    let changed = conn
+                        .execute(
+                            "UPDATE projection_store_state SET lease_expires_at=?1
+                             WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                            params![
+                                expires_at,
+                                "tantivy_tasks",
+                                authority.owner,
+                                authority.lease_token
+                            ],
+                        )
+                        .map_err(storage)?;
+                    if changed != 1 {
+                        return Err(KanbanError::Storage(
+                            "test failed to shorten projection lease before error recording"
+                                .to_owned(),
+                        ));
+                    }
+                    Ok(())
+                })?;
+                let before = claim_state_snapshot(&path, &authority.owner, &authority.lease_token)?;
+                let writer = connect_file(&path)?;
+                writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+                resume_tx
+                    .send(())
+                    .expect("resume projection error against held writer lock");
+                while SystemClock.now_ms() <= expires_at {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                writer.execute_batch("COMMIT").map_err(storage)?;
+                Ok((before, expires_at))
+            },
+        )?;
+        let error = result.expect_err("expired lease must reject delayed error recording");
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(
+            claim_state_snapshot(&path, &authority.owner, &authority.lease_token)?,
+            before
+        );
+
+        let successor =
+            acquire_projection_lease(&path, "tantivy_tasks", "error-successor", 10_000)?;
+        let successor_authority = current_lease_authority(
+            &path,
+            "tantivy_tasks",
+            &successor.owner,
+            &successor.lease_token,
+        )?;
+        record_projection_error(
+            &path,
+            "tantivy_tasks",
+            &successor_authority,
+            "successor projection failure",
+        )?;
+        let status = projection_status(&path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy status");
+        assert_eq!(status.owner.as_deref(), Some("error-successor"));
+        assert_eq!(status.lifecycle_status, "error");
+        assert_eq!(
+            status.last_error.as_deref(),
+            Some("successor projection failure")
+        );
+        let retry = claim_with_guard(&path, &successor.owner, &successor.lease_token, 1_000)?;
+        assert_eq!(retry.owner, successor.owner);
+        assert_eq!(retry.lease_token, successor.lease_token);
+        assert_eq!(retry.fence_epoch, successor.fence_epoch);
+        assert_eq!(retry.items.len(), 1);
+        assert_claim_running(&path)?;
+        assert_claim_delivery_matches_batch(&path, &retry)?;
+
+        let error = record_projection_error(
+            &path,
+            "tantivy_tasks",
+            &authority,
+            "stale projection failure",
+        )
+        .expect_err("old authority must not overwrite the successor");
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        let status = projection_status(&path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy status");
+        assert_eq!(status.owner.as_deref(), Some("error-successor"));
+        assert_eq!(
+            status.last_error.as_deref(),
+            Some("successor projection failure")
+        );
+        assert!(expires_at < SystemClock.now_ms());
         Ok(())
     }
 

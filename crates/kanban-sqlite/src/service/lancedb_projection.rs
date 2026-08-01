@@ -1988,6 +1988,10 @@ mod tests {
     use super::*;
     use crate::service::ProjectionGenerationBinding;
 
+    type CanonicalAuthorityMutation =
+        fn(&rusqlite::Connection, &mut ProjectionDestructiveAuthority);
+    type AuthorityMutation = fn(&mut ProjectionDestructiveAuthority);
+
     struct ScriptedTransport {
         response: Mutex<Option<VectorProjectionHelperResponse>>,
         requests: Mutex<Vec<VectorProjectionHelperRequest>>,
@@ -2546,10 +2550,7 @@ mod tests {
 
     #[test]
     fn publication_validation_rejects_malformed_canonical_authority_before_transport() {
-        let cases: &[(
-            &str,
-            fn(&rusqlite::Connection, &mut ProjectionDestructiveAuthority),
-        )] = &[
+        let cases: &[(&str, CanonicalAuthorityMutation)] = &[
             ("duplicate_role", |conn, authority| {
                 copy_previous_binding_to_building(conn, "prepared", false);
                 authority.role = ProjectionGenerationRole::Building;
@@ -2932,7 +2933,7 @@ mod tests {
 
     #[test]
     fn publication_validation_with_authority_rejects_each_stale_field_before_transport() {
-        let cases: &[(&str, fn(&mut ProjectionDestructiveAuthority))] = &[
+        let cases: &[(&str, AuthorityMutation)] = &[
             ("owner", |authority| {
                 authority.owner = "stale-owner".to_owned()
             }),

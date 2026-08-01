@@ -3125,8 +3125,8 @@ mod tests {
 
         run_linux_non_regular_guard_probe_with_deadline("sentinel-fifo", &fifo);
         run_linux_non_regular_guard_probe_with_deadline("database-fifo", &fifo);
-        run_linux_non_regular_guard_probe_with_deadline("sentinel-device", Path::new("/dev/null"));
-        run_linux_non_regular_guard_probe_with_deadline("database-device", Path::new("/dev/null"));
+        run_linux_non_regular_guard_probe_with_deadline("sentinel-device", Path::new("/dev/zero"));
+        run_linux_non_regular_guard_probe_with_deadline("database-device", Path::new("/dev/zero"));
         assert!(fs::symlink_metadata(&fifo).unwrap().file_type().is_fifo());
     }
 

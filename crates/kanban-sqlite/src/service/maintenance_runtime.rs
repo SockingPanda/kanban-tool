@@ -873,11 +873,23 @@ fn acquire_maintenance_owner(
     ttl_ms: i64,
     identity: &MaintenanceRuntimeIdentity,
 ) -> Result<String> {
-    let now = SystemClock.now_ms();
-    let expires_at = checked_expiry(now, ttl_ms)?;
+    acquire_maintenance_owner_with_before_transaction(path, owner, mode, ttl_ms, identity, || {})
+}
+
+fn acquire_maintenance_owner_with_before_transaction(
+    path: &Path,
+    owner: &str,
+    mode: MaintenanceMode,
+    ttl_ms: i64,
+    identity: &MaintenanceRuntimeIdentity,
+    before_transaction: impl FnOnce(),
+) -> Result<String> {
+    before_transaction();
     let lease_token = new_typed_id("pmlease");
     let conn = connect_file(path)?;
     with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
+        let expires_at = checked_expiry(now, ttl_ms)?;
         let changed = conn
             .execute(
                 "UPDATE projection_maintenance_owner
@@ -9016,6 +9028,93 @@ mod tests {
         assert_eq!(expiry_after, expiry_before);
         assert_eq!(heartbeat_after, heartbeat_before);
         assert_eq!(database_instance_id_after, database_instance_id_before);
+        Ok(())
+    }
+
+    #[test]
+    fn owner_acquisition_uses_fresh_timestamp_after_writer_delay() -> anyhow::Result<()> {
+        const LEASE_TTL_MS: i64 = 500;
+        const MIN_REMAINING_TTL_MS: i64 = 350;
+
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let identity = MaintenanceRuntimeIdentity::current()?;
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+
+        let lease_token = thread::scope(|scope| -> anyhow::Result<String> {
+            let path = db_path.as_path();
+            let identity_ref = &identity;
+            let acquisition = scope.spawn(move || {
+                acquire_maintenance_owner_with_before_transaction(
+                    path,
+                    "delayed-owner",
+                    MaintenanceMode::Continuous,
+                    LEASE_TTL_MS,
+                    identity_ref,
+                    || {
+                        entered_tx
+                            .send(())
+                            .expect("test observes acquisition at pre-transaction barrier");
+                        resume_rx
+                            .recv()
+                            .expect("test resumes acquisition against writer lock");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("owner acquisition reached pre-transaction barrier");
+
+            let writer = connect_file(&db_path)?;
+            writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+            resume_tx
+                .send(())
+                .expect("resume owner acquisition against held writer lock");
+            thread::sleep(Duration::from_millis((LEASE_TTL_MS + 200) as u64));
+            writer.execute_batch("COMMIT").map_err(storage)?;
+            let acquisition_boundary = SystemClock.now_ms();
+
+            let lease_token = acquisition
+                .join()
+                .expect("owner acquisition thread must not panic")?;
+            let conn = connect_file(&db_path)?;
+            let (owner, actual_token, expires_at, mode, capabilities_json, build_identity): (
+                String,
+                String,
+                i64,
+                String,
+                String,
+                String,
+            ) = conn.query_row(
+                "SELECT owner,lease_token,lease_expires_at,mode,capabilities_json,build_identity
+                 FROM projection_maintenance_owner WHERE singleton=1",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )?;
+            assert_eq!(owner, "delayed-owner");
+            assert_eq!(actual_token, lease_token);
+            assert_eq!(mode, MaintenanceMode::Continuous.as_str());
+            assert_eq!(capabilities_json, identity.capabilities_json);
+            assert_eq!(build_identity, identity.build_identity);
+            assert!(
+                expires_at >= acquisition_boundary + MIN_REMAINING_TTL_MS,
+                "owner acquisition must retain at least {MIN_REMAINING_TTL_MS}ms after the writer lock; expiry={expires_at}, boundary={acquisition_boundary}"
+            );
+            Ok(lease_token)
+        })?;
+
+        release_maintenance_owner(&db_path, "delayed-owner", &lease_token, &identity)?;
         Ok(())
     }
 

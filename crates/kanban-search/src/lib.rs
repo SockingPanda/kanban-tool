@@ -423,6 +423,52 @@ pub mod tantivy_backend {
         Ok(metadata)
     }
 
+    /// Replace every task document for one board in an existing generation.
+    ///
+    /// Board-scoped rebuild deliveries must remove documents for tasks that no
+    /// longer exist in SQLite as well as write the current canonical tasks.
+    /// Deleting by the stored board term makes that replacement complete
+    /// without trusting a caller-provided list of historical task IDs, while
+    /// leaving every other board's documents untouched.
+    pub fn replace_task_projection_generation_board(
+        path: &Path,
+        expected: &TantivyTaskProjectionMetadata,
+        board_id: &str,
+        documents: &[TaskSearchDocument],
+    ) -> Result<TantivyTaskProjectionMetadata, TantivyTaskIndexError> {
+        let metadata = validate_task_projection_generation(
+            path,
+            &expected.database_instance_id,
+            &expected.generation,
+        )?;
+        if metadata != *expected {
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Corrupt,
+                "task projection metadata changed during board rebuild",
+            ));
+        }
+        if documents
+            .iter()
+            .any(|document| document.board_id != board_id)
+        {
+            return Err(TantivyTaskIndexError::new(
+                TantivyTaskIndexErrorKind::Schema,
+                "task projection board rebuild contains a document from another board",
+            ));
+        }
+        let index = Index::open_in_dir(path).map_err(TantivyTaskIndexError::corrupt)?;
+        let fields = projection_fields_from_schema(&index.schema())?;
+        let mut writer = index.writer(50_000_000)?;
+        writer.delete_term(Term::from_field_text(fields.board_id, board_id));
+        for document in documents {
+            writer.add_document(to_tantivy_doc(fields, document))?;
+        }
+        writer.commit()?;
+        drop(writer);
+        durable_sync_directory_tree(path)?;
+        Ok(metadata)
+    }
+
     pub fn validate_task_projection_generation(
         path: &Path,
         database_instance_id: &str,
@@ -1039,8 +1085,9 @@ mod projection_v2_tests {
         SearchQuery, TaskSearchDocument,
         tantivy_backend::{
             TantivyTaskProjectionMetadata, TaskProjectionDocumentKey,
-            prepare_task_projection_generation, search_task_projection_generation,
-            sync_task_projection_generation, validate_task_projection_generation,
+            prepare_task_projection_generation, replace_task_projection_generation_board,
+            search_task_projection_generation, sync_task_projection_generation,
+            validate_task_projection_generation,
         },
     };
 
@@ -1219,6 +1266,56 @@ mod projection_v2_tests {
             search_task_projection_generation(&path, "db_test", "gen-a", &query("board-b", "beta"))
                 .unwrap();
         assert!(board_a.is_empty());
+        assert_eq!(board_b.len(), 1);
+    }
+
+    #[test]
+    fn projection_board_rebuild_removes_stale_tasks_without_touching_other_boards() {
+        let temp = TestDir::new("board-rebuild");
+        let path = temp.path().join("generation");
+        let manifest = metadata("gen-board-rebuild");
+        prepare_task_projection_generation(
+            &path,
+            &manifest,
+            &[
+                document("board-a", "stale", "old board-a task"),
+                document("board-a", "keep", "keep board-a task"),
+                document("board-b", "other", "other board task"),
+            ],
+        )
+        .unwrap();
+
+        replace_task_projection_generation_board(
+            &path,
+            &manifest,
+            "board-a",
+            &[document("board-a", "keep", "new board-a task")],
+        )
+        .unwrap();
+
+        let (board_a_old, _) = search_task_projection_generation(
+            &path,
+            "db_test",
+            "gen-board-rebuild",
+            &query("board-a", "old"),
+        )
+        .unwrap();
+        let (board_a_new, _) = search_task_projection_generation(
+            &path,
+            "db_test",
+            "gen-board-rebuild",
+            &query("board-a", "new"),
+        )
+        .unwrap();
+        let (board_b, _) = search_task_projection_generation(
+            &path,
+            "db_test",
+            "gen-board-rebuild",
+            &query("board-b", "other"),
+        )
+        .unwrap();
+        assert!(board_a_old.is_empty());
+        assert_eq!(board_a_new.len(), 1);
         assert_eq!(board_b.len(), 1);
     }
 

@@ -1595,6 +1595,26 @@ fn abort_projection_generation_with_authority(
     backend: &(impl ProjectionStoreBackend + ?Sized),
     authority: &ProjectionDestructiveAuthority,
 ) -> Result<()> {
+    abort_projection_generation_with_authority_before_final_transaction(
+        path,
+        store_name,
+        owner,
+        lease_token,
+        backend,
+        authority,
+        || {},
+    )
+}
+
+fn abort_projection_generation_with_authority_before_final_transaction(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+    authority: &ProjectionDestructiveAuthority,
+    before_final_transaction: impl FnOnce(),
+) -> Result<()> {
     if authority.generation.trim().is_empty()
         || authority.owner != owner
         || authority.lease_token != lease_token
@@ -1648,8 +1668,9 @@ fn abort_projection_generation_with_authority(
         )));
     }
 
-    let now = SystemClock.now_ms();
+    before_final_transaction();
     with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
         require_current_lease(&conn, store_name, owner, lease_token, now)?;
         let current: (Option<String>, Option<i64>, Option<String>) = conn
             .query_row(
@@ -5976,6 +5997,161 @@ mod read_only_publication_validation_tests {
             assert!(
                 !backend.generation_present(&manifest.generation),
                 "physical quarantine is not rolled back after a stale final SQLite commit"
+            );
+            let successor = acquire_projection_lease(&path, "tantivy_tasks", "successor", 10_000)?;
+            assert_eq!(successor.owner, "successor");
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn abort_generation_rejects_expired_lease_before_final_commit() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("abort final commit delay target"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "abort-owner", 10_000)?;
+        let manifest = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "abort-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "abort-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let authority =
+            current_building_authority(&path, "tantivy_tasks", "abort-owner", &lease.lease_token)?;
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| -> anyhow::Result<()> {
+            let path_ref = &path;
+            let token_ref = &lease.lease_token;
+            let backend_ref = &backend;
+            let authority_ref = &authority;
+            let abort = scope.spawn(move || {
+                abort_projection_generation_with_authority_before_final_transaction(
+                    path_ref,
+                    "tantivy_tasks",
+                    "abort-owner",
+                    token_ref,
+                    backend_ref,
+                    authority_ref,
+                    move || {
+                        entered_tx
+                            .send(())
+                            .expect("physical abort reached final SQLite barrier");
+                        resume_rx
+                            .recv()
+                            .expect("test resumes abort final commit against writer lock");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("physical abort completed before final SQLite barrier");
+            let expires_at = SystemClock.now_ms() + 75;
+            let conn = connect_file(&path)?;
+            with_immediate_tx(&conn, || {
+                conn.execute(
+                    "UPDATE projection_store_state SET lease_expires_at=?1
+                     WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                    params![
+                        expires_at,
+                        "tantivy_tasks",
+                        "abort-owner",
+                        lease.lease_token
+                    ],
+                )
+                .map_err(storage)?;
+                Ok(())
+            })?;
+            let snapshot_connection = connect_file(&path)?;
+            let before = projection_binding_recovery_snapshot(
+                &snapshot_connection,
+                "tantivy_tasks",
+                "abort-owner",
+                &lease.lease_token,
+                0,
+            )?;
+            let delivery_outbox_before: (String, String) = snapshot_connection.query_row(
+                "SELECT
+                   (SELECT COALESCE(json_group_array(json_object(
+                      'id',id,'status',status,'published_generation',published_generation,
+                      'claim_owner',claim_owner,'claim_token',claim_token,
+                      'claim_lease_token',claim_lease_token,
+                      'claim_fence_epoch',claim_fence_epoch,
+                      'claim_generation',claim_generation,
+                      'claim_expires_at',claim_expires_at,
+                      'attempts',attempts,'next_attempt_at',next_attempt_at,
+                      'last_error',last_error,'updated_at',updated_at)), '[]')
+                    FROM (SELECT * FROM projection_deliveries
+                          WHERE store_name='tantivy_tasks' ORDER BY id)),
+                   (SELECT COALESCE(json_group_array(json_object(
+                      'id',id,'status',status,'attempts',attempts,
+                      'last_error',last_error,'updated_at',updated_at)), '[]')
+                    FROM (SELECT * FROM index_outbox ORDER BY id))",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            let writer = connect_file(&path)?;
+            writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+            resume_tx.send(()).expect("resume final abort commit");
+            while SystemClock.now_ms() <= expires_at {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            writer.execute_batch("COMMIT").map_err(storage)?;
+            let error = abort
+                .join()
+                .expect("abort thread must not panic")
+                .expect_err("expired abort lease must reject final SQLite commit");
+            assert!(matches!(error, KanbanError::Conflict(_)));
+            let snapshot_connection = connect_file(&path)?;
+            let after = projection_binding_recovery_snapshot(
+                &snapshot_connection,
+                "tantivy_tasks",
+                "abort-owner",
+                &lease.lease_token,
+                0,
+            )?;
+            assert_eq!(after, before);
+            let delivery_outbox_after: (String, String) = snapshot_connection.query_row(
+                "SELECT
+                   (SELECT COALESCE(json_group_array(json_object(
+                      'id',id,'status',status,'published_generation',published_generation,
+                      'claim_owner',claim_owner,'claim_token',claim_token,
+                      'claim_lease_token',claim_lease_token,
+                      'claim_fence_epoch',claim_fence_epoch,
+                      'claim_generation',claim_generation,
+                      'claim_expires_at',claim_expires_at,
+                      'attempts',attempts,'next_attempt_at',next_attempt_at,
+                      'last_error',last_error,'updated_at',updated_at)), '[]')
+                    FROM (SELECT * FROM projection_deliveries
+                          WHERE store_name='tantivy_tasks' ORDER BY id)),
+                   (SELECT COALESCE(json_group_array(json_object(
+                      'id',id,'status',status,'attempts',attempts,
+                      'last_error',last_error,'updated_at',updated_at)), '[]')
+                    FROM (SELECT * FROM index_outbox ORDER BY id))",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            assert_eq!(delivery_outbox_after, delivery_outbox_before);
+            assert!(
+                !backend.generation_present(&manifest.generation),
+                "physical abort is retained when stale SQLite cleanup is rejected"
             );
             let successor = acquire_projection_lease(&path, "tantivy_tasks", "successor", 10_000)?;
             assert_eq!(successor.owner, "successor");

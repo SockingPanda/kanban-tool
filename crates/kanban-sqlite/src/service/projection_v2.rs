@@ -2837,15 +2837,26 @@ fn record_projection_error(
     authority: &ProjectionLease,
     error: &str,
 ) -> Result<()> {
+    record_projection_error_with_before_final_transaction(path, store_name, authority, error, || {})
+}
+
+fn record_projection_error_with_before_final_transaction(
+    path: &Path,
+    store_name: &str,
+    authority: &ProjectionLease,
+    error: &str,
+    before_final_transaction: impl FnOnce(),
+) -> Result<()> {
     if authority.store_name != store_name {
         return Err(KanbanError::Conflict(format!(
             "projection error authority targets {}",
             authority.store_name
         )));
     }
-    let now = SystemClock.now_ms();
     let conn = connect_file(path)?;
+    before_final_transaction();
     with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
         let changed = conn
             .execute(
                 "UPDATE projection_store_state

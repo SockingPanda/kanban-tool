@@ -1836,27 +1836,15 @@ impl ProjectionLeaseHeartbeat {
     fn renew(&self) -> Result<()> {
         #[cfg(test)]
         self.wait_before_transaction_for_test();
-        let conn = connect_file(&self.db_path)?;
-        with_immediate_tx(&conn, || {
-            let now = SystemClock.now_ms();
-            let expires_at = checked_expiry(now, self.ttl_ms)?;
-            renew_maintenance_owner_lease_on_connection(
-                &conn,
-                &self.owner,
-                &self.maintenance_lease_token,
-                &self.maintenance_identity,
-                now,
-                expires_at,
-            )?;
-            renew_projection_lease_for_heartbeat_on_connection(
-                &conn,
-                &self.store_name,
-                &self.owner,
-                &self.store_lease_token,
-                now,
-                expires_at,
-            )
-        })
+        renew_maintenance_and_store_lease(
+            &self.db_path,
+            &self.owner,
+            &self.maintenance_lease_token,
+            &self.maintenance_identity,
+            &self.store_name,
+            &self.store_lease_token,
+            self.ttl_ms,
+        )
     }
 
     fn run<T>(
@@ -1939,6 +1927,54 @@ fn renew_projection_lease_for_heartbeat_on_connection(
     Ok(())
 }
 
+fn renew_maintenance_and_store_lease(
+    db_path: &Path,
+    owner: &str,
+    maintenance_lease_token: &str,
+    maintenance_identity: &MaintenanceRuntimeIdentity,
+    store_name: &str,
+    store_lease_token: &str,
+    ttl_ms: i64,
+) -> Result<()> {
+    let conn = connect_file(db_path)?;
+    with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
+        let expires_at = checked_expiry(now, ttl_ms)?;
+        renew_maintenance_owner_lease_on_connection(
+            &conn,
+            owner,
+            maintenance_lease_token,
+            maintenance_identity,
+            now,
+            expires_at,
+        )?;
+        renew_projection_lease_for_heartbeat_on_connection(
+            &conn,
+            store_name,
+            owner,
+            store_lease_token,
+            now,
+            expires_at,
+        )
+    })
+}
+
+fn renew_catch_up_authorities(
+    session: &MaintenanceSession,
+    store_name: &str,
+    lease_token: &str,
+) -> Result<()> {
+    renew_maintenance_and_store_lease(
+        &session.db_path,
+        &session.owner,
+        &session.lease_token,
+        &session.identity,
+        store_name,
+        lease_token,
+        session.options.lease_ttl_ms,
+    )
+}
+
 fn catch_up_generation(
     session: &mut MaintenanceSession,
     store_name: &str,
@@ -1948,15 +1984,8 @@ fn catch_up_generation(
 ) -> MaintenanceStoreAttempt<usize> {
     let mut processed = 0;
     for _ in 0..MAX_REBUILD_CATCH_UP_BATCHES {
-        renew_maintenance_owner(session).map_err(MaintenanceStoreAttemptError::Fatal)?;
-        renew_projection_lease(
-            &session.db_path,
-            store_name,
-            &session.owner,
-            lease_token,
-            session.options.lease_ttl_ms,
-        )
-        .map_err(MaintenanceStoreAttemptError::Fatal)?;
+        renew_catch_up_authorities(session, store_name, lease_token)
+            .map_err(MaintenanceStoreAttemptError::Fatal)?;
         let batch = run_projection_batch_with(
             &session.db_path,
             store_name,
@@ -8922,6 +8951,88 @@ mod tests {
             successor_token.as_deref().expect("successor token"),
             &successor_identity,
         )?;
+        Ok(())
+    }
+
+    #[test]
+    fn catch_up_renewal_rolls_back_owner_extension_when_store_has_successor() -> anyhow::Result<()>
+    {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let options = MaintenanceRunOptions {
+            lease_ttl_ms: 10_000,
+            claim_ttl_ms: 250,
+            batch_size: 1,
+        };
+        let session =
+            MaintenanceSession::start(&db_path, "catch-up-owner", MaintenanceMode::Once, options)?;
+        let lease =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "catch-up-owner", 10_000)?;
+        let owner_expiry_before = SystemClock.now_ms() + 5_000;
+        let conn = connect_file(&db_path)?;
+        with_immediate_tx(&conn, || {
+            let owner_changed = conn
+                .execute(
+                    "UPDATE projection_maintenance_owner SET lease_expires_at=?1
+                     WHERE singleton=1 AND owner=?2 AND lease_token=?3",
+                    params![
+                        owner_expiry_before,
+                        "catch-up-owner",
+                        session.lease_token.as_str()
+                    ],
+                )
+                .map_err(storage)?;
+            let store_expired = conn
+                .execute(
+                    "UPDATE projection_store_state SET lease_expires_at=0
+                     WHERE store_name=?1 AND lease_owner=?2 AND lease_token=?3",
+                    params![
+                        TANTIVY_TASKS_STORE,
+                        "catch-up-owner",
+                        lease.lease_token.as_str()
+                    ],
+                )
+                .map_err(storage)?;
+            if owner_changed != 1 || store_expired != 1 {
+                return Err(KanbanError::Storage(
+                    "test failed to prepare catch-up successor handoff".to_owned(),
+                ));
+            }
+            Ok(())
+        })?;
+        let successor =
+            acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "successor-owner", 10_000)?;
+
+        let error = renew_catch_up_authorities(&session, TANTIVY_TASKS_STORE, &lease.lease_token)
+            .expect_err("catch-up renewal must fail after store handoff");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+
+        let conn = connect_file(&db_path)?;
+        let owner_expiry_after: i64 = conn.query_row(
+            "SELECT lease_expires_at FROM projection_maintenance_owner WHERE singleton=1",
+            [],
+            |row| row.get(0),
+        )?;
+        let (store_owner, store_token, store_fence_epoch): (Option<String>, Option<String>, i64) =
+            conn.query_row(
+                "SELECT lease_owner,lease_token,fence_epoch
+                 FROM projection_store_state WHERE store_name=?1",
+                [TANTIVY_TASKS_STORE],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )?;
+        assert_eq!(owner_expiry_after, owner_expiry_before);
+        assert_eq!(store_owner.as_deref(), Some("successor-owner"));
+        assert_eq!(store_token.as_deref(), Some(successor.lease_token.as_str()));
+        assert_eq!(store_fence_epoch, successor.fence_epoch);
+
+        release_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            "successor-owner",
+            &successor.lease_token,
+        )?;
+        session.finish()?;
         Ok(())
     }
 

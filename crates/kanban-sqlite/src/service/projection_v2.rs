@@ -842,7 +842,24 @@ pub fn begin_projection_generation(
     lease_token: &str,
     backend: &(impl ProjectionStoreBackend + ?Sized),
 ) -> Result<ProjectionArtifactManifest> {
-    let path = path.as_ref();
+    begin_projection_generation_with_before_transaction(
+        path.as_ref(),
+        store_name,
+        owner,
+        lease_token,
+        backend,
+        || {},
+    )
+}
+
+fn begin_projection_generation_with_before_transaction(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+    before_transaction: impl FnOnce(),
+) -> Result<ProjectionArtifactManifest> {
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let descriptor = backend.descriptor()?;
     validate_store_descriptor(store_name, &descriptor)?;
@@ -857,9 +874,10 @@ pub fn begin_projection_generation(
             })
         })
         .transpose()?;
-    let now = SystemClock.now_ms();
+    before_transaction();
     let conn = connect_file(path)?;
     with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
         let lease = current_lease(&conn, store_name, owner, lease_token, now)?;
         conn.execute(
             "UPDATE projection_deliveries
@@ -5856,6 +5874,187 @@ mod read_only_publication_validation_tests {
         assert_eq!(authority.fence_epoch, 9);
         assert_eq!(authority.lease_expires_at, 100);
         assert_eq!(authority.expected_binding.fence_epoch, 7);
+    }
+
+    #[test]
+    fn begin_generation_rejects_expired_lease_after_writer_delay() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("begin generation delay target"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "begin-owner", 10_000)?;
+        let (delivery_id, outbox_id): (i64, i64) = connect_file(&path)?.query_row(
+            "SELECT id,outbox_id FROM projection_deliveries
+             WHERE store_name=?1 ORDER BY id LIMIT 1",
+            ["tantivy_tasks"],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let conn = connect_file(&path)?;
+        with_immediate_tx(&conn, || {
+            let changed = conn
+                .execute(
+                    "UPDATE projection_deliveries
+                     SET status='running',claim_owner=?1,claim_token='begin-claim',
+                         claim_lease_token=?2,claim_fence_epoch=?3,
+                         claim_generation='begin-generation',claim_expires_at=0
+                     WHERE id=?4 AND status='pending'",
+                    params![
+                        "begin-owner",
+                        lease.lease_token,
+                        lease.fence_epoch,
+                        delivery_id
+                    ],
+                )
+                .map_err(storage)?;
+            if changed != 1 {
+                return Err(KanbanError::Storage(
+                    "test failed to seed expired running projection delivery".to_owned(),
+                ));
+            }
+            Ok(())
+        })?;
+        let snapshots = |conn: &Connection| -> anyhow::Result<(String, String, String, String)> {
+            let store = conn.query_row(
+                "SELECT json_object(
+                    'lease_owner',lease_owner,'lease_token',lease_token,
+                    'lease_expires_at',lease_expires_at,'fence_epoch',fence_epoch,
+                    'building_generation',building_generation,
+                    'building_fingerprint',building_fingerprint,
+                    'building_fence_epoch',building_fence_epoch,
+                    'building_provider',building_provider,
+                    'building_provider_fingerprint',building_provider_fingerprint,
+                    'building_corpus_schema',building_corpus_schema,
+                    'building_corpus_fingerprint',building_corpus_fingerprint,
+                    'building_embedding_model',building_embedding_model,
+                    'building_embedding_dimensions',building_embedding_dimensions,
+                    'building_canonical_count',building_canonical_count,
+                    'building_canonical_digest',building_canonical_digest,
+                    'building_delivery_count',building_delivery_count,
+                    'building_delivery_digest',building_delivery_digest,
+                    'building_phase',building_phase,'snapshot_cursor',snapshot_cursor,
+                    'control_plane',control_plane,'lifecycle_status',lifecycle_status,
+                    'last_error',last_error,'updated_at',updated_at)
+                 FROM projection_store_state WHERE store_name='tantivy_tasks'",
+                [],
+                |row| row.get(0),
+            )?;
+            let delivery = conn.query_row(
+                "SELECT json_object(
+                    'status',status,'claim_owner',claim_owner,'claim_token',claim_token,
+                    'claim_lease_token',claim_lease_token,
+                    'claim_fence_epoch',claim_fence_epoch,
+                    'claim_generation',claim_generation,
+                    'claim_expires_at',claim_expires_at,
+                    'published_generation',published_generation,
+                    'last_error',last_error,'updated_at',updated_at)
+                 FROM projection_deliveries WHERE id=?1",
+                [delivery_id],
+                |row| row.get(0),
+            )?;
+            let outbox = conn.query_row(
+                "SELECT json_object(
+                    'source_event_id',source_event_id,'target',target,
+                    'projection_store',projection_store,'entity_uri',entity_uri,
+                    'action',action,'payload_json',payload_json,'status',status,
+                    'attempts',attempts,'last_error',last_error,
+                    'created_at',created_at,'updated_at',updated_at)
+                 FROM index_outbox WHERE id=?1",
+                [outbox_id],
+                |row| row.get(0),
+            )?;
+            let checkpoint = conn.query_row(
+                "SELECT json_object(
+                    'schema_version',schema_version,'last_event_id',last_event_id,
+                    'dirty',dirty,'last_rebuild_at',last_rebuild_at,
+                    'last_sync_at',last_sync_at,'last_error',last_error,
+                    'updated_at',updated_at)
+                 FROM derived_store_state WHERE store_name='tantivy_tasks'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok((store, delivery, outbox, checkpoint))
+        };
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+
+        std::thread::scope(|scope| -> anyhow::Result<()> {
+            let path_ref = &path;
+            let lease_token = &lease.lease_token;
+            let backend_ref = &backend;
+            let begin = scope.spawn(move || {
+                begin_projection_generation_with_before_transaction(
+                    path_ref,
+                    "tantivy_tasks",
+                    "begin-owner",
+                    lease_token,
+                    backend_ref,
+                    move || {
+                        entered_tx
+                            .send(())
+                            .expect("test observes begin generation at pre-transaction barrier");
+                        resume_rx
+                            .recv()
+                            .expect("test resumes begin generation against writer lock");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("begin generation reached pre-transaction barrier");
+
+            let expires_at = SystemClock.now_ms() + 75;
+            let conn = connect_file(&path)?;
+            with_immediate_tx(&conn, || {
+                let changed = conn
+                    .execute(
+                        "UPDATE projection_store_state SET lease_expires_at=?1
+                         WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                        params![
+                            expires_at,
+                            "tantivy_tasks",
+                            "begin-owner",
+                            lease.lease_token
+                        ],
+                    )
+                    .map_err(storage)?;
+                if changed != 1 {
+                    return Err(KanbanError::Storage(
+                        "test failed to shorten projection lease before generation begin"
+                            .to_owned(),
+                    ));
+                }
+                Ok(())
+            })?;
+            let snapshot_connection = connect_file(&path)?;
+            let before = snapshots(&snapshot_connection)?;
+
+            let writer = connect_file(&path)?;
+            writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+            resume_tx
+                .send(())
+                .expect("resume begin generation against held writer lock");
+            while SystemClock.now_ms() <= expires_at {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            writer.execute_batch("COMMIT").map_err(storage)?;
+
+            let error = begin
+                .join()
+                .expect("begin generation thread must not panic")
+                .expect_err("begin generation delayed beyond expiry must reject stale owner");
+            assert!(matches!(error, KanbanError::Conflict(_)));
+            let snapshot_connection = connect_file(&path)?;
+            let after = snapshots(&snapshot_connection)?;
+            assert_eq!(after, before);
+            Ok(())
+        })?;
+        Ok(())
     }
 
     #[test]

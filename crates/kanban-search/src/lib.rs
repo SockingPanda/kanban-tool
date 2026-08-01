@@ -363,6 +363,14 @@ pub mod tantivy_backend {
                 writer.add_document(to_tantivy_doc(fields, document))?;
             }
             writer.commit()?;
+            // Tantivy keeps Windows file handles for the index directory and
+            // its writer until both values are dropped.  The generation
+            // publish below renames the complete directory, which Windows
+            // rejects while any descendant handle is still open.  Keep the
+            // handles alive through commit/metadata generation, then close
+            // them before the durable directory rename.
+            drop(writer);
+            drop(index);
             write_projection_metadata(&tmp_path, metadata)?;
             durable_publish_directory(&tmp_path, path)?;
             Ok(metadata.clone())
@@ -1155,6 +1163,27 @@ mod projection_v2_tests {
                 .collect::<Vec<_>>(),
             ["task-b"]
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn projection_prepare_closes_tantivy_handles_before_generation_publish() {
+        let temp = TestDir::new("windows-publish-handle-lifetime");
+        let path = temp.path().join("generation");
+
+        prepare_task_projection_generation(
+            &path,
+            &metadata("gen-windows"),
+            &[document("board-a", "task-a", "handle lifetime")],
+        )
+        .expect("a prepared generation must publish after Tantivy handles close");
+
+        // Recovery moves whole generations by rename.  Keeping this
+        // operation in the backend test makes the Windows handle-lifetime
+        // boundary explicit without bypassing service authority checks.
+        let moved = temp.path().join("generation.moved");
+        std::fs::rename(&path, &moved).expect("published generation must be movable");
+        std::fs::rename(&moved, &path).expect("generation must be restorable");
     }
 
     #[test]

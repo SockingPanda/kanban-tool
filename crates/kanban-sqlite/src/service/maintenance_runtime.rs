@@ -2175,19 +2175,166 @@ struct MaintenanceFailurePersistenceInput<'a> {
     maintenance_identity: &'a MaintenanceRuntimeIdentity,
 }
 
+#[cfg(test)]
+#[derive(Debug, Default)]
+struct WriterBlockProbeState {
+    contended: bool,
+    released: bool,
+    cancelled: bool,
+}
+
+#[cfg(test)]
+#[derive(Debug)]
+struct WriterBlockProbe {
+    state: std::sync::Mutex<WriterBlockProbeState>,
+    wake: std::sync::Condvar,
+}
+
+#[cfg(test)]
+impl WriterBlockProbe {
+    fn new() -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self {
+            state: std::sync::Mutex::new(WriterBlockProbeState::default()),
+            wake: std::sync::Condvar::new(),
+        })
+    }
+
+    fn on_busy(&self) -> bool {
+        let mut state = self.state.lock().expect("writer block probe lock");
+        state.contended = true;
+        self.wake.notify_all();
+        while !state.released && !state.cancelled {
+            state = self.wake.wait(state).expect("writer block probe wait");
+        }
+        state.released && !state.cancelled
+    }
+
+    fn wait_for_contention(&self, deadline: std::time::Instant) -> bool {
+        let mut state = self.state.lock().expect("writer block probe lock");
+        while !state.contended {
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                return false;
+            }
+            let timeout = deadline.saturating_duration_since(now);
+            let (next, result) = self
+                .wake
+                .wait_timeout(state, timeout)
+                .expect("writer block probe timed wait");
+            state = next;
+            if result.timed_out() && !state.contended {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn release(&self) {
+        let mut state = self.state.lock().expect("writer block probe lock");
+        state.released = true;
+        self.wake.notify_all();
+    }
+
+    fn cancel(&self) {
+        let mut state = self.state.lock().expect("writer block probe lock");
+        state.cancelled = true;
+        self.wake.notify_all();
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static PERSIST_STORE_FAILURE_BUSY_PROBE:
+        std::cell::RefCell<Option<std::sync::Arc<WriterBlockProbe>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn persist_store_failure_busy_handler(_count: i32) -> bool {
+    let probe = PERSIST_STORE_FAILURE_BUSY_PROBE.with(|slot| slot.borrow().clone());
+    probe.is_some_and(|probe| probe.on_busy())
+}
+
+#[cfg(test)]
+struct PersistStoreFailureBusyProbeGuard {
+    previous: Option<std::sync::Arc<WriterBlockProbe>>,
+}
+
+#[cfg(test)]
+impl PersistStoreFailureBusyProbeGuard {
+    fn install(probe: std::sync::Arc<WriterBlockProbe>) -> Self {
+        let previous =
+            PERSIST_STORE_FAILURE_BUSY_PROBE.with(|slot| slot.borrow_mut().replace(probe));
+        Self { previous }
+    }
+}
+
+#[cfg(test)]
+impl Drop for PersistStoreFailureBusyProbeGuard {
+    fn drop(&mut self) {
+        let previous = self.previous.take();
+        PERSIST_STORE_FAILURE_BUSY_PROBE.with(|slot| *slot.borrow_mut() = previous);
+    }
+}
+
+#[cfg(test)]
+fn install_persist_store_failure_busy_probe(conn: &rusqlite::Connection) -> Result<()> {
+    let enabled = PERSIST_STORE_FAILURE_BUSY_PROBE.with(|slot| slot.borrow().is_some());
+    if enabled {
+        conn.busy_handler(Some(persist_store_failure_busy_handler))
+            .map_err(storage)?;
+    }
+    Ok(())
+}
+
 fn persist_store_failure(
     input: MaintenanceFailurePersistenceInput<'_>,
     kind: MaintenanceStoreFailureKind,
     error: KanbanError,
 ) -> Result<MaintenanceStoreRun> {
-    persist_store_failure_with_before_transaction(input, kind, error, || {})
+    persist_store_failure_with_before_transaction(input, kind, error, |_| Ok(()))
 }
 
 fn persist_store_failure_with_before_transaction(
     input: MaintenanceFailurePersistenceInput<'_>,
     kind: MaintenanceStoreFailureKind,
     error: KanbanError,
-    before_transaction: impl FnOnce(),
+    before_transaction: impl FnOnce(&rusqlite::Connection) -> Result<()>,
+) -> Result<MaintenanceStoreRun> {
+    persist_store_failure_with_before_transaction_and_now(
+        input,
+        kind,
+        error,
+        before_transaction,
+        || SystemClock.now_ms(),
+    )
+}
+
+#[cfg(test)]
+fn persist_store_failure_with_test_now(
+    input: MaintenanceFailurePersistenceInput<'_>,
+    kind: MaintenanceStoreFailureKind,
+    error: KanbanError,
+    before_transaction: impl FnOnce(&rusqlite::Connection) -> Result<()>,
+    now: impl Fn() -> i64,
+    busy_probe: std::sync::Arc<WriterBlockProbe>,
+) -> Result<MaintenanceStoreRun> {
+    let _busy_probe_guard = PersistStoreFailureBusyProbeGuard::install(busy_probe);
+    persist_store_failure_with_before_transaction_and_now(
+        input,
+        kind,
+        error,
+        before_transaction,
+        now,
+    )
+}
+
+fn persist_store_failure_with_before_transaction_and_now(
+    input: MaintenanceFailurePersistenceInput<'_>,
+    kind: MaintenanceStoreFailureKind,
+    error: KanbanError,
+    before_transaction: impl FnOnce(&rusqlite::Connection) -> Result<()>,
+    now: impl Fn() -> i64,
 ) -> Result<MaintenanceStoreRun> {
     if input.lease.store_name != input.store_name {
         return Err(KanbanError::Conflict(format!(
@@ -2197,12 +2344,14 @@ fn persist_store_failure_with_before_transaction(
     }
     let message = error.to_string();
     let conn = connect_file(input.path)?;
-    before_transaction();
+    #[cfg(test)]
+    install_persist_store_failure_busy_probe(&conn)?;
+    before_transaction(&conn)?;
     with_immediate_tx(&conn, || {
         // The final writer barrier is part of the authority check. Capture
         // time only after BEGIN IMMEDIATE has acquired SQLite's writer lock;
         // otherwise a blocked stale finalizer could reuse a pre-wait `now`.
-        let now = SystemClock.now_ms();
+        let now = now();
         let maintenance_owner_state = conn
             .query_row(
                 "SELECT owner,lease_token,lease_expires_at,capabilities_json,build_identity

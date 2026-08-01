@@ -146,6 +146,7 @@ pub struct ProjectionDelivery {
 /// outbox row to target this store or `all` keeps a forged delivery from
 /// borrowing another store's authority, while the exact URI/action/payload
 /// checks prevent a legacy board upsert from becoming an implicit rebuild.
+#[cfg(any(feature = "oxigraph-backend", feature = "tantivy-backend"))]
 pub(crate) fn validate_board_rebuild_delivery(
     conn: &Connection,
     item: &ProjectionDelivery,

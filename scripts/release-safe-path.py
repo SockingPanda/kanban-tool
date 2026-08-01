@@ -1835,6 +1835,117 @@ def seal_tree(root: RootAnchor, path: pathlib.Path) -> None:
         os.close(descriptor)
 
 
+def inherited_build_lock_fd() -> int | None:
+    """Return and exclusively acquire the inherited Cargo lock descriptor.
+
+    The release shell wrappers prove the descriptor identity before invoking
+    the safe path helper.  Re-acquire the open file description here as an
+    independent authority check: an inherited descriptor held by the wrapper
+    succeeds, an unlocked same-inode spoof may be acquired safely, and a
+    competing holder fails before any filesystem mutation.
+    """
+
+    if os.environ.get("KANBAN_CARGO_BUILD_LOCK_HELD") != "1":
+        return None
+
+    target_raw = os.environ.get("CARGO_TARGET_DIR")
+    lock_raw = os.environ.get("KANBAN_CARGO_BUILD_LOCK_PATH")
+    fd_raw = os.environ.get("KANBAN_CARGO_BUILD_LOCK_FD")
+    if not target_raw or not lock_raw or not fd_raw:
+        raise UnsafePath("inherited Cargo build lock proof is incomplete")
+    target = pathlib.Path(target_raw)
+    if (
+        not target.is_absolute()
+        or ".." in target.parts
+        or os.path.normpath(target_raw) != target_raw
+    ):
+        raise UnsafePath("inherited Cargo target directory is not canonical")
+    expected_lock = os.fspath(target / ".build.lock")
+    if lock_raw != expected_lock:
+        raise UnsafePath("inherited Cargo build lock path is not canonical")
+    if not fd_raw.isascii() or not fd_raw.isdecimal() or int(fd_raw) < 3:
+        raise UnsafePath("inherited Cargo build lock descriptor is invalid")
+    lock_fd = int(fd_raw)
+
+    try:
+        descriptor_metadata = os.fstat(lock_fd)
+    except OSError as error:
+        raise UnsafePath(
+            "inherited Cargo build lock descriptor is not open"
+        ) from error
+    if (
+        not stat.S_ISREG(descriptor_metadata.st_mode)
+        or descriptor_metadata.st_nlink != 1
+    ):
+        raise UnsafePath(
+            "inherited Cargo build lock descriptor is not a single-linked regular file"
+        )
+
+    try:
+        lock_metadata = os.lstat(lock_raw)
+    except OSError as error:
+        raise UnsafePath(
+            "inherited Cargo build lock path is unavailable"
+        ) from error
+    if (
+        stat.S_ISLNK(lock_metadata.st_mode)
+        or not stat.S_ISREG(lock_metadata.st_mode)
+        or lock_metadata.st_nlink != 1
+    ):
+        raise UnsafePath(
+            "inherited Cargo build lock path is not a single-linked regular file"
+        )
+    if not same_inode(lock_metadata, descriptor_metadata):
+        raise UnsafePath("inherited Cargo build lock descriptor identity changed")
+
+    proc_fd_path = f"/proc/self/fd/{lock_fd}"
+    try:
+        proc_metadata = os.stat(proc_fd_path)
+    except OSError as error:
+        raise UnsafePath(
+            "inherited Cargo build lock descriptor is not observable"
+        ) from error
+    if not same_inode(lock_metadata, proc_metadata):
+        raise UnsafePath("inherited Cargo build lock descriptor identity changed")
+    test_event("inherited-lock-before-flock", pathlib.Path(lock_raw))
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        raise UnsafePath(
+            "inherited Cargo build lock is held by another process"
+        ) from error
+    except OSError as error:
+        raise UnsafePath("inherited Cargo build lock could not be acquired") from error
+
+    try:
+        descriptor_after = os.fstat(lock_fd)
+        lock_after = os.lstat(lock_raw)
+        proc_after = os.stat(proc_fd_path)
+    except OSError as error:
+        raise UnsafePath(
+            "inherited Cargo build lock identity changed after acquisition"
+        ) from error
+    for label, metadata in (
+        ("descriptor", descriptor_after),
+        ("path", lock_after),
+        ("proc descriptor", proc_after),
+    ):
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            raise UnsafePath(
+                "inherited Cargo build lock "
+                f"{label} is not a single-linked regular file after acquisition"
+            )
+    if (
+        not same_inode(lock_after, lock_metadata)
+        or not same_inode(descriptor_after, descriptor_metadata)
+        or not same_inode(proc_after, proc_metadata)
+        or not same_inode(lock_after, descriptor_after)
+        or not same_inode(lock_after, proc_after)
+    ):
+        raise UnsafePath("inherited Cargo build lock identity changed after acquisition")
+    return lock_fd
+
+
 def run_verifier(
     command: Sequence[str],
     lease_set: LeaseSet,
@@ -1871,11 +1982,15 @@ def run_verifier(
     environment["KANBAN_RELEASE_PINNED_STAGE_FD"] = str(pinned_directory)
     environment["KANBAN_RELEASE_PINNED_STAGE_DEV"] = str(pinned_metadata.st_dev)
     environment["KANBAN_RELEASE_PINNED_STAGE_INO"] = str(pinned_metadata.st_ino)
-    pass_fds: tuple[int, ...]
+    pass_fds_set: set[int] = set()
     if os.environ.get("KANBAN_RELEASE_SAFE_PATH_TEST_DROP_PINNED_FD") == "1":
-        pass_fds = ()
+        pass
     else:
-        pass_fds = (pinned_directory,)
+        pass_fds_set.add(pinned_directory)
+    build_lock_fd = inherited_build_lock_fd()
+    if build_lock_fd is not None:
+        pass_fds_set.add(build_lock_fd)
+    pass_fds = tuple(sorted(pass_fds_set))
     process = subprocess.Popen(
         normalized,
         env=environment,
@@ -2664,6 +2779,10 @@ def publish_directory(
     expected_tree_sha256: str,
     verify_command: Sequence[str],
 ) -> None:
+    # Validate the inherited build proof before creating the durable
+    # `.publishing` intent.  run_verifier repeats the check after snapshotting
+    # so a path/descriptor race cannot turn an invalid proof authoritative.
+    inherited_build_lock_fd()
     source_parent, source_name, source_parent_path = root.open_parent(
         source, "directory publish source"
     )
@@ -3251,6 +3370,11 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     arguments = parser().parse_args()
+    # Validate the inherited proof before entering any command.  This keeps
+    # even the read-only verifier paths from becoming a confused deputy when
+    # a caller supplies only a marker/target environment.  Mutating paths
+    # additionally re-check at their final mutation boundary.
+    inherited_build_lock_fd()
     if arguments.command == "validate-tree-file":
         validate_tree_file(arguments.tree_fd, arguments.relative)
         return 0

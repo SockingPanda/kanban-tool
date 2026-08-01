@@ -12,6 +12,7 @@ same-inode move/mutate/put-back ABA.
 from __future__ import annotations
 
 import os
+import fcntl
 import pathlib
 import stat
 import subprocess
@@ -38,6 +39,7 @@ class ReleaseSafePathTests(unittest.TestCase):
         self,
         *arguments: object,
         env: dict[str, str] | None = None,
+        pass_fds: tuple[int, ...] = (),
     ) -> subprocess.CompletedProcess[str]:
         command = [
             sys.executable,
@@ -50,9 +52,89 @@ class ReleaseSafePathTests(unittest.TestCase):
             check=False,
             capture_output=True,
             env=env,
+            pass_fds=pass_fds,
             text=True,
             timeout=10,
         )
+
+    def inherited_lock_environment(self, lock_fd: int) -> dict[str, str]:
+        lock_path = self.root / ".build.lock"
+        return {
+            "KANBAN_CARGO_BUILD_LOCK_HELD": "1",
+            "CARGO_TARGET_DIR": os.fspath(self.root),
+            "KANBAN_CARGO_BUILD_LOCK_PATH": os.fspath(lock_path),
+            "KANBAN_CARGO_BUILD_LOCK_FD": str(lock_fd),
+        }
+
+    def test_inherited_unlocked_same_inode_lock_is_acquired_before_mutation(self) -> None:
+        lock_path = self.root / ".build.lock"
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        self.addCleanup(lambda: os.close(lock_fd))
+        result = self.run_helper(
+            "ensure-dir",
+            "--root",
+            self.root,
+            "--path",
+            self.root / "acquired",
+            env=self.inherited_lock_environment(lock_fd),
+            pass_fds=(lock_fd,),
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertTrue((self.root / "acquired").is_dir())
+
+    def test_inherited_competing_lock_fails_before_mutation(self) -> None:
+        lock_path = self.root / ".build.lock"
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        self.addCleanup(lambda: os.close(lock_fd))
+        holder_fd = os.open(lock_path, os.O_RDWR)
+        self.addCleanup(lambda: os.close(holder_fd))
+        fcntl.flock(holder_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = self.run_helper(
+            "ensure-dir",
+            "--root",
+            self.root,
+            "--path",
+            self.root / "blocked",
+            env=self.inherited_lock_environment(lock_fd),
+            pass_fds=(lock_fd,),
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / "blocked").exists())
+        fcntl.flock(holder_fd, fcntl.LOCK_UN)
+
+    def test_inherited_lock_path_replacement_after_acquisition_is_rejected(
+        self,
+    ) -> None:
+        lock_path = self.root / ".build.lock"
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        self.addCleanup(lambda: os.close(lock_fd))
+        detached = self.root / ".build.lock.held"
+        destination = self.root / "raced"
+        environment, marker, continuation = self.paused_environment(
+            "inherited-lock-before-flock"
+        )
+        environment.update(self.inherited_lock_environment(lock_fd))
+        process = self.start_helper(
+            "ensure-dir",
+            "--root",
+            self.root,
+            "--path",
+            destination,
+            env=environment,
+            pass_fds=(lock_fd,),
+        )
+        self.wait_for_pause(process, marker)
+
+        lock_path.rename(detached)
+        lock_path.write_text("replacement\n", encoding="utf-8")
+        continuation.write_text("continue\n", encoding="utf-8")
+        _, stderr = process.communicate(timeout=10)
+
+        self.assertNotEqual(process.returncode, 0, msg=stderr)
+        self.assertTrue(stderr.startswith("error: "), msg=stderr)
+        self.assertFalse(destination.exists())
+        self.assertEqual(lock_path.read_text(encoding="utf-8"), "replacement\n")
+        self.assertTrue(detached.is_file())
 
     def assert_rejected(
         self,
@@ -98,6 +180,7 @@ class ReleaseSafePathTests(unittest.TestCase):
         self,
         *arguments: object,
         env: dict[str, str],
+        pass_fds: tuple[int, ...] = (),
     ) -> subprocess.Popen[str]:
         process = subprocess.Popen(
             [
@@ -109,6 +192,7 @@ class ReleaseSafePathTests(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=env,
+            pass_fds=pass_fds,
             text=True,
         )
         self.addCleanup(

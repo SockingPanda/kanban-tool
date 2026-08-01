@@ -367,8 +367,8 @@ pub mod tantivy_backend {
             // its writer until both values are dropped.  The generation
             // publish below renames the complete directory, which Windows
             // rejects while any descendant handle is still open.  Keep the
-            // handles alive through commit/metadata generation, then close
-            // them before the durable directory rename.
+            // handles alive through commit, then close them before metadata
+            // creation and the durable directory rename.
             drop(writer);
             drop(index);
             write_projection_metadata(&tmp_path, metadata)?;

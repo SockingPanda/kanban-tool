@@ -909,17 +909,38 @@ fn renew_maintenance_owner_lease(
     ttl_ms: i64,
     identity: &MaintenanceRuntimeIdentity,
 ) -> Result<()> {
-    let now = SystemClock.now_ms();
-    let expires_at = checked_expiry(now, ttl_ms)?;
-    let conn = connect_file(path)?;
-    renew_maintenance_owner_lease_on_connection(
-        &conn,
+    renew_maintenance_owner_lease_with_before_transaction(
+        path,
         owner,
         lease_token,
+        ttl_ms,
         identity,
-        now,
-        expires_at,
+        || {},
     )
+}
+
+fn renew_maintenance_owner_lease_with_before_transaction(
+    path: &Path,
+    owner: &str,
+    lease_token: &str,
+    ttl_ms: i64,
+    identity: &MaintenanceRuntimeIdentity,
+    before_transaction: impl FnOnce(),
+) -> Result<()> {
+    before_transaction();
+    let conn = connect_file(path)?;
+    with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
+        let expires_at = checked_expiry(now, ttl_ms)?;
+        renew_maintenance_owner_lease_on_connection(
+            &conn,
+            owner,
+            lease_token,
+            identity,
+            now,
+            expires_at,
+        )
+    })
 }
 
 fn renew_maintenance_owner_on_connection(
@@ -8857,6 +8878,89 @@ mod tests {
             &lease.lease_token,
         )?;
         session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn maintenance_owner_renew_does_not_revive_expired_lease_after_writer_delay()
+    -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let options = MaintenanceRunOptions {
+            lease_ttl_ms: 1_000,
+            claim_ttl_ms: 250,
+            batch_size: 1,
+        };
+        let session =
+            MaintenanceSession::start(&db_path, "heartbeat-owner", MaintenanceMode::Once, options)?;
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        let renewal_path = db_path.clone();
+        let renewal_token = session.lease_token.clone();
+        let renewal_identity = session.identity.clone();
+        let renewal = thread::spawn(move || {
+            renew_maintenance_owner_lease_with_before_transaction(
+                &renewal_path,
+                "heartbeat-owner",
+                &renewal_token,
+                1_000,
+                &renewal_identity,
+                || {
+                    entered_tx
+                        .send(())
+                        .expect("test observes timestamp sampling before writer lock");
+                    resume_rx
+                        .recv()
+                        .expect("test resumes owner renewal against writer lock");
+                },
+            )
+        });
+        entered_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("owner renewal reached pre-transaction barrier");
+
+        let expires_at = SystemClock.now_ms() + 75;
+        let conn = connect_file(&db_path)?;
+        with_immediate_tx(&conn, || {
+            let changed = conn
+                .execute(
+                    "UPDATE projection_maintenance_owner SET lease_expires_at=?1
+                     WHERE singleton=1 AND owner=?2 AND lease_token=?3",
+                    params![expires_at, "heartbeat-owner", session.lease_token.as_str()],
+                )
+                .map_err(storage)?;
+            if changed != 1 {
+                return Err(KanbanError::Storage(
+                    "test failed to shorten maintenance owner lease".to_owned(),
+                ));
+            }
+            Ok(())
+        })?;
+
+        let writer = connect_file(&db_path)?;
+        writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+        resume_tx
+            .send(())
+            .expect("resume owner renewal against held writer lock");
+        while SystemClock.now_ms() <= expires_at {
+            thread::sleep(Duration::from_millis(1));
+        }
+        writer.execute_batch("COMMIT").map_err(storage)?;
+
+        let error = renewal
+            .join()
+            .expect("owner renewal thread must not panic")
+            .expect_err("owner renewal delayed beyond expiry must not revive the lease");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+
+        let conn = connect_file(&db_path)?;
+        let actual_expiry: i64 = conn.query_row(
+            "SELECT lease_expires_at FROM projection_maintenance_owner WHERE singleton=1",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(actual_expiry, expires_at);
         Ok(())
     }
 

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -1545,11 +1546,44 @@ fn optional_i64(array: &Int64Array, row: usize) -> Option<i64> {
 }
 
 fn path_string(config: &LanceDbConfig) -> Result<String, VectorError> {
-    config
+    let path = config
         .path
         .to_str()
-        .map(str::to_owned)
-        .ok_or_else(|| VectorError::Store("LanceDB path is not valid UTF-8".to_owned()))
+        .ok_or_else(|| VectorError::Store("LanceDB path is not valid UTF-8".to_owned()))?;
+    Ok(normalize_lancedb_path(path).into_owned())
+}
+
+/// Return a filesystem path shape that LanceDB's URI parser accepts.
+///
+/// `std::fs::canonicalize` returns Windows extended-length (verbatim) paths
+/// such as `\\?\C:\...` and `\\?\UNC\server\share\...`. LanceDB 0.30
+/// delegates local paths to `url::Url`; the verbatim prefix is interpreted as
+/// a URI authority and fails with `invalid uri authority: %3F`. Strip only
+/// that Windows namespace prefix, preserving the underlying drive/UNC path.
+fn normalize_lancedb_path(path: &str) -> Cow<'_, str> {
+    #[cfg(windows)]
+    {
+        const VERBATIM_PREFIX: &str = r"\\?\";
+        if let Some(rest) = path.strip_prefix(VERBATIM_PREFIX) {
+            let bytes = rest.as_bytes();
+            if bytes.len() >= 4
+                && bytes[..3].eq_ignore_ascii_case(b"unc")
+                && matches!(bytes[3], b'\\' | b'/')
+            {
+                let unc_path = &rest[4..];
+                return Cow::Owned(format!(r"\\{unc_path}"));
+            }
+            if bytes.len() >= 3
+                && bytes[0].is_ascii_alphabetic()
+                && bytes[1] == b':'
+                && matches!(bytes[2], b'\\' | b'/')
+            {
+                return Cow::Borrowed(rest);
+            }
+            return Cow::Borrowed(path);
+        }
+    }
+    Cow::Borrowed(path)
 }
 
 fn map_lancedb_error(err: lancedb::Error) -> VectorError {
@@ -1641,7 +1675,10 @@ fn embed_batch_with_retry(
 
 #[cfg(test)]
 mod tests {
-    use super::{LanceDbProjectionReader, validate_projection_schema, vector_schema};
+    use super::{
+        LanceDbProjectionReader, LanceDbStore, normalize_lancedb_path, path_string,
+        validate_projection_schema, vector_schema,
+    };
     use arrow_array::{ArrayRef, Float32Array, RecordBatch, new_null_array};
     use arrow_schema::{DataType, Field, Schema};
     use std::sync::{
@@ -1650,7 +1687,7 @@ mod tests {
     };
     use std::time::Duration;
 
-    use crate::{EmbeddingExecutionPolicy, LanceDbConfig, LanceDbStore};
+    use crate::{EmbeddingExecutionPolicy, LanceDbConfig};
     use kanban_vector::{
         ChunkBuilder, ChunkVectorStore, EmbeddingProvider, LabelAtomQuery, LabelAtomVector,
         LabelAtomVectorQuery, LabelAtomVectorStore, TaskChunkSource, VectorError, VectorQuery,
@@ -1791,6 +1828,47 @@ mod tests {
             initial_retry_backoff: Duration::ZERO,
             max_retry_backoff: Duration::ZERO,
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_verbatim_lancedb_paths_drop_only_the_namespace_prefix() {
+        assert_eq!(
+            normalize_lancedb_path(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\lance"),
+            r"C:\Users\runneradmin\AppData\Local\Temp\lance"
+        );
+        assert_eq!(
+            normalize_lancedb_path(r"\\?\UNC\server\share\lance"),
+            r"\\server\share\lance"
+        );
+        assert_eq!(
+            normalize_lancedb_path(r"\\?\unc\server\share\lance"),
+            r"\\server\share\lance"
+        );
+        assert_eq!(
+            normalize_lancedb_path(r"C:\Users\runneradmin\AppData\Local\Temp\lance"),
+            r"C:\Users\runneradmin\AppData\Local\Temp\lance"
+        );
+        for path in [
+            r"\\?\Volume{1234}\lance",
+            r"\\?\GLOBALROOT\Device\HarddiskVolume1\lance",
+            r"\\?\C:",
+            r"\\?\1:\lance",
+        ] {
+            assert_eq!(normalize_lancedb_path(path), path);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_canonical_tempdir_path_is_accepted_by_lancedb_without_network() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let canonical = std::fs::canonicalize(tempdir.path()).unwrap();
+        let config = LanceDbConfig::new(canonical, Arc::new(StaticProvider));
+        let path = path_string(&config).unwrap();
+
+        assert!(!path.starts_with(r"\\?\"));
+        LanceDbStore::connect(config).unwrap();
     }
 
     #[test]

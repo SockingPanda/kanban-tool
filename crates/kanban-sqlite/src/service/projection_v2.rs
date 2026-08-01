@@ -668,13 +668,30 @@ pub fn acquire_projection_lease(
     owner: &str,
     ttl_ms: i64,
 ) -> Result<ProjectionLease> {
+    acquire_projection_lease_with_before_transaction(
+        path.as_ref(),
+        store_name,
+        owner,
+        ttl_ms,
+        || {},
+    )
+}
+
+fn acquire_projection_lease_with_before_transaction(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    ttl_ms: i64,
+    before_transaction: impl FnOnce(),
+) -> Result<ProjectionLease> {
     validate_owner_and_ttl(owner, ttl_ms)?;
-    let _authority_guard = acquire_projection_authority_guard(path.as_ref(), store_name)?;
-    let now = SystemClock.now_ms();
-    let lease_expires_at = checked_expiry(now, ttl_ms, "projection lease")?;
+    let _authority_guard = acquire_projection_authority_guard(path, store_name)?;
+    before_transaction();
     let lease_token = new_typed_id("please");
-    let conn = connect_file(path.as_ref())?;
-    let fence_epoch = with_immediate_tx(&conn, || {
+    let conn = connect_file(path)?;
+    let (fence_epoch, lease_expires_at) = with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
+        let lease_expires_at = checked_expiry(now, ttl_ms, "projection lease")?;
         let changed = conn
             .execute(
                 "UPDATE projection_store_state \
@@ -693,6 +710,7 @@ pub fn acquire_projection_lease(
             [store_name],
             |row| row.get(0),
         )
+        .map(|fence_epoch| (fence_epoch, lease_expires_at))
         .map_err(storage)
     })?;
     Ok(ProjectionLease {
@@ -5821,6 +5839,100 @@ mod read_only_publication_validation_tests {
         assert_eq!(authority.fence_epoch, 9);
         assert_eq!(authority.lease_expires_at, 100);
         assert_eq!(authority.expected_binding.fence_epoch, 7);
+    }
+
+    #[test]
+    fn projection_lease_acquisition_uses_fresh_timestamp_after_writer_delay() -> anyhow::Result<()>
+    {
+        const LEASE_TTL_MS: i64 = 500;
+        const MIN_REMAINING_TTL_MS: i64 = 350;
+
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        let fence_before: i64 = connect_file(&path)?.query_row(
+            "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
+            ["tantivy_tasks"],
+            |row| row.get(0),
+        )?;
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let acquisition_path = path.clone();
+        let acquisition = std::thread::spawn(move || {
+            acquire_projection_lease_with_before_transaction(
+                &acquisition_path,
+                "tantivy_tasks",
+                "delayed-owner",
+                LEASE_TTL_MS,
+                || {
+                    entered_tx
+                        .send(())
+                        .expect("test observes lease acquisition at pre-transaction barrier");
+                    resume_rx
+                        .recv()
+                        .expect("test resumes lease acquisition against writer lock");
+                },
+            )
+        });
+        entered_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .expect("projection lease acquisition reached pre-transaction barrier");
+
+        let writer = connect_file(&path)?;
+        writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+        resume_tx
+            .send(())
+            .expect("resume projection lease acquisition against held writer lock");
+        std::thread::sleep(std::time::Duration::from_millis(
+            (LEASE_TTL_MS + 200) as u64,
+        ));
+        let acquisition_boundary = SystemClock.now_ms();
+        writer.execute_batch("COMMIT").map_err(storage)?;
+
+        let lease = acquisition
+            .join()
+            .expect("projection lease acquisition thread must not panic")?;
+        let conn = connect_file(&path)?;
+        let (owner, token, fence_epoch, lease_expires_at, updated_at): (
+            Option<String>,
+            Option<String>,
+            i64,
+            Option<i64>,
+            i64,
+        ) = conn.query_row(
+            "SELECT lease_owner,lease_token,fence_epoch,lease_expires_at,updated_at
+             FROM projection_store_state WHERE store_name=?1",
+            ["tantivy_tasks"],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )?;
+        assert_eq!(lease.store_name, "tantivy_tasks");
+        assert_eq!(lease.owner, "delayed-owner");
+        assert_eq!(owner.as_deref(), Some(lease.owner.as_str()));
+        assert_eq!(token.as_deref(), Some(lease.lease_token.as_str()));
+        assert_eq!(fence_epoch, fence_before + 1);
+        assert_eq!(lease.fence_epoch, fence_epoch);
+        assert_eq!(
+            lease.lease_expires_at,
+            lease_expires_at.expect("stored lease expiry")
+        );
+        assert_eq!(lease.lease_expires_at, updated_at + LEASE_TTL_MS);
+        assert!(updated_at >= acquisition_boundary);
+        assert!(
+            lease.lease_expires_at >= acquisition_boundary + MIN_REMAINING_TTL_MS,
+            "lease acquisition must retain at least {MIN_REMAINING_TTL_MS}ms after the writer lock; expiry={}, boundary={acquisition_boundary}",
+            lease.lease_expires_at
+        );
+
+        release_projection_lease(&path, "tantivy_tasks", "delayed-owner", &lease.lease_token)?;
+        Ok(())
     }
 
     #[test]

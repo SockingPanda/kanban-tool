@@ -951,17 +951,25 @@ impl LanceDbProjectionStore {
             previous,
             building,
         ) = row;
-        if db.trim().is_empty()
+        if !db.starts_with("db_")
             || protocol != VECTOR_PROJECTION_PROTOCOL_VERSION
             || schema != self.store_descriptor.schema_version
             || control != "v2"
             || fence < 0
+            || owner.as_deref().is_none_or(|owner| owner.trim().is_empty())
+            || token.as_deref().is_none_or(|token| token.trim().is_empty())
             || expires_at.is_none_or(|expires_at| expires_at <= SystemClock.now_ms())
         {
             return Err(KanbanError::Conflict(
                 "projection destructive authority is stale".to_owned(),
             ));
         }
+        validate_lancedb_sqlite_authority_shape(
+            &self.store_descriptor.store_name,
+            &active,
+            &previous,
+            &building,
+        )?;
         let owner = owner
             .ok_or_else(|| KanbanError::Conflict("projection lease is not active".to_owned()))?;
         let token = token
@@ -1569,6 +1577,152 @@ impl ProjectionStoreBackend for LanceDbProjectionStore {
                 _ => None,
             },
         )
+    }
+}
+
+fn validate_lancedb_sqlite_authority_shape(
+    store_name: &str,
+    active: &[Option<String>],
+    previous: &[Option<String>],
+    building: &[Option<String>],
+) -> Result<()> {
+    if active.len() != 14 || previous.len() != 14 || building.len() != 15 {
+        return Err(lancedb_sqlite_authority_error(
+            store_name,
+            "generation binding column shape changed",
+        ));
+    }
+    validate_lancedb_published_binding_shape(store_name, "active", active)?;
+    validate_lancedb_published_binding_shape(store_name, "previous", previous)?;
+    validate_lancedb_building_binding_shape(store_name, building)?;
+
+    let generations = [
+        ("active", active[0].as_deref()),
+        ("previous", previous[0].as_deref()),
+        ("building", building[0].as_deref()),
+    ];
+    for (index, (left_role, left_generation)) in generations.iter().enumerate() {
+        for (right_role, right_generation) in generations.iter().skip(index + 1) {
+            if let (Some(left_generation), Some(right_generation)) =
+                (*left_generation, *right_generation)
+                && left_generation == right_generation
+            {
+                return Err(lancedb_sqlite_authority_error(
+                    store_name,
+                    format!("{left_role} and {right_role} alias generation {left_generation}"),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_lancedb_published_binding_shape(
+    store_name: &str,
+    role: &str,
+    binding: &[Option<String>],
+) -> Result<()> {
+    let Some(generation) = binding[0].as_deref() else {
+        if binding[1..].iter().any(Option::is_some) {
+            return Err(lancedb_sqlite_authority_error(
+                store_name,
+                format!("{role} has orphan generation metadata"),
+            ));
+        }
+        return Ok(());
+    };
+    let valid = !generation.trim().is_empty()
+        && lancedb_nonempty_field(&binding[1])
+        && lancedb_nonnegative_field(&binding[2])
+        && lancedb_nonnegative_field(&binding[3])
+        && lancedb_nonempty_field(&binding[4])
+        && lancedb_nonempty_field(&binding[5])
+        && lancedb_nonnegative_field(&binding[6])
+        && lancedb_nonempty_field(&binding[7])
+        && lancedb_nonnegative_field(&binding[8])
+        && lancedb_nonempty_field(&binding[9])
+        && lancedb_corpus_shape_is_valid(&binding[10..14]);
+    if !valid {
+        return Err(lancedb_sqlite_authority_error(
+            store_name,
+            format!("{role} generation binding is malformed"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_lancedb_building_binding_shape(
+    store_name: &str,
+    binding: &[Option<String>],
+) -> Result<()> {
+    if !lancedb_nonnegative_field(&binding[3]) {
+        return Err(lancedb_sqlite_authority_error(
+            store_name,
+            "global snapshot cursor is malformed",
+        ));
+    }
+    let Some(generation) = binding[0].as_deref() else {
+        if binding
+            .iter()
+            .enumerate()
+            .any(|(index, value)| index != 3 && value.is_some())
+        {
+            return Err(lancedb_sqlite_authority_error(
+                store_name,
+                "building has orphan generation metadata",
+            ));
+        }
+        return Ok(());
+    };
+    let phase = binding[14].as_deref();
+    let fingerprint_is_valid = match phase {
+        Some("snapshotting") => binding[1].is_none(),
+        Some("prepared" | "store_published") => lancedb_nonempty_field(&binding[1]),
+        _ => false,
+    };
+    let valid = !generation.trim().is_empty()
+        && fingerprint_is_valid
+        && lancedb_nonnegative_field(&binding[2])
+        && lancedb_nonempty_field(&binding[4])
+        && lancedb_nonempty_field(&binding[5])
+        && lancedb_nonnegative_field(&binding[6])
+        && lancedb_nonempty_field(&binding[7])
+        && lancedb_nonnegative_field(&binding[8])
+        && lancedb_nonempty_field(&binding[9])
+        && lancedb_corpus_shape_is_valid(&binding[10..14]);
+    if !valid {
+        return Err(lancedb_sqlite_authority_error(
+            store_name,
+            "building generation binding is malformed",
+        ));
+    }
+    Ok(())
+}
+
+fn lancedb_nonempty_field(value: &Option<String>) -> bool {
+    value
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+}
+
+fn lancedb_nonnegative_field(value: &Option<String>) -> bool {
+    value
+        .as_deref()
+        .and_then(|value| value.parse::<i64>().ok())
+        .is_some_and(|value| value >= 0)
+}
+
+fn lancedb_corpus_shape_is_valid(corpus: &[Option<String>]) -> bool {
+    match corpus.iter().filter(|value| value.is_some()).count() {
+        0 => true,
+        4 => {
+            corpus[..3].iter().all(lancedb_nonempty_field)
+                && corpus[3]
+                    .as_deref()
+                    .and_then(|value| value.parse::<i64>().ok())
+                    .is_some_and(|value| value > 0)
+        }
+        _ => false,
     }
 }
 
@@ -2391,6 +2545,96 @@ mod tests {
     }
 
     #[test]
+    fn publication_validation_rejects_malformed_canonical_authority_before_transport() {
+        let cases: &[(
+            &str,
+            fn(&rusqlite::Connection, &mut ProjectionDestructiveAuthority),
+        )] = &[
+            ("duplicate_role", |conn, authority| {
+                copy_previous_binding_to_building(conn, "prepared", false);
+                authority.role = ProjectionGenerationRole::Building;
+                authority.building_phase = Some("prepared".to_owned());
+            }),
+            ("invalid_building_phase", |conn, authority| {
+                copy_previous_binding_to_building(conn, "invalid", true);
+                authority.role = ProjectionGenerationRole::Building;
+                authority.building_phase = None;
+            }),
+            ("snapshotting_fingerprint", |conn, authority| {
+                copy_previous_binding_to_building(conn, "snapshotting", true);
+                authority.role = ProjectionGenerationRole::Building;
+                authority.building_phase = Some("snapshotting".to_owned());
+                authority.expected_binding.snapshot_cursor = None;
+                authority
+                    .expected_manifest
+                    .as_mut()
+                    .unwrap()
+                    .snapshot_cursor = 0;
+            }),
+            ("negative_fence", |conn, authority| {
+                conn.execute(
+                    "UPDATE projection_store_state SET previous_fence_epoch=-1",
+                    [],
+                )
+                .unwrap();
+                authority.expected_binding.fence_epoch = -1;
+                authority.expected_manifest.as_mut().unwrap().fence_epoch = -1;
+            }),
+            ("negative_cursor", |conn, authority| {
+                conn.execute(
+                    "UPDATE projection_store_state SET previous_snapshot_cursor=-1",
+                    [],
+                )
+                .unwrap();
+                authority.expected_binding.snapshot_cursor = Some(-1);
+                authority
+                    .expected_manifest
+                    .as_mut()
+                    .unwrap()
+                    .snapshot_cursor = -1;
+            }),
+            ("partial_corpus", |conn, authority| {
+                conn.execute(
+                    "UPDATE projection_store_state SET previous_corpus_fingerprint=NULL",
+                    [],
+                )
+                .unwrap();
+                authority.expected_binding.corpus = None;
+                authority.expected_manifest.as_mut().unwrap().corpus = None;
+            }),
+        ];
+        for (malformation, corrupt) in cases {
+            let (_temp, mut backend, evidence, mut authority) = publication_validation_fixture();
+            let conn = rusqlite::Connection::open(&backend.db_path).unwrap();
+            corrupt(&conn, &mut authority);
+            drop(conn);
+            let observed = Arc::new(Mutex::new(Vec::new()));
+            let observed_by_transport = observed.clone();
+            backend.transport = Arc::new(FunctionTransport::new(move |request| {
+                observed_by_transport
+                    .lock()
+                    .unwrap()
+                    .push(request.operation());
+                successful_publication_validation(request)
+            }));
+
+            let error = ProjectionStoreBackend::validate_generation_publication_with_authority(
+                &backend, &evidence, &authority,
+            )
+            .unwrap_err();
+
+            assert!(
+                matches!(error, KanbanError::Conflict(_)),
+                "{malformation}: {error}"
+            );
+            assert!(
+                observed.lock().unwrap().is_empty(),
+                "{malformation} reached the helper transport"
+            );
+        }
+    }
+
+    #[test]
     fn destructive_authority_rejects_expired_sqlite_lease_before_transport() {
         let (_temp, backend) = destructive_store_fixture(0, false);
 
@@ -3000,6 +3244,46 @@ mod tests {
                 }),
             }],
             supported_operations: REQUIRED_OPERATIONS.to_vec(),
+        }
+    }
+
+    fn copy_previous_binding_to_building(
+        conn: &rusqlite::Connection,
+        building_phase: &str,
+        clear_previous: bool,
+    ) {
+        conn.execute(
+            "UPDATE projection_store_state
+             SET building_generation=previous_generation,
+                 building_fingerprint=previous_fingerprint,
+                 building_fence_epoch=previous_fence_epoch,
+                 building_provider=previous_provider,
+                 building_provider_fingerprint=previous_provider_fingerprint,
+                 building_canonical_count=previous_canonical_count,
+                 building_canonical_digest=previous_canonical_digest,
+                 building_delivery_count=previous_delivery_count,
+                 building_delivery_digest=previous_delivery_digest,
+                 building_corpus_schema=previous_corpus_schema,
+                 building_corpus_fingerprint=previous_corpus_fingerprint,
+                 building_embedding_model=previous_embedding_model,
+                 building_embedding_dimensions=previous_embedding_dimensions,
+                 building_phase=?1",
+            [building_phase],
+        )
+        .unwrap();
+        if clear_previous {
+            conn.execute(
+                "UPDATE projection_store_state
+                 SET previous_generation=NULL,previous_fingerprint=NULL,
+                     previous_fence_epoch=NULL,previous_snapshot_cursor=NULL,
+                     previous_provider=NULL,previous_provider_fingerprint=NULL,
+                     previous_canonical_count=NULL,previous_canonical_digest=NULL,
+                     previous_delivery_count=NULL,previous_delivery_digest=NULL,
+                     previous_corpus_schema=NULL,previous_corpus_fingerprint=NULL,
+                     previous_embedding_model=NULL,previous_embedding_dimensions=NULL",
+                [],
+            )
+            .unwrap();
         }
     }
 }

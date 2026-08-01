@@ -5189,6 +5189,8 @@ mod read_only_publication_validation_tests {
     struct PrepareFailureBackendState {
         generations: std::collections::BTreeMap<String, ProjectionArtifactEvidence>,
         active: Option<ProjectionArtifactEvidence>,
+        previous: Option<ProjectionArtifactEvidence>,
+        quarantined_roles: std::collections::BTreeMap<String, ProjectionGenerationRole>,
         successor: Option<ProjectionLease>,
         abort_authority: Option<ProjectionDestructiveAuthority>,
     }
@@ -5374,7 +5376,7 @@ mod read_only_publication_validation_tests {
 
         fn publish_generation(
             &self,
-            _expected_active: Option<&ProjectionArtifactEvidence>,
+            expected_active: Option<&ProjectionArtifactEvidence>,
             prepared: &ProjectionArtifactEvidence,
         ) -> Result<ProjectionPublishReceipt> {
             let mut state = self.state.lock().expect("prepare-failure fixture lock");
@@ -5383,10 +5385,30 @@ mod read_only_publication_validation_tests {
                     "prepare-failure fixture generation is missing".to_owned(),
                 ));
             }
+            if state.active.as_ref() != expected_active {
+                return Err(KanbanError::Conflict(
+                    "prepare-failure fixture active predecessor mismatch".to_owned(),
+                ));
+            }
+            let retained_previous = state.active.take();
+            state.previous = retained_previous.clone();
+            if let Some(previous) = &retained_previous {
+                state.quarantined_roles.insert(
+                    previous.manifest.generation.clone(),
+                    ProjectionGenerationRole::Previous,
+                );
+            }
+            state
+                .quarantined_roles
+                .remove(&prepared.manifest.generation);
             state.active = Some(prepared.clone());
+            state.quarantined_roles.insert(
+                prepared.manifest.generation.clone(),
+                ProjectionGenerationRole::Active,
+            );
             Ok(ProjectionPublishReceipt {
                 active: prepared.clone(),
-                retained_previous: None,
+                retained_previous,
             })
         }
 
@@ -5500,18 +5522,85 @@ mod read_only_publication_validation_tests {
             generation: &str,
             authority: &ProjectionDestructiveAuthority,
         ) -> Result<()> {
+            let mut state = self.state.lock().expect("prepare-failure fixture lock");
+            let actual_role = if state
+                .active
+                .as_ref()
+                .is_some_and(|active| active.manifest.generation == generation)
+            {
+                ProjectionGenerationRole::Active
+            } else if state
+                .previous
+                .as_ref()
+                .is_some_and(|previous| previous.manifest.generation == generation)
+            {
+                ProjectionGenerationRole::Previous
+            } else {
+                state
+                    .quarantined_roles
+                    .get(generation)
+                    .copied()
+                    .unwrap_or(ProjectionGenerationRole::Building)
+            };
             if authority.generation != generation
-                || authority.role != ProjectionGenerationRole::Building
+                || authority.role != actual_role
+                || authority.role == ProjectionGenerationRole::Orphaned
             {
                 return Err(KanbanError::Conflict(
                     "prepare-failure fixture fenced quarantine authority mismatch".to_owned(),
                 ));
             }
-            self.state
-                .lock()
-                .expect("prepare-failure fixture lock")
-                .generations
-                .remove(generation);
+            if let Some(evidence) = state.generations.get(generation) {
+                let binding = &authority.expected_binding;
+                let stable_binding_matches = binding.generation == generation
+                    && binding.fence_epoch == evidence.manifest.fence_epoch
+                    && binding
+                        .snapshot_cursor
+                        .is_none_or(|cursor| cursor == evidence.manifest.snapshot_cursor)
+                    && binding.canonical_count == evidence.manifest.canonical_item_count
+                    && binding.canonical_digest == evidence.manifest.canonical_digest
+                    && binding.delivery_count == evidence.manifest.delivery_item_count
+                    && binding.delivery_digest == evidence.manifest.delivery_digest
+                    && binding
+                        .fingerprint
+                        .as_deref()
+                        .is_none_or(|fingerprint| fingerprint == evidence.fingerprint)
+                    && authority.expected_manifest.as_ref().is_none_or(|manifest| {
+                        manifest.generation == evidence.manifest.generation
+                            && manifest.fingerprint == evidence.manifest.fingerprint
+                    });
+                if !stable_binding_matches {
+                    return Err(KanbanError::Conflict(
+                        "prepare-failure fixture binding evidence mismatch".to_owned(),
+                    ));
+                }
+            } else if authority.expected_binding.generation != generation {
+                return Err(KanbanError::Conflict(
+                    "prepare-failure fixture missing binding evidence".to_owned(),
+                ));
+            }
+            state
+                .quarantined_roles
+                .insert(generation.to_owned(), actual_role);
+            state.generations.remove(generation);
+            // A binding reset quarantines a physically published active
+            // generation as well as the failed building candidate.  Keep the
+            // fixture's publication marker in lockstep with that physical
+            // quarantine so the service can verify `active=None`.
+            if state
+                .active
+                .as_ref()
+                .is_some_and(|active| active.manifest.generation == generation)
+            {
+                state.active = None;
+            }
+            if state
+                .previous
+                .as_ref()
+                .is_some_and(|previous| previous.manifest.generation == generation)
+            {
+                state.previous = None;
+            }
             Ok(())
         }
     }

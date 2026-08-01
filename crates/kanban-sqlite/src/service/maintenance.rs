@@ -29,7 +29,7 @@ use kanban_indexer::{
 };
 use kanban_local::DatabaseLifecycleExclusiveGuard;
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, ErrorCode, OptionalExtension, params};
 
 const SIGNAL_LEDGER_TABLES: [&str; 2] = ["signal_observations", "signals"];
 
@@ -712,6 +712,12 @@ pub(crate) fn assert_database_idle_for_replace(guard: &mut DatabaseReplaceGuard)
 }
 
 fn assert_database_idle_with_connection(conn: &Connection, path: &Path) -> Result<()> {
+    // The complete replacement authority is already held. A physical SQLite
+    // corruption has no inspectable running-work state, so recovery may
+    // proceed; every other SQLite or I/O failure remains fail-closed.
+    if inspect_database_for_replace(conn)? == DatabaseReplaceInspection::UnreadableCorrupt {
+        return Ok(());
+    }
     // Reject unknown/fake databases before any setup pragma can persistently
     // mutate them (notably journal_mode=WAL). This is only a preliminary
     // read-only identity check; the authoritative schema check is repeated
@@ -819,6 +825,32 @@ fn assert_database_idle_with_connection(conn: &Connection, path: &Path) -> Resul
             )))
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DatabaseReplaceInspection {
+    Readable,
+    UnreadableCorrupt,
+}
+
+fn inspect_database_for_replace(conn: &Connection) -> Result<DatabaseReplaceInspection> {
+    match conn.query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0)) {
+        // A diagnostic row is still readable SQLite state, so it must pass
+        // through the normal schema, transaction, owner, and running-work
+        // guards before replacement may proceed.
+        Ok(_) => Ok(DatabaseReplaceInspection::Readable),
+        Err(error) if is_replaceable_sqlite_corruption(&error) => {
+            Ok(DatabaseReplaceInspection::UnreadableCorrupt)
+        }
+        Err(error) => Err(storage(error)),
+    }
+}
+
+fn is_replaceable_sqlite_corruption(error: &rusqlite::Error) -> bool {
+    matches!(
+        error.sqlite_error_code(),
+        Some(ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase)
+    )
 }
 
 pub(crate) fn count_table_status(conn: &Connection, table: &str, status: &str) -> Result<i64> {
@@ -2308,6 +2340,123 @@ mod lifecycle_tests {
     use super::*;
     use std::io;
 
+    #[test]
+    fn replacement_corruption_classifier_accepts_only_sqlite_integrity_codes() {
+        for code in [rusqlite::ffi::SQLITE_CORRUPT, rusqlite::ffi::SQLITE_NOTADB] {
+            let error = rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(code), None);
+            assert!(is_replaceable_sqlite_corruption(&error), "code={code}");
+        }
+
+        for code in [
+            rusqlite::ffi::SQLITE_BUSY,
+            rusqlite::ffi::SQLITE_LOCKED,
+            rusqlite::ffi::SQLITE_IOERR,
+        ] {
+            let error = rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(code), None);
+            assert!(!is_replaceable_sqlite_corruption(&error), "code={code}");
+        }
+    }
+
+    fn seed_readable_integrity_diagnostic(conn: &Connection) {
+        conn.execute_batch(
+            "CREATE TABLE replacement_integrity_probe(value INTEGER CHECK(value > 0));
+             PRAGMA ignore_check_constraints=ON;
+             INSERT INTO replacement_integrity_probe(value) VALUES (0);
+             PRAGMA ignore_check_constraints=OFF;",
+        )
+        .unwrap();
+        let integrity_check: String = conn
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+            .unwrap();
+        assert_ne!(integrity_check, "ok");
+    }
+
+    #[test]
+    fn replacement_preflight_keeps_readable_unknown_schema_fail_closed() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE unrelated(value TEXT);")
+            .unwrap();
+
+        assert_eq!(
+            inspect_database_for_replace(&conn).unwrap(),
+            DatabaseReplaceInspection::Readable
+        );
+        let error =
+            assert_database_idle_with_connection(&conn, Path::new("unknown.db")).unwrap_err();
+        assert!(
+            matches!(error, KanbanError::InvalidInput(message) if message.contains("not initialized")),
+            "error: {error}"
+        );
+    }
+
+    #[test]
+    fn replacement_preflight_keeps_readable_integrity_diagnostic_owner_guarded() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("database.db");
+        crate::init::init_database(&path, "tester").unwrap();
+        let diagnostic = Connection::open(&path).unwrap();
+        seed_readable_integrity_diagnostic(&diagnostic);
+        drop(diagnostic);
+        let owner_connection = connect_file(&path).unwrap();
+        owner_connection
+            .execute(
+                "UPDATE projection_maintenance_owner
+                 SET owner='active-owner', lease_token='lease', lease_expires_at=?1
+                 WHERE singleton=1",
+                [SystemClock.now_ms() + 60_000],
+            )
+            .unwrap();
+        drop(owner_connection);
+
+        let conn = Connection::open(&path).unwrap();
+        assert_eq!(
+            inspect_database_for_replace(&conn).unwrap(),
+            DatabaseReplaceInspection::Readable
+        );
+        let error = assert_database_idle_with_connection(&conn, &path).unwrap_err();
+        assert!(
+            matches!(error, KanbanError::InvalidInput(message) if message.contains("active projection maintenance owner")),
+            "error: {error}"
+        );
+    }
+
+    #[test]
+    fn replacement_preflight_keeps_readable_integrity_diagnostic_running_work_guarded() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("database.db");
+        crate::init::init_database(&path, "tester").unwrap();
+        let task = crate::service::create_task(
+            &path,
+            "default",
+            "tester",
+            crate::service::CreateTask::ready("running replacement guard"),
+        )
+        .unwrap();
+        crate::service::mark_execution_plan_not_required(
+            &path,
+            "default",
+            "tester",
+            &task.id,
+            "fixture needs no plan",
+        )
+        .unwrap();
+        crate::service::claim_task(&path, "default", "tester", &task.id, 60_000).unwrap();
+        let diagnostic = Connection::open(&path).unwrap();
+        seed_readable_integrity_diagnostic(&diagnostic);
+        drop(diagnostic);
+
+        let conn = Connection::open(&path).unwrap();
+        assert_eq!(
+            inspect_database_for_replace(&conn).unwrap(),
+            DatabaseReplaceInspection::Readable
+        );
+        let error = assert_database_idle_with_connection(&conn, &path).unwrap_err();
+        assert!(
+            matches!(error, KanbanError::InvalidInput(message) if message.contains("database has running work")),
+            "error: {error}"
+        );
+    }
+
     unsafe extern "C" fn deny_table_probe_reads(
         _: *mut std::ffi::c_void,
         action: std::ffi::c_int,
@@ -2421,7 +2570,10 @@ mod lifecycle_tests {
 
         let error = begin_database_replace(&path).unwrap_err();
 
-        assert!(matches!(error, KanbanError::Storage(_)), "error: {error}");
+        assert!(
+            matches!(error, KanbanError::Storage(message) if message.contains("locked") || message.contains("busy")),
+            "error: {error}"
+        );
         assert_eq!(std::fs::read(&path).unwrap(), bytes_before);
         assert!(
             !maintenance_lock_path(&path).exists(),

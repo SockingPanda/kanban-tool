@@ -1922,11 +1922,13 @@ mod tests {
             batch("kb://run/r_one", Some(3), "rebuild"),
             batch("kb://board/default", Some(2), "delete"),
             batch("kb://task/t_other", None, "upsert"),
-            batch("kb://task/t_missing", None, "upsert"),
         ] {
             let error = affected_subjects(&conn, &invalid).unwrap_err();
             assert!(error.to_string().contains("cannot be mapped"), "{error}");
         }
+        let error =
+            affected_subjects(&conn, &batch("kb://task/t_missing", None, "upsert")).unwrap_err();
+        assert!(error.to_string().contains("cannot be proven"), "{error}");
     }
 
     fn fenced_fixture(

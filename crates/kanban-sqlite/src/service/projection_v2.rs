@@ -5605,6 +5605,290 @@ mod read_only_publication_validation_tests {
         }
     }
 
+    fn binding_abort_side_state(
+        conn: &Connection,
+        store_name: &str,
+    ) -> anyhow::Result<(String, String)> {
+        Ok(conn.query_row(
+            "SELECT
+               (SELECT COALESCE(json_group_array(json_object(
+                  'id',id,'status',status,'published_generation',published_generation,
+                  'claim_owner',claim_owner,'claim_token',claim_token,
+                  'claim_lease_token',claim_lease_token,'claim_fence_epoch',claim_fence_epoch,
+                  'claim_generation',claim_generation,'claim_expires_at',claim_expires_at,
+                  'attempts',attempts,'next_attempt_at',next_attempt_at,
+                  'last_error',last_error,'updated_at',updated_at)), '[]')
+                FROM (SELECT * FROM projection_deliveries
+                      WHERE store_name=?1 ORDER BY id)),
+               (SELECT COALESCE(json_group_array(json_object(
+                  'id',id,'status',status,'attempts',attempts,
+                  'last_error',last_error,'updated_at',updated_at)), '[]')
+                FROM (SELECT * FROM index_outbox ORDER BY id))",
+            [store_name],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?)
+    }
+
+    fn binding_abort_snapshot(
+        path: &std::path::Path,
+        store_name: &str,
+        owner: &str,
+        lease_token: &str,
+    ) -> anyhow::Result<(ProjectionBindingRecoverySnapshot, (String, String))> {
+        let conn = connect_file(path)?;
+        let snapshot =
+            projection_binding_recovery_snapshot(&conn, store_name, owner, lease_token, 0)?;
+        Ok((snapshot, binding_abort_side_state(&conn, store_name)?))
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct BindingAbortDeliveryState {
+        id: i64,
+        status: String,
+        published_generation: Option<String>,
+        claim_owner: Option<String>,
+        claim_token: Option<String>,
+        claim_lease_token: Option<String>,
+        claim_fence_epoch: Option<i64>,
+        claim_generation: Option<String>,
+        claim_expires_at: Option<i64>,
+        attempts: i64,
+        next_attempt_at: i64,
+        last_error: Option<String>,
+        updated_at: i64,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct BindingAbortStoreState {
+        active_generation: Option<String>,
+        previous_generation: Option<String>,
+        building_generation: Option<String>,
+        checkpoint_cursor: i64,
+        legacy_checkpoint_cursor: i64,
+        lifecycle_status: String,
+        last_success_at: Option<i64>,
+        last_error: Option<String>,
+        updated_at: i64,
+    }
+
+    fn binding_abort_delivery_state(
+        conn: &Connection,
+        store_name: &str,
+    ) -> anyhow::Result<Vec<BindingAbortDeliveryState>> {
+        let mut statement = conn.prepare(
+            "SELECT id,status,published_generation,claim_owner,claim_token,
+                    claim_lease_token,claim_fence_epoch,claim_generation,
+                    claim_expires_at,attempts,next_attempt_at,last_error,updated_at
+             FROM projection_deliveries
+             WHERE store_name=?1 ORDER BY id",
+        )?;
+        Ok(statement
+            .query_map([store_name], |row| {
+                Ok(BindingAbortDeliveryState {
+                    id: row.get(0)?,
+                    status: row.get(1)?,
+                    published_generation: row.get(2)?,
+                    claim_owner: row.get(3)?,
+                    claim_token: row.get(4)?,
+                    claim_lease_token: row.get(5)?,
+                    claim_fence_epoch: row.get(6)?,
+                    claim_generation: row.get(7)?,
+                    claim_expires_at: row.get(8)?,
+                    attempts: row.get(9)?,
+                    next_attempt_at: row.get(10)?,
+                    last_error: row.get(11)?,
+                    updated_at: row.get(12)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?)
+    }
+
+    fn assert_reset_delivery_fields(
+        before: &[BindingAbortDeliveryState],
+        after: &[BindingAbortDeliveryState],
+        expected_last_error: &str,
+    ) {
+        assert_eq!(
+            before.len(),
+            after.len(),
+            "binding reset must preserve the delivery set"
+        );
+        for expected in before {
+            let actual = after
+                .iter()
+                .find(|delivery| delivery.id == expected.id)
+                .unwrap_or_else(|| panic!("binding reset dropped delivery {}", expected.id));
+            assert_eq!(actual.status, "pending");
+            assert_eq!(actual.published_generation, None);
+            assert_eq!(actual.claim_owner, None);
+            assert_eq!(actual.claim_token, None);
+            assert_eq!(actual.claim_lease_token, None);
+            assert_eq!(actual.claim_fence_epoch, None);
+            assert_eq!(actual.claim_generation, None);
+            assert_eq!(actual.claim_expires_at, None);
+            assert_eq!(actual.attempts, expected.attempts);
+            assert_eq!(actual.next_attempt_at, expected.next_attempt_at);
+            assert_eq!(actual.last_error.as_deref(), Some(expected_last_error));
+            assert!(actual.updated_at >= expected.updated_at);
+        }
+        for actual in after {
+            assert!(
+                before.iter().any(|delivery| delivery.id == actual.id),
+                "binding reset added delivery {}",
+                actual.id
+            );
+        }
+    }
+
+    fn binding_abort_store_state(
+        conn: &Connection,
+        store_name: &str,
+    ) -> anyhow::Result<BindingAbortStoreState> {
+        Ok(conn.query_row(
+            "SELECT active_generation,previous_generation,building_generation,
+                    checkpoint_cursor,legacy_checkpoint_cursor,lifecycle_status,
+                    last_success_at,last_error,updated_at
+             FROM projection_store_state WHERE store_name=?1",
+            [store_name],
+            |row| {
+                Ok(BindingAbortStoreState {
+                    active_generation: row.get(0)?,
+                    previous_generation: row.get(1)?,
+                    building_generation: row.get(2)?,
+                    checkpoint_cursor: row.get(3)?,
+                    legacy_checkpoint_cursor: row.get(4)?,
+                    lifecycle_status: row.get(5)?,
+                    last_success_at: row.get(6)?,
+                    last_error: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            },
+        )?)
+    }
+
+    fn binding_abort_delivery_and_store_state(
+        path: &std::path::Path,
+        store_name: &str,
+    ) -> anyhow::Result<(
+        Vec<BindingAbortDeliveryState>,
+        BindingAbortStoreState,
+        String,
+    )> {
+        let conn = connect_file(path)?;
+        let deliveries = binding_abort_delivery_state(&conn, store_name)?;
+        let store = binding_abort_store_state(&conn, store_name)?;
+        let outbox = conn.query_row(
+            "SELECT COALESCE(json_group_array(json_object(
+                      'id',id,'status',status,'attempts',attempts,
+                      'last_error',last_error,'updated_at',updated_at)), '[]')
+             FROM (SELECT * FROM index_outbox ORDER BY id)",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok((deliveries, store, outbox))
+    }
+
+    fn abort_binding_with_barrier<T>(
+        path: &std::path::Path,
+        owner: &str,
+        lease_token: &str,
+        backend: &PrepareFailureBackend,
+        binding: AbortBinding,
+        after_barrier: impl FnOnce(&std::sync::mpsc::Sender<()>) -> anyhow::Result<T>,
+    ) -> anyhow::Result<(T, Result<()>)> {
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| -> anyhow::Result<(T, Result<()>)> {
+            let abort = scope.spawn(move || {
+                abort_projection_generation_with_binding_before_final_transaction(
+                    path,
+                    "tantivy_tasks",
+                    owner,
+                    lease_token,
+                    backend,
+                    binding,
+                    move || {
+                        entered_tx
+                            .send(())
+                            .expect("binding abort reached final transaction barrier");
+                        resume_rx
+                            .recv()
+                            .expect("resume binding abort at final transaction barrier");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("binding abort reached final transaction barrier");
+            let value = match after_barrier(&resume_tx) {
+                Ok(value) => value,
+                Err(error) => {
+                    let _ = resume_tx.send(());
+                    let _ = abort.join();
+                    return Err(error);
+                }
+            };
+            let result = abort.join().expect("binding abort thread must not panic");
+            Ok((value, result))
+        })
+    }
+
+    fn bump_binding_fence_direct(
+        path: &std::path::Path,
+        owner: &str,
+        lease_token: &str,
+    ) -> anyhow::Result<()> {
+        // The normal recovery-fence API acquires the outer service guard. A
+        // paused abort already owns that guard, so this test-only actor uses
+        // a direct IMMEDIATE SQLite transaction to model the rollover.
+        let actor = connect_file(path)?;
+        with_immediate_tx(&actor, || {
+            let changed = actor
+                .execute(
+                    "UPDATE projection_store_state
+                     SET fence_epoch=fence_epoch+1,updated_at=?1
+                     WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                    params![SystemClock.now_ms(), "tantivy_tasks", owner, lease_token],
+                )
+                .map_err(storage)?;
+            if changed != 1 {
+                return Err(KanbanError::Storage(
+                    "test fence rollover actor did not update the lease".to_owned(),
+                ));
+            }
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    fn prepare_fixture_generation(
+        path: &std::path::Path,
+        backend: &PrepareFailureBackend,
+        owner: &str,
+        lease_token: &str,
+    ) -> anyhow::Result<ProjectionArtifactManifest> {
+        let manifest =
+            begin_projection_generation(path, "tantivy_tasks", owner, lease_token, backend)?;
+        prepare_projection_snapshot_with(path, "tantivy_tasks", owner, lease_token, backend)?;
+        Ok(manifest)
+    }
+
+    fn prepare_and_publish_fixture_generation(
+        path: &std::path::Path,
+        backend: &PrepareFailureBackend,
+        owner: &str,
+        lease_token: &str,
+    ) -> anyhow::Result<ProjectionArtifactEvidence> {
+        prepare_fixture_generation(path, backend, owner, lease_token)?;
+        Ok(publish_projection_generation_with(
+            path,
+            "tantivy_tasks",
+            owner,
+            lease_token,
+            backend,
+        )?)
+    }
+
     #[test]
     fn failed_prepare_fenced_abort_cleans_partial_state_and_retry_converges() -> anyhow::Result<()>
     {
@@ -6235,6 +6519,470 @@ mod read_only_publication_validation_tests {
             );
             let successor = acquire_projection_lease(&path, "tantivy_tasks", "successor", 10_000)?;
             assert_eq!(successor.owner, "successor");
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn abort_binding_rejects_expired_lease_before_final_commit() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("binding abort delay"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "binding-owner", 10_000)?;
+        let manifest = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        connect_file(&path)?.execute(
+            "UPDATE projection_store_state SET building_provider_fingerprint='incompatible-v0'
+             WHERE store_name='tantivy_tasks'",
+            [],
+        )?;
+        let ((before, delivery_outbox_before), error) = abort_binding_with_barrier(
+            &path,
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+            AbortBinding::Incompatible,
+            |resume| {
+                let expires_at = SystemClock.now_ms() + 75;
+                let conn = connect_file(&path)?;
+                with_immediate_tx(&conn, || {
+                    conn.execute("UPDATE projection_store_state SET lease_expires_at=?1 WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4", params![expires_at, "tantivy_tasks", "binding-owner", lease.lease_token]).map_err(storage)?;
+                    Ok(())
+                })?;
+                let before = binding_abort_snapshot(
+                    &path,
+                    "tantivy_tasks",
+                    "binding-owner",
+                    &lease.lease_token,
+                )?;
+                let writer = connect_file(&path)?;
+                writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+                resume.send(()).expect("resume binding abort final commit");
+                while SystemClock.now_ms() <= expires_at {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                writer.execute_batch("COMMIT").map_err(storage)?;
+                Ok(before)
+            },
+        )?;
+        assert!(matches!(error, Err(KanbanError::Conflict(_))));
+        let (after, delivery_outbox_after) =
+            binding_abort_snapshot(&path, "tantivy_tasks", "binding-owner", &lease.lease_token)?;
+        assert_eq!(after, before);
+        assert_eq!(delivery_outbox_after, delivery_outbox_before);
+        assert!(!backend.generation_present(&manifest.generation));
+        assert_eq!(
+            acquire_projection_lease(&path, "tantivy_tasks", "successor", 10_000)?.owner,
+            "successor"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn abort_binding_rejects_same_owner_fence_rollover_before_final_commit() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("binding abort fence rollover target"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "binding-owner", 10_000)?;
+        let manifest = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        connect_file(&path)?.execute(
+            "UPDATE projection_store_state SET building_provider_fingerprint='incompatible-v0'
+             WHERE store_name='tantivy_tasks'",
+            [],
+        )?;
+        let ((before, delivery_outbox_before), error) = abort_binding_with_barrier(
+            &path,
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+            AbortBinding::Incompatible,
+            |resume| {
+                bump_binding_fence_direct(&path, "binding-owner", &lease.lease_token)?;
+                let before = binding_abort_snapshot(
+                    &path,
+                    "tantivy_tasks",
+                    "binding-owner",
+                    &lease.lease_token,
+                )?;
+                resume
+                    .send(())
+                    .expect("resume binding abort after direct fence rollover");
+                Ok(before)
+            },
+        )?;
+        assert!(matches!(error, Err(KanbanError::Conflict(_))), "{error:?}");
+        let (after, delivery_outbox_after) =
+            binding_abort_snapshot(&path, "tantivy_tasks", "binding-owner", &lease.lease_token)?;
+        assert_eq!(after, before);
+        assert_eq!(delivery_outbox_after, delivery_outbox_before);
+        assert!(
+            !backend.generation_present(&manifest.generation),
+            "physical quarantine must survive stale final binding CAS"
+        );
+
+        // The same owner/token can retry with the bumped fence. This is
+        // the successor evidence for the direct in-place rollover.
+        abort_incompatible_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let retry =
+            binding_abort_snapshot(&path, "tantivy_tasks", "binding-owner", &lease.lease_token)?.0;
+        assert!(retry.building.generation.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn abort_binding_reset_active_rejects_same_owner_fence_rollover_before_final_commit()
+    -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("binding abort active reset target"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "binding-owner", 20_000)?;
+
+        let active_manifest = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        publish_projection_generation_with(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let active_snapshot_connection = connect_file(&path)?;
+        assert_eq!(
+            projection_binding_recovery_snapshot(
+                &active_snapshot_connection,
+                "tantivy_tasks",
+                "binding-owner",
+                &lease.lease_token,
+                SystemClock.now_ms(),
+            )?
+            .active
+            .generation
+            .as_deref(),
+            Some(active_manifest.generation.as_str())
+        );
+
+        let building_manifest = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        connect_file(&path)?.execute(
+            "UPDATE projection_store_state
+             SET active_provider_fingerprint='incompatible-v0',
+                 building_provider_fingerprint='incompatible-v0'
+             WHERE store_name='tantivy_tasks'",
+            [],
+        )?;
+
+        let ((before, delivery_outbox_before), error) = abort_binding_with_barrier(
+            &path,
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+            AbortBinding::Incompatible,
+            |resume| {
+                bump_binding_fence_direct(&path, "binding-owner", &lease.lease_token)?;
+                let before = binding_abort_snapshot(
+                    &path,
+                    "tantivy_tasks",
+                    "binding-owner",
+                    &lease.lease_token,
+                )?;
+                resume
+                    .send(())
+                    .expect("resume active reset abort after direct fence rollover");
+                Ok(before)
+            },
+        )?;
+        assert!(matches!(error, Err(KanbanError::Conflict(_))), "{error:?}");
+        let (after, delivery_outbox_after) =
+            binding_abort_snapshot(&path, "tantivy_tasks", "binding-owner", &lease.lease_token)?;
+        assert_eq!(after, before);
+        assert_eq!(delivery_outbox_after, delivery_outbox_before);
+        assert!(!backend.generation_present(&building_manifest.generation));
+        assert!(!backend.generation_present(&active_manifest.generation));
+        assert!(backend.inspect_active()?.is_none());
+
+        // The bumped fence is a valid retry capability for the same
+        // owner/token. Both the active and building bindings now reset.
+        let (deliveries_before_success, store_before_success, outbox_before_success) =
+            binding_abort_delivery_and_store_state(&path, "tantivy_tasks")?;
+        abort_projection_generation_with_binding(
+            &path,
+            "tantivy_tasks",
+            "binding-owner",
+            &lease.lease_token,
+            &backend,
+            AbortBinding::Incompatible,
+        )?;
+        let retry =
+            binding_abort_snapshot(&path, "tantivy_tasks", "binding-owner", &lease.lease_token)?.0;
+        assert!(retry.building.generation.is_none());
+        assert!(retry.active.generation.is_none());
+        assert_eq!(retry.lifecycle_status, "bootstrap_required");
+        let (deliveries_after_success, store_after_success, outbox_after_success) =
+            binding_abort_delivery_and_store_state(&path, "tantivy_tasks")?;
+        assert_eq!(outbox_after_success, outbox_before_success);
+        assert_eq!(store_after_success.active_generation, None);
+        assert_eq!(store_after_success.previous_generation, None);
+        assert_eq!(store_after_success.building_generation, None);
+        assert_eq!(store_after_success.checkpoint_cursor, 0);
+        assert_eq!(
+            store_after_success.legacy_checkpoint_cursor,
+            store_before_success.legacy_checkpoint_cursor
+        );
+        assert_eq!(store_after_success.lifecycle_status, "bootstrap_required");
+        assert_eq!(store_after_success.last_success_at, None);
+        assert_eq!(store_after_success.last_error, None);
+        assert!(store_after_success.updated_at >= store_before_success.updated_at);
+        assert_reset_delivery_fields(
+            &deliveries_before_success,
+            &deliveries_after_success,
+            "backend binding generation reset before rebuild",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn abort_binding_reset_previous_active_and_building_rejects_fence_rollover()
+    -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("binding abort previous reset target"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "binding-owner", 20_000)?;
+
+        // Publish A, then publish B so SQLite and the fixture both have a
+        // real previous A + active B chain before preparing C.
+        let previous_manifest = prepare_and_publish_fixture_generation(
+            &path,
+            &backend,
+            "binding-owner",
+            &lease.lease_token,
+        )?;
+        let active_manifest = prepare_and_publish_fixture_generation(
+            &path,
+            &backend,
+            "binding-owner",
+            &lease.lease_token,
+        )?;
+        let building_manifest =
+            prepare_fixture_generation(&path, &backend, "binding-owner", &lease.lease_token)?;
+        connect_file(&path)?.execute(
+            "UPDATE projection_store_state
+             SET previous_provider_fingerprint='incompatible-v0',
+                 building_provider_fingerprint='incompatible-v0'
+             WHERE store_name='tantivy_tasks'",
+            [],
+        )?;
+        let (before, side_before) =
+            binding_abort_snapshot(&path, "tantivy_tasks", "binding-owner", &lease.lease_token)?;
+        assert_eq!(
+            before.previous.generation.as_deref(),
+            Some(previous_manifest.manifest.generation.as_str())
+        );
+        assert_eq!(
+            before.active.generation.as_deref(),
+            Some(active_manifest.manifest.generation.as_str())
+        );
+        assert_eq!(
+            before.building.generation.as_deref(),
+            Some(building_manifest.generation.as_str())
+        );
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| -> anyhow::Result<()> {
+            let path_ref = &path;
+            let token_ref = &lease.lease_token;
+            let backend_ref = &backend;
+            let abort = scope.spawn(move || {
+                abort_projection_generation_with_binding_before_final_transaction(
+                    path_ref,
+                    "tantivy_tasks",
+                    "binding-owner",
+                    token_ref,
+                    backend_ref,
+                    AbortBinding::Incompatible,
+                    move || {
+                        entered_tx.send(()).expect("previous reset fence barrier");
+                        resume_rx
+                            .recv()
+                            .expect("resume previous reset after fence rollover");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("previous reset abort reached final barrier");
+            bump_binding_fence_direct(&path, "binding-owner", &lease.lease_token)?;
+            resume_tx
+                .send(())
+                .expect("resume previous reset after direct fence rollover");
+            let error = abort
+                .join()
+                .expect("previous reset abort thread must not panic")
+                .expect_err("same-owner fence rollover must reject previous reset final CAS");
+            assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+
+            let (after, side_after) = binding_abort_snapshot(
+                &path,
+                "tantivy_tasks",
+                "binding-owner",
+                &lease.lease_token,
+            )?;
+            let mut expected_after_rollover = before.clone();
+            expected_after_rollover.lease.fence_epoch += 1;
+            expected_after_rollover.updated_at = after.updated_at;
+            assert_eq!(after, expected_after_rollover);
+            assert_eq!(side_after, side_before);
+            assert!(!backend.generation_present(&previous_manifest.manifest.generation));
+            assert!(backend.generation_present(&active_manifest.manifest.generation));
+            assert!(!backend.generation_present(&building_manifest.generation));
+            assert_eq!(
+                backend
+                    .inspect_active()?
+                    .expect("compatible active generation remains after previous-only reset")
+                    .manifest
+                    .generation,
+                active_manifest.manifest.generation
+            );
+
+            // The bumped same-owner/token fence is the retry capability;
+            // previous/building clear while compatible active B remains.
+            let (deliveries_before_success, store_before_success, outbox_before_success) =
+                binding_abort_delivery_and_store_state(&path, "tantivy_tasks")?;
+            abort_projection_generation_with_binding(
+                &path,
+                "tantivy_tasks",
+                "binding-owner",
+                &lease.lease_token,
+                &backend,
+                AbortBinding::Incompatible,
+            )?;
+            let retry = binding_abort_snapshot(
+                &path,
+                "tantivy_tasks",
+                "binding-owner",
+                &lease.lease_token,
+            )?
+            .0;
+            assert!(retry.previous.generation.is_none());
+            assert_eq!(
+                retry.active.generation.as_deref(),
+                Some(active_manifest.manifest.generation.as_str())
+            );
+            assert!(retry.building.generation.is_none());
+            assert_eq!(retry.lifecycle_status, "ready");
+            let (deliveries_after_success, store_after_success, outbox_after_success) =
+                binding_abort_delivery_and_store_state(&path, "tantivy_tasks")?;
+            assert_eq!(outbox_after_success, outbox_before_success);
+            assert_eq!(
+                store_after_success.active_generation,
+                Some(active_manifest.manifest.generation.clone())
+            );
+            assert_eq!(store_after_success.previous_generation, None);
+            assert_eq!(store_after_success.building_generation, None);
+            assert_eq!(store_after_success.checkpoint_cursor, 0);
+            assert_eq!(
+                store_after_success.legacy_checkpoint_cursor,
+                store_before_success.legacy_checkpoint_cursor
+            );
+            assert_eq!(store_after_success.lifecycle_status, "ready");
+            assert_eq!(
+                store_after_success.last_success_at,
+                store_before_success.last_success_at
+            );
+            assert_eq!(store_after_success.last_error, None);
+            assert!(store_after_success.updated_at >= store_before_success.updated_at);
+            assert_reset_delivery_fields(
+                &deliveries_before_success,
+                &deliveries_after_success,
+                "generation aborted before publish",
+            );
             Ok(())
         })?;
         Ok(())

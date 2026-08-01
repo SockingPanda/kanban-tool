@@ -271,6 +271,19 @@ impl DatabaseLifecycleExclusiveGuard {
         self.guard.created_authority_file
     }
 
+    /// Marks the held namespace witness for identity-checked removal on drop.
+    pub fn mark_remove_file_on_drop(&mut self) {
+        self.guard.mark_remove_file_on_drop();
+    }
+
+    /// Removes the held replacement authority immediately after revalidating
+    /// that `path` still identifies the same inode, then flushes its parent
+    /// directory entry. This closes the mark-for-drop window used by
+    /// crash-safe placeholder cleanup.
+    pub fn remove_file_now_if_identity(&mut self, path: &Path) -> io::Result<()> {
+        self.guard.remove_file_now_if_identity(path)
+    }
+
     /// Returns the canonical path whose inode is held by this guard.
     pub fn path(&self) -> &Path {
         &self.guard.normalized_path
@@ -345,9 +358,48 @@ impl DatabaseLifecycleExclusiveAuthority {
     pub fn created_authority_file(&self) -> bool {
         self.lifecycle.created_authority_file()
     }
+
+    /// Removes the held namespace witness on drop if it still identifies the
+    /// same inode. Used only for a missing-target placeholder retained under
+    /// the previous path after a successful replacement recovery.
+    pub fn remove_file_on_drop_if_identity(&mut self) {
+        self.lifecycle.mark_remove_file_on_drop();
+    }
+
+    /// Removes the held replacement authority immediately after revalidating
+    /// that `path` still identifies the same inode, then flushes its parent
+    /// directory entry.
+    pub fn remove_file_now_if_identity(&mut self, path: &Path) -> io::Result<()> {
+        self.lifecycle.remove_file_now_if_identity(path)
+    }
+
+    /// Drops derived-store locks and returns the lifecycle guard after a
+    /// caller has finished an exclusive database inspection.
+    pub fn into_lifecycle_guard(self) -> DatabaseLifecycleExclusiveGuard {
+        let Self {
+            _store_locks,
+            lifecycle,
+        } = self;
+        drop(_store_locks);
+        lifecycle
+    }
 }
 
 impl DatabaseLifecyclePhysicalGuard {
+    fn mark_remove_file_on_drop(&mut self) {
+        self.remove_created_file_on_drop = true;
+    }
+
+    fn remove_file_now_if_identity(&mut self, path: &Path) -> io::Result<()> {
+        let normalized_path = self.validate_identity_at(path)?;
+        fs::remove_file(&normalized_path)?;
+        // Do not leave a delayed drop cleanup armed after the namespace entry
+        // has been removed; a later replacement must never be deleted by the
+        // old authority's destructor.
+        self.remove_created_file_on_drop = false;
+        durable_sync_directory(parent_directory(&normalized_path)?)
+    }
+
     fn validate_path_identity(&self) -> io::Result<()> {
         validate_database_lock_file(&self.normalized_path, &self.file)
     }
@@ -1479,6 +1531,70 @@ pub fn durable_replace_file_contents(path: &Path, contents: &[u8]) -> io::Result
         return Err(error);
     }
     Ok(())
+}
+
+/// Moves one regular sibling file without replacing an existing destination.
+///
+/// The source is flushed before the namespace operation and the parent
+/// directory is flushed after it.  Platforms without an atomic no-replace
+/// primitive fail closed rather than emulating the move with copy/remove.
+pub fn durable_move_file_no_replace(source: &Path, destination: &Path) -> io::Result<()> {
+    require_sibling_paths(source, destination)?;
+    let source_metadata = fs::symlink_metadata(source)?;
+    if !source_metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "durable move source is not a regular file: {}",
+                source.display()
+            ),
+        ));
+    }
+    match fs::symlink_metadata(destination) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Ok(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!(
+                    "durable move destination already exists: {}",
+                    destination.display()
+                ),
+            ));
+        }
+        Err(error) => return Err(error),
+    }
+    durable_sync_file(source)?;
+    durable_move_file_no_replace_platform(source, destination)?;
+    durable_sync_directory(parent_directory(source)?)?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn durable_move_file_no_replace_platform(source: &Path, destination: &Path) -> io::Result<()> {
+    use rustix::fs::{CWD, RenameFlags, renameat_with};
+
+    renameat_with(CWD, source, CWD, destination, RenameFlags::NOREPLACE).map_err(Into::into)
+}
+
+#[cfg(windows)]
+fn durable_move_file_no_replace_platform(source: &Path, destination: &Path) -> io::Result<()> {
+    windows_move_file(source, destination, false)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn durable_move_file_no_replace_platform(_source: &Path, _destination: &Path) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "durable no-replace file move requires Linux renameat2 or Windows MoveFileEx",
+    ))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn durable_move_file_no_replace_platform(_source: &Path, _destination: &Path) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "durable no-replace file move is unsupported on this platform",
+    ))
 }
 
 #[cfg(not(windows))]

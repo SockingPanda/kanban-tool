@@ -5923,6 +5923,340 @@ mod read_only_publication_validation_tests {
         )?)
     }
 
+    fn claim_fixture() -> anyhow::Result<(tempfile::TempDir, ProjectionLease)> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("claim delay target"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "claim-owner", 10_000)?;
+        begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "claim-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "claim-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("claim delivery target"),
+        )?;
+        Ok((temp, lease))
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct ClaimProjectionState {
+        binding: ProjectionBindingRecoverySnapshot,
+        deliveries: String,
+        outbox: String,
+        tasks: String,
+        events: String,
+        entities: String,
+    }
+
+    fn claim_state_snapshot(
+        path: &std::path::Path,
+        owner: &str,
+        lease_token: &str,
+    ) -> anyhow::Result<ClaimProjectionState> {
+        let (binding, _) = binding_abort_snapshot(path, "tantivy_tasks", owner, lease_token)?;
+        let conn = connect_file(path)?;
+        let deliveries = conn.query_row(
+            "SELECT COALESCE(json_group_array(json_object(
+                'id',id,'outbox_id',outbox_id,'store_name',store_name,
+                'board_id',board_id,'source_event_id',source_event_id,'cursor',cursor,
+                'action',action,'entity_uri',entity_uri,'payload_json',payload_json,
+                'status',status,'attempts',attempts,'next_attempt_at',next_attempt_at,
+                'claim_owner',claim_owner,'claim_token',claim_token,
+                'claim_lease_token',claim_lease_token,'claim_fence_epoch',claim_fence_epoch,
+                'claim_generation',claim_generation,'claim_expires_at',claim_expires_at,
+                'published_generation',published_generation,'last_error',last_error,
+                'created_at',created_at,'updated_at',updated_at)), '[]')
+             FROM (SELECT * FROM projection_deliveries
+                   WHERE store_name=?1 ORDER BY id)",
+            ["tantivy_tasks"],
+            |row| row.get(0),
+        )?;
+        let outbox = conn.query_row(
+            "SELECT COALESCE(json_group_array(json_object(
+                'id',id,'source_event_id',source_event_id,'target',target,
+                'projection_store',projection_store,'entity_uri',entity_uri,
+                'action',action,'payload_json',payload_json,'status',status,
+                'attempts',attempts,'last_error',last_error,'created_at',created_at,
+                'updated_at',updated_at)), '[]')
+             FROM (SELECT * FROM index_outbox ORDER BY id)",
+            [],
+            |row| row.get(0),
+        )?;
+        let tasks = conn.query_row(
+            "SELECT COALESCE(json_group_array(json_object(
+                'id',id,'board_id',board_id,'seq',seq,'title',title,
+                'description',description,'status',status,'status_reason',status_reason,
+                'assignee',assignee,'priority',priority,'position',position,
+                'scheduled_at',scheduled_at,'due_at',due_at,'created_by',created_by,
+                'created_at',created_at,'updated_at',updated_at,'started_at',started_at,
+                'completed_at',completed_at,'archived_at',archived_at,
+                'claim_token',claim_token,'claim_owner',claim_owner,
+                'claim_expires_at',claim_expires_at,'last_heartbeat_at',last_heartbeat_at,
+                'current_run_id',current_run_id,'retry_count',retry_count,
+                'max_retries',max_retries,'result_summary',result_summary,
+                'result_json',result_json,'metadata_json',metadata_json,
+                'lock_version',lock_version)), '[]')
+             FROM (SELECT * FROM tasks ORDER BY board_id,seq,id)",
+            [],
+            |row| row.get(0),
+        )?;
+        let events = conn.query_row(
+            "SELECT COALESCE(json_group_array(json_object(
+                'id',id,'event_id',event_id,'board_id',board_id,'task_id',task_id,
+                'run_id',run_id,'kind',kind,'actor',actor,'payload_json',payload_json,
+                'created_at',created_at)), '[]')
+             FROM (SELECT * FROM task_events ORDER BY id)",
+            [],
+            |row| row.get(0),
+        )?;
+        let entities = conn.query_row(
+            "SELECT COALESCE(json_group_array(json_object(
+                'uri',uri,'kind',kind,'source_table',source_table,'source_id',source_id,
+                'board_id',board_id,'task_id',task_id,'title',title,'summary',summary,
+                'content_hash',content_hash,'created_at',created_at,'updated_at',updated_at,
+                'archived_at',archived_at)), '[]')
+             FROM (SELECT * FROM entities ORDER BY uri)",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(ClaimProjectionState {
+            binding,
+            deliveries,
+            outbox,
+            tasks,
+            events,
+            entities,
+        })
+    }
+
+    fn claim_with_guard(
+        path: &std::path::Path,
+        owner: &str,
+        lease_token: &str,
+        claim_ttl_ms: i64,
+    ) -> Result<ProjectionBatch> {
+        let _write_guard = crate::db::acquire_derived_store_write_guard(path, "tantivy_tasks")?;
+        claim_projection_batch(path, "tantivy_tasks", owner, lease_token, claim_ttl_ms, 10)
+    }
+
+    fn assert_claim_running(path: &std::path::Path) -> anyhow::Result<()> {
+        let running: i64 = connect_file(path)?.query_row(
+            "SELECT COUNT(*) FROM projection_deliveries
+             WHERE store_name='tantivy_tasks' AND status='running'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(running, 1);
+        Ok(())
+    }
+
+    fn assert_claim_delivery_matches_batch(
+        path: &std::path::Path,
+        batch: &ProjectionBatch,
+    ) -> anyhow::Result<()> {
+        let claim = connect_file(path)?.query_row(
+            "SELECT claim_owner,claim_lease_token,claim_fence_epoch,
+                    claim_generation,claim_token
+             FROM projection_deliveries
+             WHERE store_name='tantivy_tasks' AND status='running'
+             ORDER BY id LIMIT 1",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                ))
+            },
+        )?;
+        assert_eq!(claim.0.as_deref(), Some(batch.owner.as_str()));
+        assert_eq!(claim.1.as_deref(), Some(batch.lease_token.as_str()));
+        assert_eq!(claim.2, Some(batch.fence_epoch));
+        assert_eq!(claim.3.as_deref(), Some(batch.target_generation.as_str()));
+        assert_eq!(claim.4.as_deref(), Some(batch.claim_token.as_str()));
+        Ok(())
+    }
+
+    fn claim_with_barrier<T>(
+        path: &std::path::Path,
+        lease_token: &str,
+        claim_ttl_ms: i64,
+        after_barrier: impl FnOnce(&std::sync::mpsc::Sender<()>) -> anyhow::Result<T>,
+    ) -> anyhow::Result<(T, Result<ProjectionBatch>)> {
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| -> anyhow::Result<(T, Result<ProjectionBatch>)> {
+            let claim = scope.spawn(move || {
+                let _write_guard =
+                    crate::db::acquire_derived_store_write_guard(path, "tantivy_tasks")?;
+                claim_projection_batch_with_before_transaction(
+                    path,
+                    "tantivy_tasks",
+                    "claim-owner",
+                    lease_token,
+                    claim_ttl_ms,
+                    10,
+                    move || {
+                        entered_tx
+                            .send(())
+                            .expect("claim reached pre-transaction barrier");
+                        resume_rx
+                            .recv()
+                            .expect("claim resumed against held writer lock");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("claim reached pre-transaction barrier");
+            let value = match after_barrier(&resume_tx) {
+                Ok(value) => value,
+                Err(error) => {
+                    let _ = resume_tx.send(());
+                    let _ = claim.join();
+                    return Err(error);
+                }
+            };
+            let result = claim.join().expect("claim thread must not panic");
+            Ok((value, result))
+        })
+    }
+
+    #[test]
+    fn claim_rejects_lease_expiry_after_write_lock_delay() -> anyhow::Result<()> {
+        let (temp, lease) = claim_fixture()?;
+        let path = temp.path().join("kanban.db");
+        const LEASE_DELAY_MS: i64 = 250;
+        const CLAIM_TTL_MS: i64 = 100;
+        let ((before, expires_at), result) =
+            claim_with_barrier(&path, &lease.lease_token, CLAIM_TTL_MS, |resume_tx| {
+                let expires_at = SystemClock.now_ms() + LEASE_DELAY_MS;
+                let conn = connect_file(&path)?;
+                with_immediate_tx(&conn, || {
+                    let changed = conn
+                        .execute(
+                            "UPDATE projection_store_state SET lease_expires_at=?1
+                             WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                            params![
+                                expires_at,
+                                "tantivy_tasks",
+                                "claim-owner",
+                                lease.lease_token
+                            ],
+                        )
+                        .map_err(storage)?;
+                    if changed != 1 {
+                        return Err(KanbanError::Storage(
+                            "test failed to shorten projection lease before claim".to_owned(),
+                        ));
+                    }
+                    Ok(())
+                })?;
+                let before = claim_state_snapshot(&path, "claim-owner", &lease.lease_token)?;
+
+                let writer = connect_file(&path)?;
+                writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+                resume_tx
+                    .send(())
+                    .expect("resume claim against held writer lock");
+                while SystemClock.now_ms() <= expires_at {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                writer.execute_batch("COMMIT").map_err(storage)?;
+                Ok((before, expires_at))
+            })?;
+        let error = result.expect_err("expired lease must reject delayed claim");
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(
+            claim_state_snapshot(&path, "claim-owner", &lease.lease_token)?,
+            before
+        );
+
+        let successor =
+            acquire_projection_lease(&path, "tantivy_tasks", "claim-successor", 10_000)?;
+        let retry = claim_with_guard(
+            &path,
+            &successor.owner,
+            &successor.lease_token,
+            CLAIM_TTL_MS,
+        )?;
+        assert_eq!(retry.owner, successor.owner);
+        assert_eq!(retry.lease_token, successor.lease_token);
+        assert_eq!(retry.fence_epoch, successor.fence_epoch);
+        assert_eq!(retry.items.len(), 1);
+        assert!(retry.claim_expires_at > expires_at);
+        assert_claim_running(&path)?;
+        assert_claim_delivery_matches_batch(&path, &retry)?;
+        Ok(())
+    }
+
+    #[test]
+    fn claim_rejects_same_owner_fence_rollover_after_write_lock_delay() -> anyhow::Result<()> {
+        let (temp, lease) = claim_fixture()?;
+        let path = temp.path().join("kanban.db");
+        const FENCE_HOLD_MS: u64 = 200;
+        const CLAIM_TTL_MS: i64 = 1_000;
+        let (before, result) =
+            claim_with_barrier(&path, &lease.lease_token, CLAIM_TTL_MS, |resume_tx| {
+                bump_binding_fence_direct(&path, "claim-owner", &lease.lease_token)?;
+                let before = claim_state_snapshot(&path, "claim-owner", &lease.lease_token)?;
+                let writer = connect_file(&path)?;
+                writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+                resume_tx
+                    .send(())
+                    .expect("resume claim after fence rollover");
+                std::thread::sleep(std::time::Duration::from_millis(FENCE_HOLD_MS));
+                writer.execute_batch("COMMIT").map_err(storage)?;
+                Ok(before)
+            })?;
+        let error = result.expect_err("same-owner fence rollover must reject delayed claim");
+        assert!(matches!(error, KanbanError::Conflict(_)), "{error}");
+        assert_eq!(
+            claim_state_snapshot(&path, "claim-owner", &lease.lease_token)?,
+            before
+        );
+
+        let successor =
+            current_lease_authority(&path, "tantivy_tasks", "claim-owner", &lease.lease_token)?;
+        assert_eq!(successor.fence_epoch, lease.fence_epoch + 1);
+        let retry = claim_with_guard(
+            &path,
+            &successor.owner,
+            &successor.lease_token,
+            CLAIM_TTL_MS,
+        )?;
+        assert_eq!(retry.owner, successor.owner);
+        assert_eq!(retry.lease_token, successor.lease_token);
+        assert_eq!(retry.fence_epoch, successor.fence_epoch);
+        assert_eq!(retry.items.len(), 1);
+        assert_claim_running(&path)?;
+        assert_claim_delivery_matches_batch(&path, &retry)?;
+        Ok(())
+    }
+
     #[test]
     fn failed_prepare_fenced_abort_cleans_partial_state_and_retry_converges() -> anyhow::Result<()>
     {

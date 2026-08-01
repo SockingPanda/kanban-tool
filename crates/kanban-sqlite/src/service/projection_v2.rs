@@ -6003,6 +6003,110 @@ mod read_only_publication_validation_tests {
         )?)
     }
 
+    fn published_fixture_for_confirmation() -> anyhow::Result<(
+        tempfile::TempDir,
+        PrepareFailureBackend,
+        ProjectionArtifactEvidence,
+        ProjectionLease,
+        ProjectionLease,
+    )> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("published confirmation target"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "confirm-owner", 20_000)?;
+        begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "confirm-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let prepared = prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "confirm-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let authority = authority_for_generation(
+            &path,
+            "tantivy_tasks",
+            "confirm-owner",
+            &lease.lease_token,
+            &prepared.manifest.generation,
+        )?;
+        let expected_previous = active_artifact(&path, "tantivy_tasks")?;
+        let receipt = backend.publish_generation_with_authority(
+            expected_previous.as_ref(),
+            &prepared,
+            &authority,
+        )?;
+        let active = validate_publish_receipt(
+            &backend,
+            "tantivy_tasks",
+            &prepared,
+            expected_previous.as_ref(),
+            &authority,
+            receipt,
+        )?;
+        let expected_lease = lease_from_destructive_authority("tantivy_tasks", &authority);
+        Ok((temp, backend, active, expected_lease, lease))
+    }
+
+    fn confirm_fixture_with_barrier<T>(
+        path: &std::path::Path,
+        expected_lease: &ProjectionLease,
+        active: &ProjectionArtifactEvidence,
+        after_barrier: impl FnOnce(&std::sync::mpsc::Sender<()>) -> anyhow::Result<T>,
+    ) -> anyhow::Result<(T, Result<()>)> {
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| -> anyhow::Result<(T, Result<()>)> {
+            let confirm = scope.spawn(move || {
+                let _write_guard =
+                    crate::db::acquire_derived_store_write_guard(path, "tantivy_tasks")?;
+                confirm_published_generation_with_before_final_transaction(
+                    path,
+                    "tantivy_tasks",
+                    expected_lease,
+                    active,
+                    None,
+                    move || {
+                        entered_tx
+                            .send(())
+                            .expect("published confirmation reached final transaction barrier");
+                        resume_rx
+                            .recv()
+                            .expect("resume published confirmation at final transaction barrier");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("published confirmation reached final transaction barrier");
+            let value = match after_barrier(&resume_tx) {
+                Ok(value) => value,
+                Err(error) => {
+                    let _ = resume_tx.send(());
+                    let _ = confirm.join();
+                    return Err(error);
+                }
+            };
+            let result = confirm
+                .join()
+                .expect("published confirmation thread must not panic");
+            Ok((value, result))
+        })
+    }
+
     fn claim_fixture() -> anyhow::Result<(tempfile::TempDir, ProjectionLease)> {
         let temp = tempfile::tempdir()?;
         let path = temp.path().join("kanban.db");
@@ -6974,6 +7078,176 @@ mod read_only_publication_validation_tests {
             "prepare-successor",
             &successor.lease_token,
         )?;
+        Ok(())
+    }
+
+    #[test]
+    fn published_confirmation_rejects_lease_expiry_after_physical_publish() -> anyhow::Result<()> {
+        let (temp, backend, active, expected_lease, lease) = published_fixture_for_confirmation()?;
+        let path = temp.path().join("kanban.db");
+        let before =
+            claim_state_snapshot(&path, &expected_lease.owner, &expected_lease.lease_token)?;
+        let expires_at = SystemClock.now_ms() + 75;
+        let ((), result) =
+            confirm_fixture_with_barrier(&path, &expected_lease, &active, |resume_tx| {
+                let conn = connect_file(&path)?;
+                with_immediate_tx(&conn, || {
+                    let changed = conn
+                        .execute(
+                            "UPDATE projection_store_state
+                             SET lease_expires_at=?1
+                             WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                            params![
+                                expires_at,
+                                "tantivy_tasks",
+                                expected_lease.owner,
+                                expected_lease.lease_token
+                            ],
+                        )
+                        .map_err(storage)?;
+                    if changed != 1 {
+                        return Err(KanbanError::Storage(
+                            "test failed to shorten confirmation lease".to_owned(),
+                        ));
+                    }
+                    Ok(())
+                })?;
+                let writer = connect_file(&path)?;
+                writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+                resume_tx
+                    .send(())
+                    .expect("resume published confirmation against held writer lock");
+                while SystemClock.now_ms() <= expires_at {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                writer.execute_batch("COMMIT").map_err(storage)?;
+                Ok(())
+            })?;
+        assert!(matches!(result, Err(KanbanError::Conflict(_))));
+        assert!(active_artifact(&path, "tantivy_tasks")?.is_none());
+        assert_eq!(backend.inspect_active()?, Some(active.clone()));
+        let status = projection_status(&path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy projection status");
+        assert_eq!(status.owner.as_deref(), Some(expected_lease.owner.as_str()));
+        assert_eq!(status.fence_epoch, expected_lease.fence_epoch);
+        assert!(status.building_generation.is_some());
+        let after =
+            claim_state_snapshot(&path, &expected_lease.owner, &expected_lease.lease_token)?;
+        let mut expected = before;
+        expected.binding.lease.lease_expires_at = expires_at;
+        assert_eq!(after, expected);
+        assert_eq!(
+            backend.inspect_generation(&active.manifest.generation)?,
+            Some(active.clone())
+        );
+        let successor =
+            acquire_projection_lease(&path, "tantivy_tasks", "confirm-successor", 20_000)?;
+        let converged = reconcile_projection_generation_with(
+            &path,
+            "tantivy_tasks",
+            "confirm-successor",
+            &successor.lease_token,
+            &backend,
+        )?;
+        assert_eq!(converged, active);
+        let final_status = projection_status(&path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy projection status after successor reconcile");
+        assert_eq!(
+            final_status.active_generation,
+            Some(active.manifest.generation.clone())
+        );
+        assert_eq!(final_status.building_generation, None);
+        assert_eq!(backend.inspect_active()?, Some(active.clone()));
+        assert_eq!(
+            backend.inspect_generation(&active.manifest.generation)?,
+            Some(active)
+        );
+        release_projection_lease(
+            &path,
+            "tantivy_tasks",
+            "confirm-successor",
+            &successor.lease_token,
+        )?;
+        drop(lease);
+        Ok(())
+    }
+
+    #[test]
+    fn published_confirmation_rejects_same_owner_fence_rollover_after_physical_publish()
+    -> anyhow::Result<()> {
+        let (temp, backend, active, expected_lease, lease) = published_fixture_for_confirmation()?;
+        let path = temp.path().join("kanban.db");
+        let before =
+            claim_state_snapshot(&path, &expected_lease.owner, &expected_lease.lease_token)?;
+        let ((), result) =
+            confirm_fixture_with_barrier(&path, &expected_lease, &active, |resume_tx| {
+                bump_binding_fence_direct(
+                    &path,
+                    &expected_lease.owner,
+                    &expected_lease.lease_token,
+                )?;
+                resume_tx
+                    .send(())
+                    .expect("resume published confirmation after fence rollover");
+                Ok(())
+            })?;
+        assert!(matches!(result, Err(KanbanError::Conflict(_))));
+        assert!(active_artifact(&path, "tantivy_tasks")?.is_none());
+        assert_eq!(backend.inspect_active()?, Some(active.clone()));
+        let status = projection_status(&path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy projection status");
+        assert_eq!(status.owner.as_deref(), Some(expected_lease.owner.as_str()));
+        assert_eq!(status.fence_epoch, expected_lease.fence_epoch + 1);
+        assert!(status.building_generation.is_some());
+        let after =
+            claim_state_snapshot(&path, &expected_lease.owner, &expected_lease.lease_token)?;
+        let mut expected = before;
+        expected.binding.lease.fence_epoch += 1;
+        expected.binding.updated_at = after.binding.updated_at;
+        assert_eq!(after, expected);
+        assert_eq!(
+            backend.inspect_generation(&active.manifest.generation)?,
+            Some(active.clone())
+        );
+        let current = current_lease_authority(
+            &path,
+            "tantivy_tasks",
+            &expected_lease.owner,
+            &expected_lease.lease_token,
+        )?;
+        let converged = reconcile_projection_generation_with(
+            &path,
+            "tantivy_tasks",
+            &current.owner,
+            &current.lease_token,
+            &backend,
+        )?;
+        assert_eq!(converged, active);
+        let final_status = projection_status(&path)?
+            .stores
+            .into_iter()
+            .find(|store| store.store_name == "tantivy_tasks")
+            .expect("Tantivy projection status after successor reconcile");
+        assert_eq!(
+            final_status.active_generation,
+            Some(active.manifest.generation.clone())
+        );
+        assert_eq!(final_status.building_generation, None);
+        assert_eq!(backend.inspect_active()?, Some(active.clone()));
+        assert_eq!(
+            backend.inspect_generation(&active.manifest.generation)?,
+            Some(active)
+        );
+        release_projection_lease(&path, "tantivy_tasks", &lease.owner, &lease.lease_token)?;
         Ok(())
     }
 

@@ -1124,49 +1124,168 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
     }
 }
 
+enum SourceEventTarget {
+    Legacy,
+    Event {
+        task_id: Option<String>,
+        run_id: Option<String>,
+    },
+}
+
 fn affected_task_keys(
     conn: &Connection,
     batch: &ProjectionBatch,
 ) -> Result<BTreeMap<String, BTreeSet<String>>> {
     let mut keys: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for item in &batch.items {
-        let task_id = if let Some(task_id) = item
-            .entity_uri
-            .strip_prefix("kb://task/")
-            .filter(|task_id| !task_id.is_empty())
-        {
-            Some(task_id.to_owned())
-        } else if let Some(source_event_id) = item.source_event_id {
-            let event_task = conn
-                .query_row(
-                    "SELECT COALESCE(e.task_id,r.task_id)
+        let event_target = match item.source_event_id {
+            None => SourceEventTarget::Legacy,
+            Some(source_event_id) => {
+                let event_target = conn
+                    .query_row(
+                        "SELECT COALESCE(e.task_id,r.task_id),e.run_id
                  FROM task_events e
                  LEFT JOIN task_runs r ON r.board_id=e.board_id AND r.id=e.run_id
                  WHERE e.id=?1 AND e.board_id=?2",
-                    params![source_event_id, item.board_id],
-                    |row| row.get::<_, Option<String>>(0),
+                        params![source_event_id, item.board_id],
+                        |row| {
+                            Ok((
+                                row.get::<_, Option<String>>(0)?,
+                                row.get::<_, Option<String>>(1)?,
+                            ))
+                        },
+                    )
+                    .optional()
+                    .map_err(super::storage)?;
+                match event_target {
+                    Some((task_id, run_id)) => SourceEventTarget::Event { task_id, run_id },
+                    None => {
+                        return Err(KanbanError::Conflict(format!(
+                            "Tantivy delivery {} source event is missing or belongs to another board",
+                            item.id
+                        )));
+                    }
+                }
+            }
+        };
+
+        if item.entity_uri == format!("kb://board/{}", item.board_id) {
+            if matches!(
+                &event_target,
+                SourceEventTarget::Event {
+                    task_id: None,
+                    run_id: None
+                }
+            ) {
+                continue;
+            }
+            return Err(KanbanError::Conflict(format!(
+                "Tantivy delivery {} cannot be mapped to a board-scoped entity",
+                item.id
+            )));
+        }
+
+        let Some(task_id) = item
+            .entity_uri
+            .strip_prefix("kb://task/")
+            .filter(|task_id| !task_id.is_empty() && !task_id.contains('/'))
+        else {
+            let Some(run_id) = item
+                .entity_uri
+                .strip_prefix("kb://run/")
+                .filter(|run_id| !run_id.is_empty() && !run_id.contains('/'))
+            else {
+                return Err(KanbanError::Conflict(format!(
+                    "Tantivy delivery {} cannot be mapped to a board-scoped task",
+                    item.id
+                )));
+            };
+
+            let run = conn
+                .query_row(
+                    "SELECT r.board_id,r.task_id,t.board_id
+                 FROM task_runs r
+                 LEFT JOIN tasks t ON t.id=r.task_id
+                 WHERE r.id=?1",
+                    [run_id],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, Option<String>>(1)?,
+                            row.get::<_, Option<String>>(2)?,
+                        ))
+                    },
                 )
                 .optional()
                 .map_err(super::storage)?;
-            match event_task {
-                Some(Some(task_id)) => Some(task_id),
-                Some(None) if item.entity_uri == format!("kb://board/{}", item.board_id) => {
-                    continue;
-                }
-                _ => None,
+            let Some((run_board, Some(task_id), Some(task_board))) = run else {
+                return Err(KanbanError::Conflict(format!(
+                    "Tantivy delivery {} run cannot be proven to belong to its board",
+                    item.id
+                )));
+            };
+            if run_board != item.board_id || task_board != item.board_id {
+                return Err(KanbanError::Conflict(format!(
+                    "Tantivy delivery {} run cannot be proven to belong to its board",
+                    item.id
+                )));
             }
-        } else {
-            None
-        }
-        .ok_or_else(|| {
-            KanbanError::Conflict(format!(
-                "Tantivy delivery {} cannot be mapped to a board-scoped task",
+            match &event_target {
+                SourceEventTarget::Legacy => {}
+                SourceEventTarget::Event {
+                    task_id: Some(event_task),
+                    run_id: Some(event_run),
+                } if event_task.as_str() == task_id.as_str() && event_run.as_str() == run_id => {}
+                SourceEventTarget::Event { .. } => {
+                    return Err(KanbanError::Conflict(format!(
+                        "Tantivy delivery {} run does not match its source event",
+                        item.id
+                    )));
+                }
+            }
+            keys.entry(item.board_id.clone())
+                .or_default()
+                .insert(task_id);
+            continue;
+        };
+
+        let canonical_board = conn
+            .query_row("SELECT board_id FROM tasks WHERE id=?1", [task_id], |row| {
+                row.get::<_, String>(0)
+            })
+            .optional()
+            .map_err(super::storage)?;
+        if canonical_board
+            .as_deref()
+            .is_some_and(|board_id| board_id != item.board_id)
+            || (canonical_board.is_none()
+                && !matches!(&event_target, SourceEventTarget::Event {
+                    task_id: Some(event_task),
+                    ..
+                } if event_task.as_str() == task_id))
+        {
+            return Err(KanbanError::Conflict(format!(
+                "Tantivy delivery {} task cannot be proven to belong to its board",
                 item.id
-            ))
-        })?;
+            )));
+        }
+        match &event_target {
+            SourceEventTarget::Legacy => {}
+            SourceEventTarget::Event {
+                task_id: Some(event_task),
+                ..
+            } if event_task.as_str() == task_id => {}
+            SourceEventTarget::Event { .. } => {
+                return Err(KanbanError::Conflict(format!(
+                    "Tantivy delivery {} entity does not match its source event",
+                    item.id
+                )));
+            }
+        }
+
         keys.entry(item.board_id.clone())
             .or_default()
-            .insert(task_id);
+            .insert(task_id.to_owned());
     }
     Ok(keys)
 }
@@ -1295,7 +1414,7 @@ fn search_storage(error: impl std::error::Error) -> KanbanError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::service::{ProjectionSnapshotRecord, ProjectionStoreBackend};
+    use crate::service::{ProjectionDelivery, ProjectionSnapshotRecord, ProjectionStoreBackend};
     use kanban_core::TaskStatus;
     use rusqlite::params;
 
@@ -1514,6 +1633,112 @@ mod tests {
             embedding_model: "historical-tantivy-embedding".to_owned(),
             embedding_dimensions: 3,
         }
+    }
+
+    #[test]
+    fn affected_task_keys_reject_untrusted_task_identity() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE tasks (id TEXT PRIMARY KEY, board_id TEXT NOT NULL);
+             CREATE TABLE task_events (id INTEGER PRIMARY KEY, board_id TEXT NOT NULL, task_id TEXT, run_id TEXT);
+             CREATE TABLE task_runs (id TEXT PRIMARY KEY, board_id TEXT NOT NULL, task_id TEXT);",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO tasks(id,board_id) VALUES ('t_source','default'),('t_target','default'),('t_other','other')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO task_events(id,board_id,task_id) VALUES (7,'default','t_source')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO task_events(id,board_id,task_id) VALUES (8,'default','t_deleted')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO task_runs(id,board_id,task_id) VALUES ('r_source','default','t_source'),('r_other','other','t_other')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO task_events(id,board_id,task_id,run_id) VALUES (9,'default',NULL,'r_source'),(10,'default',NULL,'r_other')",
+            [],
+        )
+        .unwrap();
+
+        let batch = |entity_uri: &str, source_event_id: Option<i64>| ProjectionBatch {
+            store_name: TANTIVY_TASKS_STORE.to_owned(),
+            database_instance_id: "db_test".to_owned(),
+            protocol_version: 2,
+            schema_version: 1,
+            provider: TANTIVY_PROJECTION_PROVIDER.to_owned(),
+            provider_fingerprint: TANTIVY_PROJECTION_PROVIDER_FINGERPRINT.to_owned(),
+            corpus: None,
+            owner: "owner".to_owned(),
+            lease_token: "lease".to_owned(),
+            fence_epoch: 1,
+            target_generation: "gen_test".to_owned(),
+            claim_token: "claim".to_owned(),
+            claim_expires_at: i64::MAX,
+            items: vec![ProjectionDelivery {
+                id: 1,
+                outbox_id: 1,
+                store_name: TANTIVY_TASKS_STORE.to_owned(),
+                board_id: "default".to_owned(),
+                source_event_id,
+                cursor: 1,
+                action: "upsert".to_owned(),
+                entity_uri: entity_uri.to_owned(),
+                payload_json: "{}".to_owned(),
+                attempts: 0,
+            }],
+        };
+
+        let error = affected_task_keys(&conn, &batch("kb://task/t_other", None)).unwrap_err();
+        assert!(error.to_string().contains("cannot be proven"), "{error}");
+
+        let error = affected_task_keys(&conn, &batch("kb://task/t_target", Some(7))).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("does not match its source event"),
+            "{error}"
+        );
+
+        let error =
+            affected_task_keys(&conn, &batch("kb://task/t_source/child", None)).unwrap_err();
+        assert!(error.to_string().contains("cannot be mapped"), "{error}");
+
+        let keys = affected_task_keys(&conn, &batch("kb://task/t_deleted", Some(8))).unwrap();
+        assert!(
+            keys.get("default")
+                .is_some_and(|ids| ids.contains("t_deleted"))
+        );
+
+        let keys = affected_task_keys(&conn, &batch("kb://run/r_source", Some(9))).unwrap();
+        assert!(
+            keys.get("default")
+                .is_some_and(|ids| ids.contains("t_source"))
+        );
+
+        let error = affected_task_keys(&conn, &batch("kb://run/r_source", Some(7))).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("run does not match its source event"),
+            "{error}"
+        );
+        let error = affected_task_keys(&conn, &batch("kb://run/r_other", None)).unwrap_err();
+        assert!(
+            error.to_string().contains("run cannot be proven"),
+            "{error}"
+        );
+        let error = affected_task_keys(&conn, &batch("kb://run/r_source/child", None)).unwrap_err();
+        assert!(error.to_string().contains("cannot be mapped"), "{error}");
     }
 
     #[test]

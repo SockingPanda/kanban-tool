@@ -1789,7 +1789,7 @@ fn graph_storage(error: impl std::fmt::Display) -> KanbanError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::service::{ProjectionSnapshotRecord, ProjectionStoreBackend};
+    use crate::service::{ProjectionDelivery, ProjectionSnapshotRecord, ProjectionStoreBackend};
     use rusqlite::params;
 
     fn store(temp: &tempfile::TempDir) -> OxigraphProjectionStore {

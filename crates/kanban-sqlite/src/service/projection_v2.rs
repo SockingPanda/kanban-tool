@@ -1739,18 +1739,59 @@ fn abort_projection_generation_with_binding(
     backend: &(impl ProjectionStoreBackend + ?Sized),
     binding: AbortBinding,
 ) -> Result<()> {
+    abort_projection_generation_with_binding_before_final_transaction(
+        path,
+        store_name,
+        owner,
+        lease_token,
+        backend,
+        binding,
+        || {},
+    )
+}
+
+fn abort_projection_generation_with_binding_before_final_transaction(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+    binding: AbortBinding,
+    before_final_transaction: impl FnOnce(),
+) -> Result<()> {
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let manifest = building_manifest(path, store_name, owner, lease_token)?;
+    // Capture the complete logical binding before any provider mutation.  In
+    // particular, the lease fence and every active/previous/building binding
+    // field belong to this abort capability; a same-owner/token fence rollover
+    // must not be able to reuse it at the final SQLite CAS.
+    let snapshot_connection = connect_file(path)?;
+    let expected_snapshot = projection_binding_recovery_snapshot(
+        &snapshot_connection,
+        store_name,
+        owner,
+        lease_token,
+        SystemClock.now_ms(),
+    )?;
+    expected_snapshot.validate_shape(store_name)?;
+    let active = expected_snapshot.active.evidence(
+        store_name,
+        "active",
+        &expected_snapshot.lease.database_instance_id,
+        expected_snapshot.lease.protocol_version,
+        expected_snapshot.lease.schema_version,
+    )?;
+    let previous = expected_snapshot.previous.evidence(
+        store_name,
+        "previous",
+        &expected_snapshot.lease.database_instance_id,
+        expected_snapshot.lease.protocol_version,
+        expected_snapshot.lease.schema_version,
+    )?;
     let (descriptor, active, previous, reset_active, reset_previous) = match binding {
         AbortBinding::Exact => {
             validate_backend_binding(backend, &manifest)?;
-            (
-                None,
-                active_artifact(path, store_name)?,
-                previous_artifact(path, store_name)?,
-                false,
-                false,
-            )
+            (None, active, previous, false, false)
         }
         AbortBinding::Incompatible => {
             let descriptor = backend.descriptor()?;
@@ -1769,8 +1810,6 @@ fn abort_projection_generation_with_binding(
                     manifest.generation
                 )));
             }
-            let active = active_artifact(path, store_name)?;
-            let previous = previous_artifact(path, store_name)?;
             let reset_active = active.as_ref().is_some_and(|evidence| {
                 validate_descriptor_binding(
                     store_name,
@@ -1839,16 +1878,34 @@ fn abort_projection_generation_with_binding(
     }
     for generation in &generations_to_quarantine {
         let authority = if generation == &manifest.generation {
-            let authority = current_building_authority(path, store_name, owner, lease_token)?;
-            if authority.generation != *generation {
+            let mut authority = destructive_authority_from_snapshot(
+                &expected_snapshot,
+                store_name,
+                owner,
+                lease_token,
+                ProjectionGenerationRole::Building,
+                &expected_snapshot.building,
+            )?;
+            if authority.generation != *generation
+                || authority.generation != manifest.generation
+                || authority.expected_binding.fence_epoch != manifest.fence_epoch
+            {
                 return Err(stale_generation(store_name));
             }
+            let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
+            if lease.fence_epoch != expected_snapshot.lease.fence_epoch {
+                return Err(stale_generation(store_name));
+            }
+            authority.lease_expires_at = lease.lease_expires_at;
             authority
         } else if let Some(active) = active
             .as_ref()
             .filter(|e| e.manifest.generation == *generation)
         {
             let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
+            if lease.fence_epoch != expected_snapshot.lease.fence_epoch {
+                return Err(stale_generation(store_name));
+            }
             destructive_authority_from_evidence(
                 owner,
                 lease_token,
@@ -1862,6 +1919,9 @@ fn abort_projection_generation_with_binding(
             .filter(|e| e.manifest.generation == *generation)
         {
             let lease = current_lease_snapshot(path, store_name, owner, lease_token)?;
+            if lease.fence_epoch != expected_snapshot.lease.fence_epoch {
+                return Err(stale_generation(store_name));
+            }
             destructive_authority_from_evidence(
                 owner,
                 lease_token,
@@ -1906,33 +1966,22 @@ fn abort_projection_generation_with_binding(
             return Err(error);
         }
     }
-    let now = SystemClock.now_ms();
+    before_final_transaction();
     let conn = connect_file(path)?;
     with_immediate_tx(&conn, || {
-        require_current_lease(&conn, store_name, owner, lease_token, now)?;
-        let current: (Option<String>, Option<String>, Option<String>) = conn
-            .query_row(
-                "SELECT building_generation,active_generation,previous_generation
-                 FROM projection_store_state WHERE store_name=?1",
-                [store_name],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )
-            .map_err(storage)?;
-        let Some(building) = current.0 else {
+        let now = SystemClock.now_ms();
+        let current =
+            projection_binding_recovery_snapshot(&conn, store_name, owner, lease_token, now)?;
+        current.validate_shape(store_name)?;
+        if !expected_snapshot.matches_after_lease_heartbeat(&current) {
+            return Err(stale_generation(store_name));
+        }
+        let Some(building) = current.building.generation.as_deref() else {
             return Err(KanbanError::Conflict(format!(
                 "projection store {store_name} has no building generation to abort"
             )));
         };
-        if building != manifest.generation
-            || current.1.as_deref()
-                != active
-                    .as_ref()
-                    .map(|evidence| evidence.manifest.generation.as_str())
-            || current.2.as_deref()
-                != previous
-                    .as_ref()
-                    .map(|evidence| evidence.manifest.generation.as_str())
-        {
+        if building != manifest.generation {
             return Err(stale_generation(store_name));
         }
         if reset_active {
@@ -1970,42 +2019,139 @@ fn abort_projection_generation_with_binding(
                  building_canonical_count=NULL,building_canonical_digest=NULL,
                  building_delivery_count=NULL,building_delivery_digest=NULL,
                  building_phase=NULL,
-                 active_generation=CASE WHEN ?4 THEN NULL ELSE active_generation END,
-                 active_fingerprint=CASE WHEN ?4 THEN NULL ELSE active_fingerprint END,
-                 active_fence_epoch=CASE WHEN ?4 THEN NULL ELSE active_fence_epoch END,
-                 active_snapshot_cursor=CASE WHEN ?4 THEN NULL ELSE active_snapshot_cursor END,
-                 active_provider=CASE WHEN ?4 THEN NULL ELSE active_provider END,
-                 active_provider_fingerprint=CASE WHEN ?4 THEN NULL ELSE active_provider_fingerprint END,
-                 active_corpus_schema=CASE WHEN ?4 THEN NULL ELSE active_corpus_schema END,
-                 active_corpus_fingerprint=CASE WHEN ?4 THEN NULL ELSE active_corpus_fingerprint END,
-                 active_embedding_model=CASE WHEN ?4 THEN NULL ELSE active_embedding_model END,
-                 active_embedding_dimensions=CASE WHEN ?4 THEN NULL ELSE active_embedding_dimensions END,
-                 active_canonical_count=CASE WHEN ?4 THEN NULL ELSE active_canonical_count END,
-                 active_canonical_digest=CASE WHEN ?4 THEN NULL ELSE active_canonical_digest END,
-                 active_delivery_count=CASE WHEN ?4 THEN NULL ELSE active_delivery_count END,
-                 active_delivery_digest=CASE WHEN ?4 THEN NULL ELSE active_delivery_digest END,
-                 previous_generation=CASE WHEN ?5 THEN NULL ELSE previous_generation END,
-                 previous_fingerprint=CASE WHEN ?5 THEN NULL ELSE previous_fingerprint END,
-                 previous_fence_epoch=CASE WHEN ?5 THEN NULL ELSE previous_fence_epoch END,
-                 previous_snapshot_cursor=CASE WHEN ?5 THEN NULL ELSE previous_snapshot_cursor END,
-                 previous_provider=CASE WHEN ?5 THEN NULL ELSE previous_provider END,
-                 previous_provider_fingerprint=CASE WHEN ?5 THEN NULL ELSE previous_provider_fingerprint END,
-                 previous_corpus_schema=CASE WHEN ?5 THEN NULL ELSE previous_corpus_schema END,
-                 previous_corpus_fingerprint=CASE WHEN ?5 THEN NULL ELSE previous_corpus_fingerprint END,
-                 previous_embedding_model=CASE WHEN ?5 THEN NULL ELSE previous_embedding_model END,
-                 previous_embedding_dimensions=CASE WHEN ?5 THEN NULL ELSE previous_embedding_dimensions END,
-                 previous_canonical_count=CASE WHEN ?5 THEN NULL ELSE previous_canonical_count END,
-                 previous_canonical_digest=CASE WHEN ?5 THEN NULL ELSE previous_canonical_digest END,
-                 previous_delivery_count=CASE WHEN ?5 THEN NULL ELSE previous_delivery_count END,
-                 previous_delivery_digest=CASE WHEN ?5 THEN NULL ELSE previous_delivery_digest END,
+                 active_generation=CASE WHEN ?10 THEN NULL ELSE active_generation END,
+                 active_fingerprint=CASE WHEN ?10 THEN NULL ELSE active_fingerprint END,
+                 active_fence_epoch=CASE WHEN ?10 THEN NULL ELSE active_fence_epoch END,
+                 active_snapshot_cursor=CASE WHEN ?10 THEN NULL ELSE active_snapshot_cursor END,
+                 active_provider=CASE WHEN ?10 THEN NULL ELSE active_provider END,
+                 active_provider_fingerprint=CASE WHEN ?10 THEN NULL ELSE active_provider_fingerprint END,
+                 active_corpus_schema=CASE WHEN ?10 THEN NULL ELSE active_corpus_schema END,
+                 active_corpus_fingerprint=CASE WHEN ?10 THEN NULL ELSE active_corpus_fingerprint END,
+                 active_embedding_model=CASE WHEN ?10 THEN NULL ELSE active_embedding_model END,
+                 active_embedding_dimensions=CASE WHEN ?10 THEN NULL ELSE active_embedding_dimensions END,
+                 active_canonical_count=CASE WHEN ?10 THEN NULL ELSE active_canonical_count END,
+                 active_canonical_digest=CASE WHEN ?10 THEN NULL ELSE active_canonical_digest END,
+                 active_delivery_count=CASE WHEN ?10 THEN NULL ELSE active_delivery_count END,
+                 active_delivery_digest=CASE WHEN ?10 THEN NULL ELSE active_delivery_digest END,
+                 previous_generation=CASE WHEN ?11 THEN NULL ELSE previous_generation END,
+                 previous_fingerprint=CASE WHEN ?11 THEN NULL ELSE previous_fingerprint END,
+                 previous_fence_epoch=CASE WHEN ?11 THEN NULL ELSE previous_fence_epoch END,
+                 previous_snapshot_cursor=CASE WHEN ?11 THEN NULL ELSE previous_snapshot_cursor END,
+                 previous_provider=CASE WHEN ?11 THEN NULL ELSE previous_provider END,
+                 previous_provider_fingerprint=CASE WHEN ?11 THEN NULL ELSE previous_provider_fingerprint END,
+                 previous_corpus_schema=CASE WHEN ?11 THEN NULL ELSE previous_corpus_schema END,
+                 previous_corpus_fingerprint=CASE WHEN ?11 THEN NULL ELSE previous_corpus_fingerprint END,
+                 previous_embedding_model=CASE WHEN ?11 THEN NULL ELSE previous_embedding_model END,
+                 previous_embedding_dimensions=CASE WHEN ?11 THEN NULL ELSE previous_embedding_dimensions END,
+                 previous_canonical_count=CASE WHEN ?11 THEN NULL ELSE previous_canonical_count END,
+                 previous_canonical_digest=CASE WHEN ?11 THEN NULL ELSE previous_canonical_digest END,
+                 previous_delivery_count=CASE WHEN ?11 THEN NULL ELSE previous_delivery_count END,
+                 previous_delivery_digest=CASE WHEN ?11 THEN NULL ELSE previous_delivery_digest END,
                  lifecycle_status=CASE
-                   WHEN ?4 OR active_generation IS NULL THEN 'bootstrap_required'
+                   WHEN ?10 OR active_generation IS NULL THEN 'bootstrap_required'
                    ELSE 'ready'
                  END,
-                 last_success_at=CASE WHEN ?4 THEN NULL ELSE last_success_at END,
+                 last_success_at=CASE WHEN ?10 THEN NULL ELSE last_success_at END,
                  last_error=NULL,updated_at=?1
-             WHERE store_name=?2 AND building_generation=?3",
-                params![now, store_name, building, reset_active, reset_previous],
+             WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4
+               AND lease_expires_at>?1 AND fence_epoch=?5
+               AND building_generation=?6 AND building_fence_epoch IS ?7
+               AND active_generation IS ?8 AND previous_generation IS ?9
+               AND building_fingerprint IS ?12
+               AND building_provider IS ?13
+               AND building_provider_fingerprint IS ?14
+               AND building_canonical_count IS ?15
+               AND building_canonical_digest IS ?16
+               AND building_delivery_count IS ?17
+               AND building_delivery_digest IS ?18
+               AND building_corpus_schema IS ?19
+               AND building_corpus_fingerprint IS ?20
+               AND building_embedding_model IS ?21
+               AND building_embedding_dimensions IS ?22
+               AND building_phase IS ?23
+               AND active_fingerprint IS ?24
+               AND active_fence_epoch IS ?25
+               AND active_snapshot_cursor IS ?26
+               AND active_provider IS ?27
+               AND active_provider_fingerprint IS ?28
+               AND active_canonical_count IS ?29
+               AND active_canonical_digest IS ?30
+               AND active_delivery_count IS ?31
+               AND active_delivery_digest IS ?32
+               AND active_corpus_schema IS ?33
+               AND active_corpus_fingerprint IS ?34
+               AND active_embedding_model IS ?35
+               AND active_embedding_dimensions IS ?36
+               AND previous_fingerprint IS ?37
+               AND previous_fence_epoch IS ?38
+               AND previous_snapshot_cursor IS ?39
+               AND previous_provider IS ?40
+               AND previous_provider_fingerprint IS ?41
+               AND previous_canonical_count IS ?42
+               AND previous_canonical_digest IS ?43
+               AND previous_delivery_count IS ?44
+               AND previous_delivery_digest IS ?45
+               AND previous_corpus_schema IS ?46
+               AND previous_corpus_fingerprint IS ?47
+               AND previous_embedding_model IS ?48
+               AND previous_embedding_dimensions IS ?49",
+                params![
+                    now,
+                    store_name,
+                    owner,
+                    lease_token,
+                    expected_snapshot.lease.fence_epoch,
+                    building,
+                    expected_snapshot.building.fence_epoch,
+                    expected_snapshot.active.generation.as_deref(),
+                    expected_snapshot.previous.generation.as_deref(),
+                    reset_active,
+                    reset_previous,
+                    expected_snapshot.building.fingerprint.as_deref(),
+                    expected_snapshot.building.provider.as_deref(),
+                    expected_snapshot
+                        .building
+                        .provider_fingerprint
+                        .as_deref(),
+                    expected_snapshot.building.canonical_count,
+                    expected_snapshot.building.canonical_digest.as_deref(),
+                    expected_snapshot.building.delivery_count,
+                    expected_snapshot.building.delivery_digest.as_deref(),
+                    expected_snapshot.building.corpus_schema.as_deref(),
+                    expected_snapshot.building.corpus_fingerprint.as_deref(),
+                    expected_snapshot.building.embedding_model.as_deref(),
+                    expected_snapshot.building.embedding_dimensions,
+                    expected_snapshot.building.phase.as_deref(),
+                    expected_snapshot.active.fingerprint.as_deref(),
+                    expected_snapshot.active.fence_epoch,
+                    expected_snapshot.active.snapshot_cursor,
+                    expected_snapshot.active.provider.as_deref(),
+                    expected_snapshot.active.provider_fingerprint.as_deref(),
+                    expected_snapshot.active.canonical_count,
+                    expected_snapshot.active.canonical_digest.as_deref(),
+                    expected_snapshot.active.delivery_count,
+                    expected_snapshot.active.delivery_digest.as_deref(),
+                    expected_snapshot.active.corpus_schema.as_deref(),
+                    expected_snapshot.active.corpus_fingerprint.as_deref(),
+                    expected_snapshot.active.embedding_model.as_deref(),
+                    expected_snapshot.active.embedding_dimensions,
+                    expected_snapshot.previous.fingerprint.as_deref(),
+                    expected_snapshot.previous.fence_epoch,
+                    expected_snapshot.previous.snapshot_cursor,
+                    expected_snapshot.previous.provider.as_deref(),
+                    expected_snapshot
+                        .previous
+                        .provider_fingerprint
+                        .as_deref(),
+                    expected_snapshot.previous.canonical_count,
+                    expected_snapshot.previous.canonical_digest.as_deref(),
+                    expected_snapshot.previous.delivery_count,
+                    expected_snapshot.previous.delivery_digest.as_deref(),
+                    expected_snapshot.previous.corpus_schema.as_deref(),
+                    expected_snapshot.previous.corpus_fingerprint.as_deref(),
+                    expected_snapshot.previous.embedding_model.as_deref(),
+                    expected_snapshot.previous.embedding_dimensions,
+                ],
             )
             .map_err(storage)?;
         if changed != 1 {

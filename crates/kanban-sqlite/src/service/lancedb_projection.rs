@@ -870,6 +870,22 @@ impl LanceDbProjectionStore {
         ))
     }
 
+    fn validate_current_destructive_authority(
+        &self,
+        generation_id: &str,
+        authority: &ProjectionDestructiveAuthority,
+    ) -> Result<()> {
+        let (_, expected) = self.wire_destructive_authority(generation_id, authority)?;
+        let current = self.destructive_authority(generation_id)?;
+        if current != expected {
+            return Err(lancedb_sqlite_authority_error(
+                &self.store_descriptor.store_name,
+                "live capability changed",
+            ));
+        }
+        Ok(())
+    }
+
     /// Snapshot the current SQLite lease and generation binding for a
     /// destructive helper request. The opaque lease token is copied only into
     /// the wire capability and is never included in diagnostics.
@@ -1473,9 +1489,17 @@ impl ProjectionStoreBackend for LanceDbProjectionStore {
     fn validate_generation_publication_with_authority(
         &self,
         expected: &ProjectionArtifactEvidence,
-        _authority: &ProjectionDestructiveAuthority,
+        authority: &ProjectionDestructiveAuthority,
     ) -> Result<()> {
-        self.validate_generation_publication(expected)
+        let generation = expected.manifest.generation.clone();
+        let expected = self.wire_evidence("validate generation", expected)?;
+        self.validate_current_destructive_authority(&generation, authority)?;
+        // The subprocess holds the per-store helper read lock while validating
+        // physical publication. Recheck SQLite after it releases that lock so
+        // a release or rollover in either call window fails closed.
+        let validation = self.validate_wire_generation_publication(&expected);
+        self.validate_current_destructive_authority(&generation, authority)?;
+        validation
     }
 
     fn repair_generation_publication(&self, expected: &ProjectionArtifactEvidence) -> Result<()> {
@@ -1763,6 +1787,12 @@ fn next_request_id() -> String {
     new_typed_id("vpreq")
 }
 
+fn lancedb_sqlite_authority_error(store_name: &str, message: impl fmt::Display) -> KanbanError {
+    KanbanError::Conflict(format!(
+        "LanceDB projection destructive authority for {store_name} is stale or inconsistent: {message}"
+    ))
+}
+
 fn projection_transport_error(action: &str, error: VectorError) -> KanbanError {
     let message = format!("LanceDB projection {action} failed: {error}");
     match &error {
@@ -1797,7 +1827,7 @@ mod tests {
         VectorProjectionBatchApplicationReceipt, VectorProjectionHelperDescriptor,
         VectorProjectionHelperRequest, VectorProjectionHelperResponse,
         VectorProjectionInspectActiveResponse, VectorProjectionMutationAck,
-        VectorProjectionPrepareSnapshotResponse,
+        VectorProjectionPrepareSnapshotResponse, VectorProjectionValidationResponse,
     };
     use kanban_vector::{corpus_provider_fingerprint, embedding_provider_fingerprint};
 
@@ -2420,6 +2450,90 @@ mod tests {
     }
 
     #[test]
+    fn publication_validation_with_authority_accepts_current_capability() {
+        let (_temp, mut backend, evidence, authority) = publication_validation_fixture();
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let observed_by_transport = observed.clone();
+        backend.transport = Arc::new(FunctionTransport::new(move |request| {
+            observed_by_transport
+                .lock()
+                .unwrap()
+                .push(request.operation());
+            successful_publication_validation(request)
+        }));
+
+        ProjectionStoreBackend::validate_generation_publication_with_authority(
+            &backend, &evidence, &authority,
+        )
+        .unwrap();
+
+        assert_eq!(
+            *observed.lock().unwrap(),
+            vec![VectorProjectionHelperOperation::ValidateGenerationPublication]
+        );
+    }
+
+    #[test]
+    fn publication_validation_with_authority_rejects_released_lease_before_transport() {
+        let (_temp, mut backend, evidence, authority) = publication_validation_fixture();
+        let conn = rusqlite::Connection::open(&backend.db_path).unwrap();
+        conn.execute(
+            "UPDATE projection_store_state
+             SET lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL
+             WHERE store_name=?1",
+            [&backend.store_descriptor.store_name],
+        )
+        .unwrap();
+        drop(conn);
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let observed_by_transport = observed.clone();
+        backend.transport = Arc::new(FunctionTransport::new(move |request| {
+            observed_by_transport
+                .lock()
+                .unwrap()
+                .push(request.operation());
+            successful_publication_validation(request)
+        }));
+
+        let error = ProjectionStoreBackend::validate_generation_publication_with_authority(
+            &backend, &evidence, &authority,
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert!(observed.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn publication_validation_with_authority_rechecks_rollover_after_transport() {
+        let (_temp, mut backend, evidence, authority) = publication_validation_fixture();
+        let db_path = backend.db_path.clone();
+        let store_name = backend.store_descriptor.store_name.clone();
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let observed_by_transport = observed.clone();
+        backend.transport = Arc::new(FunctionTransport::new(move |request| {
+            observed_by_transport
+                .lock()
+                .unwrap()
+                .push(request.operation());
+            rollover_projection_lease(&db_path, &store_name);
+            successful_publication_validation(request)
+        }));
+
+        let error = ProjectionStoreBackend::validate_generation_publication_with_authority(
+            &backend, &evidence, &authority,
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert_eq!(
+            *observed.lock().unwrap(),
+            vec![VectorProjectionHelperOperation::ValidateGenerationPublication],
+            "the rollover seam must issue only the read-only validation request"
+        );
+    }
+
+    #[test]
     fn fenced_trait_overrides_forward_historical_previous_authority_and_dynamic_ack() {
         let descriptor = helper_descriptor(LANCEDB_CHUNKS_STORE, TASK_CHUNKS_CORPUS_SCHEMA);
         let store_descriptor = descriptor.supported_stores[0].clone();
@@ -2661,6 +2775,103 @@ mod tests {
             generation_digests: Arc::new(Mutex::new(BTreeMap::new())),
         };
         (temp, backend)
+    }
+
+    fn publication_validation_fixture() -> (
+        tempfile::TempDir,
+        LanceDbProjectionStore,
+        ProjectionArtifactEvidence,
+        ProjectionDestructiveAuthority,
+    ) {
+        let (temp, backend) = destructive_store_fixture(i64::MAX, true);
+        let fingerprint = "physical:previous".to_owned();
+        let manifest = ProjectionArtifactManifest {
+            store_name: backend.store_descriptor.store_name.clone(),
+            database_instance_id: "db_fixture".to_owned(),
+            protocol_version: VECTOR_PROJECTION_PROTOCOL_VERSION,
+            schema_version: backend.store_descriptor.schema_version,
+            generation: "gen_previous".to_owned(),
+            fence_epoch: 7,
+            snapshot_cursor: 7,
+            provider: backend.store_descriptor.provider.clone(),
+            provider_fingerprint: backend.store_descriptor.provider_fingerprint.clone(),
+            corpus: backend
+                .store_descriptor
+                .corpus
+                .clone()
+                .map(local_corpus_metadata),
+            canonical_item_count: 3,
+            canonical_digest: "canonical:previous".to_owned(),
+            delivery_item_count: 4,
+            delivery_digest: "delivery:previous".to_owned(),
+            fingerprint: Some(fingerprint.clone()),
+        };
+        let evidence = ProjectionArtifactEvidence {
+            manifest: manifest.clone(),
+            fingerprint,
+        };
+        let authority = ProjectionDestructiveAuthority {
+            owner: "current-owner".to_owned(),
+            lease_token: "current-lease-capability".to_owned(),
+            fence_epoch: 8,
+            lease_expires_at: i64::MAX,
+            role: ProjectionGenerationRole::Previous,
+            generation: manifest.generation.clone(),
+            expected_manifest: Some(manifest.clone()),
+            expected_binding: ProjectionGenerationBinding {
+                generation: manifest.generation.clone(),
+                fingerprint: manifest.fingerprint.clone(),
+                fence_epoch: manifest.fence_epoch,
+                snapshot_cursor: Some(manifest.snapshot_cursor),
+                provider: manifest.provider.clone(),
+                provider_fingerprint: manifest.provider_fingerprint.clone(),
+                canonical_count: manifest.canonical_item_count,
+                canonical_digest: manifest.canonical_digest.clone(),
+                delivery_count: manifest.delivery_item_count,
+                delivery_digest: manifest.delivery_digest.clone(),
+                corpus: manifest.corpus.clone(),
+            },
+            building_phase: None,
+        };
+        (temp, backend, evidence, authority)
+    }
+
+    fn successful_publication_validation(
+        request: &VectorProjectionHelperRequest,
+    ) -> std::result::Result<VectorProjectionHelperResponse, VectorError> {
+        publication_validation_response(request, true)
+    }
+
+    fn publication_validation_response(
+        request: &VectorProjectionHelperRequest,
+        valid: bool,
+    ) -> std::result::Result<VectorProjectionHelperResponse, VectorError> {
+        let VectorProjectionHelperRequest::ValidateGenerationPublication(request) = request else {
+            return Err(VectorError::Store(
+                "unexpected publication validation request".to_owned(),
+            ));
+        };
+        Ok(
+            VectorProjectionHelperResponse::ValidateGenerationPublication(
+                VectorProjectionValidationResponse {
+                    request_id: request.request_id.clone(),
+                    projection_store: request.projection_store.clone(),
+                    valid,
+                },
+            ),
+        )
+    }
+
+    fn rollover_projection_lease(db_path: &Path, store_name: &str) {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.execute(
+            "UPDATE projection_store_state
+             SET fence_epoch=fence_epoch+1,lease_owner='successor-owner',
+                 lease_token='successor-lease-capability',lease_expires_at=?1
+             WHERE store_name=?2",
+            rusqlite::params![i64::MAX, store_name],
+        )
+        .unwrap();
     }
 
     fn descriptor_response(

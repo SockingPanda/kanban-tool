@@ -13,7 +13,16 @@ use std::path::{Path, PathBuf};
 fn maintenance_run_reports_store_failure_as_closed_result() -> anyhow::Result<()> {
     let temp = TempDb::new("maintenance_store_failure_result")?;
     kanban(&temp.path, &["init"])?.success()?;
-    let store_root = temp.dir.join("index/v2/tantivy_tasks");
+    let database_instance_id = kanban_sqlite::db::connect_file(&temp.path)?.query_row(
+        "SELECT database_instance_id FROM projection_database WHERE singleton=1",
+        [],
+        |row| row.get::<_, String>(0),
+    )?;
+    let store_root = kanban_local::projection_store_root_path(
+        &temp.path,
+        &database_instance_id,
+        "tantivy_tasks",
+    )?;
     fs::create_dir_all(&store_root)?;
     fs::write(store_root.join("generations"), b"not-a-directory")?;
 

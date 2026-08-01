@@ -106,7 +106,6 @@ impl LanceDbStore {
         let provider = self.provider()?;
         self.label_atom_table(provider.dimensions()).map(|_| ())
     }
-
 }
 
 impl LanceDbProjectionReader {

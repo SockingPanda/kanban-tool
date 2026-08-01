@@ -2,7 +2,9 @@ mod common;
 
 use anyhow::Context;
 use common::{TempDb, kanban, kanban_in_dir};
+use kanban_sqlite::api::lifecycle::{begin_database_replace, publish_staged_database};
 use kanban_sqlite::db::maintenance_lock_path;
+use kanban_sqlite::init::init_database;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 
@@ -130,6 +132,26 @@ fn initialized_database(name: &str) -> anyhow::Result<TempDb> {
     let source = TempDb::new(name)?;
     kanban(&source.path, &["init"])?.success()?;
     Ok(source)
+}
+
+fn completed_replacement_fixture(
+    name: &str,
+) -> anyhow::Result<(
+    TempDb,
+    std::path::PathBuf,
+    std::path::PathBuf,
+    std::path::PathBuf,
+)> {
+    let target = TempDb::new(name)?;
+    kanban(&target.path, &["init"])?.success()?;
+    let staged = target.dir.join(".kb.db.restore.fixture");
+    let previous = target.dir.join(".kb.db.replaced.fixture");
+    let journal = target.dir.join(".kb.db.replace.journal");
+    init_database(&staged, "cli-completed-validation")?;
+    let mut guard = begin_database_replace(&target.path)?;
+    publish_staged_database(&mut guard, &target.path, &staged, &previous, &journal)?;
+    drop(guard);
+    Ok((target, staged, previous, journal))
 }
 
 fn source_with_completed_run(source: &TempDb) -> anyhow::Result<SourceData> {
@@ -625,6 +647,361 @@ fn import_replace_restores_over_corrupt_existing_database() -> anyhow::Result<()
     let imported = kanban(&target.path, &["--json", "task", "show", task_id])?.success_json()?;
     assert_eq!(imported["data"]["title"], "restore me");
     assert_eq!(imported["data"]["status"], "ready");
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn import_replace_rejects_symlinked_discoverable_journal() -> anyhow::Result<()> {
+    use std::os::unix::fs::symlink;
+
+    let target = TempDb::new("import_replace_rejects_symlinked_discoverable_journal")?;
+    kanban(&target.path, &["init"])?.success()?;
+    let input_path = target.dir.join("input.jsonl");
+    std::fs::write(&input_path, b"not parsed after journal discovery")?;
+    let target_json = target.dir.join("journal-target.json");
+    let journal_path = target.dir.join(".kb.db.replace.journal");
+    std::fs::write(&target_json, br#"{"phase":"completed"}"#)?;
+    symlink(&target_json, &journal_path)?;
+
+    kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            input_path.to_str().context("expected UTF-8 path")?,
+            "--replace",
+        ],
+    )?
+    .json_failure_code_containing(2, "regular file")?;
+    assert!(target.path.is_file());
+    assert!(std::fs::symlink_metadata(&journal_path)?.is_symlink());
+    Ok(())
+}
+
+#[test]
+fn import_replace_rejects_malformed_discoverable_journal_as_invalid_input() -> anyhow::Result<()> {
+    let target = TempDb::new("import_replace_rejects_malformed_discoverable_journal")?;
+    kanban(&target.path, &["init"])?.success()?;
+    let input_path = target.dir.join("input.jsonl");
+    std::fs::write(&input_path, b"not parsed after journal discovery")?;
+    let journal_path = target.dir.join(".kb.db.replace.journal");
+    std::fs::write(&journal_path, b"{not valid json")?;
+
+    kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            input_path.to_str().context("expected UTF-8 path")?,
+            "--replace",
+        ],
+    )?
+    .json_failure_code_containing(2, "invalid replacement journal JSON")?;
+    assert!(journal_path.is_file());
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn import_replace_rejects_non_utf8_database_basename_without_journal_collision()
+-> anyhow::Result<()> {
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
+
+    let target = TempDb::new("import_replace_rejects_non_utf8_database_basename")?;
+    let input_path = target.dir.join("input.jsonl");
+    std::fs::write(&input_path, b"not parsed after path validation")?;
+    for suffix in [&b"\xff.db"[..], &b"\xfe.db"[..]] {
+        let db_path = target.dir.join(OsString::from_vec(
+            (*b"kb-")
+                .into_iter()
+                .chain(suffix.iter().copied())
+                .collect(),
+        ));
+        kanban(
+            &db_path,
+            &[
+                "--json",
+                "import",
+                "--input",
+                input_path.to_str().context("expected UTF-8 input path")?,
+                "--replace",
+            ],
+        )?
+        .json_failure_code_containing(2, "valid UTF-8")?;
+        let entries = std::fs::read_dir(&target.dir)?
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("replace.journal")
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            entries.is_empty(),
+            "unexpected journal for rejected basename"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn import_replace_auto_resumes_discoverable_incomplete_journal() -> anyhow::Result<()> {
+    let target = TempDb::new("import_replace_auto_resumes_discoverable_incomplete_journal")?;
+    kanban(&target.path, &["init"])?.success()?;
+    let staged = target.dir.join(".kb.db.restore.test");
+    let previous = target.dir.join(".kb.db.replaced.test");
+    let journal = target.dir.join(".kb.db.replace.journal");
+    init_database(&staged, "cli-auto-resume")?;
+
+    let mut guard = begin_database_replace(&target.path)?;
+    publish_staged_database(&mut guard, &target.path, &staged, &previous, &journal)?;
+    drop(guard);
+    // Recreate the physical PreviousPublished state while preserving the
+    // published staged inode. The CLI must discover this deterministic
+    // journal and resume before attempting to parse its new input.
+    std::fs::hard_link(&target.path, &staged)?;
+    std::fs::remove_file(&target.path)?;
+    let mut journal_json: serde_json::Value = serde_json::from_slice(&std::fs::read(&journal)?)?;
+    journal_json["phase"] = serde_json::Value::String("previous_published".to_owned());
+    std::fs::write(&journal, serde_json::to_vec_pretty(&journal_json)?)?;
+    // Recovery discovery must run before validating a new import input.
+    let input_path = target.dir.join("not-consumed.jsonl");
+
+    let resumed = kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            input_path.to_str().context("expected UTF-8 path")?,
+            "--replace",
+        ],
+    )?
+    .success_json()?;
+    assert_eq!(resumed["data"]["resumed"], true);
+    assert_eq!(resumed["data"]["records"], 0);
+    assert!(target.path.is_file());
+    assert!(!staged.exists());
+    assert!(previous.is_file());
+    assert!(std::fs::read_to_string(&journal)?.contains("\"phase\": \"completed\""));
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn import_replace_auto_resumes_across_symlinked_parent_aliases() -> anyhow::Result<()> {
+    use std::os::unix::fs::symlink;
+
+    let root = TempDb::new("import_replace_auto_resumes_across_symlinked_parent_aliases")?;
+    // Exercise both directions: the interrupted publication is recorded via
+    // the real parent and resumed through its alias, then recorded through the
+    // alias and resumed through the real parent. Service paths are normalized
+    // to the same canonical parent in both cases.
+    for (case_index, (start_via_alias, resume_via_alias)) in
+        [(false, true), (true, false)].into_iter().enumerate()
+    {
+        let case_dir = root.dir.join(format!("case-{case_index}"));
+        let real_dir = case_dir.join("real");
+        let alias_dir = case_dir.join("alias");
+        std::fs::create_dir_all(&real_dir)?;
+        symlink(&real_dir, &alias_dir)?;
+
+        let real_db = real_dir.join("kb.db");
+        let start_db = if start_via_alias {
+            alias_dir.join("kb.db")
+        } else {
+            real_db.clone()
+        };
+        let resume_db = if resume_via_alias {
+            alias_dir.join("kb.db")
+        } else {
+            real_db.clone()
+        };
+        kanban(&start_db, &["init"])?.success()?;
+
+        let staged = real_dir.join(".kb.db.restore.alias");
+        let previous = real_dir.join(".kb.db.replaced.alias");
+        let journal = real_dir.join(".kb.db.replace.journal");
+        init_database(&staged, "cli-alias-resume")?;
+        let mut guard = begin_database_replace(&start_db)?;
+        publish_staged_database(&mut guard, &start_db, &staged, &previous, &journal)?;
+        drop(guard);
+
+        // Recreate a crash after the previous database was anchored but before
+        // the staged inode was moved back to the canonical path.
+        std::fs::hard_link(&real_db, &staged)?;
+        std::fs::remove_file(&real_db)?;
+        let mut journal_json: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&journal)?)?;
+        journal_json["phase"] = serde_json::Value::String("previous_published".to_owned());
+        std::fs::write(&journal, serde_json::to_vec_pretty(&journal_json)?)?;
+
+        let missing_input = case_dir.join("ignored-after-resume.jsonl");
+        let resumed = kanban(
+            &resume_db,
+            &[
+                "--json",
+                "import",
+                "--input",
+                missing_input
+                    .to_str()
+                    .context("expected UTF-8 input path")?,
+                "--replace",
+            ],
+        )?
+        .success_json()?;
+        assert_eq!(resumed["data"]["resumed"], true);
+        assert_eq!(resumed["data"]["records"], 0);
+        assert_eq!(resumed["data"]["dry_run"], false);
+        assert!(real_db.is_file());
+        assert!(!staged.exists());
+        assert!(previous.is_file());
+        assert!(std::fs::read_to_string(&journal)?.contains("\"phase\": \"completed\""));
+    }
+    Ok(())
+}
+
+#[test]
+fn import_replace_rejects_completed_journal_with_missing_canonical() -> anyhow::Result<()> {
+    let (target, _staged, previous, journal) = completed_replacement_fixture(
+        "import_replace_rejects_completed_journal_with_missing_canonical",
+    )?;
+    std::fs::remove_file(&target.path)?;
+    let input_path = target.dir.join("not-consumed.jsonl");
+    std::fs::write(&input_path, b"not parsed after completed validation")?;
+
+    kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            input_path.to_str().context("expected UTF-8 path")?,
+            "--replace",
+        ],
+    )?
+    .json_failure_containing("completed replacement canonical identity")?;
+    assert!(!target.path.exists());
+    assert!(previous.is_file());
+    assert!(journal.is_file());
+    Ok(())
+}
+
+#[test]
+fn import_replace_rejects_completed_journal_with_replaced_canonical() -> anyhow::Result<()> {
+    let (target, _staged, previous, journal) = completed_replacement_fixture(
+        "import_replace_rejects_completed_journal_with_replaced_canonical",
+    )?;
+    let replacement = target.dir.join("untrusted-canonical.db");
+    init_database(&replacement, "untrusted-replacement")?;
+    std::fs::remove_file(&target.path)?;
+    std::fs::rename(&replacement, &target.path)?;
+    let input_path = target.dir.join("not-consumed.jsonl");
+    std::fs::write(&input_path, b"not parsed after completed validation")?;
+
+    kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            input_path.to_str().context("expected UTF-8 path")?,
+            "--replace",
+        ],
+    )?
+    .json_failure_containing("completed replacement canonical identity")?;
+    assert!(target.path.is_file());
+    assert!(previous.is_file());
+    assert!(journal.is_file());
+    Ok(())
+}
+
+#[test]
+fn import_replace_rejects_completed_journal_with_replaced_previous() -> anyhow::Result<()> {
+    let (target, _staged, previous, journal) = completed_replacement_fixture(
+        "import_replace_rejects_completed_journal_with_replaced_previous",
+    )?;
+    std::fs::write(&previous, b"untrusted previous replacement")?;
+    let input_path = target.dir.join("not-consumed.jsonl");
+    std::fs::write(&input_path, b"not parsed after completed validation")?;
+
+    kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            input_path.to_str().context("expected UTF-8 path")?,
+            "--replace",
+        ],
+    )?
+    .json_failure_containing("completed replacement previous identity")?;
+    assert_eq!(std::fs::read(&previous)?, b"untrusted previous replacement");
+    assert!(target.path.is_file());
+    assert!(journal.is_file());
+    Ok(())
+}
+
+#[test]
+fn import_replace_rejects_completed_journal_with_retained_staged_entry() -> anyhow::Result<()> {
+    let (target, staged, previous, journal) = completed_replacement_fixture(
+        "import_replace_rejects_completed_journal_with_retained_staged_entry",
+    )?;
+    std::fs::write(&staged, b"untrusted retained staged evidence")?;
+    let input_path = target.dir.join("not-consumed.jsonl");
+    std::fs::write(&input_path, b"not parsed after completed validation")?;
+
+    kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            input_path.to_str().context("expected UTF-8 path")?,
+            "--replace",
+        ],
+    )?
+    .json_failure_containing("staged database")?;
+    assert_eq!(
+        std::fs::read(&staged)?,
+        b"untrusted retained staged evidence"
+    );
+    assert!(target.path.is_file());
+    assert!(previous.is_file());
+    assert!(journal.is_file());
+    Ok(())
+}
+
+#[test]
+fn import_replace_validated_completed_journal_still_validates_new_input() -> anyhow::Result<()> {
+    let (target, _staged, previous, journal) = completed_replacement_fixture(
+        "import_replace_validated_completed_journal_still_validates_new_input",
+    )?;
+    let missing_input = target.dir.join("missing-after-completed.jsonl");
+
+    kanban(
+        &target.path,
+        &[
+            "--json",
+            "import",
+            "--input",
+            missing_input
+                .to_str()
+                .context("expected UTF-8 input path")?,
+            "--replace",
+        ],
+    )?
+    .json_failure_code_containing(2, "import input does not exist")?;
+    assert!(target.path.is_file());
+    assert!(previous.is_file());
+    assert!(
+        !journal.exists(),
+        "validated completed journal must quarantine"
+    );
     Ok(())
 }
 

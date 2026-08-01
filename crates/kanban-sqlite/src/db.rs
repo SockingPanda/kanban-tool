@@ -455,7 +455,9 @@ enum SqlitePathNormalizationError {
 /// table-tested on every host. Windows verbatim paths disable the normal path
 /// parser, so removing `\\?\` is safe only when the resulting drive/UNC path
 /// has no syntax whose meaning would change under the normal parser.
-fn normalize_sqlite_path(path: &str) -> Result<NormalizedSqlitePath, SqlitePathNormalizationError> {
+fn normalize_sqlite_path(
+    path: &str,
+) -> std::result::Result<NormalizedSqlitePath, SqlitePathNormalizationError> {
     const VERBATIM_PREFIX: &str = r"\\?\";
 
     if let Some(rest) = path.strip_prefix(VERBATIM_PREFIX) {
@@ -499,7 +501,7 @@ fn validate_windows_path(
     path: &str,
     unc: bool,
     verbatim: bool,
-) -> Result<(), SqlitePathNormalizationError> {
+) -> std::result::Result<(), SqlitePathNormalizationError> {
     if path.encode_utf16().count() > 259 {
         return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
     }

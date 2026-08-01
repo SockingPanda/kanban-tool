@@ -52,6 +52,19 @@ if [[ "${1:-}" == "--print-target-dir" ]]; then
   printf '%s\n' "$PACKAGE_TEST_TARGET_ROOT"
   exit 0
 fi
+if [[ "${1:-}" == "--verify-inherited-lock" ]]; then
+  [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]] || exit 2
+  [[ "${CARGO_TARGET_DIR:-}" == "$PACKAGE_TEST_TARGET_ROOT" ]] || exit 2
+  [[ "${KANBAN_CARGO_BUILD_LOCK_PATH:-}" == "$PACKAGE_TEST_TARGET_ROOT/.build.lock" ]] || exit 2
+  lock_fd="${KANBAN_CARGO_BUILD_LOCK_FD:-}"
+  [[ "$lock_fd" =~ ^[3-9][0-9]*$ && -e "/proc/self/fd/$lock_fd" ]] || exit 2
+  expected="$(stat -Lc '%d:%i:%h:%F' "$PACKAGE_TEST_TARGET_ROOT/.build.lock")" || exit 2
+  [[ "$expected" == *":1:regular "* ]] || exit 2
+  inherited="$(stat -Lc '%d:%i:%h:%F' "/proc/self/fd/$lock_fd")" || exit 2
+  [[ "$inherited" == "$expected" ]] || exit 2
+  /usr/bin/flock -n "$lock_fd"
+  exit $?
+fi
 [[ "${1:-}" == "--" ]]
 shift
 exec "$@"
@@ -287,6 +300,31 @@ PY
   grep -Fqx "X-Kanban-Build-Id: $build_id" "$control/control" ||
     fail "provenance-enabled control has the wrong build identity"
 
+  if ! PACKAGE_TEST_AUTO_RESOURCES=1 run_package "$output" env \
+    PACKAGE_TEST_PROVENANCE=1 \
+    KANBAN_BUILD_ID="$build_id" \
+    KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
+    KANBAN_RELEASE_SOURCE_MAP="$source_map"; then
+    cat "$output" >&2
+    fail "provenance-enabled package rejected canonical auto resources"
+  fi
+
+  assert_fails "provenance package accepted marker/target lock spoof" \
+    run_package_spoofed_lock_environment "$output" env \
+    CARGO_BUILD_JOBS=9 \
+    PACKAGE_TEST_PROVENANCE=1 \
+    KANBAN_BUILD_ID="$build_id" \
+    KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
+    KANBAN_RELEASE_SOURCE_MAP="$source_map"
+
+  assert_fails "provenance package accepted valid-fd noncanonical CARGO_BUILD_JOBS" \
+    run_package "$output" env \
+    CARGO_BUILD_JOBS=9 \
+    PACKAGE_TEST_PROVENANCE=1 \
+    KANBAN_BUILD_ID="$build_id" \
+    KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
+    KANBAN_RELEASE_SOURCE_MAP="$source_map"
+
   assert_fails "provenance rejects mismatched helper identity" run_package "$output" env \
     PACKAGE_TEST_PROVENANCE=1 \
     PACKAGE_TEST_HELPER_MISMATCH=kanban-vector-lancedb \
@@ -324,13 +362,46 @@ use_real_build_lock() {
 
 run_package() {
   local output="$1"
+  local lock_path="$FIXTURE_TARGET/.build.lock"
+  shift
+  [[ "${1:-}" == "env" ]] || fail "package test runner requires env command"
+  shift
+  (
+    exec 3>"$lock_path"
+    /usr/bin/flock -n 3
+    export CARGO_TARGET_DIR="$FIXTURE_TARGET"
+    export KANBAN_CARGO_BUILD_LOCK_HELD=1
+    export KANBAN_CARGO_BUILD_LOCK_PATH="$lock_path"
+    export KANBAN_CARGO_BUILD_LOCK_FD=3
+    if [[ "${PACKAGE_TEST_AUTO_RESOURCES:-0}" == "1" ]]; then
+      export KANBAN_CARGO_BUILD_JOBS=auto KANBAN_TEST_THREADS=auto
+      unset CARGO_BUILD_JOBS NEXTEST_TEST_THREADS RUST_TEST_THREADS
+    else
+      export CARGO_BUILD_JOBS=2
+      export NEXTEST_TEST_THREADS=2
+      export RUST_TEST_THREADS=2
+    fi
+    env \
+      -u KANBAN_BUILD_ID \
+      -u KANBAN_RELEASE_SOURCE_MANIFEST \
+      -u KANBAN_RELEASE_SOURCE_MAP \
+      PACKAGE_TEST_TARGET_ROOT="$FIXTURE_TARGET" \
+      PACKAGE_TEST_CARGO_TRACE="$FIXTURE/cargo.trace" \
+      TMPDIR="$FIXTURE_TEMP_PARENT" \
+      PATH="$FIXTURE_BIN:$PATH" \
+      "$@" "$FIXTURE_REPO/scripts/package-cli-linux.sh" --format deb \
+      --no-default-features --features "tantivy-backend,oxigraph-backend"
+  ) >"$output" 2>&1
+}
+
+run_package_spoofed_lock_environment() {
+  local output="$1"
   shift
   env \
-    -u CARGO_TARGET_DIR \
-    -u KANBAN_BUILD_ID \
-    -u KANBAN_RELEASE_SOURCE_MANIFEST \
-    -u KANBAN_RELEASE_SOURCE_MAP \
+    -u KANBAN_CARGO_BUILD_LOCK_PATH \
+    -u KANBAN_CARGO_BUILD_LOCK_FD \
     KANBAN_CARGO_BUILD_LOCK_HELD=1 \
+    CARGO_TARGET_DIR="$FIXTURE_TARGET" \
     PACKAGE_TEST_TARGET_ROOT="$FIXTURE_TARGET" \
     PACKAGE_TEST_CARGO_TRACE="$FIXTURE/cargo.trace" \
     TMPDIR="$FIXTURE_TEMP_PARENT" \

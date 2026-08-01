@@ -2661,10 +2661,20 @@ fn acknowledge_projection_batch(
     batch: &ProjectionBatch,
     receipt: &ProjectionBatchReceipt,
 ) -> Result<i64> {
+    acknowledge_projection_batch_with_before_final_transaction(path.as_ref(), batch, receipt, || {})
+}
+
+fn acknowledge_projection_batch_with_before_final_transaction(
+    path: &Path,
+    batch: &ProjectionBatch,
+    receipt: &ProjectionBatchReceipt,
+    before_final_transaction: impl FnOnce(),
+) -> Result<i64> {
     validate_batch_receipt(batch, receipt)?;
-    let now = SystemClock.now_ms();
-    let conn = connect_file(path.as_ref())?;
+    let conn = connect_file(path)?;
+    before_final_transaction();
     with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
         let lease = current_lease(
             &conn,
             &batch.store_name,
@@ -2744,16 +2754,32 @@ fn fail_projection_batch(
     error: &str,
     retry_delay_ms: i64,
 ) -> Result<()> {
+    fail_projection_batch_with_before_final_transaction(
+        path.as_ref(),
+        batch,
+        error,
+        retry_delay_ms,
+        || {},
+    )
+}
+
+fn fail_projection_batch_with_before_final_transaction(
+    path: &Path,
+    batch: &ProjectionBatch,
+    error: &str,
+    retry_delay_ms: i64,
+    before_final_transaction: impl FnOnce(),
+) -> Result<()> {
     let error = error.trim();
     if error.is_empty() {
         return Err(KanbanError::InvalidInput(
             "projection failure message cannot be empty".to_owned(),
         ));
     }
-    let now = SystemClock.now_ms();
-    let retry_at = checked_expiry(now, retry_delay_ms.max(1), "projection retry")?;
-    let conn = connect_file(path.as_ref())?;
+    let conn = connect_file(path)?;
+    before_final_transaction();
     with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
         let lease = current_lease(
             &conn,
             &batch.store_name,
@@ -2764,6 +2790,7 @@ fn fail_projection_batch(
         if lease.fence_epoch != batch.fence_epoch {
             return Err(projection_lease_conflict(&batch.store_name));
         }
+        let retry_at = checked_expiry(now, retry_delay_ms.max(1), "projection retry")?;
         let changed = conn
             .execute(
                 "UPDATE projection_deliveries \
@@ -2773,7 +2800,7 @@ fn fail_projection_batch(
                      last_error=?2,updated_at=?3 \
                  WHERE store_name=?4 AND claim_owner=?5 AND claim_token=?6 \
                    AND claim_lease_token=?7 AND claim_fence_epoch=?8 \
-                   AND status='running'",
+                   AND claim_generation=?9 AND status='running' AND claim_expires_at>?10",
                 params![
                     retry_at,
                     error,
@@ -2782,7 +2809,9 @@ fn fail_projection_batch(
                     batch.owner,
                     batch.claim_token,
                     batch.lease_token,
-                    batch.fence_epoch
+                    batch.fence_epoch,
+                    batch.target_generation,
+                    now
                 ],
             )
             .map_err(storage)?;

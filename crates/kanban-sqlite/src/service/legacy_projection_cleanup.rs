@@ -2300,6 +2300,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn cleanup_actions_take_over_a_structurally_valid_expired_owner_and_finish_journal_work()
     -> anyhow::Result<()> {
@@ -2386,6 +2387,98 @@ mod tests {
                 },
             )?;
         assert_eq!(owner, (None, None, None, None, "[]".to_owned(), None));
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn cleanup_mutation_is_unsupported_without_any_primitive_mutation() -> anyhow::Result<()> {
+        let (database_temp, _backup_temp, database_path, legacy_file, backup_dir, digest) =
+            cleanup_fixture("non-linux-unsupported")?;
+        let database_instance_id =
+            super::super::maintenance::connect_existing_database_read_only(&database_path)?
+                .query_row(
+                    "SELECT database_instance_id FROM projection_database WHERE singleton=1",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )?;
+        let guard = acquire_legacy_projection_cleanup_guard(&database_path).map_err(local_error)?;
+
+        let sqlite_before = cleanup_sqlite_snapshot(&database_path)?;
+        let database_files_before = cleanup_database_file_snapshot(&database_path)?;
+        let physical_before = cleanup_physical_snapshot(database_temp.path(), &backup_dir)?;
+
+        let error = apply_legacy_projection_cleanup_with_resume_decision(
+            &guard,
+            &database_path,
+            &database_instance_id,
+            &digest,
+            &backup_dir,
+            false,
+        )
+        .expect_err("non-Linux apply must fail before publishing cleanup evidence");
+        assert!(matches!(
+            error,
+            LegacyProjectionCleanupError::UnsupportedMutationPlatform
+        ));
+        assert!(
+            !backup_dir.exists(),
+            "apply must not create a cleanup journal"
+        );
+        assert!(legacy_file.is_file(), "apply must not move a legacy root");
+        assert_eq!(
+            cleanup_sqlite_snapshot(&database_path)?,
+            sqlite_before,
+            "apply must preserve SQLite authority and owner state"
+        );
+        assert_eq!(
+            cleanup_database_file_snapshot(&database_path)?,
+            database_files_before,
+            "apply must preserve the database and SQLite sidecars"
+        );
+        assert_eq!(
+            cleanup_physical_snapshot(database_temp.path(), &backup_dir)?,
+            physical_before,
+            "apply must preserve legacy roots and backup evidence"
+        );
+
+        std::fs::create_dir(&backup_dir)?;
+        let sqlite_before = cleanup_sqlite_snapshot(&database_path)?;
+        let database_files_before = cleanup_database_file_snapshot(&database_path)?;
+        let physical_before = cleanup_physical_snapshot(database_temp.path(), &backup_dir)?;
+
+        let error = restore_legacy_projection_backup(
+            &guard,
+            &database_path,
+            &database_instance_id,
+            &backup_dir,
+        )
+        .expect_err("non-Linux restore must fail before reading or updating a journal");
+        assert!(matches!(
+            error,
+            LegacyProjectionCleanupError::UnsupportedMutationPlatform
+        ));
+        assert_eq!(
+            std::fs::read_dir(&backup_dir)?.count(),
+            0,
+            "restore must not create or update cleanup journal evidence"
+        );
+        assert!(legacy_file.is_file(), "restore must not move a legacy root");
+        assert_eq!(
+            cleanup_sqlite_snapshot(&database_path)?,
+            sqlite_before,
+            "restore must preserve SQLite authority and owner state"
+        );
+        assert_eq!(
+            cleanup_database_file_snapshot(&database_path)?,
+            database_files_before,
+            "restore must preserve the database and SQLite sidecars"
+        );
+        assert_eq!(
+            cleanup_physical_snapshot(database_temp.path(), &backup_dir)?,
+            physical_before,
+            "restore must preserve legacy roots and backup evidence"
+        );
         Ok(())
     }
 

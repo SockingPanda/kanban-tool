@@ -280,9 +280,23 @@ if [[ "${1:-}" == "--print-target-dir" ]]; then
   printf '%s\n' "$PACKAGE_TEST_TARGET_ROOT"
   exit 0
 fi
+if [[ "${1:-}" == "--verify-inherited-lock" ]]; then
+  [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]] || exit 2
+  [[ "${CARGO_TARGET_DIR:-}" == "$PACKAGE_TEST_TARGET_ROOT" ]] || exit 2
+  [[ "${KANBAN_CARGO_BUILD_LOCK_PATH:-}" == "$PACKAGE_TEST_TARGET_ROOT/.build.lock" ]] || exit 2
+  lock_fd="${KANBAN_CARGO_BUILD_LOCK_FD:-}"
+  [[ "$lock_fd" =~ ^[3-9][0-9]*$ && -e "/proc/self/fd/$lock_fd" ]] || exit 2
+  expected="$(stat -Lc '%d:%i:%h:%F' "$PACKAGE_TEST_TARGET_ROOT/.build.lock")" || exit 2
+  [[ "$expected" == *":1:regular "* ]] || exit 2
+  inherited="$(stat -Lc '%d:%i:%h:%F' "/proc/self/fd/$lock_fd")" || exit 2
+  [[ "$inherited" == "$expected" ]] || exit 2
+  /usr/bin/flock -n "$lock_fd"
+  exit $?
+fi
 [[ "${1:-}" == "--" ]]
 shift
 if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
+  export CARGO_TARGET_DIR="$PACKAGE_TEST_TARGET_ROOT"
   exec "$@"
 fi
 [[ -z "${KANBAN_PACKAGE_BUILD_LOCK_HELD:-}" ]] || {
@@ -290,7 +304,15 @@ fi
   exit 97
 }
 touch "$PACKAGE_WRAPPER_MARKER"
-exec env KANBAN_CARGO_BUILD_LOCK_HELD=1 "$@"
+lock_path="$PACKAGE_TEST_TARGET_ROOT/.build.lock"
+mkdir -p "$PACKAGE_TEST_TARGET_ROOT"
+exec 3>"$lock_path"
+/usr/bin/flock -n 3
+export CARGO_TARGET_DIR="$PACKAGE_TEST_TARGET_ROOT"
+export KANBAN_CARGO_BUILD_LOCK_HELD=1
+export KANBAN_CARGO_BUILD_LOCK_PATH="$lock_path"
+export KANBAN_CARGO_BUILD_LOCK_FD=3
+exec "$@"
 EOF
   cat > "$fake_bin/cargo" <<'EOF'
 #!/usr/bin/env bash
@@ -918,8 +940,218 @@ assert_process_exits "$descendant_pid" "long-lived descendant"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- true
 
 outer_lock_marker="$TMPDIR/outer-lock-marker"
-KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$outer_lock_marker"
+KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash -c '
+  set -euo pipefail
+  "$1" --verify-inherited-lock
+  setsid "$1" --verify-inherited-lock
+  touch "$2"
+' _ "$LOCK_SCRIPT" "$outer_lock_marker"
 [[ -e "$outer_lock_marker" ]] || fail "nested lock-held command did not run"
+
+assert_inherited_lock_proof_edges() {
+  local closed_marker="$TMPDIR/closed-proof.marker"
+  local reopened_marker="$TMPDIR/reopened-proof.marker"
+  local mismatch_marker="$TMPDIR/mismatch-proof.marker"
+  local spoof_bin="$TMPDIR/lock-proof-path-spoof-bin"
+
+  # A marker and exact target without the inherited descriptor must fail
+  # before the verifier creates the target or lock file.
+  local spoof_target="$TMPDIR/proof-spoof-target"
+  assert_failure env \
+    KANBAN_CARGO_TARGET_ROOT="$spoof_target" \
+    CARGO_TARGET_DIR="$spoof_target" \
+    KANBAN_CARGO_BUILD_LOCK_HELD=1 \
+    "$LOCK_SCRIPT" --verify-inherited-lock
+  [[ ! -e "$spoof_target" ]] || fail "spoofed lock proof created target state"
+
+  # The verifier contract is lexical as well as physical: a trailing-slash
+  # alias for CARGO_TARGET_DIR is not an inherited canonical target proof.
+  assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    "$LOCK_SCRIPT" -- bash -c '
+      CARGO_TARGET_DIR="$CARGO_TARGET_DIR/" "$1" --verify-inherited-lock
+    ' _ "$LOCK_SCRIPT"
+
+  # PATH cannot replace the trusted lock verifier primitives.  A fake flock
+  # and stat that always report success must not bless an unlocked descriptor.
+  mkdir -p "$spoof_bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$spoof_bin/flock"
+  printf '#!/usr/bin/env bash\nif [[ "${1:-}" == "-Lc" ]]; then printf "0:0:1:regular regular file\\n"; else exit 0; fi\n' >"$spoof_bin/stat"
+  chmod +x "$spoof_bin/flock" "$spoof_bin/stat"
+  assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    "$LOCK_SCRIPT" -- bash -c '
+      set -euo pipefail
+      exec 9>&-
+      exec 9<>"$CARGO_TARGET_DIR/.build.lock"
+      PATH="$1:/usr/bin:/bin" "$2" --verify-inherited-lock
+    ' _ "$spoof_bin" "$LOCK_SCRIPT"
+
+  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
+    set -euo pipefail
+    lock_script="$1"
+    closed_marker="$2"
+    reopened_marker="$3"
+    mismatch_marker="$4"
+    exec 9>&-
+    if "$lock_script" --verify-inherited-lock; then
+      exit 71
+    fi
+    touch "$closed_marker"
+    exec 9>"$CARGO_TARGET_DIR/.build.lock"
+    if "$lock_script" --verify-inherited-lock; then
+      exit 72
+    fi
+    touch "$reopened_marker"
+    exec 9>"$CARGO_TARGET_DIR/not-the-build-lock"
+    if "$lock_script" --verify-inherited-lock; then
+      exit 73
+    fi
+    touch "$mismatch_marker"
+  ' _ "$LOCK_SCRIPT" "$closed_marker" "$reopened_marker" "$mismatch_marker"
+  [[ -e "$closed_marker" ]] || fail "closed inherited lock descriptor was not rejected"
+  [[ -e "$reopened_marker" ]] || fail "reopened inherited lock descriptor was not rejected"
+  [[ -e "$mismatch_marker" ]] || fail "mismatched inherited lock descriptor was not rejected"
+}
+
+assert_inherited_lock_post_flock_identity_race() {
+  local race_target="$TMPDIR/proof-post-flock-race"
+  local marker="$TMPDIR/proof-post-flock-race.paused"
+  local continuation="$TMPDIR/proof-post-flock-race.continue"
+  local status_file="$TMPDIR/proof-post-flock-race.status"
+  local verifier_pid status
+
+  mkdir -p "$race_target"
+  : > "$race_target/.build.lock"
+  (
+    exec 9<> "$race_target/.build.lock"
+    set +e
+    env \
+      KANBAN_CARGO_TARGET_ROOT="$race_target" \
+      CARGO_TARGET_DIR="$race_target" \
+      KANBAN_CARGO_BUILD_LOCK_HELD=1 \
+      KANBAN_CARGO_BUILD_LOCK_PATH="$race_target/.build.lock" \
+      KANBAN_CARGO_BUILD_LOCK_FD=9 \
+      KANBAN_CARGO_BUILD_LOCK_TEST_PAUSE_BEFORE_FLOCK=1 \
+      KANBAN_CARGO_BUILD_LOCK_TEST_PAUSE_MARKER="$marker" \
+      KANBAN_CARGO_BUILD_LOCK_TEST_CONTINUE="$continuation" \
+      "$LOCK_SCRIPT" --verify-inherited-lock
+    printf '%s\n' "$?" > "$status_file"
+  ) &
+  verifier_pid=$!
+  wait_for_file "$marker" "inherited lock post-flock race verifier"
+  mv "$race_target/.build.lock" "$race_target/.build.lock.held"
+  printf 'replacement\n' > "$race_target/.build.lock"
+  : > "$continuation"
+  wait "$verifier_pid"
+  status="$(cat "$status_file")"
+  [[ "$status" -ne 0 ]] || fail "inherited lock path replacement was accepted after flock"
+  [[ "$(cat "$race_target/.build.lock")" == "replacement" ]] ||
+    fail "inherited lock race did not preserve replacement path"
+}
+
+assert_inherited_lock_post_flock_symlink_race() {
+  local race_target="$TMPDIR/proof-post-flock-symlink-race"
+  local marker="$TMPDIR/proof-post-flock-symlink-race.paused"
+  local continuation="$TMPDIR/proof-post-flock-symlink-race.continue"
+  local status_file="$TMPDIR/proof-post-flock-symlink-race.status"
+  local verifier_pid status
+
+  mkdir -p "$race_target"
+  : > "$race_target/.build.lock"
+  (
+    exec 9<> "$race_target/.build.lock"
+    set +e
+    env \
+      KANBAN_CARGO_TARGET_ROOT="$race_target" \
+      CARGO_TARGET_DIR="$race_target" \
+      KANBAN_CARGO_BUILD_LOCK_HELD=1 \
+      KANBAN_CARGO_BUILD_LOCK_PATH="$race_target/.build.lock" \
+      KANBAN_CARGO_BUILD_LOCK_FD=9 \
+      KANBAN_CARGO_BUILD_LOCK_TEST_PAUSE_BEFORE_FLOCK=1 \
+      KANBAN_CARGO_BUILD_LOCK_TEST_PAUSE_MARKER="$marker" \
+      KANBAN_CARGO_BUILD_LOCK_TEST_CONTINUE="$continuation" \
+      "$LOCK_SCRIPT" --verify-inherited-lock
+    printf '%s\n' "$?" > "$status_file"
+  ) &
+  verifier_pid=$!
+  wait_for_file "$marker" "inherited lock post-flock symlink race verifier"
+  mv "$race_target/.build.lock" "$race_target/.build.lock.held"
+  ln -s "$race_target/.build.lock.held" "$race_target/.build.lock"
+  : > "$continuation"
+  wait "$verifier_pid"
+  status="$(cat "$status_file")"
+  [[ "$status" -ne 0 ]] ||
+    fail "inherited lock symlink replacement was accepted after flock"
+  [[ -L "$race_target/.build.lock" ]] ||
+    fail "inherited lock symlink race did not preserve the replacement"
+}
+
+assert_fresh_lock_path_safety() {
+  local symlink_target="$TMPDIR/fresh-symlink-target"
+  local hardlink_target="$TMPDIR/fresh-hardlink-target"
+  local special_target="$TMPDIR/fresh-special-target"
+  local race_target="$TMPDIR/fresh-race-target"
+  local sentinel child race_ready race_release race_stderr race_child
+  local holder_pid second_pid status
+
+  sentinel="$TMPDIR/fresh-sentinel"
+  printf 'sentinel-preserved\n' >"$sentinel"
+  mkdir -p "$symlink_target" "$hardlink_target" "$special_target"
+
+  child="$TMPDIR/fresh-symlink-child"
+  ln -s "$sentinel" "$symlink_target/.build.lock"
+  assert_failure env KANBAN_CARGO_TARGET_ROOT="$symlink_target" \
+    "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$child"
+  [[ "$(cat "$sentinel")" == "sentinel-preserved" ]] ||
+    fail "fresh symlink lock acquisition modified the sentinel"
+  [[ ! -e "$child" ]] || fail "fresh symlink lock acquisition ran the child"
+
+  child="$TMPDIR/fresh-hardlink-child"
+  ln "$sentinel" "$hardlink_target/.build.lock"
+  assert_failure env KANBAN_CARGO_TARGET_ROOT="$hardlink_target" \
+    "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$child"
+  [[ "$(cat "$sentinel")" == "sentinel-preserved" ]] ||
+    fail "fresh hardlink lock acquisition modified the sentinel"
+  [[ ! -e "$child" ]] || fail "fresh hardlink lock acquisition ran the child"
+
+  child="$TMPDIR/fresh-special-child"
+  mkfifo "$special_target/.build.lock"
+  assert_failure timeout 3 env KANBAN_CARGO_TARGET_ROOT="$special_target" \
+    "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$child"
+  [[ ! -e "$child" ]] || fail "fresh special-file lock acquisition ran the child"
+
+  mkdir -p "$race_target"
+  race_ready="$TMPDIR/fresh-race-ready"
+  race_release="$TMPDIR/fresh-race-release"
+  race_stderr="$TMPDIR/fresh-race.stderr"
+  race_child="$TMPDIR/fresh-race-child"
+  env KANBAN_CARGO_TARGET_ROOT="$race_target" "$LOCK_SCRIPT" -- bash -c '
+    touch "$1"
+    while [[ ! -e "$2" ]]; do sleep 0.02; done
+  ' _ "$race_ready" "$race_release" &
+  holder_pid=$!
+  wait_for_file "$race_ready" "fresh lock race holder"
+  env KANBAN_CARGO_TARGET_ROOT="$race_target" "$LOCK_SCRIPT" -- \
+    bash -c 'touch "$1"' _ "$race_child" 2>"$race_stderr" &
+  second_pid=$!
+  wait_for_grep "正在等待其他构建/测试释放" "$race_stderr" "fresh lock race waiter"
+  mv "$race_target/.build.lock" "$race_target/.build.lock.held"
+  ln -s "$sentinel" "$race_target/.build.lock"
+  touch "$race_release"
+  set +e
+  wait "$second_pid"
+  status=$?
+  set -e
+  wait "$holder_pid"
+  [[ "$status" -ne 0 ]] || fail "fresh lock path race ran the child"
+  [[ ! -e "$race_child" ]] || fail "fresh lock path race ran the child"
+  [[ "$(cat "$sentinel")" == "sentinel-preserved" ]] ||
+    fail "fresh lock path race modified the sentinel"
+}
+
+assert_inherited_lock_proof_edges
+assert_inherited_lock_post_flock_identity_race
+assert_inherited_lock_post_flock_symlink_race
+assert_fresh_lock_path_safety
 
 assert_target_tools_safe_path_gate_order() {
   local -a recipe=()

@@ -6,6 +6,7 @@ CHILD_PID=""
 CHILD_PGID=""
 COMMAND=()
 NEXTEST_RUN=0
+LOCK_FD=9
 
 usage() {
   cat <<'USAGE'
@@ -20,6 +21,7 @@ worktree so the shared build lock protects the shared artifacts.
 
 Options:
   --print-target-dir  Print the exact shared Cargo target directory and exit.
+  --verify-inherited-lock  Verify an already-held inherited lock and exit.
   -h, --help          Show this help.
 
 Environment:
@@ -151,6 +153,51 @@ target_root() {
   normalize_path "$(expand_home_path "$RAW_TARGET_ROOT")"
 }
 
+lock_proof_is_valid() {
+  local expected_lock="$1" expected_target="$2"
+  local lock_fd expected_identity inherited_identity metadata status
+
+  [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]] || return 1
+  [[ "${CARGO_TARGET_DIR:-}" == "$expected_target" ]] || return 1
+  [[ "${KANBAN_CARGO_BUILD_LOCK_PATH:-}" == "$expected_lock" ]] || return 1
+  lock_fd="${KANBAN_CARGO_BUILD_LOCK_FD:-}"
+  [[ "$lock_fd" =~ ^[3-9][0-9]*$ ]] || return 1
+  [[ -e "/proc/self/fd/$lock_fd" ]] || return 1
+
+  [[ -f "$expected_lock" && ! -L "$expected_lock" ]] || return 1
+  metadata="$(/usr/bin/stat -Lc '%d:%i:%h:%F' -- "$expected_lock" 2>/dev/null)" || return 1
+  [[ "$metadata" == *":1:regular "* ]] || return 1
+  expected_identity="${metadata%:*:*}"
+  inherited_identity="$(/usr/bin/stat -Lc '%d:%i:%h:%F' -- "/proc/self/fd/$lock_fd" 2>/dev/null)" || return 1
+  [[ "$inherited_identity" == "$expected_identity:1:regular "* ]] || return 1
+
+  # `flock -n <fd>` operates on the inherited open file description.  It is
+  # successful for the lock owner and atomically acquires the same canonical
+  # lock if a caller supplied an otherwise-unlocked descriptor; either way the
+  # proof leaves this process holding the exclusive lock for its lifetime.
+  if [[ "${KANBAN_CARGO_BUILD_LOCK_TEST_PAUSE_BEFORE_FLOCK:-0}" == "1" ]]; then
+    local pause_marker="${KANBAN_CARGO_BUILD_LOCK_TEST_PAUSE_MARKER:-}"
+    local pause_continue="${KANBAN_CARGO_BUILD_LOCK_TEST_CONTINUE:-}"
+    [[ -n "$pause_marker" && -n "$pause_continue" ]] || return 1
+    : > "$pause_marker"
+    while [[ ! -e "$pause_continue" ]]; do
+      sleep 0.01
+    done
+  fi
+  /usr/bin/flock -n "$lock_fd" >/dev/null 2>&1
+  status=$?
+  [[ "$status" -eq 0 ]] || return "$status"
+
+  # Re-check the absolute path without following it: a symlink to the
+  # original inode must not be accepted after the descriptor was flocked.
+  [[ -f "$expected_lock" && ! -L "$expected_lock" ]] || return 1
+  metadata="$(/usr/bin/stat -c '%d:%i:%h:%F' -- "$expected_lock" 2>/dev/null)" || return 1
+  [[ "$metadata" == *":1:regular "* ]] || return 1
+  [[ "${metadata%:*:*}" == "$expected_identity" ]] || return 1
+  inherited_identity="$(/usr/bin/stat -Lc '%d:%i:%h:%F' -- "/proc/self/fd/$lock_fd" 2>/dev/null)" || return 1
+  [[ "$inherited_identity" == "$expected_identity:1:regular "* ]] || return 1
+}
+
 
 validate_inherited_target_dir() {
   local expected="$1"
@@ -197,6 +244,7 @@ main() {
   local lock_file=""
   local lock_dir
   local status
+  local verify_inherited_lock=0
 
   target_root_dir="$(target_root)"
   validate_inherited_target_dir "$target_root_dir"
@@ -212,6 +260,10 @@ main() {
         printf '%s\n' "$target_dir"
         exit 0
         ;;
+      --verify-inherited-lock)
+        verify_inherited_lock=1
+        shift
+        ;;
       --)
         shift
         break
@@ -223,6 +275,20 @@ main() {
         ;;
     esac
   done
+
+  lock_file="$target_root_dir/.build.lock"
+
+  if [[ "$verify_inherited_lock" == "1" ]]; then
+    [[ $# -eq 0 ]] || {
+      error "--verify-inherited-lock does not accept a command"
+      exit 2
+    }
+    lock_proof_is_valid "$lock_file" "$target_root_dir" || {
+      error "inherited Cargo build lock proof is invalid"
+      exit 2
+    }
+    exit 0
+  fi
 
   if [[ $# -eq 0 ]]; then
     error "missing command after --"
@@ -241,22 +307,24 @@ main() {
     done
   fi
 
-  if ! command -v flock >/dev/null 2>&1; then
-    error "flock is required for kanban-tool Cargo build locking"
+  if [[ ! -x /usr/bin/flock ]]; then
+    error "/usr/bin/flock is required for kanban-tool Cargo build locking"
     exit 1
   fi
-  if ! command -v setsid >/dev/null 2>&1; then
-    error "setsid is required for kanban-tool Cargo build locking"
+  if [[ ! -x /usr/bin/setsid ]]; then
+    error "/usr/bin/setsid is required for kanban-tool Cargo build locking"
     exit 1
   fi
-
-  lock_file="$target_root_dir/.build.lock"
-
-  lock_dir="$(dirname "$lock_file")"
-  mkdir -p "$lock_dir" "$target_dir"
-  configure_resource_limits
+  if [[ ! -x /usr/bin/python3 ]]; then
+    error "/usr/bin/python3 is required for kanban-tool Cargo build locking"
+    exit 1
+  fi
 
   if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
+    if ! lock_proof_is_valid "$lock_file" "$target_root_dir"; then
+      error "KANBAN_CARGO_BUILD_LOCK_HELD requires an inherited lock proof"
+      exit 2
+    fi
     export CARGO_TARGET_DIR="$target_dir"
     if [[ "$NEXTEST_RUN" == "1" ]]; then
       prepare_nextest_command
@@ -265,18 +333,142 @@ main() {
     exit $?
   fi
 
-  exec 9>"$lock_file"
-  if ! flock -n 9; then
-    echo "正在等待其他构建/测试释放 Cargo target 锁：$lock_file" >&2
-    flock 9
-  fi
+  lock_dir="$(dirname "$lock_file")"
+  mkdir -p "$lock_dir" "$target_dir"
+  configure_resource_limits
 
   export CARGO_TARGET_DIR="$target_dir"
   export KANBAN_CARGO_BUILD_LOCK_HELD=1
-  if [[ "$NEXTEST_RUN" == "1" ]]; then
-    prepare_nextest_command
-  fi
-  setsid "${COMMAND[@]}" &
+  export KANBAN_CARGO_BUILD_LOCK_FD="$LOCK_FD"
+  export KANBAN_CARGO_BUILD_LOCK_PATH="$lock_file"
+  /usr/bin/setsid /usr/bin/python3 - "$lock_file" "$LOCK_FD" \
+    "$NEXTEST_RUN" "${COMMAND[@]}" <<'PY' &
+import fcntl
+import os
+import stat
+import sys
+import tempfile
+
+
+def fail(message: str) -> "NoReturn":
+    print(f"error: {message}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+lock_path = sys.argv[1]
+requested_fd = int(sys.argv[2])
+nextest_run = sys.argv[3] == "1"
+command = sys.argv[4:]
+if not command:
+    fail("missing command for Cargo build lock")
+
+flags = (
+    os.O_RDWR
+    | os.O_CREAT
+    | os.O_CLOEXEC
+    | os.O_NOFOLLOW
+    | os.O_NONBLOCK
+)
+descriptor = -1
+try:
+    try:
+        descriptor = os.open(lock_path, flags, 0o666)
+    except OSError as error:
+        fail(f"cannot open Cargo build lock without following symlinks: {lock_path}: {error}")
+
+    def assert_identity() -> None:
+        try:
+            path_metadata = os.lstat(lock_path)
+        except OSError as error:
+            fail(f"cannot inspect Cargo build lock safely: {lock_path}: {error}")
+        descriptor_metadata = os.fstat(descriptor)
+        try:
+            proc_metadata = os.stat(f"/proc/self/fd/{descriptor}")
+        except OSError as error:
+            fail(f"cannot inspect inherited Cargo build lock descriptor: {error}")
+        for label, metadata in (
+            ("path", path_metadata),
+            ("descriptor", descriptor_metadata),
+            ("proc descriptor", proc_metadata),
+        ):
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                fail(
+                    "Cargo build lock must be a single-linked regular file "
+                    f"({label}): {lock_path}"
+                )
+        expected = (path_metadata.st_dev, path_metadata.st_ino)
+        if any(
+            (metadata.st_dev, metadata.st_ino) != expected
+            for metadata in (descriptor_metadata, proc_metadata)
+        ):
+            fail(f"Cargo build lock path and descriptor identity differ: {lock_path}")
+
+    assert_identity()
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print(f"正在等待其他构建/测试释放 Cargo target 锁：{lock_path}", file=sys.stderr)
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+    assert_identity()
+
+    if descriptor != requested_fd:
+        os.dup2(descriptor, requested_fd, inheritable=True)
+        os.close(descriptor)
+        descriptor = requested_fd
+    else:
+        os.set_inheritable(descriptor, True)
+    assert_identity()
+
+    if nextest_run:
+        target_dir = os.environ["CARGO_TARGET_DIR"]
+        config_path = os.path.join(target_dir, ".nextest.toml")
+        store_dir = os.path.join(target_dir, "nextest")
+        store_dir = store_dir.replace("\\", "\\\\").replace('"', '\\"')
+        with open(".config/nextest.toml", encoding="utf-8") as source:
+            config = f'[store]\ndir = "{store_dir}"\n\n' + source.read()
+        temporary_fd, temporary_path = tempfile.mkstemp(
+            prefix=".nextest.toml.", dir=target_dir
+        )
+        try:
+            with os.fdopen(temporary_fd, "w", encoding="utf-8") as output:
+                output.write(config)
+            os.replace(temporary_path, config_path)
+        except BaseException:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
+            raise
+        command = [
+            "cargo",
+            "nextest",
+            "run",
+            "--config-file",
+            config_path,
+            "--target-dir",
+            target_dir,
+            *command[3:],
+        ]
+
+    try:
+        child_pid = os.fork()
+    except OSError as error:
+        fail(f"cannot fork Cargo build command: {error}")
+    if child_pid == 0:
+        try:
+            os.execvpe(command[0], command, os.environ)
+        except OSError as error:
+            fail(f"cannot execute Cargo build command: {command[0]}: {error}")
+    _, child_status = os.waitpid(child_pid, 0)
+    if os.WIFEXITED(child_status):
+        raise SystemExit(os.WEXITSTATUS(child_status))
+    if os.WIFSIGNALED(child_status):
+        raise SystemExit(128 + os.WTERMSIG(child_status))
+    fail("Cargo build command ended with an unknown wait status")
+finally:
+    if descriptor >= 0:
+        os.close(descriptor)
+PY
   CHILD_PID=$!
   CHILD_PGID=$CHILD_PID
 

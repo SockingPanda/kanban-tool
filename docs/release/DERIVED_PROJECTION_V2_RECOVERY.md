@@ -1500,9 +1500,104 @@ done
 
 ## 8. 同 cohort 部署和严格串行 rebuild
 
-按站点批准的部署原语部署 `$COHORT`，但不要启动任何 unit。部署动作完成后，必须先运行
-同一个 machine comparison，再证明 maintenance unit 配置的 helper 精确绑定。任一 mismatch
-都在 canonical canary mutation 之前 hard stop。
+仓库不拥有生产 service manager、package manager 或 site deployment policy。本 runbook
+不执行、也不验证任何现场 primitive，不虚构 systemd unit、`dpkg` 命令或一个“通用部署
+脚本”。现场必须在自己的受控 change-control 环境中提供一个 deploy wrapper 和一个独立
+rollback wrapper，并把完整输入与结果证据带回本记录；缺少证据时保持生产只读。
+现场输入和证据是唯一允许的部署接口；本仓库不接收 primitive 路径、不会代为执行命令，
+也不会把未提供的现场结果推断成通过。
+发布 owner 在进入本节前显式运行只读 recipe `just release-recovery-runbook-contract`；它
+只检查本 runbook 的 evidence contract，不执行现场 primitive，也不纳入默认 `target-tools`
+或 release cohort 的构建调用图。
+
+两个 wrapper 的输入约束由现场审批负责，但证据必须证明：路径是绝对路径、`lstat` 得到
+的 regular file、非 symlink 且 owner 可执行；wrapper 不是直接把 `systemctl`/`dpkg` 当作
+primitive。实际调用必须保留 argv 数组（`shell=false`、无 `eval`、无拼接 shell 字符串）、
+cwd、wrapper SHA-256、wrapper version 和 approval reference。wrapper 自身可以使用站点
+工具，但本仓库不把那些工具当作已存在的部署能力。
+
+为避免 operator 自由拼接参数，现场 evidence 必须同时记录并逐项核对下列固定 argv 模板；
+模板是数组语义，不是 shell 命令：
+
+~~~text
+deploy.argv_template = ["<wrapper>", "--dry-run", "--cohort", "<cohort.absolute_path>",
+  "--evidence", "<operation_evidence.path>", "--post-bind", "<post_bind.json.absolute_path>"]
+deploy.apply.argv_template = ["<wrapper>", "--cohort", "<cohort.absolute_path>",
+  "--evidence", "<operation_evidence.path>", "--post-bind", "<post_bind.json.absolute_path>"]
+rollback.argv_template = ["<wrapper>", "--dry-run", "--cohort", "<rollback.predecessor.absolute_path>",
+  "--evidence", "<operation_evidence.path>", "--post-bind", "<post_bind.json.absolute_path>"]
+rollback.apply.argv_template = ["<wrapper>", "--cohort", "<rollback.predecessor.absolute_path>",
+  "--evidence", "<operation_evidence.path>", "--post-bind", "<post_bind.json.absolute_path>"]
+~~~
+
+现场 wrapper 必须拒绝缺失或额外的 deployment arguments；上述 dry-run/apply 的 exit、
+stdout、stderr 和 post-bind JSON 都要分别落盘，任何 argv drift 都保持生产只读。
+
+在任何 unit 启动或 canonical canary mutation 之前，现场必须依次取得 deploy dry-run、
+独立 rollback dry-run、deploy apply 和 apply 后 fresh post-bind 结果。dry-run 非零、apply
+非零、post-bind 缺失或任何 rehash/binding mismatch 都是 hard stop；不得用缓存的 pre-apply
+manifest、旧 bound path 或人工“通过”替代 fresh evidence。部署 primitive 和 rollback
+primitive 不能互换；rollback predecessor 必须与目标 cohort 不同、仍保留、具有完整
+published marker/release binding，并拥有同等级别的 approval、dry-run、apply 和 post-bind
+证据。没有可验证 predecessor 时不执行部署或 rollback。
+
+每个 operation 都要新建私有 evidence 目录；目录创建前必须不存在，创建后为 `0700`、
+非 symlink、不可覆盖既有 operation，且要记录 operation evidence 的 stat。每个 operation
+至少保存下列机器可读字段（原始 stdout/
+stderr 不截断、不改写；秘密字段按站点规则脱敏并记录脱敏规则）：
+其目录契约必须明确为：不存在、0700、no-symlink、no-overwrite；任何一项不满足都保持
+生产只读。
+
+~~~text
+operation_id, started_at_utc, finished_at_utc, actor, decision
+operation_evidence.path, operation_evidence.mode, operation_evidence.uid
+operation_evidence.gid, operation_evidence.dev, operation_evidence.ino
+operation_evidence.nlink, operation_evidence.no_symlink, operation_evidence.no_overwrite
+cohort.absolute_path, cohort.generation_key, cohort.generation_path, cohort.build_id
+cohort.release_artifacts_sha256, cohort.published_marker_path, cohort.marker_sha256
+cohort.tree_sha256, cohort.pre_bind_snapshot, cohort.post_bind_snapshot
+cohort.source_provenance_sha256, cohort.source_map_sha256
+artifacts[].role, artifacts[].source_path, artifacts[].bound_path(optional)
+artifacts[].size, artifacts[].sha256
+deploy.wrapper_path, deploy.wrapper_sha256, deploy.wrapper_version, deploy.approval_ref
+deploy.wrapper_stat.mode,uid,gid,dev,ino,nlink
+deploy.argv, deploy.shell=false, deploy.cwd
+deploy.dry_run.exit, deploy.dry_run.stdout, deploy.dry_run.stderr
+deploy.apply.exit, deploy.apply.stdout, deploy.apply.stderr
+deploy.post_bind.json.absolute_path, deploy.post_bind.json.content_sha256
+deploy.post_bind.json.schema, deploy.post_bind.exit
+deploy.post_bind.stdout, deploy.post_bind.stderr
+rollback.predecessor.absolute_path, rollback.predecessor.generation_key
+rollback.predecessor.build_id, rollback.predecessor.release_artifacts_sha256
+rollback.predecessor.marker_sha256, rollback.predecessor.tree_sha256
+rollback.wrapper_path, rollback.wrapper_sha256, rollback.wrapper_version
+rollback.wrapper_stat.mode,uid,gid,dev,ino,nlink
+rollback.approval_ref, rollback.argv, rollback.shell=false, rollback.cwd
+rollback.dry_run.exit, rollback.dry_run.stdout, rollback.dry_run.stderr
+rollback.apply.exit, rollback.apply.stdout, rollback.apply.stderr
+rollback.post_bind.json.absolute_path, rollback.post_bind.json.content_sha256
+rollback.post_bind.json.schema, rollback.post_bind.exit
+rollback.post_bind.stdout, rollback.post_bind.stderr
+post_deploy.machine_comparison, post_deploy.helper_binding
+post_deploy.unit_metadata(optional, raw; never inferred)
+~~~
+
+`artifacts[]` 必须覆盖 canonical 六 roles：`cli_binary`、`lancedb_helper`、
+`oxigraph_helper`、`desktop_binary`、`cli_deb`、`desktop_deb`；每个 role 的 source、size、
+SHA-256 必须同时来自 cohort manifest 和 apply 后重新读取的 post-bind。binary/helper 的
+bound path 必须存在且再次 hash 相等；package 可以没有 bound path，但不能省略 source
+evidence。cohort 的 generation key 必须等于目录 basename，generation path 必须是
+`release/bundle/cohort/<generation_key>`，published marker 必须通过 repository 的严格
+marker/tree/identity 校验；不能只比较 basename、suffix 或旧 marker 文本。
+
+现场证据收敛后，才可以在本节下面运行同一个 machine comparison 和 owner binding 检查；
+本仓库仍不会启动任何 unit。canonical SQLite restore 是独立的高风险 database replacement
+流程，必须依赖另行通过测试和 review 的真实 command；在该 command 尚未发布前只能记录
+依赖，不得在本 runbook 发明 restore 语法，也不得把 rollback evidence 当作 canonical
+restore 证据。
+
+部署动作完成后，必须先运行同一个 machine comparison，再证明 maintenance unit 配置的
+helper 精确绑定。任一 mismatch 都在 canonical canary mutation 之前 hard stop。
 
 ~~~bash
 assert_writers_stopped

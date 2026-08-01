@@ -195,6 +195,9 @@ target-tools:
     scripts/test-release-provenance.sh
     scripts/test-package-cli-linux-safe.sh
 
+release-recovery-runbook-contract:
+    python3 -B scripts/test_release_recovery_runbook.py
+
 diff-check:
     git diff --check
 

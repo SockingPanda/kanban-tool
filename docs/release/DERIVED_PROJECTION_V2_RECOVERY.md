@@ -14,6 +14,9 @@ canonical truth；Tantivy、Oxigraph、LanceDB task chunks 和 LanceDB label ato
 `LockFileEx`/per-store range-lock 路径必须由独立的 native 环境与 reviewer 按
 `just check-windows-p kanban-local` 等门禁另行验收；在没有该证据时不得把 Windows
 标为“本机已验证”，也不得以本 runbook 的 Linux 结果替代该验收。
+`cleanup-legacy inventory` 与 `verify` 不依赖 Linux `renameat2`；本流程中的 `apply`
+与 `restore` 必须使用 Linux fd-bound `renameat2(RENAME_NOREPLACE)`，不存在非 Linux
+fallback。
 
 ## 1. 硬停止条件和禁止事项
 

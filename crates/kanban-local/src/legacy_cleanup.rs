@@ -179,6 +179,10 @@ pub enum LegacyProjectionCleanupError {
     #[error("legacy projection cleanup found an unsupported entry: {0}")]
     UnsupportedEntry(PathBuf),
     #[error(
+        "legacy projection cleanup apply/restore is unsupported on this platform: requires Linux fd-bound renameat2"
+    )]
+    UnsupportedMutationPlatform,
+    #[error(
         "legacy projection cleanup inventory digest mismatch: expected {expected}, got {actual}"
     )]
     DigestMismatch { expected: String, actual: String },
@@ -2581,11 +2585,7 @@ fn ensure_atomic_cleanup_supported() -> Result<(), LegacyProjectionCleanupError>
 
 #[cfg(not(target_os = "linux"))]
 fn ensure_atomic_cleanup_supported() -> Result<(), LegacyProjectionCleanupError> {
-    Err(LegacyProjectionCleanupError::UnsafePath {
-        path: PathBuf::from("<platform>"),
-        reason: "legacy projection cleanup mutation requires Linux fd-bound renameat2 support"
-            .to_owned(),
-    })
+    Err(LegacyProjectionCleanupError::UnsupportedMutationPlatform)
 }
 
 #[cfg(target_os = "linux")]
@@ -4773,11 +4773,16 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn legacy_cleanup_windows_aliases_overlap_and_mutation_is_disabled_before_journal_write() {
+    fn legacy_cleanup_windows_aliases_overlap_case_insensitively() {
         assert!(paths_overlap(
             Path::new(r"\\?\C:\DATA\backup"),
             Path::new(r"c:\data")
         ));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn legacy_cleanup_non_linux_mutation_is_unsupported_before_journal_write() {
         let (_temp, db, backup) = fixture();
         seed_all_roots(&db);
         let inventory = inventory_legacy_projection_roots(&db, "db_fixture").expect("inventory");
@@ -4790,13 +4795,32 @@ mod tests {
             &inventory.inventory_digest,
             &backup,
         )
-        .expect_err("Windows mutation must fail closed without stable change identity");
+        .expect_err("non-Linux apply must fail closed before creating a journal");
         assert!(matches!(
             error,
-            LegacyProjectionCleanupError::UnsafePath { reason, .. }
-                if reason.contains("requires Linux")
+            LegacyProjectionCleanupError::UnsupportedMutationPlatform
         ));
         assert!(!backup.exists());
+        assert!(
+            inventory
+                .roots
+                .iter()
+                .all(|root| root.absolute_path.is_dir())
+        );
+
+        fs::create_dir(&backup).expect("empty restore backup fixture");
+        let error = restore_legacy_projection_backup(&guard, &db, "db_fixture", &backup)
+            .expect_err("non-Linux restore must fail closed before updating a journal");
+        assert!(matches!(
+            error,
+            LegacyProjectionCleanupError::UnsupportedMutationPlatform
+        ));
+        assert_eq!(
+            fs::read_dir(&backup)
+                .expect("unchanged restore backup")
+                .count(),
+            0
+        );
         assert!(
             inventory
                 .roots

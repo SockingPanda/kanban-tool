@@ -25,6 +25,7 @@ const PUBLIC_COMMAND_GROUP_PATHS: &[&[&str]] = &[
     &["dep"],
     &["index"],
     &["maintenance"],
+    &["maintenance", "cleanup-legacy"],
     &["entity"],
     &["outbox"],
     &["derived"],
@@ -348,6 +349,30 @@ fn dangerous_flags_explain_their_semantics() -> anyhow::Result<()> {
     assert_no_line(&import, "  kanban import --input backup.jsonl")?;
     assert_contains_all(&import, &["  kanban import --input backup.jsonl --dry-run"])?;
     assert_contains_all(&import, &["  kanban import --input backup.jsonl --replace"])?;
+
+    Ok(())
+}
+
+#[test]
+fn maintenance_cleanup_legacy_help_documents_platform_capabilities() -> anyhow::Result<()> {
+    for path in [
+        &["maintenance", "cleanup-legacy", "inventory"][..],
+        &["maintenance", "cleanup-legacy", "verify"],
+    ] {
+        let help = kanban_help(path)?;
+        assert_contains_all(&help, &["Does not require Linux renameat2."])?;
+    }
+
+    for path in [
+        &["maintenance", "cleanup-legacy", "apply"][..],
+        &["maintenance", "cleanup-legacy", "restore"],
+    ] {
+        let help = kanban_help(path)?;
+        assert_contains_all(
+            &help,
+            &["Requires Linux fd-bound renameat2; no non-Linux fallback."],
+        )?;
+    }
 
     Ok(())
 }

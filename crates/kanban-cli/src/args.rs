@@ -194,7 +194,7 @@ pub(crate) enum MaintenanceCommand {
     Status,
     /// Build and atomically publish a new store generation.
     Rebuild(MaintenanceRebuildArgs),
-    /// Inventory, back up, verify, or restore the fixed legacy projection allowlist.
+    /// Inventory or verify the fixed legacy projection allowlist, or mutate it on Linux.
     CleanupLegacy {
         #[command(subcommand)]
         command: MaintenanceLegacyCleanupCommand,
@@ -235,12 +235,20 @@ pub(crate) struct MaintenanceRebuildArgs {
 #[command(arg_required_else_help = true)]
 pub(crate) enum MaintenanceLegacyCleanupCommand {
     /// Produce a strictly read-only inventory and digest for the fixed legacy allowlist.
+    ///
+    /// Does not require Linux renameat2.
     Inventory,
     /// Move the exact inventoried roots into a durable same-filesystem backup.
+    ///
+    /// Requires Linux fd-bound renameat2; no non-Linux fallback.
     Apply(MaintenanceLegacyCleanupApplyArgs),
     /// Re-hash and verify a completed cleanup backup.
+    ///
+    /// Does not require Linux renameat2.
     Verify(MaintenanceLegacyCleanupBackupArgs),
     /// Restore every root from a completed cleanup backup.
+    ///
+    /// Requires Linux fd-bound renameat2; no non-Linux fallback.
     Restore(MaintenanceLegacyCleanupBackupArgs),
 }
 

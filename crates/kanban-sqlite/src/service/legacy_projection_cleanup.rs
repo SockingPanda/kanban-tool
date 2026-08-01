@@ -74,6 +74,8 @@ pub struct MaintenanceLegacyCleanupReport {
     pub roots: Vec<MaintenanceLegacyCleanupRoot>,
 }
 
+/// Produces the strictly read-only cleanup inventory without requiring Linux
+/// `renameat2`.
 pub fn maintenance_inventory_legacy_projections(
     path: impl AsRef<Path>,
 ) -> Result<MaintenanceLegacyCleanupReport> {
@@ -87,6 +89,10 @@ pub fn maintenance_inventory_legacy_projections(
     report_from_inventory(inventory)
 }
 
+/// Applies the exact inventory using Linux fd-bound `renameat2`.
+///
+/// Non-Linux platforms return `KanbanError::InvalidInput` before cleanup
+/// journal creation/update or any root move.
 pub fn maintenance_apply_legacy_projection_cleanup(
     path: impl AsRef<Path>,
     owner: &str,
@@ -186,6 +192,7 @@ fn maintenance_apply_legacy_projection_cleanup_with_post_guard_hook(
     )
 }
 
+/// Re-hashes an existing cleanup backup without requiring Linux `renameat2`.
 pub fn maintenance_verify_legacy_projection_cleanup(
     path: impl AsRef<Path>,
     owner: &str,
@@ -254,6 +261,10 @@ fn maintenance_verify_legacy_projection_cleanup_with_post_renew_hook(
     )
 }
 
+/// Restores a completed backup using Linux fd-bound `renameat2`.
+///
+/// Non-Linux platforms return `KanbanError::InvalidInput` before cleanup
+/// journal creation/update or any root move.
 pub fn maintenance_restore_legacy_projection_cleanup(
     path: impl AsRef<Path>,
     owner: &str,
@@ -1168,7 +1179,8 @@ fn path_string(path: &Path) -> Result<String> {
 fn local_error(error: LegacyProjectionCleanupError) -> KanbanError {
     let message = error.to_string();
     match error {
-        LegacyProjectionCleanupError::UnsafePath { .. }
+        LegacyProjectionCleanupError::UnsupportedMutationPlatform
+        | LegacyProjectionCleanupError::UnsafePath { .. }
         | LegacyProjectionCleanupError::UnsupportedEntry(_)
         | LegacyProjectionCleanupError::DigestMismatch { .. }
         | LegacyProjectionCleanupError::Overlap(_)
@@ -1936,6 +1948,14 @@ mod tests {
 
     #[test]
     fn cleanup_error_mapping_preserves_validation_and_corruption_classes() {
+        let unsupported = local_error(LegacyProjectionCleanupError::UnsupportedMutationPlatform);
+        assert!(matches!(
+            unsupported,
+            KanbanError::InvalidInput(message)
+                if message
+                    == "legacy projection cleanup apply/restore is unsupported on this platform: requires Linux fd-bound renameat2"
+        ));
+
         for error in [
             LegacyProjectionCleanupError::DigestMismatch {
                 expected: "sha256:expected".to_owned(),

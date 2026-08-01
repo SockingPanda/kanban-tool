@@ -5045,6 +5045,11 @@ store 局部失败不会阻止同一 pass 尝试后续已编译 store；数据�
 `index/v2/tantivy_tasks`、`index/v2/oxigraph_relations`。
 DB-scoped `index/v2/databases` 不在 allowlist 内，也不能通过递归发现加入。
 
+- 平台能力按 leaf 固定：`inventory`（即 cleanup dry-run）与 `verify` 在支持的平台上均不
+  依赖 Linux `renameat2`；`inventory` 保持严格只读，`verify` 只重哈希已有 backup，
+  同时仍遵守 maintenance owner exclusion。`apply` 与 `restore` 则必须使用 Linux
+  fd-bound `renameat2(RENAME_NOREPLACE)`，没有非 Linux fallback；非 Linux 调用在创建或
+  更新 cleanup journal、移动任一 root 之前确定性返回 `invalid_input`（退出码 2）。
 - `cleanup-legacy inventory` 是严格只读 dry-run：它在同一 checkpointed、immutable
   SQLite snapshot 与 database lifecycle 独占边界内读取 database binding，再遍历五项
   root，返回 inventory 与 `inventory_digest`；非空 WAL/journal 同样 fail closed；

@@ -2053,10 +2053,15 @@ fn failed_store_run(
         session.options.lease_ttl_ms,
     )?;
     persist_store_failure(
-        &session.db_path,
-        store_name,
-        display_name,
-        &lease,
+        MaintenanceFailurePersistenceInput {
+            path: &session.db_path,
+            store_name,
+            display_name,
+            lease: &lease,
+            maintenance_owner: &session.owner,
+            maintenance_lease_token: &session.lease_token,
+            maintenance_identity: &session.identity,
+        },
         kind,
         error,
     )
@@ -2106,10 +2111,15 @@ fn failed_store_run_without_store_lease(
     // with a handoff.  A stale/conflicted writer is deliberately downgraded to
     // the structured local failure report and never touches the successor.
     let persisted = persist_store_failure(
-        &session.db_path,
-        store_name,
-        display_name,
-        &lease,
+        MaintenanceFailurePersistenceInput {
+            path: &session.db_path,
+            store_name,
+            display_name,
+            lease: &lease,
+            maintenance_owner: &session.owner,
+            maintenance_lease_token: &session.lease_token,
+            maintenance_identity: &session.identity,
+        },
         kind.clone(),
         error,
     );
@@ -2154,55 +2164,117 @@ fn store_failure_fallback_reason(
     }
 }
 
+#[derive(Clone, Copy)]
+struct MaintenanceFailurePersistenceInput<'a> {
+    path: &'a Path,
+    store_name: &'a str,
+    display_name: &'a str,
+    lease: &'a ProjectionLease,
+    maintenance_owner: &'a str,
+    maintenance_lease_token: &'a str,
+    maintenance_identity: &'a MaintenanceRuntimeIdentity,
+}
+
 fn persist_store_failure(
-    path: &Path,
-    store_name: &str,
-    display_name: &str,
-    lease: &ProjectionLease,
+    input: MaintenanceFailurePersistenceInput<'_>,
     kind: MaintenanceStoreFailureKind,
     error: KanbanError,
 ) -> Result<MaintenanceStoreRun> {
-    if lease.store_name != store_name {
+    persist_store_failure_with_before_transaction(input, kind, error, || {})
+}
+
+fn persist_store_failure_with_before_transaction(
+    input: MaintenanceFailurePersistenceInput<'_>,
+    kind: MaintenanceStoreFailureKind,
+    error: KanbanError,
+    before_transaction: impl FnOnce(),
+) -> Result<MaintenanceStoreRun> {
+    if input.lease.store_name != input.store_name {
         return Err(KanbanError::Conflict(format!(
-            "{display_name} projection lease authority targets {}",
-            lease.store_name
+            "{} projection lease authority targets {}",
+            input.display_name, input.lease.store_name
         )));
     }
     let message = error.to_string();
-    let now = SystemClock.now_ms();
-    let conn = connect_file(path)?;
-    let changed = conn
-        .execute(
-            "UPDATE projection_store_state
-             SET lifecycle_status='error',last_error=?1,updated_at=?2
-             WHERE store_name=?3 AND lease_owner=?4 AND lease_token=?5
-               AND fence_epoch=?6 AND lease_expires_at>?2",
-            params![
-                message,
-                now,
-                store_name,
-                lease.owner,
-                lease.lease_token,
-                lease.fence_epoch,
-            ],
-        )
-        .map_err(storage)?;
-    if changed != 1 {
-        return Err(KanbanError::Conflict(format!(
-            "{display_name} projection lease is stale while persisting failure"
-        )));
-    }
-    let status = projection_status(path)?;
+    let conn = connect_file(input.path)?;
+    before_transaction();
+    with_immediate_tx(&conn, || {
+        // The final writer barrier is part of the authority check. Capture
+        // time only after BEGIN IMMEDIATE has acquired SQLite's writer lock;
+        // otherwise a blocked stale finalizer could reuse a pre-wait `now`.
+        let now = SystemClock.now_ms();
+        let maintenance_owner_state = conn
+            .query_row(
+                "SELECT owner,lease_token,lease_expires_at,capabilities_json,build_identity
+                 FROM projection_maintenance_owner
+                 WHERE singleton=1",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, Option<i64>>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(storage)?;
+        let maintenance_owner_is_current = maintenance_owner_state.is_some_and(
+            |(owner, token, lease_expires_at, capabilities_json, build_identity)| {
+                owner.as_deref() == Some(input.maintenance_owner)
+                    && token.as_deref() == Some(input.maintenance_lease_token)
+                    && lease_expires_at.is_some_and(|expires_at| expires_at > now)
+                    && capabilities_json == input.maintenance_identity.capabilities_json
+                    && build_identity.as_deref()
+                        == Some(input.maintenance_identity.build_identity.as_str())
+            },
+        );
+        if !maintenance_owner_is_current {
+            return Err(KanbanError::Conflict(
+                "projection maintenance owner lease is stale while persisting failure".to_owned(),
+            ));
+        }
+
+        let changed = conn
+            .execute(
+                "UPDATE projection_store_state
+                 SET lifecycle_status='error',last_error=?1,updated_at=?2
+                 WHERE store_name=?3 AND lease_owner=?4 AND lease_token=?5
+                   AND fence_epoch=?6 AND lease_expires_at>?2",
+                params![
+                    message,
+                    now,
+                    input.store_name,
+                    input.lease.owner,
+                    input.lease.lease_token,
+                    input.lease.fence_epoch,
+                ],
+            )
+            .map_err(storage)?;
+        if changed != 1 {
+            return Err(KanbanError::Conflict(format!(
+                "{} projection lease is stale while persisting failure",
+                input.display_name
+            )));
+        }
+        Ok(())
+    })?;
+    let status = projection_status(input.path)?;
     let store = status
         .stores
         .into_iter()
-        .find(|store| store.store_name == store_name)
+        .find(|store| store.store_name == input.store_name)
         .ok_or_else(|| {
-            KanbanError::Storage(format!("{display_name} projection state is missing"))
+            KanbanError::Storage(format!(
+                "{} projection state is missing",
+                input.display_name
+            ))
         })?;
     let fallback_reason = match store.fallback_reason.as_deref() {
         Some("corpus_binding_upgrade_required" | "corpus_binding_invalid") => store.fallback_reason,
-        _ => Some(store_failure_fallback_reason(store_name, &kind).to_owned()),
+        _ => Some(store_failure_fallback_reason(input.store_name, &kind).to_owned()),
     };
     Ok(MaintenanceStoreRun {
         store_name: store.store_name,
@@ -2725,10 +2797,15 @@ mod unleased_failure_tests {
         )?;
 
         let stale = persist_store_failure(
-            &db_path,
-            TANTIVY_TASKS_STORE,
-            "Tantivy",
-            &lease,
+            MaintenanceFailurePersistenceInput {
+                path: &db_path,
+                store_name: TANTIVY_TASKS_STORE,
+                display_name: "Tantivy",
+                lease: &lease,
+                maintenance_owner: &session.owner,
+                maintenance_lease_token: &session.lease_token,
+                maintenance_identity: &session.identity,
+            },
             MaintenanceStoreFailureKind::Backend,
             KanbanError::Storage("stale pre-recovery fence".to_owned()),
         )
@@ -9707,6 +9784,12 @@ mod tests {
         let db_path = temp.path().join("kanban.db");
         init_database(&db_path, "tester")?;
 
+        let session = MaintenanceSession::start(
+            &db_path,
+            "old-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
         let old = acquire_projection_lease(&db_path, TANTIVY_TASKS_STORE, "old-owner", 10_000)?;
         let renewed = renew_projection_lease(
             &db_path,
@@ -9725,10 +9808,15 @@ mod tests {
             .expect("Tantivy status");
 
         let error = persist_store_failure(
-            &db_path,
-            TANTIVY_TASKS_STORE,
-            "Tantivy",
-            &renewed,
+            MaintenanceFailurePersistenceInput {
+                path: &db_path,
+                store_name: TANTIVY_TASKS_STORE,
+                display_name: "Tantivy",
+                lease: &renewed,
+                maintenance_owner: &session.owner,
+                maintenance_lease_token: &session.lease_token,
+                maintenance_identity: &session.identity,
+            },
             MaintenanceStoreFailureKind::Backend,
             KanbanError::Storage("failure from the previous owner".to_owned()),
         )
@@ -9752,6 +9840,7 @@ mod tests {
             "successor-owner",
             &successor.lease_token,
         )?;
+        session.finish()?;
         Ok(())
     }
 

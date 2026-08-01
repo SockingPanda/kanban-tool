@@ -66,6 +66,60 @@ const EMBEDDING_CACHE_FILE: &str = "embedding-cache.json";
 const DELIVERY_STATE_FILE: &str = "delivery-state.json";
 const CONTENT_METADATA_FILE: &str = "projection-content.json";
 
+const SQLITE_READ_AUTHORITY_COLUMNS: &[&str] = &[
+    "database_instance_id",
+    "protocol_version",
+    "schema_version",
+    "control_plane",
+    "fence_epoch",
+    "lease_owner",
+    "lease_token",
+    "lease_expires_at",
+    "building_generation",
+    "building_fingerprint",
+    "building_fence_epoch",
+    "building_provider",
+    "building_provider_fingerprint",
+    "building_canonical_count",
+    "building_canonical_digest",
+    "building_delivery_count",
+    "building_delivery_digest",
+    "building_corpus_schema",
+    "building_corpus_fingerprint",
+    "building_embedding_model",
+    "building_embedding_dimensions",
+    "building_phase",
+    "snapshot_cursor",
+    "active_generation",
+    "active_fingerprint",
+    "active_fence_epoch",
+    "active_snapshot_cursor",
+    "active_provider",
+    "active_provider_fingerprint",
+    "active_canonical_count",
+    "active_canonical_digest",
+    "active_delivery_count",
+    "active_delivery_digest",
+    "active_corpus_schema",
+    "active_corpus_fingerprint",
+    "active_embedding_model",
+    "active_embedding_dimensions",
+    "previous_generation",
+    "previous_fingerprint",
+    "previous_fence_epoch",
+    "previous_snapshot_cursor",
+    "previous_provider",
+    "previous_provider_fingerprint",
+    "previous_canonical_count",
+    "previous_canonical_digest",
+    "previous_delivery_count",
+    "previous_delivery_digest",
+    "previous_corpus_schema",
+    "previous_corpus_fingerprint",
+    "previous_embedding_model",
+    "previous_embedding_dimensions",
+];
+
 const GENERATION_OPERATIONS: [VectorProjectionHelperOperation; 13] = [
     VectorProjectionHelperOperation::Descriptor,
     VectorProjectionHelperOperation::PrepareSnapshot,
@@ -996,6 +1050,7 @@ impl VectorProjectionBackend {
         sqlite: &Connection,
     ) -> Result<ActiveLanceProjectionReader, VectorProjectionBackendError> {
         let descriptor = self.require_store(store_name)?;
+        self.require_sqlite_read_schema_and_control_plane(sqlite, store_name)?;
         let authority = self.load_sqlite_mutation_authority_from(sqlite, store_name)?;
         self.require_sqlite_read_identity(&authority, store_name)?;
         let read_guard = acquire_helper_read_guard(&self.db_path, store_name)?;
@@ -4082,9 +4137,47 @@ impl VectorProjectionBackend {
             || authority.schema_version != DERIVED_STORE_SCHEMA_VERSION
             || authority.control_plane != "v2"
         {
-            return Err(VectorProjectionBackendError::Delivery(format!(
-                "SQLite Projection v2 read authority rejected database/store/version/control-plane mismatch for {store_name}"
-            )));
+            return Err(sqlite_read_authority_rejected(store_name));
+        }
+        Ok(())
+    }
+
+    /// Reject legacy or structurally incomplete stores before selecting the
+    /// Projection v2 generation columns. Legacy control rows can exist in a
+    /// pre-v2-shaped table, so loading the complete authority first would
+    /// surface a raw `no such column` error instead of the stable read
+    /// authority rejection contract.
+    fn require_sqlite_read_schema_and_control_plane(
+        &self,
+        conn: &Connection,
+        store_name: &str,
+    ) -> Result<(), VectorProjectionBackendError> {
+        let rejection = || sqlite_read_authority_rejected(store_name);
+        let control_plane = conn
+            .query_row(
+                "SELECT control_plane FROM projection_store_state WHERE store_name=?1",
+                [store_name],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|_| rejection())?;
+        if control_plane.as_deref() != Some("v2") {
+            return Err(rejection());
+        }
+
+        let mut statement = conn
+            .prepare("PRAGMA table_info(projection_store_state)")
+            .map_err(|_| rejection())?;
+        let columns = statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|_| rejection())?
+            .collect::<Result<BTreeSet<_>, _>>()
+            .map_err(|_| rejection())?;
+        if SQLITE_READ_AUTHORITY_COLUMNS
+            .iter()
+            .any(|column| !columns.contains(*column))
+        {
+            return Err(rejection());
         }
         Ok(())
     }
@@ -4348,6 +4441,12 @@ fn acquire_helper_read_guard(
             backend_io(error)
         }
     })
+}
+
+fn sqlite_read_authority_rejected(store_name: &str) -> VectorProjectionBackendError {
+    VectorProjectionBackendError::Delivery(format!(
+        "SQLite Projection v2 read authority rejected database/store/version/control-plane mismatch for {store_name}"
+    ))
 }
 
 fn open_readonly_database(path: &Path) -> Result<DatabaseConnection, VectorProjectionBackendError> {

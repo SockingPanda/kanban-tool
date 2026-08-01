@@ -860,7 +860,15 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
     ),
     cli_response_schema_root!("dispatch", "dispatch", CliDispatchOutput),
     cli_response_schema_root!("export", "export", CliExportOutput),
-    cli_response_schema_root!("import", "import", CliImportOutput),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:import-output:v2",
+        "cli/import-output.v2.schema.json",
+        "Kanban CLI import output v2",
+        "cli.import.output",
+        "schemas/fixtures/cli/import-output.v2.valid.json",
+        "schemas/fixtures/cli/import-output.v2.invalid.json",
+        CliImportOutput
+    ),
     request_schema_root!(
         "urn:kanban-tool:schema:api:get-stats-query:v1",
         "api/get-stats-query.v1.schema.json",

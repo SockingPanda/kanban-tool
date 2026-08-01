@@ -1614,11 +1614,14 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "export",
         "cli_operator_contract_adoption"
     ),
-    adopted_cli_slug_output_contract!(
+    adopted_cli_output_contract!(
+        "cli.import.output",
         "import",
-        "import",
-        "import",
-        "cli_operator_contract_adoption"
+        "urn:kanban-tool:schema:cli:import-output:v2",
+        "schemas/fixtures/cli/import-output.v2.valid.json",
+        "cli_operator_contract_adoption",
+        "import_output_fixture_is_produced_by_real_cli",
+        "import_output_fixture_is_consumed_by_public_contract"
     ),
     adopted_api_parameter_contract!(
         "api.get-stats.query",

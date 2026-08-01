@@ -1,0 +1,7 @@
+{
+  "data": {
+    "input_path": "/fixture/import.jsonl",
+    "records": 0,
+    "dry_run": false
+  }
+}

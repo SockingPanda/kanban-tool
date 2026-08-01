@@ -1,5 +1,5 @@
 use std::{
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -10,7 +10,13 @@ use kanban_contract::cli_operator::{
     CliExportOutput, CliExportResult, CliImportOutput, CliImportResult,
 };
 use kanban_core::KanbanError;
-use kanban_sqlite::api::lifecycle::begin_database_replace;
+use kanban_local::{
+    DatabaseFileIdentity, database_file_identity, database_file_identity_from_file,
+    durable_quarantine_entry, open_database_file_for_identity,
+};
+use kanban_sqlite::api::lifecycle::{
+    begin_database_replace, publish_staged_database, resume_staged_database_replace,
+};
 use kanban_sqlite::api::{
     MaintenanceMode, MaintenanceRebuildIntent, MaintenanceRunOptions, MaintenanceSession,
     ProjectionRuntimeAvailability, backup_database, checkpoint_database, export_jsonl,
@@ -30,26 +36,132 @@ use crate::args::{
 use crate::commands::common::{invalid_input, is_stdio_path};
 use crate::output::{print_contract_or_human, print_human};
 
+pub(crate) struct ImportCommandOutcome {
+    result: kanban_sqlite::api::ImportResult,
+    resumed: bool,
+}
+
 pub(crate) fn import_command(
     db_path: &Path,
     actor: &str,
     args: ImportArgs,
-) -> Result<kanban_sqlite::api::ImportResult> {
+) -> Result<ImportCommandOutcome> {
+    import_command_with_quarantine_hook(db_path, actor, args, quarantine_completed_journal)
+}
+
+fn import_command_with_quarantine_hook<Quarantine>(
+    db_path: &Path,
+    actor: &str,
+    args: ImportArgs,
+    mut quarantine: Quarantine,
+) -> Result<ImportCommandOutcome>
+where
+    Quarantine: FnMut(&Path) -> Result<()>,
+{
+    let discoverable_journal_path = replacement_journal_path(db_path)?;
+    let discoverable_journal_exists = match fs::symlink_metadata(&discoverable_journal_path) {
+        Ok(_) => true,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "failed to inspect replacement journal {}",
+                    discoverable_journal_path.display()
+                )
+            });
+        }
+    };
+    if discoverable_journal_exists {
+        let completed = replacement_journal_is_completed(&discoverable_journal_path)?;
+        let mut replace_guard = begin_database_replace(db_path)?;
+        if !completed {
+            resume_staged_database_replace(&mut replace_guard, &discoverable_journal_path)
+                .with_context(|| {
+                    format!(
+                        "failed to resume database replacement from {}",
+                        discoverable_journal_path.display()
+                    )
+                })?;
+            return Ok(ImportCommandOutcome {
+                result: kanban_sqlite::api::ImportResult {
+                    input_path: args.input,
+                    records: 0,
+                },
+                resumed: true,
+            });
+        }
+        // A completed phase is still untrusted until the held lifecycle
+        // guard validates every retained identity. Only then may the old
+        // journal be quarantined before starting a fresh replacement.
+        resume_staged_database_replace(&mut replace_guard, &discoverable_journal_path)
+            .with_context(|| {
+                format!(
+                    "completed database replacement journal failed validation: {}",
+                    discoverable_journal_path.display()
+                )
+            })?;
+        // The completed journal is trusted only after the held guard has
+        // validated every physical identity. Quarantine it before checking a
+        // fresh import input so an invalid input cannot leave discoverable
+        // completed evidence in place.
+        quarantine(&discoverable_journal_path)?;
+    }
+    if !args.input.is_file() {
+        return Err(invalid_input(format!(
+            "import input does not exist: {}",
+            args.input.display()
+        )));
+    }
     let temp_path = temporary_import_db_path(db_path)?;
     let restore_path = temporary_restore_db_path(db_path)?;
     let replaced_path = temporary_replaced_db_path(db_path)?;
-    let result = (|| {
-        let _replace_guard = begin_database_replace(db_path)?;
+    let journal_path = if discoverable_journal_exists {
+        replacement_journal_path(db_path)?
+    } else {
+        discoverable_journal_path
+    };
+    let result: Result<ImportCommandOutcome> = (|| {
+        let mut replace_guard = begin_database_replace(db_path)?;
         let _init = init_database(&temp_path, actor)
             .with_context(|| format!("failed to initialize/open {}", temp_path.display()))?;
         let result = import_jsonl(&temp_path, &args.input, args.replace)?;
         backup_database(&temp_path, &restore_path)?;
-        replace_database_main_file(db_path, &restore_path, &replaced_path)?;
-        Ok(result)
+        publish_staged_database(
+            &mut replace_guard,
+            db_path,
+            &restore_path,
+            &replaced_path,
+            &journal_path,
+        )?;
+        Ok(ImportCommandOutcome {
+            result,
+            resumed: false,
+        })
     })();
     remove_sqlite_file_family(&temp_path);
-    remove_sqlite_file_family(&restore_path);
-    result
+    if !journal_path.exists() {
+        remove_sqlite_file_family(&restore_path);
+    }
+    match result {
+        Err(error) if journal_path.exists() => Err(error.context(format!(
+            "database replacement is incomplete; recovery evidence retained (journal={}, staged={}, previous={})",
+            journal_path.display(),
+            restore_path.display(),
+            replaced_path.display(),
+        ))),
+        Ok(outcome) => Ok(outcome),
+        Err(error) => Err(error),
+    }
+}
+
+fn quarantine_completed_journal(path: &Path) -> Result<()> {
+    durable_quarantine_entry(path).with_context(|| {
+        format!(
+            "failed to preserve completed replacement journal {}",
+            path.display()
+        )
+    })?;
+    Ok(())
 }
 
 pub(crate) fn import_dry_run_command(
@@ -80,14 +192,104 @@ fn temporary_replaced_db_path(db_path: &Path) -> Result<PathBuf> {
     temporary_sibling_db_path(db_path, "replaced")
 }
 
-fn temporary_sibling_db_path(db_path: &Path, label: &str) -> Result<PathBuf> {
-    if let Some(parent) = db_path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create {}", parent.display()))?;
+fn replacement_journal_path(db_path: &Path) -> Result<PathBuf> {
+    let file_name = db_path
+        .file_name()
+        .ok_or_else(|| invalid_input("database path has no filename for replacement journal"))?
+        .to_str()
+        .ok_or_else(|| {
+            invalid_input(
+                "database filename must be valid UTF-8 for deterministic replacement recovery",
+            )
+        })?;
+    let parent = canonical_database_parent(db_path)?;
+    Ok(parent.join(format!(".{file_name}.replace.journal")))
+}
+
+fn replacement_journal_is_completed(path: &Path) -> Result<bool> {
+    replacement_journal_is_completed_with_hook(path, || Ok(()))
+}
+
+fn replacement_journal_is_completed_with_hook<Hook>(
+    path: &Path,
+    mut after_open: Hook,
+) -> Result<bool>
+where
+    Hook: FnMut() -> Result<()>,
+{
+    // Never discover a recovery journal by following a symlink. Read from a
+    // descriptor opened with the native no-follow primitive and compare its
+    // identity with the path before/after reading so a concurrent entry
+    // replacement fails closed instead of selecting an attacker-controlled
+    // JSON file.
+    let mut file =
+        open_database_file_for_identity(path).map_err(|error| {
+            match fs::symlink_metadata(path) {
+                Ok(metadata) if !metadata.is_file() => KanbanError::InvalidInput(format!(
+                    "replacement journal is not a regular file: {}",
+                    path.display()
+                )),
+                _ => KanbanError::InvalidInput(format!(
+                    "replacement journal could not be opened: {} ({error})",
+                    path.display()
+                )),
+            }
+        })?;
+    let opened_identity = database_file_identity_from_file(&file).map_err(|error| {
+        KanbanError::InvalidInput(format!(
+            "replacement journal identity is unavailable: {} ({error})",
+            path.display()
+        ))
+    })?;
+    after_open()?;
+    let before_identity = database_file_identity(path).map_err(|error| {
+        KanbanError::InvalidInput(format!(
+            "replacement journal could not be rechecked: {} ({error})",
+            path.display()
+        ))
+    })?;
+    if !journal_metadata_matches(&opened_identity, &before_identity) {
+        return Err(KanbanError::InvalidInput(format!(
+            "replacement journal path changed while being opened: {}",
+            path.display()
+        ))
+        .into());
     }
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).map_err(|error| {
+        KanbanError::InvalidInput(format!(
+            "replacement journal could not be read: {} ({error})",
+            path.display()
+        ))
+    })?;
+    let after_identity = database_file_identity(path).map_err(|error| {
+        KanbanError::InvalidInput(format!(
+            "replacement journal could not be rechecked: {} ({error})",
+            path.display()
+        ))
+    })?;
+    if !journal_metadata_matches(&opened_identity, &after_identity) {
+        return Err(KanbanError::InvalidInput(format!(
+            "replacement journal path changed while being read: {}",
+            path.display()
+        ))
+        .into());
+    }
+    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| {
+        KanbanError::InvalidInput(format!(
+            "invalid replacement journal JSON: {} ({error})",
+            path.display()
+        ))
+    })?;
+    Ok(value.get("phase").and_then(serde_json::Value::as_str) == Some("completed"))
+}
+
+fn journal_metadata_matches(left: &DatabaseFileIdentity, right: &DatabaseFileIdentity) -> bool {
+    left == right
+}
+
+fn temporary_sibling_db_path(db_path: &Path, label: &str) -> Result<PathBuf> {
+    let parent = canonical_database_parent(db_path)?;
     let file_name = db_path
         .file_name()
         .and_then(|value| value.to_str())
@@ -96,14 +298,26 @@ fn temporary_sibling_db_path(db_path: &Path, label: &str) -> Result<PathBuf> {
         .duration_since(UNIX_EPOCH)
         .context("system clock is before unix epoch")?
         .as_nanos();
-    Ok(db_path
+    Ok(parent.join(format!(
+        ".{file_name}.{label}.{}.{}.tmp",
+        std::process::id(),
+        nanos
+    )))
+}
+
+fn canonical_database_parent(db_path: &Path) -> Result<PathBuf> {
+    let parent = db_path
         .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(format!(
-            ".{file_name}.{label}.{}.{}.tmp",
-            std::process::id(),
-            nanos
-        )))
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)
+        .with_context(|| format!("failed to create database parent {}", parent.display()))?;
+    fs::canonicalize(parent).with_context(|| {
+        format!(
+            "failed to canonicalize database parent {}",
+            parent.display()
+        )
+    })
 }
 
 fn remove_sqlite_file_family(path: &Path) {
@@ -114,39 +328,6 @@ fn remove_sqlite_file_family(path: &Path) {
 fn remove_sqlite_sidecars(path: &Path) {
     let _ = fs::remove_file(format!("{}-wal", path.display()));
     let _ = fs::remove_file(format!("{}-shm", path.display()));
-}
-
-fn replace_database_main_file(
-    db_path: &Path,
-    restore_path: &Path,
-    replaced_path: &Path,
-) -> Result<()> {
-    remove_sqlite_sidecars(db_path);
-    let had_existing = db_path.exists();
-    if had_existing {
-        fs::rename(db_path, replaced_path).with_context(|| {
-            format!(
-                "failed to move existing database {} out of the way",
-                db_path.display()
-            )
-        })?;
-    }
-    if let Err(error) = fs::rename(restore_path, db_path) {
-        if had_existing {
-            let _ = fs::rename(replaced_path, db_path);
-        }
-        return Err(error).with_context(|| {
-            format!(
-                "failed to replace {} with restored import",
-                db_path.display()
-            )
-        });
-    }
-    if had_existing {
-        remove_sqlite_file_family(replaced_path);
-    }
-    remove_sqlite_sidecars(db_path);
-    Ok(())
 }
 
 pub(crate) fn handle_doctor(db_path: &PathBuf, args: DoctorArgs, json: bool) -> Result<()> {
@@ -644,18 +825,19 @@ pub(crate) fn handle_import(
     args: ImportArgs,
     json: bool,
 ) -> Result<()> {
-    if !args.input.is_file() {
-        return Err(invalid_input(format!(
-            "import input does not exist: {}",
-            args.input.display()
-        )));
-    }
     if args.dry_run {
+        if !args.input.is_file() {
+            return Err(invalid_input(format!(
+                "import input does not exist: {}",
+                args.input.display()
+            )));
+        }
         let result = import_dry_run_command(db_path, actor, &args)?;
         let output = CliImportOutput::new(CliImportResult {
             input_path: result.input_path,
             records: result.records,
             dry_run: true,
+            resumed: false,
         });
         print_contract_or_human(json, &output, || {
             format!(
@@ -669,18 +851,24 @@ pub(crate) fn handle_import(
     if !args.replace {
         return Err(invalid_input("import requires --replace or --dry-run"));
     }
-    let result = import_command(db_path, actor, args)?;
+    let outcome = import_command(db_path, actor, args)?;
+    let result = outcome.result;
     let output = CliImportOutput::new(CliImportResult {
         input_path: result.input_path,
         records: result.records,
         dry_run: false,
+        resumed: outcome.resumed,
     });
     print_contract_or_human(json, &output, || {
-        format!(
-            "Imported {} record(s) from {}",
-            output.data.records,
-            output.data.input_path.display()
-        )
+        if output.data.resumed {
+            "Resumed database replacement; input ignored (records=0, dry_run=false)".to_owned()
+        } else {
+            format!(
+                "Imported {} record(s) from {}",
+                output.data.records,
+                output.data.input_path.display()
+            )
+        }
     })
 }
 
@@ -712,5 +900,148 @@ pub(crate) fn handle_vacuum(db_path: &PathBuf, json: bool) -> Result<()> {
         print_contract_or_human(true, &output, String::new)
     } else {
         print_human(|| "Vacuum complete".to_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kanban_sqlite::api::lifecycle::{begin_database_replace, publish_staged_database};
+    use kanban_sqlite::init::init_database;
+    use std::{
+        process::Command,
+        thread,
+        time::{Duration, Instant},
+    };
+
+    #[test]
+    fn completed_journal_guard_is_held_until_quarantine_finishes() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let canonical = tempdir.path().join("kb.db");
+        let staged = tempdir.path().join(".kb.db.restore.fixture");
+        let previous = tempdir.path().join(".kb.db.replaced.fixture");
+        let journal = tempdir.path().join(".kb.db.replace.journal");
+        let entered = tempdir.path().join("quarantine-entered");
+        let start_probe = tempdir.path().join("start-probe");
+        let probe_result = tempdir.path().join("probe-result");
+        let missing_input = tempdir.path().join("missing-input.jsonl");
+
+        init_database(&canonical, "cli-maintenance-race").expect("canonical init");
+        init_database(&staged, "cli-maintenance-race").expect("staged init");
+        let mut guard = begin_database_replace(&canonical).expect("replace guard");
+        publish_staged_database(&mut guard, &canonical, &staged, &previous, &journal)
+            .expect("publish completed journal");
+        drop(guard);
+
+        let canonical_for_thread = canonical.clone();
+        let entered_for_thread = entered.clone();
+        let start_probe_for_thread = start_probe.clone();
+        let probe_result_for_thread = probe_result.clone();
+        let import_thread = thread::spawn(move || {
+            let result = import_command_with_quarantine_hook(
+                &canonical_for_thread,
+                "cli-maintenance-race",
+                ImportArgs {
+                    input: missing_input,
+                    dry_run: false,
+                    replace: true,
+                },
+                |path| {
+                    fs::write(&entered_for_thread, b"entered").expect("signal quarantine entry");
+                    wait_for_marker(&start_probe_for_thread);
+                    wait_for_marker(&probe_result_for_thread);
+                    let probe = fs::read_to_string(&probe_result_for_thread)
+                        .expect("read competing guard probe");
+                    assert_eq!(
+                        probe, "blocked",
+                        "competing process acquired guard before quarantine"
+                    );
+                    durable_quarantine_entry(path).expect("quarantine completed journal");
+                    Ok(())
+                },
+            );
+            assert!(
+                result.is_err(),
+                "missing import input must fail after quarantine"
+            );
+        });
+
+        wait_for_marker(&entered);
+        let mut probe = Command::new(std::env::current_exe().expect("test executable"))
+            .arg("--exact")
+            .arg("commands::maintenance::tests::completed_journal_competing_guard_probe")
+            .arg("--nocapture")
+            .env("KANBAN_COMPLETED_JOURNAL_PROBE_DB", &canonical)
+            .env("KANBAN_COMPLETED_JOURNAL_PROBE_RESULT", &probe_result)
+            .spawn()
+            .expect("spawn competing guard probe");
+        fs::write(&start_probe, b"start").expect("start competing guard probe");
+
+        let status = probe.wait().expect("wait competing guard probe");
+        assert!(status.success(), "competing guard probe failed: {status}");
+        import_thread.join().expect("import race test thread");
+
+        assert!(!journal.exists(), "completed journal should be quarantined");
+        assert!(
+            fs::read_dir(tempdir.path())
+                .expect("read quarantine directory")
+                .filter_map(Result::ok)
+                .any(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".kb.db.replace.journal.quarantine.")),
+            "quarantine evidence should remain durable"
+        );
+    }
+
+    #[test]
+    fn completed_journal_competing_guard_probe() {
+        let Some(db_path) = std::env::var_os("KANBAN_COMPLETED_JOURNAL_PROBE_DB") else {
+            return;
+        };
+        let result_path = PathBuf::from(
+            std::env::var_os("KANBAN_COMPLETED_JOURNAL_PROBE_RESULT").expect("probe result path"),
+        );
+        let result = begin_database_replace(Path::new(&db_path));
+        let acquired = result.is_ok();
+        if let Ok(guard) = result {
+            drop(guard);
+        }
+        fs::write(result_path, if acquired { "acquired" } else { "blocked" })
+            .expect("write competing guard probe result");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn completed_journal_rejects_regular_entry_replaced_after_open() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let journal = tempdir.path().join("replace.journal");
+        let replacement = tempdir.path().join("replacement.journal");
+        fs::write(&journal, br#"{"phase":"completed"}"#).expect("write journal");
+        fs::write(&replacement, br#"{"phase":"replaced"}"#).expect("write replacement journal");
+
+        let error = replacement_journal_is_completed_with_hook(&journal, || {
+            fs::remove_file(&journal).expect("remove original journal");
+            fs::rename(&replacement, &journal).expect("install replacement journal");
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(error.to_string().contains("path changed"));
+        assert_eq!(
+            fs::read(&journal).expect("read replacement journal"),
+            br#"{"phase":"replaced"}"#
+        );
+    }
+
+    fn wait_for_marker(path: &Path) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !path.exists() {
+            assert!(
+                Instant::now() < deadline,
+                "timed out waiting for {}",
+                path.display()
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
     }
 }

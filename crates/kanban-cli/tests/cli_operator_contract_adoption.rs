@@ -8,13 +8,16 @@ use kanban_contract::cli_operator::{
     CliSignalListOutput, CliSignalRecordOutput, CliSignalRejectOutput, CliSignalResolveOutput,
     CliSignalReviewOutput, CliSignalShowOutput, CliSignalSupersedeOutput,
 };
+use kanban_sqlite::api::lifecycle::{begin_database_replace, publish_staged_database};
+use kanban_sqlite::init::init_database;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 fn fixture(operation: &str, validity: &str) -> anyhow::Result<Value> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let version = if operation == "import" { "v2" } else { "v1" };
     let path = root.join(format!(
-        "schemas/fixtures/cli/{operation}-output.v1.{validity}.json"
+        "schemas/fixtures/cli/{operation}-output.{version}.{validity}.json"
     ));
     Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
 }
@@ -382,36 +385,40 @@ fn producer_export_matches_exact_fixture() -> anyhow::Result<()> {
 }
 
 #[test]
-fn producer_import_matches_exact_fixture() -> anyhow::Result<()> {
-    let source = setup("operator_import_source")?;
-    let input = source.dir.join("portable.jsonl");
-    kanban(
-        &source.path,
-        &[
-            "export",
-            "--format",
-            "jsonl",
-            "--out",
-            input.to_str().context("UTF-8 import fixture path")?,
-        ],
-    )?
-    .success()?;
-    let target = TempDb::new("operator_import_target")?;
+fn import_output_fixture_is_produced_by_real_cli() -> anyhow::Result<()> {
+    let target = TempDb::new("operator_import_resume_target")?;
+    kanban(&target.path, &["init"])?.success()?;
+    let staged = target.dir.join(".kb.db.restore.fixture");
+    let previous = target.dir.join(".kb.db.replaced.fixture");
+    let journal = target.dir.join(".kb.db.replace.journal");
+    init_database(&staged, "cli-contract-resume")?;
+    let mut guard = begin_database_replace(&target.path)?;
+    publish_staged_database(&mut guard, &target.path, &staged, &previous, &journal)?;
+    drop(guard);
+    // Recreate the durable previous-published crash state. The next CLI
+    // invocation must resume before it attempts to inspect its input path.
+    std::fs::hard_link(&target.path, &staged)?;
+    std::fs::remove_file(&target.path)?;
+    let mut journal_json: Value = serde_json::from_slice(&std::fs::read(&journal)?)?;
+    journal_json["phase"] = json!("previous_published");
+    std::fs::write(&journal, serde_json::to_vec_pretty(&journal_json)?)?;
+    let ignored_input = target.dir.join("ignored-after-resume.jsonl");
     let mut actual = kanban(
         &target.path,
         &[
             "--json",
             "import",
             "--input",
-            input.to_str().context("UTF-8 import path")?,
-            "--dry-run",
+            ignored_input.to_str().context("UTF-8 import path")?,
+            "--replace",
         ],
     )?
     .success_json()?;
     serde_json::from_value::<CliImportOutput>(actual.clone())?;
-    anyhow::ensure!(actual["data"]["records"].as_u64().unwrap_or_default() > 0);
-    actual["data"]["input_path"] = json!("/fixture/portable.jsonl");
-    actual["data"]["records"] = json!(10);
+    assert_eq!(actual["data"]["resumed"], true);
+    assert_eq!(actual["data"]["records"], 0);
+    assert_eq!(actual["data"]["dry_run"], false);
+    actual["data"]["input_path"] = json!("/fixture/ignored-after-resume.jsonl");
     assert_eq!(actual, fixture("import", "valid")?);
     Ok(())
 }

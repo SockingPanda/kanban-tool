@@ -13,17 +13,21 @@
           "format": "uint",
           "minimum": 0,
           "type": "integer"
+        },
+        "resumed": {
+          "type": "boolean"
         }
       },
       "required": [
         "input_path",
         "records",
-        "dry_run"
+        "dry_run",
+        "resumed"
       ],
       "type": "object"
     }
   },
-  "$id": "urn:kanban-tool:schema:cli:import-output:v1",
+  "$id": "urn:kanban-tool:schema:cli:import-output:v2",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -34,6 +38,6 @@
   "required": [
     "data"
   ],
-  "title": "Kanban CLI import output v1",
+  "title": "Kanban CLI import output v2",
   "type": "object"
 }

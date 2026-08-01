@@ -344,6 +344,8 @@ fn dangerous_flags_explain_their_semantics() -> anyhow::Result<()> {
             "--replace",
             "Clear existing importable records before loading input",
             "use only with an intentional backup/restore flow",
+            "ignores --input",
+            "resumed=true, records=0, and dry_run=false",
         ],
     )?;
     assert_no_line(&import, "  kanban import --input backup.jsonl")?;

@@ -268,6 +268,7 @@ pub struct CliImportResult {
     pub input_path: PathBuf,
     pub records: usize,
     pub dry_run: bool,
+    pub resumed: bool,
 }
 
 pub type CliImportOutput = DataEnvelope<CliImportResult>;

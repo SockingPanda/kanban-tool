@@ -4573,24 +4573,24 @@
       "producer": {
         "contract_id": "cli.import.output",
         "direction": "serialize",
-        "exact_test": "producer_import_matches_exact_fixture",
+        "exact_test": "import_output_fixture_is_produced_by_real_cli",
         "operation": "import",
         "package": "kanban-cli",
         "surface": "cli",
         "test_target": "cli_operator_contract_adoption"
       },
-      "producer_fixture": "schemas/fixtures/cli/import-output.v1.valid.json"
+      "producer_fixture": "schemas/fixtures/cli/import-output.v2.valid.json"
     },
     "binding": "exact_surface",
     "direction": "serialize",
     "exclusion": null,
-    "fixture": "schemas/fixtures/cli/import-output.v1.valid.json",
+    "fixture": "schemas/fixtures/cli/import-output.v2.valid.json",
     "granularity": "exact",
     "id": "cli.import.output",
     "migration": "adopted",
     "operation": "import",
     "path": "kanban import --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:import-output:v1",
+    "schema_id": "urn:kanban-tool:schema:cli:import-output:v2",
     "strictness": "deny_unknown_fields",
     "surface": "cli",
     "transport": {

@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:40fbc22196afcf3cf226dd290e77389138f20acbbef9ba35290d4970bd7444cc"
+    "sha256": "sha256:7786821ef48eb48a56b00dc76ba8a42f442c7137d09edb7384c224d7ca5eba48"
   },
   "roots": [
     {
@@ -1207,11 +1207,11 @@
     {
       "contract_id": "cli.import.output",
       "direction": "serialize",
-      "id": "urn:kanban-tool:schema:cli:import-output:v1",
-      "invalid_fixture": "schemas/fixtures/cli/import-output.v1.invalid.json",
-      "path": "cli/import-output.v1.schema.json",
-      "schema_fixture": "schemas/fixtures/cli/import-output.v1.valid.json",
-      "sha256": "sha256:9270f95883449c108f2310450f49db0de3e9eb03cad0beeda6b6ecb1ce737736",
+      "id": "urn:kanban-tool:schema:cli:import-output:v2",
+      "invalid_fixture": "schemas/fixtures/cli/import-output.v2.invalid.json",
+      "path": "cli/import-output.v2.schema.json",
+      "schema_fixture": "schemas/fixtures/cli/import-output.v2.valid.json",
+      "sha256": "sha256:c501497108c705f6895f8d90cb0a92e31f43c0972c93885089040d3f3c2b0563",
       "strictness": "deny_unknown_fields"
     },
     {

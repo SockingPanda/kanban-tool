@@ -11,7 +11,7 @@ use kanban_sqlite::api::{FinishPolicy, TaskListSort};
     version,
     about = "Local SQLite-backed Kanban work queue",
     arg_required_else_help = true,
-    after_help = "Examples:\n  kanban init\n  kanban task create \"Write spec\" --description-file -\n  kanban task list --status ready --json\n  kanban comment add default#1 --body-file - --kind note\n\nError codes:\n  1  generic or storage failure\n  2  CLI usage or invalid input\n  3  object not found\n  4  invalid state transition or unfinished required plan\n  5  claim conflict\n  6  dependency blocked\n  7  SQLite busy or locked\n  8  integrity check failed"
+    after_help = "Examples:\n  kanban init\n  kanban task create \"Write spec\" --description-file -\n  kanban task list --status ready --json\n  kanban comment add default#1 --body-file - --kind note\n\nError codes:\n  1  generic or storage failure\n  2  CLI usage or invalid input\n  3  object not found\n  4  invalid state transition or unfinished required plan\n  5  claim conflict\n  6  dependency blocked\n  7  SQLite busy or locked\n  8  integrity check failed\n\nImport replacement recovery:\n  If a replacement is interrupted after its journal is published, rerunning\n  `kanban import --replace` discovers `.<database-file>.replace.journal` and\n  resumes the fail-closed recovery before starting a new import."
 )]
 pub(crate) struct Cli {
     /// Use a specific SQLite database path.
@@ -2016,7 +2016,7 @@ pub(crate) enum ExportFormatArg {
 
 #[derive(Debug, Args)]
 #[command(
-    after_help = "Examples:\n  kanban import --input backup.jsonl --dry-run\n  kanban import --input backup.jsonl --replace\n\n--dry-run validates the input in a temporary database without replacing the selected database.\n--replace clears existing importable records before loading the input file; use only with an intentional backup/restore flow."
+    after_help = "Examples:\n  kanban import --input backup.jsonl --dry-run\n  kanban import --input backup.jsonl --replace\n\n--dry-run validates the input in a temporary database without replacing the selected database.\n--replace clears existing importable records before loading the input file; use only with an intentional backup/restore flow.\nIf an incomplete replacement journal is found, --replace resumes it first and ignores --input; success reports resumed=true, records=0, and dry_run=false."
 )]
 pub(crate) struct ImportArgs {
     #[arg(long)]

@@ -388,10 +388,22 @@ impl MaintenanceSession {
         &self,
         expected_database_instance_id: &str,
     ) -> Result<()> {
-        let now = SystemClock.now_ms();
-        let expires_at = checked_expiry(now, self.options.lease_ttl_ms)?;
+        self.renew_and_validate_database_identity_with_before_transaction(
+            expected_database_instance_id,
+            || {},
+        )
+    }
+
+    fn renew_and_validate_database_identity_with_before_transaction(
+        &self,
+        expected_database_instance_id: &str,
+        before_transaction: impl FnOnce(),
+    ) -> Result<()> {
+        before_transaction();
         let conn = connect_file(&self.db_path)?;
         with_immediate_tx(&conn, || {
+            let now = SystemClock.now_ms();
+            let expires_at = checked_expiry(now, self.options.lease_ttl_ms)?;
             renew_maintenance_owner_on_connection(self, &conn, now, expires_at)?;
             let actual_database_instance_id = conn
                 .query_row(
@@ -8861,6 +8873,149 @@ mod tests {
                 .is_none(),
             "a corrupt provider B active must remain recoverable"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn identity_renewal_does_not_revive_expired_owner_after_writer_delay() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let options = MaintenanceRunOptions {
+            lease_ttl_ms: 1_000,
+            claim_ttl_ms: 250,
+            batch_size: 1,
+        };
+        let session =
+            MaintenanceSession::start(&db_path, "identity-owner", MaintenanceMode::Once, options)?;
+        let expected_database_instance_id = projection_status(&db_path)?.database_instance_id;
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+
+        thread::scope(|scope| -> anyhow::Result<()> {
+            let session_ref = &session;
+            let expected_for_renewal = expected_database_instance_id.clone();
+            let renewal = scope.spawn(move || {
+                session_ref.renew_and_validate_database_identity_with_before_transaction(
+                    &expected_for_renewal,
+                    || {
+                        entered_tx
+                            .send(())
+                            .expect("test observes identity renewal at pre-transaction barrier");
+                        resume_rx
+                            .recv()
+                            .expect("test resumes identity renewal against writer lock");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("identity renewal reached pre-transaction barrier");
+
+            let expires_at = SystemClock.now_ms() + 75;
+            let conn = connect_file(&db_path)?;
+            let heartbeat_before: i64 = conn.query_row(
+                "SELECT last_heartbeat_at FROM projection_maintenance_owner WHERE singleton=1",
+                [],
+                |row| row.get(0),
+            )?;
+            with_immediate_tx(&conn, || {
+                let changed = conn
+                    .execute(
+                        "UPDATE projection_maintenance_owner SET lease_expires_at=?1
+                         WHERE singleton=1 AND owner=?2 AND lease_token=?3",
+                        params![expires_at, "identity-owner", session.lease_token.as_str()],
+                    )
+                    .map_err(storage)?;
+                if changed != 1 {
+                    return Err(KanbanError::Storage(
+                        "test failed to shorten identity owner lease".to_owned(),
+                    ));
+                }
+                Ok(())
+            })?;
+
+            let writer = connect_file(&db_path)?;
+            writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+            resume_tx
+                .send(())
+                .expect("resume identity renewal against held writer lock");
+            while SystemClock.now_ms() <= expires_at {
+                thread::sleep(Duration::from_millis(1));
+            }
+            writer.execute_batch("COMMIT").map_err(storage)?;
+
+            let error = renewal
+                .join()
+                .expect("identity renewal thread must not panic")
+                .expect_err("identity renewal delayed beyond expiry must not revive the owner");
+            assert!(matches!(error, KanbanError::Conflict(_)));
+
+            let conn = connect_file(&db_path)?;
+            let (actual_expiry, heartbeat_after): (i64, i64) = conn.query_row(
+                "SELECT lease_expires_at,last_heartbeat_at
+                 FROM projection_maintenance_owner WHERE singleton=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            let actual_database_instance_id: String = conn.query_row(
+                "SELECT database_instance_id FROM projection_database WHERE singleton=1",
+                [],
+                |row| row.get(0),
+            )?;
+            assert_eq!(actual_expiry, expires_at);
+            assert_eq!(heartbeat_after, heartbeat_before);
+            assert_eq!(actual_database_instance_id, expected_database_instance_id);
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn identity_renewal_rolls_back_owner_update_on_identity_mismatch() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let session = MaintenanceSession::start(
+            &db_path,
+            "identity-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let conn = connect_file(&db_path)?;
+        let (expiry_before, heartbeat_before): (i64, i64) = conn.query_row(
+            "SELECT lease_expires_at,last_heartbeat_at
+             FROM projection_maintenance_owner WHERE singleton=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let database_instance_id_before: String = conn.query_row(
+            "SELECT database_instance_id FROM projection_database WHERE singleton=1",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let error = session
+            .renew_and_validate_database_identity("different-database-instance-id")
+            .expect_err("identity mismatch must roll back owner renewal");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        assert!(error.to_string().contains("identity changed"));
+
+        let conn = connect_file(&db_path)?;
+        let (expiry_after, heartbeat_after): (i64, i64) = conn.query_row(
+            "SELECT lease_expires_at,last_heartbeat_at
+             FROM projection_maintenance_owner WHERE singleton=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let database_instance_id_after: String = conn.query_row(
+            "SELECT database_instance_id FROM projection_database WHERE singleton=1",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(expiry_after, expiry_before);
+        assert_eq!(heartbeat_after, heartbeat_before);
+        assert_eq!(database_instance_id_after, database_instance_id_before);
         Ok(())
     }
 

@@ -42,7 +42,7 @@ TOOL_PACKAGE = "kanban-schema-tool"
 CONTRACT_PACKAGE = "kanban-contract"
 PROJECTION_RELEASE_FEATURES = "tantivy-backend,oxigraph-backend"
 RELEASE_WRAPPER_SHA256 = (
-    "787bfbcdc6cd42099f2cd3a85e767336b42692ffc0a068c85a4c613978a5296a"
+    "e24b318632716cdc107fbc350bbbb61e826a6af2d83a9b9e46b35a7a4e0d06e9"
 )
 Event = dict[str, object]
 ExpectedBuilder = Callable[[Path, bool], list[Event]]

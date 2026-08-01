@@ -272,6 +272,19 @@ if [[ "$*" == "--print-target-dir" ]]; then
   printf '%s\n' "${FAKE_TARGET_ROOT:?}"
   exit 0
 fi
+if [[ "$*" == "--verify-inherited-lock" ]]; then
+  [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]] || exit 2
+  [[ "${CARGO_TARGET_DIR:-}" == "${FAKE_TARGET_ROOT:?}" ]] || exit 2
+  [[ "${KANBAN_CARGO_BUILD_LOCK_PATH:-}" == "${FAKE_TARGET_ROOT:?}/.build.lock" ]] || exit 2
+  lock_fd="${KANBAN_CARGO_BUILD_LOCK_FD:-}"
+  [[ "$lock_fd" =~ ^[3-9][0-9]*$ && -e "/proc/self/fd/$lock_fd" ]] || exit 2
+  expected="$(stat -Lc '%d:%i:%h:%F' "${FAKE_TARGET_ROOT:?}/.build.lock")" || exit 2
+  [[ "$expected" == *":1:regular "* ]] || exit 2
+  inherited="$(stat -Lc '%d:%i:%h:%F' "/proc/self/fd/$lock_fd")" || exit 2
+  [[ "${inherited}" == "${expected}" ]] || exit 2
+  /usr/bin/flock -n "$lock_fd"
+  exit $?
+fi
 [[ "${1:-}" == "--" && $# -ge 2 ]] || {
   echo "unexpected fake build lock invocation: $*" >&2
   exit 98
@@ -279,7 +292,21 @@ fi
 shift
 printf 'exclusive\t%s\n' "${KANBAN_CARGO_BUILD_LOCK_HELD:-0}" \
   >> "${FAKE_LOCK_LOG:?}"
-KANBAN_CARGO_BUILD_LOCK_HELD=1 exec "$@"
+if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
+  export CARGO_TARGET_DIR="${FAKE_TARGET_ROOT:?}"
+  exec "$@"
+fi
+lock_path="${FAKE_TARGET_ROOT:?}/.build.lock"
+mkdir -p "${FAKE_TARGET_ROOT:?}"
+export CARGO_TARGET_DIR="${FAKE_TARGET_ROOT:?}"
+export KANBAN_CARGO_BUILD_LOCK_HELD=1
+export KANBAN_CARGO_BUILD_LOCK_PATH="$lock_path"
+export KANBAN_CARGO_BUILD_LOCK_FD=3
+: "${CARGO_BUILD_JOBS:=2}"
+: "${NEXTEST_TEST_THREADS:=2}"
+: "${RUST_TEST_THREADS:=2}"
+export CARGO_BUILD_JOBS NEXTEST_TEST_THREADS RUST_TEST_THREADS
+exec /usr/bin/flock -n "$lock_path" "$@"
 EOF
 
   cat > "$repo/fake-bin/just" <<'EOF'
@@ -538,6 +565,8 @@ PY
     run_gate "$repo" prepare --output "$output/rustc-workspace-wrapper.json" >/dev/null
   CARGO_BUILD_TARGET=aarch64-unknown-linux-gnu assert_fails "cargo target override" \
     run_gate "$repo" prepare --output "$output/cargo-target.json" >/dev/null
+  CARGO_BUILD_JOBS=9 assert_fails "cargo build jobs override" \
+    run_gate "$repo" prepare --output "$output/cargo-build-jobs.json" >/dev/null
   CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/tmp/linker \
     assert_fails "cargo target linker override" \
     run_gate "$repo" prepare --output "$output/cargo-target-linker.json" >/dev/null
@@ -586,6 +615,146 @@ run_wrapper() {
     FAKE_DESKTOP_PACKAGE_ROOT="$target/fake-desktop-root" \
     "$@" \
     "$repo/scripts/release-cohort.sh"
+}
+
+assert_build_lock_resource_environment_is_allowed() {
+  local repo="$TMPROOT/cohort-resource-env-repo"
+  local target="$TMPROOT/cohort-resource-env-target"
+  local state="$TMPROOT/cohort-resource-env-state"
+  local log="$TMPROOT/cohort-resource-env.log"
+
+  make_fake_repo "$repo"
+  initialize_git_state "$state"
+  mkdir -p "$target"
+
+  # Mirror cargo-build-lock.sh's internal resource injection.  The first
+  # invocation acquires the lock and exports the exact variables that the
+  # recursive release invocation must accept; a caller-supplied value is
+  # preserved to keep the outer release environment fail-closed.
+  cat > "$repo/scripts/cargo-build-lock.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" == "--print-target-dir" ]]; then
+  printf '%s\n' "${FAKE_TARGET_ROOT:?}"
+  exit 0
+fi
+if [[ "$*" == "--verify-inherited-lock" ]]; then
+  [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]] || exit 2
+  [[ "${CARGO_TARGET_DIR:-}" == "${FAKE_TARGET_ROOT:?}" ]] || exit 2
+  [[ "${KANBAN_CARGO_BUILD_LOCK_PATH:-}" == "${FAKE_TARGET_ROOT:?}/.build.lock" ]] || exit 2
+  lock_fd="${KANBAN_CARGO_BUILD_LOCK_FD:-}"
+  [[ "$lock_fd" =~ ^[3-9][0-9]*$ && -e "/proc/self/fd/$lock_fd" ]] || exit 2
+  expected="$(stat -Lc '%d:%i:%h:%F' "${FAKE_TARGET_ROOT:?}/.build.lock")" || exit 2
+  [[ "$expected" == *":1:regular "* ]] || exit 2
+  inherited="$(stat -Lc '%d:%i:%h:%F' "/proc/self/fd/$lock_fd")" || exit 2
+  [[ "${inherited}" == "${expected}" ]] || exit 2
+  /usr/bin/flock -n "$lock_fd"
+  exit $?
+fi
+[[ "${1:-}" == "--" && $# -ge 2 ]] || exit 98
+shift
+if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
+  export CARGO_TARGET_DIR="${FAKE_TARGET_ROOT:?}"
+  exec "$@"
+fi
+export CARGO_TARGET_DIR="${FAKE_TARGET_ROOT:?}"
+configure_resource() {
+  local name="$1" policy="$2"
+  [[ -n "${!name:-}" ]] && return 0
+  case "$policy" in
+    auto|AUTO) unset "$name" ;;
+    *) export "$name=$policy" ;;
+  esac
+}
+configure_resource CARGO_BUILD_JOBS "${KANBAN_CARGO_BUILD_JOBS:-2}"
+configure_resource NEXTEST_TEST_THREADS "${KANBAN_TEST_THREADS:-2}"
+configure_resource RUST_TEST_THREADS "${KANBAN_TEST_THREADS:-2}"
+lock_path="${FAKE_TARGET_ROOT:?}/.build.lock"
+mkdir -p "${FAKE_TARGET_ROOT:?}"
+export KANBAN_CARGO_BUILD_LOCK_HELD=1
+export KANBAN_CARGO_BUILD_LOCK_PATH="$lock_path"
+export KANBAN_CARGO_BUILD_LOCK_FD=3
+exec /usr/bin/flock -n "$lock_path" "$@"
+EOF
+  chmod +x "$repo/scripts/cargo-build-lock.sh"
+
+  run_wrapper "$repo" "$target" "$state" "$log" env >/dev/null
+  (
+    unset CARGO_BUILD_JOBS NEXTEST_TEST_THREADS RUST_TEST_THREADS
+    KANBAN_CARGO_BUILD_JOBS=auto KANBAN_TEST_THREADS=auto \
+      run_wrapper "$repo" "$target" "$state" "$log" env >/dev/null
+  )
+
+  if run_wrapper "$repo" "$target" "$state" "$log" env \
+    CARGO_BUILD_JOBS=9 >/dev/null 2>&1; then
+    fail "caller-supplied CARGO_BUILD_JOBS override bypassed the outer release gate"
+  fi
+}
+
+assert_spoofed_lock_environment_is_rejected() {
+  local source_repo="$TMPROOT/source-lock-spoof"
+  local source_target="$TMPROOT/source-lock-spoof-target"
+  local source_state="$TMPROOT/source-lock-spoof-state"
+  local cohort_repo="$TMPROOT/cohort-lock-spoof"
+  local cohort_target="$TMPROOT/cohort-lock-spoof-target"
+  local cohort_state="$TMPROOT/cohort-lock-spoof-state"
+  local cohort_log="$TMPROOT/cohort-lock-spoof.log"
+
+  make_fake_repo "$source_repo"
+  mkdir -p "$source_target" "$source_state"
+  initialize_git_state "$source_state"
+  KANBAN_CARGO_BUILD_LOCK_HELD=1 \
+    CARGO_TARGET_DIR="$source_target" \
+    CARGO_BUILD_JOBS=9 \
+    FAKE_TARGET_ROOT="$source_target" \
+    FAKE_LOCK_LOG="$source_target/source-lock.log" \
+    assert_fails "source gate accepted marker/target lock spoof" \
+    run_gate "$source_repo" prepare --output "$source_target/source.json" \
+    >/dev/null
+
+  make_fake_repo "$cohort_repo"
+  mkdir -p "$cohort_target" "$cohort_state"
+  initialize_git_state "$cohort_state"
+  KANBAN_CARGO_BUILD_LOCK_HELD=1 \
+    CARGO_TARGET_DIR="$cohort_target" \
+    CARGO_BUILD_JOBS=9 \
+    assert_fails "release cohort accepted marker/target lock spoof" \
+    run_wrapper "$cohort_repo" "$cohort_target" "$cohort_state" "$cohort_log" env \
+    >/dev/null
+}
+
+assert_inherited_resource_limits_are_canonical() {
+  local repo="$TMPROOT/source-resource-limit-proof"
+  local target="$TMPROOT/source-resource-limit-proof-target"
+  local state="$TMPROOT/source-resource-limit-proof-state"
+
+  make_fake_repo "$repo"
+  initialize_git_state "$state"
+  mkdir -p "$target"
+  (
+    exec 9<>"$target/.build.lock"
+    /usr/bin/flock -n 9
+    export CARGO_TARGET_DIR="$target"
+    export KANBAN_CARGO_BUILD_LOCK_HELD=1
+    export KANBAN_CARGO_BUILD_LOCK_PATH="$target/.build.lock"
+    export KANBAN_CARGO_BUILD_LOCK_FD=9
+    export NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2 CARGO_BUILD_JOBS=9
+    export FAKE_TARGET_ROOT="$target" FAKE_LOCK_LOG="$target/source-lock.log"
+    assert_fails "source gate accepted valid-fd noncanonical CARGO_BUILD_JOBS" \
+      run_gate "$repo" prepare --output "$target/rejected.json" >/dev/null
+  )
+
+  (
+    exec 9<>"$target/.build.lock"
+    /usr/bin/flock -n 9
+    export CARGO_TARGET_DIR="$target"
+    export KANBAN_CARGO_BUILD_LOCK_HELD=1
+    export KANBAN_CARGO_BUILD_LOCK_PATH="$target/.build.lock"
+    export KANBAN_CARGO_BUILD_LOCK_FD=9
+    export CARGO_BUILD_JOBS=2 NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=2
+    export FAKE_TARGET_ROOT="$target" FAKE_LOCK_LOG="$target/source-lock.log"
+    run_gate "$repo" prepare --output "$target/canonical.json" >/dev/null
+  )
 }
 
 assert_live_embed_mutation_is_ignored() {
@@ -690,7 +859,7 @@ proxy = (
     f"live = pathlib.Path({str(live)!r})\n"
     f"state = pathlib.Path({str(state)!r})\n"
     f"original = pathlib.Path({str(original)!r})\n"
-    "result = subprocess.run(['/usr/bin/python3', str(original), *sys.argv[1:]])\n"
+    "result = subprocess.run(['/usr/bin/python3', str(original), *sys.argv[1:]], pass_fds=(3,))\n"
     "if result.returncode == 0 and sys.argv[1:2] == ['validate-file'] and any(\n"
     "    str(value).endswith('/release-safe-path.py') for value in sys.argv[1:]\n"
     "):\n"
@@ -810,13 +979,21 @@ for line in exec_log.read_text(encoding="utf-8").splitlines():
         value = re.sub(r"/proc/self/fd/[0-9]+", "<PINNED_FD>", value)
         normalized_argv.append(value)
     exec_rows.append({"argv": normalized_argv, "kind": row["kind"]})
-assert len(exec_rows) == 181
+assert len(exec_rows) == 311
 assert {row["kind"] for row in exec_rows} == {
     "build-lock",
     "dpkg-deb",
     "git",
     "helper",
     "just",
+}
+from collections import Counter
+assert Counter(row["kind"] for row in exec_rows) == {
+    "build-lock": 138,
+    "git": 127,
+    "dpkg-deb": 19,
+    "just": 15,
+    "helper": 12,
 }
 
 exec_payload = json.dumps(
@@ -825,7 +1002,7 @@ exec_payload = json.dumps(
     separators=(",", ":"),
 ).encode()
 assert hashlib.sha256(exec_payload).hexdigest() == (
-    "2375833bab73d2ec939835286700047f85020d7768770dd4de79d206b7edf04a"
+    "97066f670b5c5dfc597961780a70401753861fef733e6983cb57cb4a5c68629c"
 )
 
 generations = [path for path in cohort_root.iterdir() if path.is_dir()]
@@ -1283,16 +1460,44 @@ assert_cli_package_embeds_cohort() {
   run_gate "$repo" prepare --output "$manifest"
   build_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build_id"])' "$manifest")"
 
-  cat > "$repo/scripts/cargo-build-lock.sh" <<'EOF'
+cat > "$repo/scripts/cargo-build-lock.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "$*" == "--print-target-dir" ]]; then
   printf '%s\n' "${FAKE_TARGET_ROOT:?}"
   exit 0
 fi
+if [[ "$*" == "--verify-inherited-lock" ]]; then
+  [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]] || exit 2
+  [[ "${CARGO_TARGET_DIR:-}" == "${FAKE_TARGET_ROOT:?}" ]] || exit 2
+  [[ "${KANBAN_CARGO_BUILD_LOCK_PATH:-}" == "${FAKE_TARGET_ROOT:?}/.build.lock" ]] || exit 2
+  lock_fd="${KANBAN_CARGO_BUILD_LOCK_FD:-}"
+  [[ "$lock_fd" =~ ^[3-9][0-9]*$ && -e "/proc/self/fd/$lock_fd" ]] || exit 2
+  expected="$(stat -Lc '%d:%i:%h:%F' "${FAKE_TARGET_ROOT:?}/.build.lock")" || exit 2
+  [[ "$expected" == *":1:regular "* ]] || exit 2
+  inherited="$(stat -Lc '%d:%i:%h:%F' "/proc/self/fd/$lock_fd")" || exit 2
+  [[ "$inherited" == "$expected" ]] || exit 2
+  /usr/bin/flock -n "$lock_fd"
+  exit $?
+fi
 [[ "${1:-}" == "--" && $# -ge 2 ]] || exit 98
 shift
-KANBAN_CARGO_BUILD_LOCK_HELD=1 exec "$@"
+if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
+  export CARGO_TARGET_DIR="${FAKE_TARGET_ROOT:?}"
+  exec "$@"
+fi
+lock_path="${FAKE_TARGET_ROOT:?}/.build.lock"
+mkdir -p "${FAKE_TARGET_ROOT:?}"
+exec 3>"$lock_path"
+/usr/bin/flock -n 3
+export CARGO_TARGET_DIR="${FAKE_TARGET_ROOT:?}"
+export KANBAN_CARGO_BUILD_LOCK_HELD=1
+export KANBAN_CARGO_BUILD_LOCK_PATH="$lock_path"
+export KANBAN_CARGO_BUILD_LOCK_FD=3
+export CARGO_BUILD_JOBS=2
+export NEXTEST_TEST_THREADS=2
+export RUST_TEST_THREADS=2
+exec "$@"
 EOF
   cat > "$repo/scripts/package-source-provenance.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -2492,6 +2697,27 @@ PY
     ! -e "$published.published" ]] ||
     fail "verifier fd inheritance failure became authoritative"
 
+  generation="$root/generation-invalid-lock-proof"
+  published="$root/published-invalid-lock-proof"
+  mkdir -p "$generation"
+  printf 'invalid lock proof\n' >"$generation/artifact"
+  python3 "$SAFE_PATH" seal-tree --root "$root" --path "$generation"
+  digest="$(
+    python3 "$SAFE_PATH" tree-digest --root "$root" \
+      --path "$generation" --require-sealed
+  )"
+  output="$TMPROOT/invalid-lock-proof.output"
+  assert_fails "publish-dir partial inherited lock proof" \
+    env KANBAN_CARGO_BUILD_LOCK_HELD=1 \
+    CARGO_TARGET_DIR="$root/lock-target" \
+    python3 "$SAFE_PATH" publish-dir --root "$root" \
+      --source "$generation" --destination "$published" \
+      --expected-tree-sha256 "$digest" --verify-command /bin/true \
+      >"$output"
+  [[ -d "$generation" && ! -e "$published" &&
+    ! -e "$published.publishing" ]] ||
+    fail "partial inherited lock proof created a publish intent"
+
   generation="$root/generation-before-crash"
   published="$root/published-before-crash"
   mkdir -p "$generation/nested"
@@ -2720,6 +2946,9 @@ PY
   fail "missing committed Projection v2 source map"
 
 assert_source_gate
+assert_spoofed_lock_environment_is_rejected
+assert_inherited_resource_limits_are_canonical
+assert_build_lock_resource_environment_is_allowed
 assert_cohort_wrapper
 assert_live_embed_mutation_is_ignored
 assert_live_source_gate_mutation_is_ignored

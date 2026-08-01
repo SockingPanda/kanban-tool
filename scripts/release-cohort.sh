@@ -14,6 +14,47 @@ SEALED_SOURCE_GATE=""
 SEALED_SAFE_PATH=""
 RELEASE_FINISHED=0
 
+lock_environment_is_internal() {
+  local expected_target
+
+  [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-0}" == "1" ]] || return 1
+  [[ -n "${CARGO_TARGET_DIR:-}" ]] || return 1
+  expected_target="$("$LOCK" --print-target-dir 2>/dev/null)" || return 1
+  [[ "$CARGO_TARGET_DIR" == "$expected_target" ]] || return 1
+  "$LOCK" --verify-inherited-lock >/dev/null 2>&1
+  lock_resource_environment_is_internal
+}
+
+lock_resource_environment_is_internal() {
+  local build_policy="${KANBAN_CARGO_BUILD_JOBS:-}"
+  local test_policy="${KANBAN_TEST_THREADS:-}"
+  local build_set=0 nextest_set=0 rust_set=0
+
+  [[ -n "${CARGO_BUILD_JOBS+x}" ]] && build_set=1
+  [[ -n "${NEXTEST_TEST_THREADS+x}" ]] && nextest_set=1
+  [[ -n "${RUST_TEST_THREADS+x}" ]] && rust_set=1
+  case "$build_policy" in ""|2|auto|AUTO) ;; *) return 1 ;; esac
+  case "$test_policy" in ""|2|auto|AUTO) ;; *) return 1 ;; esac
+
+  if [[ "$build_set" == "0" && "$nextest_set" == "0" && "$rust_set" == "0" ]]; then
+    [[ "$build_policy" != "2" && "$test_policy" != "2" ]]
+    return
+  fi
+  [[ "$build_set" == "1" && "$nextest_set" == "1" && "$rust_set" == "1" ]] || return 1
+  [[ "${CARGO_BUILD_JOBS:-}" == "2" &&
+    "${NEXTEST_TEST_THREADS:-}" == "2" &&
+    "${RUST_TEST_THREADS:-}" == "2" ]] || return 1
+  [[ "$build_policy" != "auto" && "$build_policy" != "AUTO" &&
+    "$test_policy" != "auto" && "$test_policy" != "AUTO" ]]
+}
+
+require_inherited_lock_if_marked() {
+  if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]] &&
+    ! lock_environment_is_internal; then
+    fail "KANBAN_CARGO_BUILD_LOCK_HELD requires an inherited lock proof"
+  fi
+}
+
 fail() {
   echo "error: $*" >&2
   exit 1
@@ -35,8 +76,15 @@ reject_release_environment() {
         fi
         ;;
       CARGO_TARGET_*)
-        if [[ "$name" != "CARGO_TARGET_DIR" ||
-          "${KANBAN_CARGO_BUILD_LOCK_HELD:-0}" != "1" ]]; then
+        if [[ "$name" != "CARGO_TARGET_DIR" ]] ||
+          ! lock_environment_is_internal; then
+          if [[ "${!name+x}" == "x" ]]; then
+            fail "release refuses build-affecting environment override: $name"
+          fi
+        fi
+        ;;
+      CARGO_BUILD_JOBS|NEXTEST_TEST_THREADS|RUST_TEST_THREADS)
+        if ! lock_environment_is_internal; then
           if [[ "${!name+x}" == "x" ]]; then
             fail "release refuses build-affecting environment override: $name"
           fi
@@ -68,6 +116,7 @@ reject_release_environment() {
   done
 }
 
+require_inherited_lock_if_marked
 reject_release_environment
 
 [[ $# -eq 0 ]] || {

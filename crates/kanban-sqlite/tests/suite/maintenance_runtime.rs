@@ -689,7 +689,11 @@ fn maintenance_board_rebuild_rehydrates_both_stores_without_cross_board_leakage(
         &tantivy_generation_path,
         &before_invalid.database_instance_id,
         tantivy_generation,
-        &query("mixed new"),
+        // Tantivy's unquoted terms use disjunction semantics, so querying
+        // `mixed new` would also match the unchanged `keep new` document.
+        // Use the title token introduced by the uncommitted canonical change
+        // to make this assertion independent of query-term overlap.
+        &query("mixed"),
     )?;
     assert!(mixed_hits.is_empty());
     assert_eq!(

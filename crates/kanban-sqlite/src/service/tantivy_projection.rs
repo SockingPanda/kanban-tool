@@ -11,8 +11,9 @@ use kanban_search::{
     TaskSearchDocument,
     tantivy_backend::{
         TantivyTaskProjectionMetadata, TaskProjectionDocumentKey,
-        prepare_task_projection_generation, search_task_projection_generation_against,
-        sync_task_projection_generation, validate_task_projection_generation,
+        prepare_task_projection_generation, replace_task_projection_generation_board,
+        search_task_projection_generation_against, sync_task_projection_generation,
+        validate_task_projection_generation,
     },
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -21,7 +22,8 @@ use super::{
     ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
     ProjectionBatchReceipt, ProjectionDestructiveAuthority, ProjectionGenerationBinding,
     ProjectionGenerationRole, ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreBackend,
-    ProjectionStoreDescriptor, task_search_documents_for_task_ids,
+    ProjectionStoreDescriptor, task_search_documents, task_search_documents_for_task_ids,
+    validate_board_rebuild_delivery,
 };
 
 pub(crate) const TANTIVY_PROJECTION_PROVIDER: &str = "tantivy";
@@ -280,7 +282,21 @@ impl TantivyProjectionStore {
             })?;
         let metadata = metadata_from_evidence(&evidence)?;
         let conn = crate::db::connect_file(&self.db_path)?;
+        let rebuild_boards = authorized_board_rebuilds(&conn, batch)?;
+        // Complete authority and identity validation for the entire batch
+        // before touching any physical index state.  A later malformed
+        // delivery must not leave an earlier board replacement half-applied.
         let keys = affected_task_keys(&conn, batch)?;
+        // Read every canonical board snapshot and every affected task before
+        // opening or mutating Tantivy.  A later board read failure must not
+        // leave an earlier board replacement partially applied.
+        let board_documents = rebuild_boards
+            .iter()
+            .map(|board_id| {
+                task_search_documents(&conn, board_id)
+                    .map(|documents| (board_id.clone(), documents))
+            })
+            .collect::<Result<Vec<_>>>()?;
         let mut documents = Vec::new();
         let mut deletes = Vec::new();
         for (board_id, task_ids) in keys {
@@ -300,6 +316,15 @@ impl TantivyProjectionStore {
                     }),
             );
             documents.extend(current);
+        }
+        for (board_id, board_documents) in board_documents {
+            replace_task_projection_generation_board(
+                &generation_path,
+                &metadata,
+                &board_id,
+                &board_documents,
+            )
+            .map_err(search_storage)?;
         }
         sync_task_projection_generation(&generation_path, &metadata, &documents, &deletes)
             .map_err(search_storage)?;
@@ -1126,10 +1151,23 @@ impl ProjectionStoreBackend for TantivyProjectionStore {
 
 enum SourceEventTarget {
     Legacy,
-    Event {
-        task_id: Option<String>,
-        run_id: Option<String>,
-    },
+    Board,
+    Task { task_id: String },
+    Run { run_id: String, task_id: String },
+}
+
+fn authorized_board_rebuilds(
+    conn: &Connection,
+    batch: &ProjectionBatch,
+) -> Result<BTreeSet<String>> {
+    let mut boards = BTreeSet::new();
+    for item in &batch.items {
+        if item.entity_uri == format!("kb://board/{}", item.board_id) && item.action == "rebuild" {
+            validate_board_rebuild_delivery(conn, item, "tantivy")?;
+            boards.insert(item.board_id.clone());
+        }
+    }
+    Ok(boards)
 }
 
 fn affected_task_keys(
@@ -1143,7 +1181,7 @@ fn affected_task_keys(
             Some(source_event_id) => {
                 let event_target = conn
                     .query_row(
-                        "SELECT COALESCE(e.task_id,r.task_id),e.run_id
+                        "SELECT e.task_id,e.run_id,r.task_id
                  FROM task_events e
                  LEFT JOIN task_runs r ON r.board_id=e.board_id AND r.id=e.run_id
                  WHERE e.id=?1 AND e.board_id=?2",
@@ -1152,13 +1190,24 @@ fn affected_task_keys(
                             Ok((
                                 row.get::<_, Option<String>>(0)?,
                                 row.get::<_, Option<String>>(1)?,
+                                row.get::<_, Option<String>>(2)?,
                             ))
                         },
                     )
                     .optional()
                     .map_err(super::storage)?;
                 match event_target {
-                    Some((task_id, run_id)) => SourceEventTarget::Event { task_id, run_id },
+                    Some((Some(task_id), _, _)) => SourceEventTarget::Task { task_id },
+                    Some((None, Some(run_id), Some(task_id))) => {
+                        SourceEventTarget::Run { run_id, task_id }
+                    }
+                    Some((None, Some(_), None)) => {
+                        return Err(KanbanError::Conflict(format!(
+                            "Tantivy delivery {} source event run is missing or belongs to another board",
+                            item.id
+                        )));
+                    }
+                    Some((None, None, _)) => SourceEventTarget::Board,
                     None => {
                         return Err(KanbanError::Conflict(format!(
                             "Tantivy delivery {} source event is missing or belongs to another board",
@@ -1170,18 +1219,29 @@ fn affected_task_keys(
         };
 
         if item.entity_uri == format!("kb://board/{}", item.board_id) {
-            if matches!(
-                &event_target,
-                SourceEventTarget::Event {
-                    task_id: None,
-                    run_id: None
+            if item.action == "rebuild" {
+                validate_board_rebuild_delivery(conn, item, "tantivy")?;
+                continue;
+            }
+            if matches!(&event_target, SourceEventTarget::Board) {
+                if item.action != "upsert" {
+                    return Err(KanbanError::Conflict(format!(
+                        "Tantivy delivery {} cannot be mapped to a board-scoped {} action",
+                        item.id, item.action
+                    )));
                 }
-            ) {
                 continue;
             }
             return Err(KanbanError::Conflict(format!(
                 "Tantivy delivery {} cannot be mapped to a board-scoped entity",
                 item.id
+            )));
+        }
+
+        if !matches!(item.action.as_str(), "upsert" | "delete") {
+            return Err(KanbanError::Conflict(format!(
+                "Tantivy delivery {} cannot be mapped to a task action {}",
+                item.id, item.action
             )));
         }
 
@@ -1231,11 +1291,13 @@ fn affected_task_keys(
                 )));
             }
             match &event_target {
-                SourceEventTarget::Event {
-                    task_id: Some(event_task),
-                    run_id: Some(event_run),
+                SourceEventTarget::Run {
+                    run_id: event_run,
+                    task_id: event_task,
                 } if event_task.as_str() == task_id.as_str() && event_run.as_str() == run_id => {}
-                SourceEventTarget::Legacy | SourceEventTarget::Event { .. } => {
+                SourceEventTarget::Legacy
+                | SourceEventTarget::Board
+                | SourceEventTarget::Task { .. } => {
                     return Err(KanbanError::Conflict(format!(
                         "Tantivy delivery {} run does not match its source event",
                         item.id
@@ -1257,11 +1319,7 @@ fn affected_task_keys(
         if canonical_board
             .as_deref()
             .is_some_and(|board_id| board_id != item.board_id)
-            || (canonical_board.is_none()
-                && !matches!(&event_target, SourceEventTarget::Event {
-                    task_id: Some(event_task),
-                    ..
-                } if event_task.as_str() == task_id))
+            || (canonical_board.is_none() && item.action != "delete")
         {
             return Err(KanbanError::Conflict(format!(
                 "Tantivy delivery {} task cannot be proven to belong to its board",
@@ -1269,12 +1327,13 @@ fn affected_task_keys(
             )));
         }
         match &event_target {
-            SourceEventTarget::Legacy => {}
-            SourceEventTarget::Event {
-                task_id: Some(event_task),
-                ..
+            SourceEventTarget::Task {
+                task_id: event_task,
             } if event_task.as_str() == task_id => {}
-            SourceEventTarget::Event { .. } => {
+            SourceEventTarget::Legacy => {}
+            SourceEventTarget::Board
+            | SourceEventTarget::Task { .. }
+            | SourceEventTarget::Run { .. } => {
                 return Err(KanbanError::Conflict(format!(
                     "Tantivy delivery {} entity does not match its source event",
                     item.id
@@ -1659,6 +1718,11 @@ mod tests {
         )
         .unwrap();
         conn.execute(
+            "INSERT INTO task_events(id,board_id) VALUES (11,'default')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
             "INSERT INTO task_runs(id,board_id,task_id) VALUES ('r_source','default','t_source'),('r_other','other','t_other')",
             [],
         )
@@ -1712,16 +1776,35 @@ mod tests {
             affected_task_keys(&conn, &batch("kb://task/t_source/child", None)).unwrap_err();
         assert!(error.to_string().contains("cannot be mapped"), "{error}");
 
-        let keys = affected_task_keys(&conn, &batch("kb://task/t_deleted", Some(8))).unwrap();
+        let mut task_delete = batch("kb://task/t_deleted", Some(8));
+        task_delete.items[0].action = "delete".to_owned();
+        let keys = affected_task_keys(&conn, &task_delete).unwrap();
         assert!(
             keys.get("default")
                 .is_some_and(|ids| ids.contains("t_deleted"))
         );
 
+        let mut legacy_delete = batch("kb://task/t_deleted", None);
+        legacy_delete.items[0].action = "delete".to_owned();
+        let keys = affected_task_keys(&conn, &legacy_delete).unwrap();
+        assert!(
+            keys.get("default")
+                .is_some_and(|ids| ids.contains("t_deleted"))
+        );
+        let error = affected_task_keys(&conn, &batch("kb://task/t_deleted", None)).unwrap_err();
+        assert!(error.to_string().contains("cannot be proven"), "{error}");
+
         let keys = affected_task_keys(&conn, &batch("kb://run/r_source", Some(9))).unwrap();
         assert!(
             keys.get("default")
                 .is_some_and(|ids| ids.contains("t_source"))
+        );
+        let error = affected_task_keys(&conn, &batch("kb://task/t_source", Some(9))).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("does not match its source event"),
+            "{error}"
         );
 
         let error = affected_task_keys(&conn, &batch("kb://run/r_source", Some(7))).unwrap_err();
@@ -1736,8 +1819,36 @@ mod tests {
             error.to_string().contains("run cannot be proven"),
             "{error}"
         );
+        let error = affected_task_keys(&conn, &batch("kb://run/r_source", None)).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("run does not match its source event"),
+            "{error}"
+        );
         let error = affected_task_keys(&conn, &batch("kb://run/r_source/child", None)).unwrap_err();
         assert!(error.to_string().contains("cannot be mapped"), "{error}");
+
+        let mut task_rebuild = batch("kb://task/t_source", Some(7));
+        task_rebuild.items[0].action = "rebuild".to_owned();
+        let error = affected_task_keys(&conn, &task_rebuild).unwrap_err();
+        assert!(error.to_string().contains("cannot be mapped"), "{error}");
+
+        let mut run_rebuild = batch("kb://run/r_source", Some(9));
+        run_rebuild.items[0].action = "rebuild".to_owned();
+        let error = affected_task_keys(&conn, &run_rebuild).unwrap_err();
+        assert!(error.to_string().contains("cannot be mapped"), "{error}");
+
+        let mut board_delete = batch("kb://board/default", Some(11));
+        board_delete.items[0].action = "delete".to_owned();
+        let error = affected_task_keys(&conn, &board_delete).unwrap_err();
+        assert!(error.to_string().contains("cannot be mapped"), "{error}");
+
+        let keys = affected_task_keys(&conn, &batch("kb://task/t_source", None)).unwrap();
+        assert!(
+            keys.get("default")
+                .is_some_and(|ids| ids.contains("t_source"))
+        );
     }
 
     #[test]

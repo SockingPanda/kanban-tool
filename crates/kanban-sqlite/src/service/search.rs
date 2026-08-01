@@ -1030,7 +1030,10 @@ fn task_index_path(db_path: &Path) -> PathBuf {
 }
 
 #[cfg(feature = "tantivy-backend")]
-fn task_search_documents(conn: &Connection, board_id: &str) -> Result<Vec<TaskSearchDocument>> {
+pub(super) fn task_search_documents(
+    conn: &Connection,
+    board_id: &str,
+) -> Result<Vec<TaskSearchDocument>> {
     let mut stmt = conn
         .prepare(
             "SELECT t.id,t.board_id,t.seq,t.status,t.assignee,t.priority,t.created_at,t.updated_at,t.due_at,t.title,t.description,\

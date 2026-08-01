@@ -138,6 +138,61 @@ pub struct ProjectionDelivery {
     pub attempts: i64,
 }
 
+/// Validate the only board-scoped rebuild shape that may be applied to a
+/// task/relation projection generation.
+///
+/// A board rebuild has no source event because it is a canonical snapshot
+/// request (for example, the replace-import path).  Requiring the parent
+/// outbox row to target this store or `all` keeps a forged delivery from
+/// borrowing another store's authority, while the exact URI/action/payload
+/// checks prevent a legacy board upsert from becoming an implicit rebuild.
+pub(crate) fn validate_board_rebuild_delivery(
+    conn: &Connection,
+    item: &ProjectionDelivery,
+    expected_target: &str,
+) -> Result<()> {
+    let expected_uri = format!("kb://board/{}", item.board_id);
+    if item.source_event_id.is_some()
+        || item.action != "rebuild"
+        || item.entity_uri != expected_uri
+        || item.payload_json != "{}"
+    {
+        return Err(KanbanError::Conflict(format!(
+            "projection delivery {} cannot be mapped to an authorized board rebuild",
+            item.id
+        )));
+    }
+    let target = conn
+        .query_row(
+            "SELECT target FROM index_outbox WHERE id=?1 AND entity_uri=?2
+             AND action=?3 AND payload_json=?4 AND source_event_id IS NULL",
+            params![item.outbox_id, expected_uri, item.action, item.payload_json],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(storage)?;
+    if !matches!(target.as_deref(), Some("all")) && target.as_deref() != Some(expected_target) {
+        return Err(KanbanError::Conflict(format!(
+            "projection delivery {} cannot be mapped to an authorized board rebuild target for {}",
+            item.id, expected_target
+        )));
+    }
+    let board_exists: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM boards WHERE id=?1)",
+            [&item.board_id],
+            |row| row.get(0),
+        )
+        .map_err(storage)?;
+    if !board_exists {
+        return Err(KanbanError::Conflict(format!(
+            "projection delivery {} board {} does not exist",
+            item.id, item.board_id
+        )));
+    }
+    Ok(())
+}
+
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectionBatch {
     pub store_name: String,

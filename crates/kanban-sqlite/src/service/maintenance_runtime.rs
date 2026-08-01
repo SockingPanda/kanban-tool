@@ -2593,7 +2593,16 @@ mod target_validation_tests {
 
 #[cfg(test)]
 mod unleased_failure_tests {
-    use std::cell::Cell;
+    use std::{
+        cell::Cell,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+            mpsc,
+        },
+        thread,
+        time::Duration,
+    };
 
     use rusqlite::params;
     use tempfile::tempdir;
@@ -2612,6 +2621,290 @@ mod unleased_failure_tests {
             lifecycle_status: "error".to_owned(),
             fallback_reason: Some("physical_generation_unavailable".to_owned()),
         }
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum ExpiringAuthority {
+        MaintenanceOwner,
+        ProjectionStore,
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct RawTableSnapshot {
+        columns: Vec<String>,
+        rows: Vec<Vec<rusqlite::types::Value>>,
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct FailureAuthoritySnapshot {
+        maintenance_owner: RawTableSnapshot,
+        stores: RawTableSnapshot,
+    }
+
+    fn raw_table_snapshot(
+        conn: &rusqlite::Connection,
+        sql: &str,
+    ) -> anyhow::Result<RawTableSnapshot> {
+        let mut statement = conn.prepare(sql)?;
+        let columns = statement
+            .column_names()
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        let column_count = statement.column_count();
+        let rows = statement
+            .query_map([], |row| {
+                (0..column_count)
+                    .map(|index| row.get::<_, rusqlite::types::Value>(index))
+                    .collect::<rusqlite::Result<Vec<_>>>()
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(RawTableSnapshot { columns, rows })
+    }
+
+    fn failure_authority_snapshot(
+        conn: &rusqlite::Connection,
+    ) -> anyhow::Result<FailureAuthoritySnapshot> {
+        // Keep these as SELECT * snapshots.  The failure-authority proof must
+        // include every owner/store column (tokens, identity, generations,
+        // corpus/provider bindings, cursors, delivery counters, lifecycle,
+        // lease, success/error and updated timestamps), not a hand-picked
+        // status projection that can silently omit a field.
+        let maintenance_owner = raw_table_snapshot(
+            conn,
+            "SELECT * FROM projection_maintenance_owner WHERE singleton=1",
+        )?;
+        if maintenance_owner.rows.len() != 1 {
+            return Err(anyhow::anyhow!(
+                "projection maintenance owner snapshot must contain one row"
+            ));
+        }
+        let stores = raw_table_snapshot(
+            conn,
+            "SELECT * FROM projection_store_state ORDER BY store_name",
+        )?;
+        Ok(FailureAuthoritySnapshot {
+            maintenance_owner,
+            stores,
+        })
+    }
+
+    fn join_failure_finalizer(
+        probe: &WriterBlockProbe,
+        resume_tx: &mpsc::Sender<()>,
+        finalizer: thread::JoinHandle<Result<MaintenanceStoreRun>>,
+    ) -> anyhow::Result<Result<MaintenanceStoreRun>> {
+        probe.cancel();
+        let _ = resume_tx.send(());
+        finalizer
+            .join()
+            .map_err(|_| anyhow::anyhow!("stale finalizer thread must not panic"))
+    }
+
+    fn assert_expired_authority_is_not_finalized(
+        authority: ExpiringAuthority,
+    ) -> anyhow::Result<()> {
+        const LIVE_NOW: i64 = 10_000;
+        const EXPIRY: i64 = 20_000;
+        const EXPIRED_NOW: i64 = 20_001;
+
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let session = MaintenanceSession::start(
+            &db_path,
+            "maintenance-owner",
+            MaintenanceMode::Once,
+            MaintenanceRunOptions::default(),
+        )?;
+        let lease = acquire_projection_lease(
+            &db_path,
+            TANTIVY_TASKS_STORE,
+            &session.owner,
+            session.options.lease_ttl_ms,
+        )?;
+
+        const { assert!(LIVE_NOW < EXPIRY) };
+        let clock_advanced = Arc::new(AtomicBool::new(false));
+        let probe = WriterBlockProbe::new();
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (resume_tx, resume_rx) = mpsc::channel();
+        let lease_for_thread = lease.clone();
+        let owner_for_thread = session.owner.clone();
+        let token_for_thread = session.lease_token.clone();
+        let identity_for_thread = session.identity.clone();
+        let path_for_thread = db_path.clone();
+        let clock_advanced_for_thread = Arc::clone(&clock_advanced);
+        let probe_for_thread = Arc::clone(&probe);
+        let finalizer = thread::spawn(move || {
+            persist_store_failure_with_test_now(
+                MaintenanceFailurePersistenceInput {
+                    path: &path_for_thread,
+                    store_name: TANTIVY_TASKS_STORE,
+                    display_name: "Tantivy",
+                    lease: &lease_for_thread,
+                    maintenance_owner: &owner_for_thread,
+                    maintenance_lease_token: &token_for_thread,
+                    maintenance_identity: &identity_for_thread,
+                },
+                MaintenanceStoreFailureKind::Backend,
+                KanbanError::Storage("stale failure after writer barrier".to_owned()),
+                move |_conn| {
+                    // Ready is sent only after the common persistence path
+                    // installed the busy handler on this exact connection.
+                    // The main thread starts its outer BEGIN IMMEDIATE only
+                    // after receiving that witness, so PRAGMA/WAL setup
+                    // cannot contend before the handler exists.
+                    ready_tx.send(()).map_err(|error| {
+                        KanbanError::Storage(format!("ready stale finalizer: {error}"))
+                    })?;
+                    resume_rx.recv().map_err(|error| {
+                        KanbanError::Storage(format!("resume stale finalizer: {error}"))
+                    })?;
+                    Ok(())
+                },
+                move || {
+                    if clock_advanced_for_thread.load(Ordering::SeqCst) {
+                        EXPIRED_NOW
+                    } else {
+                        LIVE_NOW
+                    }
+                },
+                probe_for_thread,
+            )
+        });
+        if let Err(error) = ready_rx.recv_timeout(Duration::from_secs(2)) {
+            let _ = join_failure_finalizer(&probe, &resume_tx, finalizer);
+            return Err(anyhow::anyhow!(
+                "finalizer did not install its busy handler before ready: {error}"
+            ));
+        }
+
+        // This is the production-shaped outer maintenance writer barrier.
+        // It starts only after the finalizer connection has installed the
+        // handler and is paused at the ready/resume gate.
+        let barrier_conn = match connect_file(&db_path) {
+            Ok(conn) => conn,
+            Err(error) => {
+                let _ = join_failure_finalizer(&probe, &resume_tx, finalizer);
+                return Err(error.into());
+            }
+        };
+        if let Err(error) = barrier_conn.execute_batch("BEGIN IMMEDIATE") {
+            let _ = barrier_conn.execute_batch("ROLLBACK");
+            let _ = join_failure_finalizer(&probe, &resume_tx, finalizer);
+            return Err(error.into());
+        }
+
+        // Shorten exactly one authority while the outer transaction is held.
+        // The finalizer has already opened its connection and is paused before
+        // BEGIN IMMEDIATE, so the update below is the production-shaped
+        // pre-lock window. Every UPDATE is an explicit CAS, not a blind test
+        // fixture mutation.
+        let changed = match authority {
+            ExpiringAuthority::MaintenanceOwner => barrier_conn.execute(
+                "UPDATE projection_maintenance_owner
+                 SET lease_expires_at=?1
+                 WHERE singleton=1 AND owner=?2 AND lease_token=?3",
+                params![EXPIRY, session.owner.as_str(), session.lease_token.as_str()],
+            ),
+            ExpiringAuthority::ProjectionStore => barrier_conn.execute(
+                "UPDATE projection_store_state
+                 SET lease_expires_at=?1
+                 WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                params![
+                    EXPIRY,
+                    TANTIVY_TASKS_STORE,
+                    lease.owner.as_str(),
+                    lease.lease_token.as_str()
+                ],
+            ),
+        };
+        let changed = match changed {
+            Ok(changed) => changed,
+            Err(error) => {
+                probe.cancel();
+                let _ = barrier_conn.execute_batch("ROLLBACK");
+                let _ = join_failure_finalizer(&probe, &resume_tx, finalizer);
+                return Err(error.into());
+            }
+        };
+        if changed != 1 {
+            probe.cancel();
+            let _ = barrier_conn.execute_batch("ROLLBACK");
+            let _ = join_failure_finalizer(&probe, &resume_tx, finalizer);
+            return Err(anyhow::anyhow!(
+                "expiry fixture CAS changed {changed} rows for {authority:?}"
+            ));
+        }
+        // Capture the exact post-CAS rows before handing the finalizer its
+        // resume signal.  This snapshot is the oracle; no wall-clock-derived
+        // `ProjectionStatus.active` field participates in the assertion.
+        let after_expiry = match failure_authority_snapshot(&barrier_conn) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                probe.cancel();
+                let _ = barrier_conn.execute_batch("ROLLBACK");
+                let _ = join_failure_finalizer(&probe, &resume_tx, finalizer);
+                return Err(error);
+            }
+        };
+        if let Err(error) = resume_tx.send(()) {
+            probe.cancel();
+            let _ = barrier_conn.execute_batch("ROLLBACK");
+            let _ = join_failure_finalizer(&probe, &resume_tx, finalizer);
+            return Err(anyhow::anyhow!("resume stale finalizer: {error}"));
+        }
+
+        // The finalizer now executes the real BEGIN IMMEDIATE against the
+        // held outer writer.  The test-only busy handler reports SQLite's
+        // actual `WriterLockContended` witness; only after that witness does
+        // the injected clock advance.  Thus any pre-BEGIN timestamp sample
+        // sees LIVE_NOW, while the production post-BEGIN sample sees
+        // EXPIRED_NOW.
+        let contention_deadline = std::time::Instant::now() + Duration::from_secs(2);
+        if !probe.wait_for_contention(contention_deadline) {
+            probe.cancel();
+            let _ = barrier_conn.execute_batch("ROLLBACK");
+            let _ = join_failure_finalizer(&probe, &resume_tx, finalizer);
+            return Err(anyhow::anyhow!(
+                "finalizer did not produce a SQLite WriterLockContended witness"
+            ));
+        }
+        clock_advanced.store(true, Ordering::SeqCst);
+
+        if let Err(error) = barrier_conn.execute_batch("COMMIT") {
+            probe.cancel();
+            let _ = barrier_conn.execute_batch("ROLLBACK");
+            let _ = join_failure_finalizer(&probe, &resume_tx, finalizer);
+            return Err(error.into());
+        }
+        // Release only after COMMIT has removed the real SQLite writer
+        // contention; the handler then retries BEGIN and the post-lock
+        // authority check returns Conflict without mutating either table.
+        probe.release();
+        let result = finalizer
+            .join()
+            .map_err(|_| anyhow::anyhow!("stale finalizer thread must not panic"))?;
+        assert!(
+            matches!(result, Err(KanbanError::Conflict(_))),
+            "expired authority must fail closed, got {result:?}"
+        );
+
+        let after = failure_authority_snapshot(&barrier_conn)?;
+        assert_eq!(after, after_expiry);
+        drop(session);
+        Ok(())
+    }
+
+    #[test]
+    fn failure_finalizer_rejects_expired_owner_after_writer_barrier() -> anyhow::Result<()> {
+        assert_expired_authority_is_not_finalized(ExpiringAuthority::MaintenanceOwner)
+    }
+
+    #[test]
+    fn failure_finalizer_rejects_expired_store_after_writer_barrier() -> anyhow::Result<()> {
+        assert_expired_authority_is_not_finalized(ExpiringAuthority::ProjectionStore)
     }
 
     #[test]

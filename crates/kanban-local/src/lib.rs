@@ -1043,6 +1043,55 @@ struct DerivedLockFileIdentity {
     file_id: [u8; 16],
 }
 
+/// Stable identity of one regular, singly-linked database/journal file.
+///
+/// Unix uses the device/inode pair and Windows uses the volume serial number
+/// plus the native file identifier returned by `FILE_ID_INFO`. Unsupported
+/// platforms return `io::ErrorKind::Unsupported` instead of falling back to a
+/// size/timestamp fingerprint.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DatabaseFileIdentity {
+    pub volume: u64,
+    pub file_id: [u8; 16],
+}
+
+/// Opens an existing regular file without following a symlink or reparse
+/// point, using the same native primitive as database identity checks.
+pub fn open_database_file_for_identity(path: &Path) -> io::Result<std::fs::File> {
+    let file = open_existing_lock_file(path, false)?;
+    database_file_identity_from_file(&file)?;
+    Ok(file)
+}
+
+/// Reads a stable identity from an existing regular file without following a
+/// symlink or accepting a path/handle substitution during the check.
+pub fn database_file_identity(path: &Path) -> io::Result<DatabaseFileIdentity> {
+    let file = open_existing_lock_file(path, false)?;
+    validate_database_lock_file(path, &file)?;
+    database_file_identity_from_file(&file)
+}
+
+/// Reads the stable identity from an already-open regular file handle.
+pub fn database_file_identity_from_file(file: &std::fs::File) -> io::Result<DatabaseFileIdentity> {
+    let snapshot = snapshot_open_lock_file(file)?;
+    if !snapshot.regular_non_reparse {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "database file identity requires a regular non-reparse file",
+        ));
+    }
+    if snapshot.link_count != 1 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "database file identity requires exactly one filesystem link",
+        ));
+    }
+    Ok(DatabaseFileIdentity {
+        volume: snapshot.identity.volume,
+        file_id: snapshot.identity.file_id,
+    })
+}
+
 fn snapshot_open_directory(
     path: &Path,
     file: &std::fs::File,
@@ -2522,6 +2571,37 @@ mod tests {
         fs::rename(&guarded, &replacement).unwrap();
         fs::rename(&displaced, &guarded).unwrap();
         guard.validate_path_identity().unwrap();
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn database_file_identity_binds_path_and_open_handle() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let first = tempdir.path().join("first");
+        let second = tempdir.path().join("second");
+        fs::write(&first, b"first").unwrap();
+        fs::write(&second, b"second").unwrap();
+
+        let path_identity = database_file_identity(&first).unwrap();
+        let file = std::fs::File::open(&first).unwrap();
+        assert_eq!(
+            path_identity,
+            database_file_identity_from_file(&file).unwrap()
+        );
+        assert_ne!(path_identity, database_file_identity(&second).unwrap());
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    #[test]
+    fn database_file_identity_is_unsupported_without_native_file_ids() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().join("database");
+        fs::write(&path, b"database").unwrap();
+
+        assert_eq!(
+            database_file_identity(&path).unwrap_err().kind(),
+            io::ErrorKind::Unsupported
+        );
     }
 
     #[test]

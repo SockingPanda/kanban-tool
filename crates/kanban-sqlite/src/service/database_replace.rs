@@ -14,8 +14,9 @@ use std::{
 
 use kanban_core::{KanbanError, Result};
 use kanban_local::{
+    DatabaseFileIdentity, database_file_identity, database_file_identity_from_file,
     durable_create_new_file, durable_move_file_no_replace, durable_replace_file_contents,
-    durable_sync_directory,
+    durable_sync_directory, open_database_file_for_identity,
 };
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};

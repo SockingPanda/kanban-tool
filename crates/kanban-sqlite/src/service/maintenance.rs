@@ -575,7 +575,7 @@ impl DatabaseReplaceGuard {
                 "replacement placeholder previous path changed to a non-regular file".to_owned(),
             ));
         }
-        let actual = super::database_replace::identity_from_metadata(&metadata);
+        let actual = super::database_replace::file_identity(path)?;
         if !super::database_replace::same_file_identity(expected, &actual) {
             return Err(KanbanError::Conflict(
                 "replacement placeholder previous identity no longer matches journal evidence"

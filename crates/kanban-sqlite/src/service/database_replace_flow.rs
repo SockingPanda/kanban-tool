@@ -259,16 +259,12 @@ where
     Hook: FnMut(PublishFailpoint) -> Result<()>,
 {
     validate_journal_paths(journal, &journal.journal_path)?;
-    if journal.format_version != JOURNAL_FORMAT_VERSION {
-        return Err(KanbanError::InvalidInput(format!(
-            "unsupported database replacement journal format: {}",
-            journal.format_version
-        )));
-    }
+    validate_journal_format_version(journal)?;
 
     if matches!(&journal.phase, JournalPhase::Completed) {
-        validate_completed_journal(journal)?;
         guard.validate_database_identities()?;
+        validate_completed_journal(journal)?;
+        validate_completed_canonical_location(journal)?;
         cleanup_placeholder_previous(guard, journal)?;
         return report_for(journal);
     }

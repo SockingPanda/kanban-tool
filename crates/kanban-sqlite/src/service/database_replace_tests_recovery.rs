@@ -102,6 +102,120 @@ fn completed_journal_rejects_retained_staged_evidence() {
     drop(restarted);
 }
 
+#[test]
+fn completed_journal_allows_normal_canonical_mutation_before_recovery() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let canonical = tempdir.path().join("canonical.db");
+    let staged = tempdir.path().join("staged.db");
+    let previous = tempdir.path().join("previous.db");
+    let journal = tempdir.path().join("replace.journal");
+    init_database(&canonical, "tester").unwrap();
+    init_database(&staged, "tester").unwrap();
+
+    let mut guard = super::super::begin_database_replace(&canonical).unwrap();
+    publish_staged_database(&mut guard, &canonical, &staged, &previous, &journal).unwrap();
+    drop(guard);
+
+    // A completed journal is durable recovery evidence, not an immutable
+    // content snapshot. Normal SQLite activity may change the canonical
+    // inode's length/mtime before a later import quarantines the journal.
+    let connection = crate::db::connect_file(&canonical).unwrap();
+    connection
+        .execute_batch("CREATE TABLE completed_journal_mutation(value TEXT);")
+        .unwrap();
+    drop(connection);
+
+    let mut restarted = super::super::begin_database_replace(&canonical).unwrap();
+    resume_staged_database_replace(&mut restarted, &journal).unwrap();
+    drop(restarted);
+}
+
+#[test]
+fn read_journal_rejects_legacy_v1_format() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let canonical = tempdir.path().join("canonical.db");
+    let staged = tempdir.path().join("staged.db");
+    let previous = tempdir.path().join("previous.db");
+    let journal = tempdir.path().join("replace.journal");
+    init_database(&canonical, "tester").unwrap();
+    init_database(&staged, "tester").unwrap();
+
+    let mut guard = super::super::begin_database_replace(&canonical).unwrap();
+    publish_staged_database(&mut guard, &canonical, &staged, &previous, &journal).unwrap();
+    drop(guard);
+
+    let mut legacy: DatabaseReplaceJournal =
+        serde_json::from_slice(&fs::read(&journal).unwrap()).unwrap();
+    legacy.format_version = 1;
+    fs::write(&journal, serde_json::to_vec_pretty(&legacy).unwrap()).unwrap();
+
+    let error = read_journal(&journal).unwrap_err();
+    assert!(error.to_string().contains("unsupported database replacement journal format: 1"));
+}
+
+#[test]
+fn resume_rejects_unknown_journal_format_before_recovery() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let canonical = tempdir.path().join("canonical.db");
+    let staged = tempdir.path().join("staged.db");
+    let previous = tempdir.path().join("previous.db");
+    let journal = tempdir.path().join("replace.journal");
+    init_database(&canonical, "tester").unwrap();
+    init_database(&staged, "tester").unwrap();
+
+    let mut guard = super::super::begin_database_replace(&canonical).unwrap();
+    publish_staged_database(&mut guard, &canonical, &staged, &previous, &journal).unwrap();
+    drop(guard);
+
+    let mut unknown: DatabaseReplaceJournal =
+        serde_json::from_slice(&fs::read(&journal).unwrap()).unwrap();
+    unknown.format_version = 99;
+    fs::write(&journal, serde_json::to_vec_pretty(&unknown).unwrap()).unwrap();
+
+    let mut restarted = super::super::begin_database_replace(&canonical).unwrap();
+    let error = resume_staged_database_replace(&mut restarted, &journal).unwrap_err();
+    assert!(error.to_string().contains("unsupported database replacement journal format: 99"));
+    assert!(journal.is_file());
+    drop(restarted);
+}
+
+#[test]
+fn legacy_file_identity_is_not_accepted_without_stable_native_id() {
+    let legacy = FileIdentity {
+        device: 7,
+        inode: 11,
+        file_id_high: None,
+        length: 13,
+        modified_ns: 17,
+    };
+    let stable = FileIdentity {
+        device: 7,
+        inode: 11,
+        file_id_high: Some(0),
+        length: 13,
+        modified_ns: 17,
+    };
+
+    assert_eq!(same_file_identity(&legacy, &stable), cfg!(unix));
+    assert_eq!(same_file_location_identity(&legacy, &stable), cfg!(unix));
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn replacement_file_identity_uses_native_path_identity() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let first = tempdir.path().join("first.db");
+    let second = tempdir.path().join("second.db");
+    init_database(&first, "tester").unwrap();
+    init_database(&second, "tester").unwrap();
+
+    let first_identity = file_identity(&first).unwrap();
+    let second_identity = file_identity(&second).unwrap();
+    assert!(first_identity.file_id_high.is_some());
+    assert!(second_identity.file_id_high.is_some());
+    assert!(!same_file_location_identity(&first_identity, &second_identity));
+}
+
 #[cfg(unix)]
 #[test]
 fn read_journal_rejects_symlink_entries_before_parsing() {
@@ -115,6 +229,25 @@ fn read_journal_rejects_symlink_entries_before_parsing() {
 
     let error = read_journal(&journal).unwrap_err();
     assert!(error.to_string().contains("regular file"));
+}
+
+#[cfg(unix)]
+#[test]
+fn read_journal_rejects_regular_entry_replaced_after_open() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let journal = tempdir.path().join("replace.journal");
+    let replacement = tempdir.path().join("replacement.journal");
+    fs::write(&journal, br#"{"phase":"completed"}"#).unwrap();
+    fs::write(&replacement, br#"{"phase":"replaced"}"#).unwrap();
+
+    let error = read_journal_with_hook(&journal, || {
+        fs::remove_file(&journal).map_err(storage)?;
+        fs::rename(&replacement, &journal).map_err(storage)?;
+        Ok(())
+    })
+    .unwrap_err();
+    assert!(error.to_string().contains("path changed"));
+    assert_eq!(fs::read(&journal).unwrap(), br#"{"phase":"replaced"}"#);
 }
 
 #[cfg(unix)]

@@ -1,4 +1,4 @@
-const JOURNAL_FORMAT_VERSION: u32 = 1;
+const JOURNAL_FORMAT_VERSION: u32 = 2;
 
 /// Durable evidence returned after a staged database is published.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,21 +63,20 @@ struct DatabaseReplaceJournal {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct FileIdentity {
-    /// Unix uses device/inode. Other platforms retain a conservative metadata
-    /// fingerprint while the lifecycle guard remains the authority.
+    /// Stable device/volume identity.
     device: u64,
+    /// Unix inode, or the low 64 bits of the native Windows file identifier.
     inode: u64,
+    /// High 64 bits of the native Windows file identifier. `None` marks a
+    /// legacy journal written before stable non-Unix identities were stored.
+    #[serde(default)]
+    file_id_high: Option<u64>,
     length: u64,
     modified_ns: u128,
 }
 
 fn validate_journal_paths(journal: &DatabaseReplaceJournal, journal_path: &Path) -> Result<()> {
-    if journal.format_version != JOURNAL_FORMAT_VERSION {
-        return Err(KanbanError::InvalidInput(format!(
-            "unsupported database replacement journal format: {}",
-            journal.format_version
-        )));
-    }
+    validate_journal_format_version(journal)?;
     let canonical = normalized_path(&journal.canonical_path)?;
     let staged = normalized_path(&journal.staged_path)?;
     let previous = normalized_path(&journal.previous_path)?;
@@ -93,6 +92,16 @@ fn validate_journal_paths(journal: &DatabaseReplaceJournal, journal_path: &Path)
         return Err(KanbanError::Conflict(
             "replacement journal contains non-canonical or mismatched paths".to_owned(),
         ));
+    }
+    Ok(())
+}
+
+fn validate_journal_format_version(journal: &DatabaseReplaceJournal) -> Result<()> {
+    if journal.format_version != JOURNAL_FORMAT_VERSION {
+        return Err(KanbanError::InvalidInput(format!(
+            "unsupported database replacement journal format: {}",
+            journal.format_version
+        )));
     }
     Ok(())
 }
@@ -212,31 +221,32 @@ impl io::Write for Sha256Writer<'_> {
     }
 }
 
-fn file_identity(path: &Path) -> Result<FileIdentity> {
-    Ok(identity_from_metadata(
-        &fs::metadata(path).map_err(storage)?,
-    ))
+pub(super) fn file_identity(path: &Path) -> Result<FileIdentity> {
+    let metadata = fs::metadata(path).map_err(storage)?;
+    let stable = database_file_identity(path).map_err(storage)?;
+    Ok(identity_from_stable_metadata(&metadata, stable))
 }
 
-pub(super) fn identity_from_metadata(metadata: &Metadata) -> FileIdentity {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt as _;
-        FileIdentity {
-            device: metadata.dev(),
-            inode: metadata.ino(),
-            length: metadata.len(),
-            modified_ns: modified_ns(metadata),
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        FileIdentity {
-            device: 0,
-            inode: metadata.len(),
-            length: metadata.len(),
-            modified_ns: modified_ns(metadata),
-        }
+fn file_identity_from_file(file: &File) -> Result<FileIdentity> {
+    let metadata = file.metadata().map_err(storage)?;
+    let stable = database_file_identity_from_file(file).map_err(storage)?;
+    Ok(identity_from_stable_metadata(&metadata, stable))
+}
+
+fn identity_from_stable_metadata(
+    metadata: &Metadata,
+    stable: DatabaseFileIdentity,
+) -> FileIdentity {
+    let mut low_bytes = [0_u8; 8];
+    let mut high_bytes = [0_u8; 8];
+    low_bytes.copy_from_slice(&stable.file_id[..8]);
+    high_bytes.copy_from_slice(&stable.file_id[8..]);
+    FileIdentity {
+        device: stable.volume,
+        inode: u64::from_be_bytes(low_bytes),
+        file_id_high: Some(u64::from_be_bytes(high_bytes)),
+        length: metadata.len(),
+        modified_ns: modified_ns(metadata),
     }
 }
 
@@ -250,46 +260,76 @@ fn modified_ns(metadata: &Metadata) -> u128 {
 }
 
 pub(super) fn same_file_identity(left: &FileIdentity, right: &FileIdentity) -> bool {
+    if left.device != right.device
+        || left.inode != right.inode
+        || left.length != right.length
+        || left.modified_ns != right.modified_ns
+    {
+        return false;
+    }
+    match (left.file_id_high, right.file_id_high) {
+        (Some(left), Some(right)) => left == right,
+        _ => cfg!(unix),
+    }
+}
+
+/// Compares the retained namespace identity without treating normal writes to
+/// the same canonical SQLite inode as a replacement. Native stable file IDs
+/// are required; legacy records without one fail closed off Unix.
+pub(super) fn same_file_location_identity(left: &FileIdentity, right: &FileIdentity) -> bool {
     left.device == right.device
         && left.inode == right.inode
-        && left.length == right.length
-        && left.modified_ns == right.modified_ns
+        && match (left.file_id_high, right.file_id_high) {
+            (Some(left), Some(right)) => left == right,
+            _ => cfg!(unix),
+        }
 }
 
 fn read_journal(path: &Path) -> Result<DatabaseReplaceJournal> {
-    let before = fs::symlink_metadata(path).map_err(storage)?;
-    if !before.is_file() {
-        return Err(KanbanError::InvalidInput(format!(
-            "replacement journal is not a regular file: {}",
-            path.display()
-        )));
-    }
+    read_journal_with_hook(path, || Ok(()))
+}
+
+fn read_journal_with_hook<Hook>(
+    path: &Path,
+    mut after_open: Hook,
+) -> Result<DatabaseReplaceJournal>
+where
+    Hook: FnMut() -> Result<()>,
+{
     // Read through an opened file descriptor and bind it to the directory
-    // entry observed with `symlink_metadata`. This rejects a journal symlink
-    // and detects a path swap between the no-follow check and the open/read;
-    // the subsequent path/guard validation still binds the parsed journal to
-    // the caller's canonical database authority.
-    let mut file = File::open(path).map_err(storage)?;
-    let opened = file.metadata().map_err(storage)?;
-    let after = fs::symlink_metadata(path).map_err(storage)?;
-    if !after.is_file()
-        || !same_file_identity(
-            &identity_from_metadata(&before),
-            &identity_from_metadata(&opened),
-        )
-        || !same_file_identity(
-            &identity_from_metadata(&before),
-            &identity_from_metadata(&after),
-        )
-    {
+    // entry observed through the same no-follow handle. This rejects a
+    // journal symlink and detects a path swap between opening and each path
+    // identity check; the subsequent path/guard validation still binds the
+    // parsed journal to the caller's canonical database authority.
+    let mut file = open_database_file_for_identity(path).map_err(|error| {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if !metadata.is_file() => KanbanError::InvalidInput(format!(
+                "replacement journal is not a regular file: {}",
+                path.display()
+            )),
+            _ => storage(error),
+        }
+    })?;
+    let opened_identity = file_identity_from_file(&file)?;
+    after_open()?;
+    let before_identity = file_identity(path)?;
+    if !same_file_identity(&opened_identity, &before_identity) {
         return Err(KanbanError::Conflict(
             "replacement journal path changed while being opened".to_owned(),
         ));
     }
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes).map_err(storage)?;
-    serde_json::from_slice(&bytes)
-        .map_err(|error| KanbanError::InvalidInput(format!("invalid replacement journal: {error}")))
+    let after_identity = file_identity(path)?;
+    if !same_file_identity(&opened_identity, &after_identity) {
+        return Err(KanbanError::Conflict(
+            "replacement journal path changed while being read".to_owned(),
+        ));
+    }
+    let journal = serde_json::from_slice(&bytes)
+        .map_err(|error| KanbanError::InvalidInput(format!("invalid replacement journal: {error}")))?;
+    validate_journal_format_version(&journal)?;
+    Ok(journal)
 }
 
 fn write_new_journal(journal: &DatabaseReplaceJournal) -> Result<()> {

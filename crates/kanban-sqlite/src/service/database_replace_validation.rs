@@ -90,14 +90,6 @@ fn validate_staged_binding_connection(
 fn validate_completed_journal(journal: &DatabaseReplaceJournal) -> Result<()> {
     require_regular_file(&journal.canonical_path, "canonical database")?;
     require_absent(&journal.staged_path, "staged database")?;
-    if !same_file_identity(
-        &journal.staged_identity,
-        &file_identity(&journal.canonical_path)?,
-    ) {
-        return Err(KanbanError::Conflict(
-            "completed replacement canonical identity does not match staged identity".to_owned(),
-        ));
-    }
     if journal.placeholder_previous {
         let previous_identity = journal.previous_identity.as_ref().ok_or_else(|| {
             KanbanError::Conflict(
@@ -106,7 +98,7 @@ fn validate_completed_journal(journal: &DatabaseReplaceJournal) -> Result<()> {
         })?;
         match fs::symlink_metadata(&journal.previous_path) {
             Ok(metadata) if metadata.is_file() => {
-                let actual = identity_from_metadata(&metadata);
+                let actual = file_identity(&journal.previous_path)?;
                 if !same_file_identity(previous_identity, &actual) {
                     return Err(KanbanError::Conflict(
                         "completed replacement placeholder previous identity no longer matches retained evidence"
@@ -140,8 +132,28 @@ fn validate_completed_journal(journal: &DatabaseReplaceJournal) -> Result<()> {
     Ok(())
 }
 
+fn validate_completed_canonical_location(journal: &DatabaseReplaceJournal) -> Result<()> {
+    if !same_file_location_identity(
+        &journal.staged_identity,
+        &file_identity(&journal.canonical_path)?,
+    ) {
+        return Err(KanbanError::Conflict(
+            "completed replacement canonical identity does not match staged identity".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_rebound_journal(journal: &DatabaseReplaceJournal) -> Result<()> {
     validate_completed_journal(journal)?;
+    if !same_file_identity(
+        &journal.staged_identity,
+        &file_identity(&journal.canonical_path)?,
+    ) {
+        return Err(KanbanError::Conflict(
+            "completed replacement canonical identity does not match staged identity".to_owned(),
+        ));
+    }
     require_absent(&journal.staged_path, "staged database")?;
     reject_sqlite_sidecars(&journal.canonical_path)
 }

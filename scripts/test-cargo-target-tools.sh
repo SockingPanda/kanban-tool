@@ -842,6 +842,41 @@ assert_resource_limit_defaults() {
   [[ -e "$nested_marker" ]] || fail "nested resource limit command did not run"
 }
 
+assert_release_resource_environment_compatibility() {
+  local source_gate="$ROOT/scripts/release-source-gate.sh"
+
+  # Cloud setup's canonical auto policy intentionally leaves all three
+  # tool-specific variables unset; the release entrypoint must accept that
+  # inherited lock shape just as it accepts the wrapper's explicit 2/2/2
+  # defaults.
+  env -u CARGO_BUILD_JOBS -u NEXTEST_TEST_THREADS -u RUST_TEST_THREADS \
+    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    KANBAN_CARGO_BUILD_JOBS=auto KANBAN_TEST_THREADS=auto \
+    "$LOCK_SCRIPT" -- "$source_gate" --help >/dev/null
+
+  env -u KANBAN_CARGO_BUILD_JOBS -u KANBAN_TEST_THREADS \
+    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    "$LOCK_SCRIPT" -- "$source_gate" --help >/dev/null
+
+  assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    CARGO_BUILD_JOBS=9 "$LOCK_SCRIPT" -- "$source_gate" --help
+  assert_failure env -u NEXTEST_TEST_THREADS -u RUST_TEST_THREADS \
+    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    KANBAN_CARGO_BUILD_JOBS=auto KANBAN_TEST_THREADS=auto \
+    CARGO_BUILD_JOBS=2 "$LOCK_SCRIPT" -- "$source_gate" --help
+  assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=9 \
+    "$LOCK_SCRIPT" -- "$source_gate" --help
+  assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
+    KANBAN_CARGO_BUILD_JOBS=9 KANBAN_TEST_THREADS=auto \
+    "$LOCK_SCRIPT" -- "$source_gate" --help
+
+  # A release entrypoint invoked directly, without the wrapper-owned marker,
+  # must continue to reject caller-supplied Cargo resource overrides.
+  assert_failure env -u KANBAN_CARGO_BUILD_LOCK_HELD \
+    CARGO_BUILD_JOBS=2 "$source_gate" --help
+}
+
 [[ ! -e "$ROOT/scripts/$REMOVED_HELPER.sh" ]] || fail "removed target helper still exists"
 
 expected_target="$(expected_target_dir "$TARGET_ROOT")"
@@ -1198,6 +1233,7 @@ assert_package_source_provenance_is_current_and_non_mutating
 assert_package_layout_provenance_pairing
 assert_schema_cargo_lanes_stale_lock_fail_without_mutation
 assert_resource_limit_defaults
+assert_release_resource_environment_compatibility
 assert_no_bare_target_writing_cargo
 assert_target_dir_probe_call_sites_quote_paths
 assert_target_dir_probe_handles_space_paths

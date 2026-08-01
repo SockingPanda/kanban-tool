@@ -20,7 +20,7 @@ use super::{
     ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
     ProjectionBatchReceipt, ProjectionDestructiveAuthority, ProjectionGenerationBinding,
     ProjectionGenerationRole, ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreBackend,
-    ProjectionStoreDescriptor, storage,
+    ProjectionStoreDescriptor, storage, validate_board_rebuild_delivery,
 };
 
 pub(crate) const OXIGRAPH_PROJECTION_PROVIDER: &str = "oxigraph";
@@ -293,15 +293,57 @@ impl OxigraphProjectionStore {
                 ))
             })?;
         let conn = crate::db::connect_file(&self.db_path)?;
+        let rebuild_boards = authorized_board_rebuilds(&conn, batch)?;
+        // Validate and map every delivery before mutating the graph.  This
+        // keeps a valid board rebuild from partially applying when a later
+        // task/run/action in the same claimed batch is malformed.
         let subjects = affected_subjects(&conn, batch)?;
+        let legacy_missing_deletions = legacy_missing_task_deletions(&conn, batch)?;
+        // Prefetch every canonical board/entity relation snapshot before
+        // opening or mutating Oxigraph.  A later board read failure must not
+        // leave an earlier board replacement partially applied.
+        let board_replacements = rebuild_boards
+            .iter()
+            .map(|board_id| {
+                let entity_uris = board_entity_uris(&conn, board_id)?;
+                let mut relations = Vec::new();
+                for entity_uri in &entity_uris {
+                    relations.extend(relations_for_subject(&conn, board_id, entity_uri.as_str())?);
+                }
+                Ok((board_id.clone(), entity_uris, relations))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let subject_replacements = subjects
+            .iter()
+            .map(|(board_id, subject_uri)| {
+                let entity_uri = EntityUri::new(subject_uri.clone())
+                    .map_err(|error| KanbanError::Conflict(error.to_string()))?;
+                let relations = relations_for_subject(&conn, board_id, subject_uri)?;
+                Ok((entity_uri, relations))
+            })
+            .collect::<Result<Vec<_>>>()?;
         let graph = OxigraphStore::open(&path).map_err(graph_storage)?;
-        let mut entity_uris = Vec::with_capacity(subjects.len());
-        let mut relations = Vec::new();
-        for (board_id, subject_uri) in subjects {
-            let entity_uri = EntityUri::new(subject_uri.clone())
+        for (board_id, subject_uri) in &legacy_missing_deletions {
+            let board_uri = EntityUri::new(format!("kb://board/{board_id}"))
                 .map_err(|error| KanbanError::Conflict(error.to_string()))?;
+            let subject_uri = EntityUri::new(subject_uri.clone())
+                .map_err(|error| KanbanError::Conflict(error.to_string()))?;
+            graph
+                .validate_board_scoped_subject(&board_uri, &subject_uri)
+                .map_err(graph_storage)?;
+        }
+        for (board_id, entity_uris, board_relations) in board_replacements {
+            let board_uri = EntityUri::new(format!("kb://board/{board_id}"))
+                .map_err(|error| KanbanError::Conflict(error.to_string()))?;
+            graph
+                .replace_board_entities(&board_uri, &entity_uris, &board_relations)
+                .map_err(graph_storage)?;
+        }
+        let mut entity_uris = Vec::with_capacity(subject_replacements.len());
+        let mut relations = Vec::new();
+        for (entity_uri, subject_relations) in subject_replacements {
             entity_uris.push(entity_uri);
-            relations.extend(relations_for_subject(&conn, &board_id, &subject_uri)?);
+            relations.extend(subject_relations);
         }
         graph
             .replace_entities(&entity_uris, &relations)
@@ -1174,8 +1216,66 @@ struct RelationPayload {
 
 enum SourceEventTarget {
     Legacy,
-    Taskless,
-    Task(String),
+    Board,
+    Task { task_id: String },
+    Run { run_id: String, task_id: String },
+}
+
+fn authorized_board_rebuilds(
+    conn: &Connection,
+    batch: &ProjectionBatch,
+) -> Result<BTreeSet<String>> {
+    let mut boards = BTreeSet::new();
+    for item in &batch.items {
+        if item.entity_uri == format!("kb://board/{}", item.board_id) && item.action == "rebuild" {
+            validate_board_rebuild_delivery(conn, item, "oxigraph")?;
+            boards.insert(item.board_id.clone());
+        }
+    }
+    Ok(boards)
+}
+
+fn board_entity_uris(conn: &Connection, board_id: &str) -> Result<Vec<EntityUri>> {
+    let mut statement = conn
+        .prepare("SELECT uri FROM entities WHERE board_id=?1 ORDER BY uri")
+        .map_err(storage)?;
+    let uris = statement
+        .query_map([board_id], |row| row.get::<_, String>(0))
+        .map_err(storage)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(storage)?;
+    uris.into_iter()
+        .map(|uri| EntityUri::new(uri).map_err(|error| KanbanError::Conflict(error.to_string())))
+        .collect()
+}
+
+fn legacy_missing_task_deletions(
+    conn: &Connection,
+    batch: &ProjectionBatch,
+) -> Result<BTreeSet<(String, String)>> {
+    let mut missing = BTreeSet::new();
+    for item in &batch.items {
+        if item.source_event_id.is_some() || item.action != "delete" {
+            continue;
+        }
+        let Some(task_id) = item
+            .entity_uri
+            .strip_prefix("kb://task/")
+            .filter(|task_id| !task_id.is_empty() && !task_id.contains('/'))
+        else {
+            continue;
+        };
+        let canonical_board = conn
+            .query_row("SELECT board_id FROM tasks WHERE id=?1", [task_id], |row| {
+                row.get::<_, String>(0)
+            })
+            .optional()
+            .map_err(storage)?;
+        if canonical_board.is_none() {
+            missing.insert((item.board_id.clone(), item.entity_uri.clone()));
+        }
+    }
+    Ok(missing)
 }
 
 impl RelationPayload {
@@ -1207,20 +1307,35 @@ fn affected_subjects(
         let event_target = match item.source_event_id {
             None => SourceEventTarget::Legacy,
             Some(event_id) => {
-                let event_task = conn
+                let event_target = conn
                     .query_row(
-                        "SELECT COALESCE(e.task_id,r.task_id)
+                        "SELECT e.task_id,e.run_id,r.task_id
                      FROM task_events e
                      LEFT JOIN task_runs r ON r.board_id=e.board_id AND r.id=e.run_id
                      WHERE e.id=?1 AND e.board_id=?2",
                         params![event_id, item.board_id],
-                        |row| row.get::<_, Option<String>>(0),
+                        |row| {
+                            Ok((
+                                row.get::<_, Option<String>>(0)?,
+                                row.get::<_, Option<String>>(1)?,
+                                row.get::<_, Option<String>>(2)?,
+                            ))
+                        },
                     )
                     .optional()
                     .map_err(storage)?;
-                match event_task {
-                    Some(Some(task_id)) => SourceEventTarget::Task(task_id),
-                    Some(None) => SourceEventTarget::Taskless,
+                match event_target {
+                    Some((Some(task_id), _, _)) => SourceEventTarget::Task { task_id },
+                    Some((None, Some(run_id), Some(task_id))) => {
+                        SourceEventTarget::Run { run_id, task_id }
+                    }
+                    Some((None, Some(_), None)) => {
+                        return Err(KanbanError::Conflict(format!(
+                            "Oxigraph delivery {} source event run is missing or belongs to another board",
+                            item.id
+                        )));
+                    }
+                    Some((None, None, _)) => SourceEventTarget::Board,
                     None => {
                         return Err(KanbanError::Conflict(format!(
                             "Oxigraph delivery {} source event is missing or belongs to another board",
@@ -1231,14 +1346,41 @@ fn affected_subjects(
             }
         };
         if item.entity_uri == format!("kb://board/{}", item.board_id) {
-            if matches!(event_target, SourceEventTarget::Taskless) {
+            if item.action == "rebuild" {
+                validate_board_rebuild_delivery(conn, item, "oxigraph")?;
+                continue;
+            }
+            if matches!(&event_target, SourceEventTarget::Board) && item.action == "upsert" {
                 continue;
             }
             return Err(KanbanError::Conflict(format!(
-                "Oxigraph delivery {} cannot be mapped to a board-scoped entity",
+                "Oxigraph delivery {} cannot be mapped to a board-scoped {} action",
+                item.id, item.action
+            )));
+        }
+
+        if !matches!(item.action.as_str(), "upsert" | "delete") {
+            return Err(KanbanError::Conflict(format!(
+                "Oxigraph delivery {} cannot be mapped to an entity action {}",
+                item.id, item.action
+            )));
+        }
+
+        let task_id = item
+            .entity_uri
+            .strip_prefix("kb://task/")
+            .filter(|task_id| !task_id.is_empty() && !task_id.contains('/'));
+        let run_id = item
+            .entity_uri
+            .strip_prefix("kb://run/")
+            .filter(|run_id| !run_id.is_empty() && !run_id.contains('/'));
+        if task_id.is_none() && run_id.is_none() {
+            return Err(KanbanError::Conflict(format!(
+                "Oxigraph delivery {} cannot be mapped to a board-scoped task or run",
                 item.id
             )));
         }
+
         let entity_board = conn
             .query_row(
                 "SELECT board_id FROM entities WHERE uri=?1",
@@ -1248,37 +1390,74 @@ fn affected_subjects(
             .optional()
             .map_err(storage)?
             .flatten();
-        match entity_board {
-            Some(board_id) if board_id == item.board_id => match &event_target {
-                SourceEventTarget::Legacy => {}
-                SourceEventTarget::Task(task_id)
-                    if item.entity_uri == format!("kb://task/{task_id}") => {}
-                _ => {
+        if let Some(task_id) = task_id {
+            let event_matches = matches!(
+                &event_target,
+                SourceEventTarget::Task { task_id: event_task }
+                    if event_task.as_str() == task_id
+            );
+            let legacy_task = matches!(&event_target, SourceEventTarget::Legacy);
+            if entity_board.is_none() {
+                if !(item.action == "delete" && (event_matches || legacy_task)) {
                     return Err(KanbanError::Conflict(format!(
-                        "Oxigraph delivery {} cannot be mapped to its source event entity",
+                        "Oxigraph delivery {} task cannot be proven to belong to its board",
                         item.id
                     )));
                 }
-            },
-            Some(board_id) => {
+            }
+            if entity_board
+                .as_deref()
+                .is_some_and(|board_id| board_id != item.board_id)
+                || (!event_matches && !legacy_task)
+            {
                 return Err(KanbanError::Conflict(format!(
-                    "Oxigraph delivery {} entity belongs to board {board_id}, not {}",
-                    item.id, item.board_id
+                    "Oxigraph delivery {} cannot be mapped to its source event entity",
+                    item.id
                 )));
             }
-            None => {
-                let valid_deletion = item.action == "delete"
-                    && matches!(
-                        &event_target,
-                        SourceEventTarget::Task(task_id)
-                            if item.entity_uri == format!("kb://task/{task_id}")
-                    );
-                if !valid_deletion {
-                    return Err(KanbanError::Conflict(format!(
-                        "Oxigraph delivery {} cannot be mapped to a board-scoped entity",
-                        item.id
-                    )));
-                }
+        } else if let Some(run_id) = run_id {
+            let run = conn
+                .query_row(
+                    "SELECT r.board_id,r.task_id,t.board_id
+                     FROM task_runs r
+                     LEFT JOIN tasks t ON t.id=r.task_id
+                     WHERE r.id=?1",
+                    [run_id],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, Option<String>>(1)?,
+                            row.get::<_, Option<String>>(2)?,
+                        ))
+                    },
+                )
+                .optional()
+                .map_err(storage)?;
+            let Some((run_board, Some(task_id), Some(task_board))) = run else {
+                return Err(KanbanError::Conflict(format!(
+                    "Oxigraph delivery {} run cannot be proven to belong to its board",
+                    item.id
+                )));
+            };
+            let event_matches = matches!(
+                &event_target,
+                SourceEventTarget::Run {
+                    task_id: event_task,
+                    run_id: event_run,
+                } if event_task.as_str() == task_id && event_run.as_str() == run_id
+            );
+            if run_board != item.board_id
+                || task_board != item.board_id
+                || !event_matches
+                || entity_board.is_none()
+                || entity_board
+                    .as_deref()
+                    .is_some_and(|board_id| board_id != item.board_id)
+            {
+                return Err(KanbanError::Conflict(format!(
+                    "Oxigraph delivery {} cannot be mapped to its source event run",
+                    item.id
+                )));
             }
         }
         entity_uri(item.entity_uri.clone())?;
@@ -1666,6 +1845,87 @@ mod tests {
                 .to_string(),
                 content_hash: "fnv64:record".to_owned(),
             }],
+        }
+    }
+
+    #[test]
+    fn affected_subjects_accepts_legacy_tasks_and_rejects_invalid_actions() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE tasks (id TEXT PRIMARY KEY, board_id TEXT NOT NULL);
+             CREATE TABLE task_events (id INTEGER PRIMARY KEY, board_id TEXT NOT NULL, task_id TEXT, run_id TEXT);
+             CREATE TABLE task_runs (id TEXT PRIMARY KEY, board_id TEXT NOT NULL, task_id TEXT);
+             CREATE TABLE entities (uri TEXT PRIMARY KEY, board_id TEXT);
+             INSERT INTO tasks(id,board_id) VALUES ('t_one','default');
+             INSERT INTO task_runs(id,board_id,task_id) VALUES ('r_one','default','t_one');
+             INSERT INTO task_events(id,board_id,task_id) VALUES (1,'default','t_one');
+             INSERT INTO task_events(id,board_id) VALUES (2,'default');
+             INSERT INTO task_events(id,board_id,run_id) VALUES (3,'default','r_one');
+             INSERT INTO tasks(id,board_id) VALUES ('t_other','other');
+             INSERT INTO entities(uri,board_id) VALUES
+               ('kb://task/t_one','default'),('kb://task/t_other','other'),
+               ('kb://run/r_one','default');",
+        )
+        .unwrap();
+
+        let batch =
+            |entity_uri: &str, source_event_id: Option<i64>, action: &str| ProjectionBatch {
+                store_name: OXIGRAPH_RELATIONS_STORE.to_owned(),
+                database_instance_id: "db_test".to_owned(),
+                protocol_version: 2,
+                schema_version: 1,
+                provider: OXIGRAPH_PROJECTION_PROVIDER.to_owned(),
+                provider_fingerprint: OXIGRAPH_PROJECTION_PROVIDER_FINGERPRINT.to_owned(),
+                corpus: None,
+                owner: "owner".to_owned(),
+                lease_token: "lease".to_owned(),
+                fence_epoch: 1,
+                target_generation: "gen_test".to_owned(),
+                claim_token: "claim".to_owned(),
+                claim_expires_at: i64::MAX,
+                items: vec![ProjectionDelivery {
+                    id: 1,
+                    outbox_id: 1,
+                    store_name: OXIGRAPH_RELATIONS_STORE.to_owned(),
+                    board_id: "default".to_owned(),
+                    source_event_id,
+                    cursor: 1,
+                    action: action.to_owned(),
+                    entity_uri: entity_uri.to_owned(),
+                    payload_json: "{}".to_owned(),
+                    attempts: 0,
+                }],
+            };
+
+        assert!(affected_subjects(&conn, &batch("kb://task/t_one", Some(1), "upsert")).is_ok());
+        assert!(affected_subjects(&conn, &batch("kb://task/t_one", None, "upsert")).is_ok());
+        assert!(affected_subjects(&conn, &batch("kb://task/t_one", None, "delete")).is_ok());
+        assert!(affected_subjects(&conn, &batch("kb://task/t_missing", None, "delete")).is_ok());
+        assert!(affected_subjects(&conn, &batch("kb://run/r_one", Some(3), "upsert")).is_ok());
+        let error =
+            affected_subjects(&conn, &batch("kb://task/t_one", Some(3), "upsert")).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("cannot be mapped to its source event entity"),
+            "{error}"
+        );
+        let error = affected_subjects(&conn, &batch("kb://run/r_one", None, "upsert")).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("cannot be mapped to its source event run"),
+            "{error}"
+        );
+        for invalid in [
+            batch("kb://task/t_one", Some(1), "rebuild"),
+            batch("kb://run/r_one", Some(3), "rebuild"),
+            batch("kb://board/default", Some(2), "delete"),
+            batch("kb://task/t_other", None, "upsert"),
+            batch("kb://task/t_missing", None, "upsert"),
+        ] {
+            let error = affected_subjects(&conn, &invalid).unwrap_err();
+            assert!(error.to_string().contains("cannot be mapped"), "{error}");
         }
     }
 

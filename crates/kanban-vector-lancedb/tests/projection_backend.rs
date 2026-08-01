@@ -2790,11 +2790,11 @@ fn lease_rollover_reclaims_pending_apply_for_active_generation_with_older_manife
     let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
     let before = filesystem_digest(&generation);
 
-    let response = match backend.execute(&VectorProjectionHelperRequest::ApplyBatch(request.clone()))
-    {
-        VectorProjectionHelperResponse::ApplyBatch(response) => response,
-        response => panic!("successor active apply was rejected: {response:?}"),
-    };
+    let response =
+        match backend.execute(&VectorProjectionHelperRequest::ApplyBatch(request.clone())) {
+            VectorProjectionHelperResponse::ApplyBatch(response) => response,
+            response => panic!("successor active apply was rejected: {response:?}"),
+        };
 
     assert_eq!(successor_fence, evidence.manifest.fence_epoch + 1);
     assert_eq!(response.ack.request_id, request.context.request_id);
@@ -2838,11 +2838,11 @@ fn lease_rollover_resumes_prepared_building_apply_with_older_generation_fence() 
     let generation = generations(&db, LANCEDB_CHUNKS_STORE).join(&evidence.manifest.generation);
     let before = filesystem_digest(&generation);
 
-    let response = match backend.execute(&VectorProjectionHelperRequest::ApplyBatch(request.clone()))
-    {
-        VectorProjectionHelperResponse::ApplyBatch(response) => response,
-        response => panic!("successor prepared-building apply was rejected: {response:?}"),
-    };
+    let response =
+        match backend.execute(&VectorProjectionHelperRequest::ApplyBatch(request.clone())) {
+            VectorProjectionHelperResponse::ApplyBatch(response) => response,
+            response => panic!("successor prepared-building apply was rejected: {response:?}"),
+        };
 
     assert_eq!(successor_fence, evidence.manifest.fence_epoch + 1);
     assert_eq!(response.ack.request_id, request.context.request_id);
@@ -4532,12 +4532,7 @@ fn bind_apply_request_to_lease(
     request.batch.lease_token = lease_token.to_owned();
     request.batch.fence_epoch = fence_epoch;
     request.batch.claim_token = format!("successor-claim-capability-{fence_epoch}");
-    bind_destructive_authority_to_lease(
-        &mut request.authority,
-        owner,
-        lease_token,
-        fence_epoch,
-    );
+    bind_destructive_authority_to_lease(&mut request.authority, owner, lease_token, fence_epoch);
     request.authority.role = role;
     request.authority.building_phase = building_phase;
 }

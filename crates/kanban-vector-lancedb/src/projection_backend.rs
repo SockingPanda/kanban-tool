@@ -2001,12 +2001,8 @@ impl VectorProjectionBackend {
                     })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let provider = self.persistent_embedding_provider(
-            descriptor,
-            generation_path,
-            false,
-            persist_cache,
-        )?;
+        let provider =
+            self.persistent_embedding_provider(descriptor, generation_path, false, persist_cache)?;
         let vectors = crate::lancedb_store::embed_deduplicated(
             provider.as_ref(),
             texts.iter().map(String::as_str),
@@ -2036,7 +2032,8 @@ impl VectorProjectionBackend {
         generation_path: &Path,
         snapshot: &ProjectionSnapshot,
     ) -> Result<(), VectorProjectionBackendError> {
-        let expected = self.expected_snapshot_content_rows(descriptor, generation_path, snapshot)?;
+        let expected =
+            self.expected_snapshot_content_rows(descriptor, generation_path, snapshot)?;
         let actual = self.actual_content_rows(descriptor, generation_path)?;
         if !same_projection_content_rows(&actual, &expected) {
             return Err(VectorProjectionBackendError::Backend(
@@ -3543,10 +3540,7 @@ impl VectorProjectionBackend {
         }
         let authority =
             self.validate_operation_authority(&request.context, &request.authority, "publish")?;
-        self.require_current_sqlite_lease_at_or_after_generation(
-            &authority,
-            manifest.fence_epoch,
-        )?;
+        self.require_current_sqlite_lease_at_or_after_generation(&authority, manifest.fence_epoch)?;
         if request.authority.role != VectorProjectionGenerationRole::Building {
             return Err(stale_sqlite_authority(
                 "publish",
@@ -5499,8 +5493,8 @@ mod tests {
         let writer = DerivedStoreWriteGuard::acquire(&db_path, &lock_name)
             .expect("fixture write guard creates the persistent lock sentinel");
         drop(writer);
-        let _read_guard = acquire_helper_read_guard(&db_path, LANCEDB_CHUNKS_STORE)
-            .expect("fixture read guard");
+        let _read_guard =
+            acquire_helper_read_guard(&db_path, LANCEDB_CHUNKS_STORE).expect("fixture read guard");
 
         provider.fail_next();
         let started = std::time::Instant::now();
@@ -5563,7 +5557,9 @@ mod tests {
             result.is_ok(),
             "an invalid embedding policy must return an error instead of panicking"
         );
-        let error = result.unwrap().expect_err("zero batch size must be rejected");
+        let error = result
+            .unwrap()
+            .expect_err("zero batch size must be rejected");
         assert!(matches!(
             error,
             VectorProjectionBackendError::Backend(message)

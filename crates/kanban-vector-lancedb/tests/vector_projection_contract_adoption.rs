@@ -72,14 +72,8 @@ fn vector_projection_request_fixture_is_consumed_by_real_projection_handler() {
     assert_eq!(error.kind, VectorProjectionHelperErrorKind::Backend);
     assert_eq!(error.code, "projection_backend_unavailable");
     assert_eq!(error.request_id.as_deref(), Some("req_fixture_quarantine"));
-    assert_eq!(
-        error.projection_store.as_deref(),
-        Some("lancedb_chunks")
-    );
-    assert_eq!(
-        error.generation_id.as_deref(),
-        Some("gen_fixture_active")
-    );
+    assert_eq!(error.projection_store.as_deref(), Some("lancedb_chunks"));
+    assert_eq!(error.generation_id.as_deref(), Some("gen_fixture_active"));
     assert_eq!(
         error.delivery_digest.as_deref(),
         Some("sha256:fixture-delivery-digest")
@@ -179,11 +173,11 @@ fn vector_projection_response_fixture_is_produced_by_real_projection_handler() {
     assert_eq!(descriptor.build_identity, vector_helper_build_identity());
 
     let actual = serde_json::to_value(response).unwrap();
-    let mut expected =
-        serde_json::from_str::<serde_json::Value>(&fixture("vector-projection-response.v1.valid.json"))
-            .unwrap();
-    expected["payload"]["build_identity"] =
-        serde_json::json!(vector_helper_build_identity());
+    let mut expected = serde_json::from_str::<serde_json::Value>(&fixture(
+        "vector-projection-response.v1.valid.json",
+    ))
+    .unwrap();
+    expected["payload"]["build_identity"] = serde_json::json!(vector_helper_build_identity());
     assert_eq!(actual, expected);
 }
 

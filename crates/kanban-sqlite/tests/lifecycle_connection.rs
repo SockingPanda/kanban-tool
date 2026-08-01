@@ -7,9 +7,7 @@ use std::{
 };
 
 use kanban_local::DatabaseLifecycleExclusiveGuard;
-use kanban_sqlite::api::lifecycle::{
-    begin_database_replace, publish_staged_database,
-};
+use kanban_sqlite::api::lifecycle::{begin_database_replace, publish_staged_database};
 use kanban_sqlite::db::{DatabaseConnection, connect_existing_read_only, connect_file};
 use kanban_sqlite::init::init_database;
 
@@ -282,9 +280,11 @@ fn database_replace_publishes_staged_file_atomically_and_retains_evidence() {
     assert!(previous_path.is_file());
     assert!(!staged_path.exists());
     assert!(journal_path.is_file());
-    assert!(std::fs::read_to_string(&journal_path)
-        .unwrap()
-        .contains("completed"));
+    assert!(
+        std::fs::read_to_string(&journal_path)
+            .unwrap()
+            .contains("completed")
+    );
     replace.validate_database_identities().unwrap();
     drop(replace);
     drop(kanban_local::DatabaseLifecycleSharedGuard::acquire_existing(&db_path).unwrap());

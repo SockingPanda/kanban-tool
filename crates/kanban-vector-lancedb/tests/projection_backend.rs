@@ -3548,6 +3548,75 @@ fn label_board_rebuild_is_physically_isolated_from_task_chunks() {
 }
 
 #[test]
+fn null_source_board_rebuild_rehydrates_canonical_tasks_and_preserves_other_boards() {
+    let (_temp, db, backend) = backend();
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch(
+        "INSERT INTO tasks(
+             id,board_id,seq,title,description,status,archived_at,created_at,updated_at
+         ) VALUES
+             ('t_keep','b_one',1,'old canonical',NULL,'todo',NULL,1,1),
+             ('t_stale','b_one',2,'stale content',NULL,'todo',NULL,1,1),
+             ('t_other','b_two',1,'other board',NULL,'todo',NULL,1,1);",
+    )
+    .unwrap();
+    drop(conn);
+
+    let chunks = prepare_with_records(
+        &backend,
+        &db,
+        LANCEDB_CHUNKS_STORE,
+        "gen_null_source_board_rebuild",
+        1,
+        vec![
+            task_record("b_one", "t_keep", "old canonical"),
+            task_record("b_one", "t_stale", "stale content"),
+            task_record("b_two", "t_other", "other board"),
+        ],
+    );
+    assert_eq!(
+        chunk_entity_uris(&db, &chunks, "b_one"),
+        vec!["kb://task/t_keep", "kb://task/t_stale"]
+    );
+    assert_eq!(
+        chunk_entity_uris(&db, &chunks, "b_two"),
+        vec!["kb://task/t_other"]
+    );
+
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    conn.execute_batch(
+        "UPDATE tasks SET title='new canonical',updated_at=2 WHERE id='t_keep';
+         DELETE FROM tasks WHERE id='t_stale';
+         INSERT INTO tasks(
+             id,board_id,seq,title,description,status,archived_at,created_at,updated_at
+         ) VALUES ('t_new','b_one',2,'new task',NULL,'todo',NULL,2,2);",
+    )
+    .unwrap();
+    drop(conn);
+
+    let mut rebuild = delivery(&chunks, 304, 2, ProjectionDeliveryAction::Rebuild);
+    rebuild.entity_uri = "kb://board/b_one".to_owned();
+    assert!(rebuild.source_event_id.is_none());
+    apply(&backend, &db, &chunks, rebuild);
+
+    assert_eq!(
+        chunk_entity_uris(&db, &chunks, "b_one"),
+        vec!["kb://task/t_keep", "kb://task/t_new"]
+    );
+    let rebuilt = chunk_fingerprints(&db, &chunks, "b_one");
+    assert_eq!(rebuilt.len(), 2);
+    let mut rebuilt_texts = rebuilt.iter().map(|(_, _, text)| text.clone()).collect::<Vec<_>>();
+    rebuilt_texts.sort();
+    assert_eq!(rebuilt_texts, vec![Some("new canonical".to_owned()), Some("new task".to_owned())]);
+    assert!(!rebuilt.iter().any(|(_, _, text)| text.as_deref() == Some("old canonical")));
+    assert!(!rebuilt.iter().any(|(_, _, text)| text.as_deref() == Some("stale content")));
+    assert_eq!(
+        chunk_entity_uris(&db, &chunks, "b_two"),
+        vec!["kb://task/t_other"]
+    );
+}
+
+#[test]
 fn deliveries_require_exact_board_scoped_shapes_and_canonical_task_membership() {
     let (_temp, db, backend) = backend();
     let chunks = prepare(

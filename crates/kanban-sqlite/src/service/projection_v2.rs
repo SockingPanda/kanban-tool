@@ -3306,9 +3306,30 @@ fn bump_recovery_fence(
     lease_token: &str,
     expected: &ProjectionBindingRecoverySnapshot,
 ) -> Result<ProjectionBindingRecoverySnapshot> {
+    bump_recovery_fence_with_before_transaction(
+        path,
+        conn,
+        store_name,
+        owner,
+        lease_token,
+        expected,
+        || {},
+    )
+}
+
+fn bump_recovery_fence_with_before_transaction(
+    path: &Path,
+    conn: &Connection,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    expected: &ProjectionBindingRecoverySnapshot,
+    before_transaction: impl FnOnce(),
+) -> Result<ProjectionBindingRecoverySnapshot> {
     let _authority_guard = acquire_projection_authority_guard(path, store_name)?;
-    let now = SystemClock.now_ms();
+    before_transaction();
     with_immediate_tx(conn, || {
+        let now = SystemClock.now_ms();
         let current =
             projection_binding_recovery_snapshot(conn, store_name, owner, lease_token, now)?;
         if !expected.matches_after_lease_heartbeat(&current) {
@@ -5634,6 +5655,158 @@ mod read_only_publication_validation_tests {
         let debug = format!("{authority:?}");
         assert!(debug.contains("[REDACTED]"));
         assert!(!debug.contains("secret-token"));
+    }
+
+    #[test]
+    fn recovery_fence_bump_rejects_expired_lease_after_writer_delay() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("recovery fence delay target"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "recovery-owner", 10_000)?;
+        let manifest = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "recovery-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        prepare_projection_snapshot_with(
+            &path,
+            "tantivy_tasks",
+            "recovery-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let conn = connect_file(&path)?;
+        let expected = projection_binding_recovery_snapshot(
+            &conn,
+            "tantivy_tasks",
+            "recovery-owner",
+            &lease.lease_token,
+            SystemClock.now_ms(),
+        )?;
+        let snapshots = |conn: &Connection| -> anyhow::Result<(String, String)> {
+            let deliveries = conn.query_row(
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'status',status,'claim_owner',claim_owner,
+                    'claim_token',claim_token,'claim_lease_token',claim_lease_token,
+                    'claim_fence_epoch',claim_fence_epoch,
+                    'claim_generation',claim_generation,
+                    'claim_expires_at',claim_expires_at,
+                    'published_generation',published_generation,
+                    'last_error',last_error,'updated_at',updated_at)), '[]')
+                 FROM (SELECT * FROM projection_deliveries
+                       WHERE store_name='tantivy_tasks' ORDER BY id)",
+                [],
+                |row| row.get(0),
+            )?;
+            let outbox = conn.query_row(
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'status',status,'attempts',attempts,
+                    'last_error',last_error,'updated_at',updated_at)), '[]')
+                 FROM (SELECT * FROM index_outbox ORDER BY id)",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok((deliveries, outbox))
+        };
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+
+        std::thread::scope(|scope| -> anyhow::Result<()> {
+            let path_ref = &path;
+            let lease_token = &lease.lease_token;
+            let expected_ref = &expected;
+            let bump = scope.spawn(move || {
+                let recovery_connection = connect_file(path_ref)?;
+                bump_recovery_fence_with_before_transaction(
+                    path_ref,
+                    &recovery_connection,
+                    "tantivy_tasks",
+                    "recovery-owner",
+                    lease_token,
+                    expected_ref,
+                    move || {
+                        entered_tx
+                            .send(())
+                            .expect("test observes recovery fence at pre-transaction barrier");
+                        resume_rx
+                            .recv()
+                            .expect("test resumes recovery fence against writer lock");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("recovery fence reached pre-transaction barrier");
+
+            let expires_at = SystemClock.now_ms() + 75;
+            let conn = connect_file(&path)?;
+            with_immediate_tx(&conn, || {
+                let changed = conn
+                    .execute(
+                        "UPDATE projection_store_state SET lease_expires_at=?1
+                         WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                        params![
+                            expires_at,
+                            "tantivy_tasks",
+                            "recovery-owner",
+                            lease.lease_token
+                        ],
+                    )
+                    .map_err(storage)?;
+                if changed != 1 {
+                    return Err(KanbanError::Storage(
+                        "test failed to shorten recovery owner lease".to_owned(),
+                    ));
+                }
+                Ok(())
+            })?;
+            let snapshot_connection = connect_file(&path)?;
+            let before_side_state = snapshots(&snapshot_connection)?;
+            let mut expected_after_shortened_lease = expected.clone();
+            expected_after_shortened_lease.lease.lease_expires_at = expires_at;
+
+            let writer = connect_file(&path)?;
+            writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+            resume_tx
+                .send(())
+                .expect("resume recovery fence against held writer lock");
+            while SystemClock.now_ms() <= expires_at {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            writer.execute_batch("COMMIT").map_err(storage)?;
+
+            let error = bump
+                .join()
+                .expect("recovery fence thread must not panic")
+                .expect_err("recovery fence delayed beyond expiry must reject stale owner");
+            assert!(matches!(error, KanbanError::Conflict(_)));
+            let snapshot_connection = connect_file(&path)?;
+            let after = projection_binding_recovery_snapshot(
+                &snapshot_connection,
+                "tantivy_tasks",
+                "recovery-owner",
+                &lease.lease_token,
+                0,
+            )?;
+            assert_eq!(after, expected_after_shortened_lease);
+            assert_eq!(snapshots(&snapshot_connection)?, before_side_state);
+            assert!(
+                backend.generation_present(&manifest.generation),
+                "fence rejection must retain physical prepared evidence"
+            );
+            Ok(())
+        })?;
+        Ok(())
     }
 
     #[test]

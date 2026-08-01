@@ -54,6 +54,79 @@ impl OxigraphStore {
         self.replace_entities_optimized(entity_uris, relations)
     }
 
+    /// Replace all relation subjects owned by one board, including subjects
+    /// left behind by deleted canonical entities.  The board relation is the
+    /// durable ownership witness for historical task subjects; canonical
+    /// entity URIs cover subjects that currently have no relation rows.
+    pub fn replace_board_entities(
+        &self,
+        board_uri: &EntityUri,
+        entity_uris: &[EntityUri],
+        relations: &[Relation],
+    ) -> Result<(), GraphError> {
+        let incoming = group_relations_by_subject(relations.to_vec());
+        let mut clear_subjects = entity_uris
+            .iter()
+            .map(|entity_uri| entity_uri.as_str().to_owned())
+            .collect::<BTreeSet<_>>();
+        clear_subjects.extend(incoming.keys().cloned());
+
+        let mut stored = self.relations.lock().map_err(lock_error)?;
+        for (subject, subject_relations) in stored.iter() {
+            if subject_relations.iter().any(|relation| {
+                relation.predicate == Predicate::BelongsToBoard
+                    && relation.object_uri.as_str() == board_uri.as_str()
+            }) {
+                clear_subjects.insert(subject.clone());
+            }
+        }
+        for subject in clear_subjects {
+            self.clear_entity_graph(&EntityUri::new(subject.clone()).map_err(store_error)?)?;
+            stored.remove(&subject);
+        }
+        for relation in relations {
+            let quad = Self::relation_quad(relation)?;
+            self.store.insert(&quad).map_err(store_error)?;
+        }
+        for (subject, relations) in incoming {
+            stored.insert(subject, relations);
+        }
+        self.write_snapshot(&stored)?;
+        Ok(())
+    }
+
+    /// Validate that a subject which is about to be deleted belongs to the
+    /// delivery board.  A missing subject is already converged; any retained
+    /// relation must carry an exact `BelongsToBoard` witness before a global
+    /// subject clear is allowed.
+    pub fn validate_board_scoped_subject(
+        &self,
+        board_uri: &EntityUri,
+        entity_uri: &EntityUri,
+    ) -> Result<(), GraphError> {
+        let stored = self.relations.lock().map_err(lock_error)?;
+        let Some(relations) = stored.get(entity_uri.as_str()) else {
+            return Ok(());
+        };
+        let ownership = relations
+            .iter()
+            .filter(|relation| relation.predicate == Predicate::BelongsToBoard)
+            .collect::<Vec<_>>();
+        if relations.is_empty()
+            || (!ownership.is_empty()
+                && ownership
+                    .iter()
+                    .all(|relation| relation.object_uri.as_str() == board_uri.as_str()))
+        {
+            return Ok(());
+        }
+        Err(GraphError::Store(format!(
+            "subject {} has no exact ownership witness for board {}",
+            entity_uri.as_str(),
+            board_uri.as_str()
+        )))
+    }
+
     fn replace_entities_optimized(
         &self,
         entity_uris: &[EntityUri],
@@ -490,6 +563,116 @@ mod tests {
         assert_eq!(
             neighbors[0].object_uri,
             EntityUri::new("kb://task/new-parent").unwrap()
+        );
+    }
+
+    #[test]
+    fn board_replace_removes_stale_owned_subjects_without_touching_other_boards() {
+        let graph = OxigraphStore::in_memory().unwrap();
+        graph
+            .rebuild(&[
+                relation(
+                    "kb://task/stale",
+                    Predicate::BelongsToBoard,
+                    "kb://board/one",
+                ),
+                relation(
+                    "kb://task/keep",
+                    Predicate::BelongsToBoard,
+                    "kb://board/one",
+                ),
+                relation(
+                    "kb://task/other",
+                    Predicate::BelongsToBoard,
+                    "kb://board/two",
+                ),
+                relation("kb://task/foreign", Predicate::DependsOn, "kb://board/one"),
+                relation(
+                    "kb://task/ambiguous",
+                    Predicate::BelongsToBoard,
+                    "kb://board/one",
+                ),
+                relation(
+                    "kb://task/ambiguous",
+                    Predicate::BelongsToBoard,
+                    "kb://board/two",
+                ),
+            ])
+            .unwrap();
+
+        let board_one = EntityUri::new("kb://board/one").unwrap();
+        assert!(
+            graph
+                .validate_board_scoped_subject(
+                    &board_one,
+                    &EntityUri::new("kb://task/ambiguous").unwrap()
+                )
+                .is_err()
+        );
+        let current_one = vec![EntityUri::new("kb://task/keep").unwrap()];
+        graph
+            .replace_board_entities(
+                &board_one,
+                &current_one,
+                &[relation(
+                    "kb://task/keep",
+                    Predicate::BelongsToBoard,
+                    "kb://board/one",
+                )],
+            )
+            .unwrap();
+
+        assert!(
+            graph
+                .neighbors(&EntityUri::new("kb://task/stale").unwrap(), None, 10)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            graph
+                .neighbors(&EntityUri::new("kb://task/keep").unwrap(), None, 10)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            graph
+                .neighbors(&EntityUri::new("kb://task/other").unwrap(), None, 10)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            graph
+                .neighbors(&EntityUri::new("kb://task/foreign").unwrap(), None, 10)
+                .unwrap()
+                .len(),
+            1,
+            "a non-ownership relation to the board must not authorize clearing another subject"
+        );
+        assert!(
+            graph
+                .validate_board_scoped_subject(
+                    &board_one,
+                    &EntityUri::new("kb://task/foreign").unwrap()
+                )
+                .is_err()
+        );
+        assert!(
+            graph
+                .validate_board_scoped_subject(
+                    &board_one,
+                    &EntityUri::new("kb://task/keep").unwrap()
+                )
+                .is_ok()
+        );
+        assert!(
+            graph
+                .validate_board_scoped_subject(
+                    &board_one,
+                    &EntityUri::new("kb://task/absent").unwrap()
+                )
+                .is_ok()
         );
     }
 

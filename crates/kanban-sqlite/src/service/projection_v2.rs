@@ -712,14 +712,33 @@ pub fn renew_projection_lease(
     ttl_ms: i64,
 ) -> Result<ProjectionLease> {
     validate_owner_and_ttl(owner, ttl_ms)?;
+    renew_projection_lease_with_before_transaction(
+        path.as_ref(),
+        store_name,
+        owner,
+        lease_token,
+        ttl_ms,
+        || {},
+    )
+}
+
+fn renew_projection_lease_with_before_transaction(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    ttl_ms: i64,
+    before_transaction: impl FnOnce(),
+) -> Result<ProjectionLease> {
     // Renewal only extends the current owner's expiry; it never changes the
     // owner, opaque token, or fence. It therefore remains safe while a
     // physical backend holds the suffix authority lock, and is required for
     // the maintenance heartbeat to keep long-running helper work alive.
-    let now = SystemClock.now_ms();
-    let lease_expires_at = checked_expiry(now, ttl_ms, "projection lease")?;
-    let conn = connect_file(path.as_ref())?;
-    let fence_epoch = with_immediate_tx(&conn, || {
+    before_transaction();
+    let conn = connect_file(path)?;
+    let (fence_epoch, lease_expires_at) = with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
+        let lease_expires_at = checked_expiry(now, ttl_ms, "projection lease")?;
         let changed = conn
             .execute(
                 "UPDATE projection_store_state SET lease_expires_at=?1,updated_at=?2 \
@@ -731,12 +750,14 @@ pub fn renew_projection_lease(
         if changed != 1 {
             return Err(projection_lease_conflict(store_name));
         }
-        conn.query_row(
-            "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
-            [store_name],
-            |row| row.get(0),
-        )
-        .map_err(storage)
+        let fence_epoch = conn
+            .query_row(
+                "SELECT fence_epoch FROM projection_store_state WHERE store_name=?1",
+                [store_name],
+                |row| row.get(0),
+            )
+            .map_err(storage)?;
+        Ok((fence_epoch, lease_expires_at))
     })?;
     Ok(ProjectionLease {
         store_name: store_name.to_owned(),
@@ -5800,5 +5821,91 @@ mod read_only_publication_validation_tests {
         assert_eq!(authority.fence_epoch, 9);
         assert_eq!(authority.lease_expires_at, 100);
         assert_eq!(authority.expected_binding.fence_epoch, 7);
+    }
+
+    #[test]
+    fn projection_lease_renew_does_not_revive_expired_lease_after_writer_delay()
+    -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "owner", 1_000)?;
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let renewal_path = path.clone();
+        let renewal_token = lease.lease_token.clone();
+        let renewal = std::thread::spawn(move || {
+            renew_projection_lease_with_before_transaction(
+                &renewal_path,
+                "tantivy_tasks",
+                "owner",
+                &renewal_token,
+                1_000,
+                || {
+                    entered_tx
+                        .send(())
+                        .expect("test observes timestamp sampling before writer lock");
+                    resume_rx
+                        .recv()
+                        .expect("test resumes store renewal against writer lock");
+                },
+            )
+        });
+        entered_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .expect("store renewal reached pre-transaction barrier");
+
+        let expires_at = SystemClock.now_ms() + 75;
+        let conn = connect_file(&path)?;
+        with_immediate_tx(&conn, || {
+            let changed = conn
+                .execute(
+                    "UPDATE projection_store_state SET lease_expires_at=?1
+                     WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                    params![
+                        expires_at,
+                        "tantivy_tasks",
+                        "owner",
+                        lease.lease_token.as_str()
+                    ],
+                )
+                .map_err(storage)?;
+            if changed != 1 {
+                return Err(KanbanError::Storage(
+                    "test failed to shorten projection lease".to_owned(),
+                ));
+            }
+            Ok(())
+        })?;
+
+        let writer = connect_file(&path)?;
+        writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+        resume_tx
+            .send(())
+            .expect("resume store renewal against held writer lock");
+        while SystemClock.now_ms() <= expires_at {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        writer.execute_batch("COMMIT").map_err(storage)?;
+
+        let error = renewal
+            .join()
+            .expect("store renewal thread must not panic")
+            .expect_err("store renewal delayed beyond expiry must not revive the lease");
+        assert!(matches!(error, KanbanError::Conflict(_)));
+
+        let conn = connect_file(&path)?;
+        let (owner, token, fence_epoch, actual_expiry): (Option<String>, Option<String>, i64, i64) =
+            conn.query_row(
+                "SELECT lease_owner,lease_token,fence_epoch,lease_expires_at
+                 FROM projection_store_state WHERE store_name=?1",
+                ["tantivy_tasks"],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+        assert_eq!(owner.as_deref(), Some("owner"));
+        assert_eq!(token.as_deref(), Some(lease.lease_token.as_str()));
+        assert_eq!(fence_epoch, lease.fence_epoch);
+        assert_eq!(actual_expiry, expires_at);
+        Ok(())
     }
 }

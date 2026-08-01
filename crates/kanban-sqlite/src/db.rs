@@ -437,6 +437,175 @@ fn require_checkpointed_snapshot(path: &Path) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum NormalizedSqlitePath {
+    Local(String),
+    Unc(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SqlitePathNormalizationError {
+    UnsupportedWindowsPath,
+}
+
+/// Normalize a path for SQLite's URI parser without changing its Windows
+/// filesystem identity.
+///
+/// This is deliberately platform-independent so the shape policy can be
+/// table-tested on every host. Windows verbatim paths disable the normal path
+/// parser, so removing `\\?\` is safe only when the resulting drive/UNC path
+/// has no syntax whose meaning would change under the normal parser.
+fn normalize_sqlite_path(path: &str) -> Result<NormalizedSqlitePath, SqlitePathNormalizationError> {
+    const VERBATIM_PREFIX: &str = r"\\?\";
+
+    if let Some(rest) = path.strip_prefix(VERBATIM_PREFIX) {
+        let bytes = rest.as_bytes();
+        if is_drive_path(rest) {
+            validate_windows_path(rest, false, true)?;
+            return Ok(NormalizedSqlitePath::Local(rest.to_owned()));
+        }
+        if bytes.len() >= 4 && bytes[..3].eq_ignore_ascii_case(b"unc") && bytes[3] == b'\\' {
+            let unc_path = format!(r"\\{}", &rest[4..]);
+            validate_windows_path(&unc_path, true, true)?;
+            return Ok(NormalizedSqlitePath::Unc(unc_path));
+        }
+        return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+    }
+
+    if is_unc_path(path) {
+        validate_windows_path(path, true, false)?;
+        return Ok(NormalizedSqlitePath::Unc(path.to_owned()));
+    }
+    if is_drive_path(path) {
+        validate_windows_path(path, false, false)?;
+        return Ok(NormalizedSqlitePath::Local(path.to_owned()));
+    }
+    Ok(NormalizedSqlitePath::Local(path.to_owned()))
+}
+
+fn is_drive_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/')
+}
+
+fn is_unc_path(path: &str) -> bool {
+    path.starts_with(r"\\")
+}
+
+fn validate_windows_path(
+    path: &str,
+    unc: bool,
+    verbatim: bool,
+) -> Result<(), SqlitePathNormalizationError> {
+    if path.encode_utf16().count() > 259 {
+        return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+    }
+    if verbatim && path.contains('/') {
+        return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+    }
+
+    let separator = |byte| {
+        if verbatim {
+            byte == b'\\'
+        } else {
+            matches!(byte, b'\\' | b'/')
+        }
+    };
+    let body = if unc {
+        if !path.starts_with(r"\\") {
+            return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+        }
+        &path[2..]
+    } else if is_drive_path(path) {
+        &path[3..]
+    } else {
+        return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+    };
+
+    if !unc && path.as_bytes()[2] != b'\\' && verbatim {
+        return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+    }
+    if unc && body.is_empty() {
+        return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+    }
+    if !unc && body.is_empty() {
+        return Ok(());
+    }
+
+    let mut components = Vec::new();
+    let mut start = 0;
+    for (index, byte) in body.bytes().enumerate() {
+        if separator(byte) {
+            if index == start {
+                return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+            }
+            components.push(&body[start..index]);
+            start = index + 1;
+        }
+    }
+    if start == body.len() {
+        return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+    }
+    components.push(&body[start..]);
+    if unc && components.len() < 2 {
+        return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+    }
+    for component in components {
+        if component == "."
+            || component == ".."
+            || component.ends_with('.')
+            || component.ends_with(' ')
+            || component.is_empty()
+            || windows_reserved_component(component)
+            || component.chars().any(|character| {
+                character.is_control()
+                    || matches!(character, '<' | '>' | ':' | '"' | '|' | '?' | '*')
+            })
+        {
+            return Err(SqlitePathNormalizationError::UnsupportedWindowsPath);
+        }
+    }
+    Ok(())
+}
+
+fn windows_reserved_component(component: &str) -> bool {
+    let stem = component
+        .split_once('.')
+        .map_or(component, |(stem, _)| stem);
+    let upper = stem.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CLOCK$" | "CONIN$" | "CONOUT$"
+    ) {
+        return true;
+    }
+    let Some(suffix) = upper
+        .strip_prefix("COM")
+        .or_else(|| upper.strip_prefix("LPT"))
+    else {
+        return false;
+    };
+    matches!(
+        suffix,
+        "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+    )
+}
+
+fn sqlite_path_normalization_error(path: &str) -> KanbanError {
+    KanbanError::InvalidInput(format!(
+        "strict read-only database path is not a safe Windows path for SQLite URI conversion: {path}"
+    ))
+}
+
+/// Build an immutable SQLite URI from a canonical filesystem path.
+///
+/// Bundled SQLite rejects non-empty URI authorities unless
+/// `SQLITE_ALLOW_URI_AUTHORITY` is enabled. UNC paths therefore use an
+/// empty-authority URI (`file:////server/share/...`) so SQLite receives the
+/// original `//server/share/...` path.
 fn immutable_sqlite_uri(path: &Path) -> Result<String> {
     let raw = path.to_str().ok_or_else(|| {
         KanbanError::InvalidInput(format!(
@@ -444,8 +613,16 @@ fn immutable_sqlite_uri(path: &Path) -> Result<String> {
             path.display()
         ))
     })?;
-    let normalized = raw.replace('\\', "/");
-    let mut uri = if normalized.starts_with('/') {
+    let normalized_path =
+        normalize_sqlite_path(raw).map_err(|_| sqlite_path_normalization_error(raw))?;
+    let (path, unc) = match normalized_path {
+        NormalizedSqlitePath::Local(path) => (path, false),
+        NormalizedSqlitePath::Unc(path) => (path, true),
+    };
+    let normalized = path.replace('\\', "/");
+    let mut uri = if unc {
+        String::from("file://")
+    } else if normalized.starts_with('/') {
         String::from("file:")
     } else {
         String::from("file:/")
@@ -609,6 +786,165 @@ fn process_is_alive(_pid: u32) -> bool {
 mod tests {
     use super::*;
     use kanban_local::{DatabaseLifecycleExclusiveGuard, DatabaseLifecycleSharedGuard};
+
+    #[test]
+    fn normalize_sqlite_path_applies_windows_namespace_policy_on_every_host() {
+        let accepted = [
+            (
+                r"\\?\C:\safe\database.sqlite",
+                NormalizedSqlitePath::Local(r"C:\safe\database.sqlite".to_owned()),
+            ),
+            (r"\\?\C:\", NormalizedSqlitePath::Local(r"C:\".to_owned())),
+            (
+                r"\\?\UNC\server\share\database.sqlite",
+                NormalizedSqlitePath::Unc(r"\\server\share\database.sqlite".to_owned()),
+            ),
+            (
+                r"C:\safe\database.sqlite",
+                NormalizedSqlitePath::Local(r"C:\safe\database.sqlite".to_owned()),
+            ),
+            (
+                r"\\server\share\database.sqlite",
+                NormalizedSqlitePath::Unc(r"\\server\share\database.sqlite".to_owned()),
+            ),
+        ];
+        for (path, expected) in accepted {
+            assert_eq!(
+                normalize_sqlite_path(path),
+                Ok(expected),
+                "accepted path: {path}"
+            );
+        }
+
+        let mut rejected = vec![
+            r"\\?\Volume{1234}\database.sqlite".to_owned(),
+            r"\\?\GLOBALROOT\Device\HarddiskVolume1\database.sqlite".to_owned(),
+            r"\\?\C:".to_owned(),
+            r"\\?\1:\database.sqlite".to_owned(),
+            r"\\?\UNC\server".to_owned(),
+            r"\\?\UNC\\server\share\database.sqlite".to_owned(),
+            r"\\?\C:\safe\\database.sqlite".to_owned(),
+            r"\\?\C:\safe\.\database.sqlite".to_owned(),
+            r"\\?\C:\safe\..\database.sqlite".to_owned(),
+            r"\\?\C:\safe\database.sqlite.".to_owned(),
+            r"\\?\C:\safe\database.sqlite ".to_owned(),
+            r"\\?\C:\CON.txt".to_owned(),
+            r"\\?\C:\COM1.txt".to_owned(),
+            r"\\?\C:\LPT³".to_owned(),
+            r"\\?\C:\safe\database:stream".to_owned(),
+            r"\\?\C:\safe\database?stream".to_owned(),
+            r"\\?\C:/safe/database.sqlite".to_owned(),
+        ];
+        rejected.push(format!(r"\\?\C:\{}", "a".repeat(260)));
+        for path in rejected {
+            assert_eq!(
+                normalize_sqlite_path(&path),
+                Err(SqlitePathNormalizationError::UnsupportedWindowsPath),
+                "rejected path: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn immutable_sqlite_uri_preserves_posix_paths_and_escapes_uri_bytes() {
+        assert_eq!(
+            immutable_sqlite_uri(Path::new("/tmp/100%#?& db.sqlite")).unwrap(),
+            "file:/tmp/100%25%23%3F%26%20db.sqlite?mode=ro&immutable=1"
+        );
+    }
+
+    #[test]
+    fn immutable_sqlite_uri_opens_and_reads_a_posix_database() {
+        let tempdir = tempfile::Builder::new()
+            .prefix("kanban% sqlite uri ")
+            .tempdir()
+            .unwrap();
+        let path = tempdir.path().join("kanban.db");
+        {
+            let connection = Connection::open(&path).unwrap();
+            connection
+                .execute_batch(
+                    "CREATE TABLE values_table (value INTEGER); INSERT INTO values_table VALUES (42);",
+                )
+                .unwrap();
+        }
+
+        let canonical = std::fs::canonicalize(&path).unwrap();
+        let uri = immutable_sqlite_uri(&canonical).unwrap();
+        let connection = Connection::open_with_flags(
+            uri,
+            OpenFlags::SQLITE_OPEN_READ_ONLY
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX
+                | OpenFlags::SQLITE_OPEN_URI,
+        )
+        .unwrap();
+        let value: i64 = connection
+            .query_row("SELECT value FROM values_table", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(value, 42);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn immutable_sqlite_uri_normalizes_windows_verbatim_drive_and_unc_paths() {
+        assert_eq!(
+            immutable_sqlite_uri(Path::new(
+                r"\\?\C:\Users\runneradmin\AppData\Local\Temp\kanban.db"
+            ))
+            .unwrap(),
+            "file:/C:/Users/runneradmin/AppData/Local/Temp/kanban.db?mode=ro&immutable=1"
+        );
+        assert_eq!(
+            immutable_sqlite_uri(Path::new(r"\\?\UNC\server\share\kanban.db")).unwrap(),
+            "file:////server/share/kanban.db?mode=ro&immutable=1"
+        );
+        assert_eq!(
+            immutable_sqlite_uri(Path::new(
+                r"C:\Users\runneradmin\AppData\Local\Temp\kanban.db"
+            ))
+            .unwrap(),
+            "file:/C:/Users/runneradmin/AppData/Local/Temp/kanban.db?mode=ro&immutable=1"
+        );
+        assert_eq!(
+            immutable_sqlite_uri(Path::new(r"\\server\share\kanban.db")).unwrap(),
+            "file:////server/share/kanban.db?mode=ro&immutable=1"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn immutable_sqlite_uri_opens_and_reads_a_canonical_verbatim_database() {
+        let tempdir = tempfile::Builder::new()
+            .prefix("kanban sqlite uri ")
+            .tempdir()
+            .unwrap();
+        let path = tempdir.path().join("kanban.db");
+        {
+            let connection = Connection::open(&path).unwrap();
+            connection
+                .execute_batch("CREATE TABLE values_table (value INTEGER); INSERT INTO values_table VALUES (42);")
+                .unwrap();
+        }
+
+        let canonical = std::fs::canonicalize(&path).unwrap();
+        assert!(
+            canonical.to_string_lossy().starts_with(r"\\?\"),
+            "Windows canonical path must use the verbatim namespace: {}",
+            canonical.display()
+        );
+        let uri = immutable_sqlite_uri(&canonical).unwrap();
+        let connection = Connection::open_with_flags(
+            uri,
+            OpenFlags::SQLITE_OPEN_READ_ONLY
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX
+                | OpenFlags::SQLITE_OPEN_URI,
+        )
+        .unwrap();
+        let value: i64 = connection
+            .query_row("SELECT value FROM values_table", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(value, 42);
+    }
 
     #[cfg(any(target_os = "linux", windows))]
     #[test]

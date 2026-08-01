@@ -2516,19 +2516,52 @@ fn claim_projection_batch(
     claim_ttl_ms: i64,
     limit: usize,
 ) -> Result<ProjectionBatch> {
+    claim_projection_batch_with_before_transaction(
+        path.as_ref(),
+        store_name,
+        owner,
+        lease_token,
+        claim_ttl_ms,
+        limit,
+        || {},
+    )
+}
+
+fn claim_projection_batch_with_before_transaction(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    claim_ttl_ms: i64,
+    limit: usize,
+    before_transaction: impl FnOnce(),
+) -> Result<ProjectionBatch> {
     validate_owner_and_ttl(owner, claim_ttl_ms)?;
     if limit == 0 || limit > MAX_PROJECTION_BATCH {
         return Err(KanbanError::InvalidInput(format!(
             "projection claim limit must be between 1 and {MAX_PROJECTION_BATCH}"
         )));
     }
-    let now = SystemClock.now_ms();
-    let claim_expires_at = checked_expiry(now, claim_ttl_ms, "projection claim")?;
     let claim_token = new_typed_id("pclaim");
-    let conn = connect_file(path.as_ref())?;
-    let (lease, target_generation, provider, provider_fingerprint, corpus, items) =
+    let conn = connect_file(path)?;
+    // Keep the fence observed before waiting for SQLite's write lock as the
+    // capability this queued operation was created under. A same-owner
+    // rollover keeps owner/token stable, so the final transaction must CAS
+    // this fence explicitly rather than silently adopting the successor.
+    let expected_fence_epoch =
+        current_lease(&conn, store_name, owner, lease_token, SystemClock.now_ms())?.fence_epoch;
+    before_transaction();
+    let (lease, target_generation, provider, provider_fingerprint, corpus, claim_expires_at, items) =
         with_immediate_tx(&conn, || {
+            // BEGIN IMMEDIATE may wait behind another writer. Refresh the
+            // clock and authority only after that lock is held so an expired
+            // lease cannot clear or claim any delivery rows.
+            let now = SystemClock.now_ms();
             let lease = current_lease(&conn, store_name, owner, lease_token, now)?;
+            if lease.fence_epoch != expected_fence_epoch {
+                return Err(projection_lease_conflict(store_name));
+            }
+            let claim_expires_at = checked_expiry(now, claim_ttl_ms, "projection claim")?;
             if claim_expires_at > lease.lease_expires_at {
                 return Err(KanbanError::InvalidInput(
                     "projection claim TTL cannot exceed the current store lease".to_owned(),
@@ -2601,6 +2634,7 @@ fn claim_projection_batch(
                 provider,
                 provider_fingerprint,
                 corpus,
+                claim_expires_at,
                 claimed,
             ))
         })?;

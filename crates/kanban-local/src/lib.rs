@@ -3057,7 +3057,9 @@ mod tests {
         };
 
         for code in [ERROR_LOCK_VIOLATION, ERROR_IO_PENDING] {
-            assert!(is_lock_contention_error(&io::Error::from_raw_os_error(code as i32)));
+            assert!(is_lock_contention_error(&io::Error::from_raw_os_error(
+                code as i32
+            )));
         }
         assert!(!is_lock_contention_error(&io::Error::from_raw_os_error(
             ERROR_ACCESS_DENIED as i32

@@ -301,7 +301,12 @@ dispatcher 或重型辅助后端。JSON Schema 只验证 wire 结构/值域，
   都必须纳入中心 guarded opener 并更新审计，不能以 phase-two exemption 绕过 lifecycle 接入。
 - crate 根模块不再提供 `kanban_sqlite::*` 旧版重新导出；旧根路径是破坏性变更，
   并由 `tests/ui/root_legacy_reexport_removed.rs` 负向编译契约锁定。`api` 根模块、
-  `api::provider`、`api::lifecycle` 和显式 `db` / `init` 边界由 `public_api` trybuild contract 锁定。
+  `api::provider`、`api::lifecycle` 和显式 `db` / `init` 边界由 `public_api` 的
+  fail-closed Cargo UI compile contract 锁定。该契约显式枚举 fixture inventory，并对
+  inventory 到实际 fixture、fixture 到 inventory 做双向校验，防止新增或遗失负向用例被静默忽略。
+  负向用例失败时先读取实际编译诊断；只有经审查确认公开 API 有意变化，才更新对应的
+  `.stderr` snapshot，并在同一变更中同步审查 fixture inventory。不得使用自动覆盖模式
+  伪造通过结果。
 - `kanban_sqlite::application::SqliteApplication` 实现 `kanban-application` 的 backend port，
   用于需要以 application API 组合 selected use-case slice 的 adapter/benchmark 路径。
 - `kanban-application` DTO/trait 演进遵循 additive-first 策略：优先新增可选字段、option

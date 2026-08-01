@@ -2384,7 +2384,7 @@ mod lifecycle_tests {
         let error =
             assert_database_idle_with_connection(&conn, Path::new("unknown.db")).unwrap_err();
         assert!(
-            matches!(error, KanbanError::InvalidInput(message) if message.contains("not initialized")),
+            matches!(error, KanbanError::InvalidInput(ref message) if message.contains("not initialized")),
             "error: {error}"
         );
     }
@@ -2398,12 +2398,14 @@ mod lifecycle_tests {
         seed_readable_integrity_diagnostic(&diagnostic);
         drop(diagnostic);
         let owner_connection = connect_file(&path).unwrap();
+        let now = SystemClock.now_ms();
         owner_connection
             .execute(
                 "UPDATE projection_maintenance_owner
-                 SET owner='active-owner', lease_token='lease', lease_expires_at=?1
+                 SET owner='active-owner', lease_token='lease', lease_expires_at=?1,
+                     mode='once', started_at=?2, last_heartbeat_at=?2
                  WHERE singleton=1",
-                [SystemClock.now_ms() + 60_000],
+                rusqlite::params![now + 60_000, now],
             )
             .unwrap();
         drop(owner_connection);
@@ -2415,7 +2417,7 @@ mod lifecycle_tests {
         );
         let error = assert_database_idle_with_connection(&conn, &path).unwrap_err();
         assert!(
-            matches!(error, KanbanError::InvalidInput(message) if message.contains("active projection maintenance owner")),
+            matches!(error, KanbanError::InvalidInput(ref message) if message.contains("active projection maintenance owner")),
             "error: {error}"
         );
     }
@@ -2452,7 +2454,7 @@ mod lifecycle_tests {
         );
         let error = assert_database_idle_with_connection(&conn, &path).unwrap_err();
         assert!(
-            matches!(error, KanbanError::InvalidInput(message) if message.contains("database has running work")),
+            matches!(error, KanbanError::InvalidInput(ref message) if message.contains("database has running work")),
             "error: {error}"
         );
     }
@@ -2571,7 +2573,7 @@ mod lifecycle_tests {
         let error = begin_database_replace(&path).unwrap_err();
 
         assert!(
-            matches!(error, KanbanError::Storage(message) if message.contains("locked") || message.contains("busy")),
+            matches!(error, KanbanError::Storage(ref message) if message.contains("locked") || message.contains("busy")),
             "error: {error}"
         );
         assert_eq!(std::fs::read(&path).unwrap(), bytes_before);

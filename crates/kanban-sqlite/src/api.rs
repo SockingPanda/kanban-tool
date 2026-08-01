@@ -17,7 +17,10 @@ pub use kanban_application::dto::{
 /// Lifecycle and runtime guards used by binaries that own process lifetime.
 pub mod lifecycle {
     pub use crate::service::{
-        DatabaseReplaceGuard, DatabaseRuntimeGuard, begin_database_replace, begin_database_runtime,
+        DatabaseReplaceGuard, DatabaseReplaceOptions, DatabaseReplaceReport, DatabaseRuntimeGuard,
+        begin_database_replace, begin_database_runtime, publish_staged_database,
+        publish_staged_database_with_options, resume_staged_database_replace,
+        resume_staged_database_replace_with_options,
     };
 }
 

@@ -7,7 +7,9 @@ use std::{
 };
 
 use kanban_local::DatabaseLifecycleExclusiveGuard;
-use kanban_sqlite::api::lifecycle::begin_database_replace;
+use kanban_sqlite::api::lifecycle::{
+    begin_database_replace, publish_staged_database,
+};
 use kanban_sqlite::db::{DatabaseConnection, connect_existing_read_only, connect_file};
 use kanban_sqlite::init::init_database;
 
@@ -250,6 +252,71 @@ fn database_replace_can_fence_staged_inode_before_namespace_publish() {
     );
     drop(replace);
     drop(kanban_local::DatabaseLifecycleSharedGuard::acquire_existing(&db_path).unwrap());
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn database_replace_publishes_staged_file_atomically_and_retains_evidence() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let db_path = tempdir.path().join("kanban.db");
+    let staged_path = tempdir.path().join("staged.db");
+    let previous_path = tempdir.path().join("previous.db");
+    let journal_path = tempdir.path().join("replace.journal");
+    init_database(&db_path, "tester").unwrap();
+    init_database(&staged_path, "tester").unwrap();
+
+    let mut replace = begin_database_replace(&db_path).unwrap();
+    let report = publish_staged_database(
+        &mut replace,
+        &db_path,
+        &staged_path,
+        &previous_path,
+        &journal_path,
+    )
+    .unwrap();
+
+    assert_eq!(report.canonical_path, db_path);
+    assert_eq!(report.previous_path, previous_path);
+    assert_eq!(report.journal_path, journal_path);
+    assert!(db_path.is_file());
+    assert!(previous_path.is_file());
+    assert!(!staged_path.exists());
+    assert!(journal_path.is_file());
+    assert!(std::fs::read_to_string(&journal_path)
+        .unwrap()
+        .contains("completed"));
+    replace.validate_database_identities().unwrap();
+    drop(replace);
+    drop(kanban_local::DatabaseLifecycleSharedGuard::acquire_existing(&db_path).unwrap());
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn database_replace_rejects_existing_previous_or_journal_without_mutation() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let db_path = tempdir.path().join("kanban.db");
+    let staged_path = tempdir.path().join("staged.db");
+    let previous_path = tempdir.path().join("previous.db");
+    let journal_path = tempdir.path().join("replace.journal");
+    init_database(&db_path, "tester").unwrap();
+    init_database(&staged_path, "tester").unwrap();
+    std::fs::write(&previous_path, b"unknown previous").unwrap();
+    let before = std::fs::read(&db_path).unwrap();
+
+    let mut replace = begin_database_replace(&db_path).unwrap();
+    let error = publish_staged_database(
+        &mut replace,
+        &db_path,
+        &staged_path,
+        &previous_path,
+        &journal_path,
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("previous") || error.to_string().contains("destination"));
+    assert_eq!(std::fs::read(&db_path).unwrap(), before);
+    assert!(!journal_path.exists());
+    assert!(staged_path.exists());
+    drop(replace);
 }
 
 #[cfg(any(unix, windows))]

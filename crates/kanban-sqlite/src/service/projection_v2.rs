@@ -2218,6 +2218,7 @@ pub fn publish_projection_generation_with(
         lease_token,
         &prepared.manifest.generation,
     )?;
+    let publish_lease = lease_from_destructive_authority(store_name, &publish_authority);
     let expected_active = active_artifact(path, store_name)?;
     let operation: Result<ProjectionArtifactEvidence> = (|| {
         let receipt = match backend.inspect_active() {
@@ -2242,8 +2243,7 @@ pub fn publish_projection_generation_with(
         confirm_published_generation(
             path,
             store_name,
-            owner,
-            lease_token,
+            &publish_lease,
             &active,
             expected_active.as_ref(),
         )?;
@@ -2279,6 +2279,7 @@ pub fn recover_projection_generation_with(
         lease_token,
         &prepared.manifest.generation,
     )?;
+    let publish_lease = lease_from_destructive_authority(store_name, &publish_authority);
     let missing_active = active_artifact(path, store_name)?.ok_or_else(|| {
         KanbanError::Conflict(format!(
             "projection recovery requires a logical active generation for {store_name}"
@@ -2349,8 +2350,7 @@ pub fn recover_projection_generation_with(
                 confirm_published_generation(
                     path,
                     store_name,
-                    owner,
-                    lease_token,
+                    &publish_lease,
                     &active,
                     expected_retained.as_ref(),
                 )?;
@@ -2374,8 +2374,7 @@ pub fn recover_projection_generation_with(
                 confirm_published_generation(
                     path,
                     store_name,
-                    owner,
-                    lease_token,
+                    &publish_lease,
                     &active,
                     expected_retained.as_ref(),
                 )?;
@@ -2403,8 +2402,7 @@ pub fn recover_projection_generation_with(
         confirm_published_generation(
             path,
             store_name,
-            owner,
-            lease_token,
+            &publish_lease,
             &active,
             expected_retained.as_ref(),
         )?;
@@ -2455,6 +2453,7 @@ pub fn reconcile_projection_generation_with(
         lease_token,
         &prepared.manifest.generation,
     )?;
+    let publish_lease = lease_from_destructive_authority(store_name, &publish_authority);
     let operation = (|| {
         let expected_previous = active_artifact(path, store_name)?;
         let receipt = match backend.inspect_active() {
@@ -2489,8 +2488,7 @@ pub fn reconcile_projection_generation_with(
         confirm_published_generation(
             path,
             store_name,
-            owner,
-            lease_token,
+            &publish_lease,
             &active,
             expected_previous.as_ref(),
         )?;
@@ -2883,15 +2881,52 @@ fn record_projection_error_with_before_final_transaction(
 fn confirm_published_generation(
     path: impl AsRef<Path>,
     store_name: &str,
-    owner: &str,
-    lease_token: &str,
+    expected_lease: &ProjectionLease,
     active: &ProjectionArtifactEvidence,
     retained_previous: Option<&ProjectionArtifactEvidence>,
 ) -> Result<()> {
-    let now = SystemClock.now_ms();
-    let conn = connect_file(path.as_ref())?;
+    confirm_published_generation_with_before_final_transaction(
+        path.as_ref(),
+        store_name,
+        expected_lease,
+        active,
+        retained_previous,
+        || {},
+    )
+}
+
+fn confirm_published_generation_with_before_final_transaction(
+    path: &Path,
+    store_name: &str,
+    expected_lease: &ProjectionLease,
+    active: &ProjectionArtifactEvidence,
+    retained_previous: Option<&ProjectionArtifactEvidence>,
+    before_final_transaction: impl FnOnce(),
+) -> Result<()> {
+    if expected_lease.store_name != store_name {
+        return Err(projection_lease_conflict(store_name));
+    }
+    let conn = connect_file(path)?;
+    before_final_transaction();
     with_immediate_tx(&conn, || {
-        require_current_lease(&conn, store_name, owner, lease_token, now)?;
+        let now = SystemClock.now_ms();
+        let lease = current_lease(
+            &conn,
+            store_name,
+            &expected_lease.owner,
+            &expected_lease.lease_token,
+            now,
+        )?;
+        if lease.fence_epoch != expected_lease.fence_epoch {
+            return Err(projection_lease_conflict(store_name));
+        }
+        require_current_lease(
+            &conn,
+            store_name,
+            &expected_lease.owner,
+            &expected_lease.lease_token,
+            now,
+        )?;
         let unfinished: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM projection_deliveries \
@@ -2953,7 +2988,9 @@ fn confirm_published_generation(
                      last_success_at=?1,last_error=NULL,updated_at=?1 \
                  WHERE store_name=?2 AND building_generation=?3 \
                    AND building_fingerprint=?4 AND building_fence_epoch=?5 \
-                   AND building_phase IN ('prepared','store_published')",
+                   AND building_phase IN ('prepared','store_published') \
+                   AND lease_owner=?20 AND lease_token=?21 \
+                   AND fence_epoch=?22 AND lease_expires_at>?1",
                 params![
                     now,
                     store_name,
@@ -2974,6 +3011,9 @@ fn confirm_published_generation(
                     previous_corpus.map(|corpus| corpus.corpus_fingerprint.as_str()),
                     previous_corpus.map(|corpus| corpus.embedding_model.as_str()),
                     previous_embedding_dimensions,
+                    expected_lease.owner,
+                    expected_lease.lease_token,
+                    expected_lease.fence_epoch,
                 ],
             )
             .map_err(storage)?;

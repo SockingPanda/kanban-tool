@@ -782,16 +782,22 @@ fn try_lock_derived_store_sentinel(
     }
 }
 
-/// `fs4` exposes the Win32 code from `LockFileEx` directly. Rust currently
-/// classifies `ERROR_LOCK_VIOLATION` as `Uncategorized`, but this code means
-/// exactly the same non-blocking contention as the direct range-lock path.
+/// The Windows sentinel path can report the underlying `LockFileEx` contention
+/// codes or `ERROR_SHARING_VIOLATION` for an unavailable fixed authority. All
+/// three mean the sentinel is currently unavailable; access-denied and
+/// unrelated I/O failures remain fail-closed.
 #[cfg(windows)]
 fn is_lock_contention_error(error: &io::Error) -> bool {
-    use windows_sys::Win32::Foundation::{ERROR_IO_PENDING, ERROR_LOCK_VIOLATION};
+    use windows_sys::Win32::Foundation::{
+        ERROR_IO_PENDING, ERROR_LOCK_VIOLATION, ERROR_SHARING_VIOLATION,
+    };
 
     matches!(
         error.raw_os_error(),
-        Some(code) if code == ERROR_LOCK_VIOLATION as i32 || code == ERROR_IO_PENDING as i32
+        Some(code)
+            if code == ERROR_LOCK_VIOLATION as i32
+                || code == ERROR_IO_PENDING as i32
+                || code == ERROR_SHARING_VIOLATION as i32
     )
 }
 
@@ -3053,10 +3059,14 @@ mod tests {
     #[test]
     fn windows_lock_contention_codes_are_normalized_for_sentinel_authority() {
         use windows_sys::Win32::Foundation::{
-            ERROR_ACCESS_DENIED, ERROR_IO_PENDING, ERROR_LOCK_VIOLATION,
+            ERROR_ACCESS_DENIED, ERROR_IO_PENDING, ERROR_LOCK_VIOLATION, ERROR_SHARING_VIOLATION,
         };
 
-        for code in [ERROR_LOCK_VIOLATION, ERROR_IO_PENDING] {
+        for code in [
+            ERROR_LOCK_VIOLATION,
+            ERROR_IO_PENDING,
+            ERROR_SHARING_VIOLATION,
+        ] {
             assert!(is_lock_contention_error(&io::Error::from_raw_os_error(
                 code as i32
             )));

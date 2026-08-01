@@ -472,6 +472,15 @@ fn acquire_derived_store_lock_set(
     let existing_sentinel =
         match open_and_validate_derived_store_sentinel(&lock_path, &expected_sentinel) {
             Ok(file) => Some(file),
+            Err(error) if is_lock_contention_error(&error) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    format!(
+                        "derived store {store_name} has an active physical writer: {}",
+                        lock_path.display()
+                    ),
+                ));
+            }
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
             Err(error) => return Err(error),
         };
@@ -3074,6 +3083,31 @@ mod tests {
         assert!(!is_lock_contention_error(&io::Error::from_raw_os_error(
             ERROR_ACCESS_DENIED as i32
         )));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_exclusive_sentinel_blocks_validation_through_second_handle() {
+        use windows_sys::Win32::Foundation::ERROR_LOCK_VIOLATION;
+
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path().join("kanban.db");
+        fs::write(&db_path, "canonical-database").unwrap();
+        let guard = DerivedStoreWriteGuard::acquire(&db_path, "tantivy_tasks").unwrap();
+        let normalized_db_path = normalized_file_path(&db_path);
+        let lock_path =
+            derived_store_write_lock_path_from_normalized(&normalized_db_path, "tantivy_tasks");
+        let expected_sentinel = derived_store_sentinel_bytes(
+            &normalized_db_path,
+            "tantivy_tasks",
+            derived_store_database_lock_offset("tantivy_tasks"),
+        );
+
+        let error =
+            open_and_validate_derived_store_sentinel(&lock_path, &expected_sentinel).unwrap_err();
+
+        assert_eq!(error.raw_os_error(), Some(ERROR_LOCK_VIOLATION as i32));
+        drop(guard);
     }
 
     #[cfg(any(target_os = "linux", windows))]

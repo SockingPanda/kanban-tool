@@ -376,7 +376,10 @@ impl MaintenanceSession {
             match (operation_result, heartbeat_result) {
                 (Err(error), _) => Err(error),
                 (Ok(_), Err(error)) => Err(error),
-                (Ok(value), Ok(())) => Ok(value),
+                (Ok(value), Ok(())) => {
+                    renew_maintenance_owner(self)?;
+                    Ok(value)
+                }
             }
         })
     }
@@ -8829,6 +8832,96 @@ mod tests {
                 .is_none(),
             "a corrupt provider B active must remain recoverable"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn owner_heartbeat_renews_at_operation_completion_boundary() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let options = MaintenanceRunOptions {
+            lease_ttl_ms: 1_000,
+            claim_ttl_ms: 250,
+            batch_size: 1,
+        };
+        let session =
+            MaintenanceSession::start(&db_path, "heartbeat-owner", MaintenanceMode::Once, options)?;
+
+        let operation_completed_at = session.run_with_owner_heartbeat(|| {
+            thread::sleep(Duration::from_millis(20));
+            Ok(SystemClock.now_ms())
+        })?;
+        let status = projection_status(&db_path)?;
+        assert!(status.maintenance_owner.active);
+        assert!(
+            status
+                .maintenance_owner
+                .last_heartbeat_at
+                .is_some_and(|heartbeat_at| heartbeat_at >= operation_completed_at)
+        );
+        session.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    fn owner_heartbeat_final_renew_rejects_successor_handoff() -> anyhow::Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("kanban.db");
+        init_database(&db_path, "tester")?;
+        let options = MaintenanceRunOptions {
+            lease_ttl_ms: 10_000,
+            claim_ttl_ms: 250,
+            batch_size: 1,
+        };
+        let session =
+            MaintenanceSession::start(&db_path, "heartbeat-owner", MaintenanceMode::Once, options)?;
+        let successor_identity = session.identity.clone();
+        let operation_completed = AtomicBool::new(false);
+        let mut successor_token = None;
+
+        let error = session
+            .run_with_owner_heartbeat(|| {
+                let conn = connect_file(&db_path).expect("open test database");
+                with_immediate_tx(&conn, || {
+                    conn.execute(
+                        "UPDATE projection_maintenance_owner SET lease_expires_at=0 \
+                         WHERE singleton=1 AND owner=?1 AND lease_token=?2",
+                        params!["heartbeat-owner", session.lease_token.as_str()],
+                    )
+                    .map_err(storage)?;
+                    Ok(())
+                })
+                .expect("expire old owner lease before lawful takeover");
+                successor_token = Some(
+                    acquire_maintenance_owner(
+                        &db_path,
+                        "successor-owner",
+                        MaintenanceMode::Once,
+                        10_000,
+                        &successor_identity,
+                    )
+                    .expect("successor acquires expired owner lease"),
+                );
+                operation_completed.store(true, Ordering::SeqCst);
+                Ok(())
+            })
+            .expect_err("final owner renewal must fail after successor handoff");
+
+        assert!(operation_completed.load(Ordering::SeqCst));
+        assert!(matches!(error, KanbanError::Conflict(_)));
+        let status = projection_status(&db_path)?;
+        assert!(status.maintenance_owner.active);
+        assert_eq!(
+            status.maintenance_owner.owner.as_deref(),
+            Some("successor-owner")
+        );
+        release_maintenance_owner(
+            &db_path,
+            "successor-owner",
+            successor_token.as_deref().expect("successor token"),
+            &successor_identity,
+        )?;
         Ok(())
     }
 

@@ -1015,7 +1015,24 @@ pub(crate) fn prepare_projection_snapshot_with_disposition(
     lease_token: &str,
     backend: &(impl ProjectionStoreBackend + ?Sized),
 ) -> Result<ProjectionSnapshotPrepareDisposition> {
-    let path = path.as_ref();
+    prepare_projection_snapshot_with_disposition_with_before_final_transaction(
+        path.as_ref(),
+        store_name,
+        owner,
+        lease_token,
+        backend,
+        || {},
+    )
+}
+
+fn prepare_projection_snapshot_with_disposition_with_before_final_transaction(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    backend: &(impl ProjectionStoreBackend + ?Sized),
+    before_final_transaction: impl FnOnce(),
+) -> Result<ProjectionSnapshotPrepareDisposition> {
     let _write_guard = crate::db::acquire_derived_store_write_guard(path, store_name)?;
     let manifest = building_manifest(path, store_name, owner, lease_token)?;
     // Keep the lease capability that authorized this snapshot attempt.  Error
@@ -1100,9 +1117,10 @@ pub(crate) fn prepare_projection_snapshot_with_disposition(
             return Err(result_error);
         }
     };
-    let now = SystemClock.now_ms();
+    before_final_transaction();
     let conn = connect_file(path)?;
     if let Err(error) = with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
         require_current_lease(&conn, store_name, owner, lease_token, now)?;
         let running: i64 = conn
             .query_row(
@@ -6049,6 +6067,166 @@ mod read_only_publication_validation_tests {
                 .expect("begin generation thread must not panic")
                 .expect_err("begin generation delayed beyond expiry must reject stale owner");
             assert!(matches!(error, KanbanError::Conflict(_)));
+            let snapshot_connection = connect_file(&path)?;
+            let after = snapshots(&snapshot_connection)?;
+            assert_eq!(after, before);
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_snapshot_rejects_expired_lease_before_final_commit() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("prepare final commit delay target"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        backend.fail_once.store(false, Ordering::SeqCst);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "prepare-owner", 10_000)?;
+        let manifest = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "prepare-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        let (delivery_id, outbox_id): (i64, i64) = connect_file(&path)?.query_row(
+            "SELECT id,outbox_id FROM projection_deliveries
+             WHERE store_name=?1 ORDER BY id LIMIT 1",
+            ["tantivy_tasks"],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let snapshots = |conn: &Connection| -> anyhow::Result<(String, String, String, String)> {
+            let store = conn.query_row(
+                "SELECT json_object(
+                    'lease_owner',lease_owner,'lease_token',lease_token,
+                    'lease_expires_at',lease_expires_at,'fence_epoch',fence_epoch,
+                    'building_generation',building_generation,
+                    'building_fingerprint',building_fingerprint,
+                    'building_fence_epoch',building_fence_epoch,
+                    'building_provider',building_provider,
+                    'building_provider_fingerprint',building_provider_fingerprint,
+                    'building_phase',building_phase,'snapshot_cursor',snapshot_cursor,
+                    'checkpoint_cursor',checkpoint_cursor,
+                    'legacy_checkpoint_cursor',legacy_checkpoint_cursor,
+                    'last_success_at',last_success_at,
+                    'control_plane',control_plane,'lifecycle_status',lifecycle_status,
+                    'last_error',last_error,'updated_at',updated_at)
+                 FROM projection_store_state WHERE store_name='tantivy_tasks'",
+                [],
+                |row| row.get(0),
+            )?;
+            let delivery = conn.query_row(
+                "SELECT json_object(
+                    'status',status,'claim_owner',claim_owner,'claim_token',claim_token,
+                    'claim_lease_token',claim_lease_token,
+                    'claim_fence_epoch',claim_fence_epoch,
+                    'claim_generation',claim_generation,
+                    'claim_expires_at',claim_expires_at,
+                    'published_generation',published_generation,
+                    'last_error',last_error,'updated_at',updated_at)
+                 FROM projection_deliveries WHERE id=?1",
+                [delivery_id],
+                |row| row.get(0),
+            )?;
+            let outbox = conn.query_row(
+                "SELECT json_object(
+                    'status',status,'attempts',attempts,'last_error',last_error,
+                    'updated_at',updated_at)
+                 FROM index_outbox WHERE id=?1",
+                [outbox_id],
+                |row| row.get(0),
+            )?;
+            let checkpoint = conn.query_row(
+                "SELECT json_object(
+                    'last_event_id',last_event_id,'dirty',dirty,
+                    'last_rebuild_at',last_rebuild_at,'last_sync_at',last_sync_at,
+                    'last_error',last_error,'updated_at',updated_at)
+                 FROM derived_store_state WHERE store_name='tantivy_tasks'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok((store, delivery, outbox, checkpoint))
+        };
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+
+        std::thread::scope(|scope| -> anyhow::Result<()> {
+            let path_ref = &path;
+            let lease_token = &lease.lease_token;
+            let backend_ref = &backend;
+            let prepare = scope.spawn(move || {
+                prepare_projection_snapshot_with_disposition_with_before_final_transaction(
+                    path_ref,
+                    "tantivy_tasks",
+                    "prepare-owner",
+                    lease_token,
+                    backend_ref,
+                    move || {
+                        entered_tx
+                            .send(())
+                            .expect("physical prepare reached final SQLite barrier");
+                        resume_rx
+                            .recv()
+                            .expect("test resumes final prepare commit against writer lock");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("physical prepare completed before final SQLite barrier");
+
+            let expires_at = SystemClock.now_ms() + 75;
+            let conn = connect_file(&path)?;
+            with_immediate_tx(&conn, || {
+                let changed = conn
+                    .execute(
+                        "UPDATE projection_store_state SET lease_expires_at=?1
+                         WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                        params![
+                            expires_at,
+                            "tantivy_tasks",
+                            "prepare-owner",
+                            lease.lease_token
+                        ],
+                    )
+                    .map_err(storage)?;
+                if changed != 1 {
+                    return Err(KanbanError::Storage(
+                        "test failed to shorten projection lease before final prepare commit"
+                            .to_owned(),
+                    ));
+                }
+                Ok(())
+            })?;
+            let snapshot_connection = connect_file(&path)?;
+            let before = snapshots(&snapshot_connection)?;
+
+            let writer = connect_file(&path)?;
+            writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+            resume_tx
+                .send(())
+                .expect("resume final prepare commit against held writer lock");
+            while SystemClock.now_ms() <= expires_at {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            writer.execute_batch("COMMIT").map_err(storage)?;
+
+            let error = prepare
+                .join()
+                .expect("prepare thread must not panic")
+                .expect_err("final prepare commit delayed beyond expiry must reject stale owner");
+            assert!(matches!(error, KanbanError::Conflict(_)));
+            assert!(
+                backend.generation_present(&manifest.generation),
+                "physical prepare evidence remains for fenced abort or successor recovery"
+            );
             let snapshot_connection = connect_file(&path)?;
             let after = snapshots(&snapshot_connection)?;
             assert_eq!(after, before);

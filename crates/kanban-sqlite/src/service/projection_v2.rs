@@ -1221,9 +1221,28 @@ fn snapshot_prepare_disposition(
     lease_token: &str,
     manifest: &ProjectionArtifactManifest,
 ) -> Result<SnapshotPrepareDisposition> {
-    let now = SystemClock.now_ms();
+    snapshot_prepare_disposition_with_before_transaction(
+        path,
+        store_name,
+        owner,
+        lease_token,
+        manifest,
+        || {},
+    )
+}
+
+fn snapshot_prepare_disposition_with_before_transaction(
+    path: &Path,
+    store_name: &str,
+    owner: &str,
+    lease_token: &str,
+    manifest: &ProjectionArtifactManifest,
+    before_transaction: impl FnOnce(),
+) -> Result<SnapshotPrepareDisposition> {
+    before_transaction();
     let conn = connect_file(path)?;
     with_immediate_tx(&conn, || {
+        let now = SystemClock.now_ms();
         require_current_lease(&conn, store_name, owner, lease_token, now)?;
         let (building_generation, building_fence_epoch, building_phase, building_fingerprint): (
             Option<String>,
@@ -6226,6 +6245,168 @@ mod read_only_publication_validation_tests {
             assert!(
                 backend.generation_present(&manifest.generation),
                 "physical prepare evidence remains for fenced abort or successor recovery"
+            );
+            let snapshot_connection = connect_file(&path)?;
+            let after = snapshots(&snapshot_connection)?;
+            assert_eq!(after, before);
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn snapshot_prepare_disposition_rejects_expired_lease_after_writer_delay() -> anyhow::Result<()>
+    {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("kanban.db");
+        init_database(&path, "test")?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("snapshot disposition baseline"),
+        )?;
+        let backend = PrepareFailureBackend::new(&path);
+        let lease = acquire_projection_lease(&path, "tantivy_tasks", "snapshot-owner", 10_000)?;
+        let manifest = begin_projection_generation(
+            &path,
+            "tantivy_tasks",
+            "snapshot-owner",
+            &lease.lease_token,
+            &backend,
+        )?;
+        crate::service::create_task(
+            &path,
+            "default",
+            "test",
+            crate::service::CreateTask::ready("snapshot disposition coverage drift"),
+        )?;
+        assert!(
+            !backend.generation_present(&manifest.generation),
+            "the read-only disposition fixture has no physical generation"
+        );
+        let snapshots = |conn: &Connection| -> anyhow::Result<(String, String, String, String)> {
+            let store = conn.query_row(
+                "SELECT json_object(
+                    'lease_owner',lease_owner,'lease_token',lease_token,
+                    'lease_expires_at',lease_expires_at,'fence_epoch',fence_epoch,
+                    'building_generation',building_generation,
+                    'building_fingerprint',building_fingerprint,
+                    'building_fence_epoch',building_fence_epoch,
+                    'building_phase',building_phase,'snapshot_cursor',snapshot_cursor,
+                    'checkpoint_cursor',checkpoint_cursor,
+                    'legacy_checkpoint_cursor',legacy_checkpoint_cursor,
+                    'last_success_at',last_success_at,
+                    'control_plane',control_plane,'lifecycle_status',lifecycle_status,
+                    'last_error',last_error,'updated_at',updated_at)
+                 FROM projection_store_state WHERE store_name='tantivy_tasks'",
+                [],
+                |row| row.get(0),
+            )?;
+            let deliveries = conn.query_row(
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'status',status,'claim_owner',claim_owner,
+                    'claim_token',claim_token,'claim_lease_token',claim_lease_token,
+                    'claim_fence_epoch',claim_fence_epoch,
+                    'claim_generation',claim_generation,
+                    'claim_expires_at',claim_expires_at,
+                    'published_generation',published_generation,
+                    'last_error',last_error,'updated_at',updated_at)), '[]')
+                 FROM (SELECT * FROM projection_deliveries
+                       WHERE store_name='tantivy_tasks' ORDER BY id)",
+                [],
+                |row| row.get(0),
+            )?;
+            let outbox = conn.query_row(
+                "SELECT COALESCE(json_group_array(json_object(
+                    'id',id,'status',status,'attempts',attempts,
+                    'last_error',last_error,'updated_at',updated_at)), '[]')
+                 FROM (SELECT * FROM index_outbox ORDER BY id)",
+                [],
+                |row| row.get(0),
+            )?;
+            let checkpoint = conn.query_row(
+                "SELECT json_object(
+                    'last_event_id',last_event_id,'dirty',dirty,
+                    'last_rebuild_at',last_rebuild_at,'last_sync_at',last_sync_at,
+                    'last_error',last_error,'updated_at',updated_at)
+                 FROM derived_store_state WHERE store_name='tantivy_tasks'",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok((store, deliveries, outbox, checkpoint))
+        };
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+
+        std::thread::scope(|scope| -> anyhow::Result<()> {
+            let path_ref = &path;
+            let lease_token = &lease.lease_token;
+            let manifest_ref = &manifest;
+            let disposition = scope.spawn(move || {
+                snapshot_prepare_disposition_with_before_transaction(
+                    path_ref,
+                    "tantivy_tasks",
+                    "snapshot-owner",
+                    lease_token,
+                    manifest_ref,
+                    move || {
+                        entered_tx
+                            .send(())
+                            .expect("test observes disposition at pre-transaction barrier");
+                        resume_rx
+                            .recv()
+                            .expect("test resumes disposition against writer lock");
+                    },
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("snapshot disposition reached pre-transaction barrier");
+
+            let expires_at = SystemClock.now_ms() + 75;
+            let conn = connect_file(&path)?;
+            with_immediate_tx(&conn, || {
+                let changed = conn
+                    .execute(
+                        "UPDATE projection_store_state SET lease_expires_at=?1
+                         WHERE store_name=?2 AND lease_owner=?3 AND lease_token=?4",
+                        params![
+                            expires_at,
+                            "tantivy_tasks",
+                            "snapshot-owner",
+                            lease.lease_token
+                        ],
+                    )
+                    .map_err(storage)?;
+                if changed != 1 {
+                    return Err(KanbanError::Storage(
+                        "test failed to shorten projection lease before disposition".to_owned(),
+                    ));
+                }
+                Ok(())
+            })?;
+            let snapshot_connection = connect_file(&path)?;
+            let before = snapshots(&snapshot_connection)?;
+
+            let writer = connect_file(&path)?;
+            writer.execute_batch("BEGIN IMMEDIATE").map_err(storage)?;
+            resume_tx
+                .send(())
+                .expect("resume snapshot disposition against held writer lock");
+            while SystemClock.now_ms() <= expires_at {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            writer.execute_batch("COMMIT").map_err(storage)?;
+
+            let error = disposition
+                .join()
+                .expect("snapshot disposition thread must not panic")
+                .expect_err("disposition delayed beyond expiry must reject stale owner");
+            assert!(matches!(error, KanbanError::Conflict(_)));
+            assert!(
+                !backend.generation_present(&manifest.generation),
+                "read-only disposition must not create physical evidence"
             );
             let snapshot_connection = connect_file(&path)?;
             let after = snapshots(&snapshot_connection)?;

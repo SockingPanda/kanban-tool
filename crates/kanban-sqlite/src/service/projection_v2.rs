@@ -9255,7 +9255,7 @@ mod read_only_publication_validation_tests {
                     ))
                 },
             )?;
-        let delivery_before: (
+        type ProjectionDeliverySnapshot = (
             String,
             Option<String>,
             Option<String>,
@@ -9265,7 +9265,8 @@ mod read_only_publication_validation_tests {
             Option<i64>,
             Option<String>,
             i64,
-        ) = conn.query_row(
+        );
+        let delivery_before: ProjectionDeliverySnapshot = conn.query_row(
             "SELECT status,claim_owner,claim_token,claim_lease_token,claim_fence_epoch,
                     claim_generation,claim_expires_at,last_error,updated_at
              FROM projection_deliveries WHERE id=?1",
@@ -9316,17 +9317,7 @@ mod read_only_publication_validation_tests {
                 ))
             },
         )?;
-        let delivery_after: (
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            Option<i64>,
-            Option<String>,
-            Option<i64>,
-            Option<String>,
-            i64,
-        ) = conn.query_row(
+        let delivery_after: ProjectionDeliverySnapshot = conn.query_row(
             "SELECT status,claim_owner,claim_token,claim_lease_token,claim_fence_epoch,
                     claim_generation,claim_expires_at,last_error,updated_at
              FROM projection_deliveries WHERE id=?1",

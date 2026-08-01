@@ -2686,6 +2686,99 @@ mod tests {
         );
     }
 
+    #[test]
+    fn publication_validation_with_authority_rejects_each_stale_field_before_transport() {
+        let cases: &[(&str, fn(&mut ProjectionDestructiveAuthority))] = &[
+            ("owner", |authority| {
+                authority.owner = "stale-owner".to_owned()
+            }),
+            ("token", |authority| {
+                authority.lease_token = "stale-lease-capability".to_owned()
+            }),
+            ("fence", |authority| authority.fence_epoch += 1),
+            ("role", |authority| {
+                authority.role = ProjectionGenerationRole::Active
+            }),
+            ("generation", |authority| {
+                authority.generation = "gen_stale".to_owned()
+            }),
+            ("binding", |authority| {
+                authority.expected_binding.canonical_digest = "stale-canonical".to_owned()
+            }),
+        ];
+        for (field, mutate) in cases {
+            let (_temp, mut backend, evidence, mut authority) = publication_validation_fixture();
+            mutate(&mut authority);
+            let observed = Arc::new(Mutex::new(Vec::new()));
+            let observed_by_transport = observed.clone();
+            backend.transport = Arc::new(FunctionTransport::new(move |request| {
+                observed_by_transport
+                    .lock()
+                    .unwrap()
+                    .push(request.operation());
+                successful_publication_validation(request)
+            }));
+
+            let error = ProjectionStoreBackend::validate_generation_publication_with_authority(
+                &backend, &evidence, &authority,
+            )
+            .unwrap_err();
+
+            assert!(
+                matches!(error, KanbanError::Conflict(_)),
+                "{field}: {error}"
+            );
+            assert!(
+                observed.lock().unwrap().is_empty(),
+                "{field} reached the helper transport"
+            );
+        }
+    }
+
+    #[test]
+    fn publication_validation_postcheck_supersedes_helper_failures_after_rollover() {
+        for helper_failure in ["transport_error", "invalid"] {
+            let (_temp, mut backend, evidence, authority) = publication_validation_fixture();
+            let db_path = backend.db_path.clone();
+            let store_name = backend.store_descriptor.store_name.clone();
+            let observed = Arc::new(Mutex::new(Vec::new()));
+            let observed_by_transport = observed.clone();
+            backend.transport = Arc::new(FunctionTransport::new(move |request| {
+                observed_by_transport
+                    .lock()
+                    .unwrap()
+                    .push(request.operation());
+                rollover_projection_lease(&db_path, &store_name);
+                match helper_failure {
+                    "transport_error" => Err(VectorError::Store(
+                        "injected helper validation failure".to_owned(),
+                    )),
+                    "invalid" => publication_validation_response(request, false),
+                    _ => unreachable!(),
+                }
+            }));
+
+            let error = ProjectionStoreBackend::validate_generation_publication_with_authority(
+                &backend, &evidence, &authority,
+            )
+            .unwrap_err();
+
+            assert!(
+                matches!(error, KanbanError::Conflict(_)),
+                "{helper_failure}: {error}"
+            );
+            assert!(
+                error.to_string().contains("stale or inconsistent"),
+                "{helper_failure}: post-check did not take precedence: {error}"
+            );
+            assert_eq!(
+                *observed.lock().unwrap(),
+                vec![VectorProjectionHelperOperation::ValidateGenerationPublication],
+                "{helper_failure}: validation must not repair publication"
+            );
+        }
+    }
+
     fn destructive_store_fixture(
         lease_expires_at: i64,
         with_previous: bool,

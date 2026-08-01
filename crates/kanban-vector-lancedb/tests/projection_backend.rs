@@ -3605,11 +3605,28 @@ fn null_source_board_rebuild_rehydrates_canonical_tasks_and_preserves_other_boar
     );
     let rebuilt = chunk_fingerprints(&db, &chunks, "b_one");
     assert_eq!(rebuilt.len(), 2);
-    let mut rebuilt_texts = rebuilt.iter().map(|(_, _, text)| text.clone()).collect::<Vec<_>>();
+    let mut rebuilt_texts = rebuilt
+        .iter()
+        .map(|(_, _, text)| text.clone())
+        .collect::<Vec<_>>();
     rebuilt_texts.sort();
-    assert_eq!(rebuilt_texts, vec![Some("new canonical".to_owned()), Some("new task".to_owned())]);
-    assert!(!rebuilt.iter().any(|(_, _, text)| text.as_deref() == Some("old canonical")));
-    assert!(!rebuilt.iter().any(|(_, _, text)| text.as_deref() == Some("stale content")));
+    assert_eq!(
+        rebuilt_texts,
+        vec![
+            Some("new canonical".to_owned()),
+            Some("new task".to_owned())
+        ]
+    );
+    assert!(
+        !rebuilt
+            .iter()
+            .any(|(_, _, text)| text.as_deref() == Some("old canonical"))
+    );
+    assert!(
+        !rebuilt
+            .iter()
+            .any(|(_, _, text)| text.as_deref() == Some("stale content"))
+    );
     assert_eq!(
         chunk_entity_uris(&db, &chunks, "b_two"),
         vec!["kb://task/t_other"]

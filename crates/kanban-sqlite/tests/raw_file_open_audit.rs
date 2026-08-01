@@ -33,10 +33,11 @@ fn production_file_backed_sqlite_openers_are_centrally_audited() {
             ),
             1,
         ),
-        // The four central kanban-sqlite constructors acquire and retain the
+        // The five central kanban-sqlite constructors acquire and retain the
         // matching lifecycle authority around these exact raw open calls:
-        // shared read/write, shared read-only, exclusive immutable read-only,
-        // and an exclusive-authority-owned replacement inspection opener.
+        // shared read/write, shared read-only, the two exclusive immutable
+        // read-only paths, and an exclusive-authority-owned replacement
+        // inspection opener.
         (
             (
                 PathBuf::from("crates/kanban-sqlite/src/db.rs"),
@@ -49,7 +50,7 @@ fn production_file_backed_sqlite_openers_are_centrally_audited() {
                 PathBuf::from("crates/kanban-sqlite/src/db.rs"),
                 "open_with_flags".to_owned(),
             ),
-            2,
+            3,
         ),
     ]);
     assert_eq!(

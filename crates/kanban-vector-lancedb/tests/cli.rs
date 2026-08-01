@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use kanban_contract::VectorHelperStatusResponse;
+use kanban_helper_protocol::HelperEnvelope;
 use rusqlite::{Connection, params};
 use serde_json::Value;
 
@@ -99,7 +101,12 @@ fn write_unconfigured_vector_config(root: &Path) -> PathBuf {
 fn status_payload(output: Output) -> Value {
     assert!(output.status.success(), "status failed: {:?}", output);
     let stdout = String::from_utf8(output.stdout).unwrap();
-    serde_json::from_str(&stdout).unwrap_or_else(|error| panic!("{error}: {stdout}"))
+    let envelope = HelperEnvelope::from_json(&stdout)
+        .unwrap_or_else(|error| panic!("invalid helper envelope: {error}: {stdout}"));
+    let status: VectorHelperStatusResponse = envelope
+        .decode()
+        .unwrap_or_else(|error| panic!("invalid helper status payload: {error}: {stdout}"));
+    serde_json::to_value(status).unwrap()
 }
 
 #[test]
@@ -117,14 +124,9 @@ fn label_atom_status_without_provider_succeeds_with_degraded_payload() {
         "--vector-config",
         config.to_str().unwrap(),
     ]));
-    assert_eq!(payload["data"]["backend"], "lancedb-label-atoms");
-    assert_eq!(payload["data"]["enabled"], false);
-    assert!(
-        payload["data"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("degraded")
-    );
+    assert_eq!(payload["backend"], "lancedb-label-atoms");
+    assert_eq!(payload["enabled"], false);
+    assert!(payload["message"].as_str().unwrap().contains("degraded"));
 }
 
 #[test]
@@ -142,14 +144,9 @@ fn vector_status_without_provider_succeeds_with_disabled_payload() {
         "--vector-config",
         config.to_str().unwrap(),
     ]));
-    assert_eq!(payload["data"]["backend"], "lancedb");
-    assert_eq!(payload["data"]["enabled"], false);
-    assert!(
-        payload["data"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("degraded")
-    );
+    assert_eq!(payload["backend"], "lancedb");
+    assert_eq!(payload["enabled"], false);
+    assert!(payload["message"].as_str().unwrap().contains("degraded"));
 }
 
 #[test]

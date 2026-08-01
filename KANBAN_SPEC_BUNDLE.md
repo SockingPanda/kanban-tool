@@ -819,8 +819,13 @@ dispatcher 或重型辅助后端。JSON Schema 只验证 wire 结构/值域，
   helpers、label atom/vector-store status/query/rebuild/sync helpers，以及 trusted-suggestion validation DTO。
   这些符号不从 `api` root 暴露。
 - `kanban_sqlite::api::lifecycle` 承载进程运行时/替换生命周期管线：
-  `DatabaseRuntimeGuard`、`DatabaseReplaceGuard`、`begin_database_runtime` 和
-  `begin_database_replace`。这些保护是二进制程序/运行时 owner 的基础设施，不是普通产品用例。
+  `DatabaseRuntimeGuard`、`DatabaseReplaceGuard`、`DatabaseReplaceOptions`、
+  `DatabaseReplaceReport`、`begin_database_runtime`、`begin_database_replace`、
+  `publish_staged_database`、`publish_staged_database_with_options`、
+  `resume_staged_database_replace` 和 `resume_staged_database_replace_with_options`。
+  这些保护与替换发布/恢复操作是二进制程序/运行时 owner 的基础设施，不是普通产品用例；
+  replacement API 只允许通过同一 lifecycle guard 进行 journal-backed、fail-closed 的
+  staged SQLite namespace transition。
 - `kanban_sqlite::db` 和 `kanban_sqlite::init` 仍是显式基础设施模块；`connect_file`、
   `init_database` 不从 `api` root 暴露。文件数据库连接由 `connect_file` 返回
   `DatabaseConnection`：它先在 canonical SQLite inode 的专用 lifecycle byte 上取得 shared
@@ -835,6 +840,8 @@ dispatcher 或重型辅助后端。JSON Schema 只验证 wire 结构/值域，
   exclusive placeholder，未 publish 即释放时只删除仍映射到该 held inode 的 placeholder。
   phase-two publish seam 可先独占 staged inode；rename 后必须同时证明
   `current -> previous`、`staged -> canonical` 并显式 rebind，旧 path witness 不能继续冒充有效映射。
+  replacement journal 当前使用 `format_version=2`；读取、校验和恢复入口拒绝旧版本及未知版本，
+  不做隐式迁移或弱兼容。
   guard Drop 先释放 staged、再释放 current/legacy authority，最后才删除 maintenance marker。
 - Linux 使用 OFD byte-range lock，Windows 使用 `LockFileEx`，两者把 lifecycle byte 放在 SQLite
   最大文件大小之外；其他 Unix 使用 fs4/`flock` whole-file shared/exclusive fallback。per-store
@@ -4918,13 +4925,36 @@ JSONL `event.data.payload` 仍按不透明 JSON 保存；39 种类型的联合�
 存储原生快照只作为单向兼容输入：同一记录如果同时出现自然命名的新键与对应格式的
 存储原生旧键，会在兼容性规范化前以 `invalid_input` 拒绝，不能由旧值静默覆盖自然命名值。
 
+如果 `kanban import --replace` 发现同一数据库旁存在未完成的 replacement journal，命令会
+先在 held lifecycle guard 内自动恢复该 journal，再决定是否开始新的导入；恢复路径完全忽略
+本次调用的 `--input`，不会打开、解析或把它当作新的 source。恢复成功是正常成功（退出码
+`0`）：`--json` 输出的 `data.resumed` 为 `true`、`data.records` 为 `0`、
+`data.dry_run` 为 `false`，`data.input_path` 只保留调用证据；人类输出明确写出 input
+ignored。恢复失败会保留 journal/staged/previous evidence 并按运行期错误契约返回失败，不能
+降级成一次 fresh import。没有 journal，或已完成 journal 在 guard 内通过完整 canonical、
+previous、staged identity 校验并被 quarantine 后，才会校验 `--input` 并执行新的导入。
+completed journal 若仍有 staged 文件、身份不匹配、路径不是确定性 regular file，或数据库
+basename 不是 UTF-8，都会 fail closed 并返回 `invalid_input`/冲突错误；不会用回退 basename
+生成可能碰撞的 journal。
+
 `kanban import --replace` 是替换式恢复入口，必须显式传入 `--replace`；导入文件必须至少
 包含一个看板，且每个看板必须包含列。该命令只能离线运行；运行前必须停止 `kanban serve`
 和其他持有活动运行锁的进程；如果检测到活动运行锁会直接拒绝。导入会在同一 SQLite 事务内
 执行插入与最终 `doctor` 门禁：基础关系表会校验 `task_labels`、`task_dependencies`、
 `task_runs`、`task_comments`、`task_events`、`task_attachments` 的记录看板与所引用的
-任务/标签/运行记录看板一致；失败时整个替换事务回滚，不提交部分数据。所选目标数据库
-不存在时，成功的替换会创建它；导入或最终门禁失败时不会留下临时 placeholder 作为目标数据库。
+任务/标签/运行记录看板一致。
+
+替换发布使用同目录的 staged SQLite 文件、previous evidence 和
+`.<database-file>.replace.journal` durable journal。journal 写入前的校验失败不会改变目标；
+journal 写入后任意错误、进程退出或崩溃都进入 fail-closed recovery state，不尝试用原子性
+叙述掩盖部分 namespace transition，也不保证目标路径暂时存在。恢复证据（journal、staged
+文件和 previous 文件）会保留；重跑相同的 `kanban import --replace` 会发现该确定性 journal
+并继续恢复，只有恢复完成后才开始新的导入。已完成的 journal 会先移到同目录的 quarantine
+条目，保留审计证据。所选目标数据库不存在时，成功的替换会创建它；导入或最终门禁在
+journal 发布前失败时不会留下目标 placeholder，发布后则按上述恢复语义保留证据。
+当前 replacement journal 的 `format_version` 为 `2`；读取、校验和恢复只接受该版本。
+旧的 `v1` journal 与未知版本会在恢复开始前以 `invalid_input` fail closed，不做迁移或弱兼容
+读取。
 
 本体导入会延迟回填 `label_ontology_signals.superseded_by_signal_id` 与
 `label_ontology_actions.parent_action_id`，因此不依赖 JSONL 中同表自引用记录的偶然顺序；

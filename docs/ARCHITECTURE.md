@@ -275,8 +275,13 @@ dispatcher 或重型辅助后端。JSON Schema 只验证 wire 结构/值域，
   helpers、label atom/vector-store status/query/rebuild/sync helpers，以及 trusted-suggestion validation DTO。
   这些符号不从 `api` root 暴露。
 - `kanban_sqlite::api::lifecycle` 承载进程运行时/替换生命周期管线：
-  `DatabaseRuntimeGuard`、`DatabaseReplaceGuard`、`begin_database_runtime` 和
-  `begin_database_replace`。这些保护是二进制程序/运行时 owner 的基础设施，不是普通产品用例。
+  `DatabaseRuntimeGuard`、`DatabaseReplaceGuard`、`DatabaseReplaceOptions`、
+  `DatabaseReplaceReport`、`begin_database_runtime`、`begin_database_replace`、
+  `publish_staged_database`、`publish_staged_database_with_options`、
+  `resume_staged_database_replace` 和 `resume_staged_database_replace_with_options`。
+  这些保护与替换发布/恢复操作是二进制程序/运行时 owner 的基础设施，不是普通产品用例；
+  replacement API 只允许通过同一 lifecycle guard 进行 journal-backed、fail-closed 的
+  staged SQLite namespace transition。
 - `kanban_sqlite::db` 和 `kanban_sqlite::init` 仍是显式基础设施模块；`connect_file`、
   `init_database` 不从 `api` root 暴露。文件数据库连接由 `connect_file` 返回
   `DatabaseConnection`：它先在 canonical SQLite inode 的专用 lifecycle byte 上取得 shared
@@ -291,6 +296,8 @@ dispatcher 或重型辅助后端。JSON Schema 只验证 wire 结构/值域，
   exclusive placeholder，未 publish 即释放时只删除仍映射到该 held inode 的 placeholder。
   phase-two publish seam 可先独占 staged inode；rename 后必须同时证明
   `current -> previous`、`staged -> canonical` 并显式 rebind，旧 path witness 不能继续冒充有效映射。
+  replacement journal 当前使用 `format_version=2`；读取、校验和恢复入口拒绝旧版本及未知版本，
+  不做隐式迁移或弱兼容。
   guard Drop 先释放 staged、再释放 current/legacy authority，最后才删除 maintenance marker。
 - Linux 使用 OFD byte-range lock，Windows 使用 `LockFileEx`，两者把 lifecycle byte 放在 SQLite
   最大文件大小之外；其他 Unix 使用 fs4/`flock` whole-file shared/exclusive fallback。per-store

@@ -1596,6 +1596,16 @@ marker/tree/identity 校验；不能只比较 basename、suffix 或旧 marker �
 依赖，不得在本 runbook 发明 restore 语法，也不得把 rollback evidence 当作 canonical
 restore 证据。
 
+若现场重启时发现同一数据库旁的 replacement journal 尚未完成，恢复操作必须使用已发布的
+`kanban import --replace` CLI recovery path：它在 held lifecycle guard 内先完成 journal
+恢复，再决定是否开始新的导入，并且忽略本次调用的 `--input`（不会将其作为 source）。成功
+恢复必须记录退出码 `0` 以及 JSON `data.resumed=true`、`data.records=0`、
+`data.dry_run=false`；`data.input_path` 仅作为调用证据，不能据此声称导入了该文件。恢复失败
+必须保留 journal、staged 和 previous evidence 并 hard stop；没有 journal，或已完成 journal
+通过完整 canonical/previous/staged identity 校验并 quarantine 后，才允许按正常流程校验输入。
+当前 replacement journal 仅接受 `format_version=2`；`v1` 或未知版本必须在恢复前 hard stop，
+不得迁移、删除或按弱身份继续执行。
+
 部署动作完成后，必须先运行同一个 machine comparison，再证明 maintenance unit 配置的
 helper 精确绑定。任一 mismatch 都在 canonical canary mutation 之前 hard stop。
 

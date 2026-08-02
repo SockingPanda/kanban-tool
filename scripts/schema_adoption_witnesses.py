@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -265,10 +266,29 @@ def require_executed_test(run_output: str, exact_test: str) -> None:
         )
 
 
+def _inherited_lock_pass_fds() -> tuple[int, ...]:
+    lock_fd_raw = os.environ.get("KANBAN_CARGO_BUILD_LOCK_FD", "")
+    if not (
+        os.environ.get("KANBAN_CARGO_BUILD_LOCK_HELD") == "1"
+        and lock_fd_raw.isascii()
+        and lock_fd_raw.isdecimal()
+        and lock_fd_raw[0] in "3456789"
+    ):
+        return ()
+    try:
+        lock_fd = int(lock_fd_raw)
+        os.fstat(lock_fd)
+    except (OSError, OverflowError, ValueError):
+        return ()
+    return (lock_fd,)
+
+
 def run_checked(command: list[str], repo_root: Path) -> str:
     completed = subprocess.run(
         command,
         cwd=repo_root,
+        close_fds=True,
+        pass_fds=_inherited_lock_pass_fds(),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

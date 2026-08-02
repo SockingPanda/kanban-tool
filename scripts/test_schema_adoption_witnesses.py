@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
+import subprocess
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -78,6 +81,65 @@ def metadata_with_dependency(
 
 
 class WitnessGateNegativeTests(unittest.TestCase):
+    def test_run_checked_preserves_valid_inherited_lock_descriptor(self) -> None:
+        lock_fd = fcntl.fcntl(0, fcntl.F_DUPFD, 90)
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="ok\n", stderr=""
+        )
+        try:
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "KANBAN_CARGO_BUILD_LOCK_FD": str(lock_fd),
+                        "KANBAN_CARGO_BUILD_LOCK_HELD": "1",
+                    },
+                ),
+                mock.patch.object(
+                    witness_gate.subprocess, "run", return_value=completed
+                ) as run,
+            ):
+                self.assertEqual(
+                    witness_gate.run_checked(["cargo", "metadata"], WORKSPACE_ROOT),
+                    "ok\n",
+                )
+        finally:
+            os.close(lock_fd)
+
+        self.assertTrue(run.call_args.kwargs["close_fds"])
+        self.assertEqual(run.call_args.kwargs["pass_fds"], (lock_fd,))
+
+    def test_run_checked_rejects_unusable_inherited_lock_descriptors(self) -> None:
+        closed_fd = fcntl.fcntl(0, fcntl.F_DUPFD, 100)
+        os.close(closed_fd)
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=2,
+            stdout="",
+            stderr="error: KANBAN_CARGO_BUILD_LOCK_HELD requires an inherited lock proof\n",
+        )
+
+        for lock_fd_raw in ("not-a-fd", "999999", str(closed_fd), "9" * 5000, str(2**63)):
+            with self.subTest(lock_fd=lock_fd_raw):
+                with (
+                    mock.patch.dict(
+                        os.environ,
+                        {
+                            "KANBAN_CARGO_BUILD_LOCK_FD": lock_fd_raw,
+                            "KANBAN_CARGO_BUILD_LOCK_HELD": "1",
+                        },
+                    ),
+                    mock.patch.object(
+                        witness_gate.subprocess, "run", return_value=completed
+                    ) as run,
+                ):
+                    with self.assertRaisesRegex(
+                        witness_gate.WitnessGateError, "inherited lock proof"
+                    ):
+                        witness_gate.run_checked(["cargo", "metadata"], WORKSPACE_ROOT)
+                    self.assertTrue(run.call_args.kwargs["close_fds"])
+                    self.assertEqual(run.call_args.kwargs["pass_fds"], ())
+
     def test_registry_dependency_cannot_impersonate_workspace_contract(self) -> None:
         metadata = metadata_with_dependency(
             None,

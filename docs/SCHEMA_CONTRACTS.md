@@ -270,7 +270,7 @@ just schema-audit-closed
   nextest/fallback 双分支。release wrapper 另以 whole-file SHA-256 和结构化
   `publish_generation` argv graph 锁定，拒绝 dead branch/environment skip；独立 hermetic
   fake-git/fake-package 测试使用 default-deny command allowlist，并将 build-lock、Git、
-  `just`、Debian tooling 与 helper identity 写入统一 JSONL，规范化后对 181 行 ordered
+  `just`、Debian tooling 与 helper identity 写入统一 JSONL，规范化后对 311 行 ordered
   trace 做 exact SHA-256 比较。mutation tests 必须拒绝 workspace-wide fmt、package 漂移、
   gate 删除、host `PATH`/direct `cargo` 命令旁路与顺序调换。
 - `schema-dependency-isolation` 先运行该自测，再用结构化 manifest/full locked metadata policy

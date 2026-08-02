@@ -174,5 +174,5 @@ release wrapper 本身由 whole-file SHA-256 与结构化 `publish_generation` a
 共同锁定；dead branch、environment skip、命令新增/删除/重排都会使 witness 失败。
 hermetic wrapper 测试使用 default-deny `PATH`，只暴露声明过的工具，并把 build-lock、
 Git、`just`、Debian tooling 与 helper runtime identity 调用写入统一 JSONL；规范化后的
-181 行 ordered trace 以 exact SHA-256 比较，额外 direct `cargo` 或 host `PATH` fallback
+311 行 ordered trace 以 exact SHA-256 比较，额外 direct `cargo` 或 host `PATH` fallback
 都会失败。

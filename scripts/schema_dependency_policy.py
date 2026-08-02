@@ -1345,6 +1345,23 @@ def load_approved_registry_closure(
     return approved
 
 
+def _inherited_lock_pass_fds() -> tuple[int, ...]:
+    lock_fd_raw = os.environ.get("KANBAN_CARGO_BUILD_LOCK_FD", "")
+    if not (
+        os.environ.get("KANBAN_CARGO_BUILD_LOCK_HELD") == "1"
+        and lock_fd_raw.isascii()
+        and lock_fd_raw.isdecimal()
+        and lock_fd_raw[0] in "3456789"
+    ):
+        return ()
+    try:
+        lock_fd = int(lock_fd_raw)
+        os.fstat(lock_fd)
+    except (OSError, OverflowError, ValueError):
+        return ()
+    return (lock_fd,)
+
+
 def load_metadata(repo_root: Path = ROOT) -> dict[str, Any]:
     command = [
         str(repo_root / "scripts/cargo-build-lock.sh"),
@@ -1361,6 +1378,8 @@ def load_metadata(repo_root: Path = ROOT) -> dict[str, Any]:
         command,
         cwd=repo_root,
         check=False,
+        close_fds=True,
+        pass_fds=_inherited_lock_pass_fds(),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

@@ -35,6 +35,48 @@ class ReleaseSafePathTests(unittest.TestCase):
         self.root = self.base / "root"
         self.root.mkdir(mode=0o700)
 
+    @staticmethod
+    def effective_environment(
+        env: dict[str, str] | None,
+    ) -> dict[str, str]:
+        effective = os.environ.copy()
+        if env is not None:
+            effective.update(env)
+        return effective
+
+    @staticmethod
+    def inherited_fd(environment: dict[str, str]) -> int | None:
+        if environment.get("KANBAN_CARGO_BUILD_LOCK_HELD") != "1":
+            return None
+        raw = environment.get("KANBAN_CARGO_BUILD_LOCK_FD")
+        if (
+            raw is None
+            or not raw
+            or not raw.isascii()
+            or not raw.isdecimal()
+            or raw[0] not in "3456789"
+        ):
+            return None
+        try:
+            descriptor = int(raw, 10)
+            if descriptor < 3:
+                return None
+            os.fstat(descriptor)
+        except (OSError, OverflowError, ValueError):
+            return None
+        return descriptor
+
+    def subprocess_pass_fds(
+        self,
+        environment: dict[str, str],
+        explicit: tuple[int, ...],
+    ) -> tuple[int, ...]:
+        descriptors = set(explicit)
+        inherited = self.inherited_fd(environment)
+        if inherited is not None:
+            descriptors.add(inherited)
+        return tuple(sorted(descriptors))
+
     def run_helper(
         self,
         *arguments: object,
@@ -47,12 +89,14 @@ class ReleaseSafePathTests(unittest.TestCase):
             os.fspath(HELPER),
             *(os.fspath(argument) for argument in arguments),
         ]
+        effective_env = self.effective_environment(env)
         return subprocess.run(
             command,
             check=False,
             capture_output=True,
-            env=env,
-            pass_fds=pass_fds,
+            close_fds=True,
+            env=effective_env,
+            pass_fds=self.subprocess_pass_fds(effective_env, pass_fds),
             text=True,
             timeout=10,
         )
@@ -81,6 +125,92 @@ class ReleaseSafePathTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertTrue((self.root / "acquired").is_dir())
+
+    def test_inherited_lock_fd_is_forwarded_by_default(self) -> None:
+        lock_path = self.root / ".build.lock"
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        self.addCleanup(lambda: os.close(lock_fd))
+        result = self.run_helper(
+            "ensure-dir",
+            "--root",
+            self.root,
+            "--path",
+            self.root / "default-forwarded",
+            env=self.inherited_lock_environment(lock_fd),
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertTrue((self.root / "default-forwarded").is_dir())
+
+    def test_leading_zero_lock_fd_is_not_forwarded_even_when_fd3_is_open(
+        self,
+    ) -> None:
+        lock_path = self.root / ".build.lock"
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+        self.addCleanup(lambda: os.close(lock_fd))
+        saved_fd3: int | None = None
+        if lock_fd != 3:
+            try:
+                saved_fd3 = os.dup(3)
+            except OSError:
+                pass
+            os.dup2(lock_fd, 3)
+
+            def restore_fd3() -> None:
+                if saved_fd3 is None:
+                    os.close(3)
+                else:
+                    os.dup2(saved_fd3, 3)
+                    os.close(saved_fd3)
+
+            self.addCleanup(restore_fd3)
+
+        environment = self.inherited_lock_environment(3)
+        environment["KANBAN_CARGO_BUILD_LOCK_FD"] = "0003"
+        result = self.run_helper(
+            "ensure-dir",
+            "--root",
+            self.root,
+            "--path",
+            self.root / "leading-zero",
+            env=environment,
+        )
+        self.assertNotEqual(result.returncode, 0, msg=result.stdout)
+        self.assertTrue(
+            result.stderr.startswith("error: "),
+            msg=result.stderr,
+        )
+        self.assertFalse((self.root / "leading-zero").exists())
+
+    def test_invalid_inherited_lock_fd_is_fail_closed_without_harness_error(
+        self,
+    ) -> None:
+        lock_path = self.root / ".build.lock"
+        lock_path.touch()
+        closed_fd = os.open(lock_path, os.O_RDWR)
+        os.close(closed_fd)
+        for raw_fd in (
+            "not-a-fd",
+            "5000",
+            str(closed_fd),
+            "9" * 5000,
+            str(2**63),
+        ):
+            with self.subTest(raw_fd=raw_fd):
+                environment = self.inherited_lock_environment(closed_fd)
+                environment["KANBAN_CARGO_BUILD_LOCK_FD"] = raw_fd
+                result = self.run_helper(
+                    "ensure-dir",
+                    "--root",
+                    self.root,
+                    "--path",
+                    self.root / f"invalid-{len(raw_fd)}",
+                    env=environment,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(result.stderr)
+                self.assertFalse(
+                    (self.root / f"invalid-{len(raw_fd)}").exists()
+                )
 
     def test_inherited_competing_lock_fails_before_mutation(self) -> None:
         lock_path = self.root / ".build.lock"
@@ -121,7 +251,6 @@ class ReleaseSafePathTests(unittest.TestCase):
             "--path",
             destination,
             env=environment,
-            pass_fds=(lock_fd,),
         )
         self.wait_for_pause(process, marker)
 
@@ -179,9 +308,10 @@ class ReleaseSafePathTests(unittest.TestCase):
     def start_helper(
         self,
         *arguments: object,
-        env: dict[str, str],
+        env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
     ) -> subprocess.Popen[str]:
+        effective_env = self.effective_environment(env)
         process = subprocess.Popen(
             [
                 sys.executable,
@@ -191,8 +321,9 @@ class ReleaseSafePathTests(unittest.TestCase):
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=env,
-            pass_fds=pass_fds,
+            close_fds=True,
+            env=effective_env,
+            pass_fds=self.subprocess_pass_fds(effective_env, pass_fds),
             text=True,
         )
         self.addCleanup(

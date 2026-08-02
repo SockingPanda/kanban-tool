@@ -41,6 +41,9 @@ default-members = [
 ]
 resolver = "3"
 
+[profile.dev]
+incremental = false
+
 [workspace.package]
 edition = "2024"
 version = "2.1.3"

@@ -880,6 +880,29 @@ assert_release_resource_environment_compatibility() {
     CARGO_BUILD_JOBS=2 "$source_gate" --help
 }
 
+assert_dev_profile_disables_incremental_without_test_override() {
+  python3 -B - "$ROOT/Cargo.toml" <<'PY'
+import sys
+import tomllib
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+with manifest_path.open("rb") as manifest_file:
+    manifest = tomllib.load(manifest_file)
+
+profiles = manifest.get("profile", {})
+dev = profiles.get("dev")
+if not isinstance(dev, dict) or dev.get("incremental") is not False:
+    raise SystemExit(
+        "root Cargo.toml must set [profile.dev].incremental = false"
+    )
+if "test" in profiles:
+    raise SystemExit(
+        "root Cargo.toml must not override [profile.test]; Cargo test inherits [profile.dev]"
+    )
+PY
+}
+
 [[ ! -e "$ROOT/scripts/$REMOVED_HELPER.sh" ]] || fail "removed target helper still exists"
 
 expected_target="$(expected_target_dir "$TARGET_ROOT")"
@@ -1227,6 +1250,7 @@ assert_target_tools_safe_path_gate_order() {
 }
 
 assert_target_tools_safe_path_gate_order
+assert_dev_profile_disables_incremental_without_test_override
 
 assert_distinct_worktrees_share_target_and_lock
 assert_package_lock_marker_is_wrapper_owned

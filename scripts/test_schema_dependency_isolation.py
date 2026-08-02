@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import fcntl
 import hashlib
 import json
 import os
@@ -570,17 +571,116 @@ class DependencyIsolationGateTests(unittest.TestCase):
                 env["FAKE_CARGO_LEAK"] = leak
             if tool_leak_package is not None:
                 env["FAKE_CARGO_TOOL_LEAK_PACKAGE"] = tool_leak_package
+            lock_fd_raw = env.get("KANBAN_CARGO_BUILD_LOCK_FD", "")
+            pass_fds: tuple[int, ...] = ()
+            if (
+                env.get("KANBAN_CARGO_BUILD_LOCK_HELD") == "1"
+                and lock_fd_raw.isascii()
+                and lock_fd_raw.isdecimal()
+                and lock_fd_raw[0] in "3456789"
+            ):
+                try:
+                    lock_fd = int(lock_fd_raw)
+                    os.fstat(lock_fd)
+                except (OSError, OverflowError, ValueError):
+                    pass
+                else:
+                    # The gate re-enters cargo-build-lock.sh. Keep only its
+                    # already-proven lock descriptor so the fake cargo command
+                    # is reached under the release cohort's inherited lock.
+                    pass_fds = (lock_fd,)
             completed = subprocess.run(
                 ["bash", str(GATE)],
                 cwd=ROOT,
                 env=env,
+                close_fds=True,
+                pass_fds=pass_fds,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=False,
             )
-            records = [json.loads(line) for line in log.read_text().splitlines()]
+            records = (
+                [json.loads(line) for line in log.read_text().splitlines()]
+                if log.exists()
+                else []
+            )
             return completed, records
+
+    def test_fake_cargo_gate_preserves_inherited_build_lock_descriptor(self) -> None:
+        target_dir = Path(
+            subprocess.check_output(
+                [str(ROOT / "scripts/cargo-build-lock.sh"), "--print-target-dir"],
+                text=True,
+            ).strip()
+        )
+        lock_path = target_dir / ".build.lock"
+
+        if os.environ.get("KANBAN_CARGO_BUILD_LOCK_HELD") == "1":
+            completed, records = self.run_gate()
+        else:
+            lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o666)
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX)
+                with mock.patch.dict(
+                    os.environ,
+                    {
+                        "CARGO_TARGET_DIR": str(target_dir),
+                        "KANBAN_CARGO_BUILD_LOCK_FD": str(lock_fd),
+                        "KANBAN_CARGO_BUILD_LOCK_HELD": "1",
+                        "KANBAN_CARGO_BUILD_LOCK_PATH": str(lock_path),
+                    },
+                ):
+                    completed, records = self.run_gate()
+            finally:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                os.close(lock_fd)
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(len(records), len(PRODUCTS) + 2)
+
+    def assert_inherited_lock_descriptors_are_rejected(
+        self, *lock_fd_values: str
+    ) -> None:
+        target_dir = Path(
+            subprocess.check_output(
+                [str(ROOT / "scripts/cargo-build-lock.sh"), "--print-target-dir"],
+                text=True,
+            ).strip()
+        )
+        lock_path = target_dir / ".build.lock"
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o666)
+        os.close(lock_fd)
+
+        for lock_fd_raw in lock_fd_values:
+            with self.subTest(lock_fd=lock_fd_raw), mock.patch.dict(
+                os.environ,
+                {
+                    "CARGO_TARGET_DIR": str(target_dir),
+                    "KANBAN_CARGO_BUILD_LOCK_FD": lock_fd_raw,
+                    "KANBAN_CARGO_BUILD_LOCK_HELD": "1",
+                    "KANBAN_CARGO_BUILD_LOCK_PATH": str(lock_path),
+                },
+            ):
+                completed, records = self.run_gate()
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertEqual(records, [])
+                self.assertIn(
+                    "KANBAN_CARGO_BUILD_LOCK_HELD requires an inherited lock proof",
+                    completed.stderr,
+                )
+
+    def test_fake_cargo_gate_rejects_invalid_inherited_lock_descriptors(self) -> None:
+        closed_fd = fcntl.fcntl(0, fcntl.F_DUPFD, 100)
+        os.close(closed_fd)
+        self.assert_inherited_lock_descriptors_are_rejected(
+            "not-a-fd", "999999", str(closed_fd)
+        )
+
+    def test_fake_cargo_gate_rejects_unrepresentable_inherited_lock_descriptors(
+        self,
+    ) -> None:
+        self.assert_inherited_lock_descriptors_are_rejected("9" * 5000, str(2**63))
 
     def test_command_shapes_cover_default_product_and_tooling_graphs(self) -> None:
         completed, records = self.run_gate()

@@ -144,6 +144,16 @@ where
         options.query = trimmed_optional(options.query);
         self.store.list_tasks(board, options).await
     }
+
+    pub async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+        let task_id = task_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(KanbanError::InvalidInput(
+                "task_id must be a global t_... id".to_owned(),
+            ));
+        }
+        self.store.get_task(task_id).await
+    }
 }
 
 fn trimmed_optional(value: Option<String>) -> Option<String> {
@@ -251,6 +261,24 @@ mod tests {
                 tasks: Vec::new(),
                 total: 0,
             })
+        }
+
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            assert_eq!(task_id, "t_show");
+            Ok(task_record(CreateTaskRecord {
+                id: task_id.to_owned(),
+                idempotency_key: None,
+                title: "Shown".into(),
+                description: Some("task details".into()),
+                status: TaskStatus::Todo,
+                assignee: None,
+                priority: 2,
+                scheduled_at: None,
+                due_at: None,
+                max_retries: None,
+                metadata_json: "{}".into(),
+                created_by: "tester".into(),
+            }))
         }
     }
 
@@ -382,6 +410,21 @@ mod tests {
             )
             .await
             .unwrap_err();
+        assert!(matches!(error, KanbanError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn get_task_accepts_only_global_task_ids() {
+        let service = ApplicationService::with_clock(
+            StubStore {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            FixedClock(100),
+        );
+        let task = service.get_task(" t_show ").await.unwrap();
+        assert_eq!(task.id, "t_show");
+
+        let error = service.get_task("default#1").await.unwrap_err();
         assert!(matches!(error, KanbanError::InvalidInput(_)));
     }
 

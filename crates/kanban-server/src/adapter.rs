@@ -135,11 +135,20 @@ impl ApplicationStore for TursoApplicationStore {
             total: page.total,
         })
     }
+
+    async fn get_task(&self, task_id: &str) -> Result<ApplicationTask> {
+        self.store
+            .get_task_global(task_id)
+            .await
+            .map_err(store_error)
+            .and_then(application_task)
+    }
 }
 
 fn store_error(error: StoreError) -> KanbanError {
     match error {
         StoreError::BoardNotFound(selector) => KanbanError::NotFound(format!("board {selector}")),
+        StoreError::TaskNotFound(task_id) => KanbanError::NotFound(format!("task {task_id}")),
         StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),
         StoreError::IdempotencyConflict {
             board_id,

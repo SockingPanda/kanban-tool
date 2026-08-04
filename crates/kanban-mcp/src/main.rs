@@ -3,7 +3,8 @@ use std::{collections::BTreeMap, env, sync::Arc};
 use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, CreateTaskRequest, CreateTaskResponse,
-    ListBoardsResponse, ListTasksQuery, ListTasksResponse, TaskReadPlanFilter, TaskReadSort,
+    GetTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse, TaskReadPlanFilter,
+    TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -62,6 +63,15 @@ struct TaskListArgs {
 
 const fn default_list_limit() -> usize {
     100
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TaskShowArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
 }
 
 #[derive(Clone)]
@@ -166,6 +176,25 @@ impl KanbanMcp {
             .map_err(|error| McpError::internal_error(error.to_string(), None))?
             .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(response))
+    }
+
+    #[tool(
+        name = "task_show",
+        description = "Show one task through the canonical kanban application service"
+    )]
+    async fn task_show(
+        &self,
+        Parameters(args): Parameters<TaskShowArgs>,
+    ) -> Result<Json<GetTaskResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let client = self.client.clone();
+        let task = tokio::task::spawn_blocking(move || {
+            client.get_task_by_selector(&board, &args.task_ref)
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(GetTaskResponse::new(task, None)))
     }
 }
 

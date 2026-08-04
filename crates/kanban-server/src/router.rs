@@ -11,7 +11,7 @@ use tower_http::{
 };
 
 use crate::{
-    handlers::{create_task, health, list_board_columns, list_boards, list_tasks},
+    handlers::{create_task, get_task, health, list_board_columns, list_boards, list_tasks},
     state::AppState,
 };
 
@@ -24,6 +24,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/boards/:board/tasks",
             get(list_tasks).post(create_task),
         )
+        .route("/api/v1/tasks/:task_id", get(get_task))
         .layer(desktop_cors_layer())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -86,7 +87,7 @@ mod tests {
     use http_body_util::BodyExt;
     use kanban_contract::{
         ApiErrorCode, ApiExecutionPlanState, ApiTaskStatus, CreateTaskResponse, ErrorEnvelope,
-        ListBoardColumnsResponse, ListBoardsResponse, ListTasksResponse,
+        GetTaskResponse, ListBoardColumnsResponse, ListBoardsResponse, ListTasksResponse,
     };
     use tower::ServiceExt;
 
@@ -196,6 +197,7 @@ mod tests {
         assert_eq!(error.error.code, ApiErrorCode::IdempotencyConflict);
 
         let response = router
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/api/v1/boards/default/tasks?status=todo&priority=1&limit=25&offset=0&sort=-updated_at")
@@ -211,6 +213,51 @@ mod tests {
         assert_eq!(list.data[0].id, created.data.id);
         assert_eq!(list.meta.total, 1);
         assert_eq!(list.meta.limit, 25);
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/tasks/t_http_create")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let shown: GetTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(shown.data, created.data);
+        assert!(shown.meta.is_none());
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/tasks/t_http_create?include=ontology")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(error.error.code, ApiErrorCode::FeatureNotAvailable);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/tasks/t_missing")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(error.error.code, ApiErrorCode::NotFound);
     }
 
     fn json_request(uri: &str, value: serde_json::Value) -> Request<Body> {

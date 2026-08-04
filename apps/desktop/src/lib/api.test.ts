@@ -274,6 +274,20 @@ describe("KanbanApi task search", () => {
     })
   })
 
+  it("gets task details from the external single-host endpoint", async () => {
+    const shown = task({ id: "t_show", title: "Shown" })
+    const fetchMock = mockFetch({ data: shown })
+    const api = new KanbanApi(runtimeConfig, { locale: "zh-CN" })
+
+    await expect(api.getTask("t_show")).resolves.toEqual(shown)
+
+    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_show")
+    expect(calledInit(fetchMock)).toMatchObject({
+      method: "GET",
+      headers: { "Accept-Language": "zh-CN" },
+    })
+  })
+
   it("uses batch search windows by status", async () => {
     const ready = task({ id: "t_search_ready", status: "ready" })
     const searchMeta = {

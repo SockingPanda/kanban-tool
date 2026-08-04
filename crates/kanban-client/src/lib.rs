@@ -7,8 +7,8 @@ use std::{
 
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiErrorCode, ApiTask, CreateTaskRequest, CreateTaskResponse,
-    ErrorEnvelope, HealthReport, HealthResponse, ListBoardColumnsResponse, ListBoardsResponse,
-    ListTasksQuery, ListTasksResponse,
+    ErrorEnvelope, GetTaskResponse, HealthReport, HealthResponse, ListBoardColumnsResponse,
+    ListBoardsResponse, ListTasksQuery, ListTasksResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -17,6 +17,8 @@ pub const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:8721";
 
 #[derive(Debug, Error)]
 pub enum ClientError {
+    #[error("invalid input: {0}")]
+    InvalidInput(String),
     #[error("invalid server URL: {0}")]
     InvalidServerUrl(String),
     #[error("server unavailable: {0}")]
@@ -34,7 +36,7 @@ pub enum ClientError {
 impl ClientError {
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::InvalidServerUrl(_) => "invalid_input",
+            Self::InvalidInput(_) | Self::InvalidServerUrl(_) => "invalid_input",
             Self::ServerUnavailable(_) => "server_unavailable",
             Self::Api { code, .. } => api_error_code(*code),
             Self::InvalidResponse(_) => "invalid_response",
@@ -133,6 +135,56 @@ impl KanbanClient {
         self.get(&list_tasks_path(board, query))
     }
 
+    pub fn get_task(&self, task_id: &str) -> Result<ApiTask, ClientError> {
+        let response: GetTaskResponse = self.get(&format!(
+            "/api/v1/tasks/{}",
+            encode_path_segment(task_id.trim())
+        ))?;
+        Ok(response.data)
+    }
+
+    pub fn resolve_task_id(&self, board: &str, selector: &str) -> Result<String, ClientError> {
+        let selector = selector.trim();
+        if selector.starts_with("t_") && selector.len() > 2 {
+            return Ok(selector.to_owned());
+        }
+        if !is_board_local_task_selector(selector) {
+            return Err(ClientError::InvalidInput(
+                "task selector must be a global t_... id, board#seq, #seq, or numeric seq"
+                    .to_owned(),
+            ));
+        }
+        let response = self.list_tasks(
+            board,
+            &ListTasksQuery {
+                q: Some(selector.to_owned()),
+                include_archived: true,
+                limit: 2,
+                ..ListTasksQuery::default()
+            },
+        )?;
+        match response.data.as_slice() {
+            [task] => Ok(task.id.clone()),
+            [] => Err(ClientError::Api {
+                status: 404,
+                code: ApiErrorCode::NotFound,
+                message: format!("task not found: {selector}"),
+            }),
+            _ => Err(ClientError::InvalidResponse(format!(
+                "task selector is ambiguous: {selector}"
+            ))),
+        }
+    }
+
+    pub fn get_task_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+    ) -> Result<ApiTask, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        self.get_task(&task_id)
+    }
+
     fn get<T>(&self, path: &str) -> Result<T, ClientError>
     where
         T: DeserializeOwned,
@@ -167,6 +219,21 @@ fn prepare_create_request(mut request: CreateTaskRequest) -> CreateTaskRequest {
         .idempotency_key
         .get_or_insert_with(|| format!("task.create:{task_id}"));
     request
+}
+
+fn is_board_local_task_selector(selector: &str) -> bool {
+    let numeric = |value: &str| {
+        !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
+    };
+    if let Some(seq) = selector.strip_prefix('#') {
+        return numeric(seq);
+    }
+    if numeric(selector) {
+        return true;
+    }
+    selector
+        .split_once('#')
+        .is_some_and(|(board, seq)| !board.is_empty() && numeric(seq))
 }
 
 fn list_tasks_path(board: &str, query: &ListTasksQuery) -> String {
@@ -347,5 +414,15 @@ mod tests {
             list_tasks_path("team/one", &query),
             "/api/v1/boards/team%2Fone/tasks?status=ready&status=blocked&priority=0&priority=2&q=a%20%26%20b&include_archived=false&limit=25&offset=50&sort=-updated_at"
         );
+    }
+
+    #[test]
+    fn task_selector_classification_is_narrow_and_deterministic() {
+        for selector in ["#1", "1", "default#1", "b_default#42"] {
+            assert!(is_board_local_task_selector(selector), "{selector}");
+        }
+        for selector in ["", "#", "default", "default#x", "default#1#2"] {
+            assert!(!is_board_local_task_selector(selector), "{selector}");
+        }
     }
 }

@@ -11,7 +11,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, CreateTaskRequest, CreateTaskResponse,
-    ListTasksQuery, TaskReadPlanFilter, TaskReadSort,
+    GetTaskResponse, ListTasksQuery, TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
 
@@ -96,6 +96,8 @@ enum TaskCommand {
     Create(TaskCreateArgs),
     /// List tasks through the shared application service.
     List(TaskListArgs),
+    /// Show a task resolved by global id or board-local reference.
+    Show(TaskShowArgs),
 }
 
 #[derive(Debug, Args)]
@@ -154,6 +156,14 @@ struct TaskListArgs {
     offset: usize,
     #[arg(long, default_value = "position")]
     sort: String,
+}
+
+#[derive(Debug, Args)]
+struct TaskShowArgs {
+    task_ref: String,
+    /// Ontology details are intentionally unavailable on the single-host path.
+    #[arg(long)]
+    details: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -331,6 +341,23 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         for task in response.data {
                             println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
                         }
+                    }
+                }
+                TaskCommand::Show(args) => {
+                    if args.details {
+                        return Err(feature_not_available(
+                            "`task show --details` requires the deferred ontology projection",
+                        ));
+                    }
+                    let task = client.get_task_by_selector(&cli.board, &args.task_ref)?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&GetTaskResponse::new(task, None))
+                                .expect("task show response is serializable")
+                        );
+                    } else {
+                        println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
                     }
                 }
             }

@@ -2,7 +2,10 @@ use std::{collections::BTreeSet, str::FromStr, time::UNIX_EPOCH};
 
 use axum::{
     Json,
-    extract::{Path, Query, RawQuery, State, rejection::JsonRejection},
+    extract::{
+        Path, Query, RawQuery, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, StatusCode},
 };
 use kanban_application::{
@@ -12,13 +15,13 @@ use kanban_application::{
 };
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiCreateTaskStatus, ApiExecutionPlanState, ApiTask, ApiTaskPriority,
-    ApiTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse, HealthReport,
-    HealthResponse, ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse, ListTasksPath,
-    ListTasksQuery, ListTasksResponse, MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS,
-    MAX_TASK_READ_LABELS, MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS,
-    MAX_TASK_READ_PRIORITIES, MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES,
-    MAX_TASK_READ_QUERY_PAIRS, MAX_TASK_READ_STATUSES, TaskReadLabel, TaskReadPlanFilter,
-    TaskReadSort, TotalPaginationMeta,
+    ApiTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse, GetTaskPath,
+    GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse, ListBoardColumnsResponse,
+    ListBoardsQuery, ListBoardsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
+    MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS,
+    MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES,
+    MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
+    MAX_TASK_READ_STATUSES, TaskReadLabel, TaskReadPlanFilter, TaskReadSort, TotalPaginationMeta,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
@@ -189,6 +192,28 @@ pub(crate) async fn list_tasks(
             total: page.total,
         },
     }))
+}
+
+pub(crate) async fn get_task(
+    State(state): State<AppState>,
+    Path(GetTaskPath { task_id }): Path<GetTaskPath>,
+    query: Result<Query<GetTaskQuery>, QueryRejection>,
+) -> Result<Json<GetTaskResponse>, ApiError> {
+    let Query(query) =
+        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+    if let Some(include) = query.include.as_deref() {
+        if include == "ontology" {
+            return Err(KanbanError::FeatureNotAvailable(
+                "task ontology details are not available on the single-host path".to_owned(),
+            )
+            .into());
+        }
+        return Err(
+            KanbanError::InvalidInput(format!("unsupported task include: {include}")).into(),
+        );
+    }
+    let task = state.application().get_task(&task_id).await?;
+    Ok(Json(GetTaskResponse::new(api_task(task)?, None)))
 }
 
 fn request_actor(

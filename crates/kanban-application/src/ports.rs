@@ -32,4 +32,6 @@ pub trait ApplicationStore: Clone + Send + Sync + 'static {
         board: &str,
         options: TaskListOptions,
     ) -> impl Future<Output = Result<TaskListPage>> + Send;
+
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
 }

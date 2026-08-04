@@ -4,8 +4,12 @@ use kanban_core::{
 
 use crate::{
     ApplicationHealth, ApplicationStore, BoardColumnRecord, BoardRecord, CreateTaskCommand,
-    CreateTaskRecord, TaskRecord,
+    CreateTaskRecord, TaskListOptions, TaskListPage, TaskRecord,
 };
+
+const MAX_TASK_LIST_LIMIT: usize = 1_000;
+const MAX_TASK_QUERY_CHARS: usize = 1_024;
+const MAX_TASK_ASSIGNEE_CHARS: usize = 128;
 
 /// The canonical command/query entry point shared by the HTTP handlers and the
 /// in-process dispatcher.
@@ -94,6 +98,59 @@ where
             )
             .await
     }
+
+    pub async fn list_tasks(
+        &self,
+        board: &str,
+        mut options: TaskListOptions,
+    ) -> Result<TaskListPage> {
+        let board = board.trim();
+        if board.is_empty() {
+            return Err(KanbanError::InvalidInput("board is required".to_owned()));
+        }
+        if options.limit > MAX_TASK_LIST_LIMIT {
+            return Err(KanbanError::InvalidInput(format!(
+                "limit must be <= {MAX_TASK_LIST_LIMIT}"
+            )));
+        }
+        if options
+            .assignee
+            .as_deref()
+            .is_some_and(|value| value.chars().count() > MAX_TASK_ASSIGNEE_CHARS)
+        {
+            return Err(KanbanError::InvalidInput(format!(
+                "assignee exceeds {MAX_TASK_ASSIGNEE_CHARS} characters"
+            )));
+        }
+        if options
+            .query
+            .as_deref()
+            .is_some_and(|value| value.chars().count() > MAX_TASK_QUERY_CHARS)
+        {
+            return Err(KanbanError::InvalidInput(format!(
+                "query exceeds {MAX_TASK_QUERY_CHARS} characters"
+            )));
+        }
+        if options
+            .priorities
+            .iter()
+            .any(|value| !(0..=3).contains(value))
+        {
+            return Err(KanbanError::InvalidInput(
+                "priority filters must be between 0 and 3".to_owned(),
+            ));
+        }
+        options.assignee = trimmed_optional(options.assignee);
+        options.query = trimmed_optional(options.query);
+        self.store.list_tasks(board, options).await
+    }
+}
+
+fn trimmed_optional(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let value = value.trim();
+        (!value.is_empty()).then(|| value.to_owned())
+    })
 }
 
 fn validate_create_task(command: &CreateTaskCommand) -> Result<()> {
@@ -185,6 +242,16 @@ mod tests {
             assert_eq!(board, "default");
             Ok(task_record(input))
         }
+
+        async fn list_tasks(&self, board: &str, options: TaskListOptions) -> Result<TaskListPage> {
+            assert_eq!(board, "default");
+            assert_eq!(options.assignee.as_deref(), Some("worker"));
+            assert_eq!(options.query.as_deref(), Some("needle"));
+            Ok(TaskListPage {
+                tasks: Vec::new(),
+                total: 0,
+            })
+        }
     }
 
     #[derive(Clone, Copy)]
@@ -269,6 +336,53 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(task.status, TaskStatus::Scheduled);
+    }
+
+    #[tokio::test]
+    async fn list_tasks_validates_and_normalizes_query_options() {
+        let service = ApplicationService::with_clock(
+            StubStore {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            FixedClock(100),
+        );
+        let page = service
+            .list_tasks(
+                " default ",
+                TaskListOptions {
+                    statuses: vec![TaskStatus::Todo],
+                    priorities: vec![1],
+                    plan_filters: Vec::new(),
+                    assignee: Some(" worker ".into()),
+                    query: Some(" needle ".into()),
+                    include_archived: false,
+                    limit: 25,
+                    offset: 0,
+                    sort: crate::TaskListSort::UpdatedAtDesc,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(page.total, 0);
+
+        let error = service
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    statuses: Vec::new(),
+                    priorities: Vec::new(),
+                    plan_filters: Vec::new(),
+                    assignee: None,
+                    query: None,
+                    include_archived: false,
+                    limit: 1_001,
+                    offset: 0,
+                    sort: crate::TaskListSort::default(),
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, KanbanError::InvalidInput(_)));
     }
 
     fn task_record(input: CreateTaskRecord) -> TaskRecord {

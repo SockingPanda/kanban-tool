@@ -3,7 +3,7 @@ use std::{future::Future, net::SocketAddr};
 use axum::{
     Router,
     http::{HeaderValue, Method, header},
-    routing::{get, post},
+    routing::get,
 };
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
@@ -11,7 +11,7 @@ use tower_http::{
 };
 
 use crate::{
-    handlers::{create_task, health, list_board_columns, list_boards},
+    handlers::{create_task, health, list_board_columns, list_boards, list_tasks},
     state::AppState,
 };
 
@@ -20,7 +20,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/api/v1/boards", get(list_boards))
         .route("/api/v1/boards/:board/columns", get(list_board_columns))
-        .route("/api/v1/boards/:board/tasks", post(create_task))
+        .route(
+            "/api/v1/boards/:board/tasks",
+            get(list_tasks).post(create_task),
+        )
         .layer(desktop_cors_layer())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -83,7 +86,7 @@ mod tests {
     use http_body_util::BodyExt;
     use kanban_contract::{
         ApiErrorCode, ApiExecutionPlanState, ApiTaskStatus, CreateTaskResponse, ErrorEnvelope,
-        ListBoardColumnsResponse, ListBoardsResponse,
+        ListBoardColumnsResponse, ListBoardsResponse, ListTasksResponse,
     };
     use tower::ServiceExt;
 
@@ -183,6 +186,7 @@ mod tests {
         conflict["task_id"] = serde_json::json!("t_http_conflict");
         conflict["title"] = serde_json::json!("Different");
         let response = router
+            .clone()
             .oneshot(json_request("/api/v1/boards/default/tasks", conflict))
             .await
             .unwrap();
@@ -190,6 +194,23 @@ mod tests {
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(error.error.code, ApiErrorCode::IdempotencyConflict);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/boards/default/tasks?status=todo&priority=1&limit=25&offset=0&sort=-updated_at")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let list: ListTasksResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(list.data.len(), 1);
+        assert_eq!(list.data[0].id, created.data.id);
+        assert_eq!(list.meta.total, 1);
+        assert_eq!(list.meta.limit, 25);
     }
 
     fn json_request(uri: &str, value: serde_json::Value) -> Request<Body> {

@@ -1,10 +1,15 @@
 use kanban_application::{
     ApplicationStore, BoardColumnRecord as ApplicationBoardColumn, BoardRecord,
-    CreateTaskRecord as ApplicationCreateTask, ExecutionPlanState, TaskRecord as ApplicationTask,
+    CreateTaskRecord as ApplicationCreateTask, ExecutionPlanState,
+    TaskListOptions as ApplicationTaskListOptions, TaskListPage as ApplicationTaskListPage,
+    TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
+    TaskRecord as ApplicationTask,
 };
 use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
-    CreateTaskInput as StoreCreateTask, StoreError, TaskRecord as StoreTask, TursoStore,
+    CreateTaskInput as StoreCreateTask, StoreError, TaskListOptions as StoreTaskListOptions,
+    TaskListSort as StoreTaskListSort, TaskPlanFilter as StoreTaskPlanFilter,
+    TaskRecord as StoreTask, TursoStore,
 };
 
 #[derive(Clone)]
@@ -89,6 +94,47 @@ impl ApplicationStore for TursoApplicationStore {
             .map_err(store_error)
             .and_then(application_task)
     }
+
+    async fn list_tasks(
+        &self,
+        board: &str,
+        options: ApplicationTaskListOptions,
+    ) -> Result<ApplicationTaskListPage> {
+        let page = self
+            .store
+            .list_tasks(
+                board,
+                StoreTaskListOptions {
+                    statuses: options
+                        .statuses
+                        .into_iter()
+                        .map(|status| status.as_str().to_owned())
+                        .collect(),
+                    priorities: options.priorities,
+                    include_archived: options.include_archived,
+                    assignee: options.assignee,
+                    q: options.query,
+                    plan_filters: options
+                        .plan_filters
+                        .into_iter()
+                        .map(store_plan_filter)
+                        .collect(),
+                    sort: store_task_sort(options.sort),
+                    limit: options.limit,
+                    offset: options.offset,
+                },
+            )
+            .await
+            .map_err(store_error)?;
+        Ok(ApplicationTaskListPage {
+            tasks: page
+                .tasks
+                .into_iter()
+                .map(application_task)
+                .collect::<Result<Vec<_>>>()?,
+            total: page.total,
+        })
+    }
 }
 
 fn store_error(error: StoreError) -> KanbanError {
@@ -107,6 +153,16 @@ fn store_error(error: StoreError) -> KanbanError {
 }
 
 fn application_task(task: StoreTask) -> Result<ApplicationTask> {
+    let execution_plan_state = match task.execution_plan_state.as_str() {
+        "unplanned" => ExecutionPlanState::Unplanned,
+        "planned" => ExecutionPlanState::Planned,
+        "not_required" => ExecutionPlanState::NotRequired,
+        other => {
+            return Err(KanbanError::Storage(format!(
+                "stored execution plan state is invalid: {other}"
+            )));
+        }
+    };
     Ok(ApplicationTask {
         id: task.id,
         board_id: task.board_id,
@@ -138,11 +194,46 @@ fn application_task(task: StoreTask) -> Result<ApplicationTask> {
         result_json: task.result_json,
         metadata_json: task.metadata_json,
         lock_version: task.lock_version,
-        dependency_blocked: false,
-        unfinished_parent_count: 0,
-        execution_plan_state: ExecutionPlanState::Unplanned,
-        required_step_count: 0,
-        completed_required_step_count: 0,
-        optional_step_count: 0,
+        dependency_blocked: task.dependency_blocked,
+        unfinished_parent_count: task.unfinished_parent_count,
+        execution_plan_state,
+        required_step_count: task.required_step_count,
+        completed_required_step_count: task.completed_required_step_count,
+        optional_step_count: task.optional_step_count,
     })
+}
+
+fn store_plan_filter(filter: ApplicationTaskPlanFilter) -> StoreTaskPlanFilter {
+    match filter {
+        ApplicationTaskPlanFilter::PlanNeeded => StoreTaskPlanFilter::PlanNeeded,
+        ApplicationTaskPlanFilter::HasSteps => StoreTaskPlanFilter::HasSteps,
+        ApplicationTaskPlanFilter::IncompleteRequiredSteps => {
+            StoreTaskPlanFilter::IncompleteRequiredSteps
+        }
+    }
+}
+
+fn store_task_sort(sort: ApplicationTaskListSort) -> StoreTaskListSort {
+    match sort {
+        ApplicationTaskListSort::Seq => StoreTaskListSort::Seq,
+        ApplicationTaskListSort::SeqDesc => StoreTaskListSort::SeqDesc,
+        ApplicationTaskListSort::Title => StoreTaskListSort::Title,
+        ApplicationTaskListSort::TitleDesc => StoreTaskListSort::TitleDesc,
+        ApplicationTaskListSort::Status => StoreTaskListSort::Status,
+        ApplicationTaskListSort::StatusDesc => StoreTaskListSort::StatusDesc,
+        ApplicationTaskListSort::Position => StoreTaskListSort::Position,
+        ApplicationTaskListSort::PositionDesc => StoreTaskListSort::PositionDesc,
+        ApplicationTaskListSort::Priority => StoreTaskListSort::Priority,
+        ApplicationTaskListSort::PriorityDesc => StoreTaskListSort::PriorityDesc,
+        ApplicationTaskListSort::Assignee => StoreTaskListSort::Assignee,
+        ApplicationTaskListSort::AssigneeDesc => StoreTaskListSort::AssigneeDesc,
+        ApplicationTaskListSort::ScheduledAt => StoreTaskListSort::ScheduledAt,
+        ApplicationTaskListSort::ScheduledAtDesc => StoreTaskListSort::ScheduledAtDesc,
+        ApplicationTaskListSort::DueAt => StoreTaskListSort::DueAt,
+        ApplicationTaskListSort::DueAtDesc => StoreTaskListSort::DueAtDesc,
+        ApplicationTaskListSort::CreatedAt => StoreTaskListSort::CreatedAt,
+        ApplicationTaskListSort::CreatedAtDesc => StoreTaskListSort::CreatedAtDesc,
+        ApplicationTaskListSort::UpdatedAt => StoreTaskListSort::UpdatedAt,
+        ApplicationTaskListSort::UpdatedAtDesc => StoreTaskListSort::UpdatedAtDesc,
+    }
 }

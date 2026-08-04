@@ -104,3 +104,54 @@ pub struct TaskRecord {
     pub completed_required_step_count: i64,
     pub optional_step_count: i64,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskPlanFilter {
+    PlanNeeded,
+    HasSteps,
+    IncompleteRequiredSteps,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TaskListSort {
+    Seq,
+    SeqDesc,
+    Title,
+    TitleDesc,
+    Status,
+    StatusDesc,
+    #[default]
+    Position,
+    PositionDesc,
+    Priority,
+    PriorityDesc,
+    Assignee,
+    AssigneeDesc,
+    ScheduledAt,
+    ScheduledAtDesc,
+    DueAt,
+    DueAtDesc,
+    CreatedAt,
+    CreatedAtDesc,
+    UpdatedAt,
+    UpdatedAtDesc,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskListOptions {
+    pub statuses: Vec<TaskStatus>,
+    pub priorities: Vec<i64>,
+    pub plan_filters: Vec<TaskPlanFilter>,
+    pub assignee: Option<String>,
+    pub query: Option<String>,
+    pub include_archived: bool,
+    pub limit: usize,
+    pub offset: usize,
+    pub sort: TaskListSort,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskListPage {
+    pub tasks: Vec<TaskRecord>,
+    pub total: usize,
+}

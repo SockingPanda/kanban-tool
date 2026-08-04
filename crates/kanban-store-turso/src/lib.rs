@@ -49,6 +49,72 @@ pub struct CreateTaskInput {
     pub created_by: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskListSort {
+    Seq,
+    SeqDesc,
+    Title,
+    TitleDesc,
+    Status,
+    StatusDesc,
+    Position,
+    PositionDesc,
+    Priority,
+    PriorityDesc,
+    Assignee,
+    AssigneeDesc,
+    ScheduledAt,
+    ScheduledAtDesc,
+    CreatedAt,
+    CreatedAtDesc,
+    UpdatedAt,
+    UpdatedAtDesc,
+    DueAt,
+    DueAtDesc,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskPlanFilter {
+    PlanNeeded,
+    HasSteps,
+    IncompleteRequiredSteps,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskListOptions {
+    pub statuses: Vec<String>,
+    pub priorities: Vec<i64>,
+    pub include_archived: bool,
+    pub assignee: Option<String>,
+    pub q: Option<String>,
+    pub plan_filters: Vec<TaskPlanFilter>,
+    pub sort: TaskListSort,
+    pub limit: usize,
+    pub offset: usize,
+}
+
+impl Default for TaskListOptions {
+    fn default() -> Self {
+        Self {
+            statuses: Vec::new(),
+            priorities: Vec::new(),
+            include_archived: false,
+            assignee: None,
+            q: None,
+            plan_filters: Vec::new(),
+            sort: TaskListSort::Position,
+            limit: 100,
+            offset: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskListPage {
+    pub tasks: Vec<TaskRecord>,
+    pub total: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskRecord {
     pub id: String,
@@ -83,6 +149,13 @@ pub struct TaskRecord {
     pub result_json: Option<String>,
     pub metadata_json: String,
     pub lock_version: i64,
+    pub dependency_blocked: bool,
+    pub unfinished_parent_count: i64,
+    pub execution_plan_state: String,
+    pub required_step_count: i64,
+    pub completed_required_step_count: i64,
+    pub optional_step_count: i64,
+    pub labels: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -328,6 +401,69 @@ impl TursoStore {
         Ok(task)
     }
 
+    pub async fn list_tasks(
+        &self,
+        board_selector: &str,
+        options: TaskListOptions,
+    ) -> Result<TaskListPage, StoreError> {
+        validate_task_list_options(&options)?;
+        let connection = self.connection().await?;
+        let board = first_row(
+            connection
+                .query(
+                    "SELECT id, slug FROM boards WHERE id = ?1 OR slug = ?1 LIMIT 1",
+                    [board_selector],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => {
+                StoreError::BoardNotFound(board_selector.to_owned())
+            }
+            other => StoreError::Turso(other),
+        })?;
+        let board_id = text_value(board.get_value(0)?, "boards.id")?;
+        let board_slug = text_value(board.get_value(1)?, "boards.slug")?;
+        let (where_sql, params) = task_list_where(&board_id, &board_slug, &options);
+
+        let total_row = first_row(
+            connection
+                .query(
+                    &format!("SELECT COUNT(*) {TASK_FROM} {where_sql}"),
+                    params.clone(),
+                )
+                .await?,
+        )
+        .await?;
+        let total = integer_value(total_row.get_value(0)?, "tasks.total")?;
+        let total = usize::try_from(total).map_err(|_| StoreError::InvalidStoredValue {
+            field: "tasks.total",
+        })?;
+
+        let limit = i64::try_from(options.limit)
+            .map_err(|_| StoreError::InvalidInput("limit is too large".to_owned()))?;
+        let offset = i64::try_from(options.offset)
+            .map_err(|_| StoreError::InvalidInput("offset is too large".to_owned()))?;
+        let mut page_params = params;
+        page_params.push((":limit".to_owned(), Value::Integer(limit)));
+        page_params.push((":offset".to_owned(), Value::Integer(offset)));
+        let mut rows = connection
+            .query(
+                &format!(
+                    "{TASK_SELECT} {where_sql} ORDER BY {} LIMIT :limit OFFSET :offset",
+                    task_order_by(options.sort)
+                ),
+                page_params,
+            )
+            .await?;
+        let mut tasks = Vec::new();
+        while let Some(row) = rows.next().await? {
+            tasks.push(task_from_row(row)?);
+        }
+        Ok(TaskListPage { tasks, total })
+    }
+
     pub async fn list_boards(
         &self,
         include_archived: bool,
@@ -412,7 +548,8 @@ async fn first_row(mut rows: Rows) -> Result<Row, turso::Error> {
     Ok(row)
 }
 
-const TASK_SELECT: &str = "SELECT t.id, t.board_id, t.seq, t.idempotency_key, t.title, t.description, t.status, t.status_reason, t.assignee, t.priority, t.position, t.scheduled_at, t.due_at, t.created_by, t.created_at, t.updated_at, t.started_at, t.completed_at, t.archived_at, t.claim_token, t.claim_owner, t.claim_expires_at, t.last_heartbeat_at, t.current_run_id, t.retry_count, t.max_retries, t.result_summary, t.result_json, t.metadata_json, t.lock_version, b.slug FROM tasks AS t JOIN boards AS b ON b.id = t.board_id";
+const TASK_FROM: &str = "FROM tasks AS t JOIN boards AS b ON b.id = t.board_id";
+const TASK_SELECT: &str = "SELECT t.id, t.board_id, t.seq, t.idempotency_key, t.title, t.description, t.status, t.status_reason, t.assignee, t.priority, t.position, t.scheduled_at, t.due_at, t.created_by, t.created_at, t.updated_at, t.started_at, t.completed_at, t.archived_at, t.claim_token, t.claim_owner, t.claim_expires_at, t.last_heartbeat_at, t.current_run_id, t.retry_count, t.max_retries, t.result_summary, t.result_json, t.metadata_json, t.lock_version, b.slug, EXISTS (SELECT 1 FROM task_dependencies AS d JOIN tasks AS p ON p.id = d.parent_task_id AND p.board_id = d.board_id WHERE d.board_id = t.board_id AND d.child_task_id = t.id AND p.status NOT IN ('done', 'archived')) AS dependency_blocked, (SELECT COUNT(*) FROM task_dependencies AS d JOIN tasks AS p ON p.id = d.parent_task_id AND p.board_id = d.board_id WHERE d.board_id = t.board_id AND d.child_task_id = t.id AND p.status NOT IN ('done', 'archived')) AS unfinished_parent_count, CASE WHEN EXISTS (SELECT 1 FROM task_steps AS s WHERE s.board_id = t.board_id AND s.parent_task_id = t.id) THEN 'planned' WHEN EXISTS (SELECT 1 FROM task_execution_plans AS ep WHERE ep.board_id = t.board_id AND ep.task_id = t.id AND ep.state = 'not_required') THEN 'not_required' ELSE 'unplanned' END AS execution_plan_state, (SELECT COUNT(*) FROM task_steps AS s WHERE s.board_id = t.board_id AND s.parent_task_id = t.id AND s.required = 1) AS required_step_count, (SELECT COUNT(*) FROM task_steps AS s WHERE s.board_id = t.board_id AND s.parent_task_id = t.id AND s.required = 1 AND s.status IN ('done', 'skipped')) AS completed_required_step_count, (SELECT COUNT(*) FROM task_steps AS s WHERE s.board_id = t.board_id AND s.parent_task_id = t.id AND s.required = 0) AS optional_step_count FROM tasks AS t JOIN boards AS b ON b.id = t.board_id";
 
 fn validate_create_task_input(input: &CreateTaskInput) -> Result<(), StoreError> {
     if !input.id.starts_with("t_") || input.id.len() <= 2 {
@@ -472,6 +609,233 @@ fn canonical_payload_matches(
         && existing.created_by == input.created_by
 }
 
+fn validate_task_list_options(options: &TaskListOptions) -> Result<(), StoreError> {
+    if options.limit > 1000 {
+        return Err(StoreError::InvalidInput("limit must be <= 1000".to_owned()));
+    }
+    if i64::try_from(options.offset).is_err() {
+        return Err(StoreError::InvalidInput("offset is too large".to_owned()));
+    }
+    for status in &options.statuses {
+        if !matches!(
+            status.as_str(),
+            "triage"
+                | "todo"
+                | "scheduled"
+                | "ready"
+                | "running"
+                | "blocked"
+                | "review"
+                | "done"
+                | "archived"
+        ) {
+            return Err(StoreError::InvalidInput(format!(
+                "unknown task status: {status}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn task_list_where(
+    board_id: &str,
+    board_slug: &str,
+    options: &TaskListOptions,
+) -> (String, Vec<(String, Value)>) {
+    let mut clauses = vec!["t.board_id = :board_id".to_owned()];
+    let mut params = vec![(":board_id".to_owned(), Value::Text(board_id.to_owned()))];
+
+    if !options.include_archived {
+        clauses.push("t.status != 'archived'".to_owned());
+    }
+    if !options.statuses.is_empty() {
+        let names = options
+            .statuses
+            .iter()
+            .enumerate()
+            .map(|(index, _)| format!(":status_{index}"))
+            .collect::<Vec<_>>();
+        clauses.push(format!("t.status IN ({})", names.join(", ")));
+        params.extend(
+            options.statuses.iter().enumerate().map(|(index, status)| {
+                (format!(":status_{index}"), Value::Text(status.to_owned()))
+            }),
+        );
+    }
+    if !options.priorities.is_empty() {
+        let names = options
+            .priorities
+            .iter()
+            .enumerate()
+            .map(|(index, _)| format!(":priority_{index}"))
+            .collect::<Vec<_>>();
+        clauses.push(format!("t.priority IN ({})", names.join(", ")));
+        params.extend(
+            options
+                .priorities
+                .iter()
+                .enumerate()
+                .map(|(index, priority)| (format!(":priority_{index}"), Value::Integer(*priority))),
+        );
+    }
+
+    for filter in &options.plan_filters {
+        let clause = match filter {
+            TaskPlanFilter::PlanNeeded => {
+                "t.status NOT IN ('done', 'archived') AND NOT EXISTS (SELECT 1 FROM task_steps AS s WHERE s.board_id = t.board_id AND s.parent_task_id = t.id) AND NOT EXISTS (SELECT 1 FROM task_execution_plans AS ep WHERE ep.board_id = t.board_id AND ep.task_id = t.id AND ep.state = 'not_required')"
+            }
+            TaskPlanFilter::HasSteps => {
+                "EXISTS (SELECT 1 FROM task_steps AS s WHERE s.board_id = t.board_id AND s.parent_task_id = t.id)"
+            }
+            TaskPlanFilter::IncompleteRequiredSteps => {
+                "EXISTS (SELECT 1 FROM task_steps AS s WHERE s.board_id = t.board_id AND s.parent_task_id = t.id AND s.required = 1 AND s.status NOT IN ('done', 'skipped'))"
+            }
+        };
+        clauses.push(format!("({clause})"));
+    }
+    if let Some(assignee) = options
+        .assignee
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        clauses.push("t.assignee = :assignee".to_owned());
+        params.push((":assignee".to_owned(), Value::Text(assignee.to_owned())));
+    }
+    if let Some(q) = options
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        append_task_search_filter(&mut clauses, &mut params, board_id, board_slug, q);
+    }
+
+    (format!("WHERE {}", clauses.join(" AND ")), params)
+}
+
+fn append_task_search_filter(
+    clauses: &mut Vec<String>,
+    params: &mut Vec<(String, Value)>,
+    board_id: &str,
+    board_slug: &str,
+    query: &str,
+) {
+    if query.starts_with("t_") {
+        clauses.push("t.id = :q_task_id".to_owned());
+        params.push((":q_task_id".to_owned(), Value::Text(query.to_owned())));
+        return;
+    }
+
+    if query.starts_with('#') {
+        let Some(seq) = parse_task_seq(query) else {
+            clauses.push("0 = 1".to_owned());
+            return;
+        };
+        clauses.push("t.seq = :q_seq".to_owned());
+        params.push((":q_seq".to_owned(), Value::Integer(seq)));
+        return;
+    }
+
+    if let Some((board_ref, seq_ref)) = query.split_once('#') {
+        if board_ref.is_empty() || seq_ref.is_empty() {
+            clauses.push("0 = 1".to_owned());
+            return;
+        }
+        let Some(seq) = parse_task_seq(seq_ref) else {
+            clauses.push("0 = 1".to_owned());
+            return;
+        };
+        if board_ref != board_id && board_ref != board_slug {
+            clauses.push("0 = 1".to_owned());
+            return;
+        }
+        clauses.push("t.seq = :q_seq".to_owned());
+        params.push((":q_seq".to_owned(), Value::Integer(seq)));
+        return;
+    }
+
+    if query.chars().all(|character| character.is_ascii_digit()) {
+        let Some(seq) = parse_task_seq(query) else {
+            clauses.push("0 = 1".to_owned());
+            return;
+        };
+        clauses.push("t.seq = :q_seq".to_owned());
+        params.push((":q_seq".to_owned(), Value::Integer(seq)));
+        return;
+    }
+
+    let needle = format!("%{}%", sqlite_like_literal(&query.to_lowercase()));
+    clauses.push(
+        "(lower(t.title) LIKE :q_text ESCAPE '\\' OR lower(COALESCE(t.description, '')) LIKE :q_text ESCAPE '\\')"
+            .to_owned(),
+    );
+    params.push((":q_text".to_owned(), Value::Text(needle)));
+}
+
+fn parse_task_seq(value: &str) -> Option<i64> {
+    let value = value.strip_prefix('#').unwrap_or(value);
+    if value.is_empty() || !value.chars().all(|character| character.is_ascii_digit()) {
+        return None;
+    }
+    value.parse().ok()
+}
+
+fn sqlite_like_literal(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '%' | '_' | '\\' => {
+                escaped.push('\\');
+                escaped.push(character);
+            }
+            _ => escaped.push(character),
+        }
+    }
+    escaped
+}
+
+fn task_order_by(sort: TaskListSort) -> &'static str {
+    match sort {
+        TaskListSort::Seq => "t.seq ASC, t.id ASC",
+        TaskListSort::SeqDesc => "t.seq DESC, t.id DESC",
+        TaskListSort::Title => "lower(t.title) ASC, t.seq ASC, t.id ASC",
+        TaskListSort::TitleDesc => "lower(t.title) DESC, t.seq DESC, t.id DESC",
+        TaskListSort::Status => {
+            "CASE t.status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END ASC, t.position ASC, t.seq ASC, t.id ASC"
+        }
+        TaskListSort::StatusDesc => {
+            "CASE t.status WHEN 'triage' THEN 10 WHEN 'todo' THEN 20 WHEN 'scheduled' THEN 30 WHEN 'ready' THEN 40 WHEN 'running' THEN 50 WHEN 'blocked' THEN 60 WHEN 'review' THEN 70 WHEN 'done' THEN 80 ELSE 90 END DESC, t.position DESC, t.seq DESC, t.id DESC"
+        }
+        TaskListSort::Position => "t.position ASC, t.created_at ASC, t.seq ASC, t.id ASC",
+        TaskListSort::PositionDesc => "t.position DESC, t.created_at DESC, t.seq DESC, t.id DESC",
+        TaskListSort::Priority => "t.priority ASC, t.created_at ASC, t.seq ASC, t.id ASC",
+        TaskListSort::PriorityDesc => "t.priority DESC, t.created_at DESC, t.seq DESC, t.id DESC",
+        TaskListSort::Assignee => {
+            "COALESCE(t.assignee, t.claim_owner, '') ASC, t.seq ASC, t.id ASC"
+        }
+        TaskListSort::AssigneeDesc => {
+            "COALESCE(t.assignee, t.claim_owner, '') DESC, t.seq DESC, t.id DESC"
+        }
+        TaskListSort::ScheduledAt => {
+            "COALESCE(t.scheduled_at, 9223372036854775807) ASC, t.created_at ASC, t.seq ASC, t.id ASC"
+        }
+        TaskListSort::ScheduledAtDesc => {
+            "COALESCE(t.scheduled_at, -9223372036854775808) DESC, t.created_at DESC, t.seq DESC, t.id DESC"
+        }
+        TaskListSort::CreatedAt => "t.created_at ASC, t.seq ASC, t.id ASC",
+        TaskListSort::CreatedAtDesc => "t.created_at DESC, t.seq DESC, t.id DESC",
+        TaskListSort::UpdatedAt => "t.updated_at ASC, t.seq ASC, t.id ASC",
+        TaskListSort::UpdatedAtDesc => "t.updated_at DESC, t.seq DESC, t.id DESC",
+        TaskListSort::DueAt => {
+            "COALESCE(t.due_at, 9223372036854775807) ASC, t.created_at ASC, t.seq ASC, t.id ASC"
+        }
+        TaskListSort::DueAtDesc => {
+            "COALESCE(t.due_at, -9223372036854775808) DESC, t.created_at DESC, t.seq DESC, t.id DESC"
+        }
+    }
+}
+
 fn task_from_row(row: Row) -> Result<TaskRecord, StoreError> {
     let board_slug = text_value(row.get_value(30)?, "boards.slug")?;
     let seq = integer_value(row.get_value(2)?, "tasks.seq")?;
@@ -508,6 +872,19 @@ fn task_from_row(row: Row) -> Result<TaskRecord, StoreError> {
         result_json: optional_text_value(row.get_value(27)?, "tasks.result_json")?,
         metadata_json: text_value(row.get_value(28)?, "tasks.metadata_json")?,
         lock_version: integer_value(row.get_value(29)?, "tasks.lock_version")?,
+        dependency_blocked: integer_value(row.get_value(31)?, "tasks.dependency_blocked")? != 0,
+        unfinished_parent_count: integer_value(
+            row.get_value(32)?,
+            "tasks.unfinished_parent_count",
+        )?,
+        execution_plan_state: text_value(row.get_value(33)?, "tasks.execution_plan_state")?,
+        required_step_count: integer_value(row.get_value(34)?, "tasks.required_step_count")?,
+        completed_required_step_count: integer_value(
+            row.get_value(35)?,
+            "tasks.completed_required_step_count",
+        )?,
+        optional_step_count: integer_value(row.get_value(36)?, "tasks.optional_step_count")?,
+        labels: Vec::new(),
     })
 }
 
@@ -929,6 +1306,409 @@ mod tests {
         assert_eq!(count_rows(&connection, "tasks").await, 0);
         assert_eq!(count_rows(&connection, "task_execution_plans").await, 0);
         assert_eq!(count_rows(&connection, "task_events").await, 0);
+    }
+
+    #[tokio::test]
+    async fn list_tasks_excludes_archived_by_default_and_supports_status_priority_and_assignee_filters()
+     {
+        let (_directory, store, _path) = store("list-filters").await;
+        store.initialize().await.expect("initialize");
+        let first = store
+            .create_task(
+                "default",
+                create_input("t_filter_1", Some("filter-1"), "First"),
+            )
+            .await
+            .expect("first task");
+        let mut second_input = create_input("t_filter_2", Some("filter-2"), "Second");
+        second_input.status = "scheduled".to_owned();
+        second_input.priority = 2;
+        second_input.assignee = Some("other".to_owned());
+        let second = store
+            .create_task("default", second_input)
+            .await
+            .expect("second task");
+        let archived = store
+            .create_task(
+                "default",
+                create_input("t_filter_archived", Some("filter-archived"), "Archived"),
+            )
+            .await
+            .expect("archived task");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'archived', archived_at = 10 WHERE id = ?1",
+                [archived.id.as_str()],
+            )
+            .await
+            .expect("archive task");
+
+        let default_page = store
+            .list_tasks("default", TaskListOptions::default())
+            .await
+            .expect("default task list");
+        assert_eq!(default_page.total, 2);
+        assert_eq!(
+            default_page
+                .tasks
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![first.id.as_str(), second.id.as_str()]
+        );
+
+        let filtered = store
+            .list_tasks(
+                "b_default",
+                TaskListOptions {
+                    statuses: vec!["todo".to_owned()],
+                    priorities: vec![1],
+                    assignee: Some("agent".to_owned()),
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect("filtered task list");
+        assert_eq!(filtered.total, 1);
+        assert_eq!(filtered.tasks[0].id, first.id);
+
+        let with_archived = store
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    include_archived: true,
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect("archived task list");
+        assert_eq!(with_archived.total, 3);
+        assert_eq!(with_archived.tasks[2].id, archived.id);
+    }
+
+    #[tokio::test]
+    async fn list_tasks_supports_id_seq_board_seq_and_escaped_text_search() {
+        let (_directory, store, _path) = store("list-search").await;
+        store.initialize().await.expect("initialize");
+        let first = store
+            .create_task(
+                "default",
+                create_input("t_search", Some("search-1"), "Literal %_\\ Marker"),
+            )
+            .await
+            .expect("search task");
+        let mut second_input = create_input("t_other", Some("search-2"), "Different");
+        second_input.description = Some("Needle in description".to_owned());
+        let second = store
+            .create_task("default", second_input)
+            .await
+            .expect("second search task");
+
+        for (query, expected) in [
+            ("t_search", vec![first.id.as_str()]),
+            ("default#1", vec![first.id.as_str()]),
+            ("#1", vec![first.id.as_str()]),
+            ("1", vec![first.id.as_str()]),
+            ("%_\\", vec![first.id.as_str()]),
+            ("needle", vec![second.id.as_str()]),
+        ] {
+            let page = store
+                .list_tasks(
+                    "default",
+                    TaskListOptions {
+                        q: Some(query.to_owned()),
+                        ..TaskListOptions::default()
+                    },
+                )
+                .await
+                .expect("search task list");
+            assert_eq!(
+                page.tasks
+                    .iter()
+                    .map(|task| task.id.as_str())
+                    .collect::<Vec<_>>(),
+                expected,
+                "query {query}"
+            );
+        }
+
+        let mismatch = store
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    q: Some("other#1".to_owned()),
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect("mismatched board search");
+        assert!(mismatch.tasks.is_empty());
+        assert_eq!(mismatch.total, 0);
+    }
+
+    #[tokio::test]
+    async fn list_tasks_plan_filters_and_derived_fields_are_consistent() {
+        let (_directory, store, _path) = store("list-plan").await;
+        store.initialize().await.expect("initialize");
+        let plain = store
+            .create_task(
+                "default",
+                create_input("t_plan_plain", Some("plan-plain"), "Plain"),
+            )
+            .await
+            .expect("plain task");
+        let with_steps = store
+            .create_task(
+                "default",
+                create_input("t_plan_steps", Some("plan-steps"), "With steps"),
+            )
+            .await
+            .expect("steps task");
+        let not_required = store
+            .create_task(
+                "default",
+                create_input(
+                    "t_plan_not_required",
+                    Some("plan-not-required"),
+                    "Not required",
+                ),
+            )
+            .await
+            .expect("not required task");
+        let done = store
+            .create_task(
+                "default",
+                create_input("t_plan_done", Some("plan-done"), "Done"),
+            )
+            .await
+            .expect("done task");
+        let parent = store
+            .create_task(
+                "default",
+                create_input("t_plan_parent", Some("plan-parent"), "Parent"),
+            )
+            .await
+            .expect("parent task");
+        let child = store
+            .create_task(
+                "default",
+                create_input("t_plan_child", Some("plan-child"), "Child"),
+            )
+            .await
+            .expect("child task");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO task_steps(id, board_id, parent_task_id, position, title, required, status, created_by, created_at, updated_by, updated_at) VALUES (?1, 'b_default', ?2, 1, 'required', 1, 'todo', 'tester', 1, 'tester', 1)",
+                ("step_incomplete", with_steps.id.as_str()),
+            )
+            .await
+            .expect("insert incomplete step");
+        connection
+            .execute(
+                "INSERT INTO task_steps(id, board_id, parent_task_id, position, title, required, status, created_by, created_at, updated_by, updated_at) VALUES (?1, 'b_default', ?2, 2, 'optional', 0, 'done', 'tester', 1, 'tester', 1)",
+                ("step_optional", with_steps.id.as_str()),
+            )
+            .await
+            .expect("insert optional step");
+        connection
+            .execute(
+                "UPDATE task_execution_plans SET state = 'not_required' WHERE task_id = ?1",
+                [not_required.id.as_str()],
+            )
+            .await
+            .expect("set plan not required");
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'done' WHERE id = ?1",
+                [done.id.as_str()],
+            )
+            .await
+            .expect("finish task");
+        connection
+            .execute(
+                "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES ('b_default', ?1, ?2, 1)",
+                (parent.id.as_str(), child.id.as_str()),
+            )
+            .await
+            .expect("insert dependency");
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'blocked' WHERE id = ?1",
+                [parent.id.as_str()],
+            )
+            .await
+            .expect("block parent");
+
+        let all = store
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    include_archived: true,
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect("all tasks");
+        let child_record = all.tasks.iter().find(|task| task.id == child.id).unwrap();
+        assert!(child_record.dependency_blocked);
+        assert_eq!(child_record.unfinished_parent_count, 1);
+        let steps_record = all
+            .tasks
+            .iter()
+            .find(|task| task.id == with_steps.id)
+            .unwrap();
+        assert_eq!(steps_record.execution_plan_state, "planned");
+        assert_eq!(steps_record.required_step_count, 1);
+        assert_eq!(steps_record.completed_required_step_count, 0);
+        assert_eq!(steps_record.optional_step_count, 1);
+        assert!(all.tasks.iter().all(|task| task.labels.is_empty()));
+
+        for (filter, expected) in [
+            (
+                TaskPlanFilter::PlanNeeded,
+                vec![plain.id.as_str(), parent.id.as_str(), child.id.as_str()],
+            ),
+            (TaskPlanFilter::HasSteps, vec![with_steps.id.as_str()]),
+            (
+                TaskPlanFilter::IncompleteRequiredSteps,
+                vec![with_steps.id.as_str()],
+            ),
+        ] {
+            let page = store
+                .list_tasks(
+                    "default",
+                    TaskListOptions {
+                        include_archived: true,
+                        plan_filters: vec![filter],
+                        ..TaskListOptions::default()
+                    },
+                )
+                .await
+                .expect("plan filter list");
+            assert_eq!(
+                page.tasks
+                    .iter()
+                    .map(|task| task.id.as_str())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn list_tasks_paginates_with_total_and_all_sort_mappings_are_deterministic() {
+        let (_directory, store, _path) = store("list-pagination-sort").await;
+        store.initialize().await.expect("initialize");
+        for (id, title) in [
+            ("t_sort_1", "Zeta"),
+            ("t_sort_2", "Alpha"),
+            ("t_sort_3", "Beta"),
+        ] {
+            store
+                .create_task("default", create_input(id, Some(id), title))
+                .await
+                .expect("sort task");
+        }
+        let page = store
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    limit: 1,
+                    offset: 1,
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect("paged task list");
+        assert_eq!(page.total, 3);
+        assert_eq!(page.tasks.len(), 1);
+        assert_eq!(page.tasks[0].seq, 2);
+        let empty_page = store
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    limit: 0,
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect("zero limit task list");
+        assert_eq!(empty_page.total, 3);
+        assert!(empty_page.tasks.is_empty());
+
+        let sorts = [
+            TaskListSort::Seq,
+            TaskListSort::SeqDesc,
+            TaskListSort::Title,
+            TaskListSort::TitleDesc,
+            TaskListSort::Status,
+            TaskListSort::StatusDesc,
+            TaskListSort::Position,
+            TaskListSort::PositionDesc,
+            TaskListSort::Priority,
+            TaskListSort::PriorityDesc,
+            TaskListSort::Assignee,
+            TaskListSort::AssigneeDesc,
+            TaskListSort::ScheduledAt,
+            TaskListSort::ScheduledAtDesc,
+            TaskListSort::CreatedAt,
+            TaskListSort::CreatedAtDesc,
+            TaskListSort::UpdatedAt,
+            TaskListSort::UpdatedAtDesc,
+            TaskListSort::DueAt,
+            TaskListSort::DueAtDesc,
+        ];
+        for sort in sorts {
+            let options = TaskListOptions {
+                sort,
+                ..TaskListOptions::default()
+            };
+            let first = store
+                .list_tasks("default", options.clone())
+                .await
+                .expect("sort task list");
+            let second = store
+                .list_tasks("default", options)
+                .await
+                .expect("repeat sort task list");
+            assert_eq!(
+                first
+                    .tasks
+                    .iter()
+                    .map(|task| task.id.as_str())
+                    .collect::<Vec<_>>(),
+                second
+                    .tasks
+                    .iter()
+                    .map(|task| task.id.as_str())
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        let error = store
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    limit: 1001,
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect_err("limit above maximum must fail");
+        assert!(matches!(error, StoreError::InvalidInput(message) if message.contains("limit")));
+    }
+
+    #[tokio::test]
+    async fn list_tasks_reports_missing_board() {
+        let (_directory, store, _path) = store("list-missing-board").await;
+        store.initialize().await.expect("initialize");
+        let error = store
+            .list_tasks("missing", TaskListOptions::default())
+            .await
+            .expect_err("missing board must fail");
+        assert!(matches!(error, StoreError::BoardNotFound(selector) if selector == "missing"));
     }
 
     #[tokio::test]

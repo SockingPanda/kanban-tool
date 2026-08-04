@@ -2,7 +2,8 @@ use std::{collections::BTreeMap, env, sync::Arc};
 
 use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
-    ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse, ListBoardsResponse,
+    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, CreateTaskRequest, CreateTaskResponse,
+    ListBoardsResponse, ListTasksQuery, ListTasksResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -40,6 +41,27 @@ struct TaskCreateArgs {
 
 const fn default_priority() -> i64 {
     3
+}
+
+#[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+struct TaskListArgs {
+    /// Board slug or id. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    status: Vec<ApiTaskStatus>,
+    priority: Vec<i64>,
+    plan_filter: Vec<TaskReadPlanFilter>,
+    assignee: Option<String>,
+    query: Option<String>,
+    include_archived: bool,
+    #[serde(default = "default_list_limit")]
+    limit: usize,
+    offset: usize,
+    sort: TaskReadSort,
+}
+
+const fn default_list_limit() -> usize {
+    100
 }
 
 #[derive(Clone)]
@@ -103,6 +125,47 @@ impl KanbanMcp {
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
 
         Ok(Json(CreateTaskResponse { data: task }))
+    }
+
+    #[tool(
+        name = "task_list",
+        description = "List tasks through the canonical kanban application service"
+    )]
+    async fn task_list(
+        &self,
+        Parameters(args): Parameters<TaskListArgs>,
+    ) -> Result<Json<ListTasksResponse>, McpError> {
+        let priority = args
+            .priority
+            .into_iter()
+            .map(|value| {
+                ApiTaskPriority::try_from(value).map_err(|value| {
+                    McpError::invalid_params(
+                        format!("priority must be between 0 and 3, got {value}"),
+                        None,
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let query = ListTasksQuery {
+            status: args.status,
+            priority,
+            label: Vec::new(),
+            plan_filter: args.plan_filter,
+            assignee: args.assignee,
+            q: args.query,
+            include_archived: args.include_archived,
+            limit: args.limit,
+            offset: args.offset,
+            sort: args.sort,
+        };
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let client = self.client.clone();
+        let response = tokio::task::spawn_blocking(move || client.list_tasks(&board, &query))
+            .await
+            .map_err(|error| McpError::internal_error(error.to_string(), None))?
+            .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(response))
     }
 }
 

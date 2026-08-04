@@ -4,11 +4,15 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
     process::ExitCode,
+    str::FromStr,
 };
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
-use kanban_contract::{ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse};
+use kanban_contract::{
+    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, CreateTaskRequest, CreateTaskResponse,
+    ListTasksQuery, TaskReadPlanFilter, TaskReadSort,
+};
 use serde::Serialize;
 
 #[derive(Debug, Parser)]
@@ -90,6 +94,8 @@ enum BoardCommand {
 enum TaskCommand {
     /// Create a task through the shared application service.
     Create(TaskCreateArgs),
+    /// List tasks through the shared application service.
+    List(TaskListArgs),
 }
 
 #[derive(Debug, Args)]
@@ -126,6 +132,41 @@ enum CreateStatus {
     Todo,
     Scheduled,
     Ready,
+}
+
+#[derive(Debug, Args)]
+struct TaskListArgs {
+    #[arg(long, value_enum)]
+    status: Vec<ListStatus>,
+    #[arg(long)]
+    priority: Vec<i64>,
+    #[arg(long = "plan-filter")]
+    plan_filter: Vec<String>,
+    #[arg(long)]
+    assignee: Option<String>,
+    #[arg(long = "query", alias = "search")]
+    query: Option<String>,
+    #[arg(long)]
+    include_archived: bool,
+    #[arg(long, default_value_t = 100)]
+    limit: usize,
+    #[arg(long, default_value_t = 0)]
+    offset: usize,
+    #[arg(long, default_value = "position")]
+    sort: String,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum ListStatus {
+    Triage,
+    Todo,
+    Scheduled,
+    Ready,
+    Running,
+    Blocked,
+    Review,
+    Done,
+    Archived,
 }
 
 #[derive(Debug, Serialize)]
@@ -275,6 +316,23 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
                     }
                 }
+                TaskCommand::List(args) => {
+                    let query = list_tasks_query(args)?;
+                    let response = client.list_tasks(&cli.board, &query)?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&kanban_contract::CliTaskListOutput::new(
+                                response.data,
+                            ))
+                            .expect("task list response is serializable")
+                        );
+                    } else {
+                        for task in response.data {
+                            println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
+                        }
+                    }
+                }
             }
             Ok(())
         }
@@ -294,6 +352,63 @@ fn api_create_status(status: CreateStatus) -> ApiCreateTaskStatus {
         CreateStatus::Todo => ApiCreateTaskStatus::Todo,
         CreateStatus::Scheduled => ApiCreateTaskStatus::Scheduled,
         CreateStatus::Ready => ApiCreateTaskStatus::Ready,
+    }
+}
+
+fn list_tasks_query(args: &TaskListArgs) -> Result<ListTasksQuery, CliFailure> {
+    let priorities = args
+        .priority
+        .iter()
+        .copied()
+        .map(|value| {
+            ApiTaskPriority::try_from(value).map_err(|value| CliFailure {
+                code: "invalid_input",
+                message: format!("priority must be between 0 and 3, got {value}"),
+                exit_code: 2,
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let plan_filter = args
+        .plan_filter
+        .iter()
+        .map(|value| {
+            TaskReadPlanFilter::from_str(value).map_err(|()| CliFailure {
+                code: "invalid_input",
+                message: format!("unsupported --plan-filter: {value}"),
+                exit_code: 2,
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let sort = TaskReadSort::from_str(&args.sort).map_err(|()| CliFailure {
+        code: "invalid_input",
+        message: format!("unsupported --sort: {}", args.sort),
+        exit_code: 2,
+    })?;
+    Ok(ListTasksQuery {
+        status: args.status.iter().copied().map(api_list_status).collect(),
+        priority: priorities,
+        label: Vec::new(),
+        plan_filter,
+        assignee: args.assignee.clone(),
+        q: args.query.clone(),
+        include_archived: args.include_archived,
+        limit: args.limit,
+        offset: args.offset,
+        sort,
+    })
+}
+
+fn api_list_status(status: ListStatus) -> ApiTaskStatus {
+    match status {
+        ListStatus::Triage => ApiTaskStatus::Triage,
+        ListStatus::Todo => ApiTaskStatus::Todo,
+        ListStatus::Scheduled => ApiTaskStatus::Scheduled,
+        ListStatus::Ready => ApiTaskStatus::Ready,
+        ListStatus::Running => ApiTaskStatus::Running,
+        ListStatus::Blocked => ApiTaskStatus::Blocked,
+        ListStatus::Review => ApiTaskStatus::Review,
+        ListStatus::Done => ApiTaskStatus::Done,
+        ListStatus::Archived => ApiTaskStatus::Archived,
     }
 }
 

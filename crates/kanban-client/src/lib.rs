@@ -8,6 +8,7 @@ use std::{
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiErrorCode, ApiTask, CreateTaskRequest, CreateTaskResponse,
     ErrorEnvelope, HealthReport, HealthResponse, ListBoardColumnsResponse, ListBoardsResponse,
+    ListTasksQuery, ListTasksResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -124,6 +125,14 @@ impl KanbanClient {
         Ok(response.data)
     }
 
+    pub fn list_tasks(
+        &self,
+        board: &str,
+        query: &ListTasksQuery,
+    ) -> Result<ListTasksResponse, ClientError> {
+        self.get(&list_tasks_path(board, query))
+    }
+
     fn get<T>(&self, path: &str) -> Result<T, ClientError>
     where
         T: DeserializeOwned,
@@ -158,6 +167,41 @@ fn prepare_create_request(mut request: CreateTaskRequest) -> CreateTaskRequest {
         .idempotency_key
         .get_or_insert_with(|| format!("task.create:{task_id}"));
     request
+}
+
+fn list_tasks_path(board: &str, query: &ListTasksQuery) -> String {
+    let mut pairs = Vec::new();
+    for status in &query.status {
+        pairs.push(("status", status.as_str().to_owned()));
+    }
+    for priority in &query.priority {
+        pairs.push(("priority", priority.get().to_string()));
+    }
+    for label in &query.label {
+        pairs.push(("label", label.as_str().to_owned()));
+    }
+    for filter in &query.plan_filter {
+        pairs.push(("plan_filter", filter.as_str().to_owned()));
+    }
+    if let Some(assignee) = query.assignee.as_deref() {
+        pairs.push(("assignee", assignee.to_owned()));
+    }
+    if let Some(search) = query.q.as_deref() {
+        pairs.push(("q", search.to_owned()));
+    }
+    pairs.push(("include_archived", query.include_archived.to_string()));
+    pairs.push(("limit", query.limit.to_string()));
+    pairs.push(("offset", query.offset.to_string()));
+    pairs.push(("sort", query.sort.as_str().to_owned()));
+    let query = pairs
+        .into_iter()
+        .map(|(key, value)| format!("{key}={}", encode_path_segment(&value)))
+        .collect::<Vec<_>>()
+        .join("&");
+    format!(
+        "/api/v1/boards/{}/tasks?{query}",
+        encode_path_segment(board)
+    )
 }
 
 fn decode_response<T>(response: Result<ureq::Response, ureq::Error>) -> Result<T, ClientError>
@@ -279,6 +323,29 @@ mod tests {
         assert_eq!(
             request.idempotency_key.as_deref(),
             Some(format!("task.create:{task_id}").as_str())
+        );
+    }
+
+    #[test]
+    fn list_task_query_preserves_repeated_filters_and_escaping() {
+        let query = ListTasksQuery {
+            status: vec![
+                kanban_contract::ApiTaskStatus::Ready,
+                kanban_contract::ApiTaskStatus::Blocked,
+            ],
+            priority: vec![
+                kanban_contract::ApiTaskPriority::new(0).unwrap(),
+                kanban_contract::ApiTaskPriority::new(2).unwrap(),
+            ],
+            q: Some("a & b".into()),
+            limit: 25,
+            offset: 50,
+            sort: kanban_contract::TaskReadSort::UpdatedAtDesc,
+            ..ListTasksQuery::default()
+        };
+        assert_eq!(
+            list_tasks_path("team/one", &query),
+            "/api/v1/boards/team%2Fone/tasks?status=ready&status=blocked&priority=0&priority=2&q=a%20%26%20b&include_archived=false&limit=25&offset=50&sort=-updated_at"
         );
     }
 }

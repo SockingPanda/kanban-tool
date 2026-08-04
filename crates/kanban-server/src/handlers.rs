@@ -9,19 +9,22 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use kanban_application::{
-    CreateTaskCommand, ExecutionPlanState, TaskListOptions as ApplicationTaskListOptions,
+    CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState,
+    MarkExecutionPlanNotRequiredCommand, TaskListOptions as ApplicationTaskListOptions,
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
     TaskRecord,
 };
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, ApiCreateTaskStatus, ApiExecutionPlanState, ApiTask, ApiTaskPriority,
-    ApiTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse, GetTaskPath,
-    GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse, ListBoardColumnsResponse,
-    ListBoardsQuery, ListBoardsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
-    MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS,
-    MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES,
-    MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
-    MAX_TASK_READ_STATUSES, TaskReadLabel, TaskReadPlanFilter, TaskReadSort, TotalPaginationMeta,
+    ApiBoard, ApiBoardColumn, ApiCreateTaskStatus, ApiExecutionPlan, ApiExecutionPlanState,
+    ApiTask, ApiTaskPriority, ApiTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse,
+    GetTaskPath, GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse,
+    ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse, ListTasksPath, ListTasksQuery,
+    ListTasksResponse, MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS,
+    MAX_TASK_READ_LABELS, MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS,
+    MAX_TASK_READ_PRIORITIES, MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES,
+    MAX_TASK_READ_QUERY_PAIRS, MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, TaskReadLabel,
+    TaskReadPlanFilter, TaskReadSort, TotalPaginationMeta,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
@@ -214,6 +217,28 @@ pub(crate) async fn get_task(
     }
     let task = state.application().get_task(&task_id).await?;
     Ok(Json(GetTaskResponse::new(api_task(task)?, None)))
+}
+
+pub(crate) async fn mark_execution_plan_not_required(
+    State(state): State<AppState>,
+    Path(MarkExecutionPlanNotRequiredPath { task_id }): Path<MarkExecutionPlanNotRequiredPath>,
+    headers: HeaderMap,
+    body: Result<Json<MarkExecutionPlanNotRequiredRequest>, JsonRejection>,
+) -> Result<Json<MarkExecutionPlanNotRequiredResponse>, ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let plan = state
+        .application()
+        .mark_execution_plan_not_required(MarkExecutionPlanNotRequiredCommand {
+            task_id,
+            reason: body.reason,
+            actor,
+        })
+        .await?;
+    Ok(Json(MarkExecutionPlanNotRequiredResponse {
+        data: api_execution_plan(plan),
+    }))
 }
 
 fn request_actor(
@@ -578,6 +603,21 @@ fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
         optional_step_count: task.optional_step_count,
         labels: Vec::new(),
     })
+}
+
+fn api_execution_plan(plan: ExecutionPlanRecord) -> ApiExecutionPlan {
+    ApiExecutionPlan {
+        board_id: plan.board_id,
+        task_id: plan.task_id,
+        state: match plan.state {
+            ExecutionPlanState::Unplanned => ApiExecutionPlanState::Unplanned,
+            ExecutionPlanState::Planned => ApiExecutionPlanState::Planned,
+            ExecutionPlanState::NotRequired => ApiExecutionPlanState::NotRequired,
+        },
+        reason: plan.reason,
+        updated_by: plan.updated_by,
+        updated_at: plan.updated_at,
+    }
 }
 
 fn api_task_status(status: TaskStatus) -> ApiTaskStatus {

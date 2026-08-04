@@ -3,7 +3,8 @@ use std::{collections::BTreeMap, env, sync::Arc};
 use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, CreateTaskRequest, CreateTaskResponse,
-    GetTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse, TaskReadPlanFilter,
+    GetTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, TaskReadPlanFilter,
     TaskReadSort,
 };
 use rmcp::{
@@ -72,6 +73,16 @@ struct TaskShowArgs {
     board: Option<String>,
     /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
     task_ref: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TaskPlanNotRequiredArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+    reason: String,
 }
 
 #[derive(Clone)]
@@ -195,6 +206,32 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(GetTaskResponse::new(task, None)))
+    }
+
+    #[tool(
+        name = "task_plan_not_required",
+        description = "Mark a task execution plan as not required through the canonical application service"
+    )]
+    async fn task_plan_not_required(
+        &self,
+        Parameters(args): Parameters<TaskPlanNotRequiredArgs>,
+    ) -> Result<Json<MarkExecutionPlanNotRequiredResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let client = self.client.clone();
+        let plan = tokio::task::spawn_blocking(move || {
+            client.mark_execution_plan_not_required_by_selector(
+                &board,
+                &args.task_ref,
+                &MarkExecutionPlanNotRequiredRequest {
+                    reason: args.reason,
+                    actor: None,
+                },
+            )
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(MarkExecutionPlanNotRequiredResponse { data: plan }))
     }
 }
 

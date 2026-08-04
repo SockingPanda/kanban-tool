@@ -3,7 +3,7 @@ use std::{future::Future, net::SocketAddr};
 use axum::{
     Router,
     http::{HeaderValue, Method, header},
-    routing::get,
+    routing::{get, post},
 };
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
@@ -11,7 +11,10 @@ use tower_http::{
 };
 
 use crate::{
-    handlers::{create_task, get_task, health, list_board_columns, list_boards, list_tasks},
+    handlers::{
+        create_task, get_task, health, list_board_columns, list_boards, list_tasks,
+        mark_execution_plan_not_required,
+    },
     state::AppState,
 };
 
@@ -25,6 +28,10 @@ pub fn build_router(state: AppState) -> Router {
             get(list_tasks).post(create_task),
         )
         .route("/api/v1/tasks/:task_id", get(get_task))
+        .route(
+            "/api/v1/tasks/:task_id/execution-plan/not-required",
+            post(mark_execution_plan_not_required),
+        )
         .layer(desktop_cors_layer())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -88,6 +95,7 @@ mod tests {
     use kanban_contract::{
         ApiErrorCode, ApiExecutionPlanState, ApiTaskStatus, CreateTaskResponse, ErrorEnvelope,
         GetTaskResponse, ListBoardColumnsResponse, ListBoardsResponse, ListTasksResponse,
+        MarkExecutionPlanNotRequiredResponse,
     };
     use tower::ServiceExt;
 
@@ -216,6 +224,24 @@ mod tests {
 
         let response = router
             .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_create/execution-plan/not-required",
+                serde_json::json!({
+                    "reason": "small task",
+                    "actor": "planner"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let plan: MarkExecutionPlanNotRequiredResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(plan.data.task_id, created.data.id);
+        assert_eq!(plan.data.state, ApiExecutionPlanState::NotRequired);
+        assert_eq!(plan.data.reason.as_deref(), Some("small task"));
+
+        let response = router
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/api/v1/tasks/t_http_create")
@@ -227,7 +253,12 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         let shown: GetTaskResponse = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(shown.data, created.data);
+        assert_eq!(shown.data.id, created.data.id);
+        assert_eq!(shown.data.status, ApiTaskStatus::Todo);
+        assert_eq!(
+            shown.data.execution_plan_state,
+            ApiExecutionPlanState::NotRequired
+        );
         assert!(shown.meta.is_none());
 
         let response = router

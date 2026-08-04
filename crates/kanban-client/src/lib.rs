@@ -6,9 +6,10 @@ use std::{
 };
 
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, ApiErrorCode, ApiTask, CreateTaskRequest, CreateTaskResponse,
-    ErrorEnvelope, GetTaskResponse, HealthReport, HealthResponse, ListBoardColumnsResponse,
-    ListBoardsResponse, ListTasksQuery, ListTasksResponse,
+    ApiBoard, ApiBoardColumn, ApiErrorCode, ApiExecutionPlan, ApiTask, CreateTaskRequest,
+    CreateTaskResponse, ErrorEnvelope, GetTaskResponse, HealthReport, HealthResponse,
+    ListBoardColumnsResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -183,6 +184,31 @@ impl KanbanClient {
     ) -> Result<ApiTask, ClientError> {
         let task_id = self.resolve_task_id(board, selector)?;
         self.get_task(&task_id)
+    }
+
+    pub fn mark_execution_plan_not_required(
+        &self,
+        task_id: &str,
+        request: &MarkExecutionPlanNotRequiredRequest,
+    ) -> Result<ApiExecutionPlan, ClientError> {
+        let response: MarkExecutionPlanNotRequiredResponse = self.post(
+            &format!(
+                "/api/v1/tasks/{}/execution-plan/not-required",
+                encode_path_segment(task_id.trim())
+            ),
+            request,
+        )?;
+        Ok(response.data)
+    }
+
+    pub fn mark_execution_plan_not_required_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+        request: &MarkExecutionPlanNotRequiredRequest,
+    ) -> Result<ApiExecutionPlan, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        self.mark_execution_plan_not_required(&task_id, request)
     }
 
     fn get<T>(&self, path: &str) -> Result<T, ClientError>

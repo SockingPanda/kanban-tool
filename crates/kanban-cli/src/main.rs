@@ -11,7 +11,8 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, CreateTaskRequest, CreateTaskResponse,
-    GetTaskResponse, ListTasksQuery, TaskReadPlanFilter, TaskReadSort,
+    GetTaskResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
+    MarkExecutionPlanNotRequiredResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
 
@@ -98,6 +99,11 @@ enum TaskCommand {
     List(TaskListArgs),
     /// Show a task resolved by global id or board-local reference.
     Show(TaskShowArgs),
+    /// Manage a task's execution plan.
+    Step {
+        #[command(subcommand)]
+        command: TaskStepCommand,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -164,6 +170,19 @@ struct TaskShowArgs {
     /// Ontology details are intentionally unavailable on the single-host path.
     #[arg(long)]
     details: bool,
+}
+
+#[derive(Debug, Subcommand)]
+enum TaskStepCommand {
+    /// Mark this task as not requiring structured execution steps.
+    NotRequired(TaskPlanNotRequiredArgs),
+}
+
+#[derive(Debug, Args)]
+struct TaskPlanNotRequiredArgs {
+    task_ref: String,
+    #[arg(long)]
+    reason: String,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -360,6 +379,34 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
                     }
                 }
+                TaskCommand::Step { command } => match command {
+                    TaskStepCommand::NotRequired(args) => {
+                        let plan = client.mark_execution_plan_not_required_by_selector(
+                            &cli.board,
+                            &args.task_ref,
+                            &MarkExecutionPlanNotRequiredRequest {
+                                reason: args.reason.clone(),
+                                actor: None,
+                            },
+                        )?;
+                        if cli.json {
+                            println!(
+                                "{}",
+                                serde_json::to_string(&MarkExecutionPlanNotRequiredResponse {
+                                    data: plan,
+                                })
+                                .expect("execution plan response is serializable")
+                            );
+                        } else {
+                            println!(
+                                "{} {} {}",
+                                plan.task_id,
+                                plan.state.as_str(),
+                                plan.reason.as_deref().unwrap_or("")
+                            );
+                        }
+                    }
+                },
             }
             Ok(())
         }
@@ -525,5 +572,30 @@ mod tests {
         let failure = feature_not_available("not migrated");
         assert_eq!(failure.code, "feature_not_available");
         assert_eq!(failure.exit_code, 10);
+    }
+
+    #[test]
+    fn parses_execution_plan_not_required_command() {
+        let cli = Cli::try_parse_from([
+            "kanban",
+            "task",
+            "step",
+            "not-required",
+            "default#1",
+            "--reason",
+            "small task",
+        ])
+        .unwrap();
+        let Command::Task {
+            command:
+                TaskCommand::Step {
+                    command: TaskStepCommand::NotRequired(args),
+                },
+        } = cli.command
+        else {
+            panic!("expected task step not-required");
+        };
+        assert_eq!(args.task_ref, "default#1");
+        assert_eq!(args.reason, "small task");
     }
 }

@@ -1,13 +1,17 @@
 use kanban_application::{
     ApplicationStore, BoardColumnRecord as ApplicationBoardColumn, BoardRecord,
-    CreateTaskRecord as ApplicationCreateTask, ExecutionPlanState,
+    CreateTaskRecord as ApplicationCreateTask, ExecutionPlanRecord as ApplicationExecutionPlan,
+    ExecutionPlanState,
+    MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
     TaskListOptions as ApplicationTaskListOptions, TaskListPage as ApplicationTaskListPage,
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
     TaskRecord as ApplicationTask,
 };
 use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
-    CreateTaskInput as StoreCreateTask, StoreError, TaskListOptions as StoreTaskListOptions,
+    CreateTaskInput as StoreCreateTask,
+    MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired, StoreError,
+    TaskExecutionPlanRecord as StoreExecutionPlan, TaskListOptions as StoreTaskListOptions,
     TaskListSort as StoreTaskListSort, TaskPlanFilter as StoreTaskPlanFilter,
     TaskRecord as StoreTask, TursoStore,
 };
@@ -143,6 +147,26 @@ impl ApplicationStore for TursoApplicationStore {
             .map_err(store_error)
             .and_then(application_task)
     }
+
+    async fn mark_execution_plan_not_required(
+        &self,
+        task_id: &str,
+        input: ApplicationMarkExecutionPlanNotRequired,
+    ) -> Result<ApplicationExecutionPlan> {
+        self.store
+            .mark_execution_plan_not_required(
+                task_id,
+                StoreMarkExecutionPlanNotRequired {
+                    reason: input.reason,
+                    actor: input.actor,
+                    event_id: input.event_id,
+                    updated_at: input.updated_at,
+                },
+            )
+            .await
+            .map_err(store_error)
+            .and_then(application_execution_plan)
+    }
 }
 
 fn store_error(error: StoreError) -> KanbanError {
@@ -209,6 +233,27 @@ fn application_task(task: StoreTask) -> Result<ApplicationTask> {
         required_step_count: task.required_step_count,
         completed_required_step_count: task.completed_required_step_count,
         optional_step_count: task.optional_step_count,
+    })
+}
+
+fn application_execution_plan(plan: StoreExecutionPlan) -> Result<ApplicationExecutionPlan> {
+    let state = match plan.state.as_str() {
+        "unplanned" => ExecutionPlanState::Unplanned,
+        "planned" => ExecutionPlanState::Planned,
+        "not_required" => ExecutionPlanState::NotRequired,
+        other => {
+            return Err(KanbanError::Storage(format!(
+                "stored execution plan state is invalid: {other}"
+            )));
+        }
+    };
+    Ok(ApplicationExecutionPlan {
+        board_id: plan.board_id,
+        task_id: plan.task_id,
+        state,
+        reason: plan.reason,
+        updated_by: plan.updated_by,
+        updated_at: plan.updated_at,
     })
 }
 

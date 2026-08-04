@@ -66,6 +66,31 @@ pub struct CreateTaskRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkExecutionPlanNotRequiredCommand {
+    pub task_id: String,
+    pub reason: String,
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkExecutionPlanNotRequiredRecord {
+    pub reason: String,
+    pub actor: String,
+    pub event_id: String,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutionPlanRecord {
+    pub board_id: String,
+    pub task_id: String,
+    pub state: ExecutionPlanState,
+    pub reason: Option<String>,
+    pub updated_by: String,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskRecord {
     pub id: String,
     pub board_id: String,

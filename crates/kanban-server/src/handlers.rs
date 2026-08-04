@@ -10,23 +10,24 @@ use axum::{
 };
 use kanban_application::{
     ClaimTaskCommand, CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState,
-    MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand, RunRecord, RunStatus,
-    TaskListOptions as ApplicationTaskListOptions, TaskListSort as ApplicationTaskListSort,
-    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord,
+    HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand, RunRecord,
+    RunStatus, TaskListOptions as ApplicationTaskListOptions,
+    TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
+    TaskRecord,
 };
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiClaim, ApiCreateTaskStatus, ApiExecutionPlan,
     ApiExecutionPlanState, ApiRun, ApiRunStatus, ApiTask, ApiTaskPriority, ApiTaskStatus,
     ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CreateTaskPath, CreateTaskRequest,
     CreateTaskResponse, GetTaskPath, GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse,
-    ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse, ListTasksPath, ListTasksQuery,
-    ListTasksResponse, MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS,
-    MAX_TASK_READ_LABELS, MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS,
-    MAX_TASK_READ_PRIORITIES, MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES,
-    MAX_TASK_READ_QUERY_PAIRS, MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskPath,
-    PromoteTaskRequest, PromoteTaskResponse, TaskReadLabel, TaskReadPlanFilter, TaskReadSort,
-    TotalPaginationMeta,
+    HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse,
+    ListBoardsQuery, ListBoardsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
+    MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS,
+    MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES,
+    MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
+    MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
+    MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
+    TaskReadLabel, TaskReadPlanFilter, TaskReadSort, TotalPaginationMeta,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
@@ -284,6 +285,28 @@ pub(crate) async fn claim_task(
         claim_token: claim.claim_token,
         claim_expires_at: Some(claim.claim_expires_at),
     })))
+}
+
+pub(crate) async fn heartbeat_task(
+    State(state): State<AppState>,
+    Path(HeartbeatTaskPath { task_id }): Path<HeartbeatTaskPath>,
+    headers: HeaderMap,
+    body: Result<Json<HeartbeatTaskRequest>, JsonRejection>,
+) -> Result<Json<HeartbeatTaskResponse>, ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let task = state
+        .application()
+        .heartbeat_task(HeartbeatTaskCommand {
+            task_id,
+            actor,
+            claim_token: body.claim_token,
+            ttl_ms: body.ttl_ms,
+            note: body.note,
+        })
+        .await?;
+    Ok(Json(HeartbeatTaskResponse::new(api_task(task)?)))
 }
 
 fn request_actor(

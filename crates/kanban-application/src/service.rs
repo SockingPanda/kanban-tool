@@ -3,15 +3,16 @@ use std::sync::Arc;
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, SystemClock, TaskStatus, can_promote_from,
     initial_status, is_claimable_task, new_event_id, new_run_id, new_typed_id,
-    recompute_ready_status,
+    recompute_ready_status, running_claim_is_present,
 };
 use tokio::sync::Mutex;
 
 use crate::{
     ApplicationHealth, ApplicationStore, BoardColumnRecord, BoardRecord, ClaimRecord,
     ClaimTaskCommand, ClaimTaskRecord, CreateTaskCommand, CreateTaskRecord, ExecutionPlanRecord,
-    ExecutionPlanState, MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord,
-    PromoteTaskCommand, PromoteTaskRecord, TaskListOptions, TaskListPage, TaskRecord,
+    ExecutionPlanState, HeartbeatTaskCommand, HeartbeatTaskRecord,
+    MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord, PromoteTaskCommand,
+    PromoteTaskRecord, TaskListOptions, TaskListPage, TaskRecord,
 };
 
 const MAX_TASK_LIST_LIMIT: usize = 1_000;
@@ -320,6 +321,63 @@ where
             )
             .await
     }
+
+    pub async fn heartbeat_task(&self, command: HeartbeatTaskCommand) -> Result<TaskRecord> {
+        let task_id = command.task_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(KanbanError::InvalidInput(
+                "task_id must be a global t_... id".to_owned(),
+            ));
+        }
+        let actor = command.actor.trim();
+        if actor.is_empty() {
+            return Err(KanbanError::InvalidInput("actor is required".to_owned()));
+        }
+        if command.claim_token.trim().is_empty() {
+            return Err(KanbanError::InvalidInput(
+                "claim_token is required".to_owned(),
+            ));
+        }
+        if command.ttl_ms <= 0 {
+            return Err(KanbanError::InvalidInput(
+                "ttl_ms must be positive".to_owned(),
+            ));
+        }
+        let _mutation = self.mutation_gate.lock().await;
+        let task = self.store.get_task(task_id).await?;
+        if !running_claim_is_present(
+            task.status,
+            task.has_claim_token,
+            task.current_run_id.is_some(),
+        ) {
+            return Err(KanbanError::InvalidTransition(
+                "heartbeat requires an active running claim".to_owned(),
+            ));
+        }
+        if task.claim_owner.as_deref() != Some(actor) {
+            return Err(KanbanError::InvalidTransition(
+                "claim owner mismatch".to_owned(),
+            ));
+        }
+        let now = self.clock.now_ms();
+        let claim_expires_at = now.checked_add(command.ttl_ms).ok_or_else(|| {
+            KanbanError::InvalidInput("ttl_ms produces an invalid claim expiry".to_owned())
+        })?;
+        self.store
+            .heartbeat_task(
+                task_id,
+                HeartbeatTaskRecord {
+                    expected_lock_version: task.lock_version,
+                    actor: actor.to_owned(),
+                    claim_token: command.claim_token,
+                    event_id: new_event_id(),
+                    note: command.note,
+                    now,
+                    claim_expires_at,
+                },
+            )
+            .await
+    }
 }
 
 fn trimmed_optional(value: Option<String>) -> Option<String> {
@@ -515,6 +573,31 @@ mod tests {
                 claim_token: input.claim_token,
                 claim_expires_at,
             })
+        }
+
+        async fn heartbeat_task(
+            &self,
+            task_id: &str,
+            input: HeartbeatTaskRecord,
+        ) -> Result<TaskRecord> {
+            assert_eq!(task_id, "t_heartbeat");
+            assert_eq!(input.expected_lock_version, 2);
+            assert_eq!(input.actor, "worker");
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.now, 100);
+            assert_eq!(input.claim_expires_at, 400);
+            if input.claim_token != "claim_valid" {
+                return Err(KanbanError::InvalidTransition(
+                    "claim token mismatch".to_owned(),
+                ));
+            }
+            assert_eq!(input.note.as_deref(), Some(" alive "));
+            let mut task = task_for_id(task_id);
+            task.claim_expires_at = Some(input.claim_expires_at);
+            task.last_heartbeat_at = Some(input.now);
+            task.updated_at = input.now;
+            task.lock_version += 1;
+            Ok(task)
         }
     }
 
@@ -862,6 +945,139 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn heartbeat_task_validates_running_claim_owner_and_lease() {
+        let service = ApplicationService::with_clock(
+            StubStore {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            FixedClock(100),
+        );
+        let heartbeat = service
+            .heartbeat_task(HeartbeatTaskCommand {
+                task_id: " t_heartbeat ".into(),
+                actor: " worker ".into(),
+                claim_token: "claim_valid".into(),
+                ttl_ms: 300,
+                note: Some(" alive ".into()),
+            })
+            .await
+            .unwrap();
+        assert_eq!(heartbeat.status, TaskStatus::Running);
+        assert_eq!(heartbeat.claim_expires_at, Some(400));
+        assert_eq!(heartbeat.last_heartbeat_at, Some(100));
+        assert_eq!(heartbeat.lock_version, 3);
+
+        let padded_token = service
+            .heartbeat_task(HeartbeatTaskCommand {
+                task_id: "t_heartbeat".into(),
+                actor: "worker".into(),
+                claim_token: " claim_valid ".into(),
+                ttl_ms: 300,
+                note: None,
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            padded_token,
+            KanbanError::InvalidTransition(message) if message.contains("claim token mismatch")
+        ));
+
+        let wrong_token = service
+            .heartbeat_task(HeartbeatTaskCommand {
+                task_id: "t_heartbeat".into(),
+                actor: "worker".into(),
+                claim_token: "wrong".into(),
+                ttl_ms: 300,
+                note: None,
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            wrong_token,
+            KanbanError::InvalidTransition(message) if message.contains("claim token mismatch")
+        ));
+
+        let wrong_owner = service
+            .heartbeat_task(HeartbeatTaskCommand {
+                task_id: "t_heartbeat".into(),
+                actor: "other".into(),
+                claim_token: "claim_valid".into(),
+                ttl_ms: 300,
+                note: None,
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            wrong_owner,
+            KanbanError::InvalidTransition(message) if message.contains("claim owner mismatch")
+        ));
+
+        let inactive = service
+            .heartbeat_task(HeartbeatTaskCommand {
+                task_id: "t_claim".into(),
+                actor: "worker".into(),
+                claim_token: "claim_valid".into(),
+                ttl_ms: 300,
+                note: None,
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(inactive, KanbanError::InvalidTransition(_)));
+    }
+
+    #[tokio::test]
+    async fn heartbeat_task_rejects_invalid_identity_token_and_lease() {
+        let service = ApplicationService::with_clock(
+            StubStore {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            FixedClock(i64::MAX - 10),
+        );
+        for command in [
+            HeartbeatTaskCommand {
+                task_id: "default#1".into(),
+                actor: "worker".into(),
+                claim_token: "claim_valid".into(),
+                ttl_ms: 300,
+                note: None,
+            },
+            HeartbeatTaskCommand {
+                task_id: "t_heartbeat".into(),
+                actor: " ".into(),
+                claim_token: "claim_valid".into(),
+                ttl_ms: 300,
+                note: None,
+            },
+            HeartbeatTaskCommand {
+                task_id: "t_heartbeat".into(),
+                actor: "worker".into(),
+                claim_token: " ".into(),
+                ttl_ms: 300,
+                note: None,
+            },
+            HeartbeatTaskCommand {
+                task_id: "t_heartbeat".into(),
+                actor: "worker".into(),
+                claim_token: "claim_valid".into(),
+                ttl_ms: 0,
+                note: None,
+            },
+            HeartbeatTaskCommand {
+                task_id: "t_heartbeat".into(),
+                actor: "worker".into(),
+                claim_token: "claim_valid".into(),
+                ttl_ms: 20,
+                note: None,
+            },
+        ] {
+            assert!(matches!(
+                service.heartbeat_task(command).await,
+                Err(KanbanError::InvalidInput(_))
+            ));
+        }
+    }
+
     fn task_record(input: CreateTaskRecord) -> TaskRecord {
         TaskRecord {
             id: input.id,
@@ -937,6 +1153,17 @@ mod tests {
                 task.unfinished_parent_count = 1;
             }
             "t_claim_unplanned" => task.status = TaskStatus::Ready,
+            "t_heartbeat" => {
+                task.status = TaskStatus::Running;
+                task.execution_plan_state = ExecutionPlanState::NotRequired;
+                task.has_claim_token = true;
+                task.claim_owner = Some("worker".into());
+                task.claim_expires_at = Some(200);
+                task.last_heartbeat_at = Some(100);
+                task.current_run_id = Some("r_heartbeat".into());
+                task.started_at = Some(50);
+                task.lock_version = 2;
+            }
             "t_future" => {
                 task.status = TaskStatus::Scheduled;
                 task.scheduled_at = Some(200);

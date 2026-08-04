@@ -12,8 +12,8 @@ use tower_http::{
 
 use crate::{
     handlers::{
-        claim_task, create_task, get_task, health, list_board_columns, list_boards, list_tasks,
-        mark_execution_plan_not_required, promote_task,
+        claim_task, create_task, get_task, health, heartbeat_task, list_board_columns, list_boards,
+        list_tasks, mark_execution_plan_not_required, promote_task,
     },
     state::AppState,
 };
@@ -37,6 +37,10 @@ pub fn build_router(state: AppState) -> Router {
             post(promote_task),
         )
         .route("/api/v1/tasks/:task_id/transitions/claim", post(claim_task))
+        .route(
+            "/api/v1/tasks/:task_id/transitions/heartbeat",
+            post(heartbeat_task),
+        )
         .layer(desktop_cors_layer())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -99,9 +103,9 @@ mod tests {
     use http_body_util::BodyExt;
     use kanban_contract::{
         ApiErrorCode, ApiExecutionPlanState, ApiRunStatus, ApiTaskStatus, ClaimTaskResponse,
-        CreateTaskResponse, ErrorEnvelope, GetTaskResponse, ListBoardColumnsResponse,
-        ListBoardsResponse, ListTasksResponse, MarkExecutionPlanNotRequiredResponse,
-        PromoteTaskResponse,
+        CreateTaskResponse, ErrorEnvelope, GetTaskResponse, HeartbeatTaskResponse,
+        ListBoardColumnsResponse, ListBoardsResponse, ListTasksResponse,
+        MarkExecutionPlanNotRequiredResponse, PromoteTaskResponse,
     };
     use tower::ServiceExt;
 
@@ -316,6 +320,77 @@ mod tests {
         assert_eq!(
             claim.data.claim_expires_at,
             claim.data.task.claim_expires_at
+        );
+        let claim_token = claim.data.claim_token.clone();
+        let previous_expiry = claim.data.claim_expires_at;
+        let previous_lock_version = claim.data.task.lock_version;
+
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_create/transitions/heartbeat",
+                serde_json::json!({
+                    "actor": "worker",
+                    "claim_token": claim_token,
+                    "ttl_ms": 600000,
+                    "note": "still working"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let heartbeat: HeartbeatTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(heartbeat.data.status, ApiTaskStatus::Running);
+        assert_eq!(heartbeat.data.lock_version, previous_lock_version + 1);
+        assert!(heartbeat.data.claim_expires_at.unwrap() > previous_expiry.unwrap());
+        assert!(heartbeat.data.last_heartbeat_at.is_some());
+
+        for body in [
+            serde_json::json!({
+                "actor": "worker",
+                "claim_token": "wrong-token",
+                "ttl_ms": 600000
+            }),
+            serde_json::json!({
+                "actor": "different-worker",
+                "claim_token": claim.data.claim_token,
+                "ttl_ms": 600000
+            }),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(json_request(
+                    "/api/v1/tasks/t_http_create/transitions/heartbeat",
+                    body,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            let bytes = response.into_body().collect().await.unwrap().to_bytes();
+            let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(error.error.code, ApiErrorCode::ClaimTokenMismatch);
+        }
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/tasks/t_http_create")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let after_failed_heartbeats: GetTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            after_failed_heartbeats.data.lock_version,
+            heartbeat.data.lock_version
+        );
+        assert_eq!(
+            after_failed_heartbeats.data.claim_expires_at,
+            heartbeat.data.claim_expires_at
         );
 
         let response = router

@@ -3,9 +3,10 @@ use std::{collections::BTreeMap, env, sync::Arc};
 use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, ClaimTaskRequest, ClaimTaskResponse,
-    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, ListBoardsResponse, ListTasksQuery,
-    ListTasksResponse, MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse,
-    PromoteTaskRequest, PromoteTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
+    HeartbeatTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
+    PromoteTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -108,6 +109,22 @@ struct TaskClaimArgs {
     worker_profile: Option<String>,
     /// JSON metadata recorded on the run and claimed event.
     metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TaskHeartbeatArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+    /// Exact token returned by task_claim.
+    claim_token: String,
+    /// New claim lease duration in milliseconds.
+    #[serde(default = "default_claim_ttl_ms")]
+    ttl_ms: i64,
+    /// Optional heartbeat note recorded on the event.
+    note: Option<String>,
 }
 
 const fn default_claim_ttl_ms() -> i64 {
@@ -312,6 +329,34 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(ClaimTaskResponse::new(claim)))
+    }
+
+    #[tool(
+        name = "task_heartbeat",
+        description = "Extend an active claim lease through the canonical application service"
+    )]
+    async fn task_heartbeat(
+        &self,
+        Parameters(args): Parameters<TaskHeartbeatArgs>,
+    ) -> Result<Json<HeartbeatTaskResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let client = self.client.clone();
+        let task = tokio::task::spawn_blocking(move || {
+            client.heartbeat_task_by_selector(
+                &board,
+                &args.task_ref,
+                &HeartbeatTaskRequest {
+                    actor: None,
+                    claim_token: args.claim_token,
+                    ttl_ms: args.ttl_ms,
+                    note: args.note,
+                },
+            )
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(HeartbeatTaskResponse::new(task)))
     }
 }
 

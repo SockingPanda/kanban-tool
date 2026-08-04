@@ -36,7 +36,10 @@ impl IntoResponse for ApiError {
             KanbanError::StepsIncomplete(_) => {
                 (StatusCode::CONFLICT, ApiErrorCode::StepsIncomplete)
             }
-            KanbanError::InvalidTransition(message) if message.contains("claim token mismatch") => {
+            KanbanError::InvalidTransition(message)
+                if message.contains("claim token mismatch")
+                    || message.contains("claim owner mismatch") =>
+            {
                 (StatusCode::FORBIDDEN, ApiErrorCode::ClaimTokenMismatch)
             }
             KanbanError::InvalidTransition(message) if message.contains("dependency blocked") => {

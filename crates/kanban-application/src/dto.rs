@@ -155,6 +155,26 @@ pub struct ClaimRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeartbeatTaskCommand {
+    pub task_id: String,
+    pub actor: String,
+    pub claim_token: String,
+    pub ttl_ms: i64,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeartbeatTaskRecord {
+    pub expected_lock_version: i64,
+    pub actor: String,
+    pub claim_token: String,
+    pub event_id: String,
+    pub note: Option<String>,
+    pub now: i64,
+    pub claim_expires_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionPlanRecord {
     pub board_id: String,
     pub task_id: String,

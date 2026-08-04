@@ -11,9 +11,10 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, ClaimTaskRequest, ClaimTaskResponse,
-    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, ListTasksQuery,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
+    HeartbeatTaskResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
+    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
+    TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
 
@@ -109,6 +110,8 @@ enum TaskCommand {
     Promote(TaskRefArgs),
     /// Atomically claim a ready task and start a run.
     Claim(TaskClaimArgs),
+    /// Extend the active claim lease with a matching token.
+    Heartbeat(TaskHeartbeatArgs),
 }
 
 #[derive(Debug, Args)]
@@ -200,6 +203,17 @@ struct TaskClaimArgs {
     task_ref: String,
     #[arg(long, default_value_t = 300_000)]
     ttl_ms: i64,
+}
+
+#[derive(Debug, Args)]
+struct TaskHeartbeatArgs {
+    task_ref: String,
+    #[arg(long)]
+    claim_token: String,
+    #[arg(long, default_value_t = 300_000)]
+    ttl_ms: i64,
+    #[arg(long)]
+    note: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -461,6 +475,27 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         println!("Claimed {} token={}", claim.task.id, claim.claim_token);
                     }
                 }
+                TaskCommand::Heartbeat(args) => {
+                    let task = client.heartbeat_task_by_selector(
+                        &cli.board,
+                        &args.task_ref,
+                        &HeartbeatTaskRequest {
+                            actor: None,
+                            claim_token: args.claim_token.clone(),
+                            ttl_ms: args.ttl_ms,
+                            note: args.note.clone(),
+                        },
+                    )?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&HeartbeatTaskResponse::new(task))
+                                .expect("heartbeat response is serializable")
+                        );
+                    } else {
+                        println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
+                    }
+                }
             }
             Ok(())
         }
@@ -679,5 +714,32 @@ mod tests {
         };
         assert_eq!(args.task_ref, "default#1");
         assert_eq!(args.ttl_ms, 120_000);
+    }
+
+    #[test]
+    fn parses_task_heartbeat_command() {
+        let cli = Cli::try_parse_from([
+            "kanban",
+            "task",
+            "heartbeat",
+            "default#1",
+            "--claim-token",
+            "claim_test",
+            "--ttl-ms",
+            "120000",
+            "--note",
+            "alive",
+        ])
+        .expect("heartbeat args");
+        let Command::Task {
+            command: TaskCommand::Heartbeat(args),
+        } = cli.command
+        else {
+            panic!("expected task heartbeat");
+        };
+        assert_eq!(args.task_ref, "default#1");
+        assert_eq!(args.claim_token, "claim_test");
+        assert_eq!(args.ttl_ms, 120_000);
+        assert_eq!(args.note.as_deref(), Some("alive"));
     }
 }

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { KanbanApi, type ClaimResponse, type Task } from "./api"
 
 const config = { apiBaseUrl: "http://127.0.0.1:8721", actor: "desktop-test", board: "default" }
-const actions = ["specify", "promote", "reopen", "unblock", "archive"] as const
+const actions = ["specify", "promote", "heartbeat", "reopen", "unblock", "archive"] as const
 const fixtures = Object.fromEntries(actions.map((action) => [
   action,
   JSON.parse(readFileSync(new URL(`../../../../schemas/fixtures/api/${action}-task-response.v1.valid.json`, import.meta.url), "utf8")),

@@ -1324,13 +1324,13 @@ export class KanbanApi {
     return { events: envelope.data, meta: envelope.meta ?? {} } satisfies EventPage
   }
 
-  async transition(task: Task, action: "specify" | "promote" | "reopen" | "unblock" | "archive", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task>
-  async transition(task: Task, action: "claim" | "heartbeat" | "complete" | "submit-review" | "block", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task | ClaimResponse>
+  async transition(task: Task, action: "specify" | "promote" | "heartbeat" | "reopen" | "unblock" | "archive", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task>
+  async transition(task: Task, action: "claim" | "complete" | "submit-review" | "block", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task | ClaimResponse>
   async transition(task: Task, action: "specify" | "promote" | "claim" | "heartbeat" | "complete" | "reopen" | "submit-review" | "block" | "unblock" | "archive", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task | ClaimResponse>
   async transition(task: Task, action: "specify" | "promote" | "claim" | "heartbeat" | "complete" | "reopen" | "submit-review" | "block" | "unblock" | "archive", body: Record<string, unknown> = {}, options: RequestOptions = {}): Promise<Task | ClaimResponse> {
     const payload = { actor: this.actor, ...body }
     const path = `/api/v1/tasks/${task.id}/transitions/${action}`
-    if (action === "specify" || action === "promote" || action === "reopen" || action === "unblock" || action === "archive") {
+    if (action === "specify" || action === "promote" || action === "heartbeat" || action === "reopen" || action === "unblock" || action === "archive") {
       return parseTransitionTaskEnvelope(await this.requestRaw(path, {
         method: "POST",
         body: payload,

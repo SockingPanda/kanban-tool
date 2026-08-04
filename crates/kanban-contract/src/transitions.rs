@@ -39,7 +39,9 @@ pub type ArchiveTaskResponse = crate::DataEnvelope<crate::ApiTask>;
 
 #[cfg(test)]
 mod tests {
-    use super::{ReleaseTaskPath, ReleaseTaskResponse};
+    use super::{
+        ReleaseTaskPath, ReleaseTaskResponse, SubmitReviewTaskPath, SubmitReviewTaskResponse,
+    };
 
     #[test]
     fn release_task_path_contract() {
@@ -55,5 +57,21 @@ mod tests {
         let response: ReleaseTaskResponse = serde_json::from_str(fixture).unwrap();
         assert_eq!(response.data.id, "t_fixture");
         assert_eq!(response.data.status.as_str(), "ready");
+    }
+
+    #[test]
+    fn submit_review_task_path_contract() {
+        let path: SubmitReviewTaskPath =
+            serde_json::from_value(serde_json::json!({"task_id": "t_fixture"})).unwrap();
+        assert_eq!(path.task_id, "t_fixture");
+    }
+
+    #[test]
+    fn submit_review_task_response_contract() {
+        let fixture =
+            include_str!("../../../schemas/fixtures/api/submit-review-task-response.v1.valid.json");
+        let response: SubmitReviewTaskResponse = serde_json::from_str(fixture).unwrap();
+        assert_eq!(response.data.id, "t_fixture");
+        assert_eq!(response.data.status.as_str(), "review");
     }
 }

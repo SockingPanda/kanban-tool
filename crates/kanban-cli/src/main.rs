@@ -14,7 +14,8 @@ use kanban_contract::{
     CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
     HeartbeatTaskResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskRequest, ReleaseTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
+    TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
 
@@ -114,6 +115,8 @@ enum TaskCommand {
     Heartbeat(TaskHeartbeatArgs),
     /// Return an actively claimed task to ready.
     Release(TaskReleaseArgs),
+    /// Finish the active run and submit the task for review.
+    Review(TaskReviewArgs),
 }
 
 #[derive(Debug, Args)]
@@ -223,6 +226,15 @@ struct TaskReleaseArgs {
     task_ref: String,
     #[arg(long)]
     claim_token: String,
+}
+
+#[derive(Debug, Args)]
+struct TaskReviewArgs {
+    task_ref: String,
+    #[arg(long)]
+    claim_token: Option<String>,
+    #[arg(long)]
+    force: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -524,6 +536,27 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
                     }
                 }
+                TaskCommand::Review(args) => {
+                    let task = client.submit_review_task_by_selector(
+                        &cli.board,
+                        &args.task_ref,
+                        &SubmitReviewTaskRequest {
+                            actor: None,
+                            claim_token: args.claim_token.clone(),
+                            force: args.force,
+                            summary: None,
+                        },
+                    )?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&SubmitReviewTaskResponse::new(task))
+                                .expect("review response is serializable")
+                        );
+                    } else {
+                        println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
+                    }
+                }
             }
             Ok(())
         }
@@ -790,5 +823,38 @@ mod tests {
         };
         assert_eq!(args.task_ref, "default#1");
         assert_eq!(args.claim_token, "claim_test");
+    }
+
+    #[test]
+    fn parses_task_review_command() {
+        let cli = Cli::try_parse_from([
+            "kanban",
+            "task",
+            "review",
+            "default#1",
+            "--claim-token",
+            "claim_test",
+        ])
+        .expect("review args");
+        let Command::Task {
+            command: TaskCommand::Review(args),
+        } = cli.command
+        else {
+            panic!("expected task review");
+        };
+        assert_eq!(args.task_ref, "default#1");
+        assert_eq!(args.claim_token.as_deref(), Some("claim_test"));
+        assert!(!args.force);
+
+        let cli = Cli::try_parse_from(["kanban", "task", "review", "t_global", "--force"])
+            .expect("forced review args");
+        let Command::Task {
+            command: TaskCommand::Review(args),
+        } = cli.command
+        else {
+            panic!("expected forced task review");
+        };
+        assert_eq!(args.claim_token, None);
+        assert!(args.force);
     }
 }

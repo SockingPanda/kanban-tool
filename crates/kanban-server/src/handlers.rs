@@ -11,9 +11,9 @@ use axum::{
 use kanban_application::{
     ClaimTaskCommand, CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState,
     HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand,
-    ReleaseTaskCommand, RunRecord, RunStatus, TaskListOptions as ApplicationTaskListOptions,
-    TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
-    TaskRecord,
+    ReleaseTaskCommand, RunRecord, RunStatus, SubmitReviewTaskCommand,
+    TaskListOptions as ApplicationTaskListOptions, TaskListSort as ApplicationTaskListSort,
+    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord,
 };
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiClaim, ApiCreateTaskStatus, ApiExecutionPlan,
@@ -27,7 +27,8 @@ use kanban_contract::{
     MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
     MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskPath, ReleaseTaskRequest, ReleaseTaskResponse, TaskReadLabel, TaskReadPlanFilter,
+    ReleaseTaskPath, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskPath,
+    SubmitReviewTaskRequest, SubmitReviewTaskResponse, TaskReadLabel, TaskReadPlanFilter,
     TaskReadSort, TotalPaginationMeta,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
@@ -328,6 +329,28 @@ pub(crate) async fn release_task(
         })
         .await?;
     Ok(Json(ReleaseTaskResponse::new(api_task(task)?)))
+}
+
+pub(crate) async fn submit_review_task(
+    State(state): State<AppState>,
+    Path(SubmitReviewTaskPath { task_id }): Path<SubmitReviewTaskPath>,
+    headers: HeaderMap,
+    body: Result<Json<SubmitReviewTaskRequest>, JsonRejection>,
+) -> Result<Json<SubmitReviewTaskResponse>, ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let task = state
+        .application()
+        .submit_review_task(SubmitReviewTaskCommand {
+            task_id,
+            actor,
+            claim_token: body.claim_token,
+            force: body.force,
+            summary: body.summary,
+        })
+        .await?;
+    Ok(Json(SubmitReviewTaskResponse::new(api_task(task)?)))
 }
 
 fn request_actor(

@@ -124,6 +124,21 @@ fn lifecycle_release_request_contract() {
 }
 
 #[test]
+fn submit_review_task_request_contract() {
+    let request: SubmitReviewTaskRequest = serde_json::from_value(json!({
+        "actor": "worker",
+        "claim_token": "claim_exact",
+        "force": false,
+        "summary": "ready for review"
+    }))
+    .unwrap();
+    assert_eq!(request.actor.as_deref(), Some("worker"));
+    assert_eq!(request.claim_token.as_deref(), Some("claim_exact"));
+    assert!(!request.force);
+    assert_eq!(request.summary.as_deref(), Some("ready for review"));
+}
+
+#[test]
 fn complete_result_is_opaque_but_submit_review_is_closed() {
     let payload = json!({
         "claim_token": "ct_fixture",

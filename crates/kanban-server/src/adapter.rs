@@ -6,6 +6,7 @@ use kanban_application::{
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
     PromoteTaskRecord as ApplicationPromoteTask, ReleaseTaskRecord as ApplicationReleaseTask,
     RunRecord as ApplicationRun, RunStatus as ApplicationRunStatus,
+    SubmitReviewTaskRecord as ApplicationSubmitReviewTask,
     TaskListOptions as ApplicationTaskListOptions, TaskListPage as ApplicationTaskListPage,
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
     TaskRecord as ApplicationTask,
@@ -16,9 +17,10 @@ use kanban_store_turso::{
     CreateTaskInput as StoreCreateTask, HeartbeatTaskInput as StoreHeartbeatTask,
     MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
     PromoteTaskInput as StorePromoteTask, ReleaseTaskInput as StoreReleaseTask, StoreError,
-    TaskExecutionPlanRecord as StoreExecutionPlan, TaskListOptions as StoreTaskListOptions,
-    TaskListSort as StoreTaskListSort, TaskPlanFilter as StoreTaskPlanFilter,
-    TaskRecord as StoreTask, TaskRunRecord as StoreRun, TursoStore,
+    SubmitReviewTaskInput as StoreSubmitReviewTask, TaskExecutionPlanRecord as StoreExecutionPlan,
+    TaskListOptions as StoreTaskListOptions, TaskListSort as StoreTaskListSort,
+    TaskPlanFilter as StoreTaskPlanFilter, TaskRecord as StoreTask, TaskRunRecord as StoreRun,
+    TursoStore,
 };
 
 #[derive(Clone)]
@@ -253,6 +255,29 @@ impl ApplicationStore for TursoApplicationStore {
                     expected_lock_version: input.expected_lock_version,
                     actor: input.actor,
                     claim_token: input.claim_token,
+                    event_id: input.event_id,
+                    now: input.now,
+                },
+            )
+            .await
+            .map_err(store_error)
+            .and_then(application_task)
+    }
+
+    async fn submit_review_task(
+        &self,
+        task_id: &str,
+        input: ApplicationSubmitReviewTask,
+    ) -> Result<ApplicationTask> {
+        self.store
+            .submit_review_task(
+                task_id,
+                StoreSubmitReviewTask {
+                    expected_lock_version: input.expected_lock_version,
+                    actor: input.actor,
+                    claim_token: input.claim_token,
+                    force: input.force,
+                    summary: input.summary,
                     event_id: input.event_id,
                     now: input.now,
                 },

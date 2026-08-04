@@ -6,7 +6,8 @@ use kanban_contract::{
     CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
     HeartbeatTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
     MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
+    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -136,6 +137,22 @@ struct TaskReleaseArgs {
     task_ref: String,
     /// Exact token returned by task_claim.
     claim_token: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TaskReviewArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+    /// Exact token returned by task_claim. May be omitted only with force.
+    claim_token: Option<String>,
+    /// Bypass caller credential checks without bypassing running-run consistency.
+    #[serde(default)]
+    force: bool,
+    /// Optional summary recorded on the task and completed run.
+    summary: Option<String>,
 }
 
 const fn default_claim_ttl_ms() -> i64 {
@@ -394,6 +411,34 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(ReleaseTaskResponse::new(task)))
+    }
+
+    #[tool(
+        name = "task_review",
+        description = "Finish an active run and submit its task for review through the canonical application service"
+    )]
+    async fn task_review(
+        &self,
+        Parameters(args): Parameters<TaskReviewArgs>,
+    ) -> Result<Json<SubmitReviewTaskResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let client = self.client.clone();
+        let task = tokio::task::spawn_blocking(move || {
+            client.submit_review_task_by_selector(
+                &board,
+                &args.task_ref,
+                &SubmitReviewTaskRequest {
+                    actor: None,
+                    claim_token: args.claim_token,
+                    force: args.force,
+                    summary: args.summary,
+                },
+            )
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(SubmitReviewTaskResponse::new(task)))
     }
 }
 

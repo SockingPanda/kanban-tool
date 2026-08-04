@@ -2619,8 +2619,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "urn:kanban-tool:schema:api:submit-review-task-request:v1",
         "schemas/fixtures/api/submit-review-task-request.v1.valid.json",
-        "suite::lifecycle_request_adoption::submit_review_task_request_dto_serializes_to_committed_fixture",
-        "suite::lifecycle_request_adoption::submit_review_task_request_fixture_is_consumed_by_real_router"
+        "submit_review_task_request_contract",
+        "router::tests::task_review_closes_the_application_path"
     ),
     adopted_comment_contract!(
         "api.submit-review-task.path",
@@ -2631,8 +2631,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/submit-review-task-path.v1.valid.json",
         HttpTransportLocation::Path,
         TASK_TRANSITION_PATH_PARAMETERS,
-        "suite::transitions_adoption::submit_review_task_path_dto_serializes_to_committed_fixture",
-        "suite::transitions_adoption::submit_review_task_path_fixture_is_consumed_by_real_router"
+        "submit_review_task_path_contract",
+        "router::tests::task_review_closes_the_application_path"
     ),
     adopted_comment_contract!(
         "api.submit-review-task.response",
@@ -2643,8 +2643,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/submit-review-task-response.v1.valid.json",
         HttpTransportLocation::Success,
         &[],
-        "suite::transitions_adoption::submit_review_task_response_fixture_is_produced_by_real_router",
-        "suite::transitions_adoption::submit_review_task_response_fixture_is_consumed_by_contract_root"
+        "router::tests::task_review_closes_the_application_path",
+        "submit_review_task_response_contract"
     ),
     adopted_api_request!(
         "api.block-task.request",

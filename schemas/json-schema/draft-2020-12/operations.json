@@ -8134,7 +8134,7 @@
       "consumer": {
         "contract_id": "api.submit-review-task.request",
         "direction": "deserialize",
-        "exact_test": "suite::lifecycle_request_adoption::submit_review_task_request_fixture_is_consumed_by_real_router",
+        "exact_test": "router::tests::task_review_closes_the_application_path",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -8143,7 +8143,7 @@
       "producer": {
         "contract_id": "api.submit-review-task.request",
         "direction": "deserialize",
-        "exact_test": "suite::lifecycle_request_adoption::submit_review_task_request_dto_serializes_to_committed_fixture",
+        "exact_test": "submit_review_task_request_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -8175,7 +8175,7 @@
       "consumer": {
         "contract_id": "api.submit-review-task.path",
         "direction": "deserialize",
-        "exact_test": "suite::transitions_adoption::submit_review_task_path_fixture_is_consumed_by_real_router",
+        "exact_test": "router::tests::task_review_closes_the_application_path",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -8184,7 +8184,7 @@
       "producer": {
         "contract_id": "api.submit-review-task.path",
         "direction": "deserialize",
-        "exact_test": "suite::transitions_adoption::submit_review_task_path_dto_serializes_to_committed_fixture",
+        "exact_test": "submit_review_task_path_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -8221,7 +8221,7 @@
       "consumer": {
         "contract_id": "api.submit-review-task.response",
         "direction": "serialize",
-        "exact_test": "suite::transitions_adoption::submit_review_task_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "submit_review_task_response_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -8230,7 +8230,7 @@
       "producer": {
         "contract_id": "api.submit-review-task.response",
         "direction": "serialize",
-        "exact_test": "suite::transitions_adoption::submit_review_task_response_fixture_is_produced_by_real_router",
+        "exact_test": "router::tests::task_review_closes_the_application_path",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",

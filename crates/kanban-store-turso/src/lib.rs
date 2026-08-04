@@ -204,6 +204,17 @@ pub struct ReleaseTaskInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubmitReviewTaskInput {
+    pub expected_lock_version: i64,
+    pub actor: String,
+    pub claim_token: Option<String>,
+    pub force: bool,
+    pub summary: Option<String>,
+    pub now: i64,
+    pub event_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskRecord {
     pub id: String,
     pub board_id: String,
@@ -1583,6 +1594,210 @@ impl TursoStore {
         Ok(released)
     }
 
+    pub async fn submit_review_task(
+        &self,
+        task_id: &str,
+        input: SubmitReviewTaskInput,
+    ) -> Result<TaskRecord, StoreError> {
+        validate_submit_review_task_input(task_id, &input)?;
+        let actor = input.actor.trim().to_owned();
+        let input_claim_token = input.claim_token.as_deref();
+        let event_id = input.event_id.trim().to_owned();
+        let summary = input.summary.as_deref();
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+
+        let task = first_row(
+            transaction
+                .query(
+                    "SELECT t.board_id, t.status, t.archived_at, b.archived_at, t.lock_version, t.claim_token, t.claim_owner, t.claim_expires_at, t.current_run_id, t.result_summary FROM tasks AS t JOIN boards AS b ON b.id = t.board_id WHERE t.id = :task_id LIMIT 1",
+                    [ (":task_id", task_id) ],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
+            other => StoreError::Turso(other),
+        })?;
+        let board_id = text_value(task.get_value(0)?, "tasks.board_id")?;
+        let status = text_value(task.get_value(1)?, "tasks.status")?;
+        let task_archived_at = optional_integer_value(task.get_value(2)?, "tasks.archived_at")?;
+        let board_archived_at = optional_integer_value(task.get_value(3)?, "boards.archived_at")?;
+        if task_archived_at.is_some() || board_archived_at.is_some() {
+            return Err(StoreError::InvalidTransition(
+                "archived task or board cannot submit review".to_owned(),
+            ));
+        }
+        if status != "running" {
+            return Err(StoreError::InvalidTransition(
+                "submit review requires a running task".to_owned(),
+            ));
+        }
+
+        let lock_version = integer_value(task.get_value(4)?, "tasks.lock_version")?;
+        if lock_version != input.expected_lock_version {
+            return Err(StoreError::ClaimConflict(
+                "lock_version mismatch".to_owned(),
+            ));
+        }
+        let task_claim_token = optional_text_value(task.get_value(5)?, "tasks.claim_token")?;
+        let task_claim_owner = optional_text_value(task.get_value(6)?, "tasks.claim_owner")?;
+        if task_claim_token.is_none() || task_claim_owner.is_none() {
+            return Err(StoreError::InvalidTransition(
+                "submit review requires an active claim".to_owned(),
+            ));
+        }
+        if !input.force {
+            if input_claim_token != task_claim_token.as_deref() {
+                return Err(StoreError::ClaimTokenMismatch);
+            }
+            if task_claim_owner.as_deref() != Some(actor.as_str()) {
+                return Err(StoreError::InvalidTransition(
+                    "claim owner mismatch".to_owned(),
+                ));
+            }
+        }
+        if optional_integer_value(task.get_value(7)?, "tasks.claim_expires_at")?.is_none() {
+            return Err(StoreError::InvalidTransition(
+                "submit review requires an active claim".to_owned(),
+            ));
+        }
+        let run_id = optional_text_value(task.get_value(8)?, "tasks.current_run_id")?
+            .filter(|run_id| !run_id.trim().is_empty())
+            .ok_or_else(|| {
+                StoreError::InvalidTransition(
+                    "submit review requires a current running run".to_owned(),
+                )
+            })?;
+
+        let active_run_count = first_row(
+            transaction
+                .query(
+                    "SELECT COUNT(*) FROM task_runs WHERE board_id = :board_id AND task_id = :task_id AND status = 'running'",
+                    [
+                        (":board_id", board_id.as_str()),
+                        (":task_id", task_id),
+                    ],
+                )
+                .await?,
+        )
+        .await?;
+        if integer_value(active_run_count.get_value(0)?, "task_runs.active_count")? != 1 {
+            return Err(StoreError::InvalidTransition(
+                "submit review requires exactly one running run".to_owned(),
+            ));
+        }
+
+        let run = first_row(
+            transaction
+                .query(
+                    "SELECT status, claim_token, claim_owner FROM task_runs WHERE id = :run_id AND board_id = :board_id AND task_id = :task_id LIMIT 1",
+                    [
+                        (":run_id", run_id.as_str()),
+                        (":board_id", board_id.as_str()),
+                        (":task_id", task_id),
+                    ],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::InvalidTransition(
+                "submit review requires a matching running run".to_owned(),
+            ),
+            other => StoreError::Turso(other),
+        })?;
+        if text_value(run.get_value(0)?, "task_runs.status")? != "running" {
+            return Err(StoreError::InvalidTransition(
+                "submit review requires a matching running run".to_owned(),
+            ));
+        }
+        let run_claim_token = text_value(run.get_value(1)?, "task_runs.claim_token")?;
+        let run_claim_owner = text_value(run.get_value(2)?, "task_runs.claim_owner")?;
+        if task_claim_token.as_deref() != Some(run_claim_token.as_str())
+            || task_claim_owner.as_deref() != Some(run_claim_owner.as_str())
+        {
+            return Err(StoreError::InvalidTransition(
+                "active run claim is inconsistent".to_owned(),
+            ));
+        }
+
+        let changed = transaction
+            .execute(
+                "UPDATE task_runs SET status = 'succeeded', finished_at = :finished_at, exit_code = 0, summary = COALESCE(:summary, summary) WHERE id = :run_id AND board_id = :board_id AND task_id = :task_id AND status = 'running' AND claim_token = :claim_token AND claim_owner = :claim_owner",
+                (
+                    (":finished_at", input.now),
+                    (":summary", summary),
+                    (":run_id", run_id.as_str()),
+                    (":board_id", board_id.as_str()),
+                    (":task_id", task_id),
+                    (":claim_token", run_claim_token.as_str()),
+                    (":claim_owner", run_claim_owner.as_str()),
+                ),
+            )
+            .await?;
+        if changed != 1 {
+            return Err(StoreError::InvalidTransition(
+                "submit review requires a matching running run".to_owned(),
+            ));
+        }
+
+        let changed = transaction
+            .execute(
+                "UPDATE tasks SET status = 'review', status_reason = NULL, claim_token = NULL, claim_owner = NULL, claim_expires_at = NULL, last_heartbeat_at = NULL, result_summary = COALESCE(:summary, result_summary), updated_at = :updated_at, lock_version = lock_version + 1 WHERE id = :task_id AND board_id = :board_id AND status = 'running' AND claim_token = :claim_token AND claim_owner = :claim_owner AND current_run_id = :run_id AND lock_version = :expected_lock_version",
+                (
+                    (":summary", summary),
+                    (":updated_at", input.now),
+                    (":task_id", task_id),
+                    (":board_id", board_id.as_str()),
+                    (":claim_token", run_claim_token.as_str()),
+                    (":claim_owner", run_claim_owner.as_str()),
+                    (":run_id", run_id.as_str()),
+                    (":expected_lock_version", input.expected_lock_version),
+                ),
+            )
+            .await?;
+        if changed != 1 {
+            return Err(StoreError::ClaimConflict(
+                "submit review compare-and-set failed".to_owned(),
+            ));
+        }
+
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, :run_id, 'task.submitted_for_review', :actor, '{\"result\":null}', :created_at)",
+                (
+                    (":event_id", event_id.as_str()),
+                    (":board_id", board_id.as_str()),
+                    (":task_id", task_id),
+                    (":run_id", run_id.as_str()),
+                    (":actor", actor.as_str()),
+                    (":created_at", input.now),
+                ),
+            )
+            .await?;
+
+        let reviewed = task_from_row(
+            first_row(
+                transaction
+                    .query(
+                        &format!(
+                            "{TASK_SELECT} WHERE t.board_id = :board_id AND t.id = :task_id LIMIT 1"
+                        ),
+                        [(":board_id", board_id.as_str()), (":task_id", task_id)],
+                    )
+                    .await?,
+            )
+            .await?,
+        )?;
+
+        transaction.commit().await?;
+        Ok(reviewed)
+    }
+
     pub async fn list_boards(
         &self,
         include_archived: bool,
@@ -2129,6 +2344,36 @@ fn validate_release_task_input(task_id: &str, input: &ReleaseTaskInput) -> Resul
     Ok(())
 }
 
+fn validate_submit_review_task_input(
+    task_id: &str,
+    input: &SubmitReviewTaskInput,
+) -> Result<(), StoreError> {
+    if !task_id.starts_with("t_") || task_id.len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "task id must start with t_".to_owned(),
+        ));
+    }
+    if input.expected_lock_version < 0 {
+        return Err(StoreError::InvalidInput(
+            "expected_lock_version must be non-negative".to_owned(),
+        ));
+    }
+    if input.actor.trim().is_empty() {
+        return Err(StoreError::InvalidInput("actor is required".to_owned()));
+    }
+    if !input.event_id.trim().starts_with("e_") || input.event_id.trim().len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "event_id must start with e_".to_owned(),
+        ));
+    }
+    if input.now < 0 {
+        return Err(StoreError::InvalidInput(
+            "now must be non-negative".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 fn task_from_row(row: Row) -> Result<TaskRecord, StoreError> {
     let board_slug = text_value(row.get_value(30)?, "boards.slug")?;
     let seq = integer_value(row.get_value(2)?, "tasks.seq")?;
@@ -2359,6 +2604,26 @@ mod tests {
             claim_token: claim_token.to_owned(),
             event_id: event_id.to_owned(),
             now,
+        }
+    }
+
+    fn submit_review_input(
+        expected_lock_version: i64,
+        actor: &str,
+        claim_token: Option<&str>,
+        force: bool,
+        summary: Option<&str>,
+        now: i64,
+        event_id: &str,
+    ) -> SubmitReviewTaskInput {
+        SubmitReviewTaskInput {
+            expected_lock_version,
+            actor: actor.to_owned(),
+            claim_token: claim_token.map(str::to_owned),
+            force,
+            summary: summary.map(str::to_owned),
+            now,
+            event_id: event_id.to_owned(),
         }
     }
 
@@ -6033,6 +6298,803 @@ mod tests {
             text_value(event.get_value(3).expect("event payload"), "event.payload")
                 .expect("event payload text"),
             r#"{"to_status":"ready"}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn submit_review_task_moves_running_task_and_run_atomically() {
+        let (_directory, store, _path) = store("review-success").await;
+        store.initialize().await.expect("initialize");
+        let task = ready_task_for_claim(
+            &store,
+            "t_review_success",
+            "review-success",
+            "Review success",
+        )
+        .await;
+        let claimed = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_review_success",
+                    "r_review_success",
+                    "e_review_claim",
+                    "{}",
+                    300,
+                    1_000,
+                ),
+            )
+            .await
+            .expect("claim task");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE task_runs SET error = ?1 WHERE id = ?2",
+                ("preexisting error", "r_review_success"),
+            )
+            .await
+            .expect("set preexisting run error");
+
+        let reviewed = store
+            .submit_review_task(
+                &task.id,
+                submit_review_input(
+                    claimed.task.lock_version,
+                    "worker",
+                    Some("claim_review_success"),
+                    false,
+                    Some("ready for review"),
+                    500,
+                    "e_review_success",
+                ),
+            )
+            .await
+            .expect("submit review");
+        assert_eq!(reviewed.id, task.id);
+        assert_eq!(reviewed.status, "review");
+        assert_eq!(reviewed.status_reason, None);
+        assert_eq!(reviewed.claim_token, None);
+        assert_eq!(reviewed.claim_owner, None);
+        assert_eq!(reviewed.claim_expires_at, None);
+        assert_eq!(reviewed.last_heartbeat_at, None);
+        assert_eq!(reviewed.current_run_id.as_deref(), Some("r_review_success"));
+        assert_eq!(reviewed.result_summary.as_deref(), Some("ready for review"));
+        assert_eq!(reviewed.completed_at, None);
+        assert_eq!(reviewed.updated_at, 500);
+        assert_eq!(reviewed.lock_version, claimed.task.lock_version + 1);
+
+        let run = first_row(
+            connection
+                .query(
+                    "SELECT status, finished_at, exit_code, summary, error FROM task_runs WHERE id = ?1",
+                    ["r_review_success"],
+                )
+                .await
+                .expect("run query"),
+        )
+        .await
+        .expect("run row");
+        assert_eq!(
+            text_value(run.get_value(0).expect("run status"), "run.status")
+                .expect("run status text"),
+            "succeeded"
+        );
+        assert_eq!(
+            integer_value(
+                run.get_value(1).expect("run finished_at"),
+                "run.finished_at"
+            )
+            .expect("run finished_at integer"),
+            500
+        );
+        assert_eq!(
+            integer_value(run.get_value(2).expect("run exit_code"), "run.exit_code")
+                .expect("run exit code integer"),
+            0
+        );
+        assert_eq!(
+            optional_text_value(run.get_value(3).expect("run summary"), "run.summary")
+                .expect("run summary text")
+                .as_deref(),
+            Some("ready for review")
+        );
+        assert_eq!(
+            optional_text_value(run.get_value(4).expect("run error"), "run.error")
+                .expect("run error text")
+                .as_deref(),
+            Some("preexisting error")
+        );
+
+        let event = first_row(
+            connection
+                .query(
+                    "SELECT board_id, task_id, run_id, kind, actor, payload_json, created_at FROM task_events WHERE event_id = ?1",
+                    ["e_review_success"],
+                )
+                .await
+                .expect("event query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(event.get_value(0).expect("event board"), "event.board_id")
+                .expect("event board text"),
+            "b_default"
+        );
+        assert_eq!(
+            text_value(event.get_value(1).expect("event task"), "event.task_id")
+                .expect("event task text"),
+            task.id
+        );
+        assert_eq!(
+            text_value(event.get_value(2).expect("event run"), "event.run_id")
+                .expect("event run text"),
+            "r_review_success"
+        );
+        assert_eq!(
+            text_value(event.get_value(3).expect("event kind"), "event.kind")
+                .expect("event kind text"),
+            "task.submitted_for_review"
+        );
+        assert_eq!(
+            text_value(event.get_value(4).expect("event actor"), "event.actor")
+                .expect("event actor text"),
+            "worker"
+        );
+        assert_eq!(
+            text_value(event.get_value(5).expect("event payload"), "event.payload")
+                .expect("event payload text"),
+            r#"{"result":null}"#
+        );
+        assert_eq!(
+            integer_value(
+                event.get_value(6).expect("event created_at"),
+                "event.created_at"
+            )
+            .expect("event created_at integer"),
+            500
+        );
+    }
+
+    #[tokio::test]
+    async fn submit_review_task_rejects_credentials_and_damaged_state_without_writes() {
+        let (_directory, store, _path) = store("review-guards").await;
+        store.initialize().await.expect("initialize");
+        let task =
+            ready_task_for_claim(&store, "t_review_guards", "review-guards", "Review guards").await;
+        let claimed = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_review_guards",
+                    "r_review_guards",
+                    "e_review_guards_claim",
+                    "{}",
+                    300,
+                    1_000,
+                ),
+            )
+            .await
+            .expect("claim task");
+        let connection = store.connection().await.expect("connection");
+
+        for (token, event_id) in [
+            (Some("wrong-review-token"), "e_review_wrong_token"),
+            (Some(" claim_review_guards "), "e_review_padded_token"),
+            (None, "e_review_missing_token"),
+        ] {
+            let error = store
+                .submit_review_task(
+                    &task.id,
+                    submit_review_input(
+                        claimed.task.lock_version,
+                        "worker",
+                        token,
+                        false,
+                        None,
+                        500,
+                        event_id,
+                    ),
+                )
+                .await
+                .expect_err("token mismatch must fail");
+            assert!(matches!(error, StoreError::ClaimTokenMismatch));
+            assert!(!error.to_string().contains("wrong-review-token"));
+        }
+
+        let owner_error = store
+            .submit_review_task(
+                &task.id,
+                submit_review_input(
+                    claimed.task.lock_version,
+                    "other-worker",
+                    Some("claim_review_guards"),
+                    false,
+                    None,
+                    500,
+                    "e_review_wrong_owner",
+                ),
+            )
+            .await
+            .expect_err("owner mismatch must fail");
+        assert!(matches!(
+            owner_error,
+            StoreError::InvalidTransition(message) if message.contains("owner")
+        ));
+
+        let stale_error = store
+            .submit_review_task(
+                &task.id,
+                submit_review_input(
+                    claimed.task.lock_version - 1,
+                    "worker",
+                    Some("claim_review_guards"),
+                    false,
+                    None,
+                    500,
+                    "e_review_stale",
+                ),
+            )
+            .await
+            .expect_err("stale lock must fail");
+        assert!(matches!(stale_error, StoreError::ClaimConflict(_)));
+
+        let unchanged = store
+            .get_task_global(&task.id)
+            .await
+            .expect("get unchanged task");
+        assert_eq!(unchanged.status, "running");
+        assert_eq!(unchanged.lock_version, claimed.task.lock_version);
+        assert_eq!(unchanged.claim_token, claimed.task.claim_token);
+        assert_eq!(unchanged.current_run_id, claimed.task.current_run_id);
+
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'ready' WHERE id = ?1",
+                [task.id.as_str()],
+            )
+            .await
+            .expect("make task non-running");
+        let non_running = store
+            .submit_review_task(
+                &task.id,
+                submit_review_input(
+                    claimed.task.lock_version,
+                    "worker",
+                    Some("claim_review_guards"),
+                    false,
+                    None,
+                    500,
+                    "e_review_non_running",
+                ),
+            )
+            .await
+            .expect_err("non-running task must fail");
+        assert!(matches!(
+            non_running,
+            StoreError::InvalidTransition(message) if message.contains("running")
+        ));
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'running' WHERE id = ?1",
+                [task.id.as_str()],
+            )
+            .await
+            .expect("restore running task");
+
+        connection
+            .execute(
+                "UPDATE tasks SET current_run_id = NULL WHERE id = ?1",
+                [task.id.as_str()],
+            )
+            .await
+            .expect("remove current run");
+        let missing_run = store
+            .submit_review_task(
+                &task.id,
+                submit_review_input(
+                    claimed.task.lock_version,
+                    "worker",
+                    Some("claim_review_guards"),
+                    false,
+                    None,
+                    500,
+                    "e_review_missing_run",
+                ),
+            )
+            .await
+            .expect_err("missing run must fail");
+        assert!(matches!(
+            missing_run,
+            StoreError::InvalidTransition(message) if message.contains("current running run")
+        ));
+        connection
+            .execute(
+                "UPDATE tasks SET current_run_id = ?1 WHERE id = ?2",
+                ("r_review_guards", task.id.as_str()),
+            )
+            .await
+            .expect("restore current run");
+
+        connection
+            .execute(
+                "UPDATE task_runs SET claim_owner = 'tampered' WHERE id = ?1",
+                ["r_review_guards"],
+            )
+            .await
+            .expect("tamper run owner");
+        let inconsistent_run = store
+            .submit_review_task(
+                &task.id,
+                submit_review_input(
+                    claimed.task.lock_version,
+                    "worker",
+                    Some("claim_review_guards"),
+                    false,
+                    None,
+                    500,
+                    "e_review_inconsistent_run",
+                ),
+            )
+            .await
+            .expect_err("inconsistent run must fail");
+        assert!(matches!(
+            inconsistent_run,
+            StoreError::InvalidTransition(message) if message.contains("inconsistent")
+        ));
+        connection
+            .execute(
+                "UPDATE task_runs SET claim_owner = 'worker' WHERE id = ?1",
+                ["r_review_guards"],
+            )
+            .await
+            .expect("restore run owner");
+
+        connection
+            .execute(
+                "UPDATE task_runs SET status = 'succeeded' WHERE id = ?1",
+                ["r_review_guards"],
+            )
+            .await
+            .expect("remove active run");
+        let no_active_run = store
+            .submit_review_task(
+                &task.id,
+                submit_review_input(
+                    claimed.task.lock_version,
+                    "worker",
+                    Some("claim_review_guards"),
+                    false,
+                    None,
+                    500,
+                    "e_review_no_active_run",
+                ),
+            )
+            .await
+            .expect_err("missing active run must fail");
+        assert!(matches!(no_active_run, StoreError::InvalidTransition(_)));
+        connection
+            .execute(
+                "UPDATE task_runs SET status = 'running' WHERE id = ?1",
+                ["r_review_guards"],
+            )
+            .await
+            .expect("restore active run");
+
+        let release_event_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.submitted_for_review'",
+                    [task.id.as_str()],
+                )
+                .await
+                .expect("review event count query"),
+        )
+        .await
+        .expect("review event count row");
+        assert_eq!(
+            integer_value(
+                release_event_count.get_value(0).expect("event count"),
+                "event.count",
+            )
+            .expect("event count integer"),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn submit_review_task_force_bypasses_input_credentials_but_keeps_run_consistency() {
+        let (_directory, store, _path) = store("review-force").await;
+        store.initialize().await.expect("initialize");
+        let task =
+            ready_task_for_claim(&store, "t_review_force", "review-force", "Review force").await;
+        let claimed = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_review_force",
+                    "r_review_force",
+                    "e_review_force_claim",
+                    "{}",
+                    300,
+                    1_000,
+                ),
+            )
+            .await
+            .expect("claim task");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE tasks SET result_summary = ?1 WHERE id = ?2",
+                ("existing task summary", task.id.as_str()),
+            )
+            .await
+            .expect("set existing task summary");
+        connection
+            .execute(
+                "UPDATE task_runs SET summary = ?1 WHERE id = ?2",
+                ("existing run summary", "r_review_force"),
+            )
+            .await
+            .expect("set existing run summary");
+
+        let reviewed = store
+            .submit_review_task(
+                &task.id,
+                submit_review_input(
+                    claimed.task.lock_version,
+                    "force-reviewer",
+                    Some("wrong force token"),
+                    true,
+                    None,
+                    500,
+                    "e_review_force",
+                ),
+            )
+            .await
+            .expect("force submit review");
+        assert_eq!(reviewed.status, "review");
+        assert_eq!(
+            reviewed.result_summary.as_deref(),
+            Some("existing task summary")
+        );
+        assert_eq!(reviewed.current_run_id.as_deref(), Some("r_review_force"));
+
+        let run = first_row(
+            connection
+                .query(
+                    "SELECT summary FROM task_runs WHERE id = ?1",
+                    ["r_review_force"],
+                )
+                .await
+                .expect("run query"),
+        )
+        .await
+        .expect("run row");
+        assert_eq!(
+            optional_text_value(run.get_value(0).expect("run summary"), "run.summary")
+                .expect("run summary text")
+                .as_deref(),
+            Some("existing run summary")
+        );
+        let event = first_row(
+            connection
+                .query(
+                    "SELECT actor, payload_json FROM task_events WHERE event_id = ?1",
+                    ["e_review_force"],
+                )
+                .await
+                .expect("event query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(event.get_value(0).expect("event actor"), "event.actor")
+                .expect("event actor text"),
+            "force-reviewer"
+        );
+        assert_eq!(
+            text_value(event.get_value(1).expect("event payload"), "event.payload")
+                .expect("event payload text"),
+            r#"{"result":null}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn submit_review_task_event_conflict_rolls_back_task_and_run_updates() {
+        let (_directory, store, _path) = store("review-event-conflict").await;
+        store.initialize().await.expect("initialize");
+        let task = ready_task_for_claim(
+            &store,
+            "t_review_event_conflict",
+            "review-event-conflict",
+            "Review event conflict",
+        )
+        .await;
+        let claimed = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_review_event_conflict",
+                    "r_review_event_conflict",
+                    "e_review_event_claim",
+                    "{}",
+                    300,
+                    1_000,
+                ),
+            )
+            .await
+            .expect("claim task");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, 'b_default', ?2, NULL, 'other.event', 'tester', '{}', 1)",
+                ("e_review_event_conflict", task.id.as_str()),
+            )
+            .await
+            .expect("insert conflicting event");
+
+        let error = store
+            .submit_review_task(
+                &task.id,
+                submit_review_input(
+                    claimed.task.lock_version,
+                    "worker",
+                    Some("claim_review_event_conflict"),
+                    false,
+                    Some("must roll back"),
+                    500,
+                    "e_review_event_conflict",
+                ),
+            )
+            .await
+            .expect_err("event conflict must fail");
+        assert!(matches!(error, StoreError::Turso(_)));
+
+        let unchanged = store
+            .get_task_global(&task.id)
+            .await
+            .expect("get rolled back task");
+        assert_eq!(unchanged.status, "running");
+        assert_eq!(unchanged.lock_version, claimed.task.lock_version);
+        assert_eq!(unchanged.claim_token, claimed.task.claim_token);
+        assert_eq!(unchanged.current_run_id, claimed.task.current_run_id);
+        let run = first_row(
+            connection
+                .query(
+                    "SELECT status, finished_at, exit_code, summary FROM task_runs WHERE id = ?1",
+                    ["r_review_event_conflict"],
+                )
+                .await
+                .expect("run query"),
+        )
+        .await
+        .expect("run row");
+        assert_eq!(
+            text_value(run.get_value(0).expect("run status"), "run.status")
+                .expect("run status text"),
+            "running"
+        );
+        assert!(matches!(
+            run.get_value(1).expect("run finished_at"),
+            Value::Null
+        ));
+        assert!(matches!(
+            run.get_value(2).expect("run exit_code"),
+            Value::Null
+        ));
+        assert!(matches!(
+            run.get_value(3).expect("run summary"),
+            Value::Null
+        ));
+        let review_event_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.submitted_for_review'",
+                    [task.id.as_str()],
+                )
+                .await
+                .expect("review event count query"),
+        )
+        .await
+        .expect("review event count row");
+        assert_eq!(
+            integer_value(
+                review_event_count.get_value(0).expect("event count"),
+                "event.count",
+            )
+            .expect("event count integer"),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn submit_review_task_validates_input_without_writes() {
+        let (_directory, store, _path) = store("review-input").await;
+        store.initialize().await.expect("initialize");
+        let task =
+            ready_task_for_claim(&store, "t_review_input", "review-input", "Review input").await;
+        let cases = [
+            (
+                "task id",
+                "default#1".to_owned(),
+                submit_review_input(1, "worker", Some("claim"), false, None, 500, "e_input"),
+            ),
+            (
+                "expected_lock_version",
+                task.id.clone(),
+                submit_review_input(
+                    -1,
+                    "worker",
+                    Some("claim"),
+                    false,
+                    None,
+                    500,
+                    "e_input_version",
+                ),
+            ),
+            (
+                "actor",
+                task.id.clone(),
+                submit_review_input(1, " ", Some("claim"), false, None, 500, "e_input_actor"),
+            ),
+            (
+                "event_id",
+                task.id.clone(),
+                submit_review_input(1, "worker", Some("claim"), false, None, 500, "input_event"),
+            ),
+            (
+                "now",
+                task.id.clone(),
+                submit_review_input(1, "worker", Some("claim"), false, None, -1, "e_input_now"),
+            ),
+        ];
+        for (field, task_id, input) in cases {
+            let error = store
+                .submit_review_task(&task_id, input)
+                .await
+                .expect_err("invalid review input must fail");
+            assert!(matches!(error, StoreError::InvalidInput(message) if message.contains(field)));
+        }
+        let unchanged = store
+            .get_task_global(&task.id)
+            .await
+            .expect("get unchanged input task");
+        assert_eq!(unchanged.status, "ready");
+        assert_eq!(unchanged.lock_version, task.lock_version);
+        let connection = store.connection().await.expect("connection");
+        let review_event_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE kind = 'task.submitted_for_review'",
+                    (),
+                )
+                .await
+                .expect("review event count query"),
+        )
+        .await
+        .expect("review event count row");
+        assert_eq!(
+            integer_value(
+                review_event_count.get_value(0).expect("event count"),
+                "event.count",
+            )
+            .expect("event count integer"),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn submit_review_task_uses_global_task_board_for_run_and_event() {
+        let (_directory, store, _path) = store("review-multi-board").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO boards(id, slug, name, created_at, updated_at) VALUES ('b_review_other', 'review-other', 'Review other', 1, 1)",
+                (),
+            )
+            .await
+            .expect("insert other board");
+        let task = store
+            .create_task(
+                "review-other",
+                create_input("t_review_other", Some("review-other"), "Review other task"),
+            )
+            .await
+            .expect("create other-board task");
+        store
+            .mark_execution_plan_not_required(
+                &task.id,
+                plan_input(
+                    "No other-board review plan",
+                    "planner",
+                    "e_review_other_plan",
+                    100,
+                ),
+            )
+            .await
+            .expect("mark plan not required");
+        store
+            .promote_task(
+                &task.id,
+                promote_input(0, "promoter", "e_review_other_promote", 200),
+            )
+            .await
+            .expect("promote other-board task");
+        let claimed = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    1,
+                    "other-worker",
+                    "claim_review_other",
+                    "r_review_other",
+                    "e_review_other_claim",
+                    "{}",
+                    300,
+                    1_000,
+                ),
+            )
+            .await
+            .expect("claim other-board task");
+        let reviewed = store
+            .submit_review_task(
+                &task.id,
+                submit_review_input(
+                    claimed.task.lock_version,
+                    "other-worker",
+                    Some("claim_review_other"),
+                    false,
+                    None,
+                    500,
+                    "e_review_other",
+                ),
+            )
+            .await
+            .expect("review other-board task");
+        assert_eq!(reviewed.board_id, "b_review_other");
+        assert_eq!(reviewed.board_slug, "review-other");
+        assert_eq!(reviewed.current_run_id.as_deref(), Some("r_review_other"));
+
+        let event = first_row(
+            connection
+                .query(
+                    "SELECT board_id, task_id, run_id, payload_json FROM task_events WHERE event_id = ?1",
+                    ["e_review_other"],
+                )
+                .await
+                .expect("event query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(event.get_value(0).expect("event board"), "event.board_id")
+                .expect("event board text"),
+            "b_review_other"
+        );
+        assert_eq!(
+            text_value(event.get_value(1).expect("event task"), "event.task_id")
+                .expect("event task text"),
+            task.id
+        );
+        assert_eq!(
+            text_value(event.get_value(2).expect("event run"), "event.run_id")
+                .expect("event run text"),
+            "r_review_other"
+        );
+        assert_eq!(
+            text_value(event.get_value(3).expect("event payload"), "event.payload")
+                .expect("event payload text"),
+            r#"{"result":null}"#
         );
     }
 

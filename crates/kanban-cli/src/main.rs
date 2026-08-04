@@ -1,244 +1,278 @@
-mod args;
-mod commands;
-mod output;
+use std::{
+    env,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    path::PathBuf,
+    process::ExitCode,
+};
 
-use anyhow::Error;
-use kanban_core::KanbanError;
+use clap::{Args, Parser, Subcommand};
+use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use serde::Serialize;
 
-fn main() {
-    let cli = commands::app::parse_cli();
-    let wants_json = cli.json;
-    if let Err(error) = commands::app::run(cli) {
-        let report = CliErrorReport::from_error(&error);
-        if wants_json {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({ "error": report }))
-                    .unwrap_or_else(|_| "{\"error\":{\"code\":\"generic_error\",\"message\":\"failed to render error\",\"exit_code\":1}}".to_owned())
-            );
-        } else {
-            eprintln!("Error: {}", report.human_message);
-        }
-        std::process::exit(report.exit_code);
-    }
+#[derive(Debug, Parser)]
+#[command(
+    name = "kanban",
+    version,
+    about = "Local Turso-backed Kanban work queue",
+    arg_required_else_help = true,
+    after_help = "All product commands call kanban serve; only `kanban serve` opens the database."
+)]
+struct Cli {
+    /// Canonical localhost application host.
+    #[arg(
+        long,
+        global = true,
+        env = "KANBAN_SERVER_URL",
+        default_value = DEFAULT_SERVER_URL
+    )]
+    server_url: String,
+    /// Board slug or id used by board-scoped client commands.
+    #[arg(long, global = true, env = "KB_BOARD", default_value = "default")]
+    board: String,
+    /// Audit actor sent to the application host.
+    #[arg(long, global = true, env = "KANBAN_ACTOR")]
+    actor: Option<String>,
+    /// Emit stable JSON envelopes.
+    #[arg(long, global = true)]
+    json: bool,
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Start the only process allowed to open the Turso database.
+    Serve(ServeArgs),
+    /// Query boards through the localhost application host.
+    Board {
+        #[command(subcommand)]
+        command: BoardCommand,
+    },
+    /// Removed direct-database initialization path.
+    Init,
+    /// Commands not yet migrated to the canonical host fail without touching storage.
+    #[command(external_subcommand)]
+    FeatureNotAvailable(Vec<String>),
+}
+
+#[derive(Debug, Args)]
+struct ServeArgs {
+    /// Canonical Turso database owned by this host.
+    #[arg(long, env = "KANBAN_DB")]
+    db: Option<PathBuf>,
+    /// Loopback address to listen on.
+    #[arg(long, default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
+    host: IpAddr,
+    /// Local HTTP port.
+    #[arg(long, default_value_t = 8721)]
+    port: u16,
+}
+
+#[derive(Debug, Subcommand)]
+enum BoardCommand {
+    /// List boards from the canonical application service.
+    List {
+        #[arg(long)]
+        include_archived: bool,
+    },
+    /// List a board's fixed status columns.
+    Columns { board: Option<String> },
 }
 
 #[derive(Debug, Serialize)]
-struct CliErrorReport {
+struct CliErrorBody<'a> {
+    code: &'a str,
+    message: String,
+    exit_code: u8,
+}
+
+#[derive(Debug, Serialize)]
+struct CliErrorEnvelope<'a> {
+    error: CliErrorBody<'a>,
+}
+
+#[derive(Debug)]
+struct CliFailure {
     code: &'static str,
     message: String,
-    exit_code: i32,
-    #[serde(skip)]
-    human_message: String,
+    exit_code: u8,
 }
 
-impl CliErrorReport {
-    fn from_error(error: &Error) -> Self {
-        if let Some(kanban_error) = error
-            .chain()
-            .find_map(|cause| cause.downcast_ref::<KanbanError>())
-        {
-            let locale = kanban_core::current_locale();
-            let message = kanban_core::i18n::render_error(locale, kanban_error);
-            let (code, exit_code) = classify_kanban_error(kanban_error);
-            let human_message = render_human_error(
-                locale,
-                &message,
-                recovery_hint_for_kanban_error(locale, kanban_error),
-            );
-            return Self {
-                code,
-                message,
-                exit_code,
-                human_message,
-            };
-        }
-
-        if let Some(config_error) = error
-            .chain()
-            .find_map(|cause| cause.downcast_ref::<kanban_local::ConfigError>())
-        {
-            let message = format!("{error:?}");
-            let (code, exit_code) = classify_config_error(config_error);
-            return Self {
-                code,
-                message: message.clone(),
-                exit_code,
-                human_message: message,
-            };
-        }
-
-        let message = format!("{error:?}");
-        let (code, exit_code) = classify_error_message(&message).unwrap_or(("generic_error", 1));
-        let human_message = message.clone();
+impl From<ClientError> for CliFailure {
+    fn from(error: ClientError) -> Self {
+        let code = error.code();
+        let exit_code = match code {
+            "not_found" => 3,
+            "invalid_transition" | "execution_plan_required" | "steps_incomplete" => 4,
+            "claim_conflict" | "claim_token_mismatch" => 5,
+            "dependency_blocked" => 6,
+            "server_unavailable" => 9,
+            "feature_not_available" => 10,
+            "invalid_input" | "invalid_response" => 2,
+            _ => 1,
+        };
         Self {
             code,
-            message,
+            message: error.to_string(),
             exit_code,
-            human_message,
         }
     }
 }
 
-fn classify_config_error(error: &kanban_local::ConfigError) -> (&'static str, i32) {
-    match error {
-        kanban_local::ConfigError::FileParse { .. } | kanban_local::ConfigError::Parse(_) => {
-            ("invalid_input", 2)
-        }
-        kanban_local::ConfigError::Io(_) | kanban_local::ConfigError::Serialize(_) => {
-            ("generic_error", 1)
-        }
-    }
-}
-
-fn classify_kanban_error(error: &KanbanError) -> (&'static str, i32) {
-    match error {
-        KanbanError::InvalidInput(message) => {
-            classify_runtime_boundary_message(message).unwrap_or(("invalid_input", 2))
-        }
-        KanbanError::InvalidStatus(_) => ("invalid_input", 2),
-        KanbanError::NotFound(_) => ("not_found", 3),
-        KanbanError::InvalidTransition(message)
-            if message.contains("claim conflict") || message.contains("matching running claim") =>
-        {
-            ("claim_conflict", 5)
-        }
-        KanbanError::InvalidTransition(message) if message.contains("dependency blocked") => {
-            ("dependency_blocked", 6)
-        }
-        KanbanError::InvalidTransition(_)
-        | KanbanError::ExecutionPlanRequired(_)
-        | KanbanError::StepsIncomplete(_) => ("invalid_transition", 4),
-        KanbanError::Conflict(_) => ("claim_conflict", 5),
-        KanbanError::Storage(message) => {
-            classify_error_message(message).unwrap_or(("storage_error", 1))
-        }
-    }
-}
-
-fn classify_runtime_boundary_message(message: &str) -> Option<(&'static str, i32)> {
-    let normalized = message.to_ascii_lowercase();
-    if normalized.contains("database is locked")
-        || normalized.contains("database is busy")
-        || normalized.contains("sqlite busy")
-        || normalized.contains("sqlite locked")
-    {
-        return Some(("sqlite_busy", 7));
-    }
-    if normalized.contains("integrity_check")
-        || normalized.contains("integrity check failed")
-        || normalized.contains("failed doctor checks")
-        || normalized.contains("file is not a database")
-        || normalized.contains("database disk image is malformed")
-    {
-        return Some(("integrity_check_failed", 8));
-    }
-    None
-}
-
-fn classify_error_message(message: &str) -> Option<(&'static str, i32)> {
-    if let Some(classification) = classify_runtime_boundary_message(message) {
-        return Some(classification);
-    }
-    // Only classify external or storage-layer text that cannot carry a structured
-    // KanbanError variant through the command boundary. Business/config validation
-    // must return KanbanError::InvalidInput at the command layer.
-    None
-}
-
-fn render_human_error(
-    locale: kanban_core::Locale,
-    message: &str,
-    hint: Option<&'static str>,
-) -> String {
-    let Some(hint) = hint else {
-        return message.to_owned();
-    };
-    match locale {
-        kanban_core::Locale::ZhCn => format!("{message}\n恢复建议：{hint}"),
-        kanban_core::Locale::En => format!("{message}\nRecovery: {hint}"),
-    }
-}
-
-fn recovery_hint_for_kanban_error(
-    locale: kanban_core::Locale,
-    error: &KanbanError,
-) -> Option<&'static str> {
-    match error {
-        KanbanError::InvalidStatus(_) => Some(status_hint(locale)),
-        KanbanError::InvalidInput(detail) => invalid_input_hint(locale, detail),
-        KanbanError::NotFound(detail) => not_found_hint(locale, detail),
-        _ => None,
-    }
-}
-
-fn invalid_input_hint(locale: kanban_core::Locale, detail: &str) -> Option<&'static str> {
-    if detail.starts_with("unsupported task list sort: ")
-        || detail.starts_with("unsupported sort: ")
-    {
-        return Some(match locale {
-            kanban_core::Locale::ZhCn => {
-                "允许的 task list sort：seq, -seq, title, -title, status, -status, position, -position, priority, -priority, assignee, -assignee, scheduled_at, -scheduled_at, created_at, -created_at, updated_at, -updated_at, due_at, -due_at。"
+#[tokio::main]
+async fn main() -> ExitCode {
+    let cli = Cli::parse();
+    match run(&cli).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            if cli.json {
+                println!(
+                    "{}",
+                    serde_json::to_string(&CliErrorEnvelope {
+                        error: CliErrorBody {
+                            code: error.code,
+                            message: error.message,
+                            exit_code: error.exit_code,
+                        },
+                    })
+                    .expect("CLI error envelope is serializable")
+                );
+            } else {
+                eprintln!("{}: {}", error.code, error.message);
             }
-            kanban_core::Locale::En => {
-                "Allowed task list sort values: seq, -seq, title, -title, status, -status, position, -position, priority, -priority, assignee, -assignee, scheduled_at, -scheduled_at, created_at, -created_at, updated_at, -updated_at, due_at, -due_at."
+            ExitCode::from(error.exit_code)
+        }
+    }
+}
+
+async fn run(cli: &Cli) -> Result<(), CliFailure> {
+    match &cli.command {
+        Command::Serve(args) => run_server(cli, args).await,
+        Command::Board { command } => {
+            let client = KanbanClient::new(&cli.server_url, actor(cli))?;
+            match command {
+                BoardCommand::List { include_archived } => {
+                    let boards = client.list_boards(*include_archived)?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&kanban_contract::ListBoardsResponse {
+                                data: boards
+                            })
+                            .expect("board response is serializable")
+                        );
+                    } else {
+                        for board in boards {
+                            println!("{} {} {}", board.id, board.slug, board.name);
+                        }
+                    }
+                }
+                BoardCommand::Columns { board } => {
+                    let board = board.as_deref().unwrap_or(&cli.board);
+                    let columns = client.list_board_columns(board)?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&kanban_contract::ListBoardColumnsResponse {
+                                data: columns
+                            })
+                            .expect("column response is serializable")
+                        );
+                    } else {
+                        for column in columns {
+                            println!(
+                                "{} {}{}",
+                                column.status.as_str(),
+                                column.title,
+                                if column.hidden { " (hidden)" } else { "" }
+                            );
+                        }
+                    }
+                }
             }
+            Ok(())
+        }
+        Command::Init => Err(feature_not_available(
+            "`kanban init` was removed; start `kanban serve` to initialize the canonical Turso database",
+        )),
+        Command::FeatureNotAvailable(parts) => Err(feature_not_available(format!(
+            "command `{}` is not available on the single-host path yet",
+            parts.join(" ")
+        ))),
+    }
+}
+
+async fn run_server(cli: &Cli, args: &ServeArgs) -> Result<(), CliFailure> {
+    if !args.host.is_loopback() {
+        return Err(CliFailure {
+            code: "invalid_input",
+            message: "kanban serve only accepts a loopback --host".to_owned(),
+            exit_code: 2,
         });
     }
-    if detail.starts_with("unsupported export format: ") {
-        return Some(match locale {
-            kanban_core::Locale::ZhCn => "允许的 export formats：jsonl。",
-            kanban_core::Locale::En => "Allowed export formats: jsonl.",
-        });
-    }
-    if detail.starts_with("unsupported locale: ") {
-        return Some(match locale {
-            kanban_core::Locale::ZhCn => "允许的 locale：auto, zh-CN, en。",
-            kanban_core::Locale::En => "Allowed locales: auto, zh-CN, en.",
-        });
-    }
-    if detail.starts_with("invalid priority filter: ") {
-        return Some(match locale {
-            kanban_core::Locale::ZhCn => "允许的 priority：0, 1, 2, 3。",
-            kanban_core::Locale::En => "Allowed priorities: 0, 1, 2, 3.",
-        });
-    }
-    None
+    let db_path = args.db.clone().unwrap_or_else(default_db_path);
+    let state = kanban_server::AppState::open(&db_path, actor(cli))
+        .await
+        .map_err(|error| CliFailure {
+            code: "storage_error",
+            message: error.to_string(),
+            exit_code: 1,
+        })?;
+    let addr = SocketAddr::new(args.host, args.port);
+    eprintln!(
+        "kanban serve listening on http://{addr}; database={}",
+        db_path.display()
+    );
+    kanban_server::serve_with_shutdown(addr, state, async {
+        let _ = tokio::signal::ctrl_c().await;
+    })
+    .await
+    .map_err(|error| CliFailure {
+        code: "server_error",
+        message: error.to_string(),
+        exit_code: 1,
+    })
 }
 
-fn not_found_hint(locale: kanban_core::Locale, detail: &str) -> Option<&'static str> {
-    let normalized = detail.to_ascii_lowercase();
-    if normalized.contains("board") {
-        return Some(match locale {
-            kanban_core::Locale::ZhCn => {
-                "运行 `kanban board list` 查看可用 board，或运行 `kanban board current` 查看当前 board。"
-            }
-            kanban_core::Locale::En => {
-                "Run `kanban board list` to see available boards, or `kanban board current` to show the active board."
-            }
-        });
-    }
-    if normalized.contains("task") || normalized.contains("ref") {
-        return Some(match locale {
-            kanban_core::Locale::ZhCn => {
-                "运行 `kanban task list` 查找任务 ref，或运行 `kanban task show <task-ref>` 查看任务详情。"
-            }
-            kanban_core::Locale::En => {
-                "Run `kanban task list` to find task refs, or `kanban task show <task-ref>` to inspect a task."
-            }
-        });
-    }
-    None
+fn actor(cli: &Cli) -> String {
+    cli.actor
+        .clone()
+        .or_else(|| env::var("USER").ok())
+        .or_else(|| env::var("USERNAME").ok())
+        .unwrap_or_else(|| "local".to_owned())
 }
 
-fn status_hint(locale: kanban_core::Locale) -> &'static str {
-    match locale {
-        kanban_core::Locale::ZhCn => {
-            "允许的 statuses：triage, todo, scheduled, ready, running, blocked, review, done, archived。"
-        }
-        kanban_core::Locale::En => {
-            "Allowed statuses: triage, todo, scheduled, ready, running, blocked, review, done, archived."
-        }
+fn default_db_path() -> PathBuf {
+    dirs_next::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("kb")
+        .join("kanban.db")
+}
+
+fn feature_not_available(message: impl Into<String>) -> CliFailure {
+    CliFailure {
+        code: "feature_not_available",
+        message: message.into(),
+        exit_code: 10,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_database_uses_new_filename() {
+        assert_eq!(
+            default_db_path().file_name().and_then(|name| name.to_str()),
+            Some("kanban.db")
+        );
+    }
+
+    #[test]
+    fn init_is_a_stable_unavailable_feature() {
+        let failure = feature_not_available("not migrated");
+        assert_eq!(failure.code, "feature_not_available");
+        assert_eq!(failure.exit_code, 10);
     }
 }

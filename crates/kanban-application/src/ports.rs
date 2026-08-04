@@ -1,10 +1,21 @@
-//! Application storage and runtime ports.
-//!
-//! This module is intentionally small because `kanban-application` is currently a
-//! selected vertical slice, not a full application-service crate. Concrete ports
-//! are added only when a use case is intentionally moved behind this boundary;
-//! SQLite transaction ownership remains in `kanban-sqlite::service` until a
-//! future extraction has a concrete, tested reason.
+use std::future::Future;
 
-/// Marker trait for storage implementations that back application use cases.
-pub trait ApplicationStore {}
+use kanban_core::Result;
+
+use crate::{BoardColumnRecord, BoardRecord};
+
+/// Persistence port used only by the shared application service.
+///
+/// The concrete Turso implementation is adapted inside `kanban-server`, which
+/// keeps the storage crate out of every other product adapter.
+pub trait ApplicationStore: Clone + Send + Sync + 'static {
+    fn list_boards(
+        &self,
+        include_archived: bool,
+    ) -> impl Future<Output = Result<Vec<BoardRecord>>> + Send;
+
+    fn list_board_columns(
+        &self,
+        board: &str,
+    ) -> impl Future<Output = Result<Vec<BoardColumnRecord>>> + Send;
+}

@@ -1,13 +1,13 @@
 [package]
-name = "kanban-application"
-edition.workspace = true
+name = "kanban-store-turso"
 version.workspace = true
+edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
 [dependencies]
-kanban-core.workspace = true
-serde.workspace = true
+turso.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true
 tokio.workspace = true

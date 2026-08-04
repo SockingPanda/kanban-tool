@@ -1,21 +1,18 @@
 [package]
-name = "kanban-cli"
+name = "kanban-mcp"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 authors.workspace = true
-autotests = false
 
 [[bin]]
-name = "kanban"
+name = "kanban-mcp"
 path = "src/main.rs"
 
 [dependencies]
-clap.workspace = true
-dirs-next.workspace = true
+anyhow.workspace = true
 kanban-client.workspace = true
-kanban-contract.workspace = true
-kanban-server.workspace = true
+kanban-contract = { workspace = true, features = ["schema"] }
+rmcp.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 tokio.workspace = true

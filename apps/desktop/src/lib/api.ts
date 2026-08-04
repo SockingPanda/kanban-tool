@@ -14,13 +14,11 @@ export type TaskStatus =
 
 export type RuntimeConfig = {
   apiBaseUrl: string
-  dbPath: string
   actor: string
   board: string
 }
 
 const WEB_DEV_API_BASE_URL = "/__kb_api__"
-const WEB_DEV_DB_LABEL = "local kanban serve"
 const WEB_DEV_DEFAULT_ACTOR = "desktop-dev"
 const WEB_DEV_DEFAULT_BOARD = "kanban-tool"
 
@@ -798,7 +796,6 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
   }
   return {
     apiBaseUrl,
-    dbPath: import.meta.env.VITE_KB_DB_PATH?.trim() || (usingWebDevDefault ? WEB_DEV_DB_LABEL : "external API"),
     actor: import.meta.env.VITE_KB_ACTOR ?? WEB_DEV_DEFAULT_ACTOR,
     board: import.meta.env.VITE_KB_BOARD ?? (usingWebDevDefault ? WEB_DEV_DEFAULT_BOARD : "default"),
   }
@@ -822,10 +819,6 @@ export class KanbanApi {
 
   get board() {
     return this.config.board
-  }
-
-  get dbPath() {
-    return this.config.dbPath
   }
 
   async health(options: RequestOptions = {}) {

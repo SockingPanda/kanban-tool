@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { KanbanApi } from "./api"
-const config={apiBaseUrl:"http://127.0.0.1:8721",dbPath:"test.db",actor:"desktop-test",board:"default"}
+const config={apiBaseUrl:"http://127.0.0.1:8721",actor:"desktop-test",board:"default"}
 const list=JSON.parse(readFileSync(new URL("../../../../schemas/fixtures/api/list-comments-response.v1.valid.json",import.meta.url),"utf8"))
 const create=JSON.parse(readFileSync(new URL("../../../../schemas/fixtures/api/create-comment-response.v1.valid.json",import.meta.url),"utf8"))
 function response(value:unknown,status=200){return new Response(JSON.stringify(value),{status,headers:{"Content-Type":"application/json"}})}

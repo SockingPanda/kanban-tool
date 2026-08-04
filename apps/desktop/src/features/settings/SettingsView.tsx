@@ -36,7 +36,6 @@ export function SettingsView({ config }: { config: RuntimeConfig | null }) {
           <InfoRow label="board" value={config?.board ?? "-"} />
           <InfoRow label="actor" value={config?.actor ?? "-"} />
           <InfoRow label="api base" value={config?.apiBaseUrl || "same-origin"} />
-          <InfoRow label={t("database")} value={config?.dbPath ?? "-"} />
         </div>
       </Card>
     </ScrollArea>

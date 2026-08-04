@@ -1,13 +1,16 @@
 [package]
-name = "kanban-application"
+name = "kanban-client"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 
 [dependencies]
-kanban-core.workspace = true
+kanban-contract.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ureq.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
+serde_json.workspace = true

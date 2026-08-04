@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { KanbanApi } from "./api"
 
-const config = { apiBaseUrl: "http://127.0.0.1:8721", dbPath: "test.db", actor: "desktop-test", board: "project" }
+const config = { apiBaseUrl: "http://127.0.0.1:8721", actor: "desktop-test", board: "project" }
 const fixture = JSON.parse(readFileSync(new URL("../../../../schemas/fixtures/api/create-task-response.v1.valid.json", import.meta.url), "utf8"))
 const response = (value: unknown, status = 201) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } })
 

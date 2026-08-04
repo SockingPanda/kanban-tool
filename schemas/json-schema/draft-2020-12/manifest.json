@@ -1431,7 +1431,7 @@
       "invalid_fixture": "schemas/fixtures/api/error-response.v1.invalid.json",
       "path": "api/error-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/error-response.v1.valid.json",
-      "sha256": "sha256:7c54a290ce28d53c6bc51a21d70eb7f596fdee873beb821f3198bb13ac8f0993",
+      "sha256": "sha256:1cf28b4d8a0466e93cf77dca4a99d53ad87ba1e96c8950efb174c7ff0d86f9db",
       "strictness": "deny_unknown_fields"
     },
     {

@@ -13,12 +13,12 @@ set shell := ["bash", "-cu"]
 audit-ignore-flags := "--ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2024-0411 --ignore RUSTSEC-2024-0412 --ignore RUSTSEC-2024-0413 --ignore RUSTSEC-2024-0414 --ignore RUSTSEC-2024-0415 --ignore RUSTSEC-2024-0416 --ignore RUSTSEC-2024-0417 --ignore RUSTSEC-2024-0418 --ignore RUSTSEC-2024-0419 --ignore RUSTSEC-2024-0420 --ignore RUSTSEC-2024-0429 --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2025-0075 --ignore RUSTSEC-2025-0080 --ignore RUSTSEC-2025-0081 --ignore RUSTSEC-2025-0098 --ignore RUSTSEC-2025-0100"
 
 fmt:
-    cargo fmt -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search -p kanban-graph -p kanban-vector -p kanban-derived-io -p kanban-helper-protocol -p kanban-labels -p kanban-context -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli -- --check
+    cargo fmt -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -- --check
 
 fmt-check: fmt
 
 fmt-full:
-    cargo fmt -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search -p kanban-graph -p kanban-vector -p kanban-derived-io -p kanban-helper-protocol -p kanban-labels -p kanban-context -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli -p kanban-vector-lancedb -p kanban-graph-oxigraph -- --check
+    cargo fmt -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -p kanban-desktop -p kanban-schema-tool -- --check
 
 fix *args:
     scripts/cargo-build-lock.sh -- cargo clippy --fix --tests --allow-dirty "$@"
@@ -43,20 +43,13 @@ check: check-core
 check-core:
     scripts/cargo-build-lock.sh -- cargo check --tests \
         -p kanban-core \
+        -p kanban-application \
         -p kanban-contract \
-        -p kanban-entity \
-        -p kanban-indexer \
-        -p kanban-search \
-        -p kanban-graph \
-        -p kanban-vector \
-        -p kanban-derived-io \
-        -p kanban-helper-protocol \
-        -p kanban-labels \
-        -p kanban-context \
-        -p kanban-sqlite \
-        -p kanban-local \
+        -p kanban-store-turso \
+        -p kanban-client \
         -p kanban-server \
-        -p kanban-cli
+        -p kanban-cli \
+        -p kanban-mcp
 
 check-helpers:
     scripts/cargo-build-lock.sh -- cargo check --tests \
@@ -88,25 +81,16 @@ rust-fast:
 test-core *args:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run \
         -p kanban-core \
+        -p kanban-application \
         -p kanban-contract \
-        -p kanban-entity \
-        -p kanban-indexer \
-        -p kanban-search \
-        -p kanban-graph \
-        -p kanban-vector \
-        -p kanban-derived-io \
-        -p kanban-helper-protocol \
-        -p kanban-labels \
-        -p kanban-context \
-        -p kanban-sqlite \
-        -p kanban-local \
+        -p kanban-store-turso \
+        -p kanban-client \
         -p kanban-server \
         -p kanban-cli \
+        -p kanban-mcp \
         --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test \
-        -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search \
-        -p kanban-graph -p kanban-vector -p kanban-derived-io \
-        -p kanban-helper-protocol -p kanban-labels -p kanban-context \
-        -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli "$@"; fi
+        -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso \
+        -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@"; fi
 
 test-helpers *args:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run \
@@ -120,10 +104,8 @@ test-full *args:
 
 clippy-core *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
-        -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search \
-        -p kanban-graph -p kanban-vector -p kanban-derived-io \
-        -p kanban-helper-protocol -p kanban-labels -p kanban-context \
-        -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli "$@" -- -D warnings
+        -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso \
+        -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@" -- -D warnings
 
 clippy-helpers *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
@@ -153,11 +135,12 @@ web-build:
     pnpm --dir apps/desktop build
 
 desktop-check:
-    scripts/prepare-desktop-helper-binaries.sh
-    scripts/test-desktop-helper-sidecars.sh
     scripts/cargo-build-lock.sh -- cargo check -p kanban-desktop --tests
     pnpm --dir apps/desktop typecheck
     pnpm --dir apps/desktop test
+
+single-host-dependency-gate:
+    python3 -B scripts/check-single-host-dependencies.py
 
 desktop-build:
     pnpm --dir apps/desktop build

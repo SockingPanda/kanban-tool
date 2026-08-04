@@ -3,7 +3,6 @@ import {
   Activity,
   Bell,
   ChevronDown,
-  Database,
   DatabaseBackup,
   HeartPulse,
   Inbox,
@@ -585,10 +584,6 @@ function ShellSidebar({
           switching={switchingBoard}
           onBoardChange={onBoardChange}
         />
-        <div className="flex items-center gap-2">
-          <Database className="h-3.5 w-3.5" />
-          <span className="truncate">{config?.dbPath ?? t("loading db")}</span>
-        </div>
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-2">
             <Server className="h-3.5 w-3.5" />

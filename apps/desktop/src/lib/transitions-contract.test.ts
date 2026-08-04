@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { KanbanApi, type Task } from "./api"
 
-const config = { apiBaseUrl: "http://127.0.0.1:8721", dbPath: "test.db", actor: "desktop-test", board: "default" }
+const config = { apiBaseUrl: "http://127.0.0.1:8721", actor: "desktop-test", board: "default" }
 const actions = ["specify", "promote", "reopen", "unblock", "archive"] as const
 const fixtures = Object.fromEntries(actions.map((action) => [
   action,

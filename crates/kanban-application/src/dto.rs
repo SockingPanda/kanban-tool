@@ -81,6 +81,20 @@ pub struct MarkExecutionPlanNotRequiredRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromoteTaskCommand {
+    pub task_id: String,
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromoteTaskRecord {
+    pub expected_lock_version: i64,
+    pub actor: String,
+    pub event_id: String,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionPlanRecord {
     pub board_id: String,
     pub task_id: String,

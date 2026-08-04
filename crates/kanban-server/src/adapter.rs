@@ -3,14 +3,15 @@ use kanban_application::{
     CreateTaskRecord as ApplicationCreateTask, ExecutionPlanRecord as ApplicationExecutionPlan,
     ExecutionPlanState,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
-    TaskListOptions as ApplicationTaskListOptions, TaskListPage as ApplicationTaskListPage,
-    TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
-    TaskRecord as ApplicationTask,
+    PromoteTaskRecord as ApplicationPromoteTask, TaskListOptions as ApplicationTaskListOptions,
+    TaskListPage as ApplicationTaskListPage, TaskListSort as ApplicationTaskListSort,
+    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord as ApplicationTask,
 };
 use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
     CreateTaskInput as StoreCreateTask,
-    MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired, StoreError,
+    MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
+    PromoteTaskInput as StorePromoteTask, StoreError,
     TaskExecutionPlanRecord as StoreExecutionPlan, TaskListOptions as StoreTaskListOptions,
     TaskListSort as StoreTaskListSort, TaskPlanFilter as StoreTaskPlanFilter,
     TaskRecord as StoreTask, TursoStore,
@@ -167,6 +168,26 @@ impl ApplicationStore for TursoApplicationStore {
             .map_err(store_error)
             .and_then(application_execution_plan)
     }
+
+    async fn promote_task(
+        &self,
+        task_id: &str,
+        input: ApplicationPromoteTask,
+    ) -> Result<ApplicationTask> {
+        self.store
+            .promote_task(
+                task_id,
+                StorePromoteTask {
+                    expected_lock_version: input.expected_lock_version,
+                    actor: input.actor,
+                    event_id: input.event_id,
+                    updated_at: input.updated_at,
+                },
+            )
+            .await
+            .map_err(store_error)
+            .and_then(application_task)
+    }
 }
 
 fn store_error(error: StoreError) -> KanbanError {
@@ -174,6 +195,7 @@ fn store_error(error: StoreError) -> KanbanError {
         StoreError::BoardNotFound(selector) => KanbanError::NotFound(format!("board {selector}")),
         StoreError::TaskNotFound(task_id) => KanbanError::NotFound(format!("task {task_id}")),
         StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),
+        StoreError::InvalidTransition(message) => KanbanError::InvalidTransition(message),
         StoreError::IdempotencyConflict {
             board_id,
             key,

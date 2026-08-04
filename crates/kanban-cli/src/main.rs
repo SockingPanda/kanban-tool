@@ -12,7 +12,8 @@ use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, CreateTaskRequest, CreateTaskResponse,
     GetTaskResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
-    MarkExecutionPlanNotRequiredResponse, TaskReadPlanFilter, TaskReadSort,
+    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
+    TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
 
@@ -104,6 +105,8 @@ enum TaskCommand {
         #[command(subcommand)]
         command: TaskStepCommand,
     },
+    /// Promote an eligible todo or due scheduled task to ready.
+    Promote(TaskRefArgs),
 }
 
 #[derive(Debug, Args)]
@@ -183,6 +186,11 @@ struct TaskPlanNotRequiredArgs {
     task_ref: String,
     #[arg(long)]
     reason: String,
+}
+
+#[derive(Debug, Args)]
+struct TaskRefArgs {
+    task_ref: String,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -407,6 +415,22 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         }
                     }
                 },
+                TaskCommand::Promote(args) => {
+                    let task = client.promote_task_by_selector(
+                        &cli.board,
+                        &args.task_ref,
+                        &PromoteTaskRequest { actor: None },
+                    )?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&PromoteTaskResponse::new(task))
+                                .expect("promote response is serializable")
+                        );
+                    } else {
+                        println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
+                    }
+                }
             }
             Ok(())
         }
@@ -597,5 +621,18 @@ mod tests {
         };
         assert_eq!(args.task_ref, "default#1");
         assert_eq!(args.reason, "small task");
+    }
+
+    #[test]
+    fn parses_task_promote_command() {
+        let cli =
+            Cli::try_parse_from(["kanban", "task", "promote", "default#1"]).expect("promote args");
+        let Command::Task {
+            command: TaskCommand::Promote(args),
+        } = cli.command
+        else {
+            panic!("expected task promote");
+        };
+        assert_eq!(args.task_ref, "default#1");
     }
 }

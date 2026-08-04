@@ -134,6 +134,14 @@ pub struct TaskExecutionPlanRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromoteTaskInput {
+    pub expected_lock_version: i64,
+    pub actor: String,
+    pub event_id: String,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskRecord {
     pub id: String,
     pub board_id: String,
@@ -181,6 +189,7 @@ pub enum StoreError {
     Turso(turso::Error),
     InvalidPath,
     InvalidInput(String),
+    InvalidTransition(String),
     InvalidStoredValue {
         field: &'static str,
     },
@@ -199,6 +208,9 @@ impl Display for StoreError {
             Self::Turso(error) => write!(formatter, "turso error: {error}"),
             Self::InvalidPath => write!(formatter, "database path must be valid non-empty UTF-8"),
             Self::InvalidInput(message) => write!(formatter, "invalid task input: {message}"),
+            Self::InvalidTransition(message) => {
+                write!(formatter, "invalid task transition: {message}")
+            }
             Self::InvalidStoredValue { field } => {
                 write!(formatter, "invalid stored value for {field}")
             }
@@ -652,6 +664,170 @@ impl TursoStore {
         Ok(result)
     }
 
+    pub async fn promote_task(
+        &self,
+        task_id: &str,
+        input: PromoteTaskInput,
+    ) -> Result<TaskRecord, StoreError> {
+        validate_promote_task_input(task_id, &input)?;
+        let actor = input.actor.trim().to_owned();
+        let event_id = input.event_id.trim().to_owned();
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+
+        let task = first_row(
+            transaction
+                .query(
+                    "SELECT t.board_id, t.status, t.archived_at, b.archived_at, t.lock_version, t.title, t.description, t.scheduled_at FROM tasks AS t JOIN boards AS b ON b.id = t.board_id WHERE t.id = :task_id LIMIT 1",
+                    [(":task_id", task_id)],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
+            other => StoreError::Turso(other),
+        })?;
+        let board_id = text_value(task.get_value(0)?, "tasks.board_id")?;
+        let status = text_value(task.get_value(1)?, "tasks.status")?;
+        let archived_at = optional_integer_value(task.get_value(2)?, "tasks.archived_at")?;
+        let board_archived_at = optional_integer_value(task.get_value(3)?, "boards.archived_at")?;
+        if status == "archived" || archived_at.is_some() || board_archived_at.is_some() {
+            return Err(StoreError::InvalidTransition(
+                "archived task or board cannot be promoted".to_owned(),
+            ));
+        }
+
+        let lock_version = integer_value(task.get_value(4)?, "tasks.lock_version")?;
+        if lock_version != input.expected_lock_version {
+            return Err(StoreError::InvalidTransition(
+                "lock_version mismatch".to_owned(),
+            ));
+        }
+        if !matches!(status.as_str(), "todo" | "scheduled") {
+            return Err(StoreError::InvalidTransition(format!(
+                "cannot promote from {status}"
+            )));
+        }
+
+        let title = text_value(task.get_value(5)?, "tasks.title")?;
+        let description = optional_text_value(task.get_value(6)?, "tasks.description")?;
+        if title.trim().is_empty()
+            || description
+                .as_deref()
+                .is_none_or(|description| description.trim().is_empty())
+        {
+            return Err(StoreError::InvalidTransition(
+                "task spec is incomplete".to_owned(),
+            ));
+        }
+
+        let scheduled_at = optional_integer_value(task.get_value(7)?, "tasks.scheduled_at")?;
+        if status == "scheduled" && scheduled_at.is_none() {
+            return Err(StoreError::InvalidTransition(
+                "scheduled task requires scheduled_at".to_owned(),
+            ));
+        }
+        if scheduled_at.is_some_and(|scheduled_at| scheduled_at > input.updated_at) {
+            return Err(StoreError::InvalidTransition(
+                "scheduled_at is in the future".to_owned(),
+            ));
+        }
+
+        let dependency_blocked = first_row(
+            transaction
+                .query(
+                    "SELECT EXISTS (SELECT 1 FROM task_dependencies AS d JOIN tasks AS p ON p.id = d.parent_task_id AND p.board_id = d.board_id WHERE d.board_id = :board_id AND d.child_task_id = :task_id AND p.status NOT IN ('done', 'archived'))",
+                    [
+                        (":board_id", board_id.as_str()),
+                        (":task_id", task_id),
+                    ],
+                )
+                .await?,
+        )
+        .await?;
+        if integer_value(
+            dependency_blocked.get_value(0)?,
+            "task_dependencies.unfinished_parent",
+        )? != 0
+        {
+            return Err(StoreError::InvalidTransition(
+                "dependency blocked".to_owned(),
+            ));
+        }
+
+        let execution_plan_ready = first_row(
+            transaction
+                .query(
+                    "SELECT EXISTS (SELECT 1 FROM task_steps AS s WHERE s.board_id = :board_id AND s.parent_task_id = :task_id) OR EXISTS (SELECT 1 FROM task_execution_plans AS ep WHERE ep.board_id = :board_id AND ep.task_id = :task_id AND ep.state = 'not_required')",
+                    [
+                        (":board_id", board_id.as_str()),
+                        (":task_id", task_id),
+                    ],
+                )
+                .await?,
+        )
+        .await?;
+        if integer_value(
+            execution_plan_ready.get_value(0)?,
+            "task_execution_plans.ready",
+        )? == 0
+        {
+            return Err(StoreError::InvalidTransition(
+                "execution plan is required".to_owned(),
+            ));
+        }
+
+        let changed = transaction
+            .execute(
+                "UPDATE tasks SET status = 'ready', status_reason = NULL, updated_at = :updated_at, lock_version = lock_version + 1 WHERE id = :task_id AND board_id = :board_id AND status IN ('todo', 'scheduled') AND lock_version = :expected_lock_version",
+                (
+                    (":updated_at", input.updated_at),
+                    (":task_id", task_id),
+                    (":board_id", board_id.as_str()),
+                    (":expected_lock_version", input.expected_lock_version),
+                ),
+            )
+            .await?;
+        if changed != 1 {
+            return Err(StoreError::InvalidTransition(
+                "promote requires matching fresh task".to_owned(),
+            ));
+        }
+
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'task.promoted', :actor, '{\"to_status\":\"ready\"}', :created_at)",
+                (
+                    (":event_id", event_id.as_str()),
+                    (":board_id", board_id.as_str()),
+                    (":task_id", task_id),
+                    (":actor", actor.as_str()),
+                    (":created_at", input.updated_at),
+                ),
+            )
+            .await?;
+
+        let promoted = task_from_row(
+            first_row(
+                transaction
+                    .query(
+                        &format!(
+                            "{TASK_SELECT} WHERE t.board_id = :board_id AND t.id = :task_id LIMIT 1"
+                        ),
+                        [(":board_id", board_id.as_str()), (":task_id", task_id)],
+                    )
+                    .await?,
+            )
+            .await?,
+        )?;
+
+        transaction.commit().await?;
+        Ok(promoted)
+    }
+
     pub async fn list_boards(
         &self,
         include_archived: bool,
@@ -1052,6 +1228,33 @@ fn validate_plan_not_required_input(
     Ok(())
 }
 
+fn validate_promote_task_input(task_id: &str, input: &PromoteTaskInput) -> Result<(), StoreError> {
+    if !task_id.starts_with("t_") || task_id.len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "task id must start with t_".to_owned(),
+        ));
+    }
+    if input.expected_lock_version < 0 {
+        return Err(StoreError::InvalidInput(
+            "expected_lock_version must be non-negative".to_owned(),
+        ));
+    }
+    if input.actor.trim().is_empty() {
+        return Err(StoreError::InvalidInput("actor is required".to_owned()));
+    }
+    if !input.event_id.trim().starts_with("e_") || input.event_id.trim().len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "event_id must start with e_".to_owned(),
+        ));
+    }
+    if input.updated_at < 0 {
+        return Err(StoreError::InvalidInput(
+            "updated_at must be non-negative".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 fn task_from_row(row: Row) -> Result<TaskRecord, StoreError> {
     let board_slug = text_value(row.get_value(30)?, "boards.slug")?;
     let seq = integer_value(row.get_value(2)?, "tasks.seq")?;
@@ -1180,6 +1383,20 @@ mod tests {
     ) -> MarkExecutionPlanNotRequiredInput {
         MarkExecutionPlanNotRequiredInput {
             reason: reason.to_owned(),
+            actor: actor.to_owned(),
+            event_id: event_id.to_owned(),
+            updated_at,
+        }
+    }
+
+    fn promote_input(
+        expected_lock_version: i64,
+        actor: &str,
+        event_id: &str,
+        updated_at: i64,
+    ) -> PromoteTaskInput {
+        PromoteTaskInput {
+            expected_lock_version,
             actor: actor.to_owned(),
             event_id: event_id.to_owned(),
             updated_at,
@@ -2026,6 +2243,660 @@ mod tests {
         assert_eq!(shown_other.board_id, "b_other");
         assert_eq!(shown_other.board_slug, "other");
         assert_eq!(shown_other.seq, 1);
+    }
+
+    #[tokio::test]
+    async fn promote_task_todo_writes_ready_and_event() {
+        let (_directory, store, _path) = store("promote-todo").await;
+        store.initialize().await.expect("initialize");
+        let task = store
+            .create_task(
+                "default",
+                create_input("t_promote_todo", Some("promote-todo"), "Promote todo"),
+            )
+            .await
+            .expect("create task");
+        store
+            .mark_execution_plan_not_required(
+                &task.id,
+                plan_input("No execution plan", "planner", "e_promote_plan", 100),
+            )
+            .await
+            .expect("mark plan not required");
+
+        let promoted = store
+            .promote_task(&task.id, promote_input(0, "promoter", "e_promoted", 200))
+            .await
+            .expect("promote task");
+        assert_eq!(promoted.id, task.id);
+        assert_eq!(promoted.board_id, "b_default");
+        assert_eq!(promoted.board_slug, "default");
+        assert_eq!(promoted.task_ref, "default#1");
+        assert_eq!(promoted.status, "ready");
+        assert_eq!(promoted.status_reason, None);
+        assert_eq!(promoted.lock_version, 1);
+        assert_eq!(promoted.updated_at, 200);
+        assert_eq!(promoted.execution_plan_state, "not_required");
+        assert!(!promoted.dependency_blocked);
+        assert_eq!(promoted.unfinished_parent_count, 0);
+        assert!(promoted.labels.is_empty());
+
+        let connection = store.connection().await.expect("connection");
+        let event = first_row(
+            connection
+                .query(
+                    "SELECT board_id, task_id, kind, actor, payload_json, created_at FROM task_events WHERE event_id = ?1",
+                    ["e_promoted"],
+                )
+                .await
+                .expect("event query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(event.get_value(0).expect("event board"), "event.board_id")
+                .expect("event board text"),
+            "b_default"
+        );
+        assert_eq!(
+            text_value(event.get_value(1).expect("event task"), "event.task_id")
+                .expect("event task text"),
+            task.id
+        );
+        assert_eq!(
+            text_value(event.get_value(2).expect("event kind"), "event.kind")
+                .expect("event kind text"),
+            "task.promoted"
+        );
+        assert_eq!(
+            text_value(event.get_value(3).expect("event actor"), "event.actor")
+                .expect("event actor text"),
+            "promoter"
+        );
+        assert_eq!(
+            text_value(event.get_value(4).expect("event payload"), "event.payload")
+                .expect("event payload text"),
+            r#"{"to_status":"ready"}"#
+        );
+        assert_eq!(
+            integer_value(
+                event.get_value(5).expect("event created_at"),
+                "event.created_at"
+            )
+            .expect("event created_at integer"),
+            200
+        );
+    }
+
+    #[tokio::test]
+    async fn promote_task_scheduled_when_due_writes_ready() {
+        let (_directory, store, _path) = store("promote-scheduled-due").await;
+        store.initialize().await.expect("initialize");
+        let mut input = create_input(
+            "t_promote_scheduled",
+            Some("promote-scheduled"),
+            "Promote scheduled",
+        );
+        input.status = "scheduled".to_owned();
+        input.scheduled_at = Some(100);
+        let task = store
+            .create_task("default", input)
+            .await
+            .expect("create scheduled task");
+        store
+            .mark_execution_plan_not_required(
+                &task.id,
+                plan_input(
+                    "No scheduled execution",
+                    "planner",
+                    "e_promote_scheduled_plan",
+                    100,
+                ),
+            )
+            .await
+            .expect("mark scheduled plan not required");
+
+        let promoted = store
+            .promote_task(
+                &task.id,
+                promote_input(0, "promoter", "e_promoted_scheduled", 100),
+            )
+            .await
+            .expect("promote due scheduled task");
+        assert_eq!(promoted.status, "ready");
+        assert_eq!(promoted.scheduled_at, Some(100));
+        assert_eq!(promoted.lock_version, 1);
+        assert_eq!(promoted.updated_at, 100);
+
+        let connection = store.connection().await.expect("connection");
+        let event_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.promoted' AND payload_json = '{\"to_status\":\"ready\"}'",
+                    [task.id.as_str()],
+                )
+                .await
+                .expect("promoted event count query"),
+        )
+        .await
+        .expect("promoted event count row");
+        assert_eq!(
+            integer_value(
+                event_count.get_value(0).expect("event count"),
+                "event.count"
+            )
+            .expect("event count integer"),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn promote_task_rejects_source_and_readiness_guards_without_partial_write() {
+        let (_directory, store, _path) = store("promote-guards").await;
+        store.initialize().await.expect("initialize");
+        let unplanned = store
+            .create_task(
+                "default",
+                create_input(
+                    "t_promote_unplanned",
+                    Some("promote-unplanned"),
+                    "Unplanned",
+                ),
+            )
+            .await
+            .expect("create unplanned task");
+
+        let mut triage_input =
+            create_input("t_promote_source", Some("promote-source"), "Invalid source");
+        triage_input.status = "triage".to_owned();
+        let source = store
+            .create_task("default", triage_input)
+            .await
+            .expect("create source task");
+
+        let mut incomplete_input = create_input(
+            "t_promote_incomplete",
+            Some("promote-incomplete"),
+            "Incomplete",
+        );
+        incomplete_input.description = None;
+        let incomplete = store
+            .create_task("default", incomplete_input)
+            .await
+            .expect("create incomplete task");
+        store
+            .mark_execution_plan_not_required(
+                &incomplete.id,
+                plan_input(
+                    "No execution plan",
+                    "planner",
+                    "e_promote_incomplete_plan",
+                    100,
+                ),
+            )
+            .await
+            .expect("mark incomplete plan not required");
+
+        let mut future_input = create_input(
+            "t_promote_future",
+            Some("promote-future"),
+            "Future scheduled",
+        );
+        future_input.status = "scheduled".to_owned();
+        future_input.scheduled_at = Some(500);
+        let future = store
+            .create_task("default", future_input)
+            .await
+            .expect("create future task");
+        store
+            .mark_execution_plan_not_required(
+                &future.id,
+                plan_input(
+                    "No future execution",
+                    "planner",
+                    "e_promote_future_plan",
+                    100,
+                ),
+            )
+            .await
+            .expect("mark future plan not required");
+
+        let parent = store
+            .create_task(
+                "default",
+                create_input("t_promote_parent", Some("promote-parent"), "Parent"),
+            )
+            .await
+            .expect("create dependency parent");
+        let child = store
+            .create_task(
+                "default",
+                create_input("t_promote_child", Some("promote-child"), "Child"),
+            )
+            .await
+            .expect("create dependency child");
+        store
+            .mark_execution_plan_not_required(
+                &child.id,
+                plan_input("No child execution", "planner", "e_promote_child_plan", 100),
+            )
+            .await
+            .expect("mark child plan not required");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES ('b_default', ?1, ?2, 1)",
+                (parent.id.as_str(), child.id.as_str()),
+            )
+            .await
+            .expect("insert unfinished dependency");
+
+        let cases = [
+            (unplanned.id.as_str(), "execution plan"),
+            (source.id.as_str(), "cannot promote from triage"),
+            (incomplete.id.as_str(), "task spec"),
+            (future.id.as_str(), "future"),
+            (child.id.as_str(), "dependency"),
+        ];
+        for (index, (task_id, message)) in cases.into_iter().enumerate() {
+            let error = store
+                .promote_task(
+                    task_id,
+                    promote_input(0, "promoter", &format!("e_promote_guard_{index}"), 100),
+                )
+                .await
+                .expect_err("readiness guard must fail");
+            assert!(matches!(
+                error,
+                StoreError::InvalidTransition(error_message)
+                    if error_message.contains(message)
+            ));
+        }
+
+        for (task_id, expected_status, expected_plan) in [
+            (unplanned.id.as_str(), "todo", "unplanned"),
+            (source.id.as_str(), "triage", "unplanned"),
+            (incomplete.id.as_str(), "todo", "not_required"),
+            (future.id.as_str(), "scheduled", "not_required"),
+            (child.id.as_str(), "todo", "not_required"),
+        ] {
+            let unchanged = store
+                .get_task_global(task_id)
+                .await
+                .expect("get unchanged task");
+            assert_eq!(unchanged.status, expected_status, "task {task_id}");
+            assert_eq!(unchanged.lock_version, 0, "task {task_id}");
+            assert_eq!(
+                unchanged.execution_plan_state, expected_plan,
+                "task {task_id}"
+            );
+        }
+        let promoted_event_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE kind = 'task.promoted'",
+                    (),
+                )
+                .await
+                .expect("promoted event count query"),
+        )
+        .await
+        .expect("promoted event count row");
+        assert_eq!(
+            integer_value(
+                promoted_event_count
+                    .get_value(0)
+                    .expect("promoted event count"),
+                "event.count",
+            )
+            .expect("promoted event count integer"),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn promote_task_rejects_archived_task_board_and_stale_version_without_partial_write() {
+        let (_directory, store, _path) = store("promote-archive-stale").await;
+        store.initialize().await.expect("initialize");
+        let archived_task = store
+            .create_task(
+                "default",
+                create_input(
+                    "t_promote_archived_task",
+                    Some("promote-archived-task"),
+                    "Archived task",
+                ),
+            )
+            .await
+            .expect("create archived task");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'archived', archived_at = 300 WHERE id = ?1",
+                [archived_task.id.as_str()],
+            )
+            .await
+            .expect("archive task");
+
+        connection
+            .execute(
+                "INSERT INTO boards(id, slug, name, created_at, updated_at, archived_at) VALUES ('b_promote_archived', 'promote-archived', 'Archived promote board', 1, 1, 350)",
+                (),
+            )
+            .await
+            .expect("insert archived board");
+        let archived_board_task = store
+            .create_task(
+                "promote-archived",
+                create_input(
+                    "t_promote_archived_board",
+                    Some("promote-archived-board"),
+                    "Archived board task",
+                ),
+            )
+            .await
+            .expect("create task on archived board");
+
+        let stale = store
+            .create_task(
+                "default",
+                create_input("t_promote_stale", Some("promote-stale"), "Stale task"),
+            )
+            .await
+            .expect("create stale task");
+        store
+            .mark_execution_plan_not_required(
+                &stale.id,
+                plan_input("No stale execution", "planner", "e_promote_stale_plan", 100),
+            )
+            .await
+            .expect("mark stale plan not required");
+
+        for (task_id, expected_lock_version, message) in [
+            (archived_task.id.as_str(), 0_i64, "archived task or board"),
+            (
+                archived_board_task.id.as_str(),
+                0_i64,
+                "archived task or board",
+            ),
+            (stale.id.as_str(), 1_i64, "lock_version mismatch"),
+        ] {
+            let error = store
+                .promote_task(
+                    task_id,
+                    promote_input(
+                        expected_lock_version,
+                        "promoter",
+                        &format!("e_promote_archive_stale_{}", task_id),
+                        100,
+                    ),
+                )
+                .await
+                .expect_err("archive/stale guard must fail");
+            assert!(matches!(
+                error,
+                StoreError::InvalidTransition(error_message)
+                    if error_message.contains(message)
+            ));
+        }
+
+        let archived_task_after = store
+            .get_task_global(&archived_task.id)
+            .await
+            .expect("get archived task");
+        assert_eq!(archived_task_after.status, "archived");
+        assert_eq!(archived_task_after.lock_version, 0);
+        let archived_board_task_after = store
+            .get_task_global(&archived_board_task.id)
+            .await
+            .expect("get archived board task");
+        assert_eq!(archived_board_task_after.status, "todo");
+        assert_eq!(archived_board_task_after.lock_version, 0);
+        let stale_after = store
+            .get_task_global(&stale.id)
+            .await
+            .expect("get stale task");
+        assert_eq!(stale_after.status, "todo");
+        assert_eq!(stale_after.lock_version, 0);
+        assert_eq!(stale_after.execution_plan_state, "not_required");
+
+        let promoted_event_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE kind = 'task.promoted'",
+                    (),
+                )
+                .await
+                .expect("promoted event count query"),
+        )
+        .await
+        .expect("promoted event count row");
+        assert_eq!(
+            integer_value(
+                promoted_event_count
+                    .get_value(0)
+                    .expect("promoted event count"),
+                "event.count",
+            )
+            .expect("promoted event count integer"),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn promote_task_event_conflict_rolls_back_status_update() {
+        let (_directory, store, _path) = store("promote-event-conflict").await;
+        store.initialize().await.expect("initialize");
+        let task = store
+            .create_task(
+                "default",
+                create_input(
+                    "t_promote_event_conflict",
+                    Some("promote-event-conflict"),
+                    "Promote event conflict",
+                ),
+            )
+            .await
+            .expect("create task");
+        store
+            .mark_execution_plan_not_required(
+                &task.id,
+                plan_input(
+                    "No conflicting execution",
+                    "planner",
+                    "e_promote_conflict_plan",
+                    100,
+                ),
+            )
+            .await
+            .expect("mark plan not required");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, 'b_default', ?2, NULL, 'other.event', 'tester', '{}', 1)",
+                ("e_promote_conflict", task.id.as_str()),
+            )
+            .await
+            .expect("insert conflicting event");
+
+        let error = store
+            .promote_task(
+                &task.id,
+                promote_input(0, "promoter", "e_promote_conflict", 200),
+            )
+            .await
+            .expect_err("event conflict must fail");
+        assert!(matches!(error, StoreError::Turso(_)));
+
+        let unchanged = store
+            .get_task_global(&task.id)
+            .await
+            .expect("get rolled back task");
+        assert_eq!(unchanged.status, "todo");
+        assert_eq!(unchanged.lock_version, 0);
+        assert_eq!(unchanged.updated_at, task.updated_at);
+        assert_eq!(unchanged.execution_plan_state, "not_required");
+
+        let promoted_event_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.promoted'",
+                    [task.id.as_str()],
+                )
+                .await
+                .expect("promoted event count query"),
+        )
+        .await
+        .expect("promoted event count row");
+        assert_eq!(
+            integer_value(
+                promoted_event_count
+                    .get_value(0)
+                    .expect("promoted event count"),
+                "event.count",
+            )
+            .expect("promoted event count integer"),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn promote_task_uses_global_task_board() {
+        let (_directory, store, _path) = store("promote-multi-board").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO boards(id, slug, name, created_at, updated_at) VALUES ('b_other', 'other', 'Other', 1, 1)",
+                (),
+            )
+            .await
+            .expect("insert other board");
+        let task = store
+            .create_task(
+                "other",
+                create_input("t_promote_other", Some("promote-other"), "Other task"),
+            )
+            .await
+            .expect("create other-board task");
+        store
+            .mark_execution_plan_not_required(
+                &task.id,
+                plan_input(
+                    "No other-board execution",
+                    "planner",
+                    "e_promote_other_plan",
+                    100,
+                ),
+            )
+            .await
+            .expect("mark other-board plan not required");
+
+        let promoted = store
+            .promote_task(
+                &task.id,
+                promote_input(0, "promoter", "e_promote_other", 200),
+            )
+            .await
+            .expect("promote other-board task");
+        assert_eq!(promoted.board_id, "b_other");
+        assert_eq!(promoted.board_slug, "other");
+        assert_eq!(promoted.task_ref, "other#1");
+        assert_eq!(promoted.status, "ready");
+        assert_eq!(promoted.lock_version, 1);
+
+        let event = first_row(
+            connection
+                .query(
+                    "SELECT board_id, task_id, payload_json FROM task_events WHERE event_id = ?1",
+                    ["e_promote_other"],
+                )
+                .await
+                .expect("event query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(event.get_value(0).expect("event board"), "event.board_id")
+                .expect("event board text"),
+            "b_other"
+        );
+        assert_eq!(
+            text_value(event.get_value(1).expect("event task"), "event.task_id")
+                .expect("event task text"),
+            task.id
+        );
+        assert_eq!(
+            text_value(event.get_value(2).expect("event payload"), "event.payload")
+                .expect("event payload text"),
+            r#"{"to_status":"ready"}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn promote_task_validates_global_input() {
+        let (_directory, store, _path) = store("promote-input").await;
+        store.initialize().await.expect("initialize");
+
+        let invalid_id = store
+            .promote_task(
+                "default#1",
+                promote_input(0, "promoter", "e_promote_input", 100),
+            )
+            .await
+            .expect_err("board-local id must fail");
+        assert!(matches!(
+            invalid_id,
+            StoreError::InvalidInput(message) if message.contains("task id")
+        ));
+
+        let invalid_version = store
+            .promote_task(
+                "t_promote_input",
+                promote_input(-1, "promoter", "e_promote_input_version", 100),
+            )
+            .await
+            .expect_err("negative version must fail");
+        assert!(matches!(
+            invalid_version,
+            StoreError::InvalidInput(message) if message.contains("expected_lock_version")
+        ));
+
+        let invalid_actor = store
+            .promote_task(
+                "t_promote_input",
+                promote_input(0, " ", "e_promote_input_actor", 100),
+            )
+            .await
+            .expect_err("empty actor must fail");
+        assert!(matches!(
+            invalid_actor,
+            StoreError::InvalidInput(message) if message.contains("actor")
+        ));
+
+        let invalid_event = store
+            .promote_task(
+                "t_promote_input",
+                promote_input(0, "promoter", "promote_input_event", 100),
+            )
+            .await
+            .expect_err("invalid event id must fail");
+        assert!(matches!(
+            invalid_event,
+            StoreError::InvalidInput(message) if message.contains("event_id")
+        ));
+
+        let invalid_time = store
+            .promote_task(
+                "t_promote_input",
+                promote_input(0, "promoter", "e_promote_input_time", -1),
+            )
+            .await
+            .expect_err("negative time must fail");
+        assert!(matches!(
+            invalid_time,
+            StoreError::InvalidInput(message) if message.contains("updated_at")
+        ));
     }
 
     #[tokio::test]

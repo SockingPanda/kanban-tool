@@ -13,7 +13,7 @@ use tower_http::{
 use crate::{
     handlers::{
         create_task, get_task, health, list_board_columns, list_boards, list_tasks,
-        mark_execution_plan_not_required,
+        mark_execution_plan_not_required, promote_task,
     },
     state::AppState,
 };
@@ -31,6 +31,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/tasks/:task_id/execution-plan/not-required",
             post(mark_execution_plan_not_required),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/transitions/promote",
+            post(promote_task),
         )
         .layer(desktop_cors_layer())
         .layer(TraceLayer::new_for_http())
@@ -95,7 +99,7 @@ mod tests {
     use kanban_contract::{
         ApiErrorCode, ApiExecutionPlanState, ApiTaskStatus, CreateTaskResponse, ErrorEnvelope,
         GetTaskResponse, ListBoardColumnsResponse, ListBoardsResponse, ListTasksResponse,
-        MarkExecutionPlanNotRequiredResponse,
+        MarkExecutionPlanNotRequiredResponse, PromoteTaskResponse,
     };
     use tower::ServiceExt;
 
@@ -242,6 +246,24 @@ mod tests {
 
         let response = router
             .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_create/transitions/promote",
+                serde_json::json!({"actor": "promoter"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let promoted: PromoteTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(promoted.data.id, created.data.id);
+        assert_eq!(promoted.data.status, ApiTaskStatus::Ready);
+        assert_eq!(
+            promoted.data.execution_plan_state,
+            ApiExecutionPlanState::NotRequired
+        );
+
+        let response = router
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/api/v1/tasks/t_http_create")
@@ -254,7 +276,7 @@ mod tests {
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         let shown: GetTaskResponse = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(shown.data.id, created.data.id);
-        assert_eq!(shown.data.status, ApiTaskStatus::Todo);
+        assert_eq!(shown.data.status, ApiTaskStatus::Ready);
         assert_eq!(
             shown.data.execution_plan_state,
             ApiExecutionPlanState::NotRequired

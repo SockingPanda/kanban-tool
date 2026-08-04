@@ -10,9 +10,9 @@ use axum::{
 };
 use kanban_application::{
     CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState,
-    MarkExecutionPlanNotRequiredCommand, TaskListOptions as ApplicationTaskListOptions,
-    TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
-    TaskRecord,
+    MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand,
+    TaskListOptions as ApplicationTaskListOptions, TaskListSort as ApplicationTaskListSort,
+    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord,
 };
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiCreateTaskStatus, ApiExecutionPlan, ApiExecutionPlanState,
@@ -23,8 +23,9 @@ use kanban_contract::{
     MAX_TASK_READ_LABELS, MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS,
     MAX_TASK_READ_PRIORITIES, MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES,
     MAX_TASK_READ_QUERY_PAIRS, MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, TaskReadLabel,
-    TaskReadPlanFilter, TaskReadSort, TotalPaginationMeta,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskPath,
+    PromoteTaskRequest, PromoteTaskResponse, TaskReadLabel, TaskReadPlanFilter, TaskReadSort,
+    TotalPaginationMeta,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
@@ -239,6 +240,22 @@ pub(crate) async fn mark_execution_plan_not_required(
     Ok(Json(MarkExecutionPlanNotRequiredResponse {
         data: api_execution_plan(plan),
     }))
+}
+
+pub(crate) async fn promote_task(
+    State(state): State<AppState>,
+    Path(PromoteTaskPath { task_id }): Path<PromoteTaskPath>,
+    headers: HeaderMap,
+    body: Result<Json<PromoteTaskRequest>, JsonRejection>,
+) -> Result<Json<PromoteTaskResponse>, ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let task = state
+        .application()
+        .promote_task(PromoteTaskCommand { task_id, actor })
+        .await?;
+    Ok(Json(PromoteTaskResponse::new(api_task(task)?)))
 }
 
 fn request_actor(

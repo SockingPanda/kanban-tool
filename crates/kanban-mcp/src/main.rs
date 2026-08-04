@@ -4,8 +4,8 @@ use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, CreateTaskRequest, CreateTaskResponse,
     GetTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, TaskReadPlanFilter,
-    TaskReadSort,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
+    PromoteTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -83,6 +83,15 @@ struct TaskPlanNotRequiredArgs {
     /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
     task_ref: String,
     reason: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TaskPromoteArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
 }
 
 #[derive(Clone)]
@@ -232,6 +241,29 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(MarkExecutionPlanNotRequiredResponse { data: plan }))
+    }
+
+    #[tool(
+        name = "task_promote",
+        description = "Promote an eligible task to ready through the canonical application service"
+    )]
+    async fn task_promote(
+        &self,
+        Parameters(args): Parameters<TaskPromoteArgs>,
+    ) -> Result<Json<PromoteTaskResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let client = self.client.clone();
+        let task = tokio::task::spawn_blocking(move || {
+            client.promote_task_by_selector(
+                &board,
+                &args.task_ref,
+                &PromoteTaskRequest { actor: None },
+            )
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(PromoteTaskResponse::new(task)))
     }
 }
 

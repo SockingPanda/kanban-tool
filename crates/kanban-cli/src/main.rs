@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     env,
+    io::Read,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
     process::ExitCode,
@@ -10,14 +11,17 @@ use std::{
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
-    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, ClaimTaskRequest, ClaimTaskResponse,
-    CompleteTaskRequest, CompleteTaskResponse, CreateTaskRequest, CreateTaskResponse,
-    GetTaskResponse, HeartbeatTaskRequest, HeartbeatTaskResponse, ListTasksQuery,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
-    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, BlockTaskRequest, BlockTaskResponse,
+    ClaimTaskRequest, ClaimTaskResponse, CompleteTaskRequest, CompleteTaskResponse,
+    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
+    HeartbeatTaskResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
+    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
+    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
+    TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
+
+const MAX_TEXT_INPUT_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -120,6 +124,8 @@ enum TaskCommand {
     /// Complete a running or reviewed task.
     #[command(visible_alias = "complete")]
     Done(TaskDoneArgs),
+    /// Block an active task with a required reason.
+    Block(TaskBlockArgs),
 }
 
 #[derive(Debug, Args)]
@@ -243,6 +249,27 @@ struct TaskReviewArgs {
 #[derive(Debug, Args)]
 struct TaskDoneArgs {
     task_ref: String,
+    #[arg(long)]
+    claim_token: Option<String>,
+    #[arg(long)]
+    force: bool,
+}
+
+#[derive(Debug, Args)]
+struct TaskBlockArgs {
+    task_ref: String,
+    #[arg(
+        required_unless_present = "reason_file",
+        conflicts_with = "reason_file"
+    )]
+    reason: Option<String>,
+    #[arg(
+        long,
+        value_name = "PATH|->",
+        required_unless_present = "reason",
+        conflicts_with = "reason"
+    )]
+    reason_file: Option<PathBuf>,
     #[arg(long)]
     claim_token: Option<String>,
     #[arg(long)]
@@ -591,6 +618,28 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
                     }
                 }
+                TaskCommand::Block(args) => {
+                    let reason = block_reason(args)?;
+                    let task = client.block_task_by_selector(
+                        &cli.board,
+                        &args.task_ref,
+                        &BlockTaskRequest {
+                            actor: None,
+                            reason,
+                            claim_token: args.claim_token.clone(),
+                            force: args.force,
+                        },
+                    )?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&BlockTaskResponse::new(task))
+                                .expect("block response is serializable")
+                        );
+                    } else {
+                        println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
+                    }
+                }
             }
             Ok(())
         }
@@ -682,6 +731,64 @@ fn parse_metadata(
             })
         })
         .transpose()
+}
+
+fn block_reason(args: &TaskBlockArgs) -> Result<String, CliFailure> {
+    let reason = match (&args.reason, &args.reason_file) {
+        (Some(reason), None) => reason.clone(),
+        (None, Some(path)) if path.as_os_str() == "-" => {
+            let stdin = std::io::stdin();
+            read_limited_text(stdin.lock(), "--reason-file -")?
+        }
+        (None, Some(path)) => {
+            let file = std::fs::File::open(path).map_err(|error| CliFailure {
+                code: "invalid_input",
+                message: format!("failed to read --reason-file {}: {error}", path.display()),
+                exit_code: 2,
+            })?;
+            read_limited_text(file, &format!("--reason-file {}", path.display()))?
+        }
+        _ => {
+            return Err(CliFailure {
+                code: "invalid_input",
+                message: "block requires exactly one reason or --reason-file".to_owned(),
+                exit_code: 2,
+            });
+        }
+    };
+    let reason = reason.trim();
+    if reason.is_empty() {
+        return Err(CliFailure {
+            code: "invalid_input",
+            message: "block reason is required".to_owned(),
+            exit_code: 2,
+        });
+    }
+    Ok(reason.to_owned())
+}
+
+fn read_limited_text(reader: impl Read, label: &str) -> Result<String, CliFailure> {
+    let mut bytes = Vec::new();
+    reader
+        .take((MAX_TEXT_INPUT_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| CliFailure {
+            code: "invalid_input",
+            message: format!("failed to read {label}: {error}"),
+            exit_code: 2,
+        })?;
+    if bytes.len() > MAX_TEXT_INPUT_BYTES {
+        return Err(CliFailure {
+            code: "invalid_input",
+            message: format!("{label} exceeds the 1 MiB input limit"),
+            exit_code: 2,
+        });
+    }
+    String::from_utf8(bytes).map_err(|error| CliFailure {
+        code: "invalid_input",
+        message: format!("{label} must be UTF-8: {error}"),
+        exit_code: 2,
+    })
 }
 
 async fn run_server(cli: &Cli, args: &ServeArgs) -> Result<(), CliFailure> {
@@ -935,6 +1042,58 @@ mod tests {
         assert_eq!(output.data.status.as_str(), "done");
         assert_eq!(
             serde_json::to_value(CompleteTaskResponse::new(output.data.clone())).unwrap(),
+            serde_json::from_str::<serde_json::Value>(fixture).unwrap()
+        );
+    }
+
+    #[test]
+    fn parses_task_block_command() {
+        let cli = Cli::try_parse_from([
+            "kanban",
+            "task",
+            "block",
+            "default#1",
+            "waiting",
+            "--claim-token",
+            "claim_test",
+        ])
+        .expect("block args");
+        let Command::Task {
+            command: TaskCommand::Block(args),
+        } = cli.command
+        else {
+            panic!("expected task block");
+        };
+        assert_eq!(args.task_ref, "default#1");
+        assert_eq!(block_reason(&args).unwrap(), "waiting");
+        assert_eq!(args.claim_token.as_deref(), Some("claim_test"));
+        assert!(!args.force);
+    }
+
+    #[test]
+    fn block_reason_file_input_is_bounded() {
+        let accepted = read_limited_text(
+            std::io::Cursor::new(vec![b'x'; MAX_TEXT_INPUT_BYTES]),
+            "reason",
+        )
+        .unwrap();
+        assert_eq!(accepted.len(), MAX_TEXT_INPUT_BYTES);
+        let error = read_limited_text(
+            std::io::Cursor::new(vec![b'x'; MAX_TEXT_INPUT_BYTES + 1]),
+            "reason",
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "invalid_input");
+        assert!(error.message.contains("1 MiB"));
+    }
+
+    #[test]
+    fn task_block_output_contract() {
+        let fixture = include_str!("../../../schemas/fixtures/cli/task-block-output.v1.valid.json");
+        let output: kanban_contract::CliTaskBlockOutput = serde_json::from_str(fixture).unwrap();
+        assert_eq!(output.data.status.as_str(), "blocked");
+        assert_eq!(
+            serde_json::to_value(BlockTaskResponse::new(output.data.clone())).unwrap(),
             serde_json::from_str::<serde_json::Value>(fixture).unwrap()
         );
     }

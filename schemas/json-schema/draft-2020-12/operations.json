@@ -2170,20 +2170,20 @@
       "consumer": {
         "contract_id": "cli.task-block.output",
         "direction": "serialize",
-        "exact_test": "task_block_output_fixture_is_consumed_by_contract_root",
+        "exact_test": "task_block_output_contract",
         "operation": "task block",
         "package": "kanban-cli",
         "surface": "cli",
-        "test_target": "cli_task_lifecycle_contract_adoption"
+        "test_target": "all"
       },
       "producer": {
         "contract_id": "cli.task-block.output",
         "direction": "serialize",
-        "exact_test": "task_block_output_fixture_is_produced_by_real_cli",
+        "exact_test": "task_block_output_contract",
         "operation": "task block",
         "package": "kanban-cli",
         "surface": "cli",
-        "test_target": "cli_task_lifecycle_contract_adoption"
+        "test_target": "all"
       },
       "producer_fixture": "schemas/fixtures/cli/task-block-output.v1.valid.json"
     },
@@ -8262,7 +8262,7 @@
       "consumer": {
         "contract_id": "api.block-task.request",
         "direction": "deserialize",
-        "exact_test": "suite::lifecycle_request_adoption::block_task_request_fixture_is_consumed_by_real_router",
+        "exact_test": "router::tests::task_block_closes_non_running_and_running_application_paths",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -8271,7 +8271,7 @@
       "producer": {
         "contract_id": "api.block-task.request",
         "direction": "deserialize",
-        "exact_test": "suite::lifecycle_request_adoption::block_task_request_dto_serializes_to_committed_fixture",
+        "exact_test": "block_task_request_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -8303,7 +8303,7 @@
       "consumer": {
         "contract_id": "api.block-task.path",
         "direction": "deserialize",
-        "exact_test": "suite::transitions_adoption::block_task_path_fixture_is_consumed_by_real_router",
+        "exact_test": "router::tests::task_block_closes_non_running_and_running_application_paths",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -8312,7 +8312,7 @@
       "producer": {
         "contract_id": "api.block-task.path",
         "direction": "deserialize",
-        "exact_test": "suite::transitions_adoption::block_task_path_dto_serializes_to_committed_fixture",
+        "exact_test": "block_task_path_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -8349,7 +8349,7 @@
       "consumer": {
         "contract_id": "api.block-task.response",
         "direction": "serialize",
-        "exact_test": "suite::transitions_adoption::block_task_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "block_task_response_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -8358,7 +8358,7 @@
       "producer": {
         "contract_id": "api.block-task.response",
         "direction": "serialize",
-        "exact_test": "suite::transitions_adoption::block_task_response_fixture_is_produced_by_real_router",
+        "exact_test": "router::tests::task_block_closes_non_running_and_running_application_paths",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",

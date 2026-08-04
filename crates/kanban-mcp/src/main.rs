@@ -2,13 +2,13 @@ use std::{collections::BTreeMap, env, sync::Arc};
 
 use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
-    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, ClaimTaskRequest, ClaimTaskResponse,
-    CompleteTaskRequest, CompleteTaskResponse, CreateTaskRequest, CreateTaskResponse,
-    GetTaskResponse, HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardsResponse,
-    ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
-    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
-    TaskReadPlanFilter, TaskReadSort,
+    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, BlockTaskRequest, BlockTaskResponse,
+    ClaimTaskRequest, ClaimTaskResponse, CompleteTaskRequest, CompleteTaskResponse,
+    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
+    HeartbeatTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
+    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
+    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -172,6 +172,22 @@ struct TaskDoneArgs {
     summary: Option<String>,
     /// Optional opaque JSON result stored on the task and completion event.
     result: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TaskBlockArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+    /// Required reason recorded on the task, failed run, and event.
+    reason: String,
+    /// Exact token returned by task_claim when blocking from running.
+    claim_token: Option<String>,
+    /// Bypass running caller credentials without bypassing task/run consistency.
+    #[serde(default)]
+    force: bool,
 }
 
 const fn default_claim_ttl_ms() -> i64 {
@@ -487,6 +503,34 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(CompleteTaskResponse::new(task)))
+    }
+
+    #[tool(
+        name = "task_block",
+        description = "Block an active task through the canonical application service"
+    )]
+    async fn task_block(
+        &self,
+        Parameters(args): Parameters<TaskBlockArgs>,
+    ) -> Result<Json<BlockTaskResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let client = self.client.clone();
+        let task = tokio::task::spawn_blocking(move || {
+            client.block_task_by_selector(
+                &board,
+                &args.task_ref,
+                &BlockTaskRequest {
+                    actor: None,
+                    reason: args.reason,
+                    claim_token: args.claim_token,
+                    force: args.force,
+                },
+            )
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(BlockTaskResponse::new(task)))
     }
 }
 

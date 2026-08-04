@@ -40,8 +40,8 @@ pub type ArchiveTaskResponse = crate::DataEnvelope<crate::ApiTask>;
 #[cfg(test)]
 mod tests {
     use super::{
-        CompleteTaskPath, CompleteTaskResponse, ReleaseTaskPath, ReleaseTaskResponse,
-        SubmitReviewTaskPath, SubmitReviewTaskResponse,
+        BlockTaskPath, BlockTaskResponse, CompleteTaskPath, CompleteTaskResponse, ReleaseTaskPath,
+        ReleaseTaskResponse, SubmitReviewTaskPath, SubmitReviewTaskResponse,
     };
 
     #[test]
@@ -90,5 +90,29 @@ mod tests {
         let response: CompleteTaskResponse = serde_json::from_str(fixture).unwrap();
         assert_eq!(response.data.id, "t_fixture");
         assert_eq!(response.data.status.as_str(), "done");
+    }
+
+    #[test]
+    fn block_task_path_contract() {
+        let fixture = include_str!("../../../schemas/fixtures/api/block-task-path.v1.valid.json");
+        let path: BlockTaskPath = serde_json::from_str(fixture).unwrap();
+        assert_eq!(path.task_id, "t_fixture");
+        assert_eq!(
+            serde_json::to_value(path).unwrap(),
+            serde_json::from_str::<serde_json::Value>(fixture).unwrap()
+        );
+    }
+
+    #[test]
+    fn block_task_response_contract() {
+        let fixture =
+            include_str!("../../../schemas/fixtures/api/block-task-response.v1.valid.json");
+        let response: BlockTaskResponse = serde_json::from_str(fixture).unwrap();
+        assert_eq!(response.data.id, "t_fixture");
+        assert_eq!(response.data.status.as_str(), "blocked");
+        assert_eq!(
+            serde_json::to_value(response).unwrap(),
+            serde_json::from_str::<serde_json::Value>(fixture).unwrap()
+        );
     }
 }

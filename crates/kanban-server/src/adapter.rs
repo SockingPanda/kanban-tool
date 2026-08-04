@@ -1,9 +1,9 @@
 use kanban_application::{
-    ApplicationStore, BoardColumnRecord as ApplicationBoardColumn, BoardRecord,
-    ClaimRecord as ApplicationClaim, ClaimTaskRecord as ApplicationClaimTask,
-    CompleteTaskRecord as ApplicationCompleteTask, CreateTaskRecord as ApplicationCreateTask,
-    ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
-    HeartbeatTaskRecord as ApplicationHeartbeatTask,
+    ApplicationStore, BlockTaskRecord as ApplicationBlockTask,
+    BoardColumnRecord as ApplicationBoardColumn, BoardRecord, ClaimRecord as ApplicationClaim,
+    ClaimTaskRecord as ApplicationClaimTask, CompleteTaskRecord as ApplicationCompleteTask,
+    CreateTaskRecord as ApplicationCreateTask, ExecutionPlanRecord as ApplicationExecutionPlan,
+    ExecutionPlanState, HeartbeatTaskRecord as ApplicationHeartbeatTask,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
     PromoteTaskRecord as ApplicationPromoteTask, ReleaseTaskRecord as ApplicationReleaseTask,
     RunRecord as ApplicationRun, RunStatus as ApplicationRunStatus,
@@ -14,9 +14,9 @@ use kanban_application::{
 };
 use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
-    ClaimTaskInput as StoreClaimTask, ClaimTaskRecord as StoreClaim,
-    CompleteTaskInput as StoreCompleteTask, CreateTaskInput as StoreCreateTask,
-    HeartbeatTaskInput as StoreHeartbeatTask,
+    BlockTaskInput as StoreBlockTask, ClaimTaskInput as StoreClaimTask,
+    ClaimTaskRecord as StoreClaim, CompleteTaskInput as StoreCompleteTask,
+    CreateTaskInput as StoreCreateTask, HeartbeatTaskInput as StoreHeartbeatTask,
     MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
     PromoteTaskInput as StorePromoteTask, ReleaseTaskInput as StoreReleaseTask, StoreError,
     SubmitReviewTaskInput as StoreSubmitReviewTask, TaskExecutionPlanRecord as StoreExecutionPlan,
@@ -304,6 +304,29 @@ impl ApplicationStore for TursoApplicationStore {
                     force: input.force,
                     summary: input.summary,
                     result_json: input.result_json,
+                    event_id: input.event_id,
+                    now: input.now,
+                },
+            )
+            .await
+            .map_err(store_error)
+            .and_then(application_task)
+    }
+
+    async fn block_task(
+        &self,
+        task_id: &str,
+        input: ApplicationBlockTask,
+    ) -> Result<ApplicationTask> {
+        self.store
+            .block_task(
+                task_id,
+                StoreBlockTask {
+                    expected_lock_version: input.expected_lock_version,
+                    actor: input.actor,
+                    reason: input.reason,
+                    claim_token: input.claim_token,
+                    force: input.force,
                     event_id: input.event_id,
                     now: input.now,
                 },

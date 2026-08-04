@@ -1240,9 +1240,9 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "task block",
         "urn:kanban-tool:schema:cli:task-block-output:v1",
         "schemas/fixtures/cli/task-block-output.v1.valid.json",
-        "cli_task_lifecycle_contract_adoption",
-        "task_block_output_fixture_is_produced_by_real_cli",
-        "task_block_output_fixture_is_consumed_by_contract_root"
+        "all",
+        "task_block_output_contract",
+        "task_block_output_contract"
     ),
     adopted_cli_output_contract!(
         "cli.task-unblock.output",
@@ -2652,8 +2652,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "POST /api/v1/tasks/:task_id/transitions/block",
         "urn:kanban-tool:schema:api:block-task-request:v1",
         "schemas/fixtures/api/block-task-request.v1.valid.json",
-        "suite::lifecycle_request_adoption::block_task_request_dto_serializes_to_committed_fixture",
-        "suite::lifecycle_request_adoption::block_task_request_fixture_is_consumed_by_real_router"
+        "block_task_request_contract",
+        "router::tests::task_block_closes_non_running_and_running_application_paths"
     ),
     adopted_comment_contract!(
         "api.block-task.path",
@@ -2664,8 +2664,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/block-task-path.v1.valid.json",
         HttpTransportLocation::Path,
         TASK_TRANSITION_PATH_PARAMETERS,
-        "suite::transitions_adoption::block_task_path_dto_serializes_to_committed_fixture",
-        "suite::transitions_adoption::block_task_path_fixture_is_consumed_by_real_router"
+        "block_task_path_contract",
+        "router::tests::task_block_closes_non_running_and_running_application_paths"
     ),
     adopted_comment_contract!(
         "api.block-task.response",
@@ -2676,8 +2676,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/block-task-response.v1.valid.json",
         HttpTransportLocation::Success,
         &[],
-        "suite::transitions_adoption::block_task_response_fixture_is_produced_by_real_router",
-        "suite::transitions_adoption::block_task_response_fixture_is_consumed_by_contract_root"
+        "router::tests::task_block_closes_non_running_and_running_application_paths",
+        "block_task_response_contract"
     ),
     adopted_api_request!(
         "api.unblock-task.request",

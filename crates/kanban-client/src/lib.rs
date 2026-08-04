@@ -6,13 +6,14 @@ use std::{
 };
 
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, ApiClaim, ApiErrorCode, ApiExecutionPlan, ApiTask, ClaimTaskRequest,
-    ClaimTaskResponse, CompleteTaskRequest, CompleteTaskResponse, CreateTaskRequest,
-    CreateTaskResponse, ErrorEnvelope, GetTaskResponse, HealthReport, HealthResponse,
-    HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse, ListBoardsResponse,
-    ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
-    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
+    ApiBoard, ApiBoardColumn, ApiClaim, ApiErrorCode, ApiExecutionPlan, ApiTask, BlockTaskRequest,
+    BlockTaskResponse, ClaimTaskRequest, ClaimTaskResponse, CompleteTaskRequest,
+    CompleteTaskResponse, CreateTaskRequest, CreateTaskResponse, ErrorEnvelope, GetTaskResponse,
+    HealthReport, HealthResponse, HeartbeatTaskRequest, HeartbeatTaskResponse,
+    ListBoardColumnsResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
+    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
+    SubmitReviewTaskResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -362,6 +363,31 @@ impl KanbanClient {
     ) -> Result<ApiTask, ClientError> {
         let task_id = self.resolve_task_id(board, selector)?;
         self.complete_task(&task_id, request)
+    }
+
+    pub fn block_task(
+        &self,
+        task_id: &str,
+        request: &BlockTaskRequest,
+    ) -> Result<ApiTask, ClientError> {
+        let response: BlockTaskResponse = self.post(
+            &format!(
+                "/api/v1/tasks/{}/transitions/block",
+                encode_path_segment(task_id.trim())
+            ),
+            request,
+        )?;
+        Ok(response.data)
+    }
+
+    pub fn block_task_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+        request: &BlockTaskRequest,
+    ) -> Result<ApiTask, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        self.block_task(&task_id, request)
     }
 
     fn get<T>(&self, path: &str) -> Result<T, ClientError>

@@ -9,28 +9,29 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use kanban_application::{
-    ClaimTaskCommand, CompleteTaskCommand, CreateTaskCommand, ExecutionPlanRecord,
-    ExecutionPlanState, HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand,
-    PromoteTaskCommand, ReleaseTaskCommand, RunRecord, RunStatus, SubmitReviewTaskCommand,
-    TaskListOptions as ApplicationTaskListOptions, TaskListSort as ApplicationTaskListSort,
-    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord,
+    BlockTaskCommand, ClaimTaskCommand, CompleteTaskCommand, CreateTaskCommand,
+    ExecutionPlanRecord, ExecutionPlanState, HeartbeatTaskCommand,
+    MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand, ReleaseTaskCommand, RunRecord,
+    RunStatus, SubmitReviewTaskCommand, TaskListOptions as ApplicationTaskListOptions,
+    TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
+    TaskRecord,
 };
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiClaim, ApiCreateTaskStatus, ApiExecutionPlan,
     ApiExecutionPlanState, ApiRun, ApiRunStatus, ApiTask, ApiTaskPriority, ApiTaskStatus,
-    ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CompleteTaskPath, CompleteTaskRequest,
-    CompleteTaskResponse, CreateTaskPath, CreateTaskRequest, CreateTaskResponse, GetTaskPath,
-    GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse, HeartbeatTaskPath,
-    HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse, ListBoardsQuery,
-    ListBoardsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
-    MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS,
-    MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES,
-    MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
-    MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
-    MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskPath, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskPath,
-    SubmitReviewTaskRequest, SubmitReviewTaskResponse, TaskReadLabel, TaskReadPlanFilter,
-    TaskReadSort, TotalPaginationMeta,
+    BlockTaskPath, BlockTaskRequest, BlockTaskResponse, ClaimTaskPath, ClaimTaskRequest,
+    ClaimTaskResponse, CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse, CreateTaskPath,
+    CreateTaskRequest, CreateTaskResponse, GetTaskPath, GetTaskQuery, GetTaskResponse,
+    HealthReport, HealthResponse, HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse,
+    ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse, ListTasksPath, ListTasksQuery,
+    ListTasksResponse, MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS,
+    MAX_TASK_READ_LABELS, MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS,
+    MAX_TASK_READ_PRIORITIES, MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES,
+    MAX_TASK_READ_QUERY_PAIRS, MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskPath,
+    PromoteTaskRequest, PromoteTaskResponse, ReleaseTaskPath, ReleaseTaskRequest,
+    ReleaseTaskResponse, SubmitReviewTaskPath, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
+    TaskReadLabel, TaskReadPlanFilter, TaskReadSort, TotalPaginationMeta,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
@@ -375,6 +376,28 @@ pub(crate) async fn complete_task(
         })
         .await?;
     Ok(Json(CompleteTaskResponse::new(api_task(task)?)))
+}
+
+pub(crate) async fn block_task(
+    State(state): State<AppState>,
+    Path(BlockTaskPath { task_id }): Path<BlockTaskPath>,
+    headers: HeaderMap,
+    body: Result<Json<BlockTaskRequest>, JsonRejection>,
+) -> Result<Json<BlockTaskResponse>, ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let task = state
+        .application()
+        .block_task(BlockTaskCommand {
+            task_id,
+            actor,
+            reason: body.reason,
+            claim_token: body.claim_token,
+            force: body.force,
+        })
+        .await?;
+    Ok(Json(BlockTaskResponse::new(api_task(task)?)))
 }
 
 fn request_actor(

@@ -1328,13 +1328,13 @@ export class KanbanApi {
     return this.transition(task, "release", { claim_token: claimToken }, options)
   }
 
-  async transition(task: Task, action: "specify" | "promote" | "heartbeat" | "release" | "submit-review" | "complete" | "reopen" | "unblock" | "archive", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task>
-  async transition(task: Task, action: "claim" | "block", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task | ClaimResponse>
+  async transition(task: Task, action: "specify" | "promote" | "heartbeat" | "release" | "submit-review" | "complete" | "block" | "reopen" | "unblock" | "archive", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task>
+  async transition(task: Task, action: "claim", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task | ClaimResponse>
   async transition(task: Task, action: "specify" | "promote" | "claim" | "heartbeat" | "release" | "complete" | "reopen" | "submit-review" | "block" | "unblock" | "archive", body?: Record<string, unknown>, options?: RequestOptions): Promise<Task | ClaimResponse>
   async transition(task: Task, action: "specify" | "promote" | "claim" | "heartbeat" | "release" | "complete" | "reopen" | "submit-review" | "block" | "unblock" | "archive", body: Record<string, unknown> = {}, options: RequestOptions = {}): Promise<Task | ClaimResponse> {
     const payload = { actor: this.actor, ...body }
     const path = `/api/v1/tasks/${task.id}/transitions/${action}`
-    if (action === "specify" || action === "promote" || action === "heartbeat" || action === "release" || action === "submit-review" || action === "complete" || action === "reopen" || action === "unblock" || action === "archive") {
+    if (action === "specify" || action === "promote" || action === "heartbeat" || action === "release" || action === "submit-review" || action === "complete" || action === "block" || action === "reopen" || action === "unblock" || action === "archive") {
       return parseTransitionTaskEnvelope(await this.requestRaw(path, {
         method: "POST",
         body: payload,

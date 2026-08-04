@@ -157,6 +157,20 @@ fn complete_task_request_contract() {
 }
 
 #[test]
+fn block_task_request_contract() {
+    let fixture = include_str!("../../../schemas/fixtures/api/block-task-request.v1.valid.json");
+    let request: BlockTaskRequest = serde_json::from_str(fixture).unwrap();
+    assert_eq!(request.actor.as_deref(), Some("fixture-blocker"));
+    assert_eq!(request.reason, "fixture blocked");
+    assert_eq!(request.claim_token, None);
+    assert!(!request.force);
+    assert_eq!(
+        serde_json::to_value(request).unwrap(),
+        serde_json::from_str::<serde_json::Value>(fixture).unwrap()
+    );
+}
+
+#[test]
 fn complete_result_is_opaque_but_submit_review_is_closed() {
     let payload = json!({
         "claim_token": "ct_fixture",

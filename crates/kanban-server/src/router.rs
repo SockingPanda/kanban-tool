@@ -12,7 +12,7 @@ use tower_http::{
 
 use crate::{
     handlers::{
-        claim_task, complete_task, create_task, get_task, health, heartbeat_task,
+        block_task, claim_task, complete_task, create_task, get_task, health, heartbeat_task,
         list_board_columns, list_boards, list_tasks, mark_execution_plan_not_required,
         promote_task, release_task, submit_review_task,
     },
@@ -54,6 +54,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/tasks/:task_id/transitions/complete",
             post(complete_task),
         )
+        .route("/api/v1/tasks/:task_id/transitions/block", post(block_task))
         .layer(desktop_cors_layer())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -115,11 +116,11 @@ mod tests {
     };
     use http_body_util::BodyExt;
     use kanban_contract::{
-        ApiErrorCode, ApiExecutionPlanState, ApiRunStatus, ApiTaskStatus, ClaimTaskResponse,
-        CompleteTaskResponse, CreateTaskResponse, ErrorEnvelope, GetTaskResponse,
-        HeartbeatTaskResponse, ListBoardColumnsResponse, ListBoardsResponse, ListTasksResponse,
-        MarkExecutionPlanNotRequiredResponse, PromoteTaskResponse, ReleaseTaskResponse,
-        SubmitReviewTaskResponse,
+        ApiErrorCode, ApiExecutionPlanState, ApiRunStatus, ApiTaskStatus, BlockTaskResponse,
+        ClaimTaskResponse, CompleteTaskResponse, CreateTaskResponse, ErrorEnvelope,
+        GetTaskResponse, HeartbeatTaskResponse, ListBoardColumnsResponse, ListBoardsResponse,
+        ListTasksResponse, MarkExecutionPlanNotRequiredResponse, PromoteTaskResponse,
+        ReleaseTaskResponse, SubmitReviewTaskResponse,
     };
     use tower::ServiceExt;
 
@@ -568,6 +569,162 @@ mod tests {
             completed.data.lock_version,
             claim.data.task.lock_version + 1
         );
+    }
+
+    #[tokio::test]
+    async fn task_block_closes_non_running_and_running_application_paths() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let router = build_router(state);
+
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/boards/default/tasks",
+                serde_json::json!({
+                    "task_id": "t_http_block_todo",
+                    "idempotency_key": "http-block-todo",
+                    "title": "HTTP block todo",
+                    "description": "block specification",
+                    "status": "todo",
+                    "priority": 1,
+                    "metadata": {},
+                    "labels": [],
+                    "depends_on": [],
+                    "actor": "seed"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let block_fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../schemas/fixtures/api/block-task-request.v1.valid.json"
+        ))
+        .unwrap();
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_block_todo/transitions/block",
+                block_fixture,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let blocked: BlockTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(blocked.data.status, ApiTaskStatus::Blocked);
+        assert_eq!(
+            blocked.data.status_reason.as_deref(),
+            Some("fixture blocked")
+        );
+        assert_eq!(blocked.data.current_run_id, None);
+
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/boards/default/tasks",
+                serde_json::json!({
+                    "task_id": "t_http_block_running",
+                    "idempotency_key": "http-block-running",
+                    "title": "HTTP block running",
+                    "description": "block running specification",
+                    "status": "todo",
+                    "priority": 1,
+                    "metadata": {},
+                    "labels": [],
+                    "depends_on": [],
+                    "actor": "seed"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_block_running/execution-plan/not-required",
+                serde_json::json!({"reason": "single action", "actor": "planner"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_block_running/transitions/promote",
+                serde_json::json!({"actor": "planner"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_block_running/transitions/claim",
+                serde_json::json!({"actor": "worker", "ttl_ms": 300000}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let claim: ClaimTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        let claim_token = claim.data.claim_token.clone();
+
+        for body in [
+            serde_json::json!({
+                "actor": "worker",
+                "reason": "waiting",
+                "claim_token": "wrong-token"
+            }),
+            serde_json::json!({
+                "actor": "other-worker",
+                "reason": "waiting",
+                "claim_token": claim_token
+            }),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(json_request(
+                    "/api/v1/tasks/t_http_block_running/transitions/block",
+                    body,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            let bytes = response.into_body().collect().await.unwrap().to_bytes();
+            let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(error.error.code, ApiErrorCode::ClaimTokenMismatch);
+        }
+
+        let response = router
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_block_running/transitions/block",
+                serde_json::json!({
+                    "actor": "worker",
+                    "reason": "waiting on dependency",
+                    "claim_token": claim.data.claim_token
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let blocked: BlockTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(blocked.data.status, ApiTaskStatus::Blocked);
+        assert_eq!(
+            blocked.data.status_reason.as_deref(),
+            Some("waiting on dependency")
+        );
+        assert_eq!(blocked.data.claim_owner, None);
+        assert_eq!(blocked.data.claim_expires_at, None);
+        assert_eq!(blocked.data.last_heartbeat_at, None);
+        assert_eq!(
+            blocked.data.current_run_id.as_deref(),
+            Some(claim.data.run.id.as_str())
+        );
+        assert_eq!(blocked.data.lock_version, claim.data.task.lock_version + 1);
     }
 
     #[tokio::test]

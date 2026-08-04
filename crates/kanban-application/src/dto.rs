@@ -233,6 +233,26 @@ pub struct CompleteTaskRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockTaskCommand {
+    pub task_id: String,
+    pub actor: String,
+    pub reason: String,
+    pub claim_token: Option<String>,
+    pub force: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockTaskRecord {
+    pub expected_lock_version: i64,
+    pub actor: String,
+    pub reason: String,
+    pub claim_token: Option<String>,
+    pub force: bool,
+    pub event_id: String,
+    pub now: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionPlanRecord {
     pub board_id: String,
     pub task_id: String,

@@ -1,112 +1,168 @@
-# kanban-tool 协作规则
+# kanban-tool Agent Instructions
 
-本项目是本地优先看板与持久工作队列：Rust 核心、SQLite、CLI、本机 API 和 Tauri 桌面端。
+本文件适用于整个仓库。更深目录中的 `AGENTS.md` 可以补充局部规则，但不应重复或弱化这里的仓库级约束。
 
-## 必读文档
+## 1. 指令优先级与任务边界
 
-所有任务开始时先读：
+- 以当前用户任务、明确的验收标准和明确的非目标为本轮工作边界。
+- 现有代码、测试、文档和 ADR 是理解系统的证据；当用户明确要求重新评估某项设计时，不得因为旧实现或旧决策已经存在就机械维护它。
+- 未经明确要求，不创建新分支、额外 worktree、临时 clone，不执行 commit、push、merge、rebase 或发布操作。
+- 不覆盖、回滚或整理与当前任务无关的用户改动。
+- 一次只推进当前任务。完成验收后停止，不自动开始下一阶段。
 
-- `README.md`
+## 2. 稳定的产品边界
 
-按影响面补读：
+kanban-tool 是本地优先、单机、单用户语义的看板与 durable work queue。
 
-- 产品/范围/非目标：`docs/SPEC.md`
-- crate、进程、数据流或 service path：`docs/ARCHITECTURE.md`
-- 公开 machine contract、schema、fixture、artifact 或 dependency isolation：`docs/SCHEMA_CONTRACTS.md`
-- 状态、transition、claim、recompute：`docs/STATE_MACHINE.md`
-- schema、ID、事件、查询模型：`docs/DATA_MODEL.md`、`migrations/001_initial.sql`
-- CLI 行为、参数、输出或退出码：`docs/CLI_SPEC.md`
-- Web API、SSE 或 desktop embedded server：`docs/API_SPEC.md`
-- 领取、心跳、回收和内部实验性 dispatch 路径：`docs/STATE_MACHINE.md`、`docs/CLI_SPEC.md`
-- 架构决策或取舍背景：`docs/ADR.md`
+除非当前任务明确改变这些边界：
 
-跨模块、架构级、release/milestone 级改动必须读完整文档包和相关 migration。
+- 不引入 SaaS、多租户、组织、邀请、RBAC 或云同步假设。
+- CLI、HTTP、MCP、Desktop 和 dispatcher 是同一产品的不同 adapter，不应各自实现一套业务语义。
+- canonical 数据源保存业务事实；全文、图、向量、缓存及其他 projection 都是可重建的派生数据，不得反向成为事实来源。
+- `tasks.status` 是任务状态的 canonical truth；看板列只负责展示或映射，不得形成第二套状态机。
+- 所有 mutation 必须经过共享的 application/service path，并复用同一套状态机、校验、事务和错误语义。
+- adapter 不得直接绕过 application/service 层修改 canonical 状态。
+- `ready -> running` 必须通过原子 claim 完成；claim、run 和相应事件必须保持一致。
+- dispatcher 只能 claim `ready`，不得自动 claim `review`。
+- board isolation、外键、唯一约束、幂等边界和必要的事务原子性必须被保留。
 
-## 架构边界
+## 3. 架构与实现原则
 
-- SQLite 是唯一数据库；不要引入 Postgres/MySQL/MongoDB 后端。
-- 单机本地语义；不要引入多用户、RBAC、组织、团队、邀请或 SaaS 假设。
-- `tasks.status` 是 canonical truth；`board_columns` 只是 UI 展示映射。
-- Web、CLI、desktop 和 dispatcher 必须走同一套 Rust service path；当前 application orchestration 主要在 `kanban-sqlite::service`，并复用 `kanban-core` 状态机 helper。
-- 涉及 `kanban_sqlite::api` facade、provider seam、lifecycle plumbing、`db` / `init` 边界的改动，以 `docs/ARCHITECTURE.md` 的 Public API 边界为准，并同步维护 `public_api` compile contract。
-- 不允许绕过 service path 或状态机 guard 直接写 `tasks.status`。
-- `ready -> running` 必须是原子 claim transaction：CAS update + run + event。
-- `blocked -> ready` 必须重新计算 spec、schedule、dependency，不允许盲设。
-- contract 默认是 `operation_id`、method、path 与 obligation 的 authority；router 只保存 `adapter_id` + handler，并从 descriptor 读取 method/path。
-- API/SSE contract 必须显式声明 `Http { operation_key, location, parameters }`，其它 surface 必须显式声明 `NoTransport`；path/query/headers 参数逐项声明 cardinality，禁止隐式缺省。`Success` 只表示 2xx success；`Error` 只用于 `SharedComponent` 的非 2xx response，不新增 endpoint obligation。
-- 任意 `Adopted` contract 和任意 endpoint `ExactSurface` 引用都必须是 `granularity=Exact`。Exact endpoint 唯一性由唯一 method/path、精确 `operation_key` 与单一 location 共同推出，不维护冗余的全局 second-binding 状态。
-- `SharedComponent` 可以被多个 endpoint 显式复用，但不计入 exact coverage，也不能单独把 endpoint 提升为 `Adopted`；generated/adopted shared 必须满足“至少一个显式 linkage”或“同 surface 的真实 adoption witness”之一。
-- contract 只拥有 wire/schema evidence；locale、HTTP status、service guard、状态机、CAS、transaction 与 SQLite 继续属于 adapter/service/core。
-- review 不自动触发执行；dispatcher 不 claim `review`。
+- 优先使用现有清晰边界；不要为了“更通用”主动增加 framework、crate、backend、协议层、兼容层或抽象层。
+- storage engine 是实现细节。除非任务明确要求，不建立双写、双 backend、两套 canonical path 或长期兼容桥。
+- adapter 应保持薄：完成输入解析、调用 application API、结果映射和展示，不复制领域规则。
+- 当共享业务行为发生变化时，以端到端纵向切片推进：真实入口、共享 application path、存储实现和受影响 adapter 应在同一任务中闭合。
+- 只要求当前切片涉及的 surface 达成一致；不要因此擅自扩展为全产品 parity、全协议迁移或全仓库重构。
+- 多种实现都满足要求时，选择最简单、最直接、最容易验证且最少引入长期维护面的方案。
+- 不为假设中的未来部署方式、兼容需求或扩展场景提前建设机制。
 
-## 桌面前端约定
+## 4. 工作循环
 
-- 修改 `apps/desktop` 的外壳或滚动布局时，先查阅 `docs/DESKTOP_LAYOUT_SMOKE.md`，并同步维护自动契约与人工冒烟清单。
-- Desktop UI 必须保持本地优先、单用户、localhost operator console 语义；不要引入 SaaS、团队协作、RBAC、邀请、云同步或远程 worker 假设。
-- 未来 shell/layout 变更优先保持 `AppShell` 作为边界：sidebar/header/global search/actions 属于 shell，Board/List/Event/Run/TaskDetail 等功能视图不要重复实现外层布局。
-- Board/List/Event 等数据视图必须保留状态机语义：列只是展示，任务状态变化通过 API/core command service，不直接写 `tasks.status`。
+开始修改前，先确定：
 
-## 工程流程
+1. 用户可观察到的目标行为；
+2. 明确的验收方式；
+3. 最小相关调用链；
+4. 本轮非目标和停止条件。
 
-- 公开仓库只长期保留 `main`。需要隔离时可以使用本地临时分支，但发布前必须合回 `main` 并删除临时分支。
-- 默认流程：干净的 `main` → 必要时使用本地临时分支 → TDD 实现 → 验证 → 合回 `main`。
-- 复杂实现优先按小任务推进，并使用 worker/reviewer gate；父级负责最终验证。
-- milestone/release 级实现必须在合并前通过独立 spec reviewer + quality reviewer；仅 `fmt/test/clippy/smoke` 通过不能宣称版本完成。
-- 如果 reviewer 指出 P0/P1 规格或质量问题，必须在同一方向分支上修正并重新 review，直到 PASS/APPROVED 后再由父级合并。
-- 生产代码遵循 TDD：先写失败测试，运行看到 RED，再写最小实现，运行 GREEN。
-- 文档小改、只读分析或无代码行为变化的单文件校准可以跳过分支/TDD，但必须说明原因并做最小验证。
-- 提交语义使用 Conventional Commits。
+随后按以下顺序工作：
 
-## 文档语言
+1. 从真实入口、失败点或目标 operation 开始检查；
+2. 只读取当前调用链及直接依赖；
+3. 实现最小完整改动；
+4. 运行受影响范围的验证；
+5. 检查一次最终 diff；
+6. 汇报结果并停止。
 
-- 项目自有文档以简体中文为主要说明语言。
-- 命令、路径、代码符号、JSON 字段、枚举、库名、协议名和必要的标准术语保留原文。
-- `vendor/` 中的上游文档和 Apache-2.0 官方许可证不翻译、不改写。
-- `KANBAN_SPEC_BUNDLE.md` 是生成文件；先改中文源文档，再重新生成。
+计划只是执行辅助，不是独立产出。计划项必须对应可验证结果，并有明确结束条件；不得通过持续细化计划、扩展风险清单或追加 review 来替代实现。
 
-## 验证策略
+遇到阻塞时，先完成仍可完成的部分，再准确报告阻塞点。不得借阻塞转向无关重构或新的研究任务。
 
-普通小改动默认跑受影响范围验证，不要把每个阶段都升级成全量 workspace gate。
+## 5. 范围控制
 
-### 默认使用 just
+除非当前验收不可缺少或用户明确要求，不做以下工作：
 
-- 本仓库验证优先使用 `just`。会写 Cargo target 的 recipes 已经内置共享 target root 与构建锁。
-- 不要直接运行会写 Cargo target 的 raw `cargo build/test/check/clippy/nextest/run`；需要新验证入口时，先加 `just` recipe。
-- 验证、review、acceptance gate 必须在用户指定的工作树 / 目录中执行；不要为验证擅自切换到额外 worktree、临时 clone、新路径或隔离目录。
-- 不要额外设置 `KANBAN_CARGO_TARGET_ROOT`、`CARGO_TARGET_DIR` 或其它自定义 target/cache 隔离变量；使用本仓库 `just` recipes 内置的 exact shared target 与构建锁；所有 worktree 必须解析到同一 `CARGO_TARGET_DIR`，不得派生 per-worktree 子目录。
-- 如果确实需要任何额外隔离、新路径、临时 target 或不同工作树，必须先得到用户明确授权。
-- 查看可用入口：`just --summary`。
+- 顺手重构、命名清理、目录整理或大范围格式化；
+- 无关 bug 修复、无关测试补全或邻接模块改造；
+- dependency 升级、lockfile 重写或构建系统改造；
+- 新 crate、新 production dependency、新 backend 或新通用 abstraction；
+- 旧版本兼容、完整迁移框架、发布打包、跨平台精修或 release gate；
+- 为尚未发生的问题设计通用 recovery、capability、protocol 或 policy 系统；
+- 将当前任务扩大成 milestone、架构治理或全仓库审计。
 
-常用验证：
+范围外发现只记录，不自动修复，也不自动创建后续任务。最终报告中的 deferred findings 最多保留 5 条最重要内容。
 
-- Rust 快速检查：`just fmt`、`just check`、`just test`、`just clippy`、`just rust-fast`。`just fmt`（及 `fmt-check` alias）只显式选择 core package 集；`just test` / `just clippy` 默认覆盖同一 core set。
-- Helper/full 验证：`just fmt-full`、`just test-full`、`just clippy-full`、`just rust-full`。`fmt-full` 只显式选择 core + helper package 集；这些产品门禁均排除 desktop 与 `kanban-schema-tool`。
-- 单 crate：`just check-p kanban-cli`、`just test-p kanban-cli`、`just clippy-p kanban-cli`。
-- feature 组合：`just feature-p kanban-cli tantivy-backend`。
-- 公开 JSON contract / schema：`just schema-contract`。该 gate 必须先执行 dependency isolation，再用 `schema-fmt` 精确格式化检查 `kanban-contract` + `kanban-schema-tool`，随后运行 feature/tool/artifact/surface/adoption gates；不得用 workspace-wide `cargo fmt` 混入 leaf。full locked metadata、真实 `Cargo.lock` 与 `policy/schema-tool-registry-closure.json` 锁定 opaque logical SourceId、reachable registry tuple/checksum 双向精确集合、effective features、target surface 和产品排除；approval 只比较、不自动 bless。真实 `just` parser AST hash + fake executable ordered trace 还锁定产品 fmt lane、full/rust 调用图、schema/release/closure 内部顺序与 `test-full` 双分支；Cargo source replacement 可使用等价物理 mirror，crate 内容仍由 Cargo fetch/build 按 registry index `cksum` 验证。
-- Desktop / Web：`just desktop-check`、`just desktop-package`、`just web-test`、`just web-typecheck`、`just web-build`。
-- CLI package 与 smoke：`just cli-package`、`just smoke`。
-- 脚本 / 文档小改动：`just target-tools`、`just diff-check`。
+## 6. 文档与事实判断
 
-以下用于本地发布打包 / explicit release gate：
+- 从与当前调用链最近的代码、测试和局部文档开始，不默认预读完整文档包、全部 migration、全部 ADR 或整个 workspace。
+- 代码和可执行测试描述当前实现；spec、架构文档和 ADR 描述约束、意图或历史决定。出现冲突时必须指出，不得自行选择最方便的一方。
+- ADR 是已接受决策的记录，但当用户明确要求重新设计时，应评估其前提是否仍成立，而不是把历史决定当成不可修改的目标。
+- 只有公开行为、领域约束、数据模型、API contract 或架构边界实际变化时，才更新对应文档。
+- 不把 Proposed、Experimental、In migration 或尚未接入的能力描述成 Current、Stable 或 Released。
+- 不为普通实现任务补齐整套文档、contract artifact、snapshot 或治理材料。
 
-- `just release`
+## 7. 测试与构建
 
-## Rust workspace 约定
+- 验证应匹配本次改动的风险和范围。先运行 package、module、operation 或 surface 级检查，再决定是否需要更大的 gate。
+- 优先使用仓库已有的 `just`、脚本和定向测试命令；先通过 `just --list` 或已有文档确认命令，不重复发明入口。
+- Rust 改动优先执行受影响 package 的 format、check、test 和 clippy；前端改动优先执行受影响应用的 typecheck 和 test。
+- 避免不必要的全 workspace build/test、重复编译和并行 Cargo 进程，以控制构建时间和中间产物体积。
+- 不执行 `cargo clean`，除非用户明确要求或有证据表明缓存损坏且它是当前阻塞原因。
+- 修复可复现 bug 时，优先增加能证明该行为的回归测试。
+- 状态机、claim、事务、并发和数据恢复改动必须验证其关键不变量；普通 wiring 不需要为了形式完整增加大规模测试矩阵。
+- 只有 release、milestone、schema/migration、跨 crate 公共 contract 或广泛基础设施改动，才升级到全仓库或专项 gate。
+- 既有失败与当前改动无关时，准确记录，不顺手修复，也不通过削弱测试隐藏失败。
 
-当前主要 crate：
+## 8. Review 规则
 
-- `kanban-core`：领域类型、状态机、guard/recompute helper；不依赖 SQLite/HTTP/CLI。
-- `kanban-application`：选定用例的 DTO 与端口契约；不拥有 SQLite 事务。
-- `kanban-contract`：候选/已采用 wire DTO、operation inventory、surface catalog 与 schema root registry；默认 runtime 依赖图不包含 schema tooling。
-- `kanban-schema-tool`：独立 leaf tooling，拥有 `kanban-schema` binary、离线校验与 artifact drift gate；direct dependency 必须且只能是 5 条已批准 normal edge，不得新增 dev/build/target edge；全部 Cargo auto target discovery 必须关闭且只允许显式批准的 lib/bin/test；full locked resolve 必须指向 canonical workspace tool/contract 和批准的逻辑 registry closure；其它 workspace member 不得引用它，default/core/helper/full 产品 recipes 也不得选择或调用它。
-- `kanban-sqlite`：SQLite 连接、migration/init、application service、transaction、query helper。
-- `kanban-cli`：`kanban` CLI。
-- `kanban-server`：本机 HTTP API 与 SSE。
-- `kanban-context`、`kanban-entity`、`kanban-graph`、`kanban-indexer`、`kanban-labels`、`kanban-local`、`kanban-search`、`kanban-vector`：本地派生层、索引、graph、context、label 和 vector 支持 crate。
-- `apps/desktop`：Tauri 桌面操作者控制台。
+普通实现完成后只做一次针对当前 diff 和验收标准的自检。
 
-## 本地文档经验
+需要独立 reviewer 时，默认预算为：
 
-- 项目经验优先写入本仓库的 `AGENTS.md` 或后续 `.agents/` 支持文件，不写成一次性全局技能。
-- 全局 skill 只承载可复用模式；本项目特定取舍写在本仓库。
+1. 一次 blocker review；
+2. 一次针对原 findings 的修复验证；
+3. 随后结束 review。
+
+Review 约束：
+
+- 只有 P0/P1 默认阻塞当前任务。
+- P0：数据丢失、不可恢复损坏、安全边界破坏或主路径完全不可用。
+- P1：明确验收失败、canonical mutation path 被绕过，或状态机、claim、事务、隔离等核心不变量被破坏。
+- P2/P3、风格、未来风险和范围外可维护性建议只记录为 deferred，不阻塞当前切片。
+- 每轮最多报告 5 个 blocker。
+- 每个 finding 必须包含准确位置、代码证据、可触发条件、实际结果和预期结果；不得仅凭摘要、猜测或抽象担忧报错。
+- 修复验证只检查原 findings。除非修复本身引入新的 P0/P1，不得在验证轮展开新的问题集合。
+- 不存在“持续 review 直到没有意见”的默认流程；禁止 reviewer 派生 reviewer，禁止为 review 本身继续扩展任务。
+
+## 9. Sub-agent 使用
+
+- 只有任务可以被清晰拆成相互独立、文件范围基本不重叠、输出可直接验收的部分时才使用 sub-agent。
+- 每个 sub-agent 必须获得明确的目标、允许修改范围、交付物、验证方式和停止条件。
+- 主 agent 对最终集成、范围控制和停止负责，不能把架构决策权或任务扩张权交给 sub-agent。
+- 不建立多层 agent 树，不创建 reviewer 的 reviewer，不在一个任务中反复轮换 reviewer。
+- sub-agent 完成约定交付后，不要求其继续“深入看看”或主动寻找更多问题。
+
+## 10. Git 与变更卫生
+
+- 修改前检查工作区状态，识别并保护现有未提交改动。
+- diff 必须聚焦当前任务；不得因为格式化或生成工具造成大量无关变化。
+- 不修改与当前任务无关的生成文件、快照、锁文件或配置。
+- 删除旧路径前，确认当前任务覆盖的调用方已经切换，并用测试或搜索证明没有遗留的活跃引用。
+- 不用兼容 shim 掩盖未完成迁移，除非 shim 本身是用户明确要求的交付物。
+
+## 11. 完成定义
+
+任务完成需要同时满足：
+
+- 用户明确的验收标准成立；
+- 当前改动涉及的 product surface 走预期的共享业务路径；
+- 相关领域不变量没有被绕过；
+- 受影响验证通过，或外部阻塞被准确说明；
+- 最终 diff 没有未经批准的扩域、重复实现或无关依赖；
+- 已检查一次最终 diff。
+
+最终报告只需说明：
+
+- 完成了什么及其用户可见结果；
+- 修改了哪些关键位置；
+- 运行了哪些验证及结果；
+- 存在的真实阻塞或少量 deferred findings。
+
+报告后停止，不自动提出或执行下一阶段。
+
+## 12. 维护本文件
+
+根 `AGENTS.md` 只保存长期、跨任务、跨分支都成立的仓库级规则。
+
+以下内容不应写入根文件：
+
+- 当前分支名或当前 milestone；
+- 某次数据库、runtime、前端或协议迁移方案；
+- 临时 operation 清单和执行顺序；
+- 当前已知 bug、review findings 或待办列表；
+- 一次性的 gate、验收命令或发布步骤；
+- 对某个短期实现的文件级约束。
+
+这些内容应放在当前任务提示、issue、专项计划文档、runbook、skill，或对应子目录的局部 `AGENTS.md` 中，并按需加载。
+
+只有一条规则在多个任务中反复证明必要、长期有效且确实改变 agent 行为时，才加入根文件。新增前优先删除失效、重复或已经由代码、测试、lint、脚本强制执行的规则。

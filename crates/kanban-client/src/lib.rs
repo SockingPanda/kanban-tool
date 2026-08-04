@@ -11,7 +11,7 @@ use kanban_contract::{
     HealthReport, HealthResponse, HeartbeatTaskRequest, HeartbeatTaskResponse,
     ListBoardColumnsResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
     MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse,
+    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -286,6 +286,31 @@ impl KanbanClient {
     ) -> Result<ApiTask, ClientError> {
         let task_id = self.resolve_task_id(board, selector)?;
         self.heartbeat_task(&task_id, request)
+    }
+
+    pub fn release_task(
+        &self,
+        task_id: &str,
+        request: &ReleaseTaskRequest,
+    ) -> Result<ApiTask, ClientError> {
+        let response: ReleaseTaskResponse = self.post(
+            &format!(
+                "/api/v1/tasks/{}/transitions/release",
+                encode_path_segment(task_id.trim())
+            ),
+            request,
+        )?;
+        Ok(response.data)
+    }
+
+    pub fn release_task_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+        request: &ReleaseTaskRequest,
+    ) -> Result<ApiTask, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        self.release_task(&task_id, request)
     }
 
     fn get<T>(&self, path: &str) -> Result<T, ClientError>

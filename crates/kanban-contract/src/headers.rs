@@ -54,6 +54,7 @@ const ACTOR_OPERATIONS: &[&str] = &[
     "api.promote-task",
     "api.propose-task-label",
     "api.reclaim-task",
+    "api.release-task",
     "api.remove-dependency",
     "api.remove-step",
     "api.remove-task-label",

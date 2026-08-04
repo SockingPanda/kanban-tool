@@ -621,6 +621,7 @@ pub type CliTaskUpdateOutput = DataEnvelope<ApiTask>;
 pub type CliTaskPromoteOutput = DataEnvelope<ApiTask>;
 pub type CliTaskReopenOutput = DataEnvelope<ApiTask>;
 pub type CliTaskHeartbeatOutput = DataEnvelope<ApiTask>;
+pub type CliTaskReleaseOutput = DataEnvelope<ApiTask>;
 pub type CliTaskDoneOutput = DataEnvelope<ApiTask>;
 pub type CliTaskCompleteOutput = DataEnvelope<ApiTask>;
 pub type CliTaskReviewOutput = DataEnvelope<ApiTask>;

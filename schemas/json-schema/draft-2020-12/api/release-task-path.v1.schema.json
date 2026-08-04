@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:release-task-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id"
+  ],
+  "title": "Kanban release task path v1",
+  "type": "object"
+}

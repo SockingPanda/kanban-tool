@@ -599,6 +599,18 @@
   },
   {
     "contracts": [
+      "api.release-task.path",
+      "api.release-task.headers",
+      "api.release-task.request",
+      "api.release-task.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/tasks/:task_id/transitions/release",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
       "api.complete-task.path",
       "api.complete-task.headers",
       "api.complete-task.request",
@@ -1880,6 +1892,15 @@
     ],
     "exclusion": null,
     "key": "task heartbeat",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-release.output"
+    ],
+    "exclusion": null,
+    "key": "task release",
     "migration": "adopted",
     "surface": "cli"
   },

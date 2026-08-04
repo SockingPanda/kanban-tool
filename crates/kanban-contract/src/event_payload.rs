@@ -294,6 +294,7 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "task.promoted",
     "task.reclaimed",
     "task.recomputed",
+    "task.released",
     "task.reopened",
     "task.retry_policy.updated",
     "task.specified",
@@ -449,7 +450,8 @@ impl EventPayload {
                 decode!(TaskResult, TaskResultPayload)
             }
             "task.created" => decode!(TaskStatus, TaskStatusPayload),
-            "task.promoted" | "task.recomputed" | "task.specified" | "task.unblocked" => {
+            "task.promoted" | "task.recomputed" | "task.released" | "task.specified"
+            | "task.unblocked" => {
                 decode!(TaskToStatus, TaskToStatusPayload)
             }
             "task.execution_plan.not_required" => {
@@ -569,6 +571,7 @@ mod tests {
             r#"{"retry_count":1,"max_retries":3,"to_status":"ready","reason":"expired"}"#,
         ),
         ("task.recomputed", r#"{"to_status":"todo"}"#),
+        ("task.released", r#"{"to_status":"ready"}"#),
         (
             "task.reopened",
             r#"{"from":"done","to":"ready","reason":"follow-up","original_completed_at":123}"#,
@@ -609,8 +612,8 @@ mod tests {
     ];
 
     #[test]
-    fn all_39_real_event_kinds_have_bounded_payloads() {
-        assert_eq!(KNOWN_EVENT_KINDS.len(), 39);
+    fn all_40_real_event_kinds_have_bounded_payloads() {
+        assert_eq!(KNOWN_EVENT_KINDS.len(), 40);
         assert_eq!(
             KNOWN_EVENT_KINDS
                 .iter()

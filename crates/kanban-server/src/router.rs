@@ -13,7 +13,7 @@ use tower_http::{
 use crate::{
     handlers::{
         claim_task, create_task, get_task, health, heartbeat_task, list_board_columns, list_boards,
-        list_tasks, mark_execution_plan_not_required, promote_task,
+        list_tasks, mark_execution_plan_not_required, promote_task, release_task,
     },
     state::AppState,
 };
@@ -40,6 +40,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/tasks/:task_id/transitions/heartbeat",
             post(heartbeat_task),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/transitions/release",
+            post(release_task),
         )
         .layer(desktop_cors_layer())
         .layer(TraceLayer::new_for_http())
@@ -105,7 +109,7 @@ mod tests {
         ApiErrorCode, ApiExecutionPlanState, ApiRunStatus, ApiTaskStatus, ClaimTaskResponse,
         CreateTaskResponse, ErrorEnvelope, GetTaskResponse, HeartbeatTaskResponse,
         ListBoardColumnsResponse, ListBoardsResponse, ListTasksResponse,
-        MarkExecutionPlanNotRequiredResponse, PromoteTaskResponse,
+        MarkExecutionPlanNotRequiredResponse, PromoteTaskResponse, ReleaseTaskResponse,
     };
     use tower::ServiceExt;
 
@@ -147,6 +151,124 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let columns: ListBoardColumnsResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(columns.data.len(), 9);
+    }
+
+    #[tokio::test]
+    async fn task_release_closes_the_application_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let router = build_router(state);
+
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/boards/default/tasks",
+                serde_json::json!({
+                    "task_id": "t_http_release",
+                    "idempotency_key": "http-release",
+                    "title": "HTTP release",
+                    "description": "release specification",
+                    "priority": 1,
+                    "metadata": {},
+                    "labels": [],
+                    "depends_on": [],
+                    "actor": "seed"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_release/execution-plan/not-required",
+                serde_json::json!({"reason": "single action", "actor": "planner"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_release/transitions/promote",
+                serde_json::json!({"actor": "planner"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_release/transitions/claim",
+                serde_json::json!({"actor": "worker", "ttl_ms": 300000}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let claim: ClaimTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        let claim_token = claim.data.claim_token.clone();
+
+        for body in [
+            serde_json::json!({
+                "actor": "worker",
+                "claim_token": "wrong-token"
+            }),
+            serde_json::json!({
+                "actor": "other-worker",
+                "claim_token": claim_token
+            }),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(json_request(
+                    "/api/v1/tasks/t_http_release/transitions/release",
+                    body,
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            let bytes = response.into_body().collect().await.unwrap().to_bytes();
+            let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(error.error.code, ApiErrorCode::ClaimTokenMismatch);
+        }
+
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_release/transitions/release",
+                serde_json::json!({
+                    "actor": "worker",
+                    "claim_token": claim.data.claim_token
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let released: ReleaseTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(released.data.status, ApiTaskStatus::Ready);
+        assert_eq!(released.data.claim_owner, None);
+        assert_eq!(released.data.claim_expires_at, None);
+        assert_eq!(released.data.last_heartbeat_at, None);
+        assert_eq!(released.data.current_run_id, None);
+        assert_eq!(released.data.lock_version, claim.data.task.lock_version + 1);
+
+        let response = router
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_release/transitions/claim",
+                serde_json::json!({"actor": "second-worker", "ttl_ms": 300000}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let reclaimed: ClaimTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(reclaimed.data.task.status, ApiTaskStatus::Running);
+        assert_ne!(reclaimed.data.run.id, claim.data.run.id);
     }
 
     #[tokio::test]

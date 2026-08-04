@@ -218,8 +218,11 @@ fn api_error_code_schema_lists_only_stable_wire_values() {
         &json!([
             "not_found",
             "conflict",
+            "idempotency_conflict",
             "dependency_cycle",
             "invalid_input",
+            "feature_not_available",
+            "server_unavailable",
             "execution_plan_required",
             "steps_incomplete",
             "claim_token_mismatch",

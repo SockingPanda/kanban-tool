@@ -299,7 +299,7 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
         .iter()
         .filter(|endpoint| endpoint.operation_id != "sse.stream-events")
         .collect::<Vec<_>>();
-    assert_eq!(endpoints.len(), 83);
+    assert_eq!(endpoints.len(), 84);
 
     for endpoint in endpoints {
         let expected_id = format!("{}.headers", endpoint.operation_id);
@@ -371,6 +371,7 @@ fn b7_header_profiles_fail_closed_over_actor_and_body_cardinality() {
         "api.promote-task",
         "api.propose-task-label",
         "api.reclaim-task",
+        "api.release-task",
         "api.remove-dependency",
         "api.remove-step",
         "api.remove-task-label",
@@ -677,7 +678,7 @@ fn foundation_registry_contains_generated_roots() {
         .filter(|id| id.contains(":api:") && id.ends_with("-headers:v1"))
         .copied()
         .collect::<BTreeSet<_>>();
-    assert_eq!(header_roots.len(), 83);
+    assert_eq!(header_roots.len(), 84);
     actual.retain(|id| !header_roots.contains(id));
     let mut expected = BTreeSet::from([
         "urn:kanban-tool:schema:api:accept-label-proposal-body:v1",
@@ -764,6 +765,9 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:heartbeat-task-path:v1",
         "urn:kanban-tool:schema:api:heartbeat-task-request:v1",
         "urn:kanban-tool:schema:api:heartbeat-task-response:v1",
+        "urn:kanban-tool:schema:api:release-task-path:v1",
+        "urn:kanban-tool:schema:api:release-task-request:v1",
+        "urn:kanban-tool:schema:api:release-task-response:v1",
         "urn:kanban-tool:schema:api:label-atom-index-status-path:v1",
         "urn:kanban-tool:schema:api:label-atom-index-status-response:v1",
         "urn:kanban-tool:schema:api:label-atom-path:v1",
@@ -998,8 +1002,8 @@ fn endpoint_descriptor_catalog_is_complete_and_explicit() {
     let endpoints = endpoint_catalog();
     assert_eq!(
         endpoints.len(),
-        84,
-        "83 JSON API + 1 SSE 必须全部有 descriptor"
+        85,
+        "84 JSON API + 1 SSE 必须全部有 descriptor"
     );
     assert_eq!(
         endpoints
@@ -1769,7 +1773,7 @@ fn current_train_freeze_requires_closed_authority() {
             EndpointObligation::Excluded { .. } => excluded += 1,
         }
     }
-    assert_eq!((contract, todo, not_applicable, excluded), (296, 0, 207, 1));
+    assert_eq!((contract, todo, not_applicable, excluded), (300, 0, 209, 1));
     let unfinished_contracts = operation_inventory()
         .iter()
         .filter(|contract| {

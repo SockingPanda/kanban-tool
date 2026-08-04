@@ -14,7 +14,7 @@ use kanban_contract::{
     CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
     HeartbeatTaskResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
-    TaskReadPlanFilter, TaskReadSort,
+    ReleaseTaskRequest, ReleaseTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
 
@@ -112,6 +112,8 @@ enum TaskCommand {
     Claim(TaskClaimArgs),
     /// Extend the active claim lease with a matching token.
     Heartbeat(TaskHeartbeatArgs),
+    /// Return an actively claimed task to ready.
+    Release(TaskReleaseArgs),
 }
 
 #[derive(Debug, Args)]
@@ -214,6 +216,13 @@ struct TaskHeartbeatArgs {
     ttl_ms: i64,
     #[arg(long)]
     note: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct TaskReleaseArgs {
+    task_ref: String,
+    #[arg(long)]
+    claim_token: String,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -496,6 +505,25 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
                     }
                 }
+                TaskCommand::Release(args) => {
+                    let task = client.release_task_by_selector(
+                        &cli.board,
+                        &args.task_ref,
+                        &ReleaseTaskRequest {
+                            actor: None,
+                            claim_token: args.claim_token.clone(),
+                        },
+                    )?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&ReleaseTaskResponse::new(task))
+                                .expect("release response is serializable")
+                        );
+                    } else {
+                        println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
+                    }
+                }
             }
             Ok(())
         }
@@ -741,5 +769,26 @@ mod tests {
         assert_eq!(args.claim_token, "claim_test");
         assert_eq!(args.ttl_ms, 120_000);
         assert_eq!(args.note.as_deref(), Some("alive"));
+    }
+
+    #[test]
+    fn parses_task_release_command() {
+        let cli = Cli::try_parse_from([
+            "kanban",
+            "task",
+            "release",
+            "default#1",
+            "--claim-token",
+            "claim_test",
+        ])
+        .expect("release args");
+        let Command::Task {
+            command: TaskCommand::Release(args),
+        } = cli.command
+        else {
+            panic!("expected task release");
+        };
+        assert_eq!(args.task_ref, "default#1");
+        assert_eq!(args.claim_token, "claim_test");
     }
 }

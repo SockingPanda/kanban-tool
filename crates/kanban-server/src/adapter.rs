@@ -4,17 +4,18 @@ use kanban_application::{
     CreateTaskRecord as ApplicationCreateTask, ExecutionPlanRecord as ApplicationExecutionPlan,
     ExecutionPlanState, HeartbeatTaskRecord as ApplicationHeartbeatTask,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
-    PromoteTaskRecord as ApplicationPromoteTask, RunRecord as ApplicationRun,
-    RunStatus as ApplicationRunStatus, TaskListOptions as ApplicationTaskListOptions,
-    TaskListPage as ApplicationTaskListPage, TaskListSort as ApplicationTaskListSort,
-    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord as ApplicationTask,
+    PromoteTaskRecord as ApplicationPromoteTask, ReleaseTaskRecord as ApplicationReleaseTask,
+    RunRecord as ApplicationRun, RunStatus as ApplicationRunStatus,
+    TaskListOptions as ApplicationTaskListOptions, TaskListPage as ApplicationTaskListPage,
+    TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
+    TaskRecord as ApplicationTask,
 };
 use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
     ClaimTaskInput as StoreClaimTask, ClaimTaskRecord as StoreClaim,
     CreateTaskInput as StoreCreateTask, HeartbeatTaskInput as StoreHeartbeatTask,
     MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
-    PromoteTaskInput as StorePromoteTask, StoreError,
+    PromoteTaskInput as StorePromoteTask, ReleaseTaskInput as StoreReleaseTask, StoreError,
     TaskExecutionPlanRecord as StoreExecutionPlan, TaskListOptions as StoreTaskListOptions,
     TaskListSort as StoreTaskListSort, TaskPlanFilter as StoreTaskPlanFilter,
     TaskRecord as StoreTask, TaskRunRecord as StoreRun, TursoStore,
@@ -233,6 +234,27 @@ impl ApplicationStore for TursoApplicationStore {
                     note: input.note,
                     now: input.now,
                     claim_expires_at: input.claim_expires_at,
+                },
+            )
+            .await
+            .map_err(store_error)
+            .and_then(application_task)
+    }
+
+    async fn release_task(
+        &self,
+        task_id: &str,
+        input: ApplicationReleaseTask,
+    ) -> Result<ApplicationTask> {
+        self.store
+            .release_task(
+                task_id,
+                StoreReleaseTask {
+                    expected_lock_version: input.expected_lock_version,
+                    actor: input.actor,
+                    claim_token: input.claim_token,
+                    event_id: input.event_id,
+                    now: input.now,
                 },
             )
             .await

@@ -2,9 +2,9 @@ use crate::{
     AddDependencyRequest, ArchiveBoardRequest, ArchiveTaskRequest, BlockTaskRequest,
     ClaimTaskRequest, CompleteTaskRequest, ContractBinding, ContractDirection, ContractGranularity,
     ContractStrictness, EndpointObligation, HeartbeatTaskRequest, MigrationState,
-    PromoteTaskRequest, ReclaimTargetStatus, ReclaimTaskRequest, ReopenTaskRequest,
-    SpecifyTaskRequest, SubmitReviewTaskRequest, UnblockTaskRequest, endpoint_descriptor,
-    operation_inventory,
+    PromoteTaskRequest, ReclaimTargetStatus, ReclaimTaskRequest, ReleaseTaskRequest,
+    ReopenTaskRequest, SpecifyTaskRequest, SubmitReviewTaskRequest, UnblockTaskRequest,
+    endpoint_descriptor, operation_inventory,
 };
 use serde_json::json;
 
@@ -39,6 +39,9 @@ fn lifecycle_requests_preserve_wire_defaults() {
     let heartbeat: HeartbeatTaskRequest =
         serde_json::from_value(json!({"claim_token": "ct_fixture"})).unwrap();
     assert_eq!(heartbeat.ttl_ms, 300_000);
+    let release: ReleaseTaskRequest =
+        serde_json::from_value(json!({"claim_token": "ct_fixture"})).unwrap();
+    assert_eq!(release.actor, None);
 
     assert_eq!(
         serde_json::from_value::<PromoteTaskRequest>(json!({})).unwrap(),
@@ -72,6 +75,10 @@ fn lifecycle_requests_reject_unknown_outer_fields() {
         HeartbeatTaskRequest,
         json!({"claim_token": "ct_fixture", "unknown": true})
     );
+    rejects_unknown!(
+        ReleaseTaskRequest,
+        json!({"claim_token": "ct_fixture", "unknown": true})
+    );
     rejects_unknown!(CompleteTaskRequest, json!({"unknown": true}));
     rejects_unknown!(SubmitReviewTaskRequest, json!({"unknown": true}));
     rejects_unknown!(
@@ -95,9 +102,25 @@ fn lifecycle_requests_reject_unknown_outer_fields() {
 fn required_lifecycle_fields_remain_required() {
     serde_json::from_value::<HeartbeatTaskRequest>(json!({}))
         .expect_err("heartbeat claim_token 必填");
+    serde_json::from_value::<ReleaseTaskRequest>(json!({})).expect_err("release claim_token 必填");
     serde_json::from_value::<BlockTaskRequest>(json!({})).expect_err("block reason 必填");
     serde_json::from_value::<ReopenTaskRequest>(json!({})).expect_err("reopen reason 必填");
     serde_json::from_value::<AddDependencyRequest>(json!({})).expect_err("parent_task_id 必填");
+}
+
+#[test]
+fn lifecycle_release_request_contract() {
+    let request: ReleaseTaskRequest = serde_json::from_value(json!({
+        "actor": "worker",
+        "claim_token": "claim_exact"
+    }))
+    .unwrap();
+    assert_eq!(request.actor.as_deref(), Some("worker"));
+    assert_eq!(request.claim_token, "claim_exact");
+    assert_eq!(
+        serde_json::to_value(request).unwrap(),
+        json!({"actor": "worker", "claim_token": "claim_exact"})
+    );
 }
 
 #[test]
@@ -147,6 +170,7 @@ fn lifecycle_requests_all_derive_schema() {
     assert_schema::<ClaimTaskRequest>();
     assert_schema::<ReclaimTaskRequest>();
     assert_schema::<HeartbeatTaskRequest>();
+    assert_schema::<ReleaseTaskRequest>();
     assert_schema::<CompleteTaskRequest>();
     assert_schema::<SubmitReviewTaskRequest>();
     assert_schema::<BlockTaskRequest>();
@@ -163,6 +187,7 @@ const LIFECYCLE_CONTRACTS: &[(&str, &str)] = &[
     ("api.claim-task", "api.claim-task.request"),
     ("api.reclaim-task", "api.reclaim-task.request"),
     ("api.heartbeat-task", "api.heartbeat-task.request"),
+    ("api.release-task", "api.release-task.request"),
     ("api.complete-task", "api.complete-task.request"),
     ("api.submit-review-task", "api.submit-review-task.request"),
     ("api.block-task", "api.block-task.request"),
@@ -226,6 +251,7 @@ fn lifecycle_request_inventory_is_exact_and_adopted() {
             "api.claim-task"
                 | "api.reclaim-task"
                 | "api.heartbeat-task"
+                | "api.release-task"
                 | "api.complete-task"
                 | "api.submit-review-task"
                 | "api.block-task"

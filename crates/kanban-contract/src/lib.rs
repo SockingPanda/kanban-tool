@@ -78,8 +78,8 @@ pub use cli::{
     CliStatsOutput, CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput,
     CliTaskCompleteOutput, CliTaskCreateOutput, CliTaskDoneOutput, CliTaskHeartbeatOutput,
     CliTaskListOutput, CliTaskPromoteOutput, CliTaskReclaimOutput, CliTaskReclaimResult,
-    CliTaskReopenOutput, CliTaskReviewOutput, CliTaskShowOutput, CliTaskStartOutput,
-    CliTaskStepAddOutput, CliTaskStepDoneOutput, CliTaskStepListOutput,
+    CliTaskReleaseOutput, CliTaskReopenOutput, CliTaskReviewOutput, CliTaskShowOutput,
+    CliTaskStartOutput, CliTaskStepAddOutput, CliTaskStepDoneOutput, CliTaskStepListOutput,
     CliTaskStepNotRequiredOutput, CliTaskStepRemoveOutput, CliTaskStepRemoveResult,
     CliTaskStepReopenOutput, CliTaskStepSkipOutput, CliTaskStepUpdateOutput, CliTaskUnblockOutput,
     CliTaskUpdateOutput, CliVacuumOutput, CliVacuumResult, cli_operation_catalog,
@@ -123,8 +123,8 @@ pub use labels::{
 pub use lifecycle::{
     AddDependencyRequest, ArchiveBoardRequest, ArchiveTaskRequest, BlockTaskRequest,
     ClaimTaskRequest, CompleteTaskRequest, HeartbeatTaskRequest, PromoteTaskRequest,
-    ReclaimTargetStatus, ReclaimTaskRequest, ReopenTaskRequest, SpecifyTaskRequest,
-    SubmitReviewTaskRequest, UnblockTaskRequest,
+    ReclaimTargetStatus, ReclaimTaskRequest, ReleaseTaskRequest, ReopenTaskRequest,
+    SpecifyTaskRequest, SubmitReviewTaskRequest, UnblockTaskRequest,
 };
 pub use ontology::{LabelOntologySignalWire, LabelOntologySignalsResponse};
 pub use portable::{
@@ -167,8 +167,9 @@ pub use transitions::{
     ArchiveTaskPath, ArchiveTaskResponse, BlockTaskPath, BlockTaskResponse, ClaimTaskPath,
     ClaimTaskResponse, CompleteTaskPath, CompleteTaskResponse, HeartbeatTaskPath,
     HeartbeatTaskResponse, PromoteTaskPath, PromoteTaskResponse, ReclaimTaskPath,
-    ReclaimTaskResponse, ReopenTaskPath, ReopenTaskResponse, SpecifyTaskPath, SpecifyTaskResponse,
-    SubmitReviewTaskPath, SubmitReviewTaskResponse, UnblockTaskPath, UnblockTaskResponse,
+    ReclaimTaskResponse, ReleaseTaskPath, ReleaseTaskResponse, ReopenTaskPath, ReopenTaskResponse,
+    SpecifyTaskPath, SpecifyTaskResponse, SubmitReviewTaskPath, SubmitReviewTaskResponse,
+    UnblockTaskPath, UnblockTaskResponse,
 };
 pub use wire::{
     ApiErrorCode, CreatedLabelsMeta, DataEnvelope, DecisionMetadata, DecisionOption,

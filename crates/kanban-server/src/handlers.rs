@@ -10,8 +10,8 @@ use axum::{
 };
 use kanban_application::{
     ClaimTaskCommand, CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState,
-    HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand, RunRecord,
-    RunStatus, TaskListOptions as ApplicationTaskListOptions,
+    HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand,
+    ReleaseTaskCommand, RunRecord, RunStatus, TaskListOptions as ApplicationTaskListOptions,
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
     TaskRecord,
 };
@@ -27,7 +27,8 @@ use kanban_contract::{
     MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
     MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
-    TaskReadLabel, TaskReadPlanFilter, TaskReadSort, TotalPaginationMeta,
+    ReleaseTaskPath, ReleaseTaskRequest, ReleaseTaskResponse, TaskReadLabel, TaskReadPlanFilter,
+    TaskReadSort, TotalPaginationMeta,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
@@ -307,6 +308,26 @@ pub(crate) async fn heartbeat_task(
         })
         .await?;
     Ok(Json(HeartbeatTaskResponse::new(api_task(task)?)))
+}
+
+pub(crate) async fn release_task(
+    State(state): State<AppState>,
+    Path(ReleaseTaskPath { task_id }): Path<ReleaseTaskPath>,
+    headers: HeaderMap,
+    body: Result<Json<ReleaseTaskRequest>, JsonRejection>,
+) -> Result<Json<ReleaseTaskResponse>, ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let task = state
+        .application()
+        .release_task(ReleaseTaskCommand {
+            task_id,
+            actor,
+            claim_token: body.claim_token,
+        })
+        .await?;
+    Ok(Json(ReleaseTaskResponse::new(api_task(task)?)))
 }
 
 fn request_actor(

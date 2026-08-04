@@ -1200,6 +1200,15 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "task_heartbeat_output_fixture_is_consumed_by_contract_root"
     ),
     adopted_cli_output_contract!(
+        "cli.task-release.output",
+        "task release",
+        "urn:kanban-tool:schema:cli:task-release-output:v1",
+        "schemas/fixtures/cli/task-release-output.v1.valid.json",
+        "cli_task_release_contract_adoption",
+        "task_release_output_fixture_is_produced_by_real_cli",
+        "task_release_output_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_cli_output_contract!(
         "cli.task-done.output",
         "task done",
         "urn:kanban-tool:schema:cli:task-done-output:v1",
@@ -2537,6 +2546,39 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         &[],
         "suite::transitions_adoption::heartbeat_task_response_fixture_is_produced_by_real_router",
         "suite::transitions_adoption::heartbeat_task_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_request!(
+        "api.release-task.request",
+        "POST /api/v1/tasks/:task_id/transitions/release",
+        "POST /api/v1/tasks/:task_id/transitions/release",
+        "urn:kanban-tool:schema:api:release-task-request:v1",
+        "schemas/fixtures/api/release-task-request.v1.valid.json",
+        "lifecycle_release_request_contract",
+        "router::tests::task_release_closes_the_application_path"
+    ),
+    adopted_comment_contract!(
+        "api.release-task.path",
+        "POST /api/v1/tasks/:task_id/transitions/release path",
+        "POST /api/v1/tasks/:task_id/transitions/release",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:release-task-path:v1",
+        "schemas/fixtures/api/release-task-path.v1.valid.json",
+        HttpTransportLocation::Path,
+        TASK_TRANSITION_PATH_PARAMETERS,
+        "release_task_path_contract",
+        "router::tests::task_release_closes_the_application_path"
+    ),
+    adopted_comment_contract!(
+        "api.release-task.response",
+        "POST /api/v1/tasks/:task_id/transitions/release response",
+        "POST /api/v1/tasks/:task_id/transitions/release",
+        ContractDirection::Serialize,
+        "urn:kanban-tool:schema:api:release-task-response:v1",
+        "schemas/fixtures/api/release-task-response.v1.valid.json",
+        HttpTransportLocation::Success,
+        &[],
+        "router::tests::task_release_closes_the_application_path",
+        "release_task_response_contract"
     ),
     adopted_api_request!(
         "api.complete-task.request",

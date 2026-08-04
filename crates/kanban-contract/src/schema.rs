@@ -22,12 +22,12 @@ use crate::{
     CliMaintenanceStatusOutput, CliOutboxListOutput, CliRunLogsOutput, CliRunShowOutput,
     CliRunsOutput, CliStatsOutput, CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput,
     CliTaskCompleteOutput, CliTaskCreateOutput, CliTaskDoneOutput, CliTaskHeartbeatOutput,
-    CliTaskListOutput, CliTaskPromoteOutput, CliTaskReclaimOutput, CliTaskReopenOutput,
-    CliTaskReviewOutput, CliTaskShowOutput, CliTaskStartOutput, CliTaskStepAddOutput,
-    CliTaskStepDoneOutput, CliTaskStepListOutput, CliTaskStepNotRequiredOutput,
-    CliTaskStepRemoveOutput, CliTaskStepReopenOutput, CliTaskStepSkipOutput,
-    CliTaskStepUpdateOutput, CliTaskUnblockOutput, CliTaskUpdateOutput, CliVacuumOutput,
-    CompleteStepPath, CompleteStepRequest, CompleteStepResponse, CompleteTaskPath,
+    CliTaskListOutput, CliTaskPromoteOutput, CliTaskReclaimOutput, CliTaskReleaseOutput,
+    CliTaskReopenOutput, CliTaskReviewOutput, CliTaskShowOutput, CliTaskStartOutput,
+    CliTaskStepAddOutput, CliTaskStepDoneOutput, CliTaskStepListOutput,
+    CliTaskStepNotRequiredOutput, CliTaskStepRemoveOutput, CliTaskStepReopenOutput,
+    CliTaskStepSkipOutput, CliTaskStepUpdateOutput, CliTaskUnblockOutput, CliTaskUpdateOutput,
+    CliVacuumOutput, CompleteStepPath, CompleteStepRequest, CompleteStepResponse, CompleteTaskPath,
     CompleteTaskRequest, CompleteTaskResponse, ContractDirection, ContractStrictness,
     CreateBoardRequest, CreateBoardResponse, CreateCommentPath, CreateCommentRequest,
     CreateCommentResponse, CreateStepPath, CreateStepRequest, CreateStepResponse, CreateTaskPath,
@@ -42,15 +42,16 @@ use crate::{
     ListTasksByStatusResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
     MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
-    ReclaimTaskPath, ReclaimTaskRequest, ReclaimTaskResponse, RemoveDependencyPath,
-    RemoveDependencyResponse, RemoveStepPath, RemoveStepResponse, RemoveTaskLabelPath,
-    RemoveTaskLabelResponse, ReopenStepPath, ReopenStepRequest, ReopenStepResponse, ReopenTaskPath,
-    ReopenTaskRequest, ReopenTaskResponse, SkipStepPath, SkipStepRequest, SkipStepResponse,
-    SpecifyTaskPath, SpecifyTaskRequest, SpecifyTaskResponse, StreamEventData, StreamEventsQuery,
-    SubmitReviewTaskPath, SubmitReviewTaskRequest, SubmitReviewTaskResponse, TaskNeighborhoodPath,
-    TaskNeighborhoodQuery, TaskNeighborhoodResponse, UnblockTaskPath, UnblockTaskRequest,
-    UnblockTaskResponse, UpdateStepPath, UpdateStepRequest, UpdateStepResponse, UpdateTaskPath,
-    UpdateTaskRequest, UpdateTaskResponse,
+    ReclaimTaskPath, ReclaimTaskRequest, ReclaimTaskResponse, ReleaseTaskPath, ReleaseTaskRequest,
+    ReleaseTaskResponse, RemoveDependencyPath, RemoveDependencyResponse, RemoveStepPath,
+    RemoveStepResponse, RemoveTaskLabelPath, RemoveTaskLabelResponse, ReopenStepPath,
+    ReopenStepRequest, ReopenStepResponse, ReopenTaskPath, ReopenTaskRequest, ReopenTaskResponse,
+    SkipStepPath, SkipStepRequest, SkipStepResponse, SpecifyTaskPath, SpecifyTaskRequest,
+    SpecifyTaskResponse, StreamEventData, StreamEventsQuery, SubmitReviewTaskPath,
+    SubmitReviewTaskRequest, SubmitReviewTaskResponse, TaskNeighborhoodPath, TaskNeighborhoodQuery,
+    TaskNeighborhoodResponse, UnblockTaskPath, UnblockTaskRequest, UnblockTaskResponse,
+    UpdateStepPath, UpdateStepRequest, UpdateStepResponse, UpdateTaskPath, UpdateTaskRequest,
+    UpdateTaskResponse,
 };
 
 use crate::{
@@ -608,6 +609,15 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/cli/task-heartbeat-output.v1.valid.json",
         "schemas/fixtures/cli/task-heartbeat-output.v1.invalid.json",
         CliTaskHeartbeatOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:task-release-output:v1",
+        "cli/task-release-output.v1.schema.json",
+        "Kanban CLI task release output v1",
+        "cli.task-release.output",
+        "schemas/fixtures/cli/task-release-output.v1.valid.json",
+        "schemas/fixtures/cli/task-release-output.v1.invalid.json",
+        CliTaskReleaseOutput
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:task-done-output:v1",
@@ -1916,6 +1926,33 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/api/heartbeat-task-response.v1.valid.json",
         "schemas/fixtures/api/heartbeat-task-response.v1.invalid.json",
         HeartbeatTaskResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:release-task-request:v1",
+        "api/release-task-request.v1.schema.json",
+        "Kanban release task request v1",
+        "api.release-task.request",
+        "schemas/fixtures/api/release-task-request.v1.valid.json",
+        "schemas/fixtures/api/release-task-request.v1.invalid.json",
+        ReleaseTaskRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:release-task-path:v1",
+        "api/release-task-path.v1.schema.json",
+        "Kanban release task path v1",
+        "api.release-task.path",
+        "schemas/fixtures/api/release-task-path.v1.valid.json",
+        "schemas/fixtures/api/release-task-path.v1.invalid.json",
+        ReleaseTaskPath
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:release-task-response:v1",
+        "api/release-task-response.v1.schema.json",
+        "Kanban release task response v1",
+        "api.release-task.response",
+        "schemas/fixtures/api/release-task-response.v1.valid.json",
+        "schemas/fixtures/api/release-task-response.v1.invalid.json",
+        ReleaseTaskResponse
     ),
     request_schema_root!(
         "urn:kanban-tool:schema:api:complete-task-request:v1",

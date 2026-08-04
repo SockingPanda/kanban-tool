@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { KanbanApi, type ClaimResponse, type Task } from "./api"
 
 const config = { apiBaseUrl: "http://127.0.0.1:8721", actor: "desktop-test", board: "default" }
-const actions = ["specify", "promote", "heartbeat", "reopen", "unblock", "archive"] as const
+const actions = ["specify", "promote", "heartbeat", "release", "reopen", "unblock", "archive"] as const
 const fixtures = Object.fromEntries(actions.map((action) => [
   action,
   JSON.parse(readFileSync(new URL(`../../../../schemas/fixtures/api/${action}-task-response.v1.valid.json`, import.meta.url), "utf8")),
@@ -46,6 +46,20 @@ describe("task transition exact contracts", () => {
     expect(url).toBe("http://127.0.0.1:8721/api/v1/tasks/t_fixture/transitions/promote")
     expect(init).toMatchObject({ method: "POST", headers: { "Accept-Language": "zh-CN", "Content-Type": "application/json" } })
     expect(JSON.parse(init!.body as string)).toEqual({ actor: "desktop-test" })
+  })
+
+  it("releaseTask sends the exact token body and parses the task envelope", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response(fixtures.release))
+    vi.stubGlobal("fetch", fetch)
+    const task = await new KanbanApi(config, { locale: "zh-CN" })
+      .releaseTask(fixtures.release.data, "claim_exact")
+    expect(task.status).toBe("ready")
+    const [url, init] = fetch.mock.calls[0]!
+    expect(url).toBe("http://127.0.0.1:8721/api/v1/tasks/t_fixture/transitions/release")
+    expect(JSON.parse(init!.body as string)).toEqual({
+      actor: "desktop-test",
+      claim_token: "claim_exact",
+    })
   })
 
   it("consumes the exact claim response and sends the claim request body", async () => {

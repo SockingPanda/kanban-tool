@@ -6,7 +6,7 @@ use kanban_contract::{
     CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
     HeartbeatTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
     MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -125,6 +125,17 @@ struct TaskHeartbeatArgs {
     ttl_ms: i64,
     /// Optional heartbeat note recorded on the event.
     note: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TaskReleaseArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+    /// Exact token returned by task_claim.
+    claim_token: String,
 }
 
 const fn default_claim_ttl_ms() -> i64 {
@@ -357,6 +368,32 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(HeartbeatTaskResponse::new(task)))
+    }
+
+    #[tool(
+        name = "task_release",
+        description = "Return an actively claimed task to ready through the canonical application service"
+    )]
+    async fn task_release(
+        &self,
+        Parameters(args): Parameters<TaskReleaseArgs>,
+    ) -> Result<Json<ReleaseTaskResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let client = self.client.clone();
+        let task = tokio::task::spawn_blocking(move || {
+            client.release_task_by_selector(
+                &board,
+                &args.task_ref,
+                &ReleaseTaskRequest {
+                    actor: None,
+                    claim_token: args.claim_token,
+                },
+            )
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(ReleaseTaskResponse::new(task)))
     }
 }
 

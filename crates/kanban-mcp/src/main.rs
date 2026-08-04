@@ -3,11 +3,12 @@ use std::{collections::BTreeMap, env, sync::Arc};
 use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, ClaimTaskRequest, ClaimTaskResponse,
-    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
-    HeartbeatTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
-    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    CompleteTaskRequest, CompleteTaskResponse, CreateTaskRequest, CreateTaskResponse,
+    GetTaskResponse, HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardsResponse,
+    ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
+    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
+    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
+    TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -153,6 +154,24 @@ struct TaskReviewArgs {
     force: bool,
     /// Optional summary recorded on the task and completed run.
     summary: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TaskDoneArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+    /// Exact token returned by task_claim when completing from running.
+    claim_token: Option<String>,
+    /// Bypass running caller credentials without bypassing required-step guards.
+    #[serde(default)]
+    force: bool,
+    /// Optional summary stored on the task and active run.
+    summary: Option<String>,
+    /// Optional opaque JSON result stored on the task and completion event.
+    result: Option<serde_json::Value>,
 }
 
 const fn default_claim_ttl_ms() -> i64 {
@@ -439,6 +458,35 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(SubmitReviewTaskResponse::new(task)))
+    }
+
+    #[tool(
+        name = "task_done",
+        description = "Complete a running or reviewed task through the canonical application service"
+    )]
+    async fn task_done(
+        &self,
+        Parameters(args): Parameters<TaskDoneArgs>,
+    ) -> Result<Json<CompleteTaskResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let client = self.client.clone();
+        let task = tokio::task::spawn_blocking(move || {
+            client.complete_task_by_selector(
+                &board,
+                &args.task_ref,
+                &CompleteTaskRequest {
+                    actor: None,
+                    claim_token: args.claim_token,
+                    force: args.force,
+                    summary: args.summary,
+                    result: args.result,
+                },
+            )
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(CompleteTaskResponse::new(task)))
     }
 }
 

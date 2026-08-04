@@ -9,19 +9,20 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use kanban_application::{
-    ClaimTaskCommand, CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState,
-    HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand,
-    ReleaseTaskCommand, RunRecord, RunStatus, SubmitReviewTaskCommand,
+    ClaimTaskCommand, CompleteTaskCommand, CreateTaskCommand, ExecutionPlanRecord,
+    ExecutionPlanState, HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand,
+    PromoteTaskCommand, ReleaseTaskCommand, RunRecord, RunStatus, SubmitReviewTaskCommand,
     TaskListOptions as ApplicationTaskListOptions, TaskListSort as ApplicationTaskListSort,
     TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord,
 };
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiClaim, ApiCreateTaskStatus, ApiExecutionPlan,
     ApiExecutionPlanState, ApiRun, ApiRunStatus, ApiTask, ApiTaskPriority, ApiTaskStatus,
-    ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CreateTaskPath, CreateTaskRequest,
-    CreateTaskResponse, GetTaskPath, GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse,
-    HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse,
-    ListBoardsQuery, ListBoardsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
+    ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CompleteTaskPath, CompleteTaskRequest,
+    CompleteTaskResponse, CreateTaskPath, CreateTaskRequest, CreateTaskResponse, GetTaskPath,
+    GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse, HeartbeatTaskPath,
+    HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse, ListBoardsQuery,
+    ListBoardsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
     MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS,
     MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES,
     MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
@@ -351,6 +352,29 @@ pub(crate) async fn submit_review_task(
         })
         .await?;
     Ok(Json(SubmitReviewTaskResponse::new(api_task(task)?)))
+}
+
+pub(crate) async fn complete_task(
+    State(state): State<AppState>,
+    Path(CompleteTaskPath { task_id }): Path<CompleteTaskPath>,
+    headers: HeaderMap,
+    body: Result<Json<CompleteTaskRequest>, JsonRejection>,
+) -> Result<Json<CompleteTaskResponse>, ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let task = state
+        .application()
+        .complete_task(CompleteTaskCommand {
+            task_id,
+            actor,
+            claim_token: body.claim_token,
+            force: body.force,
+            summary: body.summary,
+            result: body.result,
+        })
+        .await?;
+    Ok(Json(CompleteTaskResponse::new(api_task(task)?)))
 }
 
 fn request_actor(

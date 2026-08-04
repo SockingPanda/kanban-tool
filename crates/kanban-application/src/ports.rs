@@ -3,8 +3,8 @@ use std::future::Future;
 use kanban_core::Result;
 
 use crate::{
-    BoardColumnRecord, BoardRecord, ClaimRecord, ClaimTaskRecord, CreateTaskRecord,
-    ExecutionPlanRecord, HeartbeatTaskRecord, MarkExecutionPlanNotRequiredRecord,
+    BoardColumnRecord, BoardRecord, ClaimRecord, ClaimTaskRecord, CompleteTaskRecord,
+    CreateTaskRecord, ExecutionPlanRecord, HeartbeatTaskRecord, MarkExecutionPlanNotRequiredRecord,
     PromoteTaskRecord, ReleaseTaskRecord, SubmitReviewTaskRecord, TaskListOptions, TaskListPage,
     TaskRecord,
 };
@@ -72,5 +72,11 @@ pub trait ApplicationStore: Clone + Send + Sync + 'static {
         &self,
         task_id: &str,
         input: SubmitReviewTaskRecord,
+    ) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn complete_task(
+        &self,
+        task_id: &str,
+        input: CompleteTaskRecord,
     ) -> impl Future<Output = Result<TaskRecord>> + Send;
 }

@@ -210,6 +210,28 @@ pub struct SubmitReviewTaskRecord {
     pub now: i64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompleteTaskCommand {
+    pub task_id: String,
+    pub actor: String,
+    pub claim_token: Option<String>,
+    pub force: bool,
+    pub summary: Option<String>,
+    pub result: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompleteTaskRecord {
+    pub expected_lock_version: i64,
+    pub actor: String,
+    pub claim_token: Option<String>,
+    pub force: bool,
+    pub summary: Option<String>,
+    pub result_json: Option<String>,
+    pub event_id: String,
+    pub now: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionPlanRecord {
     pub board_id: String,

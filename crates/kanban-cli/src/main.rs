@@ -11,11 +11,11 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, ClaimTaskRequest, ClaimTaskResponse,
-    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
-    HeartbeatTaskResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
-    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
-    TaskReadPlanFilter, TaskReadSort,
+    CompleteTaskRequest, CompleteTaskResponse, CreateTaskRequest, CreateTaskResponse,
+    GetTaskResponse, HeartbeatTaskRequest, HeartbeatTaskResponse, ListTasksQuery,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
+    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
+    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
 
@@ -117,6 +117,9 @@ enum TaskCommand {
     Release(TaskReleaseArgs),
     /// Finish the active run and submit the task for review.
     Review(TaskReviewArgs),
+    /// Complete a running or reviewed task.
+    #[command(visible_alias = "complete")]
+    Done(TaskDoneArgs),
 }
 
 #[derive(Debug, Args)]
@@ -230,6 +233,15 @@ struct TaskReleaseArgs {
 
 #[derive(Debug, Args)]
 struct TaskReviewArgs {
+    task_ref: String,
+    #[arg(long)]
+    claim_token: Option<String>,
+    #[arg(long)]
+    force: bool,
+}
+
+#[derive(Debug, Args)]
+struct TaskDoneArgs {
     task_ref: String,
     #[arg(long)]
     claim_token: Option<String>,
@@ -557,6 +569,28 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
                     }
                 }
+                TaskCommand::Done(args) => {
+                    let task = client.complete_task_by_selector(
+                        &cli.board,
+                        &args.task_ref,
+                        &CompleteTaskRequest {
+                            actor: None,
+                            claim_token: args.claim_token.clone(),
+                            force: args.force,
+                            summary: None,
+                            result: None,
+                        },
+                    )?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&CompleteTaskResponse::new(task))
+                                .expect("done response is serializable")
+                        );
+                    } else {
+                        println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
+                    }
+                }
             }
             Ok(())
         }
@@ -856,5 +890,52 @@ mod tests {
         };
         assert_eq!(args.claim_token, None);
         assert!(args.force);
+    }
+
+    #[test]
+    fn parses_task_done_and_complete_commands() {
+        for command in ["done", "complete"] {
+            let cli = Cli::try_parse_from([
+                "kanban",
+                "task",
+                command,
+                "default#1",
+                "--claim-token",
+                "claim_test",
+            ])
+            .expect("done args");
+            let Command::Task {
+                command: TaskCommand::Done(args),
+            } = cli.command
+            else {
+                panic!("expected task done");
+            };
+            assert_eq!(args.task_ref, "default#1");
+            assert_eq!(args.claim_token.as_deref(), Some("claim_test"));
+            assert!(!args.force);
+        }
+    }
+
+    #[test]
+    fn task_done_output_contract() {
+        let fixture = include_str!("../../../schemas/fixtures/cli/task-done-output.v1.valid.json");
+        let output: kanban_contract::CliTaskDoneOutput = serde_json::from_str(fixture).unwrap();
+        assert_eq!(output.data.status.as_str(), "done");
+        assert_eq!(
+            serde_json::to_value(CompleteTaskResponse::new(output.data.clone())).unwrap(),
+            serde_json::from_str::<serde_json::Value>(fixture).unwrap()
+        );
+    }
+
+    #[test]
+    fn task_complete_output_contract() {
+        let fixture =
+            include_str!("../../../schemas/fixtures/cli/task-complete-output.v1.valid.json");
+        let output: kanban_contract::CliTaskCompleteOutput = serde_json::from_str(fixture).unwrap();
+        assert_eq!(output.data.status.as_str(), "done");
+        assert_eq!(
+            serde_json::to_value(CompleteTaskResponse::new(output.data.clone())).unwrap(),
+            serde_json::from_str::<serde_json::Value>(fixture).unwrap()
+        );
     }
 }

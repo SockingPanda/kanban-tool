@@ -1,8 +1,9 @@
 use kanban_application::{
     ApplicationStore, BoardColumnRecord as ApplicationBoardColumn, BoardRecord,
     ClaimRecord as ApplicationClaim, ClaimTaskRecord as ApplicationClaimTask,
-    CreateTaskRecord as ApplicationCreateTask, ExecutionPlanRecord as ApplicationExecutionPlan,
-    ExecutionPlanState, HeartbeatTaskRecord as ApplicationHeartbeatTask,
+    CompleteTaskRecord as ApplicationCompleteTask, CreateTaskRecord as ApplicationCreateTask,
+    ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
+    HeartbeatTaskRecord as ApplicationHeartbeatTask,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
     PromoteTaskRecord as ApplicationPromoteTask, ReleaseTaskRecord as ApplicationReleaseTask,
     RunRecord as ApplicationRun, RunStatus as ApplicationRunStatus,
@@ -14,7 +15,8 @@ use kanban_application::{
 use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
     ClaimTaskInput as StoreClaimTask, ClaimTaskRecord as StoreClaim,
-    CreateTaskInput as StoreCreateTask, HeartbeatTaskInput as StoreHeartbeatTask,
+    CompleteTaskInput as StoreCompleteTask, CreateTaskInput as StoreCreateTask,
+    HeartbeatTaskInput as StoreHeartbeatTask,
     MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
     PromoteTaskInput as StorePromoteTask, ReleaseTaskInput as StoreReleaseTask, StoreError,
     SubmitReviewTaskInput as StoreSubmitReviewTask, TaskExecutionPlanRecord as StoreExecutionPlan,
@@ -286,6 +288,30 @@ impl ApplicationStore for TursoApplicationStore {
             .map_err(store_error)
             .and_then(application_task)
     }
+
+    async fn complete_task(
+        &self,
+        task_id: &str,
+        input: ApplicationCompleteTask,
+    ) -> Result<ApplicationTask> {
+        self.store
+            .complete_task(
+                task_id,
+                StoreCompleteTask {
+                    expected_lock_version: input.expected_lock_version,
+                    actor: input.actor,
+                    claim_token: input.claim_token,
+                    force: input.force,
+                    summary: input.summary,
+                    result_json: input.result_json,
+                    event_id: input.event_id,
+                    now: input.now,
+                },
+            )
+            .await
+            .map_err(store_error)
+            .and_then(application_task)
+    }
 }
 
 fn store_error(error: StoreError) -> KanbanError {
@@ -300,6 +326,7 @@ fn store_error(error: StoreError) -> KanbanError {
         StoreError::ClaimTokenMismatch => {
             KanbanError::InvalidTransition("claim token mismatch".to_owned())
         }
+        StoreError::StepsIncomplete(message) => KanbanError::StepsIncomplete(message),
         StoreError::IdempotencyConflict {
             board_id,
             key,

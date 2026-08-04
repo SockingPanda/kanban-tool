@@ -6,10 +6,10 @@ use std::{
 };
 
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, ApiErrorCode, ErrorEnvelope, HealthReport, HealthResponse,
-    ListBoardColumnsResponse, ListBoardsResponse,
+    ApiBoard, ApiBoardColumn, ApiErrorCode, ApiTask, CreateTaskRequest, CreateTaskResponse,
+    ErrorEnvelope, HealthReport, HealthResponse, ListBoardColumnsResponse, ListBoardsResponse,
 };
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 pub const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:8721";
@@ -113,6 +113,17 @@ impl KanbanClient {
         Ok(response.data)
     }
 
+    pub fn create_task(
+        &self,
+        board: &str,
+        request: CreateTaskRequest,
+    ) -> Result<ApiTask, ClientError> {
+        let request = prepare_create_request(request);
+        let path = format!("/api/v1/boards/{}/tasks", encode_path_segment(board));
+        let response: CreateTaskResponse = self.post(&path, &request)?;
+        Ok(response.data)
+    }
+
     fn get<T>(&self, path: &str) -> Result<T, ClientError>
     where
         T: DeserializeOwned,
@@ -124,6 +135,29 @@ impl KanbanClient {
             .set("X-KB-Actor", &self.actor);
         decode_response(request.call())
     }
+
+    fn post<B, T>(&self, path: &str, body: &B) -> Result<T, ClientError>
+    where
+        B: Serialize,
+        T: DeserializeOwned,
+    {
+        let body = serde_json::to_value(body)
+            .map_err(|error| ClientError::InvalidResponse(error.to_string()))?;
+        let request = self
+            .agent
+            .post(&format!("{}{path}", self.base_url))
+            .set("Accept", "application/json")
+            .set("X-KB-Actor", &self.actor);
+        decode_response(request.send_json(body))
+    }
+}
+
+fn prepare_create_request(mut request: CreateTaskRequest) -> CreateTaskRequest {
+    let task_id = request.task_id.get_or_insert_with(kanban_core::new_task_id);
+    request
+        .idempotency_key
+        .get_or_insert_with(|| format!("task.create:{task_id}"));
+    request
 }
 
 fn decode_response<T>(response: Result<ureq::Response, ureq::Error>) -> Result<T, ClientError>
@@ -220,5 +254,31 @@ mod tests {
     #[test]
     fn path_segments_are_percent_encoded() {
         assert_eq!(encode_path_segment("board/#1"), "board%2F%231");
+    }
+
+    #[test]
+    fn create_request_gets_stable_entity_local_identifiers() {
+        let request = prepare_create_request(CreateTaskRequest {
+            task_id: None,
+            idempotency_key: None,
+            title: "Create".into(),
+            description: None,
+            status: None,
+            assignee: None,
+            priority: 3,
+            scheduled_at: None,
+            due_at: None,
+            max_retries: None,
+            metadata: None,
+            labels: Vec::new(),
+            depends_on: Vec::new(),
+            actor: None,
+        });
+        let task_id = request.task_id.as_deref().unwrap();
+        assert!(task_id.starts_with("t_"));
+        assert_eq!(
+            request.idempotency_key.as_deref(),
+            Some(format!("task.create:{task_id}").as_str())
+        );
     }
 }

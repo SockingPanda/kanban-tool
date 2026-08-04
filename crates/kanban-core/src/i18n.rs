@@ -121,6 +121,12 @@ fn render_error_zh(error: &KanbanError) -> String {
         KanbanError::StepsIncomplete(detail) => format!("步骤未完成：{}", detail_zh(detail)),
         KanbanError::InvalidInput(detail) => format!("输入无效：{}", detail_zh(detail)),
         KanbanError::Conflict(detail) => format!("冲突：{}", detail_zh(detail)),
+        KanbanError::IdempotencyConflict(detail) => {
+            format!("幂等冲突：{}", detail_zh(detail))
+        }
+        KanbanError::FeatureNotAvailable(detail) => {
+            format!("功能尚不可用：{}", detail_zh(detail))
+        }
         KanbanError::NotFound(detail) => format!("未找到：{}", detail_zh(detail)),
         KanbanError::Storage(detail) => format!("存储错误：{}", detail_zh(detail)),
     }

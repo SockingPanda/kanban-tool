@@ -1,12 +1,14 @@
 use std::{
+    collections::BTreeMap,
     env,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
     process::ExitCode,
 };
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
+use kanban_contract::{ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse};
 use serde::Serialize;
 
 #[derive(Debug, Parser)]
@@ -48,6 +50,11 @@ enum Command {
         #[command(subcommand)]
         command: BoardCommand,
     },
+    /// Manage tasks through the canonical localhost host.
+    Task {
+        #[command(subcommand)]
+        command: TaskCommand,
+    },
     /// Removed direct-database initialization path.
     Init,
     /// Commands not yet migrated to the canonical host fail without touching storage.
@@ -79,6 +86,48 @@ enum BoardCommand {
     Columns { board: Option<String> },
 }
 
+#[derive(Debug, Subcommand)]
+enum TaskCommand {
+    /// Create a task through the shared application service.
+    Create(TaskCreateArgs),
+}
+
+#[derive(Debug, Args)]
+struct TaskCreateArgs {
+    title: String,
+    #[arg(long)]
+    description: Option<String>,
+    #[arg(long, value_enum)]
+    status: Option<CreateStatus>,
+    #[arg(long)]
+    assignee: Option<String>,
+    #[arg(long, default_value_t = 3)]
+    priority: i64,
+    #[arg(long)]
+    scheduled_at: Option<i64>,
+    #[arg(long)]
+    due_at: Option<i64>,
+    #[arg(long)]
+    max_retries: Option<i64>,
+    /// JSON object stored as task metadata.
+    #[arg(long)]
+    metadata: Option<String>,
+    /// Stable retry key scoped to this board.
+    #[arg(long)]
+    idempotency_key: Option<String>,
+    /// Optional client-selected typed task id.
+    #[arg(long)]
+    task_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum CreateStatus {
+    Triage,
+    Todo,
+    Scheduled,
+    Ready,
+}
+
 #[derive(Debug, Serialize)]
 struct CliErrorBody<'a> {
     code: &'a str,
@@ -104,7 +153,7 @@ impl From<ClientError> for CliFailure {
         let exit_code = match code {
             "not_found" => 3,
             "invalid_transition" | "execution_plan_required" | "steps_incomplete" => 4,
-            "claim_conflict" | "claim_token_mismatch" => 5,
+            "claim_conflict" | "claim_token_mismatch" | "idempotency_conflict" => 5,
             "dependency_blocked" => 6,
             "server_unavailable" => 9,
             "feature_not_available" => 10,
@@ -192,6 +241,43 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
             }
             Ok(())
         }
+        Command::Task { command } => {
+            let client = KanbanClient::new(&cli.server_url, actor(cli))?;
+            match command {
+                TaskCommand::Create(args) => {
+                    let metadata = parse_metadata(args.metadata.as_deref())?;
+                    let task = client.create_task(
+                        &cli.board,
+                        CreateTaskRequest {
+                            task_id: args.task_id.clone(),
+                            idempotency_key: args.idempotency_key.clone(),
+                            title: args.title.clone(),
+                            description: args.description.clone(),
+                            status: args.status.map(api_create_status),
+                            assignee: args.assignee.clone(),
+                            priority: args.priority,
+                            scheduled_at: args.scheduled_at,
+                            due_at: args.due_at,
+                            max_retries: args.max_retries,
+                            metadata,
+                            labels: Vec::new(),
+                            depends_on: Vec::new(),
+                            actor: None,
+                        },
+                    )?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&CreateTaskResponse { data: task })
+                                .expect("task response is serializable")
+                        );
+                    } else {
+                        println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
+                    }
+                }
+            }
+            Ok(())
+        }
         Command::Init => Err(feature_not_available(
             "`kanban init` was removed; start `kanban serve` to initialize the canonical Turso database",
         )),
@@ -200,6 +286,29 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
             parts.join(" ")
         ))),
     }
+}
+
+fn api_create_status(status: CreateStatus) -> ApiCreateTaskStatus {
+    match status {
+        CreateStatus::Triage => ApiCreateTaskStatus::Triage,
+        CreateStatus::Todo => ApiCreateTaskStatus::Todo,
+        CreateStatus::Scheduled => ApiCreateTaskStatus::Scheduled,
+        CreateStatus::Ready => ApiCreateTaskStatus::Ready,
+    }
+}
+
+fn parse_metadata(
+    metadata: Option<&str>,
+) -> Result<Option<BTreeMap<String, serde_json::Value>>, CliFailure> {
+    metadata
+        .map(|metadata| {
+            serde_json::from_str(metadata).map_err(|error| CliFailure {
+                code: "invalid_input",
+                message: format!("--metadata must be a JSON object: {error}"),
+                exit_code: 2,
+            })
+        })
+        .transpose()
 }
 
 async fn run_server(cli: &Cli, args: &ServeArgs) -> Result<(), CliFailure> {

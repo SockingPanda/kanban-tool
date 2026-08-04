@@ -2,12 +2,16 @@ use std::time::UNIX_EPOCH;
 
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Path, Query, State, rejection::JsonRejection},
+    http::{HeaderMap, StatusCode},
 };
+use kanban_application::{CreateTaskCommand, ExecutionPlanState, TaskRecord};
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, HealthReport, HealthResponse, ListBoardColumnsResponse,
-    ListBoardsQuery, ListBoardsResponse,
+    ApiBoard, ApiBoardColumn, ApiCreateTaskStatus, ApiExecutionPlanState, ApiTask, ApiTaskPriority,
+    ApiTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse, HealthReport,
+    HealthResponse, ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse,
 };
+use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
 use crate::{error::ApiError, state::AppState};
 
@@ -87,4 +91,153 @@ pub(crate) async fn list_board_columns(
         })
         .collect();
     Ok(Json(ListBoardColumnsResponse { data }))
+}
+
+pub(crate) async fn create_task(
+    State(state): State<AppState>,
+    Path(CreateTaskPath { board }): Path<CreateTaskPath>,
+    headers: HeaderMap,
+    body: Result<Json<CreateTaskRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<CreateTaskResponse>), ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    if !body.labels.is_empty() || !body.depends_on.is_empty() {
+        return Err(KanbanError::FeatureNotAvailable(
+            "task.create labels and dependencies are not available on the single-host path"
+                .to_owned(),
+        )
+        .into());
+    }
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let task = state
+        .application()
+        .create_task(CreateTaskCommand {
+            task_id: body.task_id.unwrap_or_else(new_task_id),
+            board,
+            idempotency_key: body.idempotency_key,
+            title: body.title,
+            description: body.description,
+            requested_status: body.status.map(create_status),
+            assignee: body.assignee,
+            priority: body.priority,
+            scheduled_at: body.scheduled_at,
+            due_at: body.due_at,
+            max_retries: body.max_retries,
+            metadata: body.metadata.unwrap_or_default(),
+            actor,
+        })
+        .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateTaskResponse {
+            data: api_task(task)?,
+        }),
+    ))
+}
+
+fn request_actor(
+    body_actor: Option<&str>,
+    headers: &HeaderMap,
+    default_actor: &str,
+) -> Result<String, ApiError> {
+    let actor = match body_actor {
+        Some(actor) => actor,
+        None => headers
+            .get("x-kb-actor")
+            .map(|value| {
+                value.to_str().map_err(|_| {
+                    KanbanError::InvalidInput("x-kb-actor must contain valid text".to_owned())
+                })
+            })
+            .transpose()?
+            .unwrap_or(default_actor),
+    };
+    let actor = actor.trim();
+    if actor.is_empty() {
+        return Err(KanbanError::InvalidInput("actor is required".to_owned()).into());
+    }
+    Ok(actor.to_owned())
+}
+
+fn create_status(status: ApiCreateTaskStatus) -> TaskStatus {
+    match status {
+        ApiCreateTaskStatus::Triage => TaskStatus::Triage,
+        ApiCreateTaskStatus::Todo => TaskStatus::Todo,
+        ApiCreateTaskStatus::Scheduled => TaskStatus::Scheduled,
+        ApiCreateTaskStatus::Ready => TaskStatus::Ready,
+    }
+}
+
+fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
+    let priority = ApiTaskPriority::try_from(task.priority).map_err(|priority| {
+        KanbanError::Storage(format!("stored task priority is outside 0..=3: {priority}"))
+    })?;
+    let metadata = serde_json::from_str(&task.metadata_json).map_err(|error| {
+        KanbanError::Storage(format!("stored task metadata is invalid JSON: {error}"))
+    })?;
+    let result = task
+        .result_json
+        .as_deref()
+        .map(serde_json::from_str)
+        .transpose()
+        .map_err(|error| {
+            KanbanError::Storage(format!("stored task result is invalid JSON: {error}"))
+        })?;
+    Ok(ApiTask {
+        id: task.id,
+        board_id: task.board_id,
+        board_slug: task.board_slug,
+        task_ref: task.task_ref,
+        seq: task.seq,
+        title: task.title,
+        description: task.description,
+        status: api_task_status(task.status),
+        status_reason: task.status_reason,
+        assignee: task.assignee,
+        priority,
+        position: task.position,
+        scheduled_at: task.scheduled_at,
+        due_at: task.due_at,
+        created_by: task.created_by,
+        created_at: task.created_at,
+        updated_at: task.updated_at,
+        started_at: task.started_at,
+        completed_at: task.completed_at,
+        archived_at: task.archived_at,
+        claim_owner: task.claim_owner,
+        claim_expires_at: task.claim_expires_at,
+        last_heartbeat_at: task.last_heartbeat_at,
+        current_run_id: task.current_run_id,
+        retry_count: task.retry_count,
+        max_retries: task.max_retries,
+        result_summary: task.result_summary,
+        result,
+        metadata,
+        lock_version: task.lock_version,
+        dependency_blocked: task.dependency_blocked,
+        unfinished_parent_count: task.unfinished_parent_count,
+        execution_plan_state: match task.execution_plan_state {
+            ExecutionPlanState::Unplanned => ApiExecutionPlanState::Unplanned,
+            ExecutionPlanState::Planned => ApiExecutionPlanState::Planned,
+            ExecutionPlanState::NotRequired => ApiExecutionPlanState::NotRequired,
+        },
+        required_step_count: task.required_step_count,
+        completed_required_step_count: task.completed_required_step_count,
+        optional_step_count: task.optional_step_count,
+        labels: Vec::new(),
+    })
+}
+
+fn api_task_status(status: TaskStatus) -> ApiTaskStatus {
+    match status {
+        TaskStatus::Triage => ApiTaskStatus::Triage,
+        TaskStatus::Todo => ApiTaskStatus::Todo,
+        TaskStatus::Scheduled => ApiTaskStatus::Scheduled,
+        TaskStatus::Ready => ApiTaskStatus::Ready,
+        TaskStatus::Running => ApiTaskStatus::Running,
+        TaskStatus::Blocked => ApiTaskStatus::Blocked,
+        TaskStatus::Review => ApiTaskStatus::Review,
+        TaskStatus::Done => ApiTaskStatus::Done,
+        TaskStatus::Archived => ApiTaskStatus::Archived,
+    }
 }

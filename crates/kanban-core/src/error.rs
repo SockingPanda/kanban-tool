@@ -16,6 +16,10 @@ pub enum KanbanError {
     InvalidInput(String),
     #[error("conflict: {0}")]
     Conflict(String),
+    #[error("idempotency_conflict: {0}")]
+    IdempotencyConflict(String),
+    #[error("feature_not_available: {0}")]
+    FeatureNotAvailable(String),
     #[error("not found: {0}")]
     NotFound(String),
     #[error("storage error: {0}")]

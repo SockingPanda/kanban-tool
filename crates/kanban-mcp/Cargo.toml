@@ -15,4 +15,5 @@ kanban-client.workspace = true
 kanban-contract = { workspace = true, features = ["schema"] }
 rmcp.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true

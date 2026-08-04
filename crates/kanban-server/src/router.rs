@@ -3,7 +3,7 @@ use std::{future::Future, net::SocketAddr};
 use axum::{
     Router,
     http::{HeaderValue, Method, header},
-    routing::get,
+    routing::{get, post},
 };
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
@@ -11,7 +11,7 @@ use tower_http::{
 };
 
 use crate::{
-    handlers::{health, list_board_columns, list_boards},
+    handlers::{create_task, health, list_board_columns, list_boards},
     state::AppState,
 };
 
@@ -20,6 +20,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/api/v1/boards", get(list_boards))
         .route("/api/v1/boards/:board/columns", get(list_board_columns))
+        .route("/api/v1/boards/:board/tasks", post(create_task))
         .layer(desktop_cors_layer())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -80,7 +81,10 @@ mod tests {
         http::{Request, StatusCode},
     };
     use http_body_util::BodyExt;
-    use kanban_contract::{ListBoardColumnsResponse, ListBoardsResponse};
+    use kanban_contract::{
+        ApiErrorCode, ApiExecutionPlanState, ApiTaskStatus, CreateTaskResponse, ErrorEnvelope,
+        ListBoardColumnsResponse, ListBoardsResponse,
+    };
     use tower::ServiceExt;
 
     use super::*;
@@ -121,5 +125,79 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let columns: ListBoardColumnsResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(columns.data.len(), 9);
+    }
+
+    #[tokio::test]
+    async fn task_create_closes_the_application_and_idempotency_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let router = build_router(state);
+        let body = serde_json::json!({
+            "task_id": "t_http_create",
+            "idempotency_key": "http-create-1",
+            "title": "HTTP create",
+            "description": "ready spec",
+            "status": "ready",
+            "assignee": null,
+            "priority": 1,
+            "scheduled_at": null,
+            "due_at": null,
+            "max_retries": 2,
+            "metadata": {"source": "http"},
+            "labels": [],
+            "depends_on": [],
+            "actor": "body-actor"
+        });
+
+        let response = router
+            .clone()
+            .oneshot(json_request("/api/v1/boards/default/tasks", body.clone()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let created: CreateTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(created.data.id, "t_http_create");
+        assert_eq!(created.data.status, ApiTaskStatus::Todo);
+        assert_eq!(
+            created.data.execution_plan_state,
+            ApiExecutionPlanState::Unplanned
+        );
+
+        let mut replay = body.clone();
+        replay["task_id"] = serde_json::json!("t_http_retry");
+        let response = router
+            .clone()
+            .oneshot(json_request("/api/v1/boards/default/tasks", replay))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let replayed: CreateTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(replayed.data.id, created.data.id);
+        assert_eq!(replayed.data.seq, created.data.seq);
+
+        let mut conflict = body;
+        conflict["task_id"] = serde_json::json!("t_http_conflict");
+        conflict["title"] = serde_json::json!("Different");
+        let response = router
+            .oneshot(json_request("/api/v1/boards/default/tasks", conflict))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(error.error.code, ApiErrorCode::IdempotencyConflict);
+    }
+
+    fn json_request(uri: &str, value: serde_json::Value) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_vec(&value).unwrap()))
+            .unwrap()
     }
 }

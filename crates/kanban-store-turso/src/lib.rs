@@ -33,12 +33,72 @@ pub struct BoardColumnRecord {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateTaskInput {
+    pub id: String,
+    pub idempotency_key: Option<String>,
+    pub title: String,
+    pub status: String,
+    pub description: Option<String>,
+    pub assignee: Option<String>,
+    pub priority: i64,
+    pub scheduled_at: Option<i64>,
+    pub due_at: Option<i64>,
+    pub max_retries: Option<i64>,
+    pub metadata_json: String,
+    pub created_by: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskRecord {
+    pub id: String,
+    pub board_id: String,
+    pub board_slug: String,
+    pub task_ref: String,
+    pub seq: i64,
+    pub idempotency_key: Option<String>,
+    pub title: String,
+    pub description: Option<String>,
+    pub status: String,
+    pub status_reason: Option<String>,
+    pub assignee: Option<String>,
+    pub priority: i64,
+    pub position: i64,
+    pub scheduled_at: Option<i64>,
+    pub due_at: Option<i64>,
+    pub created_by: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub started_at: Option<i64>,
+    pub completed_at: Option<i64>,
+    pub archived_at: Option<i64>,
+    pub claim_token: Option<String>,
+    pub claim_owner: Option<String>,
+    pub claim_expires_at: Option<i64>,
+    pub last_heartbeat_at: Option<i64>,
+    pub current_run_id: Option<String>,
+    pub retry_count: i64,
+    pub max_retries: Option<i64>,
+    pub result_summary: Option<String>,
+    pub result_json: Option<String>,
+    pub metadata_json: String,
+    pub lock_version: i64,
+}
+
 #[derive(Debug)]
 pub enum StoreError {
     Turso(turso::Error),
     InvalidPath,
-    InvalidStoredValue { field: &'static str },
+    InvalidInput(String),
+    InvalidStoredValue {
+        field: &'static str,
+    },
     BoardNotFound(String),
+    IdempotencyConflict {
+        board_id: String,
+        key: String,
+        existing_task_id: String,
+    },
 }
 
 impl Display for StoreError {
@@ -46,10 +106,19 @@ impl Display for StoreError {
         match self {
             Self::Turso(error) => write!(formatter, "turso error: {error}"),
             Self::InvalidPath => write!(formatter, "database path must be valid non-empty UTF-8"),
+            Self::InvalidInput(message) => write!(formatter, "invalid task input: {message}"),
             Self::InvalidStoredValue { field } => {
                 write!(formatter, "invalid stored value for {field}")
             }
             Self::BoardNotFound(selector) => write!(formatter, "board not found: {selector}"),
+            Self::IdempotencyConflict {
+                board_id,
+                key,
+                existing_task_id,
+            } => write!(
+                formatter,
+                "idempotency conflict for board {board_id}, key {key}, existing task {existing_task_id}"
+            ),
         }
     }
 }
@@ -119,6 +188,144 @@ impl TursoStore {
 
         transaction.commit().await?;
         Ok(())
+    }
+
+    pub async fn create_task(
+        &self,
+        board_selector: &str,
+        input: CreateTaskInput,
+    ) -> Result<TaskRecord, StoreError> {
+        validate_create_task_input(&input)?;
+        let title = input.title.trim().to_owned();
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+
+        let board = first_row(
+            transaction
+                .query(
+                    "SELECT id, slug FROM boards WHERE id = ?1 OR slug = ?1 LIMIT 1",
+                    [board_selector],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => {
+                StoreError::BoardNotFound(board_selector.to_owned())
+            }
+            other => StoreError::Turso(other),
+        })?;
+        let board_id = text_value(board.get_value(0)?, "boards.id")?;
+        let board_slug = text_value(board.get_value(1)?, "boards.slug")?;
+
+        if let Some(idempotency_key) = input.idempotency_key.as_deref() {
+            let existing = first_row(
+                transaction
+                    .query(
+                        &format!(
+                            "{TASK_SELECT} WHERE t.board_id = ?1 AND t.idempotency_key = ?2 LIMIT 1"
+                        ),
+                        (board_id.as_str(), idempotency_key),
+                    )
+                    .await?,
+            )
+            .await;
+            match existing {
+                Ok(row) => {
+                    let existing = task_from_row(row)?;
+                    if canonical_payload_matches(&existing, &input, &title) {
+                        transaction.commit().await?;
+                        return Ok(existing);
+                    }
+                    return Err(StoreError::IdempotencyConflict {
+                        board_id,
+                        key: idempotency_key.to_owned(),
+                        existing_task_id: existing.id,
+                    });
+                }
+                Err(turso::Error::QueryReturnedNoRows) => {}
+                Err(error) => return Err(StoreError::Turso(error)),
+            }
+        }
+
+        let seq = first_row(
+            transaction
+                .query(
+                    "SELECT COALESCE(MAX(seq), 0) + 1 FROM tasks WHERE board_id = ?1",
+                    [board_id.as_str()],
+                )
+                .await?,
+        )
+        .await?
+        .get_value(0)
+        .map_err(StoreError::from)
+        .and_then(|value| integer_value(value, "tasks.seq"))?;
+        let position = seq
+            .checked_mul(1024)
+            .ok_or_else(|| StoreError::InvalidInput("task sequence is too large".to_owned()))?;
+        let now = now_ms();
+        transaction
+            .execute(
+                "INSERT INTO tasks(id, board_id, seq, idempotency_key, title, description, status, assignee, priority, position, scheduled_at, due_at, created_by, created_at, updated_at, max_retries, metadata_json, lock_version) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14, ?15, ?16, 0)",
+                (
+                    input.id.as_str(),
+                    board_id.as_str(),
+                    seq,
+                    input.idempotency_key.as_deref(),
+                    title.as_str(),
+                    input.description.as_deref(),
+                    input.status.as_str(),
+                    input.assignee.as_deref(),
+                    input.priority,
+                    position,
+                    input.scheduled_at,
+                    input.due_at,
+                    input.created_by.as_str(),
+                    now,
+                    input.max_retries,
+                    input.metadata_json.as_str(),
+                ),
+            )
+            .await?;
+        transaction
+            .execute(
+                "INSERT INTO task_execution_plans(board_id, task_id, state, reason, updated_by, updated_at) VALUES (?1, ?2, 'unplanned', NULL, ?3, ?4)",
+                (board_id.as_str(), input.id.as_str(), input.created_by.as_str(), now),
+            )
+            .await?;
+        let event_id = format!("e_{}_created", input.id.trim_start_matches("t_"));
+        let event_payload = format!(r#"{{"status":"{}"}}"#, input.status);
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, ?2, ?3, NULL, 'task.created', ?4, ?5, ?6)",
+                (
+                    event_id.as_str(),
+                    board_id.as_str(),
+                    input.id.as_str(),
+                    input.created_by.as_str(),
+                    event_payload.as_str(),
+                    now,
+                ),
+            )
+            .await?;
+        let task = task_from_row(
+            first_row(
+                transaction
+                    .query(
+                        &format!("{TASK_SELECT} WHERE t.board_id = ?1 AND t.id = ?2 LIMIT 1"),
+                        (board_id.as_str(), input.id.as_str()),
+                    )
+                    .await?,
+            )
+            .await?,
+        )?;
+
+        transaction.commit().await?;
+        debug_assert_eq!(task.board_id, board_id);
+        debug_assert_eq!(task.board_slug, board_slug);
+        Ok(task)
     }
 
     pub async fn list_boards(
@@ -205,6 +412,105 @@ async fn first_row(mut rows: Rows) -> Result<Row, turso::Error> {
     Ok(row)
 }
 
+const TASK_SELECT: &str = "SELECT t.id, t.board_id, t.seq, t.idempotency_key, t.title, t.description, t.status, t.status_reason, t.assignee, t.priority, t.position, t.scheduled_at, t.due_at, t.created_by, t.created_at, t.updated_at, t.started_at, t.completed_at, t.archived_at, t.claim_token, t.claim_owner, t.claim_expires_at, t.last_heartbeat_at, t.current_run_id, t.retry_count, t.max_retries, t.result_summary, t.result_json, t.metadata_json, t.lock_version, b.slug FROM tasks AS t JOIN boards AS b ON b.id = t.board_id";
+
+fn validate_create_task_input(input: &CreateTaskInput) -> Result<(), StoreError> {
+    if !input.id.starts_with("t_") || input.id.len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "task id must start with t_".to_owned(),
+        ));
+    }
+    if input.title.trim().is_empty() {
+        return Err(StoreError::InvalidInput("title is required".to_owned()));
+    }
+    if !matches!(input.status.as_str(), "triage" | "todo" | "scheduled") {
+        return Err(StoreError::InvalidInput(
+            "status must be triage, todo, or scheduled".to_owned(),
+        ));
+    }
+    if !(0..=3).contains(&input.priority) {
+        return Err(StoreError::InvalidInput(
+            "priority must be between 0 and 3".to_owned(),
+        ));
+    }
+    if input.max_retries.is_some_and(|value| value < 0) {
+        return Err(StoreError::InvalidInput(
+            "max_retries must be non-negative".to_owned(),
+        ));
+    }
+    if input.created_by.trim().is_empty() {
+        return Err(StoreError::InvalidInput(
+            "created_by is required".to_owned(),
+        ));
+    }
+    if input
+        .idempotency_key
+        .as_deref()
+        .is_some_and(|key| key.trim().is_empty())
+    {
+        return Err(StoreError::InvalidInput(
+            "idempotency_key must not be empty".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn canonical_payload_matches(
+    existing: &TaskRecord,
+    input: &CreateTaskInput,
+    canonical_title: &str,
+) -> bool {
+    existing.status == input.status
+        && existing.title == canonical_title
+        && existing.description == input.description
+        && existing.assignee == input.assignee
+        && existing.priority == input.priority
+        && existing.scheduled_at == input.scheduled_at
+        && existing.due_at == input.due_at
+        && existing.max_retries == input.max_retries
+        && existing.metadata_json == input.metadata_json
+        && existing.created_by == input.created_by
+}
+
+fn task_from_row(row: Row) -> Result<TaskRecord, StoreError> {
+    let board_slug = text_value(row.get_value(30)?, "boards.slug")?;
+    let seq = integer_value(row.get_value(2)?, "tasks.seq")?;
+    Ok(TaskRecord {
+        id: text_value(row.get_value(0)?, "tasks.id")?,
+        board_id: text_value(row.get_value(1)?, "tasks.board_id")?,
+        board_slug: board_slug.clone(),
+        task_ref: format!("{board_slug}#{seq}"),
+        seq,
+        idempotency_key: optional_text_value(row.get_value(3)?, "tasks.idempotency_key")?,
+        title: text_value(row.get_value(4)?, "tasks.title")?,
+        description: optional_text_value(row.get_value(5)?, "tasks.description")?,
+        status: text_value(row.get_value(6)?, "tasks.status")?,
+        status_reason: optional_text_value(row.get_value(7)?, "tasks.status_reason")?,
+        assignee: optional_text_value(row.get_value(8)?, "tasks.assignee")?,
+        priority: integer_value(row.get_value(9)?, "tasks.priority")?,
+        position: integer_value(row.get_value(10)?, "tasks.position")?,
+        scheduled_at: optional_integer_value(row.get_value(11)?, "tasks.scheduled_at")?,
+        due_at: optional_integer_value(row.get_value(12)?, "tasks.due_at")?,
+        created_by: text_value(row.get_value(13)?, "tasks.created_by")?,
+        created_at: integer_value(row.get_value(14)?, "tasks.created_at")?,
+        updated_at: integer_value(row.get_value(15)?, "tasks.updated_at")?,
+        started_at: optional_integer_value(row.get_value(16)?, "tasks.started_at")?,
+        completed_at: optional_integer_value(row.get_value(17)?, "tasks.completed_at")?,
+        archived_at: optional_integer_value(row.get_value(18)?, "tasks.archived_at")?,
+        claim_token: optional_text_value(row.get_value(19)?, "tasks.claim_token")?,
+        claim_owner: optional_text_value(row.get_value(20)?, "tasks.claim_owner")?,
+        claim_expires_at: optional_integer_value(row.get_value(21)?, "tasks.claim_expires_at")?,
+        last_heartbeat_at: optional_integer_value(row.get_value(22)?, "tasks.last_heartbeat_at")?,
+        current_run_id: optional_text_value(row.get_value(23)?, "tasks.current_run_id")?,
+        retry_count: integer_value(row.get_value(24)?, "tasks.retry_count")?,
+        max_retries: optional_integer_value(row.get_value(25)?, "tasks.max_retries")?,
+        result_summary: optional_text_value(row.get_value(26)?, "tasks.result_summary")?,
+        result_json: optional_text_value(row.get_value(27)?, "tasks.result_json")?,
+        metadata_json: text_value(row.get_value(28)?, "tasks.metadata_json")?,
+        lock_version: integer_value(row.get_value(29)?, "tasks.lock_version")?,
+    })
+}
+
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -254,6 +560,32 @@ mod tests {
         let path = directory.path().join(format!("{name}.db"));
         let store = TursoStore::open(&path).await.expect("open Turso database");
         (directory, store, path)
+    }
+
+    fn create_input(id: &str, idempotency_key: Option<&str>, title: &str) -> CreateTaskInput {
+        CreateTaskInput {
+            id: id.to_owned(),
+            idempotency_key: idempotency_key.map(str::to_owned),
+            title: title.to_owned(),
+            status: "todo".to_owned(),
+            description: Some("description".to_owned()),
+            assignee: Some("agent".to_owned()),
+            priority: 1,
+            scheduled_at: Some(100),
+            due_at: Some(200),
+            max_retries: Some(2),
+            metadata_json: r#"{"source":"test"}"#.to_owned(),
+            created_by: "tester".to_owned(),
+        }
+    }
+
+    async fn count_rows(connection: &Connection, table: &str) -> i64 {
+        let mut rows = connection
+            .query(&format!("SELECT COUNT(*) FROM {table}"), ())
+            .await
+            .expect("count rows");
+        let row = rows.next().await.expect("count row").expect("count result");
+        integer_value(row.get_value(0).expect("count value"), "count").expect("integer count")
     }
 
     #[tokio::test]
@@ -375,6 +707,228 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["default", "archive"]
         );
+    }
+
+    #[tokio::test]
+    async fn create_task_writes_task_plan_and_event_atomically() {
+        let (_directory, store, _path) = store("create").await;
+        store.initialize().await.expect("initialize");
+
+        let task = store
+            .create_task(
+                "default",
+                create_input("t_create", Some("create-1"), "Create task"),
+            )
+            .await
+            .expect("create task");
+        assert_eq!(task.id, "t_create");
+        assert_eq!(task.board_id, "b_default");
+        assert_eq!(task.board_slug, "default");
+        assert_eq!(task.task_ref, "default#1");
+        assert_eq!(task.seq, 1);
+        assert_eq!(task.idempotency_key.as_deref(), Some("create-1"));
+        assert_eq!(task.title, "Create task");
+        assert_eq!(task.status, "todo");
+        assert_eq!(task.priority, 1);
+        assert_eq!(task.position, 1024);
+        assert_eq!(task.lock_version, 0);
+        assert_eq!(task.max_retries, Some(2));
+
+        let connection = store.connection().await.expect("connection");
+        assert_eq!(count_rows(&connection, "tasks").await, 1);
+        assert_eq!(count_rows(&connection, "task_execution_plans").await, 1);
+        assert_eq!(count_rows(&connection, "task_events").await, 1);
+        let plan = first_row(
+            connection
+                .query(
+                    "SELECT state FROM task_execution_plans WHERE task_id = ?1",
+                    [task.id.as_str()],
+                )
+                .await
+                .expect("plan query"),
+        )
+        .await
+        .expect("plan row");
+        assert_eq!(
+            text_value(plan.get_value(0).expect("plan state"), "plan.state")
+                .expect("plan state text"),
+            "unplanned"
+        );
+        let event = first_row(
+            connection
+                .query(
+                    "SELECT kind, actor, payload_json FROM task_events WHERE task_id = ?1",
+                    [task.id.as_str()],
+                )
+                .await
+                .expect("event query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(event.get_value(0).expect("event kind"), "event.kind")
+                .expect("event kind text"),
+            "task.created"
+        );
+        assert_eq!(
+            text_value(event.get_value(1).expect("event actor"), "event.actor")
+                .expect("event actor text"),
+            "tester"
+        );
+        assert_eq!(
+            text_value(event.get_value(2).expect("event payload"), "event.payload")
+                .expect("event payload text"),
+            r#"{"status":"todo"}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn create_task_preserves_allowed_initial_statuses() {
+        let (_directory, store, _path) = store("create-statuses").await;
+        store.initialize().await.expect("initialize");
+        let mut triage = create_input("t_triage", Some("status-triage"), "Triage");
+        triage.status = "triage".to_owned();
+        let mut scheduled = create_input("t_scheduled", Some("status-scheduled"), "Scheduled");
+        scheduled.status = "scheduled".to_owned();
+
+        let triage_task = store
+            .create_task("default", triage)
+            .await
+            .expect("triage create");
+        let scheduled_task = store
+            .create_task("default", scheduled)
+            .await
+            .expect("scheduled create");
+        assert_eq!(triage_task.status, "triage");
+        assert_eq!(scheduled_task.status, "scheduled");
+
+        let mut ready = create_input("t_ready", Some("status-ready"), "Ready");
+        ready.status = "ready".to_owned();
+        assert!(matches!(
+            store.create_task("default", ready).await,
+            Err(StoreError::InvalidInput(message)) if message.contains("status")
+        ));
+
+        let connection = store.connection().await.expect("connection");
+        let mut rows = connection
+            .query("SELECT payload_json FROM task_events ORDER BY id ASC", ())
+            .await
+            .expect("event payload query");
+        let mut payloads = Vec::new();
+        while let Some(row) = rows.next().await.expect("event payload row") {
+            payloads.push(
+                text_value(row.get_value(0).expect("event payload"), "event.payload")
+                    .expect("event payload text"),
+            );
+        }
+        assert_eq!(
+            payloads,
+            vec![r#"{"status":"triage"}"#, r#"{"status":"scheduled"}"#]
+        );
+    }
+
+    #[tokio::test]
+    async fn create_task_replays_same_idempotent_payload_without_extra_rows() {
+        let (_directory, store, _path) = store("create-replay").await;
+        store.initialize().await.expect("initialize");
+        let input = create_input("t_replay", Some("replay-1"), "Replay task");
+        let first = store
+            .create_task("default", input.clone())
+            .await
+            .expect("first create");
+        let mut retry_input = input;
+        retry_input.id = "t_replay_retry".to_owned();
+        let replay = store
+            .create_task("b_default", retry_input)
+            .await
+            .expect("replay create");
+        assert_eq!(first, replay);
+
+        let connection = store.connection().await.expect("connection");
+        assert_eq!(count_rows(&connection, "tasks").await, 1);
+        assert_eq!(count_rows(&connection, "task_execution_plans").await, 1);
+        assert_eq!(count_rows(&connection, "task_events").await, 1);
+    }
+
+    #[tokio::test]
+    async fn create_task_rejects_same_key_with_different_payload() {
+        let (_directory, store, _path) = store("create-conflict").await;
+        store.initialize().await.expect("initialize");
+        let input = create_input("t_conflict", Some("conflict-1"), "Original");
+        store
+            .create_task("default", input.clone())
+            .await
+            .expect("first create");
+        let mut changed = input;
+        changed.title = "Changed".to_owned();
+        let error = store
+            .create_task("default", changed)
+            .await
+            .expect_err("different payload must conflict");
+        assert!(matches!(
+            error,
+            StoreError::IdempotencyConflict {
+                board_id,
+                key,
+                existing_task_id
+            } if board_id == "b_default" && key == "conflict-1" && existing_task_id == "t_conflict"
+        ));
+        let connection = store.connection().await.expect("connection");
+        assert_eq!(count_rows(&connection, "tasks").await, 1);
+        assert_eq!(count_rows(&connection, "task_execution_plans").await, 1);
+        assert_eq!(count_rows(&connection, "task_events").await, 1);
+    }
+
+    #[tokio::test]
+    async fn create_task_assigns_monotonic_board_local_sequences() {
+        let (_directory, store, _path) = store("create-seq").await;
+        store.initialize().await.expect("initialize");
+        let first = store
+            .create_task("default", create_input("t_seq_1", Some("seq-1"), "First"))
+            .await
+            .expect("first create");
+        let second = store
+            .create_task(
+                "b_default",
+                create_input("t_seq_2", Some("seq-2"), "Second"),
+            )
+            .await
+            .expect("second create");
+        assert_eq!(first.seq, 1);
+        assert_eq!(second.seq, 2);
+        assert_ne!(first.id, second.id);
+    }
+
+    #[tokio::test]
+    async fn create_task_reports_missing_board() {
+        let (_directory, store, _path) = store("create-missing-board").await;
+        store.initialize().await.expect("initialize");
+        let error = store
+            .create_task(
+                "missing",
+                create_input("t_missing_board", Some("missing-board"), "Missing"),
+            )
+            .await
+            .expect_err("missing board must fail");
+        assert!(matches!(error, StoreError::BoardNotFound(selector) if selector == "missing"));
+        let connection = store.connection().await.expect("connection");
+        assert_eq!(count_rows(&connection, "tasks").await, 0);
+        assert_eq!(count_rows(&connection, "task_execution_plans").await, 0);
+        assert_eq!(count_rows(&connection, "task_events").await, 0);
+    }
+
+    #[tokio::test]
+    async fn create_task_failure_does_not_leave_partial_rows() {
+        let (_directory, store, _path) = store("create-rollback").await;
+        store.initialize().await.expect("initialize");
+        let mut invalid = create_input("t_invalid_json", Some("invalid-json"), "Invalid");
+        invalid.metadata_json = "{not-json".to_owned();
+        assert!(store.create_task("default", invalid).await.is_err());
+
+        let connection = store.connection().await.expect("connection");
+        assert_eq!(count_rows(&connection, "tasks").await, 0);
+        assert_eq!(count_rows(&connection, "task_execution_plans").await, 0);
+        assert_eq!(count_rows(&connection, "task_events").await, 0);
     }
 
     #[tokio::test]

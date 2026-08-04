@@ -1561,7 +1561,7 @@
       "invalid_fixture": "schemas/fixtures/api/create-task-request.v1.invalid.json",
       "path": "api/create-task-request.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/create-task-request.v1.valid.json",
-      "sha256": "sha256:1091060116b33afc45d7c3baa0296f1ecec173f0a599504839a43f2a5cc61db1",
+      "sha256": "sha256:a94809187f6d4c34b4f1112c08fd053543ecc1ff842576654852c28201c0ceda",
       "strictness": "deny_unknown_fields"
     },
     {

@@ -38,6 +38,14 @@ export type CreateBoardInput = {
   description?: string | null
 }
 
+export type CreateTaskInput = {
+  title: string
+  description?: string
+  status?: TaskStatus
+  taskId?: string
+  idempotencyKey?: string
+}
+
 export type Task = {
   id: string
   board_id: string
@@ -975,10 +983,13 @@ export class KanbanApi {
     } satisfies SearchTaskStatusWindowsResult
   }
 
-  async createTask(input: { title: string; description?: string; status?: TaskStatus }, options: RequestOptions = {}) {
+  async createTask(input: CreateTaskInput, options: RequestOptions = {}) {
+    const taskId = input.taskId ?? newClientTaskId()
     const envelope = await this.requestEnvelope<unknown>(`/api/v1/boards/${this.board}/tasks`, {
       method: "POST",
       body: {
+        task_id: taskId,
+        idempotency_key: input.idempotencyKey ?? `task.create:${taskId}`,
         title: input.title,
         description: input.description ?? null,
         status: input.status ?? undefined,
@@ -1412,6 +1423,10 @@ export class KanbanApi {
     }
     return params
   }
+}
+
+function newClientTaskId() {
+  return `t_${crypto.randomUUID().replace(/-/g, "").toUpperCase()}`
 }
 
 type RequestOptions = {

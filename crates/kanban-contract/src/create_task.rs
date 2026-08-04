@@ -29,6 +29,10 @@ pub enum ApiCreateTaskStatus {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateTaskRequest {
+    /// Optional client-generated typed id. The host generates one when omitted.
+    pub task_id: Option<String>,
+    /// Entity-local retry key scoped to the selected board.
+    pub idempotency_key: Option<String>,
     pub title: String,
     pub description: Option<String>,
     pub status: Option<ApiCreateTaskStatus>,

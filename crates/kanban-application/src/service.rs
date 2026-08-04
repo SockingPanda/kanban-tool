@@ -1,13 +1,17 @@
+use std::sync::Arc;
+
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, SystemClock, TaskStatus, can_promote_from,
-    initial_status, new_event_id, recompute_ready_status,
+    initial_status, is_claimable_task, new_event_id, new_run_id, new_typed_id,
+    recompute_ready_status,
 };
+use tokio::sync::Mutex;
 
 use crate::{
-    ApplicationHealth, ApplicationStore, BoardColumnRecord, BoardRecord, CreateTaskCommand,
-    CreateTaskRecord, ExecutionPlanRecord, MarkExecutionPlanNotRequiredCommand,
-    MarkExecutionPlanNotRequiredRecord, PromoteTaskCommand, PromoteTaskRecord, TaskListOptions,
-    TaskListPage, TaskRecord,
+    ApplicationHealth, ApplicationStore, BoardColumnRecord, BoardRecord, ClaimRecord,
+    ClaimTaskCommand, ClaimTaskRecord, CreateTaskCommand, CreateTaskRecord, ExecutionPlanRecord,
+    ExecutionPlanState, MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord,
+    PromoteTaskCommand, PromoteTaskRecord, TaskListOptions, TaskListPage, TaskRecord,
 };
 
 const MAX_TASK_LIST_LIMIT: usize = 1_000;
@@ -20,6 +24,7 @@ const MAX_TASK_ASSIGNEE_CHARS: usize = 128;
 pub struct ApplicationService<S, C = SystemClock> {
     store: S,
     clock: C,
+    mutation_gate: Arc<Mutex<()>>,
 }
 
 impl<S> ApplicationService<S, SystemClock>
@@ -30,6 +35,7 @@ where
         Self {
             store,
             clock: SystemClock,
+            mutation_gate: Arc::new(Mutex::new(())),
         }
     }
 }
@@ -40,7 +46,11 @@ where
     C: Clock,
 {
     pub fn with_clock(store: S, clock: C) -> Self {
-        Self { store, clock }
+        Self {
+            store,
+            clock,
+            mutation_gate: Arc::new(Mutex::new(())),
+        }
     }
 
     pub async fn health(&self) -> Result<ApplicationHealth> {
@@ -81,6 +91,7 @@ where
         let metadata_json = serde_json::to_string(&command.metadata)
             .map_err(|error| KanbanError::InvalidInput(format!("invalid metadata: {error}")))?;
         let board = command.board.trim().to_owned();
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .create_task(
                 &board,
@@ -178,6 +189,7 @@ where
         if actor.is_empty() {
             return Err(KanbanError::InvalidInput("actor is required".to_owned()));
         }
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .mark_execution_plan_not_required(
                 task_id,
@@ -202,6 +214,7 @@ where
         if actor.is_empty() {
             return Err(KanbanError::InvalidInput("actor is required".to_owned()));
         }
+        let _mutation = self.mutation_gate.lock().await;
         let task = self.store.get_task(task_id).await?;
         if !can_promote_from(task.status) {
             return Err(KanbanError::InvalidTransition(format!(
@@ -240,6 +253,69 @@ where
                     actor: actor.to_owned(),
                     event_id: new_event_id(),
                     updated_at: now,
+                },
+            )
+            .await
+    }
+
+    pub async fn claim_task(&self, command: ClaimTaskCommand) -> Result<ClaimRecord> {
+        let task_id = command.task_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(KanbanError::InvalidInput(
+                "task_id must be a global t_... id".to_owned(),
+            ));
+        }
+        let actor = command.actor.trim();
+        if actor.is_empty() {
+            return Err(KanbanError::InvalidInput("actor is required".to_owned()));
+        }
+        if command.ttl_ms <= 0 {
+            return Err(KanbanError::InvalidInput(
+                "ttl_ms must be positive".to_owned(),
+            ));
+        }
+        let worker_profile = command
+            .worker_profile
+            .unwrap_or_else(|| "manual".to_owned());
+        let metadata_json = serde_json::to_string(&command.metadata)
+            .map_err(|error| KanbanError::InvalidInput(format!("invalid metadata: {error}")))?;
+        let _mutation = self.mutation_gate.lock().await;
+        let task = self.store.get_task(task_id).await?;
+        if !is_claimable_task(task.status, task.has_claim_token) {
+            let message = if task.has_claim_token {
+                "claim conflict: task is already claimed"
+            } else {
+                "task is not claimable"
+            };
+            return Err(KanbanError::InvalidTransition(message.to_owned()));
+        }
+        if task.dependency_blocked {
+            return Err(KanbanError::InvalidTransition(
+                "dependency blocked".to_owned(),
+            ));
+        }
+        if task.execution_plan_state == ExecutionPlanState::Unplanned {
+            return Err(KanbanError::ExecutionPlanRequired(
+                "add steps or mark execution plan not_required before claiming task".to_owned(),
+            ));
+        }
+        let now = self.clock.now_ms();
+        let claim_expires_at = now.checked_add(command.ttl_ms).ok_or_else(|| {
+            KanbanError::InvalidInput("ttl_ms produces an invalid claim expiry".to_owned())
+        })?;
+        self.store
+            .claim_task(
+                task_id,
+                ClaimTaskRecord {
+                    expected_lock_version: task.lock_version,
+                    actor: actor.to_owned(),
+                    claim_token: new_typed_id("claim"),
+                    run_id: new_run_id(),
+                    event_id: new_event_id(),
+                    worker_profile,
+                    metadata_json,
+                    now,
+                    claim_expires_at,
                 },
             )
             .await
@@ -301,7 +377,7 @@ mod tests {
     use kanban_core::{Board, Clock, Result, TaskStatus};
 
     use super::*;
-    use crate::ExecutionPlanState;
+    use crate::{ExecutionPlanState, RunRecord, RunStatus};
 
     #[derive(Clone)]
     struct StubStore {
@@ -392,6 +468,53 @@ mod tests {
             task.lock_version += 1;
             task.updated_at = input.updated_at;
             Ok(task)
+        }
+
+        async fn claim_task(&self, task_id: &str, input: ClaimTaskRecord) -> Result<ClaimRecord> {
+            assert_eq!(task_id, "t_claim");
+            assert_eq!(input.expected_lock_version, 0);
+            assert_eq!(input.actor, "worker");
+            assert!(input.claim_token.starts_with("claim_"));
+            assert!(input.run_id.starts_with("r_"));
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.worker_profile, "manual");
+            assert_eq!(input.metadata_json, r#"{"source":"test"}"#);
+            assert_eq!(input.now, 100);
+            assert_eq!(input.claim_expires_at, 400);
+            let claim_expires_at = input.claim_expires_at;
+            let mut task = task_for_id(task_id);
+            task.status = TaskStatus::Running;
+            task.has_claim_token = true;
+            task.claim_owner = Some(input.actor.clone());
+            task.claim_expires_at = Some(claim_expires_at);
+            task.last_heartbeat_at = Some(input.now);
+            task.current_run_id = Some(input.run_id.clone());
+            task.started_at = Some(input.now);
+            task.updated_at = input.now;
+            task.lock_version += 1;
+            Ok(ClaimRecord {
+                task,
+                run: RunRecord {
+                    id: input.run_id,
+                    board_id: "b_default".into(),
+                    task_id: task_id.to_owned(),
+                    status: RunStatus::Running,
+                    worker_profile: Some(input.worker_profile),
+                    worker_pid: None,
+                    claim_owner: input.actor,
+                    claim_expires_at,
+                    started_at: input.now,
+                    last_heartbeat_at: Some(input.now),
+                    finished_at: None,
+                    exit_code: None,
+                    summary: None,
+                    error: None,
+                    log_path: None,
+                    metadata_json: input.metadata_json,
+                },
+                claim_token: input.claim_token,
+                claim_expires_at,
+            })
         }
     }
 
@@ -630,6 +753,115 @@ mod tests {
         assert!(matches!(running, KanbanError::InvalidTransition(_)));
     }
 
+    #[tokio::test]
+    async fn claim_task_uses_core_guard_and_canonicalizes_lease_input() {
+        let service = ApplicationService::with_clock(
+            StubStore {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            FixedClock(100),
+        );
+        let claim = service
+            .claim_task(ClaimTaskCommand {
+                task_id: " t_claim ".into(),
+                actor: " worker ".into(),
+                ttl_ms: 300,
+                worker_profile: None,
+                metadata: serde_json::json!({"source": "test"}),
+            })
+            .await
+            .unwrap();
+        assert_eq!(claim.task.status, TaskStatus::Running);
+        assert_eq!(claim.run.status, RunStatus::Running);
+        assert!(claim.claim_token.starts_with("claim_"));
+        assert_eq!(claim.claim_expires_at, 400);
+
+        let claimed = service
+            .claim_task(ClaimTaskCommand {
+                task_id: "t_claimed".into(),
+                actor: "worker".into(),
+                ttl_ms: 300,
+                worker_profile: None,
+                metadata: serde_json::json!({}),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            claimed,
+            KanbanError::InvalidTransition(message) if message.contains("claim conflict")
+        ));
+        let dependency = service
+            .claim_task(ClaimTaskCommand {
+                task_id: "t_claim_dependency".into(),
+                actor: "worker".into(),
+                ttl_ms: 300,
+                worker_profile: None,
+                metadata: serde_json::json!({}),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            dependency,
+            KanbanError::InvalidTransition(message) if message.contains("dependency blocked")
+        ));
+        let unplanned = service
+            .claim_task(ClaimTaskCommand {
+                task_id: "t_claim_unplanned".into(),
+                actor: "worker".into(),
+                ttl_ms: 300,
+                worker_profile: None,
+                metadata: serde_json::json!({}),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(unplanned, KanbanError::ExecutionPlanRequired(_)));
+    }
+
+    #[tokio::test]
+    async fn claim_task_rejects_invalid_identity_and_lease() {
+        let service = ApplicationService::with_clock(
+            StubStore {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            FixedClock(i64::MAX - 10),
+        );
+        for command in [
+            ClaimTaskCommand {
+                task_id: "default#1".into(),
+                actor: "worker".into(),
+                ttl_ms: 300,
+                worker_profile: None,
+                metadata: serde_json::json!({}),
+            },
+            ClaimTaskCommand {
+                task_id: "t_claim".into(),
+                actor: " ".into(),
+                ttl_ms: 300,
+                worker_profile: None,
+                metadata: serde_json::json!({}),
+            },
+            ClaimTaskCommand {
+                task_id: "t_claim".into(),
+                actor: "worker".into(),
+                ttl_ms: 0,
+                worker_profile: None,
+                metadata: serde_json::json!({}),
+            },
+            ClaimTaskCommand {
+                task_id: "t_claim".into(),
+                actor: "worker".into(),
+                ttl_ms: 20,
+                worker_profile: None,
+                metadata: serde_json::json!({}),
+            },
+        ] {
+            assert!(matches!(
+                service.claim_task(command).await,
+                Err(KanbanError::InvalidInput(_))
+            ));
+        }
+    }
+
     fn task_record(input: CreateTaskRecord) -> TaskRecord {
         TaskRecord {
             id: input.id,
@@ -652,6 +884,7 @@ mod tests {
             started_at: None,
             completed_at: None,
             archived_at: None,
+            has_claim_token: false,
             claim_owner: None,
             claim_expires_at: None,
             last_heartbeat_at: None,
@@ -688,6 +921,22 @@ mod tests {
         });
         match task_id {
             "t_promote" => task.execution_plan_state = ExecutionPlanState::NotRequired,
+            "t_claim" => {
+                task.status = TaskStatus::Ready;
+                task.execution_plan_state = ExecutionPlanState::NotRequired;
+            }
+            "t_claimed" => {
+                task.status = TaskStatus::Ready;
+                task.execution_plan_state = ExecutionPlanState::NotRequired;
+                task.has_claim_token = true;
+            }
+            "t_claim_dependency" => {
+                task.status = TaskStatus::Ready;
+                task.execution_plan_state = ExecutionPlanState::NotRequired;
+                task.dependency_blocked = true;
+                task.unfinished_parent_count = 1;
+            }
+            "t_claim_unplanned" => task.status = TaskStatus::Ready,
             "t_future" => {
                 task.status = TaskStatus::Scheduled;
                 task.scheduled_at = Some(200);
@@ -696,6 +945,7 @@ mod tests {
             "t_running" => {
                 task.status = TaskStatus::Running;
                 task.execution_plan_state = ExecutionPlanState::NotRequired;
+                task.has_claim_token = true;
                 task.claim_owner = Some("worker".into());
                 task.claim_expires_at = Some(200);
                 task.current_run_id = Some("r_running".into());

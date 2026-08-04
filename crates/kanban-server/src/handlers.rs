@@ -9,15 +9,16 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use kanban_application::{
-    CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState,
-    MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand,
+    ClaimTaskCommand, CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState,
+    MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand, RunRecord, RunStatus,
     TaskListOptions as ApplicationTaskListOptions, TaskListSort as ApplicationTaskListSort,
     TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord,
 };
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, ApiCreateTaskStatus, ApiExecutionPlan, ApiExecutionPlanState,
-    ApiTask, ApiTaskPriority, ApiTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse,
-    GetTaskPath, GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse,
+    ApiBoard, ApiBoardColumn, ApiClaim, ApiCreateTaskStatus, ApiExecutionPlan,
+    ApiExecutionPlanState, ApiRun, ApiRunStatus, ApiTask, ApiTaskPriority, ApiTaskStatus,
+    ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CreateTaskPath, CreateTaskRequest,
+    CreateTaskResponse, GetTaskPath, GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse,
     ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse, ListTasksPath, ListTasksQuery,
     ListTasksResponse, MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS,
     MAX_TASK_READ_LABELS, MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS,
@@ -256,6 +257,33 @@ pub(crate) async fn promote_task(
         .promote_task(PromoteTaskCommand { task_id, actor })
         .await?;
     Ok(Json(PromoteTaskResponse::new(api_task(task)?)))
+}
+
+pub(crate) async fn claim_task(
+    State(state): State<AppState>,
+    Path(ClaimTaskPath { task_id }): Path<ClaimTaskPath>,
+    headers: HeaderMap,
+    body: Result<Json<ClaimTaskRequest>, JsonRejection>,
+) -> Result<Json<ClaimTaskResponse>, ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let claim = state
+        .application()
+        .claim_task(ClaimTaskCommand {
+            task_id,
+            actor,
+            ttl_ms: body.ttl_ms,
+            worker_profile: body.worker_profile,
+            metadata: body.metadata.unwrap_or_else(|| serde_json::json!({})),
+        })
+        .await?;
+    Ok(Json(ClaimTaskResponse::new(ApiClaim {
+        task: api_task(claim.task)?,
+        run: api_run(claim.run)?,
+        claim_token: claim.claim_token,
+        claim_expires_at: Some(claim.claim_expires_at),
+    })))
 }
 
 fn request_actor(
@@ -619,6 +647,33 @@ fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
         completed_required_step_count: task.completed_required_step_count,
         optional_step_count: task.optional_step_count,
         labels: Vec::new(),
+    })
+}
+
+fn api_run(run: RunRecord) -> Result<ApiRun, ApiError> {
+    let metadata = serde_json::from_str(&run.metadata_json).map_err(|error| {
+        KanbanError::Storage(format!("stored run metadata is invalid JSON: {error}"))
+    })?;
+    Ok(ApiRun {
+        id: run.id,
+        task_id: run.task_id,
+        status: match run.status {
+            RunStatus::Running => ApiRunStatus::Running,
+            RunStatus::Succeeded => ApiRunStatus::Succeeded,
+            RunStatus::Failed => ApiRunStatus::Failed,
+            RunStatus::Canceled => ApiRunStatus::Canceled,
+            RunStatus::Expired => ApiRunStatus::Expired,
+        },
+        worker_profile: run.worker_profile,
+        worker_pid: run.worker_pid,
+        claim_owner: run.claim_owner,
+        started_at: run.started_at,
+        finished_at: run.finished_at,
+        exit_code: run.exit_code,
+        summary: run.summary,
+        error: run.error,
+        has_log: run.log_path.is_some(),
+        metadata,
     })
 }
 

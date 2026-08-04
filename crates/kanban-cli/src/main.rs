@@ -10,10 +10,10 @@ use std::{
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
-    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, CreateTaskRequest, CreateTaskResponse,
-    GetTaskResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
-    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
-    TaskReadPlanFilter, TaskReadSort,
+    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, ClaimTaskRequest, ClaimTaskResponse,
+    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, ListTasksQuery,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
+    PromoteTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
 
@@ -107,6 +107,8 @@ enum TaskCommand {
     },
     /// Promote an eligible todo or due scheduled task to ready.
     Promote(TaskRefArgs),
+    /// Atomically claim a ready task and start a run.
+    Claim(TaskClaimArgs),
 }
 
 #[derive(Debug, Args)]
@@ -191,6 +193,13 @@ struct TaskPlanNotRequiredArgs {
 #[derive(Debug, Args)]
 struct TaskRefArgs {
     task_ref: String,
+}
+
+#[derive(Debug, Args)]
+struct TaskClaimArgs {
+    task_ref: String,
+    #[arg(long, default_value_t = 300_000)]
+    ttl_ms: i64,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -431,6 +440,27 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
                     }
                 }
+                TaskCommand::Claim(args) => {
+                    let claim = client.claim_task_by_selector(
+                        &cli.board,
+                        &args.task_ref,
+                        &ClaimTaskRequest {
+                            actor: None,
+                            ttl_ms: args.ttl_ms,
+                            worker_profile: None,
+                            metadata: None,
+                        },
+                    )?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&ClaimTaskResponse::new(claim))
+                                .expect("claim response is serializable")
+                        );
+                    } else {
+                        println!("Claimed {} token={}", claim.task.id, claim.claim_token);
+                    }
+                }
             }
             Ok(())
         }
@@ -634,5 +664,20 @@ mod tests {
             panic!("expected task promote");
         };
         assert_eq!(args.task_ref, "default#1");
+    }
+
+    #[test]
+    fn parses_task_claim_command() {
+        let cli =
+            Cli::try_parse_from(["kanban", "task", "claim", "default#1", "--ttl-ms", "120000"])
+                .expect("claim args");
+        let Command::Task {
+            command: TaskCommand::Claim(args),
+        } = cli.command
+        else {
+            panic!("expected task claim");
+        };
+        assert_eq!(args.task_ref, "default#1");
+        assert_eq!(args.ttl_ms, 120_000);
     }
 }

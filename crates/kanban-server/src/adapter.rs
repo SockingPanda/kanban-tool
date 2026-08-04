@@ -1,20 +1,23 @@
 use kanban_application::{
     ApplicationStore, BoardColumnRecord as ApplicationBoardColumn, BoardRecord,
+    ClaimRecord as ApplicationClaim, ClaimTaskRecord as ApplicationClaimTask,
     CreateTaskRecord as ApplicationCreateTask, ExecutionPlanRecord as ApplicationExecutionPlan,
     ExecutionPlanState,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
-    PromoteTaskRecord as ApplicationPromoteTask, TaskListOptions as ApplicationTaskListOptions,
+    PromoteTaskRecord as ApplicationPromoteTask, RunRecord as ApplicationRun,
+    RunStatus as ApplicationRunStatus, TaskListOptions as ApplicationTaskListOptions,
     TaskListPage as ApplicationTaskListPage, TaskListSort as ApplicationTaskListSort,
     TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord as ApplicationTask,
 };
 use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
+    ClaimTaskInput as StoreClaimTask, ClaimTaskRecord as StoreClaim,
     CreateTaskInput as StoreCreateTask,
     MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
     PromoteTaskInput as StorePromoteTask, StoreError,
     TaskExecutionPlanRecord as StoreExecutionPlan, TaskListOptions as StoreTaskListOptions,
     TaskListSort as StoreTaskListSort, TaskPlanFilter as StoreTaskPlanFilter,
-    TaskRecord as StoreTask, TursoStore,
+    TaskRecord as StoreTask, TaskRunRecord as StoreRun, TursoStore,
 };
 
 #[derive(Clone)]
@@ -188,6 +191,31 @@ impl ApplicationStore for TursoApplicationStore {
             .map_err(store_error)
             .and_then(application_task)
     }
+
+    async fn claim_task(
+        &self,
+        task_id: &str,
+        input: ApplicationClaimTask,
+    ) -> Result<ApplicationClaim> {
+        self.store
+            .claim_task(
+                task_id,
+                StoreClaimTask {
+                    expected_lock_version: input.expected_lock_version,
+                    owner: input.actor,
+                    claim_token: input.claim_token,
+                    run_id: input.run_id,
+                    event_id: input.event_id,
+                    worker_profile: input.worker_profile,
+                    metadata_json: input.metadata_json,
+                    now: input.now,
+                    claim_expires_at: input.claim_expires_at,
+                },
+            )
+            .await
+            .map_err(store_error)
+            .and_then(application_claim)
+    }
 }
 
 fn store_error(error: StoreError) -> KanbanError {
@@ -196,6 +224,9 @@ fn store_error(error: StoreError) -> KanbanError {
         StoreError::TaskNotFound(task_id) => KanbanError::NotFound(format!("task {task_id}")),
         StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),
         StoreError::InvalidTransition(message) => KanbanError::InvalidTransition(message),
+        StoreError::ClaimConflict(message) => {
+            KanbanError::InvalidTransition(format!("claim conflict: {message}"))
+        }
         StoreError::IdempotencyConflict {
             board_id,
             key,
@@ -205,6 +236,48 @@ fn store_error(error: StoreError) -> KanbanError {
         )),
         other => KanbanError::Storage(other.to_string()),
     }
+}
+
+fn application_claim(claim: StoreClaim) -> Result<ApplicationClaim> {
+    Ok(ApplicationClaim {
+        task: application_task(claim.task)?,
+        run: application_run(claim.run)?,
+        claim_token: claim.claim_token,
+        claim_expires_at: claim.claim_expires_at,
+    })
+}
+
+fn application_run(run: StoreRun) -> Result<ApplicationRun> {
+    let status = match run.status.as_str() {
+        "running" => ApplicationRunStatus::Running,
+        "succeeded" => ApplicationRunStatus::Succeeded,
+        "failed" => ApplicationRunStatus::Failed,
+        "canceled" => ApplicationRunStatus::Canceled,
+        "expired" => ApplicationRunStatus::Expired,
+        other => {
+            return Err(KanbanError::Storage(format!(
+                "stored run status is invalid: {other}"
+            )));
+        }
+    };
+    Ok(ApplicationRun {
+        id: run.id,
+        board_id: run.board_id,
+        task_id: run.task_id,
+        status,
+        worker_profile: run.worker_profile,
+        worker_pid: run.worker_pid,
+        claim_owner: run.claim_owner,
+        claim_expires_at: run.claim_expires_at,
+        started_at: run.started_at,
+        last_heartbeat_at: run.last_heartbeat_at,
+        finished_at: run.finished_at,
+        exit_code: run.exit_code,
+        summary: run.summary,
+        error: run.error,
+        log_path: run.log_path,
+        metadata_json: run.metadata_json,
+    })
 }
 
 fn application_task(task: StoreTask) -> Result<ApplicationTask> {
@@ -239,6 +312,7 @@ fn application_task(task: StoreTask) -> Result<ApplicationTask> {
         started_at: task.started_at,
         completed_at: task.completed_at,
         archived_at: task.archived_at,
+        has_claim_token: task.claim_token.is_some(),
         claim_owner: task.claim_owner,
         claim_expires_at: task.claim_expires_at,
         last_heartbeat_at: task.last_heartbeat_at,

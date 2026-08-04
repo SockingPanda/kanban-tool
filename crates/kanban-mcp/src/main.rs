@@ -2,10 +2,10 @@ use std::{collections::BTreeMap, env, sync::Arc};
 
 use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
-    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, CreateTaskRequest, CreateTaskResponse,
-    GetTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, ClaimTaskRequest, ClaimTaskResponse,
+    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, ListBoardsResponse, ListTasksQuery,
+    ListTasksResponse, MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse,
+    PromoteTaskRequest, PromoteTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -92,6 +92,26 @@ struct TaskPromoteArgs {
     board: Option<String>,
     /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
     task_ref: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TaskClaimArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+    /// Claim lease duration in milliseconds.
+    #[serde(default = "default_claim_ttl_ms")]
+    ttl_ms: i64,
+    /// Worker configuration recorded on the run. Defaults to manual.
+    worker_profile: Option<String>,
+    /// JSON metadata recorded on the run and claimed event.
+    metadata: Option<serde_json::Value>,
+}
+
+const fn default_claim_ttl_ms() -> i64 {
+    300_000
 }
 
 #[derive(Clone)]
@@ -264,6 +284,34 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(PromoteTaskResponse::new(task)))
+    }
+
+    #[tool(
+        name = "task_claim",
+        description = "Atomically claim a ready task and create its run through the canonical application service"
+    )]
+    async fn task_claim(
+        &self,
+        Parameters(args): Parameters<TaskClaimArgs>,
+    ) -> Result<Json<ClaimTaskResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let client = self.client.clone();
+        let claim = tokio::task::spawn_blocking(move || {
+            client.claim_task_by_selector(
+                &board,
+                &args.task_ref,
+                &ClaimTaskRequest {
+                    actor: None,
+                    ttl_ms: args.ttl_ms,
+                    worker_profile: args.worker_profile,
+                    metadata: args.metadata,
+                },
+            )
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(ClaimTaskResponse::new(claim)))
     }
 }
 

@@ -12,7 +12,7 @@ use tower_http::{
 
 use crate::{
     handlers::{
-        create_task, get_task, health, list_board_columns, list_boards, list_tasks,
+        claim_task, create_task, get_task, health, list_board_columns, list_boards, list_tasks,
         mark_execution_plan_not_required, promote_task,
     },
     state::AppState,
@@ -36,6 +36,7 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/tasks/:task_id/transitions/promote",
             post(promote_task),
         )
+        .route("/api/v1/tasks/:task_id/transitions/claim", post(claim_task))
         .layer(desktop_cors_layer())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -97,9 +98,10 @@ mod tests {
     };
     use http_body_util::BodyExt;
     use kanban_contract::{
-        ApiErrorCode, ApiExecutionPlanState, ApiTaskStatus, CreateTaskResponse, ErrorEnvelope,
-        GetTaskResponse, ListBoardColumnsResponse, ListBoardsResponse, ListTasksResponse,
-        MarkExecutionPlanNotRequiredResponse, PromoteTaskResponse,
+        ApiErrorCode, ApiExecutionPlanState, ApiRunStatus, ApiTaskStatus, ClaimTaskResponse,
+        CreateTaskResponse, ErrorEnvelope, GetTaskResponse, ListBoardColumnsResponse,
+        ListBoardsResponse, ListTasksResponse, MarkExecutionPlanNotRequiredResponse,
+        PromoteTaskResponse,
     };
     use tower::ServiceExt;
 
@@ -282,6 +284,126 @@ mod tests {
             ApiExecutionPlanState::NotRequired
         );
         assert!(shown.meta.is_none());
+
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_create/transitions/claim",
+                serde_json::json!({
+                    "actor": "worker",
+                    "ttl_ms": 300000,
+                    "worker_profile": "manual",
+                    "metadata": {"source": "http"}
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let claim: ClaimTaskResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(claim.data.task.status, ApiTaskStatus::Running);
+        assert_eq!(claim.data.run.status, ApiRunStatus::Running);
+        assert_eq!(
+            claim.data.task.current_run_id.as_deref(),
+            Some(claim.data.run.id.as_str())
+        );
+        assert_eq!(claim.data.run.worker_profile.as_deref(), Some("manual"));
+        assert_eq!(
+            claim.data.run.metadata,
+            serde_json::json!({"source": "http"})
+        );
+        assert!(claim.data.claim_token.starts_with("claim_"));
+        assert_eq!(
+            claim.data.claim_expires_at,
+            claim.data.task.claim_expires_at
+        );
+
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_create/transitions/claim",
+                serde_json::json!({"actor": "second-worker"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(error.error.code, ApiErrorCode::ClaimConflict);
+
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/boards/default/tasks",
+                serde_json::json!({
+                    "task_id": "t_http_claim_race",
+                    "idempotency_key": "http-claim-race",
+                    "title": "HTTP claim race",
+                    "description": "ready spec",
+                    "priority": 1,
+                    "metadata": {},
+                    "labels": [],
+                    "depends_on": [],
+                    "actor": "seed"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_claim_race/execution-plan/not-required",
+                serde_json::json!({"reason": "single action", "actor": "planner"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_claim_race/transitions/promote",
+                serde_json::json!({"actor": "planner"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let (first, second) = tokio::join!(
+            router.clone().oneshot(json_request(
+                "/api/v1/tasks/t_http_claim_race/transitions/claim",
+                serde_json::json!({"actor": "worker-a"}),
+            )),
+            router.clone().oneshot(json_request(
+                "/api/v1/tasks/t_http_claim_race/transitions/claim",
+                serde_json::json!({"actor": "worker-b"}),
+            ))
+        );
+        let first = first.unwrap();
+        let second = second.unwrap();
+        let statuses = [first.status(), second.status()];
+        assert_eq!(
+            statuses
+                .iter()
+                .filter(|status| **status == StatusCode::OK)
+                .count(),
+            1
+        );
+        assert_eq!(
+            statuses
+                .iter()
+                .filter(|status| **status == StatusCode::CONFLICT)
+                .count(),
+            1
+        );
+        let loser = if first.status() == StatusCode::CONFLICT {
+            first
+        } else {
+            second
+        };
+        let bytes = loser.into_body().collect().await.unwrap().to_bytes();
+        let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(error.error.code, ApiErrorCode::ClaimConflict);
 
         let response = router
             .clone()

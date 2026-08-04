@@ -6,11 +6,11 @@ use std::{
 };
 
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, ApiErrorCode, ApiExecutionPlan, ApiTask, CreateTaskRequest,
-    CreateTaskResponse, ErrorEnvelope, GetTaskResponse, HealthReport, HealthResponse,
-    ListBoardColumnsResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse,
+    ApiBoard, ApiBoardColumn, ApiClaim, ApiErrorCode, ApiExecutionPlan, ApiTask, ClaimTaskRequest,
+    ClaimTaskResponse, CreateTaskRequest, CreateTaskResponse, ErrorEnvelope, GetTaskResponse,
+    HealthReport, HealthResponse, ListBoardColumnsResponse, ListBoardsResponse, ListTasksQuery,
+    ListTasksResponse, MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse,
+    PromoteTaskRequest, PromoteTaskResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -235,6 +235,31 @@ impl KanbanClient {
     ) -> Result<ApiTask, ClientError> {
         let task_id = self.resolve_task_id(board, selector)?;
         self.promote_task(&task_id, request)
+    }
+
+    pub fn claim_task(
+        &self,
+        task_id: &str,
+        request: &ClaimTaskRequest,
+    ) -> Result<ApiClaim, ClientError> {
+        let response: ClaimTaskResponse = self.post(
+            &format!(
+                "/api/v1/tasks/{}/transitions/claim",
+                encode_path_segment(task_id.trim())
+            ),
+            request,
+        )?;
+        Ok(response.data)
+    }
+
+    pub fn claim_task_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+        request: &ClaimTaskRequest,
+    ) -> Result<ApiClaim, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        self.claim_task(&task_id, request)
     }
 
     fn get<T>(&self, path: &str) -> Result<T, ClientError>

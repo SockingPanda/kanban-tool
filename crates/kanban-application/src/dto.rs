@@ -94,6 +94,66 @@ pub struct PromoteTaskRecord {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClaimTaskCommand {
+    pub task_id: String,
+    pub actor: String,
+    pub ttl_ms: i64,
+    pub worker_profile: Option<String>,
+    pub metadata: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClaimTaskRecord {
+    pub expected_lock_version: i64,
+    pub actor: String,
+    pub claim_token: String,
+    pub run_id: String,
+    pub event_id: String,
+    pub worker_profile: String,
+    pub metadata_json: String,
+    pub now: i64,
+    pub claim_expires_at: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunStatus {
+    Running,
+    Succeeded,
+    Failed,
+    Canceled,
+    Expired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunRecord {
+    pub id: String,
+    pub board_id: String,
+    pub task_id: String,
+    pub status: RunStatus,
+    pub worker_profile: Option<String>,
+    pub worker_pid: Option<i64>,
+    pub claim_owner: String,
+    pub claim_expires_at: i64,
+    pub started_at: i64,
+    pub last_heartbeat_at: Option<i64>,
+    pub finished_at: Option<i64>,
+    pub exit_code: Option<i64>,
+    pub summary: Option<String>,
+    pub error: Option<String>,
+    pub log_path: Option<String>,
+    pub metadata_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClaimRecord {
+    pub task: TaskRecord,
+    pub run: RunRecord,
+    pub claim_token: String,
+    pub claim_expires_at: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionPlanRecord {
     pub board_id: String,
@@ -126,6 +186,7 @@ pub struct TaskRecord {
     pub started_at: Option<i64>,
     pub completed_at: Option<i64>,
     pub archived_at: Option<i64>,
+    pub has_claim_token: bool,
     pub claim_owner: Option<String>,
     pub claim_expires_at: Option<i64>,
     pub last_heartbeat_at: Option<i64>,

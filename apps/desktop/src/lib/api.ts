@@ -1337,6 +1337,13 @@ export class KanbanApi {
         signal: options.signal,
       }))
     }
+    if (action === "claim") {
+      return parseClaimEnvelope(await this.requestRaw(path, {
+        method: "POST",
+        body: payload,
+        signal: options.signal,
+      }))
+    }
     return this.request<Task | ClaimResponse>(path, {
       method: "POST",
       body: payload,
@@ -1717,6 +1724,19 @@ function parseListRunsEnvelope(value: unknown): { data: Run[] } {
 function parseGetRunEnvelope(value: unknown): { data: Run } {
   const envelope = expectRecord<Record<string, unknown>>(value, "get run response"); expectExactKeys(envelope, ["data"], "get run response")
   return { data: parseApiRun(envelope.data, "get run response data") }
+}
+
+function parseClaimEnvelope(value: unknown): ClaimResponse {
+  const envelope = expectRecord<Record<string, unknown>>(value, "claim response")
+  expectExactKeys(envelope, ["data"], "claim response")
+  const data = expectRecord<Record<string, unknown>>(envelope.data, "claim response.data")
+  expectExactKeys(data, ["task", "run", "claim_token", "claim_expires_at"], "claim response.data")
+  return {
+    task: parseApiTask(data.task, "claim response.data.task"),
+    run: parseApiRun(data.run, "claim response.data.run"),
+    claim_token: expectString(data.claim_token, "claim response.data.claim_token"),
+    claim_expires_at: expectNullableInteger(data.claim_expires_at, "claim response.data.claim_expires_at"),
+  }
 }
 
 const SIGNAL_OBSERVATION_KEYS = ["id", "board_id", "task_id", "task_ref_snapshot", "run_id", "comment_id", "actor", "agent_type", "source", "evidence", "created_at"] as const

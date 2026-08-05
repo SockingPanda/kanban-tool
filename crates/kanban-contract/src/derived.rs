@@ -60,6 +60,9 @@ fn default_context_vector_limit() -> usize {
 fn default_context_max_items() -> usize {
     20
 }
+fn default_context_depth() -> usize {
+    1
+}
 fn default_events_limit() -> usize {
     100
 }
@@ -224,6 +227,21 @@ pub struct BuildContextQuery {
     pub vector_limit: usize,
     #[serde(default = "default_context_max_items")]
     pub max_items: usize,
+    /// Optional global task id.  When omitted, `reference` or `query` selects
+    /// the context subject.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    /// Board-local task reference such as `kanban-tool#12`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<String>,
+    /// Free-text query used for lexical/vector subject resolution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    #[serde(default = "default_context_depth")]
+    pub depth: usize,
+    /// Total item budget.  `max_items` remains accepted as the v1 alias.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -406,10 +424,14 @@ pub type SearchStatusResponse = DataEnvelope<SearchStatus>;
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct ContextPolicy {
+    #[serde(default = "default_context_depth")]
+    pub depth: usize,
     pub lexical_limit: usize,
     pub graph_limit: usize,
     pub vector_limit: usize,
     pub max_items: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -438,6 +460,29 @@ pub struct ContextItem {
         schemars(required, schema_with = "required_nullable_string_schema")
     )]
     pub snippet: Option<String>,
+    #[serde(default, skip_serializing_if = "is_zero_usize")]
+    pub rank: usize,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<ContextEvidence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct ContextEvidence {
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entity_uri: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub predicate: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -459,8 +504,34 @@ pub struct ContextPack {
     pub degraded: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<ContextDiagnostic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub providers: Vec<ContextProviderStatus>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub truncated: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub truncation_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct ContextProviderStatus {
+    pub provider: String,
+    pub capability: String,
+    pub available: bool,
+    pub degraded: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 pub type BuildContextResponse = DataEnvelope<ContextPack>;
+
+fn is_zero_usize(value: &usize) -> bool {
+    *value == 0
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

@@ -835,6 +835,26 @@ const BUILD_CONTEXT_QUERY_PARAMETERS: &[WireParameter] = &[
         name: "max_items",
         cardinality: Some(WireParameterCardinality::OptionalOne),
     },
+    WireParameter {
+        name: "task",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "reference",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "query",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "depth",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "budget",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
 ];
 const LIST_EVENTS_QUERY_PARAMETERS: &[WireParameter] = &[
     WireParameter {

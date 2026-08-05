@@ -88,7 +88,7 @@ baseline 公开 transitions 为 11 个；HEAD 公开 transitions 为 7 个，另
 
 ## 3. HTTP route parity
 
-### 3.1 Retained routes (26/84, `current`)
+### 3.1 Retained routes (27/84, `current`)
 
 | legacy evidence / operation | target owner / public entry | migration rule | acceptance | status |
 |---|---|---|---|---|
@@ -97,6 +97,7 @@ baseline 公开 transitions 为 11 个；HEAD 公开 transitions 为 7 个，另
 | `GET /api/v1/boards/:board/columns` (`api.list-board-columns`) | `.../boards/columns.rs` | fixed canonical columns | columns match 9 default statuses | current |
 | `GET/POST /api/v1/boards/:board/tasks` (`api.list-tasks`, `api.create-task`) | `.../tasks/list.rs`, `create.rs` | shared task list/create path | list/create and idempotency acceptance | current |
 | `GET /api/v1/tasks/:task_id` (`api.get-task`) | `.../tasks/show.rs` | selector resolved by host | global id/board selector response exact | current |
+| `GET /api/v1/tasks/:task_id/context` | `.../context.rs` + `adapter/operations/context.rs` | bounded subject/reference/query pack；Turso FTS、canonical relation BFS、vector provider 均经 application merge | subject-first stable dedup/rank、budget、board isolation、provider degraded/fallback and response contract tests | current |
 | `POST /api/v1/tasks/:task_id/execution-plan/not-required` | `.../tasks/plan_not_required.rs` | explicit plan gate | unplanned task can opt out with reason | current |
 | `POST /api/v1/tasks/:task_id/transitions/{block,claim,complete,heartbeat,promote,submit-review}` | `.../tasks/{block,claim,done,heartbeat,promote,review}.rs` | all mutations use the shared `kanban-service` transaction path | route-specific lifecycle tests and event/run invariants | current |
 | `POST /api/v1/tasks/:task_id/transitions/release` | `.../tasks/release.rs` | new release contract; see §2 | release acceptance above | new/current |
@@ -107,7 +108,7 @@ baseline 公开 transitions 为 11 个；HEAD 公开 transitions 为 7 个，另
 | `GET /api/v1/events` (`api.list-events`) | `.../events/list.rs` | event list only, no direct event write | cursor/board/task filter acceptance | current |
 | `GET /api/v1/stats` (`api.get-stats`) | `.../stats.rs` | canonical queue stats query | status counts/stale claims/blocked reasons response | current |
 
-### 3.2 删除的 baseline routes（58/84，全部 `missing`）
+### 3.2 删除的 baseline routes（57/84，全部 `missing`）
 
 以下逐项来自 baseline `EndpointDescriptor`；HEAD `http/operations` 没有对应 route：
 
@@ -119,7 +120,6 @@ GET  /api/v1/boards/:board/tasks/by-status
 GET  /api/v1/boards/:board/task-map
 PATCH /api/v1/tasks/:task_id
 GET  /api/v1/tasks/:task_id/neighborhood
-GET  /api/v1/tasks/:task_id/context
 GET  /api/v1/tasks/:task_id/labels
 POST /api/v1/tasks/:task_id/labels
 DELETE /api/v1/tasks/:task_id/labels/:label_id
@@ -212,13 +212,14 @@ MCP 只承载领域 query/resource。迁移规则是先加 Turso schema/service 
 | label leaves `list/create/bootstrap/delete/add/remove`, `semantics list/show/upsert/delete`, `atoms list/explain`, `atom-index status/rebuild/query`, `suggest`, `propose`, `proposals list/show/accept/reject`, `ontology record/list/show/review/quality/confirm/reject/supersede/resolve/apply atom/revert/validate` | baseline `args.rs`, `commands/label.rs` | owner：`kanban-service` label/ontology facts + Turso vector projection；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop ontology/detail | 按 §1 表→service→derived index→adapter 顺序迁移，每个 leaf 绑定 schema/adoption witness。 | 所有列出的 leaf 有稳定 JSON/error、事务/回滚、Turso vector degraded 和 Desktop workbench acceptance。 | missing |
 | search/index `search`; `index status/doctor/rebuild/sync` | baseline `args.rs`, `commands/search.rs`, `commands/index.rs` | owner：`kanban-service` Turso FTS + host projection worker；public entry：`kanban-server`/`kanban-client`、CLI search/index、Desktop list query | 迁移 FTS facts/metadata/outbox；legacy SQLite importer 作为 service feature，经 host-admin HTTP/CLI 运行，不在 `xtask`；再完成 rebuild/sync/doctor，并让 query adapter 只读 service projection。 | FTS missing/corrupt/degraded、query filters/pagination、rebuild/sync tests 完整；importer 不经 `xtask` 写 canonical。 | missing |
 | substrate `entity list/show`, `outbox list`, `derived status` | baseline `commands/substrate.rs` | owner：`kanban-service` entity/outbox/derived facts + host projection worker；public entry：`kanban-server`/`kanban-client`、CLI、MCP substrate queries、Desktop diagnostics | 迁移 entity/outbox/derived tables并定义 event replay cursor，再注册只读 adapters。 | entity/outbox/derived DTO、cursor、lag/error diagnostics acceptance 完整。 | missing |
-| graph `status/neighbors/rebuild/sync/query`; vector `status/configure/rebuild/sync/query-chunks/query-label-atoms`; context `build` | baseline `args.rs`, `commands/substrate.rs` | owner：`kanban-service` Turso BFS/vector/FTS + host projection worker；public entry：`kanban-server`/`kanban-client`、CLI、Desktop map/detail | 恢复 service 内 capability/lease/config、derived rebuild/sync 与 context degraded policy；legacy SQLite importer 仅作为 service feature 通过 host-admin HTTP/CLI，不在 `xtask`，再开放命令。 | service unavailable/degraded/recovery、BFS/vector/FTS query and context merge tests 完整。 | missing |
+| graph `status/neighbors/rebuild/sync/query`; vector `status/configure/rebuild/sync/query-chunks/query-label-atoms` | baseline `args.rs`, `commands/substrate.rs` | owner：`kanban-service` Turso BFS/vector/FTS + host projection worker；public entry：`kanban-server`/`kanban-client`、CLI、Desktop map/detail | 恢复 service 内 capability/lease/config、derived rebuild/sync 与 context 外的维护操作；legacy SQLite importer 仅作为 service feature 通过 host-admin HTTP/CLI，不在 `xtask`，再开放命令。 | service unavailable/degraded/recovery、BFS/vector/FTS query and maintenance tests 完整。 | missing |
+| context `build` | baseline `args.rs`, `commands/substrate.rs` | owner：`kanban-application` context merge + Turso FTS/BFS/vector adapters；public entry：`kanban-server`/`kanban-client`、CLI `context build`、MCP `context_build`、Desktop typed API | read-only context pack；subject/reference/query selectors、budget/depth、provider capability/degraded diagnostics、lexical-only fallback 和 board isolation 均走 canonical host | application merge、HTTP/client/CLI/MCP/fixture/adoption witness and provider outage tests complete | current |
 | hidden `dispatch`, `completions`, `__complete` | baseline `args.rs` | owner：host-admin dispatcher + CLI completion adapter；public entry：`kanban serve --dispatcher-profile`, `kanban completions`, hidden `__complete` | dispatcher 绑定 serve host/claim path；completion 只生成静态脚本和本地枚举/配置候选，不重新打开 DB。 | profile/claim/shutdown、completion no-storage-touch tests 完整。 | partial |
 | baseline maintenance/diagnostics: `doctor`, `stats`, `backup`, `export`, `import`, `checkpoint`, `vacuum` | baseline `args.rs`, `commands/maintenance.rs`, `app.rs` | owner：`host-admin` + `kanban-service` maintenance；public entry：CLI `kanban doctor|stats|backup|export|import|checkpoint|vacuum` 与等价 `kanban-server`/`kanban-client` HTTP、Desktop | 先定义 Turso backup/import format、doctor/checkpoint/lock/recovery contracts，再注册 CLI/HTTP/Desktop。 | each leaf has no-data-loss, recovery, lock and JSON contract acceptance；当前没有对应 CLI leaf。 | missing |
 
 ## 5. MCP surface
 
-baseline 没有 MCP crate/tool；HEAD 新增 24 个 stdio tools，均通过 `KanbanClient` 调用
+baseline 没有 MCP crate/tool；HEAD 新增 25 个 stdio tools，均通过 `KanbanClient` 调用
 loopback host（`crates/kanban-mcp/src/shared.rs`），不直接打开 Turso。
 
 | tool set / names | legacy evidence | target owner / public entry | migration rule | acceptance | status |
@@ -230,8 +231,9 @@ loopback host（`crates/kanban-mcp/src/shared.rs`），不直接打开 Turso。
 | `dependency_create`, `dependency_list`, `dependency_remove` | baseline absent | `tools/dependencies/*.rs` | same-board FK/cycle guards | relation operation acceptance | new/current |
 | `step_create`, `step_list`, `step_update` | baseline absent | `tools/steps/*.rs` | no old step done/skip/reopen/remove until route exists | step contract acceptance | new/current |
 | `run_list`, `run_show`, `run_log`, `event_list` | baseline absent | `tools/runs/*.rs`, `tools/events/list.rs` | read-only run/event paths; bounded log | tool inventory + bounded log/event tests | new/current |
+| `context_build` | baseline absent | `tools/context.rs` | bounded read-only context pack；不提供 rebuild/sync/admin | tool locatability + typed client/provider degraded acceptance | new/current |
 
-HEAD inventory is locked by `crates/kanban-mcp/src/main.rs:38-73` and lists exactly 24 names.
+HEAD inventory is locked by `crates/kanban-mcp/src/main.rs:38-74` and lists exactly 25 names.
 
 ## 6. Desktop views and task workbench
 
@@ -243,6 +245,7 @@ HEAD inventory is locked by `crates/kanban-mcp/src/main.rs:38-73` and lists exac
 | `ontology` | baseline `OntologyReviewWorkbench.tsx` and navigation | owner：`kanban-service` ontology facts + Turso vector projection + Desktop Ontology；public entry：`kanban-server`/`kanban-client` label-ontology HTTP、CLI、MCP、Ontology workbench | 迁移 ontology ledger/action/validation 及 atom index，再注册 workbench navigation。 | ontology action/validation/revert/UI review acceptance 完整；当前 view 被排除，status partial/retired。 | partial/retired |
 | `maintenance` | baseline `MaintenanceView.tsx` and navigation | owner：`host-admin` + `kanban-service` maintenance worker + Desktop Maintenance；public entry：`kanban-server`/`kanban-client` maintenance HTTP、CLI and Maintenance view | 迁移 owner lease/generation/doctor/checkpoint/recovery，再把 Maintenance view 接回导航。 | maintenance run/rebuild/doctor/recovery/UI acceptance 完整；当前 view 被排除，status partial/retired。 | partial/retired |
 | task detail panels: description, execution plan, comments, dependencies, runs/events, metadata | baseline/current `features/task-detail/*` | `TaskDetail.tsx` and retained task/run/comment/dependency/step APIs | keep panel only for retained routes; no direct SQL | detail sheet can read/update only supported operations | current |
+| context pack typed API | baseline task context surface | `apps/desktop/src/lib/api/context.ts`, `KanbanApi.buildContext` | expose the read-only context contract without adding a second data path; UI adoption remains scoped to a later detail panel | TypeScript API types and route encoding compile; no direct database access | current/partial |
 | task labels/label suggestions and old graph detail | baseline `TaskLabelsPanel.tsx`, label API methods | current cutline test `task-detail-capability-cutline.test.ts` removes label panel and label mutations from selected detail | do not infer parity from orphan files/types | test proves no label panel/add/remove/suggestion call in active detail path | partial/missing |
 
 ## 7. host、dispatcher 与维护命令
@@ -254,7 +257,7 @@ HEAD inventory is locked by `crates/kanban-mcp/src/main.rs:38-73` and lists exac
 | HTTP `POST /api/v1/maintenance/doctor`, `POST /api/v1/maintenance/checkpoint` | baseline `api.doctor`, `api.checkpoint`; baseline server router | owner：`host-admin` + `kanban-service` maintenance operations + `kanban-server`; public entry：same HTTP paths, `kanban-client`/CLI doctor/checkpoint and Desktop Health/Maintenance | 以 Turso schema/host identity、WAL/checkpoint、FK/derived diagnostics 为 operation contract，注册 HTTP/client/CLI/Desktop。 | route inventory、doctor report、checkpoint lock/recovery and JSON contract tests complete；当前 route 数为 0。 | missing |
 | CLI `maintenance run/status/rebuild/cleanup-legacy inventory/apply/verify/restore` (7 leaves) | baseline `args.rs::MaintenanceCommand`; `commands/maintenance.rs` | owner：`host-admin` + `kanban-service` projection worker；public entry：CLI `kanban maintenance ...`、`kanban-server` maintenance HTTP、Desktop Maintenance | 迁移 projection-v2 owner lease/generation/recovery/cleanup protocol，随后注册每个 leaf 与 schema/adoption witness。 | run/status/rebuild/cleanup-legacy 的 no-data-loss、owner exclusion、resume/restore tests complete。 | missing |
 | CLI `doctor`, `stats`, `backup`, `export`, `import`, `checkpoint`, `vacuum` (7 leaves) | baseline `args.rs`, `commands/app.rs` | owner：`host-admin` + `kanban-service` maintenance operations；public entry：CLI、`kanban-server`/`kanban-client` maintenance HTTP、Desktop Health | 定义 backup/import format、replace journal、doctor/checkpoint/lock/recovery 后注册 CLI；stats 与 HTTP stats 共用 `kanban-protocol` DTO。legacy SQLite importer 是 service feature，经 host-admin HTTP/CLI 运行，不在 `xtask`。 | 每个 leaf 有 JSON/error、data-loss guard、recovery and read-only acceptance；当前 CLI leaf 缺失。 | missing |
-| search/graph/vector/index/context maintenance | baseline `commands/search.rs`, `commands/index.rs`, `commands/substrate.rs`, projection migrations | owner：`kanban-service` Turso vector/FTS/BFS + host projection worker；public entry：`kanban-server`/`kanban-client`、CLI、Desktop map/detail，host-admin 负责维护调用 | 由 service feature 提供 legacy SQLite importer，通过 host-admin HTTP/CLI 运行，绝不在 `xtask`；恢复 Turso derived metadata/outbox/capability，再执行 rebuild/sync/repair；canonical Turso 只保存事实。 | service unavailable/degraded、rebuild/sync/repair、context fallback and cross-surface acceptance complete。 | missing |
+| search/graph/vector/index maintenance | baseline `commands/search.rs`, `commands/index.rs`, `commands/substrate.rs`, projection migrations | owner：`kanban-service` Turso vector/FTS/BFS + host projection worker；public entry：`kanban-server`/`kanban-client`、CLI、Desktop map/detail，host-admin 负责维护调用 | 由 service feature 提供 legacy SQLite importer，通过 host-admin HTTP/CLI 运行，绝不在 `xtask`；恢复 Turso derived metadata/outbox/capability，再执行 rebuild/sync/repair；canonical Turso 只保存事实。 | service unavailable/degraded、rebuild/sync/repair and cross-surface acceptance complete。 | missing |
 | desktop maintenance/health boundary | baseline MaintenanceView plus HTTP doctor/checkpoint; HEAD HealthView only | owner：`host-admin` + `kanban-service` maintenance worker + Desktop；public entry：`kanban-server`/`kanban-client` maintenance HTTP、CLI maintenance 与 Desktop Maintenance；`HealthView` 保留为只读 host health | 恢复 Maintenance view 导航及完整 host-admin 操作（doctor/checkpoint、owner lease、generation、rebuild、restore/recovery）；所有写操作经 service/host-admin path，不直接开 Turso。 | `HealthView` 只展示 host 状态；Maintenance view 可导航并覆盖完整 maintenance acceptance，且与 §7 的 HTTP/CLI 操作一致。 | partial |
 
 本节 host-admin 维护路径不注册 MCP；MCP 只保留领域 query/resource，不提供 rebuild、migration、backup、compaction 或 replacement。

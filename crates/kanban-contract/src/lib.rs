@@ -94,6 +94,7 @@ pub use cli::{
     CliTaskStepReopenOutput, CliTaskStepSkipOutput, CliTaskStepUpdateOutput, CliTaskUnblockOutput,
     CliTaskUpdateOutput, CliVacuumOutput, CliVacuumResult, cli_operation_catalog,
 };
+pub use cli_helpers::CliContextBuildOutput;
 pub use comments::{
     ApiComment, CommentAuthorType, CommentKind, CreateCommentPath, CreateCommentRequest,
     CreateCommentResponse, ListCommentsPath, ListCommentsResponse,
@@ -106,14 +107,14 @@ pub use dependencies::{
 };
 pub use derived::{
     ApiRelation, ApiRelationProvenance, BlockedReasonCount, BoardQuery, BuildContextPath,
-    BuildContextQuery, BuildContextResponse, ContextDiagnostic, ContextItem, ContextPack,
-    ContextPolicy, EntityListQuery, EntityListResponse, EntityPath, EntityResponse,
-    EntityUpsertRequest, GraphMaintenance, GraphMaintenanceResponse, GraphNeighborsQuery,
-    GraphNeighborsResponse, GraphQueryQuery, GraphStatus, GraphStatusResponse, ListEventsQuery,
-    QueueStats, SearchMeta, SearchPageMeta, SearchStatus, SearchStatusResponse, SearchTaskHit,
-    SearchTaskStatusWindow, SearchTaskStatusWindows, SearchTasksByStatusResponse, SearchTasksData,
-    SearchTasksQuery, SearchTasksResponse, StaleClaim, StatsResponse, StatusCount, VectorStatus,
-    VectorStatusResponse,
+    BuildContextQuery, BuildContextResponse, ContextDiagnostic, ContextEvidence, ContextItem,
+    ContextPack, ContextPolicy, ContextProviderStatus, EntityListQuery, EntityListResponse,
+    EntityPath, EntityResponse, EntityUpsertRequest, GraphMaintenance, GraphMaintenanceResponse,
+    GraphNeighborsQuery, GraphNeighborsResponse, GraphQueryQuery, GraphStatus, GraphStatusResponse,
+    ListEventsQuery, QueueStats, SearchMeta, SearchPageMeta, SearchStatus, SearchStatusResponse,
+    SearchTaskHit, SearchTaskStatusWindow, SearchTaskStatusWindows, SearchTasksByStatusResponse,
+    SearchTasksData, SearchTasksQuery, SearchTasksResponse, StaleClaim, StatsResponse, StatusCount,
+    VectorStatus, VectorStatusResponse,
 };
 pub use endpoint::{
     EndpointDescriptor, EndpointObligation, EndpointObligationKind, EndpointObligations,

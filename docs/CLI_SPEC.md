@@ -5,10 +5,10 @@ Codex hook 和 `kanban serve` 这些本地 shell 命令外，所有命令都只�
 调用 `http://127.0.0.1:8721`；CLI 不打开、初始化或 fallback 到任何数据库。
 
 当前实现覆盖 board、task、comment、attachment、dependency、run、event、search、index、
-ontology、signal、host-admin maintenance，以及本节列出的本地 shell 命令；这不是最终功能边界。
-labels、graph、vector、context 和其他 projection 能力仍按 parity ledger 恢复为
-localhost client 命令。portable export/import 和 verified backup 已接入；旧的直接数据库
-执行路径不会恢复。
+context、ontology、signal、host-admin maintenance，以及本节列出的本地 shell 命令；这不
+是最终功能边界。labels、graph、vector 的维护能力仍按 parity ledger 恢复为 localhost
+client 命令。portable export/import 和 verified backup 已接入；旧的直接数据库执行路径不
+会恢复。
 
 ## 1. 全局选项
 
@@ -291,6 +291,25 @@ kanban task step update <TASK_SELECTOR> <STEP_SELECTOR>
 
 `STEP_SELECTOR` 可为全局 `step_...` 或该 task 下的 `S<n>`。add/list/update 返回同一
 `ApiTaskSteps` shape；add 的 idempotency key 仅在实体 task 内生效。
+
+### 7.6 Context pack（只读）
+
+```text
+kanban context build [SUBJECT]
+  [--task <TASK_ID>] [--reference <TASK_REFERENCE>] [--query <TEXT>]
+  [--depth <N>] [--lexical-limit <N>] [--graph-limit <N>] [--vector-limit <N>]
+  [--max-items <N>] [--budget <N>]
+```
+
+`SUBJECT` 以 `t_` 开头时作为 `--task`，其他值作为 board-local `--reference`；query-only
+调用可省略 positional subject 并提供 `--query`。参数至少需要一个 task/reference/query
+selector。命令只通过 `kanban-client` 请求 `GET /api/v1/tasks/{task_id}/context`，不会写入
+canonical task、relation 或任何 derived provider。
+
+文本输出按 `rank source entity_uri score reason` 展示 item，并附带 truncation 和 provider
+状态；`--json` 使用 `CliContextBuildOutput`，保留 `policy`、`provenance`、`evidence`、
+`providers`、`degraded` 与 diagnostics。vector/graph provider 降级时仍返回 lexical
+context；跨 board candidate 会被丢弃。
 
 ## 8. Attachment
 

@@ -7,9 +7,9 @@
 `/api/v1`；健康检查是 `/health`。
 
 本文件描述当前已接入的 single-host 路由；signals ledger 已通过同一 application/service
-path 接入，task search 已通过 Turso FTS projection 接入，host-admin maintenance 只由
-HTTP/CLI 调用，MCP 不暴露这些操作。labels、graph、vector、context 与其他 projection 仍按
-parity ledger 逐项恢复到同一 localhost API；旧的直接数据库路径不会恢复。
+path 接入，task search/context 已通过 Turso FTS、canonical relation BFS 和可降级 vector
+provider 接入，host-admin maintenance 只由 HTTP/CLI 调用，MCP 不暴露这些操作。labels、
+graph、vector 的维护操作仍按 parity ledger 逐项恢复；旧的直接数据库路径不会恢复。
 
 ## 1. 通用契约
 
@@ -212,6 +212,26 @@ projection generation、ready/degraded/stale、最后 event 与 lag。projection
 Query：`board`（默认 `default`），请求体为空 JSON。`rebuild` 从 canonical task、comment、run
 和 event 事实重建 `task_search_fts`；`sync` 在存在 pending projection job 或 event lag 时
 执行同一可重放 rebuild。两者返回 `SearchStatusResponse`，不会修改 canonical task 状态。
+
+### `GET /api/v1/tasks/{task_id}/context`
+
+这是只读的 bounded context pack 查询。`task_id` 是默认 subject；也可以在 query 中使用
+`task`（全局 `t_...`）、`reference`（board-local reference）或 `query`（自由文本）选择
+subject。至少提供一个 selector；query-only 调用可将 path 占位写为 `query`。
+
+支持的 query 参数：`board`（默认 `default`）、`lexical_limit`（默认 5）、`graph_limit`
+（默认 10）、`vector_limit`（默认 5）、`depth`（默认 1，最大 8）、`max_items`（默认 20）
+和 `budget`（总 item 预算，默认使用 `max_items`）。各 limit 和 budget 范围为 `1..=1000`。
+
+响应为 `BuildContextResponse`，`data.items` 按 subject、lexical、graph、vector 的稳定顺序
+合并，并按 `entity_uri` 去重；每项包含 `source`、`provenance`、可选 `score`、`rank`、
+`reason` 和 task/relation `evidence`。`providers` 报告 provider capability、可用性、
+降级原因；`degraded`/`diagnostics` 与 `truncated`/`truncation_reason` 让调用方无需解析
+人类 message 即可处理部分结果。
+
+所有 provider 结果都按 subject board 做 isolation，canonical task/relation 只读；graph
+BFS 自带 cycle/dedup 保护。vector 或 graph 不可用时不会阻断 lexical 结果；Turso FTS 不可用
+或 stale 时由 canonical SQL fallback 并在 provider diagnostics 中标记。
 
 ## 5. Execution plan 与 task state machine
 

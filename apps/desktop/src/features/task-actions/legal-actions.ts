@@ -1,26 +1,12 @@
-import {
-  Archive,
-  CheckCircle2,
-  HeartPulse,
-  ListChecks,
-  PauseCircle,
-  Play,
-  RefreshCcw,
-  XCircle,
-  type LucideIcon,
-} from "lucide-react"
+import { CheckCircle2, HeartPulse, PauseCircle, Play, XCircle, type LucideIcon } from "lucide-react"
 
 import type { KanbanApi, Task } from "@/lib/api"
 import {
-  archiveTaskBody,
   blockTaskBody,
-  canArchiveTask,
   canBlockTask,
   canCompleteTask,
-  canSpecifyTask,
   completeTaskBody,
   requiresForceConfirmation,
-  specifyTaskBody,
 } from "@/lib/action-policy"
 import type { I18nMessage } from "@/i18n"
 
@@ -35,12 +21,6 @@ export type LegalTaskAction = {
 
 export function legalActions(task: Task, claimToken: string | null, blockReason: string): LegalTaskAction[] {
   return [
-    {
-      label: "Specify",
-      icon: ListChecks,
-      enabled: canSpecifyTask(task.status, task.description),
-      run: (api, item) => api.transition(item, "specify", specifyTaskBody(item.description)),
-    },
     {
       label: "Promote",
       icon: Play,
@@ -83,22 +63,6 @@ export function legalActions(task: Task, claimToken: string | null, blockReason:
         : undefined,
       danger: true,
       run: (api, item) => api.transition(item, "block", blockTaskBody(item.status, claimToken, blockReason)),
-    },
-    {
-      label: "Unblock",
-      icon: RefreshCcw,
-      enabled: task.status === "blocked",
-      run: (api, item) => api.transition(item, "unblock"),
-    },
-    {
-      label: "Archive",
-      icon: Archive,
-      enabled: canArchiveTask(task.status),
-      confirmation: requiresForceConfirmation(task.status, "archive", claimToken)
-        ? message("Force archive running task #{seq}?", { seq: task.seq })
-        : undefined,
-      danger: true,
-      run: (api, item) => api.transition(item, "archive", archiveTaskBody(item.status)),
     },
   ]
 }

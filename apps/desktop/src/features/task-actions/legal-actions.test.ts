@@ -5,32 +5,10 @@ import type { KanbanApi, Task } from "@/lib/api"
 import { legalActions } from "./legal-actions"
 
 describe("legal task actions", () => {
-  it("disables specify until a triage task has real description text", () => {
-    expect(actionFor(task({ status: "triage", description: null }), "Specify").enabled).toBe(false)
-    expect(actionFor(task({ status: "triage", description: "" }), "Specify").enabled).toBe(false)
-    expect(actionFor(task({ status: "triage", description: " ready enough " }), "Specify").enabled).toBe(true)
-  })
+  it("does not expose unsupported transition actions", () => {
+    const labels = legalActions(task({ status: "blocked" }), null, "waiting").map((action) => action.label)
 
-  it("sends existing description for specify without a synthetic fallback", async () => {
-    const api = apiStub()
-    const item = task({ status: "triage", description: " ready enough " })
-
-    await actionFor(item, "Specify").run(api, item)
-
-    expect(api.transition).toHaveBeenCalledWith(item, "specify", { description: "ready enough" })
-  })
-
-  it("force-confirms and force archives running tasks even with a claim token", async () => {
-    const api = apiStub()
-    const item = task({ status: "running" })
-    const action = actionFor(item, "Archive", "claim_123")
-
-    expect(action.enabled).toBe(true)
-    expect(action.confirmation).toEqual({ key: "Force archive running task #{seq}?", values: { seq: 1 } })
-
-    await action.run(api, item)
-
-    expect(api.transition).toHaveBeenCalledWith(item, "archive", { force: true })
+    expect(labels).not.toEqual(expect.arrayContaining(["Specify", "Unblock", "Archive"]))
   })
 
   it("enables non-running block actions with a reason body and no force confirmation", async () => {

@@ -9,12 +9,14 @@ use kanban_application::{
     DependencyEdgeRecord as ApplicationDependencyEdge,
     DependencySnapshotRecord as ApplicationDependencySnapshot,
     ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
-    StepRecord as ApplicationStep, TaskRecord as ApplicationTask,
+    RunRecord as ApplicationRun, RunStatus as ApplicationRunStatus, StepRecord as ApplicationStep,
+    TaskRecord as ApplicationTask,
 };
 use kanban_core::{KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
     DependencySnapshotRecord as StoreDependencySnapshot, StoreError,
-    TaskExecutionPlanRecord as StoreExecutionPlan, TaskRecord as StoreTask, TursoStore,
+    TaskExecutionPlanRecord as StoreExecutionPlan, TaskRecord as StoreTask,
+    TaskRunRecord as StoreRun, TursoStore,
 };
 
 mod operations;
@@ -176,6 +178,39 @@ fn application_execution_plan(plan: StoreExecutionPlan) -> Result<ApplicationExe
         reason: plan.reason,
         updated_by: plan.updated_by,
         updated_at: plan.updated_at,
+    })
+}
+
+pub(crate) fn application_run(run: StoreRun) -> Result<ApplicationRun> {
+    let status = match run.status.as_str() {
+        "running" => ApplicationRunStatus::Running,
+        "succeeded" => ApplicationRunStatus::Succeeded,
+        "failed" => ApplicationRunStatus::Failed,
+        "canceled" => ApplicationRunStatus::Canceled,
+        "expired" => ApplicationRunStatus::Expired,
+        other => {
+            return Err(KanbanError::Storage(format!(
+                "stored run status is invalid: {other}"
+            )));
+        }
+    };
+    Ok(ApplicationRun {
+        id: run.id,
+        board_id: run.board_id,
+        task_id: run.task_id,
+        status,
+        worker_profile: run.worker_profile,
+        worker_pid: run.worker_pid,
+        claim_owner: run.claim_owner,
+        claim_expires_at: run.claim_expires_at,
+        started_at: run.started_at,
+        last_heartbeat_at: run.last_heartbeat_at,
+        finished_at: run.finished_at,
+        exit_code: run.exit_code,
+        summary: run.summary,
+        error: run.error,
+        log_path: run.log_path,
+        metadata_json: run.metadata_json,
     })
 }
 

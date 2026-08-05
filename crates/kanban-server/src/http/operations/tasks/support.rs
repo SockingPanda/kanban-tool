@@ -1,10 +1,8 @@
 use crate::error::ApiError;
-use kanban_application::{
-    ExecutionPlanRecord, ExecutionPlanState, RunRecord, RunStatus, TaskRecord,
-};
+use kanban_application::{ExecutionPlanRecord, ExecutionPlanState, TaskRecord};
 use kanban_contract::{
-    ApiExecutionPlan, ApiExecutionPlanState, ApiRun, ApiRunStatus, ApiStepStatus, ApiTask,
-    ApiTaskPriority, ApiTaskStatus, ApiTaskStep,
+    ApiExecutionPlan, ApiExecutionPlanState, ApiStepStatus, ApiTask, ApiTaskPriority,
+    ApiTaskStatus, ApiTaskStep,
 };
 use kanban_core::{KanbanError, TaskStatus};
 
@@ -95,33 +93,6 @@ pub(crate) fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
         completed_required_step_count: task.completed_required_step_count,
         optional_step_count: task.optional_step_count,
         labels: Vec::new(),
-    })
-}
-
-pub(crate) fn api_run(run: RunRecord) -> Result<ApiRun, ApiError> {
-    let metadata = serde_json::from_str(&run.metadata_json).map_err(|error| {
-        KanbanError::Storage(format!("stored run metadata is invalid JSON: {error}"))
-    })?;
-    Ok(ApiRun {
-        id: run.id,
-        task_id: run.task_id,
-        status: match run.status {
-            RunStatus::Running => ApiRunStatus::Running,
-            RunStatus::Succeeded => ApiRunStatus::Succeeded,
-            RunStatus::Failed => ApiRunStatus::Failed,
-            RunStatus::Canceled => ApiRunStatus::Canceled,
-            RunStatus::Expired => ApiRunStatus::Expired,
-        },
-        worker_profile: run.worker_profile,
-        worker_pid: run.worker_pid,
-        claim_owner: run.claim_owner,
-        started_at: run.started_at,
-        finished_at: run.finished_at,
-        exit_code: run.exit_code,
-        summary: run.summary,
-        error: run.error,
-        has_log: run.log_path.is_some(),
-        metadata,
     })
 }
 

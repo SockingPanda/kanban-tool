@@ -21,5 +21,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(comments::router())
         .merge(dependencies::router())
         .merge(steps::router())
+        .merge(runs::router())
+        .merge(events::router())
         .with_state(state)
 }

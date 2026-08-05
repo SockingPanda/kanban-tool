@@ -1,3 +1,4 @@
+pub(super) mod archive;
 pub(super) mod block;
 pub(super) mod claim;
 pub(super) mod create;
@@ -6,10 +7,15 @@ pub(super) mod heartbeat;
 pub(super) mod list;
 pub(super) mod plan_not_required;
 pub(super) mod promote;
+pub(super) mod reclaim;
 pub(super) mod release;
+pub(super) mod reopen;
 pub(super) mod review;
 pub(super) mod show;
+pub(super) mod specify;
 pub(super) mod step;
+pub(super) mod unblock;
+pub(super) mod update;
 
 use clap::Subcommand;
 
@@ -43,6 +49,18 @@ pub(crate) enum TaskCommand {
     Done(done::DoneArgs),
     /// Block an active task with a required reason.
     Block(block::BlockArgs),
+    /// 更新任务的安全字段。
+    Update(update::UpdateArgs),
+    /// 补充 triage 任务规格并重算状态。
+    Specify(specify::SpecifyArgs),
+    /// 解除 blocked 状态并重算队列状态。
+    Unblock(unblock::UnblockArgs),
+    /// 重新打开已完成任务。
+    Reopen(reopen::ReopenArgs),
+    /// 回收过期或强制回收 running claim。
+    Reclaim(reclaim::ReclaimArgs),
+    /// 归档任务。
+    Archive(archive::ArchiveArgs),
 }
 
 pub(crate) fn run(ctx: &CliContext, command: &TaskCommand) -> Result<(), CliFailure> {
@@ -59,5 +77,11 @@ pub(crate) fn run(ctx: &CliContext, command: &TaskCommand) -> Result<(), CliFail
         TaskCommand::Review(args) => review::run(ctx, &client, args),
         TaskCommand::Done(args) => done::run(ctx, &client, args),
         TaskCommand::Block(args) => block::run(ctx, &client, args),
+        TaskCommand::Update(args) => update::run(ctx, &client, args),
+        TaskCommand::Specify(args) => specify::run(ctx, &client, args),
+        TaskCommand::Unblock(args) => unblock::run(ctx, &client, args),
+        TaskCommand::Reopen(args) => reopen::run(ctx, &client, args),
+        TaskCommand::Reclaim(args) => reclaim::run(ctx, &client, args),
+        TaskCommand::Archive(args) => archive::run(ctx, &client, args),
     }
 }

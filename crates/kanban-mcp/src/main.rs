@@ -65,6 +65,7 @@ mod tests {
                 "step_reopen",
                 "step_skip",
                 "step_update",
+                "task_archive",
                 "task_block",
                 "task_claim",
                 "task_create",
@@ -73,9 +74,14 @@ mod tests {
                 "task_list",
                 "task_plan_not_required",
                 "task_promote",
+                "task_reclaim",
                 "task_release",
+                "task_reopen",
                 "task_review",
                 "task_show",
+                "task_specify",
+                "task_unblock",
+                "task_update",
             ]
         );
     }

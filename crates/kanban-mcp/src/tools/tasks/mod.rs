@@ -6,6 +6,7 @@ mod list;
 mod plan_not_required;
 mod promote;
 mod show;
+mod update;
 
 impl KanbanMcp {
     pub(crate) fn task_tools() -> ToolRouter<Self> {
@@ -14,5 +15,6 @@ impl KanbanMcp {
             + Self::task_show_tools()
             + Self::task_plan_not_required_tools()
             + Self::task_promote_tools()
+            + Self::task_update_tools()
     }
 }

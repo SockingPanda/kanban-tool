@@ -52,6 +52,7 @@ export const queryKeys = {
   events: (board: string) => ["events", board] as const,
   stats: (board: string) => ["stats", board] as const,
   searchStatus: (board: string) => ["search-status", board] as const,
+  maintenanceStatus: (board: string) => ["maintenance-status", board] as const,
   boardTasksRoot: (board: string) => ["tasks", board] as const,
   boardTasks: (query: BoardTaskQuery) =>
     [

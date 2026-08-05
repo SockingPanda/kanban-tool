@@ -29,6 +29,9 @@ function guidanceKey(code: string, lower: string) {
   ) {
     return "Server unavailable. Start or check kanban serve."
   }
+  if (code === "restart_required" || code === "restart-required" || /restart[_ -]?required/.test(lower)) {
+    return "The operation was not applied because kanban serve must restart before the new database is available."
+  }
   if (code === "degraded" || code === "degraded_result" || /\bdegraded\b|stale/.test(lower)) {
     return "Service returned a degraded result; inspect the capability reason."
   }

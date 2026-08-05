@@ -1,12 +1,15 @@
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { Settings } from "lucide-react"
 import type { ReactNode } from "react"
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card } from "@/components/ui/card"
 import { Item, ItemActions, ItemContent, ItemTitle } from "@/components/ui/item"
 import { MenuSelect, type MenuSelectOption } from "@/components/ui/menu-select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useI18n, type LocaleMode } from "@/i18n"
-import type { RuntimeConfig } from "@/lib/api"
+import type { KanbanApi, RuntimeConfig } from "@/lib/api"
+import { presentApiError } from "@/lib/api/error-presentation"
 
 const localeOptions: MenuSelectOption<LocaleMode>[] = [
   { value: "system", label: "System" },
@@ -14,8 +17,17 @@ const localeOptions: MenuSelectOption<LocaleMode>[] = [
   { value: "en", label: "English" },
 ]
 
-export function SettingsView({ config }: { config: RuntimeConfig | null }) {
+export function SettingsView({ api, config }: { api: KanbanApi | null; config: RuntimeConfig | null }) {
   const { locale, mode, setMode, t } = useI18n()
+  const healthQuery = useQuery({
+    enabled: Boolean(api),
+    queryKey: ["health", config?.apiBaseUrl ?? "pending"],
+    queryFn: ({ signal }) => {
+      if (!api) throw new Error(t("API client is not ready."))
+      return api.health({ signal })
+    },
+    placeholderData: keepPreviousData,
+  })
   return (
     <ScrollArea className="flex-1 bg-card p-4">
       <Card className="p-4">
@@ -36,10 +48,23 @@ export function SettingsView({ config }: { config: RuntimeConfig | null }) {
           <InfoRow label="board" value={config?.board ?? "-"} />
           <InfoRow label="actor" value={config?.actor ?? "-"} />
           <InfoRow label="api base" value={config?.apiBaseUrl || "same-origin"} />
+          <InfoRow label={t("database")} value={reportedValue(healthQuery.data?.db_path, t)} />
+          <InfoRow label={t("db_fingerprint")} value={reportedValue(healthQuery.data?.db_fingerprint, t)} />
         </div>
+        {healthQuery.error ? (
+          <Alert className="mt-3 border-destructive/50">
+            <AlertTitle className="text-destructive">{t("Server unavailable. Start or check kanban serve.")}</AlertTitle>
+            <AlertDescription className="text-destructive">{presentApiError(healthQuery.error, t)}</AlertDescription>
+          </Alert>
+        ) : null}
       </Card>
     </ScrollArea>
   )
+}
+
+function reportedValue(value: string | undefined, t: (key: string) => string) {
+  const trimmed = value?.trim()
+  return trimmed || t("not reported")
 }
 
 function InfoRow({ children, label, value }: { children?: ReactNode; label: string; value: string }) {

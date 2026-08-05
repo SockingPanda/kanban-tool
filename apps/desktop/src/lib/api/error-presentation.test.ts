@@ -23,4 +23,12 @@ describe("API error presentation", () => {
     expect(errorMessage(new ApiError("feature_not_available", "attachments route missing"), "zh-CN")).toContain("服务未提供请求的能力。")
     expect(errorMessage(new ApiError("invalid_response", "response must be valid JSON"), "zh-CN")).toContain("桌面客户端收到无效服务响应")
   })
+
+  it("does not present restart-required replacement as a successful mutation", () => {
+    const message = errorMessage(new ApiError("restart_required", "portable replacement staged"), "zh-CN")
+
+    expect(message).toContain("操作未应用")
+    expect(message).toContain("重启 kanban serve")
+    expect(message).toContain("restart_required: portable replacement staged")
+  })
 })

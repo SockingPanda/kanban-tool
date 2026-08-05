@@ -510,6 +510,98 @@ export type BlockedReason = {
   count: number
 }
 
+export type BackupReport = {
+  out_path: string
+  checksum_sha256: string
+  bytes: number
+  source_fingerprint: string
+}
+
+export type ExportReport = {
+  out_path: string
+  checksum_sha256: string
+  bytes: number
+  record_count: number
+  source_fingerprint: string
+}
+
+export type ImportReport = {
+  in_path: string
+  source_fingerprint: string
+  imported_records: number
+  skipped_records: number
+  rebuild_jobs_enqueued: number
+  journal_id: string
+}
+
+export type VacuumReport = {
+  ok: boolean
+  before_bytes: number
+  after_bytes: number
+  source_fingerprint: string
+}
+
+export type MaintenanceOwnerStatus = {
+  owner: string | null
+  mode: string | null
+  lease_expires_at: number | null
+  fence_epoch: number
+  build_identity: string | null
+  last_heartbeat_at: number | null
+  active: boolean
+}
+
+export type ProjectionStoreStatus = {
+  store_name: string
+  active_generation: string | null
+  active_fingerprint: string | null
+  previous_generation: string | null
+  building_generation: string | null
+  lifecycle_status: string
+  fence_epoch: number
+  last_event_id: number
+  dirty: boolean
+  pending: number
+  running: number
+  failed: number
+  last_error: string | null
+  updated_at: number
+}
+
+export type MaintenanceStatusReport = {
+  database_instance_id: string
+  protocol_version: number
+  owner: MaintenanceOwnerStatus
+  stores: ProjectionStoreStatus[]
+}
+
+export type MaintenanceRunReport = {
+  database_instance_id: string
+  protocol_version: number
+  owner: string
+  mode: string
+  action: string
+  processed: number
+  stores: ProjectionStoreStatus[]
+}
+
+export type LegacyImportTableCount = {
+  table: string
+  source_rows: number
+  target_rows: number
+}
+
+export type LegacyImportReport = {
+  journal_id: string
+  phase: string
+  source_path: string
+  source_fingerprint: string
+  schema_fingerprint: string
+  resumed: boolean
+  attachment_count: number
+  table_counts: LegacyImportTableCount[]
+}
+
 export type DoctorDerivedStore = {
   store_name: string
   schema_version: number

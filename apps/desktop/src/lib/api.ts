@@ -65,6 +65,28 @@ export class KanbanApi {
   searchStatus(options: RequestOptions = {}) { return health.searchStatus(this.transport, options) }
   doctor(options: RequestOptions = {}) { return maintenance.doctor(this.transport, options) }
   checkpoint(options: RequestOptions = {}) { return maintenance.checkpoint(this.transport, options) }
+  backup(path: string, options: RequestOptions = {}) { return maintenance.backup(this.transport, path, options) }
+  exportData(path: string, options: RequestOptions = {}) { return maintenance.exportData(this.transport, path, options) }
+  export(path: string, options: RequestOptions = {}) { return this.exportData(path, options) }
+  importData(path: string, replace = false, options: RequestOptions = {}) { return maintenance.importData(this.transport, path, replace, options) }
+  import(path: string, replace = false, options: RequestOptions = {}) { return this.importData(path, replace, options) }
+  importLegacySqliteV30(path: string, canonicalAttachmentRoot: string | null = null, options: RequestOptions = {}) {
+    return maintenance.importLegacySqliteV30(this.transport, path, canonicalAttachmentRoot, options)
+  }
+  importV30(path: string, canonicalAttachmentRoot: string | null = null, options: RequestOptions = {}) {
+    return this.importLegacySqliteV30(path, canonicalAttachmentRoot, options)
+  }
+  vacuum(options: RequestOptions = {}) { return maintenance.vacuum(this.transport, options) }
+  maintenanceStatus(options: RequestOptions = {}) { return maintenance.maintenanceStatus(this.transport, options) }
+  maintenanceRun(owner: string | null = null, action: string | null = null, options: RequestOptions = {}) {
+    return maintenance.maintenanceRun(this.transport, owner, action, options)
+  }
+  maintenanceRebuild(owner: string | null = null, options: RequestOptions = {}) {
+    return maintenance.maintenanceRebuild(this.transport, owner, options)
+  }
+  maintenanceCleanup(owner: string | null = null, options: RequestOptions = {}) {
+    return maintenance.maintenanceCleanup(this.transport, owner, options)
+  }
   listBoardColumns(options: RequestOptions = {}) { return boards.listBoardColumns(this.transport, options) }
   listTasks(options: TaskListOptions = {}) { return tasks.listTasks(this.transport, options) }
   listTasksByStatus(options: TaskListOptions & { statuses: import("./api/types").TaskStatus[] }) { return tasks.listTasksByStatus(this.transport, options) }

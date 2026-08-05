@@ -1026,7 +1026,7 @@ function MainView({
     )
   }
   if (view === "health") return <HealthView api={api} config={config} />
-  return <SettingsView config={config} />
+  return <SettingsView api={api} config={config} />
 }
 
 function LazyViewFallback({ label }: { label: string }) {

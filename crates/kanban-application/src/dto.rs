@@ -375,6 +375,19 @@ pub struct AddDependencyResult {
     pub dependencies: DependencySnapshotRecord,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoveDependencyCommand {
+    pub child_task_id: String,
+    pub parent_task_id: String,
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoveDependencyResult {
+    pub removed: bool,
+    pub dependencies: DependencySnapshotRecord,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CreateStepCommand {
     pub task_id: String,

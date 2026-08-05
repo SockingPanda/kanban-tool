@@ -126,12 +126,20 @@ enum CommentCommand {
 enum DependencyCommand {
     /// Add a parent dependency to a child task.
     Add(DependencyAddArgs),
+    /// Remove a parent dependency from a child task.
+    Remove(DependencyRemoveArgs),
     /// List direct parent and child dependencies for a task.
     List(DependencyListArgs),
 }
 
 #[derive(Debug, Args)]
 struct DependencyAddArgs {
+    child_task_ref: String,
+    parent_task_ref: String,
+}
+
+#[derive(Debug, Args)]
+struct DependencyRemoveArgs {
     child_task_ref: String,
     parent_task_ref: String,
 }
@@ -647,6 +655,40 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                         );
                     }
                 }
+                DependencyCommand::Remove(args) => {
+                    let child = client.get_task_by_selector(&cli.board, &args.child_task_ref)?;
+                    let parent = client.get_task_by_selector(&cli.board, &args.parent_task_ref)?;
+                    let before = client.list_dependencies(&child.id)?;
+                    let dependencies = client.remove_dependency(&child.id, &parent.id)?;
+                    if cli.json {
+                        let edge = before
+                            .edges
+                            .iter()
+                            .find(|edge| edge.child.id == child.id && edge.parent.id == parent.id)
+                            .cloned()
+                            .unwrap_or_else(|| ApiDependencyEdge {
+                                parent: api_dependency_task(&parent),
+                                child: api_dependency_task(&child),
+                            });
+                        println!(
+                            "{}",
+                            serde_json::to_string(&kanban_contract::CliDependencyRemoveOutput {
+                                data: kanban_contract::CliDependencyMutation {
+                                    edge: cli_dependency_edge(&edge),
+                                    dependencies: cli_dependency_snapshot(&dependencies),
+                                },
+                            })
+                            .expect("dependency response is serializable")
+                        );
+                    } else {
+                        println!(
+                            "removed {} depends_on {} ({})",
+                            child.task_ref,
+                            parent.task_ref,
+                            dependencies.task.status.as_str()
+                        );
+                    }
+                }
                 DependencyCommand::List(args) => {
                     let dependencies =
                         client.list_dependencies_by_selector(&cli.board, &args.task_ref)?;
@@ -1087,6 +1129,17 @@ fn cli_dependency_task(task: &ApiTask) -> kanban_contract::CliDependencyTask {
     }
 }
 
+fn api_dependency_task(task: &ApiTask) -> ApiDependencyTask {
+    ApiDependencyTask {
+        id: task.id.clone(),
+        board_id: task.board_id.clone(),
+        board_slug: task.board_slug.clone(),
+        task_ref: task.task_ref.clone(),
+        title: task.title.clone(),
+        status: task.status,
+    }
+}
+
 fn cli_dependency_task_compact(task: &ApiDependencyTask) -> kanban_contract::CliDependencyTask {
     kanban_contract::CliDependencyTask {
         id: task.id.clone(),
@@ -1383,6 +1436,17 @@ mod tests {
         } = cli.command
         else {
             panic!("expected dependency add");
+        };
+        assert_eq!(args.child_task_ref, "default#2");
+        assert_eq!(args.parent_task_ref, "default#1");
+
+        let cli = Cli::try_parse_from(["kanban", "dep", "remove", "default#2", "default#1"])
+            .expect("dependency remove args");
+        let Command::Dependency {
+            command: DependencyCommand::Remove(args),
+        } = cli.command
+        else {
+            panic!("expected dependency remove");
         };
         assert_eq!(args.child_task_ref, "default#2");
         assert_eq!(args.parent_task_ref, "default#1");

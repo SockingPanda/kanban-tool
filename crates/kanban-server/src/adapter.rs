@@ -13,7 +13,8 @@ use kanban_application::{
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
     PromoteTaskRecord as ApplicationPromoteTask,
     ReclaimExpiredTaskRecord as ApplicationReclaimExpiredTask,
-    ReleaseTaskRecord as ApplicationReleaseTask, RunRecord as ApplicationRun,
+    ReleaseTaskRecord as ApplicationReleaseTask,
+    RemoveDependencyResult as ApplicationRemoveDependencyResult, RunRecord as ApplicationRun,
     RunStatus as ApplicationRunStatus, StepRecord as ApplicationStep,
     SubmitReviewTaskRecord as ApplicationSubmitReviewTask,
     TaskListOptions as ApplicationTaskListOptions, TaskListPage as ApplicationTaskListPage,
@@ -30,11 +31,12 @@ use kanban_store_turso::{
     DependencySnapshotRecord as StoreDependencySnapshot, HeartbeatTaskInput as StoreHeartbeatTask,
     MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
     PromoteTaskInput as StorePromoteTask, ReclaimExpiredTaskInput as StoreReclaimExpiredTask,
-    ReleaseTaskInput as StoreReleaseTask, StoreError,
-    SubmitReviewTaskInput as StoreSubmitReviewTask, TaskExecutionPlanRecord as StoreExecutionPlan,
-    TaskListOptions as StoreTaskListOptions, TaskListSort as StoreTaskListSort,
-    TaskPlanFilter as StoreTaskPlanFilter, TaskRecord as StoreTask, TaskRunRecord as StoreRun,
-    TursoStore, UpdateStepInput as StoreUpdateStep,
+    ReleaseTaskInput as StoreReleaseTask, RemoveDependencyInput as StoreRemoveDependency,
+    StoreError, SubmitReviewTaskInput as StoreSubmitReviewTask,
+    TaskExecutionPlanRecord as StoreExecutionPlan, TaskListOptions as StoreTaskListOptions,
+    TaskListSort as StoreTaskListSort, TaskPlanFilter as StoreTaskPlanFilter,
+    TaskRecord as StoreTask, TaskRunRecord as StoreRun, TursoStore,
+    UpdateStepInput as StoreUpdateStep,
 };
 
 #[derive(Clone)]
@@ -180,6 +182,33 @@ impl ApplicationStore for TursoApplicationStore {
             .map_err(store_error)?;
         Ok(ApplicationAddDependencyResult {
             added: result.added,
+            dependencies: application_dependency_snapshot(result.dependencies)?,
+        })
+    }
+
+    async fn remove_dependency(
+        &self,
+        child_task_id: &str,
+        parent_task_id: &str,
+        actor: String,
+        event_id: String,
+        now: i64,
+    ) -> Result<ApplicationRemoveDependencyResult> {
+        let result = self
+            .store
+            .remove_dependency(
+                child_task_id,
+                parent_task_id,
+                StoreRemoveDependency {
+                    actor,
+                    event_id,
+                    now,
+                },
+            )
+            .await
+            .map_err(store_error)?;
+        Ok(ApplicationRemoveDependencyResult {
+            removed: result.removed,
             dependencies: application_dependency_snapshot(result.dependencies)?,
         })
     }

@@ -907,6 +907,9 @@ describe("KanbanApi task search", () => {
 
     expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_child/dependencies/t_parent")
     expect(calledInit(fetchMock).method).toBe("DELETE")
+    expect(calledInit(fetchMock).headers).toMatchObject({
+      "X-KB-Actor": "desktop-test",
+    })
   })
 
   it("lists and creates dependencies through the canonical task endpoint", async () => {

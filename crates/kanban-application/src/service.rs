@@ -16,8 +16,9 @@ use crate::{
     DependencySnapshotRecord, ExecutionPlanRecord, ExecutionPlanState, HeartbeatTaskCommand,
     HeartbeatTaskRecord, MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord,
     PromoteTaskCommand, PromoteTaskRecord, ReclaimExpiredTaskRecord, ReleaseTaskCommand,
-    ReleaseTaskRecord, SubmitReviewTaskCommand, SubmitReviewTaskRecord, TaskListOptions,
-    TaskListPage, TaskRecord, TaskStepsRecord, UpdateStepCommand, UpdateStepRecord,
+    ReleaseTaskRecord, RemoveDependencyCommand, RemoveDependencyResult, SubmitReviewTaskCommand,
+    SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskRecord, TaskStepsRecord,
+    UpdateStepCommand, UpdateStepRecord,
 };
 
 const MAX_TASK_LIST_LIMIT: usize = 1_000;
@@ -343,6 +344,45 @@ where
             ));
         }
         self.store.list_dependencies(task_id).await
+    }
+
+    pub async fn remove_dependency(
+        &self,
+        command: RemoveDependencyCommand,
+    ) -> Result<RemoveDependencyResult> {
+        let child_task_id = command.child_task_id.trim();
+        let parent_task_id = command.parent_task_id.trim();
+        if !child_task_id.starts_with("t_") || child_task_id.len() <= 2 {
+            return Err(KanbanError::InvalidInput(
+                "child_task_id must be a global t_... id".to_owned(),
+            ));
+        }
+        if !parent_task_id.starts_with("t_") || parent_task_id.len() <= 2 {
+            return Err(KanbanError::InvalidInput(
+                "parent_task_id must be a global t_... id".to_owned(),
+            ));
+        }
+        if child_task_id == parent_task_id {
+            return Err(KanbanError::InvalidInput(
+                "dependency cannot point to itself".to_owned(),
+            ));
+        }
+        let actor = command.actor.trim();
+        if actor.is_empty() {
+            return Err(KanbanError::InvalidInput("actor is required".to_owned()));
+        }
+        let _mutation = self.mutation_gate.lock().await;
+        let result = self
+            .store
+            .remove_dependency(
+                child_task_id,
+                parent_task_id,
+                actor.to_owned(),
+                new_event_id(),
+                self.clock.now_ms(),
+            )
+            .await?;
+        Ok(result)
     }
 
     pub async fn create_step(&self, command: CreateStepCommand) -> Result<TaskStepsRecord> {
@@ -1571,6 +1611,19 @@ mod tests {
         }
 
         async fn list_dependencies(&self, _task_id: &str) -> Result<DependencySnapshotRecord> {
+            Err(KanbanError::FeatureNotAvailable(
+                "dependency stub is not configured".to_owned(),
+            ))
+        }
+
+        async fn remove_dependency(
+            &self,
+            _child_task_id: &str,
+            _parent_task_id: &str,
+            _actor: String,
+            _event_id: String,
+            _now: i64,
+        ) -> Result<RemoveDependencyResult> {
             Err(KanbanError::FeatureNotAvailable(
                 "dependency stub is not configured".to_owned(),
             ))

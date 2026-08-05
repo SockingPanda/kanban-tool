@@ -1046,6 +1046,7 @@ export class KanbanApi {
   async removeDependency(taskId: string, parentTaskId: string, options: RequestOptions = {}) {
     return this.request<Dependencies>(`/api/v1/tasks/${taskId}/dependencies/${parentTaskId}`, {
       method: "DELETE",
+      actorHeader: true,
       signal: options.signal,
     })
   }

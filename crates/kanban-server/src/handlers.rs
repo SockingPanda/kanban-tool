@@ -13,10 +13,10 @@ use kanban_application::{
     CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
     CompleteTaskCommand, CreateCommentCommand, CreateStepCommand, CreateTaskCommand,
     ExecutionPlanRecord, ExecutionPlanState, HeartbeatTaskCommand,
-    MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand, ReleaseTaskCommand, RunRecord,
-    RunStatus, SubmitReviewTaskCommand, TaskListOptions as ApplicationTaskListOptions,
-    TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
-    TaskRecord, UpdateStepCommand,
+    MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand, ReleaseTaskCommand,
+    RemoveDependencyCommand, RunRecord, RunStatus, SubmitReviewTaskCommand,
+    TaskListOptions as ApplicationTaskListOptions, TaskListSort as ApplicationTaskListSort,
+    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord, UpdateStepCommand,
 };
 use kanban_contract::{
     AddDependencyPath, AddDependencyRequest, AddDependencyResponse, ApiBoard, ApiBoardColumn,
@@ -37,9 +37,9 @@ use kanban_contract::{
     MAX_TASK_READ_QUERY_PAIRS, MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath,
     MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskPath,
     PromoteTaskRequest, PromoteTaskResponse, ReleaseTaskPath, ReleaseTaskRequest,
-    ReleaseTaskResponse, SubmitReviewTaskPath, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
-    TaskReadLabel, TaskReadPlanFilter, TaskReadSort, TotalPaginationMeta, UpdateStepPath,
-    UpdateStepRequest, UpdateStepResponse,
+    ReleaseTaskResponse, RemoveDependencyPath, RemoveDependencyResponse, SubmitReviewTaskPath,
+    SubmitReviewTaskRequest, SubmitReviewTaskResponse, TaskReadLabel, TaskReadPlanFilter,
+    TaskReadSort, TotalPaginationMeta, UpdateStepPath, UpdateStepRequest, UpdateStepResponse,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
@@ -337,6 +337,28 @@ pub(crate) async fn add_dependency(
             data: api_dependencies(result.dependencies)?,
         }),
     ))
+}
+
+pub(crate) async fn remove_dependency(
+    State(state): State<AppState>,
+    Path(RemoveDependencyPath {
+        child_task_id,
+        parent_task_id,
+    }): Path<RemoveDependencyPath>,
+    headers: HeaderMap,
+) -> Result<Json<RemoveDependencyResponse>, ApiError> {
+    let actor = request_actor(None, &headers, state.default_actor())?;
+    let result = state
+        .application()
+        .remove_dependency(RemoveDependencyCommand {
+            child_task_id,
+            parent_task_id,
+            actor,
+        })
+        .await?;
+    Ok(Json(RemoveDependencyResponse {
+        data: api_dependencies(result.dependencies)?,
+    }))
 }
 
 pub(crate) async fn list_steps(

@@ -20,7 +20,7 @@ use crate::{
         add_dependency, block_task, claim_task, complete_task, create_comment, create_step,
         create_task, get_task, health, heartbeat_task, list_board_columns, list_boards,
         list_comments, list_dependencies, list_steps, list_tasks, mark_execution_plan_not_required,
-        promote_task, release_task, submit_review_task, update_step,
+        promote_task, release_task, remove_dependency, submit_review_task, update_step,
     },
     state::AppState,
 };
@@ -42,6 +42,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/tasks/:task_id/dependencies",
             get(list_dependencies).post(add_dependency),
+        )
+        .route(
+            "/api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
+            axum::routing::delete(remove_dependency),
         )
         .route(
             "/api/v1/tasks/:task_id/steps",
@@ -532,6 +536,43 @@ mod tests {
         let cycle_body = cycle.into_body().collect().await.unwrap().to_bytes();
         let cycle: ErrorEnvelope = serde_json::from_slice(&cycle_body).unwrap();
         assert_eq!(cycle.error.code, ApiErrorCode::DependencyCycle);
+
+        let removed = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(
+                        "/api/v1/tasks/t_http_dependency_child/dependencies/t_http_dependency_parent",
+                    )
+                    .header("X-KB-Actor", "remove-test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(removed.status(), StatusCode::OK);
+        let removed_body = removed.into_body().collect().await.unwrap().to_bytes();
+        let removed: kanban_contract::RemoveDependencyResponse =
+            serde_json::from_slice(&removed_body).unwrap();
+        assert!(removed.data.parents.is_empty());
+        assert!(removed.data.edges.is_empty());
+
+        let replay = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(
+                        "/api/v1/tasks/t_http_dependency_child/dependencies/t_http_dependency_parent",
+                    )
+                    .header("X-KB-Actor", "remove-replay")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(replay.status(), StatusCode::OK);
 
         let missing = router
             .oneshot(

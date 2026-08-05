@@ -9,9 +9,9 @@ use kanban_contract::{
     HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardsResponse, ListCommentsResponse,
     ListDependenciesResponse, ListStepsResponse, ListTasksQuery, ListTasksResponse,
     MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
-    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort, UpdateStepRequest,
-    UpdateStepResponse,
+    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, RemoveDependencyResponse,
+    SubmitReviewTaskRequest, SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    UpdateStepRequest, UpdateStepResponse,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -236,6 +236,17 @@ struct DependencyListArgs {
     board: Option<String>,
     /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
     task_ref: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct DependencyRemoveArgs {
+    /// Board used when child_task_ref or parent_task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence for the child task.
+    child_task_ref: String,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence for the parent task.
+    parent_task_ref: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -532,6 +543,27 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(AddDependencyResponse { data: dependencies }))
+    }
+
+    #[tool(
+        name = "dependency_remove",
+        description = "Remove a direct parent dependency through the canonical kanban application service"
+    )]
+    async fn dependency_remove(
+        &self,
+        Parameters(args): Parameters<DependencyRemoveArgs>,
+    ) -> Result<Json<RemoveDependencyResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let child_task_ref = args.child_task_ref;
+        let parent_task_ref = args.parent_task_ref;
+        let client = self.client.clone();
+        let dependencies = tokio::task::spawn_blocking(move || {
+            client.remove_dependency_by_selector(&board, &child_task_ref, &parent_task_ref)
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(RemoveDependencyResponse { data: dependencies }))
     }
 
     #[tool(

@@ -15,8 +15,8 @@ use kanban_contract::{
     ListBoardsResponse, ListCommentsResponse, ListDependenciesResponse, ListStepsResponse,
     ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
-    UpdateStepRequest, UpdateStepResponse,
+    ReleaseTaskRequest, ReleaseTaskResponse, RemoveDependencyResponse, SubmitReviewTaskRequest,
+    SubmitReviewTaskResponse, UpdateStepRequest, UpdateStepResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -265,6 +265,42 @@ impl KanbanClient {
         let child_task_id = self.resolve_task_id(board, child_selector)?;
         let parent_task_id = self.resolve_task_id(board, parent_selector)?;
         self.add_dependency(&child_task_id, &parent_task_id)
+    }
+
+    pub fn remove_dependency(
+        &self,
+        child_task_id: &str,
+        parent_task_id: &str,
+    ) -> Result<ApiDependencies, ClientError> {
+        let child_task_id = child_task_id.trim();
+        let parent_task_id = parent_task_id.trim();
+        if !child_task_id.starts_with("t_") || child_task_id.len() <= 2 {
+            return Err(ClientError::InvalidInput(
+                "task selector must resolve to a global t_... id".to_owned(),
+            ));
+        }
+        if !parent_task_id.starts_with("t_") || parent_task_id.len() <= 2 {
+            return Err(ClientError::InvalidInput(
+                "task selector must resolve to a global t_... id".to_owned(),
+            ));
+        }
+        let response: RemoveDependencyResponse = self.delete(&format!(
+            "/api/v1/tasks/{}/dependencies/{}",
+            encode_path_segment(child_task_id),
+            encode_path_segment(parent_task_id)
+        ))?;
+        Ok(response.data)
+    }
+
+    pub fn remove_dependency_by_selector(
+        &self,
+        board: &str,
+        child_selector: &str,
+        parent_selector: &str,
+    ) -> Result<ApiDependencies, ClientError> {
+        let child_task_id = self.resolve_task_id(board, child_selector)?;
+        let parent_task_id = self.resolve_task_id(board, parent_selector)?;
+        self.remove_dependency(&child_task_id, &parent_task_id)
     }
 
     pub fn list_steps(&self, task_id: &str) -> Result<ApiTaskSteps, ClientError> {
@@ -668,6 +704,18 @@ impl KanbanClient {
         decode_response(request.send_json(body))
     }
 
+    fn delete<T>(&self, path: &str) -> Result<T, ClientError>
+    where
+        T: DeserializeOwned,
+    {
+        let request = self
+            .agent
+            .request("DELETE", &format!("{}{path}", self.base_url))
+            .set("Accept", "application/json")
+            .set("X-KB-Actor", &self.actor);
+        decode_response(request.call())
+    }
+
     fn patch<B, T>(&self, path: &str, body: &B) -> Result<T, ClientError>
     where
         B: Serialize,
@@ -941,6 +989,10 @@ mod tests {
             .add_dependency("t_child", "#1")
             .expect_err("parent selector must be resolved first");
         assert_eq!(add_error.code(), "invalid_input");
+        let remove_error = client
+            .remove_dependency("t_child", "#1")
+            .expect_err("parent selector must be resolved first");
+        assert_eq!(remove_error.code(), "invalid_input");
     }
 
     #[test]

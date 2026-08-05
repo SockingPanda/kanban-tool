@@ -7,8 +7,9 @@ use crate::{
     ClaimRecord, ClaimTaskRecord, CommentRecord, CompleteTaskRecord, CreateCommentRecord,
     CreateStepRecord, CreateTaskRecord, DependencySnapshotRecord, ExecutionPlanRecord,
     HeartbeatTaskRecord, MarkExecutionPlanNotRequiredRecord, PromoteTaskRecord,
-    ReclaimExpiredTaskRecord, ReleaseTaskRecord, StepRecord, SubmitReviewTaskRecord,
-    TaskListOptions, TaskListPage, TaskRecord, TaskStepsRecord, UpdateStepRecord,
+    ReclaimExpiredTaskRecord, ReleaseTaskRecord, RemoveDependencyResult, StepRecord,
+    SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskRecord, TaskStepsRecord,
+    UpdateStepRecord,
 };
 
 /// Persistence port used only by the shared application service.
@@ -117,6 +118,15 @@ pub trait ApplicationStore: Clone + Send + Sync + 'static {
         parent_task_id: &str,
         input: AddDependencyRecord,
     ) -> impl Future<Output = Result<AddDependencyResult>> + Send;
+
+    fn remove_dependency(
+        &self,
+        child_task_id: &str,
+        parent_task_id: &str,
+        actor: String,
+        event_id: String,
+        now: i64,
+    ) -> impl Future<Output = Result<RemoveDependencyResult>> + Send;
 
     fn list_dependencies(
         &self,

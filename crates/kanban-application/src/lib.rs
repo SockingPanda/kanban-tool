@@ -12,12 +12,15 @@ pub mod service;
 pub use dto::*;
 pub use operations::{
     ArchiveBoardCommand, ArchiveBoardRecord, BoardArchive, BoardColumns, BoardCreate, BoardGet,
-    BoardList, CommentCreate, CommentList, CreateBoardCommand, CreateBoardRecord, DependencyCreate,
-    DependencyList, DependencyRemove, EventList, EventListOptions, EventListPage, EventRecord,
-    RUN_LOG_TAIL_BYTES, RunList, RunLog, RunLogRecord, RunShow, StepComplete, StepCreate, StepList,
-    StepRemove, StepReopen, StepSkip, StepUpdate, TaskBlock, TaskClaim, TaskCreate, TaskDone,
-    TaskHeartbeat, TaskList, TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskRelease, TaskReview,
-    TaskShow,
+    ArchiveTaskCommand, ArchiveTaskRecord, BoardList, CommentCreate, CommentList,
+    CreateBoardCommand, CreateBoardRecord, DependencyCreate, DependencyList, DependencyRemove,
+    EventList, EventListOptions, EventListPage, EventRecord, RUN_LOG_TAIL_BYTES,
+    ReclaimTaskCommand, ReclaimTaskRecord, ReopenTaskCommand, ReopenTaskRecord, RunList, RunLog,
+    RunLogRecord, RunShow, SpecifyTaskCommand, SpecifyTaskRecord, StepComplete, StepCreate,
+    StepList, StepRemove, StepReopen, StepSkip, StepUpdate, TaskArchive, TaskBlock, TaskClaim,
+    TaskCreate, TaskDone, TaskHeartbeat, TaskList, TaskPlanNotRequired, TaskPromote, TaskReclaim,
+    TaskReclaimExplicit, TaskRelease, TaskReopen, TaskReview, TaskShow, TaskSpecify, TaskUnblock,
+    TaskUpdate, UnblockTaskCommand, UnblockTaskRecord, UpdateTaskCommand, UpdateTaskRecord,
 };
 pub use ports::ApplicationStore;
 pub use service::ApplicationService;

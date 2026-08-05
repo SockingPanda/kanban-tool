@@ -23,8 +23,9 @@ pub use run::*;
 pub use stats::*;
 pub use step::{StepComplete, StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate};
 pub use task::{
-    TaskBlock, TaskClaim, TaskCreate, TaskDone, TaskHeartbeat, TaskList, TaskPlanNotRequired,
-    TaskPromote, TaskReclaim, TaskRelease, TaskReview, TaskShow,
+    TaskArchive, TaskBlock, TaskClaim, TaskCreate, TaskDone, TaskHeartbeat, TaskList,
+    TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen,
+    TaskReview, TaskShow, TaskSpecify, TaskUnblock, TaskUpdate,
 };
 
 pub use comment::{CreateCommentCommand, CreateCommentRecord};
@@ -38,12 +39,14 @@ pub use step::{
     SkipStepRecord, UpdateStepCommand, UpdateStepRecord,
 };
 pub use task::{
-    BlockTaskCommand, BlockTaskRecord, ClaimTaskCommand, ClaimTaskRecord, CompleteTaskCommand,
-    CompleteTaskRecord, CreateTaskCommand, CreateTaskRecord, HeartbeatTaskCommand,
-    HeartbeatTaskRecord, MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord,
-    PromoteTaskCommand, PromoteTaskRecord, ReclaimExpiredTaskRecord, ReleaseTaskCommand,
-    ReleaseTaskRecord, SubmitReviewTaskCommand, SubmitReviewTaskRecord, TaskListOptions,
-    TaskListPage, TaskListSort, TaskPlanFilter,
+    ArchiveTaskCommand, ArchiveTaskRecord, BlockTaskCommand, BlockTaskRecord, ClaimTaskCommand,
+    ClaimTaskRecord, CompleteTaskCommand, CompleteTaskRecord, CreateTaskCommand, CreateTaskRecord,
+    HeartbeatTaskCommand, HeartbeatTaskRecord, MarkExecutionPlanNotRequiredCommand,
+    MarkExecutionPlanNotRequiredRecord, PromoteTaskCommand, PromoteTaskRecord,
+    ReclaimExpiredTaskRecord, ReclaimTaskCommand, ReclaimTaskRecord, ReleaseTaskCommand,
+    ReleaseTaskRecord, ReopenTaskCommand, ReopenTaskRecord, SpecifyTaskCommand, SpecifyTaskRecord,
+    SubmitReviewTaskCommand, SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskListSort,
+    TaskPlanFilter, UnblockTaskCommand, UnblockTaskRecord, UpdateTaskCommand, UpdateTaskRecord,
 };
 
 #[cfg(test)]

@@ -759,16 +759,6 @@ UNION ALL SELECT 'entities.task_id' WHERE EXISTS (
   LEFT JOIN tasks parent ON parent.id=child.task_id AND parent.board_id=child.board_id
   WHERE child.task_id IS NOT NULL AND parent.id IS NULL
 )
-UNION ALL SELECT 'entity_relations.subject_uri' WHERE EXISTS (
-  SELECT 1 FROM entity_relations child
-  LEFT JOIN entities parent ON parent.uri=child.subject_uri AND parent.board_id IS child.board_id
-  WHERE parent.uri IS NULL
-)
-UNION ALL SELECT 'entity_relations.object_uri' WHERE EXISTS (
-  SELECT 1 FROM entity_relations child
-  LEFT JOIN entities parent ON parent.uri=child.object_uri AND parent.board_id IS child.board_id
-  WHERE parent.uri IS NULL
-)
 UNION ALL SELECT 'label_semantics.label_id' WHERE EXISTS (
   SELECT 1 FROM label_semantics child
   LEFT JOIN labels parent ON parent.id=child.label_id AND parent.board_id=child.board_id
@@ -877,6 +867,18 @@ LIMIT 1
         .map_err(|e| error(format!("board isolation 预检失败: {e}")))?
     {
         return Err(error(format!("源 SQLite 存在跨 board 引用: {name}")));
+    }
+    if connection
+        .query_row(
+            "SELECT 1 FROM entity_relations r JOIN entities s ON s.uri=r.subject_uri JOIN entities o ON o.uri=r.object_uri WHERE s.board_id IS NOT o.board_id LIMIT 1",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|e| error(format!("entity_relations board 预检失败: {e}")))?
+        .is_some()
+    {
+        return Err(error("源 entity_relations subject/object 跨 board"));
     }
     Ok(())
 }

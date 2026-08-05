@@ -9,33 +9,37 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use kanban_application::{
-    BlockTaskCommand, ClaimTaskCommand, CommentAuthorType as ApplicationCommentAuthorType,
-    CommentKind as ApplicationCommentKind, CompleteTaskCommand, CreateCommentCommand,
-    CreateStepCommand, CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState,
-    HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand,
-    ReleaseTaskCommand, RunRecord, RunStatus, SubmitReviewTaskCommand,
-    TaskListOptions as ApplicationTaskListOptions, TaskListSort as ApplicationTaskListSort,
-    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord, UpdateStepCommand,
+    AddDependencyCommand, BlockTaskCommand, ClaimTaskCommand,
+    CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
+    CompleteTaskCommand, CreateCommentCommand, CreateStepCommand, CreateTaskCommand,
+    ExecutionPlanRecord, ExecutionPlanState, HeartbeatTaskCommand,
+    MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand, ReleaseTaskCommand, RunRecord,
+    RunStatus, SubmitReviewTaskCommand, TaskListOptions as ApplicationTaskListOptions,
+    TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
+    TaskRecord, UpdateStepCommand,
 };
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, ApiClaim, ApiComment, ApiCreateTaskStatus, ApiExecutionPlan,
-    ApiExecutionPlanState, ApiRun, ApiRunStatus, ApiStepStatus, ApiTask, ApiTaskPriority,
-    ApiTaskStatus, ApiTaskStep, ApiTaskSteps, BlockTaskPath, BlockTaskRequest, BlockTaskResponse,
-    ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CompleteTaskPath, CompleteTaskRequest,
-    CompleteTaskResponse, CreateCommentPath, CreateCommentRequest, CreateCommentResponse,
-    CreateStepPath, CreateStepRequest, CreateStepResponse, CreateTaskPath, CreateTaskRequest,
-    CreateTaskResponse, GetTaskPath, GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse,
-    HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse,
-    ListBoardsQuery, ListBoardsResponse, ListCommentsPath, ListCommentsResponse, ListStepsPath,
-    ListStepsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
-    MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS,
-    MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES,
-    MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
-    MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
-    MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskPath, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskPath,
-    SubmitReviewTaskRequest, SubmitReviewTaskResponse, TaskReadLabel, TaskReadPlanFilter,
-    TaskReadSort, TotalPaginationMeta, UpdateStepPath, UpdateStepRequest, UpdateStepResponse,
+    AddDependencyPath, AddDependencyRequest, AddDependencyResponse, ApiBoard, ApiBoardColumn,
+    ApiClaim, ApiComment, ApiCreateTaskStatus, ApiDependencies, ApiDependencyEdge,
+    ApiDependencyTask, ApiExecutionPlan, ApiExecutionPlanState, ApiRun, ApiRunStatus,
+    ApiStepStatus, ApiTask, ApiTaskPriority, ApiTaskStatus, ApiTaskStep, ApiTaskSteps,
+    BlockTaskPath, BlockTaskRequest, BlockTaskResponse, ClaimTaskPath, ClaimTaskRequest,
+    ClaimTaskResponse, CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse,
+    CreateCommentPath, CreateCommentRequest, CreateCommentResponse, CreateStepPath,
+    CreateStepRequest, CreateStepResponse, CreateTaskPath, CreateTaskRequest, CreateTaskResponse,
+    GetTaskPath, GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse, HeartbeatTaskPath,
+    HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse, ListBoardsQuery,
+    ListBoardsResponse, ListCommentsPath, ListCommentsResponse, ListDependenciesPath,
+    ListDependenciesResponse, ListStepsPath, ListStepsResponse, ListTasksPath, ListTasksQuery,
+    ListTasksResponse, MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS,
+    MAX_TASK_READ_LABELS, MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS,
+    MAX_TASK_READ_PRIORITIES, MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES,
+    MAX_TASK_READ_QUERY_PAIRS, MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskPath,
+    PromoteTaskRequest, PromoteTaskResponse, ReleaseTaskPath, ReleaseTaskRequest,
+    ReleaseTaskResponse, SubmitReviewTaskPath, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
+    TaskReadLabel, TaskReadPlanFilter, TaskReadSort, TotalPaginationMeta, UpdateStepPath,
+    UpdateStepRequest, UpdateStepResponse,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
@@ -293,6 +297,46 @@ pub(crate) async fn list_comments(
         .map(api_comment)
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Json(ListCommentsResponse { data }))
+}
+
+pub(crate) async fn list_dependencies(
+    State(state): State<AppState>,
+    Path(ListDependenciesPath { task_id }): Path<ListDependenciesPath>,
+) -> Result<Json<ListDependenciesResponse>, ApiError> {
+    let dependencies = state.application().list_dependencies(&task_id).await?;
+    Ok(Json(ListDependenciesResponse {
+        data: api_dependencies(dependencies)?,
+    }))
+}
+
+pub(crate) async fn add_dependency(
+    State(state): State<AppState>,
+    Path(AddDependencyPath { task_id }): Path<AddDependencyPath>,
+    headers: HeaderMap,
+    body: Result<Json<AddDependencyRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<AddDependencyResponse>), ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let result = state
+        .application()
+        .add_dependency(AddDependencyCommand {
+            child_task_id: task_id,
+            parent_task_id: body.parent_task_id,
+            actor,
+        })
+        .await?;
+    let status = if result.added {
+        StatusCode::CREATED
+    } else {
+        StatusCode::OK
+    };
+    Ok((
+        status,
+        Json(AddDependencyResponse {
+            data: api_dependencies(result.dependencies)?,
+        }),
+    ))
 }
 
 pub(crate) async fn list_steps(
@@ -864,6 +908,43 @@ fn api_comment(comment: kanban_application::CommentRecord) -> Result<ApiComment,
         metadata,
         created_at: comment.created_at,
     })
+}
+
+fn api_dependencies(
+    dependencies: kanban_application::DependencySnapshotRecord,
+) -> Result<ApiDependencies, ApiError> {
+    Ok(ApiDependencies {
+        task: api_dependency_task(&dependencies.task),
+        parents: dependencies
+            .parents
+            .into_iter()
+            .map(api_task)
+            .collect::<Result<Vec<_>, _>>()?,
+        children: dependencies
+            .children
+            .into_iter()
+            .map(api_task)
+            .collect::<Result<Vec<_>, _>>()?,
+        edges: dependencies
+            .edges
+            .iter()
+            .map(|edge| ApiDependencyEdge {
+                parent: api_dependency_task(&edge.parent),
+                child: api_dependency_task(&edge.child),
+            })
+            .collect(),
+    })
+}
+
+fn api_dependency_task(task: &TaskRecord) -> ApiDependencyTask {
+    ApiDependencyTask {
+        id: task.id.clone(),
+        board_id: task.board_id.clone(),
+        board_slug: task.board_slug.clone(),
+        task_ref: task.task_ref.clone(),
+        title: task.title.clone(),
+        status: api_task_status(task.status),
+    }
 }
 
 fn api_task_steps(steps: kanban_application::TaskStepsRecord) -> Result<ApiTaskSteps, ApiError> {

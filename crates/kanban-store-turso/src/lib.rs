@@ -1,13 +1,17 @@
 mod schema;
 
 use std::{
+    collections::HashSet,
     error::Error,
     fmt::{Display, Formatter},
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use turso::{Builder, Connection, Database, Row, Rows, Value, transaction::TransactionBehavior};
+use turso::{
+    Builder, Connection, Database, Row, Rows, Value,
+    transaction::{Transaction, TransactionBehavior},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoardRecord {
@@ -61,6 +65,36 @@ pub struct CreateCommentInput {
     pub metadata_json: String,
     pub event_id: String,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddDependencyInput {
+    pub expected_child_lock_version: i64,
+    pub target_child_status: String,
+    pub actor: String,
+    pub event_id: String,
+    pub recompute_event_id: String,
+    pub now: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependencyEdgeRecord {
+    pub parent: TaskRecord,
+    pub child: TaskRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependencySnapshotRecord {
+    pub task: TaskRecord,
+    pub parents: Vec<TaskRecord>,
+    pub children: Vec<TaskRecord>,
+    pub edges: Vec<DependencyEdgeRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddDependencyRecord {
+    pub added: bool,
+    pub dependencies: DependencySnapshotRecord,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -396,6 +430,7 @@ pub enum StoreError {
     BoardNotFound(String),
     TaskNotFound(String),
     StepNotFound(String),
+    DependencyCycle(String),
     IdempotencyConflict {
         board_id: String,
         key: String,
@@ -421,6 +456,7 @@ impl Display for StoreError {
             Self::BoardNotFound(selector) => write!(formatter, "board not found: {selector}"),
             Self::TaskNotFound(task_id) => write!(formatter, "task not found: {task_id}"),
             Self::StepNotFound(step_id) => write!(formatter, "step not found: {step_id}"),
+            Self::DependencyCycle(message) => write!(formatter, "dependency cycle: {message}"),
             Self::IdempotencyConflict {
                 board_id,
                 key,
@@ -1511,6 +1547,219 @@ impl TursoStore {
             steps,
             execution_plan,
         })
+    }
+
+    /// Add one parent -> child dependency and return the post-mutation
+    /// snapshot. The edge, optional child recomputation and event are guarded
+    /// by one immediate transaction so a stale caller cannot observe a
+    /// partially-applied dependency.
+    pub async fn add_dependency(
+        &self,
+        child_task_id: &str,
+        parent_task_id: &str,
+        input: AddDependencyInput,
+    ) -> Result<AddDependencyRecord, StoreError> {
+        validate_add_dependency_input(child_task_id, parent_task_id, &input)?;
+        let child_task_id = child_task_id.trim();
+        let parent_task_id = parent_task_id.trim();
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+
+        let child = dependency_task_in_transaction(&transaction, child_task_id).await?;
+        let parent = dependency_task_in_transaction(&transaction, parent_task_id).await?;
+        if child.board_id != parent.board_id {
+            return Err(StoreError::InvalidInput(
+                "cross-board dependency is not allowed".to_owned(),
+            ));
+        }
+        let board = first_row(
+            transaction
+                .query(
+                    "SELECT archived_at FROM boards WHERE id = :board_id LIMIT 1",
+                    [(":board_id", child.board_id.as_str())],
+                )
+                .await?,
+        )
+        .await?;
+        if optional_integer_value(board.get_value(0)?, "boards.archived_at")?.is_some() {
+            return Err(StoreError::InvalidTransition(
+                "archived board cannot receive dependencies".to_owned(),
+            ));
+        }
+        if child.archived_at.is_some() || child.status == "archived" {
+            return Err(StoreError::InvalidTransition(
+                "archived child task cannot receive dependencies".to_owned(),
+            ));
+        }
+
+        let existing = first_row(
+            transaction
+                .query(
+                    "SELECT 1 FROM task_dependencies WHERE board_id = :board_id AND parent_task_id = :parent_task_id AND child_task_id = :child_task_id LIMIT 1",
+                    [
+                        (":board_id", child.board_id.as_str()),
+                        (":parent_task_id", parent.id.as_str()),
+                        (":child_task_id", child.id.as_str()),
+                    ],
+                )
+                .await?,
+        )
+        .await;
+        match existing {
+            Ok(_) => {
+                let dependencies = dependency_snapshot_in_transaction(
+                    &transaction,
+                    child.board_id.as_str(),
+                    child.id.as_str(),
+                )
+                .await?;
+                transaction.commit().await?;
+                return Ok(AddDependencyRecord {
+                    added: false,
+                    dependencies,
+                });
+            }
+            Err(turso::Error::QueryReturnedNoRows) => {}
+            Err(error) => return Err(StoreError::Turso(error)),
+        }
+
+        if dependency_path_exists(
+            &transaction,
+            child.board_id.as_str(),
+            child.id.as_str(),
+            parent.id.as_str(),
+        )
+        .await?
+        {
+            return Err(StoreError::DependencyCycle(
+                "dependency cycle detected".to_owned(),
+            ));
+        }
+        if child.status == "running" && !dependency_parent_satisfied(&parent) {
+            return Err(StoreError::InvalidTransition(
+                "cannot add incomplete dependency to running task".to_owned(),
+            ));
+        }
+        if input.expected_child_lock_version != child.lock_version {
+            return Err(StoreError::InvalidTransition(
+                "dependency add requires matching fresh child task".to_owned(),
+            ));
+        }
+
+        let target_status = if matches!(
+            child.status.as_str(),
+            "triage" | "todo" | "scheduled" | "ready"
+        ) {
+            let existing_dependencies_done = !child.dependency_blocked;
+            let dependencies_done =
+                existing_dependencies_done && dependency_parent_satisfied(&parent);
+            let computed = canonical_ready_status(
+                &child.title,
+                child.description.as_deref(),
+                child.scheduled_at,
+                dependencies_done,
+                input.now,
+            );
+            if computed == "ready" {
+                child.status.clone()
+            } else {
+                computed.to_owned()
+            }
+        } else {
+            child.status.clone()
+        };
+        if target_status != input.target_child_status.trim() {
+            return Err(StoreError::InvalidTransition(
+                "dependency add readiness decision is stale".to_owned(),
+            ));
+        }
+
+        transaction
+            .execute(
+                "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES (:board_id, :parent_task_id, :child_task_id, :created_at) ON CONFLICT(parent_task_id, child_task_id) DO NOTHING",
+                (
+                    (":board_id", child.board_id.as_str()),
+                    (":parent_task_id", parent.id.as_str()),
+                    (":child_task_id", child.id.as_str()),
+                    (":created_at", input.now),
+                ),
+            )
+            .await?;
+
+        if target_status != child.status {
+            let changed = transaction
+                .execute(
+                    "UPDATE tasks SET status = :target_status, status_reason = NULL, updated_at = :updated_at, lock_version = lock_version + 1 WHERE id = :task_id AND board_id = :board_id AND status = :current_status AND archived_at IS NULL AND lock_version = :lock_version",
+                    (
+                        (":target_status", target_status.as_str()),
+                        (":updated_at", input.now),
+                        (":task_id", child.id.as_str()),
+                        (":board_id", child.board_id.as_str()),
+                        (":current_status", child.status.as_str()),
+                        (":lock_version", input.expected_child_lock_version),
+                    ),
+                )
+                .await?;
+            if changed != 1 {
+                return Err(StoreError::InvalidTransition(
+                    "dependency add requires matching fresh child task".to_owned(),
+                ));
+            }
+            let payload = format!(r#"{{"to_status":"{}"}}"#, target_status);
+            transaction
+                .execute(
+                    "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'task.recomputed', :actor, :payload_json, :created_at)",
+                    (
+                        (":event_id", input.recompute_event_id.as_str()),
+                        (":board_id", child.board_id.as_str()),
+                        (":task_id", child.id.as_str()),
+                        (":actor", input.actor.trim()),
+                        (":payload_json", payload.as_str()),
+                        (":created_at", input.now),
+                    ),
+                )
+                .await?;
+        }
+
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'dependency.added', :actor, json_object('parent_task_id', :parent_task_id), :created_at)",
+                (
+                    (":event_id", input.event_id.as_str()),
+                    (":board_id", child.board_id.as_str()),
+                    (":task_id", child.id.as_str()),
+                    (":actor", input.actor.trim()),
+                    (":parent_task_id", parent.id.as_str()),
+                    (":created_at", input.now),
+                ),
+            )
+            .await?;
+
+        let dependencies = dependency_snapshot_in_transaction(
+            &transaction,
+            child.board_id.as_str(),
+            child.id.as_str(),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(AddDependencyRecord {
+            added: true,
+            dependencies,
+        })
+    }
+
+    pub async fn list_dependencies(
+        &self,
+        task_id: &str,
+    ) -> Result<DependencySnapshotRecord, StoreError> {
+        validate_task_id(task_id)?;
+        let task_id = task_id.trim();
+        let connection = self.connection().await?;
+        let task = dependency_task_in_connection(&connection, task_id).await?;
+        dependency_snapshot_in_connection(&connection, task.board_id.as_str(), task.id.as_str())
+            .await
     }
 
     pub async fn list_tasks(
@@ -3761,6 +4010,157 @@ impl TursoStore {
     }
 }
 
+async fn dependency_task_in_transaction(
+    transaction: &Transaction<'_>,
+    task_id: &str,
+) -> Result<TaskRecord, StoreError> {
+    let row = first_row(
+        transaction
+            .query(
+                &format!("{TASK_SELECT} WHERE t.id = :task_id LIMIT 1"),
+                [(":task_id", task_id)],
+            )
+            .await?,
+    )
+    .await
+    .map_err(|error| match error {
+        turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
+        other => StoreError::Turso(other),
+    })?;
+    task_from_row(row)
+}
+
+async fn dependency_task_in_connection(
+    connection: &Connection,
+    task_id: &str,
+) -> Result<TaskRecord, StoreError> {
+    let row = first_row(
+        connection
+            .query(
+                &format!("{TASK_SELECT} WHERE t.id = :task_id LIMIT 1"),
+                [(":task_id", task_id)],
+            )
+            .await?,
+    )
+    .await
+    .map_err(|error| match error {
+        turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
+        other => StoreError::Turso(other),
+    })?;
+    task_from_row(row)
+}
+
+async fn dependency_path_exists(
+    transaction: &Transaction<'_>,
+    board_id: &str,
+    start_task_id: &str,
+    target_task_id: &str,
+) -> Result<bool, StoreError> {
+    // Turso 0.7.x does not implement recursive CTEs. Walk the direct edge
+    // relation inside the same immediate transaction instead; the transaction
+    // still gives the traversal a stable view and keeps the subsequent insert
+    // atomic with the cycle check.
+    let mut frontier = vec![start_task_id.to_owned()];
+    let mut visited = HashSet::from([start_task_id.to_owned()]);
+    while let Some(parent_task_id) = frontier.pop() {
+        let mut rows = transaction
+            .query(
+                "SELECT child_task_id FROM task_dependencies WHERE board_id = :board_id AND parent_task_id = :parent_task_id",
+                [
+                    (":board_id", board_id),
+                    (":parent_task_id", parent_task_id.as_str()),
+                ],
+            )
+            .await?;
+        while let Some(row) = rows.next().await? {
+            let child_task_id = text_value(row.get_value(0)?, "task_dependencies.child_task_id")?;
+            if child_task_id == target_task_id {
+                return Ok(true);
+            }
+            if visited.insert(child_task_id.clone()) {
+                frontier.push(child_task_id);
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn dependency_parent_satisfied(parent: &TaskRecord) -> bool {
+    matches!(parent.status.as_str(), "done" | "archived") || parent.archived_at.is_some()
+}
+
+async fn dependency_snapshot_in_transaction(
+    transaction: &Transaction<'_>,
+    board_id: &str,
+    task_id: &str,
+) -> Result<DependencySnapshotRecord, StoreError> {
+    let task = dependency_task_in_transaction(transaction, task_id).await?;
+    let mut rows = transaction
+        .query(
+            "SELECT parent_task_id, child_task_id FROM task_dependencies WHERE board_id = :board_id AND (parent_task_id = :task_id OR child_task_id = :task_id) ORDER BY created_at ASC, parent_task_id ASC, child_task_id ASC",
+            [(":board_id", board_id), (":task_id", task_id)],
+        )
+        .await?;
+    let mut edges = Vec::new();
+    let mut parents = Vec::new();
+    let mut children = Vec::new();
+    while let Some(row) = rows.next().await? {
+        let parent_id = text_value(row.get_value(0)?, "task_dependencies.parent_task_id")?;
+        let child_id = text_value(row.get_value(1)?, "task_dependencies.child_task_id")?;
+        let parent = dependency_task_in_transaction(transaction, &parent_id).await?;
+        let child = dependency_task_in_transaction(transaction, &child_id).await?;
+        if child_id == task_id {
+            parents.push(parent.clone());
+        }
+        if parent_id == task_id {
+            children.push(child.clone());
+        }
+        edges.push(DependencyEdgeRecord { parent, child });
+    }
+    Ok(DependencySnapshotRecord {
+        task,
+        parents,
+        children,
+        edges,
+    })
+}
+
+async fn dependency_snapshot_in_connection(
+    connection: &Connection,
+    board_id: &str,
+    task_id: &str,
+) -> Result<DependencySnapshotRecord, StoreError> {
+    let task = dependency_task_in_connection(connection, task_id).await?;
+    let mut rows = connection
+        .query(
+            "SELECT parent_task_id, child_task_id FROM task_dependencies WHERE board_id = :board_id AND (parent_task_id = :task_id OR child_task_id = :task_id) ORDER BY created_at ASC, parent_task_id ASC, child_task_id ASC",
+            [(":board_id", board_id), (":task_id", task_id)],
+        )
+        .await?;
+    let mut edges = Vec::new();
+    let mut parents = Vec::new();
+    let mut children = Vec::new();
+    while let Some(row) = rows.next().await? {
+        let parent_id = text_value(row.get_value(0)?, "task_dependencies.parent_task_id")?;
+        let child_id = text_value(row.get_value(1)?, "task_dependencies.child_task_id")?;
+        let parent = dependency_task_in_connection(connection, &parent_id).await?;
+        let child = dependency_task_in_connection(connection, &child_id).await?;
+        if child_id == task_id {
+            parents.push(parent.clone());
+        }
+        if parent_id == task_id {
+            children.push(child.clone());
+        }
+        edges.push(DependencyEdgeRecord { parent, child });
+    }
+    Ok(DependencySnapshotRecord {
+        task,
+        parents,
+        children,
+        edges,
+    })
+}
+
 async fn first_row(mut rows: Rows) -> Result<Row, turso::Error> {
     let row = rows
         .next()
@@ -3868,6 +4268,52 @@ fn validate_create_comment_input(
     if input.created_at < 0 {
         return Err(StoreError::InvalidInput(
             "created_at must be non-negative".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_add_dependency_input(
+    child_task_id: &str,
+    parent_task_id: &str,
+    input: &AddDependencyInput,
+) -> Result<(), StoreError> {
+    validate_task_id(child_task_id)?;
+    validate_task_id(parent_task_id)?;
+    if child_task_id.trim() == parent_task_id.trim() {
+        return Err(StoreError::InvalidInput(
+            "dependency cannot point to itself".to_owned(),
+        ));
+    }
+    if input.expected_child_lock_version < 0 {
+        return Err(StoreError::InvalidInput(
+            "expected_child_lock_version must be non-negative".to_owned(),
+        ));
+    }
+    if !matches!(
+        input.target_child_status.trim(),
+        "triage" | "todo" | "scheduled" | "ready" | "running" | "blocked" | "review" | "done"
+    ) {
+        return Err(StoreError::InvalidInput(
+            "target_child_status is invalid".to_owned(),
+        ));
+    }
+    if input.actor.trim().is_empty() {
+        return Err(StoreError::InvalidInput("actor is required".to_owned()));
+    }
+    for (name, value) in [
+        ("event_id", input.event_id.as_str()),
+        ("recompute_event_id", input.recompute_event_id.as_str()),
+    ] {
+        if !value.trim().starts_with("e_") || value.trim().len() <= 2 {
+            return Err(StoreError::InvalidInput(format!(
+                "{name} must start with e_"
+            )));
+        }
+    }
+    if input.now < 0 {
+        return Err(StoreError::InvalidInput(
+            "now must be non-negative".to_owned(),
         ));
     }
     Ok(())
@@ -14339,6 +14785,304 @@ mod tests {
         assert!(matches!(
             archived_error,
             StoreError::InvalidTransition(message) if message.contains("archived")
+        ));
+    }
+
+    #[tokio::test]
+    async fn dependency_create_list_recomputes_atomically_and_rejects_cycles() {
+        let (_directory, store, _path) = store("dependency-create-list").await;
+        store.initialize().await.expect("initialize");
+        let parent = store
+            .create_task(
+                "default",
+                create_input("t_dependency_parent", None, "Dependency parent"),
+            )
+            .await
+            .expect("create parent");
+        let child = store
+            .create_task(
+                "default",
+                create_input("t_dependency_child", None, "Dependency child"),
+            )
+            .await
+            .expect("create child");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'done', completed_at = 400 WHERE id = ?1",
+                [parent.id.as_str()],
+            )
+            .await
+            .expect("finish parent");
+
+        let first = store
+            .add_dependency(
+                &child.id,
+                &parent.id,
+                AddDependencyInput {
+                    expected_child_lock_version: child.lock_version,
+                    target_child_status: "todo".to_owned(),
+                    actor: " tester ".to_owned(),
+                    event_id: "e_dependency_added".to_owned(),
+                    recompute_event_id: "e_dependency_recomputed".to_owned(),
+                    now: 500,
+                },
+            )
+            .await
+            .expect("add dependency");
+        assert!(first.added);
+        assert_eq!(first.dependencies.task.id, child.id);
+        assert_eq!(
+            first
+                .dependencies
+                .parents
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![parent.id.as_str()]
+        );
+        assert!(first.dependencies.children.is_empty());
+        assert_eq!(first.dependencies.edges.len(), 1);
+        assert_eq!(first.dependencies.edges[0].parent.id, parent.id);
+        assert_eq!(first.dependencies.edges[0].child.id, child.id);
+        assert_eq!(first.dependencies.task.status, "todo");
+
+        let replay = store
+            .add_dependency(
+                &child.id,
+                &parent.id,
+                AddDependencyInput {
+                    expected_child_lock_version: child.lock_version,
+                    target_child_status: "todo".to_owned(),
+                    actor: "different actor".to_owned(),
+                    event_id: "e_dependency_added_retry".to_owned(),
+                    recompute_event_id: "e_dependency_recomputed_retry".to_owned(),
+                    now: 900,
+                },
+            )
+            .await
+            .expect("dependency replay");
+        assert!(!replay.added);
+        assert_eq!(replay.dependencies, first.dependencies);
+        let events = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind IN ('dependency.added', 'task.recomputed')",
+                    [child.id.as_str()],
+                )
+                .await
+                .expect("dependency event count"),
+        )
+        .await
+        .expect("dependency event count row");
+        assert_eq!(
+            integer_value(events.get_value(0).expect("event count"), "event.count")
+                .expect("event count integer"),
+            1
+        );
+
+        let listed = store
+            .list_dependencies(&child.id)
+            .await
+            .expect("list dependencies");
+        assert_eq!(listed, first.dependencies);
+
+        let cycle = store
+            .add_dependency(
+                &parent.id,
+                &child.id,
+                AddDependencyInput {
+                    expected_child_lock_version: parent.lock_version,
+                    target_child_status: "todo".to_owned(),
+                    actor: "tester".to_owned(),
+                    event_id: "e_dependency_cycle".to_owned(),
+                    recompute_event_id: "e_dependency_cycle_recompute".to_owned(),
+                    now: 1_000,
+                },
+            )
+            .await
+            .expect_err("cycle must be rejected");
+        assert!(matches!(cycle, StoreError::DependencyCycle(message) if message.contains("cycle")));
+        let edge_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_dependencies WHERE board_id = 'b_default'",
+                    (),
+                )
+                .await
+                .expect("edge count"),
+        )
+        .await
+        .expect("edge count row");
+        assert_eq!(
+            integer_value(edge_count.get_value(0).expect("edge count"), "edge.count")
+                .expect("edge count integer"),
+            1
+        );
+
+        let unknown = store
+            .list_dependencies("t_dependency_unknown")
+            .await
+            .expect_err("unknown task must fail");
+        assert!(matches!(unknown, StoreError::TaskNotFound(id) if id == "t_dependency_unknown"));
+    }
+
+    #[tokio::test]
+    async fn dependency_create_enforces_board_and_running_guards_and_demotes_ready_children() {
+        let (_directory, store, _path) = store("dependency-create-guards").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO boards(id, slug, name, created_at, updated_at) VALUES ('b_dependency_other', 'dependency-other', 'Other', 1, 1)",
+                (),
+            )
+            .await
+            .expect("insert other board");
+        let parent = store
+            .create_task(
+                "default",
+                create_input("t_dependency_guard_parent", None, "Guard parent"),
+            )
+            .await
+            .expect("create parent");
+        let ready_child = store
+            .create_task(
+                "default",
+                create_input("t_dependency_guard_ready", None, "Ready child"),
+            )
+            .await
+            .expect("create ready child");
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'ready' WHERE id = ?1",
+                [ready_child.id.as_str()],
+            )
+            .await
+            .expect("make child ready");
+        let ready_child = store
+            .get_task_global(&ready_child.id)
+            .await
+            .expect("read ready child");
+        let demoted = store
+            .add_dependency(
+                &ready_child.id,
+                &parent.id,
+                AddDependencyInput {
+                    expected_child_lock_version: ready_child.lock_version,
+                    target_child_status: "todo".to_owned(),
+                    actor: "tester".to_owned(),
+                    event_id: "e_dependency_demoted".to_owned(),
+                    recompute_event_id: "e_dependency_demoted_recompute".to_owned(),
+                    now: 500,
+                },
+            )
+            .await
+            .expect("ready child should be demoted");
+        assert!(demoted.added);
+        assert_eq!(demoted.dependencies.task.status, "todo");
+        assert_eq!(
+            demoted.dependencies.task.lock_version,
+            ready_child.lock_version + 1
+        );
+        let recompute_events = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.recomputed'",
+                    [ready_child.id.as_str()],
+                )
+                .await
+                .expect("demotion recompute events"),
+        )
+        .await
+        .expect("demotion recompute events row");
+        assert_eq!(
+            integer_value(
+                recompute_events.get_value(0).expect("recompute count"),
+                "event.count",
+            )
+            .expect("recompute count integer"),
+            1
+        );
+        let dependency_events = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'dependency.added'",
+                    [ready_child.id.as_str()],
+                )
+                .await
+                .expect("demotion dependency events"),
+        )
+        .await
+        .expect("demotion dependency events row");
+        assert_eq!(
+            integer_value(
+                dependency_events.get_value(0).expect("dependency count"),
+                "event.count",
+            )
+            .expect("dependency count integer"),
+            1
+        );
+
+        let running_child = store
+            .create_task(
+                "default",
+                create_input("t_dependency_guard_running", None, "Running child"),
+            )
+            .await
+            .expect("create running child");
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'running', claim_token = 'token-running', claim_owner = 'tester', claim_expires_at = 999999 WHERE id = ?1",
+                [running_child.id.as_str()],
+            )
+            .await
+            .expect("make child running");
+        let running_error = store
+            .add_dependency(
+                &running_child.id,
+                &parent.id,
+                AddDependencyInput {
+                    expected_child_lock_version: running_child.lock_version,
+                    target_child_status: "running".to_owned(),
+                    actor: "tester".to_owned(),
+                    event_id: "e_dependency_running".to_owned(),
+                    recompute_event_id: "e_dependency_running_recompute".to_owned(),
+                    now: 600,
+                },
+            )
+            .await
+            .expect_err("running child cannot receive unfinished parent");
+        assert!(matches!(
+            running_error,
+            StoreError::InvalidTransition(message) if message.contains("running")
+        ));
+
+        let other_parent = store
+            .create_task(
+                "dependency-other",
+                create_input("t_dependency_other_parent", None, "Other parent"),
+            )
+            .await
+            .expect("create other parent");
+        let cross_board = store
+            .add_dependency(
+                &ready_child.id,
+                &other_parent.id,
+                AddDependencyInput {
+                    expected_child_lock_version: ready_child.lock_version + 1,
+                    target_child_status: "todo".to_owned(),
+                    actor: "tester".to_owned(),
+                    event_id: "e_dependency_cross_board".to_owned(),
+                    recompute_event_id: "e_dependency_cross_board_recompute".to_owned(),
+                    now: 700,
+                },
+            )
+            .await
+            .expect_err("cross-board dependency must be rejected");
+        assert!(matches!(
+            cross_board,
+            StoreError::InvalidInput(message) if message.contains("cross-board")
         ));
     }
 

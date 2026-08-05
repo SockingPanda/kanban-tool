@@ -11,11 +11,12 @@ use std::{
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
-    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, BlockTaskRequest, BlockTaskResponse,
-    ClaimTaskRequest, ClaimTaskResponse, CommentAuthorType, CommentKind, CompleteTaskRequest,
-    CompleteTaskResponse, CreateCommentRequest, CreateStepRequest, CreateStepResponse,
-    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
-    HeartbeatTaskResponse, ListStepsResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
+    ApiCreateTaskStatus, ApiDependencies, ApiDependencyEdge, ApiDependencyTask, ApiTask,
+    ApiTaskPriority, ApiTaskStatus, BlockTaskRequest, BlockTaskResponse, ClaimTaskRequest,
+    ClaimTaskResponse, CommentAuthorType, CommentKind, CompleteTaskRequest, CompleteTaskResponse,
+    CreateCommentRequest, CreateStepRequest, CreateStepResponse, CreateTaskRequest,
+    CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest, HeartbeatTaskResponse,
+    ListStepsResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
     ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
     TaskReadPlanFilter, TaskReadSort, UpdateStepRequest, UpdateStepResponse,
@@ -73,6 +74,12 @@ enum Command {
         #[command(subcommand)]
         command: CommentCommand,
     },
+    /// Manage task dependencies through the canonical localhost host.
+    #[command(name = "dep", visible_alias = "dependency")]
+    Dependency {
+        #[command(subcommand)]
+        command: DependencyCommand,
+    },
     /// Removed direct-database initialization path.
     Init,
     /// Commands not yet migrated to the canonical host fail without touching storage.
@@ -113,6 +120,25 @@ enum CommentCommand {
     Add(CommentAddArgs),
     /// List task comments from the canonical application host.
     List(CommentListArgs),
+}
+
+#[derive(Debug, Subcommand)]
+enum DependencyCommand {
+    /// Add a parent dependency to a child task.
+    Add(DependencyAddArgs),
+    /// List direct parent and child dependencies for a task.
+    List(DependencyListArgs),
+}
+
+#[derive(Debug, Args)]
+struct DependencyAddArgs {
+    child_task_ref: String,
+    parent_task_ref: String,
+}
+
+#[derive(Debug, Args)]
+struct DependencyListArgs {
+    task_ref: String,
 }
 
 #[derive(Debug, Args)]
@@ -416,7 +442,10 @@ impl From<ClientError> for CliFailure {
         let code = error.code();
         let exit_code = match code {
             "not_found" => 3,
-            "invalid_transition" | "execution_plan_required" | "steps_incomplete" => 4,
+            "invalid_transition"
+            | "execution_plan_required"
+            | "steps_incomplete"
+            | "dependency_cycle" => 4,
             "claim_conflict" | "claim_token_mismatch" | "idempotency_conflict" => 5,
             "dependency_blocked" => 6,
             "server_unavailable" => 9,
@@ -568,6 +597,74 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                                 comment.author_type.as_str(),
                                 comment.body
                             );
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+        Command::Dependency { command } => {
+            let client = KanbanClient::new(&cli.server_url, actor(cli))?;
+            match command {
+                DependencyCommand::Add(args) => {
+                    let parent_id = client
+                        .get_task_by_selector(&cli.board, &args.parent_task_ref)?
+                        .id;
+                    let dependencies = client.add_dependency_by_selector(
+                        &cli.board,
+                        &args.child_task_ref,
+                        &args.parent_task_ref,
+                    )?;
+                    if cli.json {
+                        let edge = dependencies
+                            .edges
+                            .iter()
+                            .find(|edge| {
+                                edge.child.id == dependencies.task.id && edge.parent.id == parent_id
+                            })
+                            .cloned()
+                            .ok_or_else(|| CliFailure {
+                                code: "invalid_response",
+                                message: "dependency add response omitted the new edge".to_owned(),
+                                exit_code: 2,
+                            })?;
+                        println!(
+                            "{}",
+                            serde_json::to_string(&kanban_contract::CliDependencyAddOutput {
+                                data: kanban_contract::CliDependencyMutation {
+                                    edge: cli_dependency_edge(&edge),
+                                    dependencies: cli_dependency_snapshot(&dependencies),
+                                },
+                            })
+                            .expect("dependency response is serializable")
+                        );
+                    } else {
+                        println!(
+                            "{} depends_on {} ({})",
+                            dependencies.task.task_ref,
+                            args.parent_task_ref,
+                            dependencies.task.status.as_str()
+                        );
+                    }
+                }
+                DependencyCommand::List(args) => {
+                    let dependencies =
+                        client.list_dependencies_by_selector(&cli.board, &args.task_ref)?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&kanban_contract::CliDependencyListOutput {
+                                data: cli_dependency_snapshot(&dependencies),
+                            })
+                            .expect("dependency response is serializable")
+                        );
+                    } else {
+                        println!("{}", dependencies.task.task_ref);
+                        for parent in &dependencies.parents {
+                            println!("  parent {} {}", parent.task_ref, parent.status.as_str());
+                        }
+                        for child in &dependencies.children {
+                            println!("  child {} {}", child.task_ref, child.status.as_str());
                         }
                     }
                 }
@@ -979,6 +1076,54 @@ fn api_list_status(status: ListStatus) -> ApiTaskStatus {
     }
 }
 
+fn cli_dependency_task(task: &ApiTask) -> kanban_contract::CliDependencyTask {
+    kanban_contract::CliDependencyTask {
+        id: task.id.clone(),
+        board_id: task.board_id.clone(),
+        board_slug: task.board_slug.clone(),
+        task_ref: task.task_ref.clone(),
+        title: task.title.clone(),
+        status: task.status,
+    }
+}
+
+fn cli_dependency_task_compact(task: &ApiDependencyTask) -> kanban_contract::CliDependencyTask {
+    kanban_contract::CliDependencyTask {
+        id: task.id.clone(),
+        board_id: task.board_id.clone(),
+        board_slug: task.board_slug.clone(),
+        task_ref: task.task_ref.clone(),
+        title: task.title.clone(),
+        status: task.status,
+    }
+}
+
+fn cli_dependency_edge(edge: &ApiDependencyEdge) -> kanban_contract::CliDependencyEdge {
+    kanban_contract::CliDependencyEdge {
+        parent: cli_dependency_task_compact(&edge.parent),
+        child: cli_dependency_task_compact(&edge.child),
+    }
+}
+
+fn cli_dependency_snapshot(
+    dependencies: &ApiDependencies,
+) -> kanban_contract::CliDependencySnapshot {
+    kanban_contract::CliDependencySnapshot {
+        task: cli_dependency_task_compact(&dependencies.task),
+        parents: dependencies
+            .parents
+            .iter()
+            .map(cli_dependency_task)
+            .collect(),
+        children: dependencies
+            .children
+            .iter()
+            .map(cli_dependency_task)
+            .collect(),
+        edges: dependencies.edges.iter().map(cli_dependency_edge).collect(),
+    }
+}
+
 fn parse_metadata(
     metadata: Option<&str>,
 ) -> Result<Option<BTreeMap<String, serde_json::Value>>, CliFailure> {
@@ -1227,6 +1372,30 @@ mod tests {
             panic!("expected comment list");
         };
         assert_eq!(args.task_ref, "default#1");
+    }
+
+    #[test]
+    fn parses_dependency_commands() {
+        let cli = Cli::try_parse_from(["kanban", "dep", "add", "default#2", "default#1"])
+            .expect("dependency add args");
+        let Command::Dependency {
+            command: DependencyCommand::Add(args),
+        } = cli.command
+        else {
+            panic!("expected dependency add");
+        };
+        assert_eq!(args.child_task_ref, "default#2");
+        assert_eq!(args.parent_task_ref, "default#1");
+
+        let cli = Cli::try_parse_from(["kanban", "dep", "list", "default#2"])
+            .expect("dependency list args");
+        let Command::Dependency {
+            command: DependencyCommand::List(args),
+        } = cli.command
+        else {
+            panic!("expected dependency list");
+        };
+        assert_eq!(args.task_ref, "default#2");
     }
 
     #[test]

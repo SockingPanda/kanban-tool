@@ -1,10 +1,13 @@
 use kanban_application::{
-    ApplicationStore, BlockTaskRecord as ApplicationBlockTask,
-    BoardColumnRecord as ApplicationBoardColumn, BoardRecord, ClaimRecord as ApplicationClaim,
-    ClaimTaskRecord as ApplicationClaimTask, CommentAuthorType as ApplicationCommentAuthorType,
-    CommentKind as ApplicationCommentKind, CommentRecord as ApplicationComment,
-    CompleteTaskRecord as ApplicationCompleteTask, CreateCommentRecord as ApplicationCreateComment,
-    CreateStepRecord as ApplicationCreateStep, CreateTaskRecord as ApplicationCreateTask,
+    AddDependencyRecord as ApplicationAddDependency,
+    AddDependencyResult as ApplicationAddDependencyResult, ApplicationStore,
+    BlockTaskRecord as ApplicationBlockTask, BoardColumnRecord as ApplicationBoardColumn,
+    BoardRecord, ClaimRecord as ApplicationClaim, ClaimTaskRecord as ApplicationClaimTask,
+    CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
+    CommentRecord as ApplicationComment, CompleteTaskRecord as ApplicationCompleteTask,
+    CreateCommentRecord as ApplicationCreateComment, CreateStepRecord as ApplicationCreateStep,
+    CreateTaskRecord as ApplicationCreateTask, DependencyEdgeRecord as ApplicationDependencyEdge,
+    DependencySnapshotRecord as ApplicationDependencySnapshot,
     ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
     HeartbeatTaskRecord as ApplicationHeartbeatTask,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
@@ -20,10 +23,11 @@ use kanban_application::{
 };
 use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
-    BlockTaskInput as StoreBlockTask, ClaimTaskInput as StoreClaimTask,
-    ClaimTaskRecord as StoreClaim, CompleteTaskInput as StoreCompleteTask,
-    CreateCommentInput as StoreCreateComment, CreateStepInput as StoreCreateStep,
-    CreateTaskInput as StoreCreateTask, HeartbeatTaskInput as StoreHeartbeatTask,
+    AddDependencyInput as StoreAddDependency, BlockTaskInput as StoreBlockTask,
+    ClaimTaskInput as StoreClaimTask, ClaimTaskRecord as StoreClaim,
+    CompleteTaskInput as StoreCompleteTask, CreateCommentInput as StoreCreateComment,
+    CreateStepInput as StoreCreateStep, CreateTaskInput as StoreCreateTask,
+    DependencySnapshotRecord as StoreDependencySnapshot, HeartbeatTaskInput as StoreHeartbeatTask,
     MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
     PromoteTaskInput as StorePromoteTask, ReclaimExpiredTaskInput as StoreReclaimExpiredTask,
     ReleaseTaskInput as StoreReleaseTask, StoreError,
@@ -150,6 +154,42 @@ impl ApplicationStore for TursoApplicationStore {
             .into_iter()
             .map(application_comment)
             .collect()
+    }
+
+    async fn add_dependency(
+        &self,
+        child_task_id: &str,
+        parent_task_id: &str,
+        input: ApplicationAddDependency,
+    ) -> Result<ApplicationAddDependencyResult> {
+        let result = self
+            .store
+            .add_dependency(
+                child_task_id,
+                parent_task_id,
+                StoreAddDependency {
+                    expected_child_lock_version: input.expected_child_lock_version,
+                    target_child_status: input.target_child_status.as_str().to_owned(),
+                    actor: input.actor,
+                    event_id: input.event_id,
+                    recompute_event_id: input.recompute_event_id,
+                    now: input.now,
+                },
+            )
+            .await
+            .map_err(store_error)?;
+        Ok(ApplicationAddDependencyResult {
+            added: result.added,
+            dependencies: application_dependency_snapshot(result.dependencies)?,
+        })
+    }
+
+    async fn list_dependencies(&self, task_id: &str) -> Result<ApplicationDependencySnapshot> {
+        self.store
+            .list_dependencies(task_id)
+            .await
+            .map_err(store_error)
+            .and_then(application_dependency_snapshot)
     }
 
     async fn create_step(
@@ -498,6 +538,7 @@ fn store_error(error: StoreError) -> KanbanError {
         StoreError::BoardNotFound(selector) => KanbanError::NotFound(format!("board {selector}")),
         StoreError::TaskNotFound(task_id) => KanbanError::NotFound(format!("task {task_id}")),
         StoreError::StepNotFound(step_id) => KanbanError::NotFound(format!("step {step_id}")),
+        StoreError::DependencyCycle(message) => KanbanError::Conflict(message),
         StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),
         StoreError::InvalidTransition(message) => KanbanError::InvalidTransition(message),
         StoreError::ClaimConflict(message) => {
@@ -516,6 +557,34 @@ fn store_error(error: StoreError) -> KanbanError {
         )),
         other => KanbanError::Storage(other.to_string()),
     }
+}
+
+fn application_dependency_snapshot(
+    snapshot: StoreDependencySnapshot,
+) -> Result<ApplicationDependencySnapshot> {
+    Ok(ApplicationDependencySnapshot {
+        task: application_task(snapshot.task)?,
+        parents: snapshot
+            .parents
+            .into_iter()
+            .map(application_task)
+            .collect::<Result<Vec<_>>>()?,
+        children: snapshot
+            .children
+            .into_iter()
+            .map(application_task)
+            .collect::<Result<Vec<_>>>()?,
+        edges: snapshot
+            .edges
+            .into_iter()
+            .map(|edge| {
+                Ok(ApplicationDependencyEdge {
+                    parent: application_task(edge.parent)?,
+                    child: application_task(edge.child)?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?,
+    })
 }
 
 fn application_claim(claim: StoreClaim) -> Result<ApplicationClaim> {

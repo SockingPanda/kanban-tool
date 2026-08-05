@@ -2,15 +2,16 @@ use std::{collections::BTreeMap, env, sync::Arc};
 
 use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
-    ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, BlockTaskRequest, BlockTaskResponse,
-    ClaimTaskRequest, ClaimTaskResponse, CommentAuthorType, CommentKind, CompleteTaskRequest,
-    CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse, CreateStepRequest,
-    CreateStepResponse, CreateTaskRequest, CreateTaskResponse, GetTaskResponse,
+    AddDependencyResponse, ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, BlockTaskRequest,
+    BlockTaskResponse, ClaimTaskRequest, ClaimTaskResponse, CommentAuthorType, CommentKind,
+    CompleteTaskRequest, CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse,
+    CreateStepRequest, CreateStepResponse, CreateTaskRequest, CreateTaskResponse, GetTaskResponse,
     HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardsResponse, ListCommentsResponse,
-    ListStepsResponse, ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
-    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
-    TaskReadPlanFilter, TaskReadSort, UpdateStepRequest, UpdateStepResponse,
+    ListDependenciesResponse, ListStepsResponse, ListTasksQuery, ListTasksResponse,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
+    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
+    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort, UpdateStepRequest,
+    UpdateStepResponse,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -211,6 +212,26 @@ struct CommentCreateArgs {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct CommentListArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct DependencyCreateArgs {
+    /// Board used when child_task_ref or parent_task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence for the child task.
+    child_task_ref: String,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence for the parent task.
+    parent_task_ref: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct DependencyListArgs {
     /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
     board: Option<String>,
     /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
@@ -490,6 +511,47 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(ListCommentsResponse { data: comments }))
+    }
+
+    #[tool(
+        name = "dependency_create",
+        description = "Add a direct parent dependency through the canonical kanban application service"
+    )]
+    async fn dependency_create(
+        &self,
+        Parameters(args): Parameters<DependencyCreateArgs>,
+    ) -> Result<Json<AddDependencyResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let child_task_ref = args.child_task_ref;
+        let parent_task_ref = args.parent_task_ref;
+        let client = self.client.clone();
+        let dependencies = tokio::task::spawn_blocking(move || {
+            client.add_dependency_by_selector(&board, &child_task_ref, &parent_task_ref)
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(AddDependencyResponse { data: dependencies }))
+    }
+
+    #[tool(
+        name = "dependency_list",
+        description = "List direct task dependencies through the canonical kanban application service"
+    )]
+    async fn dependency_list(
+        &self,
+        Parameters(args): Parameters<DependencyListArgs>,
+    ) -> Result<Json<ListDependenciesResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let task_ref = args.task_ref;
+        let client = self.client.clone();
+        let dependencies = tokio::task::spawn_blocking(move || {
+            client.list_dependencies_by_selector(&board, &task_ref)
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(ListDependenciesResponse { data: dependencies }))
     }
 
     #[tool(

@@ -338,6 +338,43 @@ pub struct CommentRecord {
     pub created_at: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddDependencyCommand {
+    pub child_task_id: String,
+    pub parent_task_id: String,
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddDependencyRecord {
+    pub expected_child_lock_version: i64,
+    pub target_child_status: TaskStatus,
+    pub actor: String,
+    pub event_id: String,
+    pub recompute_event_id: String,
+    pub now: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependencyEdgeRecord {
+    pub parent: TaskRecord,
+    pub child: TaskRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependencySnapshotRecord {
+    pub task: TaskRecord,
+    pub parents: Vec<TaskRecord>,
+    pub children: Vec<TaskRecord>,
+    pub edges: Vec<DependencyEdgeRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddDependencyResult {
+    pub added: bool,
+    pub dependencies: DependencySnapshotRecord,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CreateStepCommand {
     pub task_id: String,

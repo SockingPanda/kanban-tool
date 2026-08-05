@@ -541,9 +541,25 @@ export type CheckpointReport = {
   checkpointed_frames: number
 }
 
+export type DependencyTask = {
+  id: string
+  board_id: string
+  board_slug: string
+  ref: string
+  title: string
+  status: TaskStatus
+}
+
+export type DependencyEdge = {
+  parent: DependencyTask
+  child: DependencyTask
+}
+
 export type Dependencies = {
+  task?: DependencyTask
   parents: Task[]
   children: Task[]
+  edges?: DependencyEdge[]
 }
 
 export type StepPlanState = "unplanned" | "planned" | "not_required"

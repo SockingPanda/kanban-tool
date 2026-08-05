@@ -909,6 +909,55 @@ describe("KanbanApi task search", () => {
     expect(calledInit(fetchMock).method).toBe("DELETE")
   })
 
+  it("lists and creates dependencies through the canonical task endpoint", async () => {
+    const parent = task({ id: "t_parent", ref: "default#1", title: "Parent", status: "done" })
+    const child = task({ id: "t_child", ref: "default#2", title: "Child", status: "todo" })
+    const compactParent = {
+      id: parent.id,
+      board_id: parent.board_id,
+      board_slug: parent.board_slug,
+      ref: parent.ref,
+      title: parent.title,
+      status: parent.status,
+    }
+    const compactChild = {
+      id: child.id,
+      board_id: child.board_id,
+      board_slug: child.board_slug,
+      ref: child.ref,
+      title: child.title,
+      status: child.status,
+    }
+    const response = {
+      data: {
+        task: compactChild,
+        parents: [parent],
+        children: [],
+        edges: [{ parent: compactParent, child: compactChild }],
+      },
+    }
+    const listFetch = mockFetch(response)
+    const api = new KanbanApi(runtimeConfig)
+
+    await expect(api.listDependencies(child.id)).resolves.toEqual(response.data)
+    expect(calledUrl(listFetch).pathname).toBe("/api/v1/tasks/t_child/dependencies")
+    expect(calledInit(listFetch).method).toBe("GET")
+
+    vi.unstubAllGlobals()
+    const addFetch = mockFetch(response)
+    await expect(api.addDependency(child.id, parent.id)).resolves.toEqual(response.data)
+    expect(calledUrl(addFetch).pathname).toBe("/api/v1/tasks/t_child/dependencies")
+    expect(calledInit(addFetch).method).toBe("POST")
+    expect(calledInit(addFetch).headers).toMatchObject({
+      "Content-Type": "application/json",
+      "X-KB-Actor": "desktop-test",
+    })
+    expect(JSON.parse(calledInit(addFetch).body as string)).toEqual({
+      parent_task_id: parent.id,
+      actor: "desktop-test",
+    })
+  })
+
   it("uses step routes and includes the desktop actor", async () => {
     const child = task({ id: "t_child", title: "Child" })
     const steps = {

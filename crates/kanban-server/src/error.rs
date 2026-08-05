@@ -19,7 +19,6 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, code) = match &self.0 {
             KanbanError::NotFound(_) => (StatusCode::NOT_FOUND, ApiErrorCode::NotFound),
-            KanbanError::Conflict(_) => (StatusCode::CONFLICT, ApiErrorCode::Conflict),
             KanbanError::IdempotencyConflict(_) => {
                 (StatusCode::CONFLICT, ApiErrorCode::IdempotencyConflict)
             }
@@ -27,6 +26,10 @@ impl IntoResponse for ApiError {
                 StatusCode::NOT_IMPLEMENTED,
                 ApiErrorCode::FeatureNotAvailable,
             ),
+            KanbanError::Conflict(message) if message.contains("dependency cycle") => {
+                (StatusCode::CONFLICT, ApiErrorCode::DependencyCycle)
+            }
+            KanbanError::Conflict(_) => (StatusCode::CONFLICT, ApiErrorCode::Conflict),
             KanbanError::InvalidInput(_) | KanbanError::InvalidStatus(_) => {
                 (StatusCode::BAD_REQUEST, ApiErrorCode::InvalidInput)
             }

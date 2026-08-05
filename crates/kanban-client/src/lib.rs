@@ -6,12 +6,13 @@ use std::{
 };
 
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, ApiClaim, ApiComment, ApiErrorCode, ApiExecutionPlan, ApiTask,
-    ApiTaskSteps, BlockTaskRequest, BlockTaskResponse, ClaimTaskRequest, ClaimTaskResponse,
-    CompleteTaskRequest, CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse,
-    CreateStepRequest, CreateTaskRequest, CreateTaskResponse, ErrorEnvelope, GetTaskResponse,
-    HealthReport, HealthResponse, HeartbeatTaskRequest, HeartbeatTaskResponse,
-    ListBoardColumnsResponse, ListBoardsResponse, ListCommentsResponse, ListStepsResponse,
+    AddDependencyRequest, AddDependencyResponse, ApiBoard, ApiBoardColumn, ApiClaim, ApiComment,
+    ApiDependencies, ApiErrorCode, ApiExecutionPlan, ApiTask, ApiTaskSteps, BlockTaskRequest,
+    BlockTaskResponse, ClaimTaskRequest, ClaimTaskResponse, CompleteTaskRequest,
+    CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse, CreateStepRequest,
+    CreateTaskRequest, CreateTaskResponse, ErrorEnvelope, GetTaskResponse, HealthReport,
+    HealthResponse, HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse,
+    ListBoardsResponse, ListCommentsResponse, ListDependenciesResponse, ListStepsResponse,
     ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
     ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
@@ -200,6 +201,70 @@ impl KanbanClient {
     ) -> Result<Vec<ApiComment>, ClientError> {
         let task_id = self.resolve_task_id(board, selector)?;
         self.list_comments(&task_id)
+    }
+
+    pub fn list_dependencies(&self, task_id: &str) -> Result<ApiDependencies, ClientError> {
+        let task_id = task_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(ClientError::InvalidInput(
+                "task selector must resolve to a global t_... id".to_owned(),
+            ));
+        }
+        let response: ListDependenciesResponse = self.get(&format!(
+            "/api/v1/tasks/{}/dependencies",
+            encode_path_segment(task_id)
+        ))?;
+        Ok(response.data)
+    }
+
+    pub fn list_dependencies_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+    ) -> Result<ApiDependencies, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        self.list_dependencies(&task_id)
+    }
+
+    pub fn add_dependency(
+        &self,
+        child_task_id: &str,
+        parent_task_id: &str,
+    ) -> Result<ApiDependencies, ClientError> {
+        let child_task_id = child_task_id.trim();
+        let parent_task_id = parent_task_id.trim();
+        if !child_task_id.starts_with("t_") || child_task_id.len() <= 2 {
+            return Err(ClientError::InvalidInput(
+                "task selector must resolve to a global t_... id".to_owned(),
+            ));
+        }
+        if !parent_task_id.starts_with("t_") || parent_task_id.len() <= 2 {
+            return Err(ClientError::InvalidInput(
+                "task selector must resolve to a global t_... id".to_owned(),
+            ));
+        }
+        let response: AddDependencyResponse = self.post(
+            &format!(
+                "/api/v1/tasks/{}/dependencies",
+                encode_path_segment(child_task_id)
+            ),
+            &AddDependencyRequest {
+                parent_task_id: parent_task_id.to_owned(),
+                actor: None,
+            },
+        )?;
+        Ok(response.data)
+    }
+
+    pub fn add_dependency_by_selector(
+        &self,
+        board: &str,
+        child_selector: &str,
+        parent_selector: &str,
+    ) -> Result<ApiDependencies, ClientError> {
+        let child_task_id = self.resolve_task_id(board, child_selector)?;
+        let parent_task_id = self.resolve_task_id(board, parent_selector)?;
+        self.add_dependency(&child_task_id, &parent_task_id)
     }
 
     pub fn list_steps(&self, task_id: &str) -> Result<ApiTaskSteps, ClientError> {
@@ -863,6 +928,19 @@ mod tests {
             .list_comments("default#1")
             .expect_err("board-local selectors must be resolved first");
         assert_eq!(error.code(), "invalid_input");
+    }
+
+    #[test]
+    fn dependency_methods_require_global_ids_before_http() {
+        let client = KanbanClient::new(DEFAULT_SERVER_URL, "test").unwrap();
+        let list_error = client
+            .list_dependencies("default#1")
+            .expect_err("board-local selectors must be resolved first");
+        assert_eq!(list_error.code(), "invalid_input");
+        let add_error = client
+            .add_dependency("t_child", "#1")
+            .expect_err("parent selector must be resolved first");
+        assert_eq!(add_error.code(), "invalid_input");
     }
 
     #[test]

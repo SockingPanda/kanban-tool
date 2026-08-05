@@ -3,12 +3,12 @@ use std::future::Future;
 use kanban_core::Result;
 
 use crate::{
-    BlockTaskRecord, BoardColumnRecord, BoardRecord, ClaimRecord, ClaimTaskRecord, CommentRecord,
-    CompleteTaskRecord, CreateCommentRecord, CreateStepRecord, CreateTaskRecord,
-    ExecutionPlanRecord, HeartbeatTaskRecord, MarkExecutionPlanNotRequiredRecord,
-    PromoteTaskRecord, ReclaimExpiredTaskRecord, ReleaseTaskRecord, StepRecord,
-    SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskRecord, TaskStepsRecord,
-    UpdateStepRecord,
+    AddDependencyRecord, AddDependencyResult, BlockTaskRecord, BoardColumnRecord, BoardRecord,
+    ClaimRecord, ClaimTaskRecord, CommentRecord, CompleteTaskRecord, CreateCommentRecord,
+    CreateStepRecord, CreateTaskRecord, DependencySnapshotRecord, ExecutionPlanRecord,
+    HeartbeatTaskRecord, MarkExecutionPlanNotRequiredRecord, PromoteTaskRecord,
+    ReclaimExpiredTaskRecord, ReleaseTaskRecord, StepRecord, SubmitReviewTaskRecord,
+    TaskListOptions, TaskListPage, TaskRecord, TaskStepsRecord, UpdateStepRecord,
 };
 
 /// Persistence port used only by the shared application service.
@@ -110,6 +110,18 @@ pub trait ApplicationStore: Clone + Send + Sync + 'static {
         &self,
         task_id: &str,
     ) -> impl Future<Output = Result<Vec<CommentRecord>>> + Send;
+
+    fn add_dependency(
+        &self,
+        child_task_id: &str,
+        parent_task_id: &str,
+        input: AddDependencyRecord,
+    ) -> impl Future<Output = Result<AddDependencyResult>> + Send;
+
+    fn list_dependencies(
+        &self,
+        task_id: &str,
+    ) -> impl Future<Output = Result<DependencySnapshotRecord>> + Send;
 
     fn create_step(
         &self,

@@ -1,21 +1,109 @@
 //! Turso-native task search and host-local FTS projection maintenance.
 
-use kanban_search::{
-    SEARCH_INDEX_VERSION, SEARCH_PROVIDER, SEARCH_PROVIDER_FINGERPRINT, SearchHit,
-    SearchIndexStatus, SearchMeta, SearchQuery, SearchResults, TaskSearchDocument,
-};
+use kanban_core::TaskStatus;
 use sha2::{Digest, Sha256};
 use turso::{Connection, Row, Value, transaction::TransactionBehavior};
 
 use crate::{
     db::TursoStore,
     error::StoreError,
-    shared::{
-        first_row, integer_value, now_ms, optional_integer_value, optional_text_value, text_value,
-    },
+    shared::{first_row, integer_value, now_ms, optional_text_value, text_value},
 };
 
 const TASK_SOURCE_KIND: &str = "task";
+const SEARCH_INDEX_VERSION: &str = "turso-fts-task-v1";
+const SEARCH_PROVIDER: &str = "turso_fts";
+const SEARCH_PROVIDER_FINGERPRINT: &str = "turso-fts-task-v1";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreSearchQuery {
+    pub board: String,
+    pub q: Option<String>,
+    pub statuses: Vec<TaskStatus>,
+    pub labels: Vec<String>,
+    pub assignee: Option<String>,
+    pub include_archived: bool,
+    pub limit: usize,
+    pub offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StoreSearchHit {
+    pub task_id: String,
+    pub seq: i64,
+    pub score: f64,
+    pub snippet: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreSearchMeta {
+    pub backend: String,
+    pub stale: bool,
+    pub database_instance_id: Option<String>,
+    pub protocol_version: Option<i64>,
+    pub generation: Option<String>,
+    pub resolved_board_id: String,
+    pub fallback_reason: Option<String>,
+    pub index_version: Option<String>,
+    pub last_event_id: Option<i64>,
+    pub index_lag_events: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StoreSearchResults {
+    pub hits: Vec<StoreSearchHit>,
+    pub meta: StoreSearchMeta,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreSearchIndexStatus {
+    pub backend: String,
+    pub derived_index: bool,
+    pub stale: bool,
+    pub database_instance_id: Option<String>,
+    pub protocol_version: Option<i64>,
+    pub generation: Option<String>,
+    pub resolved_board_id: String,
+    pub fallback_reason: Option<String>,
+    pub index_version: Option<String>,
+    pub last_event_id: Option<i64>,
+    pub index_lag_events: Option<i64>,
+    pub message: String,
+}
+
+type SearchQuery = StoreSearchQuery;
+type SearchHit = StoreSearchHit;
+type SearchMeta = StoreSearchMeta;
+type SearchResults = StoreSearchResults;
+type SearchIndexStatus = StoreSearchIndexStatus;
+
+#[derive(Debug, Clone)]
+struct StoreTaskSearchDocument {
+    board_id: String,
+    task_id: String,
+    created_at: i64,
+    updated_at: i64,
+    title: String,
+    description: Option<String>,
+    comments: String,
+    run_text: String,
+    event_text: String,
+}
+
+impl StoreTaskSearchDocument {
+    fn content(&self) -> String {
+        [
+            self.title.as_str(),
+            self.description.as_deref().unwrap_or_default(),
+            self.comments.as_str(),
+            self.run_text.as_str(),
+            self.event_text.as_str(),
+        ]
+        .join("\n")
+    }
+}
+
+type TaskSearchDocument = StoreTaskSearchDocument;
 
 #[derive(Debug, Clone)]
 struct BoardRef {
@@ -38,10 +126,6 @@ impl TursoStore {
     /// 查询任务。FTS 未 ready、FTS provider 失败或 query 不被 provider 接受时，
     /// 退回 canonical SQL，并在 meta 中明确标记 degraded/fallback 原因。
     pub async fn search_tasks(&self, query: SearchQuery) -> Result<SearchResults, StoreError> {
-        query
-            .validate()
-            .map_err(|error| StoreError::InvalidInput(error.to_string()))?;
-        let query = query.normalized();
         let connection = self.connection().await?;
         let board = resolve_board(&connection, &query.board).await?;
         let state = projection_state(&connection).await?;
@@ -374,21 +458,11 @@ async fn task_search_documents(
 }
 
 fn document_from_row(row: Row) -> Result<TaskSearchDocument, StoreError> {
-    let status = text_value(row.get_value(3)?, "tasks.status")?
-        .parse()
-        .map_err(|_| StoreError::InvalidStoredValue {
-            field: "tasks.status",
-        })?;
     Ok(TaskSearchDocument {
         task_id: text_value(row.get_value(0)?, "tasks.id")?,
         board_id: text_value(row.get_value(1)?, "tasks.board_id")?,
-        seq: integer_value(row.get_value(2)?, "tasks.seq")?,
-        status,
-        assignee: optional_text_value(row.get_value(4)?, "tasks.assignee")?,
-        priority: integer_value(row.get_value(5)?, "tasks.priority")?,
         created_at: integer_value(row.get_value(6)?, "tasks.created_at")?,
         updated_at: integer_value(row.get_value(7)?, "tasks.updated_at")?,
-        due_at: optional_integer_value(row.get_value(8)?, "tasks.due_at")?,
         title: text_value(row.get_value(9)?, "tasks.title")?,
         description: optional_text_value(row.get_value(10)?, "tasks.description")?,
         comments: text_value(row.get_value(11)?, "task_comments.body")?,

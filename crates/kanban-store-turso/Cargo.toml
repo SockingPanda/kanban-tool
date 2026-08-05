@@ -10,12 +10,12 @@ default = []
 legacy-sqlite-import = ["dep:rusqlite"]
 
 [dependencies]
+kanban-core.workspace = true
 sha2.workspace = true
 rusqlite = { workspace = true, optional = true, features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true
 ulid.workspace = true
-kanban-search.workspace = true
 turso = { workspace = true, default-features = false, features = ["fts"] }
 
 [dev-dependencies]

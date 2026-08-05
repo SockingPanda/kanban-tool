@@ -2749,7 +2749,6 @@ name = "kanban-application"
 version = "2.1.3"
 dependencies = [
  "kanban-core",
- "kanban-search",
  "serde",
  "serde_json",
  "tokio",
@@ -2827,14 +2826,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kanban-search"
-version = "2.1.3"
-dependencies = [
- "kanban-core",
- "serde",
-]
-
-[[package]]
 name = "kanban-server"
 version = "2.1.3"
 dependencies = [
@@ -2843,7 +2834,6 @@ dependencies = [
  "kanban-application",
  "kanban-contract",
  "kanban-core",
- "kanban-search",
  "kanban-store-turso",
  "serde",
  "serde_json",
@@ -2859,10 +2849,10 @@ dependencies = [
 name = "kanban-store-turso"
 version = "2.1.3"
 dependencies = [
+ "kanban-core",
  "rusqlite",
  "serde",
  "serde_json",
- "kanban-search",
  "sha2",
  "tempfile",
  "tokio",

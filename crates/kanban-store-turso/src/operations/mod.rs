@@ -5,7 +5,7 @@ mod events;
 mod lifecycle;
 mod ontology;
 mod runs;
-mod search;
+pub mod search;
 pub(crate) mod shared;
 mod stats;
 mod steps;

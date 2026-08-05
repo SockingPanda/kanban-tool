@@ -23,7 +23,10 @@ pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
 pub use event::*;
 pub use ontology::LabelOntologyOperations;
 pub use run::*;
-pub use search::SearchTasks;
+pub use search::{
+    MAX_SEARCH_LIMIT, SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults,
+    SearchTasks,
+};
 pub use stats::*;
 pub use step::{StepComplete, StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate};
 pub use task::{

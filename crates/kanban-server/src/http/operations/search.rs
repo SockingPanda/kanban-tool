@@ -3,6 +3,7 @@ use axum::{
     extract::{Query, State, rejection::QueryRejection},
     routing::{get, post},
 };
+use kanban_application::{SearchIndexStatus, SearchMeta as AppSearchMeta, SearchQuery};
 use kanban_contract::{
     ApiTaskStatus, BoardQuery, DataEnvelope, MetadataEnvelope, OffsetPaginationMeta, SearchMeta,
     SearchPageMeta, SearchStatus, SearchStatusResponse, SearchTaskHit, SearchTaskStatusWindow,
@@ -10,7 +11,6 @@ use kanban_contract::{
     SearchTasksResponse,
 };
 use kanban_core::{KanbanError, TaskStatus};
-use kanban_search::SearchQuery;
 
 use crate::{error::ApiError, http::operations::tasks::support::api_task, state::AppState};
 
@@ -133,7 +133,7 @@ fn to_search_query(query: &SearchTasksQuery, statuses: Vec<TaskStatus>) -> Searc
     }
 }
 
-fn search_meta(value: kanban_search::SearchMeta) -> SearchMeta {
+fn search_meta(value: AppSearchMeta) -> SearchMeta {
     SearchMeta {
         backend: value.backend,
         stale: value.stale,
@@ -148,7 +148,7 @@ fn search_meta(value: kanban_search::SearchMeta) -> SearchMeta {
     }
 }
 
-fn to_search_status(value: kanban_search::SearchIndexStatus) -> SearchStatus {
+fn to_search_status(value: SearchIndexStatus) -> SearchStatus {
     SearchStatus {
         backend: value.backend,
         derived_index: value.derived_index,

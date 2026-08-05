@@ -505,6 +505,7 @@ impl TursoStore {
                 }
                 "failed" => {}
                 "validated" if replace => {}
+                "published" if replace => {}
                 phase => {
                     return Err(StoreError::MaintenanceBusy(format!(
                         "portable import journal {} 处于不可恢复阶段 {phase}，请先完成 recovery",

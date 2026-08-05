@@ -20,6 +20,7 @@ impl KanbanMcp {
             + Self::event_tools()
             + Self::run_tools()
             + Self::search_tools()
+            + Self::signal_tools()
             + Self::step_tools()
             + Self::lifecycle_tools()
             + Self::ontology_tools()
@@ -91,6 +92,14 @@ mod tests {
                 "run_show",
                 "search_status",
                 "search_tasks",
+                "signal_confirm",
+                "signal_list",
+                "signal_record",
+                "signal_reject",
+                "signal_resolve",
+                "signal_review",
+                "signal_show",
+                "signal_supersede",
                 "step_create",
                 "step_done",
                 "step_list",

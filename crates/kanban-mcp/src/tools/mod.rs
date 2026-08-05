@@ -7,5 +7,6 @@ mod lifecycle;
 mod ontology;
 mod runs;
 mod search;
+mod signals;
 mod steps;
 mod tasks;

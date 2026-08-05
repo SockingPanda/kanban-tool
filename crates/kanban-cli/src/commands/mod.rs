@@ -11,4 +11,5 @@ pub(crate) mod maintenance;
 pub(crate) mod ontology;
 pub(crate) mod run;
 pub(crate) mod search;
+pub(crate) mod signal;
 pub(crate) mod task;

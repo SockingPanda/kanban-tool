@@ -126,6 +126,11 @@ enum Command {
         #[command(subcommand)]
         command: commands::index::IndexCommand,
     },
+    /// Record and review generic signals through the canonical host.
+    Signal {
+        #[command(subcommand)]
+        command: commands::signal::SignalCommand,
+    },
     /// Create the project `.kb/config.toml` selection file without opening Turso.
     Init {
         /// Idempotent compatibility flag; init never resets existing user settings.
@@ -194,6 +199,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Dependency { command } => commands::dependency::run(&ctx, command),
         Command::Events(args) => commands::event::run(&ctx, args),
         Command::Run { command } => commands::run::run(&ctx, command),
+        Command::Signal { command } => commands::signal::run(&ctx, command),
         Command::Runs(args) => commands::run::list(&ctx, args),
         Command::Doctor => commands::maintenance::doctor(&ctx),
         Command::Stats(args) => commands::maintenance::stats(&ctx, args),

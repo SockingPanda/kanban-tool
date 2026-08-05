@@ -11,9 +11,10 @@ pub use domain::*;
 pub use error::StoreError;
 pub use operations::{
     AddDependencyInput, AddDependencyRecord, BlockTaskInput, ClaimTaskInput, ClaimTaskRecord,
-    CompleteTaskInput, CreateCommentInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
-    MarkExecutionPlanNotRequiredInput, PromoteTaskInput, ReclaimExpiredTaskInput, ReleaseTaskInput,
-    RemoveDependencyInput, RemoveDependencyRecord, SubmitReviewTaskInput, TaskListOptions,
+    CompleteStepInput, CompleteTaskInput, CreateCommentInput, CreateStepInput, CreateTaskInput,
+    HeartbeatTaskInput, MarkExecutionPlanNotRequiredInput, PromoteTaskInput,
+    ReclaimExpiredTaskInput, ReleaseTaskInput, RemoveDependencyInput, RemoveDependencyRecord,
+    RemoveStepInput, ReopenStepInput, SkipStepInput, SubmitReviewTaskInput, TaskListOptions,
     TaskListSort, TaskPlanFilter, UpdateStepInput,
 };
 

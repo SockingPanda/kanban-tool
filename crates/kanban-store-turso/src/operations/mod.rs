@@ -18,5 +18,8 @@ pub use lifecycle::{
     MarkExecutionPlanNotRequiredInput, PromoteTaskInput, ReclaimExpiredTaskInput, ReleaseTaskInput,
     SubmitReviewTaskInput,
 };
-pub use steps::{CreateStepInput, UpdateStepInput};
+pub use steps::{
+    CompleteStepInput, CreateStepInput, RemoveStepInput, ReopenStepInput, SkipStepInput,
+    UpdateStepInput,
+};
 pub use tasks::{CreateTaskInput, TaskListOptions, TaskListSort, TaskPlanFilter};

@@ -18,7 +18,7 @@ pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
 pub use event::*;
 pub use run::*;
 pub use stats::*;
-pub use step::{StepCreate, StepList, StepUpdate};
+pub use step::{StepComplete, StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate};
 pub use task::{
     TaskBlock, TaskClaim, TaskCreate, TaskDone, TaskHeartbeat, TaskList, TaskPlanNotRequired,
     TaskPromote, TaskReclaim, TaskRelease, TaskReview, TaskShow,
@@ -29,7 +29,11 @@ pub use dependency::{
     AddDependencyCommand, AddDependencyRecord, AddDependencyResult, RemoveDependencyCommand,
     RemoveDependencyResult,
 };
-pub use step::{CreateStepCommand, CreateStepRecord, UpdateStepCommand, UpdateStepRecord};
+pub use step::{
+    CompleteStepCommand, CompleteStepRecord, CreateStepCommand, CreateStepRecord,
+    RemoveStepCommand, RemoveStepRecord, ReopenStepCommand, ReopenStepRecord, SkipStepCommand,
+    SkipStepRecord, UpdateStepCommand, UpdateStepRecord,
+};
 pub use task::{
     BlockTaskCommand, BlockTaskRecord, ClaimTaskCommand, ClaimTaskRecord, CompleteTaskCommand,
     CompleteTaskRecord, CreateTaskCommand, CreateTaskRecord, HeartbeatTaskCommand,

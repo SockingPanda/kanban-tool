@@ -13,9 +13,9 @@ pub use dto::*;
 pub use operations::{
     BoardColumns, BoardList, CommentCreate, CommentList, DependencyCreate, DependencyList,
     DependencyRemove, EventList, EventListOptions, EventListPage, EventRecord, RUN_LOG_TAIL_BYTES,
-    RunList, RunLog, RunLogRecord, RunShow, StepCreate, StepList, StepUpdate, TaskBlock, TaskClaim,
-    TaskCreate, TaskDone, TaskHeartbeat, TaskList, TaskPlanNotRequired, TaskPromote, TaskReclaim,
-    TaskRelease, TaskReview, TaskShow,
+    RunList, RunLog, RunLogRecord, RunShow, StepComplete, StepCreate, StepList, StepRemove,
+    StepReopen, StepSkip, StepUpdate, TaskBlock, TaskClaim, TaskCreate, TaskDone, TaskHeartbeat,
+    TaskList, TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskRelease, TaskReview, TaskShow,
 };
 pub use ports::ApplicationStore;
 pub use service::ApplicationService;

@@ -193,7 +193,7 @@ impl TursoStore {
                     && !value.dirty
                     && value.provider.as_deref() == Some(SEARCH_PROVIDER)
                     && value.provider_fingerprint.as_deref() == Some(SEARCH_PROVIDER_FINGERPRINT)
-                    && value.last_event_id == current_event
+                    && value.last_event_id >= current_event
             });
         if ready {
             return Ok(SearchIndexStatus {
@@ -258,11 +258,12 @@ impl TursoStore {
         }
         let documents = task_search_documents(&connection, &board.id).await?;
         let now = now_ms();
-        let generation = format!("fts-{now}");
+        let fingerprint = documents_fingerprint(&documents);
+        let generation = format!("fts-{fingerprint}");
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        set_projection_building(&transaction, &generation, now).await?;
+        set_projection_building(&transaction, &generation, &fingerprint, now).await?;
         replace_board_documents(&transaction, &board.id, &documents, now).await?;
         let last_event_id = board_last_event_id_tx(&transaction, &board.id).await?;
         transaction
@@ -270,10 +271,10 @@ impl TursoStore {
                 "UPDATE projection_state SET lifecycle_status='ready', active_generation=:generation, active_fingerprint=:fingerprint, previous_generation=NULL, previous_fingerprint=NULL, building_generation=NULL, building_fingerprint=NULL, provider=:provider, provider_fingerprint=:provider_fingerprint, corpus_schema='task-search-v1', corpus_fingerprint=:corpus_fingerprint, last_event_id=:last_event_id, dirty=0, last_success_at=:now, last_error=NULL, updated_at=:now WHERE projection='fts'",
                 vec![
                     (":generation".to_owned(), Value::Text(generation.clone())),
-                    (":fingerprint".to_owned(), Value::Text(SEARCH_PROVIDER_FINGERPRINT.to_owned())),
+                    (":fingerprint".to_owned(), Value::Text(fingerprint.clone())),
                     (":provider".to_owned(), Value::Text(SEARCH_PROVIDER.to_owned())),
                     (":provider_fingerprint".to_owned(), Value::Text(SEARCH_PROVIDER_FINGERPRINT.to_owned())),
-                    (":corpus_fingerprint".to_owned(), Value::Text(SEARCH_PROVIDER_FINGERPRINT.to_owned())),
+                    (":corpus_fingerprint".to_owned(), Value::Text(fingerprint.clone())),
                     (":last_event_id".to_owned(), Value::Integer(last_event_id)),
                     (":now".to_owned(), Value::Integer(now)),
                 ],
@@ -305,7 +306,7 @@ impl TursoStore {
             && state.as_ref().is_some_and(|value| {
                 value.lifecycle_status == "ready"
                     && !value.dirty
-                    && value.last_event_id == current_event
+                    && value.last_event_id >= current_event
             })
         {
             return self.search_index_status(board_selector).await;
@@ -324,7 +325,7 @@ fn should_use_fts(
     state.is_some_and(|state| {
         state.lifecycle_status == "ready"
             && !state.dirty
-            && state.last_event_id == current_event
+            && state.last_event_id >= current_event
             && state.provider.as_deref() == Some(SEARCH_PROVIDER)
             && state.provider_fingerprint.as_deref() == Some(SEARCH_PROVIDER_FINGERPRINT)
     }) && query
@@ -752,6 +753,7 @@ fn canonical_meta(
 async fn set_projection_building(
     transaction: &turso::transaction::Transaction<'_>,
     generation: &str,
+    fingerprint: &str,
     now: i64,
 ) -> Result<(), StoreError> {
     transaction
@@ -759,12 +761,23 @@ async fn set_projection_building(
             "UPDATE projection_state SET lifecycle_status='rebuilding', building_generation=:generation, building_fingerprint=:fingerprint, dirty=1, last_error=NULL, updated_at=:now WHERE projection='fts'",
             vec![
                 (":generation".to_owned(), Value::Text(generation.to_owned())),
-                (":fingerprint".to_owned(), Value::Text(SEARCH_PROVIDER_FINGERPRINT.to_owned())),
+                (":fingerprint".to_owned(), Value::Text(fingerprint.to_owned())),
                 (":now".to_owned(), Value::Integer(now)),
             ],
         )
         .await?;
     Ok(())
+}
+
+fn documents_fingerprint(documents: &[TaskSearchDocument]) -> String {
+    let mut digest = Sha256::new();
+    for document in documents {
+        digest.update(document.task_id.as_bytes());
+        digest.update(b"\0");
+        digest.update(document.content().as_bytes());
+        digest.update(b"\n");
+    }
+    format!("sha256:{:x}", digest.finalize())
 }
 
 async fn mark_projection_error(connection: &Connection, message: &str) -> Result<(), StoreError> {

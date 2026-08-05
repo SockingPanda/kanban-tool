@@ -180,6 +180,67 @@ pub struct VectorLabelAtomHitRecord {
 }
 
 impl TursoStore {
+    /// 为一个 board 的 canonical task/label-atom 快照补齐 vector projection job。
+    ///
+    /// `rebuild` 会重新排队全部事实；`sync` 复用 dedupe key，只补齐缺失或已完成后
+    /// 又被 canonical trigger 标脏的条目。provider 不可用时 job 保留 pending，供
+    /// 后续 host worker resume，不能把 projection_state 提前发布为 ready。
+    pub async fn enqueue_vector_projection_jobs(
+        &self,
+        board_selector: &str,
+        rebuild: bool,
+    ) -> Result<u64, StoreError> {
+        let board_id = self.vector_board_id(board_selector).await?;
+        let operation = if rebuild { "rebuild" } else { "upsert" };
+        let task_ids = self.vector_task_ids(&board_id).await?;
+        let atom_ids = self.vector_label_atom_ids(&board_id).await?;
+        let mut count = 0_u64;
+        for task_id in task_ids {
+            let uri = format!("kb://task/{task_id}");
+            let payload = format!(r#"{{"task_id":"{task_id}"}}"#);
+            self.enqueue_vector_job(
+                Some(&board_id),
+                None,
+                VECTOR_TASKS_PROJECTION,
+                &uri,
+                operation,
+                &payload,
+            )
+            .await?;
+            count = count.saturating_add(1);
+        }
+        for atom_id in atom_ids {
+            let uri = format!("kb://label-atom/{atom_id}");
+            let payload = format!(r#"{{"atom_id":"{atom_id}"}}"#);
+            self.enqueue_vector_job(
+                Some(&board_id),
+                None,
+                VECTOR_LABEL_ATOMS_PROJECTION,
+                &uri,
+                operation,
+                &payload,
+            )
+            .await?;
+            count = count.saturating_add(1);
+        }
+        let provider_configured = self.vector_config().await?.is_some();
+        let message = if provider_configured {
+            "vector job pending，等待 host worker".to_owned()
+        } else {
+            "vector provider 未配置，job 保持 pending".to_owned()
+        };
+        if count > 0 || !provider_configured {
+            let connection = self.connection().await?;
+            connection
+                .execute(
+                    "UPDATE projection_state SET lifecycle_status='degraded', dirty=1, last_error=?1, updated_at=?2 WHERE projection IN ('vector_tasks','vector_label_atoms')",
+                    (message.as_str(), crate::shared::now_ms()),
+                )
+                .await?;
+        }
+        Ok(count)
+    }
+
     /// 设置 provider/model/dimension，并清除旧 generation 的读 authority。
     pub async fn configure_vector(
         &self,

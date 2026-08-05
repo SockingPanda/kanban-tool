@@ -194,6 +194,12 @@ pub struct StoreProjectionStatus {
     pub running: i64,
     pub failed: i64,
     pub last_error: Option<String>,
+    /// 当前 projection 的可审计阶段；它来自实际派生状态而不是请求动作。
+    pub phase: String,
+    /// provider 或 job 失败时保持降级，不能把 pending projection 报成 ready。
+    pub degraded: bool,
+    /// 当前阶段所有可见错误；`last_error` 保留兼容字段。
+    pub errors: Vec<String>,
     pub updated_at: i64,
 }
 
@@ -213,6 +219,9 @@ pub struct StoreMaintenanceRun {
     pub mode: String,
     pub action: String,
     pub processed: u64,
+    pub phase: String,
+    pub degraded: bool,
+    pub errors: Vec<String>,
     pub stores: Vec<StoreProjectionStatus>,
 }
 
@@ -699,36 +708,281 @@ impl TursoStore {
         owner: &str,
         action: &str,
     ) -> Result<StoreMaintenanceRun, StoreError> {
-        let mode = if action == "compact" {
+        let action = action.trim();
+        if !matches!(action, "run" | "rebuild" | "cleanup" | "compact") {
+            return Err(StoreError::InvalidInput(format!(
+                "unsupported maintenance action: {action}"
+            )));
+        }
+        let mode = if matches!(action, "cleanup" | "compact") {
             "compact"
         } else {
             "rebuild"
         };
         let lease = self.acquire_maintenance_lease(mode, owner).await?;
-        let connection = self.connection().await?;
-        let now = now_ms();
-        if table_exists(&connection, "projection_state").await? {
-            let generation = format!("gen_{}", unique_suffix());
-            let fingerprint = self.database_fingerprint().await?;
-            connection.execute("UPDATE projection_state SET previous_generation=active_generation, previous_fingerprint=active_fingerprint, active_generation=?1, active_fingerprint=?2, building_generation=NULL, building_fingerprint=NULL, lifecycle_status='ready', dirty=0, last_success_at=?3, last_error=NULL, updated_at=?3, fence_epoch=fence_epoch+1", (generation.as_str(), fingerprint.as_str(), now)).await?;
+        let result = self.maintenance_run_inner(owner.trim(), action, mode).await;
+
+        if let Err(error) = &result {
+            // 跨阶段的硬失败也必须留下可 resume 的 dirty/error 证据；不能因
+            // 返回 transport error 而把上一次 active generation 伪装成 ready。
+            let _ = self.mark_maintenance_failure(&error.to_string()).await;
         }
+
+        // 维护阶段可能跨多个 projection。无论哪个阶段失败，都先把失败写入
+        // projection_state，再释放 owner lease，供下一次 run resume。
+        let release_result = self.release_maintenance_lease(&lease).await;
+        match (result, release_result) {
+            (Ok(report), Ok(())) => Ok(report),
+            (Err(error), Ok(())) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
+            (Err(error), Err(release_error)) => Err(StoreError::InvalidInput(format!(
+                "maintenance failed: {error}; lease release failed: {release_error}"
+            ))),
+        }
+    }
+
+    async fn maintenance_run_inner(
+        &self,
+        owner: &str,
+        action: &str,
+        mode: &str,
+    ) -> Result<StoreMaintenanceRun, StoreError> {
+        let mut errors = Vec::new();
+        let mut processed = 0_u64;
+        let mut phase = if matches!(action, "cleanup" | "compact") {
+            "cleanup"
+        } else if action == "rebuild" {
+            "rebuild"
+        } else {
+            "sync"
+        }
+        .to_owned();
+
+        if matches!(action, "cleanup" | "compact") {
+            processed = self.cleanup_rebuildable().await?;
+        } else {
+            let connection = self.connection().await?;
+            let boards = board_ids(&connection).await?;
+            drop(connection);
+
+            for board in boards {
+                // 每个 capability 独立提交；一个 provider 故障不能回滚其它派生层，
+                // 也不能把 vector 的 pending 误报成整体 ready。
+                let search = if action == "rebuild" {
+                    self.rebuild_search_index(&board).await
+                } else {
+                    self.sync_search_index(&board).await
+                };
+                match search {
+                    Ok(status) => {
+                        processed = processed.saturating_add(
+                            self.count_board_documents(&board).await.unwrap_or_default(),
+                        );
+                        if status.stale || status.fallback_reason.is_some() {
+                            let message = status
+                                .fallback_reason
+                                .unwrap_or_else(|| "fts projection 未 ready".to_owned());
+                            errors.push(format!("fts[{board}]: {message}"));
+                        }
+                    }
+                    Err(error) => {
+                        let message = error.to_string();
+                        errors.push(format!("fts[{board}]: {message}"));
+                        let _ = self.mark_projection_error("fts", &message).await;
+                    }
+                }
+
+                match if action == "rebuild" {
+                    self.graph_rebuild(&board).await
+                } else {
+                    self.graph_sync(&board).await
+                } {
+                    Ok(graph) => {
+                        processed = processed.saturating_add(
+                            u64::try_from(
+                                graph
+                                    .validated_tasks
+                                    .saturating_add(graph.validated_entities)
+                                    .saturating_add(graph.validated_relations),
+                            )
+                            .unwrap_or_default(),
+                        );
+                    }
+                    Err(error) => {
+                        let message = error.to_string();
+                        errors.push(format!("relations[{board}]: {message}"));
+                        let _ = self.mark_projection_error("relations", &message).await;
+                    }
+                }
+
+                match self
+                    .enqueue_vector_projection_jobs(&board, action == "rebuild")
+                    .await
+                {
+                    Ok(count) => processed = processed.saturating_add(count),
+                    Err(error) => {
+                        let message = error.to_string();
+                        errors.push(format!("vector[{board}]: {message}"));
+                        let _ = self.mark_projection_error("vector_tasks", &message).await;
+                        let _ = self
+                            .mark_projection_error("vector_label_atoms", &message)
+                            .await;
+                    }
+                }
+            }
+            // `projection_state` 目前以 projection 为粒度保存 cursor，而 FTS
+            // 文档本身按 board 隔离。全量阶段结束后发布全库最大 event cursor，
+            // 避免最后一个 board 的 cursor 让其它 board 被误判为 stale。
+            if !errors.iter().any(|error| error.starts_with("fts[")) {
+                self.refresh_fts_global_cursor().await?;
+            }
+            phase = "complete".to_owned();
+        }
+
+        let connection = self.connection().await?;
         let status = maintenance_status_connection(&connection).await?;
-        let processed = status
-            .stores
+        let stores = status.stores;
+        let mut store_errors = stores
             .iter()
-            .map(|store| store.pending.max(0) as u64)
-            .sum();
-        let report = StoreMaintenanceRun {
+            .flat_map(|store| store.errors.iter().cloned())
+            .collect::<Vec<_>>();
+        errors.append(&mut store_errors);
+        errors.sort();
+        errors.dedup();
+        let degraded = !errors.is_empty()
+            || stores.iter().any(|store| {
+                store.degraded
+                    || store.dirty
+                    || store.pending > 0
+                    || store.running > 0
+                    || store.failed > 0
+            });
+        if degraded && phase == "complete" {
+            phase = "degraded".to_owned();
+        }
+        Ok(StoreMaintenanceRun {
             database_instance_id: status.database_instance_id,
             protocol_version: status.protocol_version,
             owner: owner.to_owned(),
             mode: mode.to_owned(),
             action: action.to_owned(),
             processed,
-            stores: status.stores,
-        };
-        self.release_maintenance_lease(&lease).await?;
-        Ok(report)
+            phase,
+            degraded,
+            errors,
+            stores,
+        })
+    }
+
+    async fn count_board_documents(&self, board_id: &str) -> Result<u64, StoreError> {
+        let connection = self.connection().await?;
+        let count = scalar_integer_params(
+            &connection,
+            "SELECT COUNT(*) FROM retrieval_documents WHERE board_id=?1 AND source_kind='task'",
+            [board_id],
+            "retrieval_documents.count",
+        )
+        .await?;
+        Ok(u64::try_from(count).unwrap_or_default())
+    }
+
+    async fn mark_projection_error(
+        &self,
+        projection: &str,
+        message: &str,
+    ) -> Result<(), StoreError> {
+        let connection = self.connection().await?;
+        connection
+            .execute(
+                "UPDATE projection_state SET lifecycle_status='degraded', dirty=1, last_error=?1, updated_at=?2 WHERE projection=?3",
+                (message, now_ms(), projection),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn mark_maintenance_failure(&self, message: &str) -> Result<(), StoreError> {
+        let connection = self.connection().await?;
+        connection
+            .execute(
+                "UPDATE projection_state SET lifecycle_status='degraded', dirty=1, last_error=?1, updated_at=?2",
+                (message, now_ms()),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn refresh_fts_global_cursor(&self) -> Result<(), StoreError> {
+        let connection = self.connection().await?;
+        let cursor = scalar_integer(
+            &connection,
+            "SELECT COALESCE(MAX(id), 0) FROM task_events",
+            "task_events.global_last_event_id",
+        )
+        .await?;
+        let mut rows = connection
+            .query(
+                "SELECT board_id, id, content_hash FROM retrieval_documents WHERE source_kind='task' ORDER BY board_id, id",
+                (),
+            )
+            .await?;
+        let mut digest = Sha256::new();
+        while let Some(row) = rows.next().await? {
+            digest.update(text_value(
+                row.get_value(0)?,
+                "retrieval_documents.board_id",
+            )?);
+            digest.update(b"\0");
+            digest.update(text_value(row.get_value(1)?, "retrieval_documents.id")?);
+            digest.update(b"\0");
+            digest.update(text_value(
+                row.get_value(2)?,
+                "retrieval_documents.content_hash",
+            )?);
+            digest.update(b"\n");
+        }
+        let fingerprint = format!("sha256:{:x}", digest.finalize());
+        let generation = format!("fts-{fingerprint}");
+        connection
+            .execute(
+                "UPDATE projection_state SET active_generation=?1, active_fingerprint=?2, corpus_fingerprint=?2, last_event_id=?3, updated_at=?4 WHERE projection='fts' AND lifecycle_status='ready' AND dirty=0",
+                (generation.as_str(), fingerprint.as_str(), cursor, now_ms()),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// 只清理派生 job/cache；canonical facts 和事件永远不在此路径删除。
+    async fn cleanup_rebuildable(&self) -> Result<u64, StoreError> {
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+        let cutoff = now_ms().saturating_sub(60 * 60 * 1_000);
+        let mut processed = transaction
+            .execute(
+                "DELETE FROM projection_jobs WHERE status='done' AND updated_at < ?1",
+                [cutoff],
+            )
+            .await? as u64;
+        processed = processed.saturating_add(
+            transaction
+                .execute(
+                    "DELETE FROM retrieval_documents WHERE source_kind='task' AND id LIKE 'doc_task_%' AND NOT EXISTS (SELECT 1 FROM tasks WHERE tasks.id = substr(retrieval_documents.id, 10) AND tasks.board_id IS retrieval_documents.board_id)",
+                    (),
+                )
+                .await? as u64,
+        );
+        processed = processed.saturating_add(
+            transaction
+                .execute(
+                    "DELETE FROM retrieval_documents WHERE source_kind='label_atom' AND NOT EXISTS (SELECT 1 FROM label_atoms WHERE label_atoms.board_id IS retrieval_documents.board_id AND label_atoms.content_hash = retrieval_documents.content_hash)",
+                    (),
+                )
+                .await? as u64,
+        );
+        transaction.commit().await?;
+        Ok(processed)
     }
 
     async fn acquire_maintenance_lease(
@@ -979,6 +1233,20 @@ async fn maintenance_status_connection(
     })
 }
 
+async fn board_ids(connection: &Connection) -> Result<Vec<String>, StoreError> {
+    let mut rows = connection
+        .query(
+            "SELECT id FROM boards WHERE archived_at IS NULL ORDER BY id",
+            (),
+        )
+        .await?;
+    let mut boards = Vec::new();
+    while let Some(row) = rows.next().await? {
+        boards.push(text_value(row.get_value(0)?, "boards.id")?);
+    }
+    Ok(boards)
+}
+
 async fn projection_state_reports(
     connection: &Connection,
 ) -> Result<Vec<StoreProjectionStatus>, StoreError> {
@@ -1010,6 +1278,22 @@ async fn projection_state_reports(
         )
         .await
         .unwrap_or(0);
+        let last_error = optional_text(row.get_value(9)?)?;
+        let degraded = matches!(
+            text_value(row.get_value(5)?, "projection_state.lifecycle_status")?.as_str(),
+            "degraded" | "error"
+        ) || failed > 0;
+        let phase = if degraded {
+            "degraded"
+        } else if pending > 0
+            || running > 0
+            || integer_value(row.get_value(8)?, "projection_state.dirty")? != 0
+        {
+            "pending"
+        } else {
+            "ready"
+        };
+        let errors = last_error.clone().into_iter().collect();
         values.push(StoreProjectionStatus {
             store_name: projection,
             active_generation: optional_text(row.get_value(1)?)?,
@@ -1020,7 +1304,10 @@ async fn projection_state_reports(
             fence_epoch: integer_value(row.get_value(6)?, "projection_state.fence_epoch")?,
             last_event_id: integer_value(row.get_value(7)?, "projection_state.last_event_id")?,
             dirty: integer_value(row.get_value(8)?, "projection_state.dirty")? != 0,
-            last_error: optional_text(row.get_value(9)?)?,
+            last_error,
+            phase: phase.to_owned(),
+            degraded,
+            errors,
             updated_at: integer_value(row.get_value(10)?, "projection_state.updated_at")?,
             pending,
             running,
@@ -2053,6 +2340,7 @@ mod tests {
 
     use super::{integer_value, text_value};
     use crate::test_support::{create_input, store};
+    use crate::{StoreError, maintenance::scalar_integer_params, shared::now_ms};
 
     #[tokio::test]
     async fn maintenance_status_and_run_release_owner_lease() {
@@ -2069,7 +2357,14 @@ mod tests {
         assert!(
             run.stores
                 .iter()
+                .filter(|store| store.store_name == "fts" || store.store_name == "relations")
                 .all(|store| store.active_generation.is_some())
+        );
+        assert!(
+            run.stores
+                .iter()
+                .filter(|store| store.store_name.starts_with("vector_"))
+                .all(|store| store.degraded)
         );
         let status = store.maintenance_status().await.expect("released status");
         assert!(
@@ -2081,6 +2376,141 @@ mod tests {
         assert!(checkpoint.busy >= 0);
         let doctor = store.doctor().await.expect("doctor");
         assert_eq!(doctor.integrity_check, "ok");
+    }
+
+    #[tokio::test]
+    async fn maintenance_rebuild_executes_search_graph_and_leaves_unavailable_vector_pending() {
+        let (_directory, store, _path) = store("maintenance-orchestrator").await;
+        store.initialize().await.expect("initialize");
+        store
+            .create_task(
+                "default",
+                create_input("t_maintenance_orchestrator", None, "Orchestrated task"),
+            )
+            .await
+            .expect("create task");
+
+        let first = store
+            .maintenance_run("orchestrator", "rebuild")
+            .await
+            .expect("maintenance rebuild");
+        assert!(first.processed > 0, "maintenance must report real work");
+        assert!(first.degraded, "missing vector provider must be degraded");
+        assert_eq!(first.phase, "degraded");
+        assert!(first.errors.iter().any(|error| error.contains("vector")));
+
+        let connection = store.connection().await.expect("connection");
+        let fts_documents = scalar_integer_params(
+            &connection,
+            "SELECT COUNT(*) FROM retrieval_documents WHERE board_id='b_default' AND source_kind='task'",
+            (),
+            "fts documents",
+        )
+        .await
+        .expect("fts documents count");
+        let task_entities = scalar_integer_params(
+            &connection,
+            "SELECT COUNT(*) FROM entities WHERE board_id='b_default' AND task_id='t_maintenance_orchestrator'",
+            (),
+            "task entities",
+        )
+        .await
+        .expect("task entities count");
+        let vector_jobs = scalar_integer_params(
+            &connection,
+            "SELECT COUNT(*) FROM projection_jobs WHERE board_id='b_default' AND target IN ('vector_tasks','vector_label_atoms') AND status='pending'",
+            (),
+            "vector jobs",
+        )
+        .await
+        .expect("vector jobs count");
+        assert_eq!(fts_documents, 1);
+        assert!(task_entities > 0);
+        assert!(vector_jobs > 0, "vector outage must retain resumable jobs");
+
+        let second = store
+            .maintenance_run("orchestrator", "rebuild")
+            .await
+            .expect("idempotent maintenance rebuild");
+        let first_status = first
+            .stores
+            .iter()
+            .find(|store| store.store_name == "fts")
+            .expect("fts first status");
+        let second_status = second
+            .stores
+            .iter()
+            .find(|store| store.store_name == "fts")
+            .expect("fts second status");
+        assert_eq!(
+            first_status.active_fingerprint, second_status.active_fingerprint,
+            "same canonical corpus must publish a stable fingerprint"
+        );
+    }
+
+    #[tokio::test]
+    async fn maintenance_cleanup_does_not_delete_canonical_facts() {
+        let (_directory, store, _path) = store("maintenance-cleanup-safe").await;
+        store.initialize().await.expect("initialize");
+        store
+            .create_task("default", create_input("t_cleanup_fact", None, "fact"))
+            .await
+            .expect("create fact");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO projection_jobs(board_id, target, entity_uri, operation, payload_json, status, created_at, updated_at) VALUES ('b_default', 'fts', 'kb://task/t_cleanup_fact', 'upsert', '{}', 'done', 1, 1)",
+                (),
+            )
+            .await
+            .expect("old derived job");
+        let before = scalar_integer_params(
+            &connection,
+            "SELECT COUNT(*) FROM tasks WHERE id='t_cleanup_fact'",
+            (),
+            "canonical task",
+        )
+        .await
+        .expect("task count");
+        drop(connection);
+
+        let report = store
+            .maintenance_run("cleanup-owner", "cleanup")
+            .await
+            .expect("cleanup");
+        assert!(
+            report.processed > 0,
+            "cleanup must report deleted derived rows"
+        );
+        let connection = store.connection().await.expect("connection");
+        let after = scalar_integer_params(
+            &connection,
+            "SELECT COUNT(*) FROM tasks WHERE id='t_cleanup_fact'",
+            (),
+            "canonical task",
+        )
+        .await
+        .expect("task count");
+        assert_eq!(before, after, "cleanup must preserve canonical facts");
+    }
+
+    #[tokio::test]
+    async fn maintenance_lease_competition_is_fail_closed() {
+        let (_directory, store, _path) = store("maintenance-lease-competition").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE projection_maintenance_owner SET owner='other-owner', lease_token='held', mode='rebuild', lease_expires_at=?1 WHERE singleton=1",
+                [now_ms().saturating_add(60_000)],
+            )
+            .await
+            .expect("hold lease");
+        let error = store
+            .maintenance_run("losing-owner", "run")
+            .await
+            .expect_err("active owner must win");
+        assert!(matches!(error, StoreError::MaintenanceBusy(_)));
     }
 
     #[tokio::test]

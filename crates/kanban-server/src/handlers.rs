@@ -11,22 +11,23 @@ use axum::{
 use kanban_application::{
     BlockTaskCommand, ClaimTaskCommand, CommentAuthorType as ApplicationCommentAuthorType,
     CommentKind as ApplicationCommentKind, CompleteTaskCommand, CreateCommentCommand,
-    CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState, HeartbeatTaskCommand,
-    MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand, ReleaseTaskCommand, RunRecord,
-    RunStatus, SubmitReviewTaskCommand, TaskListOptions as ApplicationTaskListOptions,
-    TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
-    TaskRecord,
+    CreateStepCommand, CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState,
+    HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand,
+    ReleaseTaskCommand, RunRecord, RunStatus, SubmitReviewTaskCommand,
+    TaskListOptions as ApplicationTaskListOptions, TaskListSort as ApplicationTaskListSort,
+    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord,
 };
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiClaim, ApiComment, ApiCreateTaskStatus, ApiExecutionPlan,
-    ApiExecutionPlanState, ApiRun, ApiRunStatus, ApiTask, ApiTaskPriority, ApiTaskStatus,
-    BlockTaskPath, BlockTaskRequest, BlockTaskResponse, ClaimTaskPath, ClaimTaskRequest,
-    ClaimTaskResponse, CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse,
-    CreateCommentPath, CreateCommentRequest, CreateCommentResponse, CreateTaskPath,
-    CreateTaskRequest, CreateTaskResponse, GetTaskPath, GetTaskQuery, GetTaskResponse,
-    HealthReport, HealthResponse, HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse,
-    ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse, ListCommentsPath,
-    ListCommentsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
+    ApiExecutionPlanState, ApiRun, ApiRunStatus, ApiStepStatus, ApiTask, ApiTaskPriority,
+    ApiTaskStatus, ApiTaskStep, ApiTaskSteps, BlockTaskPath, BlockTaskRequest, BlockTaskResponse,
+    ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CompleteTaskPath, CompleteTaskRequest,
+    CompleteTaskResponse, CreateCommentPath, CreateCommentRequest, CreateCommentResponse,
+    CreateStepPath, CreateStepRequest, CreateStepResponse, CreateTaskPath, CreateTaskRequest,
+    CreateTaskResponse, GetTaskPath, GetTaskQuery, GetTaskResponse, HealthReport, HealthResponse,
+    HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse,
+    ListBoardsQuery, ListBoardsResponse, ListCommentsPath, ListCommentsResponse, ListStepsPath,
+    ListStepsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
     MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS,
     MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES,
     MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
@@ -292,6 +293,46 @@ pub(crate) async fn list_comments(
         .map(api_comment)
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Json(ListCommentsResponse { data }))
+}
+
+pub(crate) async fn list_steps(
+    State(state): State<AppState>,
+    Path(ListStepsPath { task_id }): Path<ListStepsPath>,
+) -> Result<Json<ListStepsResponse>, ApiError> {
+    let steps = state.application().list_steps(&task_id).await?;
+    Ok(Json(ListStepsResponse {
+        data: api_task_steps(steps)?,
+    }))
+}
+
+pub(crate) async fn create_step(
+    State(state): State<AppState>,
+    Path(CreateStepPath { task_id }): Path<CreateStepPath>,
+    headers: HeaderMap,
+    body: Result<Json<CreateStepRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<CreateStepResponse>), ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let steps = state
+        .application()
+        .create_step(CreateStepCommand {
+            task_id,
+            idempotency_key: body.idempotency_key,
+            title: body.title,
+            body: body.body,
+            linked_task_id: body.linked_task_ref,
+            position: body.position,
+            required: body.required,
+            actor,
+        })
+        .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateStepResponse {
+            data: api_task_steps(steps)?,
+        }),
+    ))
 }
 
 pub(crate) async fn mark_execution_plan_not_required(
@@ -794,6 +835,48 @@ fn api_comment(comment: kanban_application::CommentRecord) -> Result<ApiComment,
         },
         metadata,
         created_at: comment.created_at,
+    })
+}
+
+fn api_task_steps(steps: kanban_application::TaskStepsRecord) -> Result<ApiTaskSteps, ApiError> {
+    Ok(ApiTaskSteps {
+        task_id: steps.task_id,
+        steps: steps
+            .steps
+            .into_iter()
+            .map(api_task_step)
+            .collect::<Result<Vec<_>, _>>()?,
+        execution_plan: api_execution_plan(steps.execution_plan),
+    })
+}
+
+fn api_task_step(step: kanban_application::StepRecord) -> Result<ApiTaskStep, ApiError> {
+    let status = match step.status.as_str() {
+        "todo" => ApiStepStatus::Todo,
+        "done" => ApiStepStatus::Done,
+        "skipped" => ApiStepStatus::Skipped,
+        other => {
+            return Err(
+                KanbanError::Storage(format!("stored step status is invalid: {other}")).into(),
+            );
+        }
+    };
+    Ok(ApiTaskStep {
+        id: step.id,
+        parent_task_id: step.parent_task_id,
+        title: step.title,
+        body: step.body,
+        linked_task: step.linked_task.map(api_task).transpose()?,
+        position: step.position,
+        required: step.required,
+        status,
+        resolution_note: step.resolution_note,
+        resolved_by: step.resolved_by,
+        resolved_at: step.resolved_at,
+        created_by: step.created_by,
+        created_at: step.created_at,
+        updated_by: step.updated_by,
+        updated_at: step.updated_at,
     })
 }
 

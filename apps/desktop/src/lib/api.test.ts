@@ -955,7 +955,8 @@ describe("KanbanApi task search", () => {
     ).resolves.toEqual(steps)
     expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_parent/steps")
     expect(calledInit(fetchMock).method).toBe("POST")
-    expect(JSON.parse(calledInit(fetchMock).body as string)).toEqual({
+    const createBody = JSON.parse(calledInit(fetchMock).body as string)
+    expect(createBody).toMatchObject({
       title: "Review child",
       body: "child context",
       linked_task_ref: "#123",
@@ -963,6 +964,7 @@ describe("KanbanApi task search", () => {
       position: 2048,
       actor: "desktop-test",
     })
+    expect(createBody.idempotency_key).toMatch(/^step\.create:step_[0-9a-f-]+$/)
 
     vi.unstubAllGlobals()
     const updateFetch = mockFetch({ data: steps })

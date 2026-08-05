@@ -53,6 +53,7 @@ fn default_required() -> bool {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateStepRequest {
+    pub idempotency_key: Option<String>,
     pub title: String,
     pub body: Option<String>,
     pub linked_task_ref: Option<String>,

@@ -36,6 +36,8 @@ describe("steps exact contracts",()=>{
     const [url,init]=(fetch.mock.calls as unknown as [RequestInfo|URL,RequestInit][])[0]!
     expect(url).toBe("http://127.0.0.1:8721/api/v1/tasks/t_project_parent/steps")
     expect(init).toMatchObject({method:"POST",headers:{"Accept-Language":"zh-CN","Content-Type":"application/json"}})
-    expect(JSON.parse(init.body as string)).toEqual({title:"Draft checks",required:true,actor:"desktop-test"})
+    const body=JSON.parse(init.body as string)
+    expect(body).toMatchObject({title:"Draft checks",required:true,actor:"desktop-test"})
+    expect(body.idempotency_key).toMatch(/^step\.create:step_[0-9a-f-]+$/)
   })
 })

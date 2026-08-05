@@ -4,10 +4,10 @@ use kanban_core::Result;
 
 use crate::{
     BlockTaskRecord, BoardColumnRecord, BoardRecord, ClaimRecord, ClaimTaskRecord, CommentRecord,
-    CompleteTaskRecord, CreateCommentRecord, CreateTaskRecord, ExecutionPlanRecord,
-    HeartbeatTaskRecord, MarkExecutionPlanNotRequiredRecord, PromoteTaskRecord,
-    ReclaimExpiredTaskRecord, ReleaseTaskRecord, SubmitReviewTaskRecord, TaskListOptions,
-    TaskListPage, TaskRecord,
+    CompleteTaskRecord, CreateCommentRecord, CreateStepRecord, CreateTaskRecord,
+    ExecutionPlanRecord, HeartbeatTaskRecord, MarkExecutionPlanNotRequiredRecord,
+    PromoteTaskRecord, ReclaimExpiredTaskRecord, ReleaseTaskRecord, StepRecord,
+    SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskRecord, TaskStepsRecord,
 };
 
 /// Persistence port used only by the shared application service.
@@ -109,4 +109,12 @@ pub trait ApplicationStore: Clone + Send + Sync + 'static {
         &self,
         task_id: &str,
     ) -> impl Future<Output = Result<Vec<CommentRecord>>> + Send;
+
+    fn create_step(
+        &self,
+        task_id: &str,
+        input: CreateStepRecord,
+    ) -> impl Future<Output = Result<StepRecord>> + Send;
+
+    fn list_steps(&self, task_id: &str) -> impl Future<Output = Result<TaskStepsRecord>> + Send;
 }

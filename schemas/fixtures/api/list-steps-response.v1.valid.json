@@ -3,7 +3,7 @@
     "task_id": "t_project_parent",
     "steps": [
       {
-        "id": "st_fixture",
+        "id": "step_fixture",
         "parent_task_id": "t_project_parent",
         "title": "Draft checks",
         "body": "Cover plan guards",

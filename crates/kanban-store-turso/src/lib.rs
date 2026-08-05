@@ -145,6 +145,52 @@ pub struct CommentRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateStepInput {
+    pub id: String,
+    pub idempotency_key: Option<String>,
+    pub title: String,
+    pub body: Option<String>,
+    pub linked_task_id: Option<String>,
+    pub position: Option<i64>,
+    pub required: bool,
+    pub created_by: String,
+    pub event_id: String,
+    pub plan_event_id: String,
+    pub recompute_event_id: String,
+    pub created_at: i64,
+    pub expected_lock_version: i64,
+    pub expected_plan_state: String,
+    pub target_status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskStepRecord {
+    pub id: String,
+    pub board_id: String,
+    pub parent_task_id: String,
+    pub title: String,
+    pub body: Option<String>,
+    pub linked_task: Option<TaskRecord>,
+    pub position: i64,
+    pub required: bool,
+    pub status: String,
+    pub resolution_note: Option<String>,
+    pub resolved_by: Option<String>,
+    pub resolved_at: Option<i64>,
+    pub created_by: String,
+    pub created_at: i64,
+    pub updated_by: String,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskStepsRecord {
+    pub task_id: String,
+    pub steps: Vec<TaskStepRecord>,
+    pub execution_plan: TaskExecutionPlanRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MarkExecutionPlanNotRequiredInput {
     pub reason: String,
     pub actor: String,
@@ -853,6 +899,403 @@ impl TursoStore {
             comments.push(comment_from_row(row)?);
         }
         Ok(comments)
+    }
+
+    /// Create one execution-plan step and apply the associated plan/status
+    /// changes in a single immediate transaction. The application service
+    /// supplies the expected parent facts; this method re-reads them and
+    /// refuses stale writes before touching any canonical row.
+    pub async fn create_step(
+        &self,
+        task_id: &str,
+        input: CreateStepInput,
+    ) -> Result<TaskStepRecord, StoreError> {
+        validate_create_step_input(task_id, &input)?;
+        let title = input.title.trim().to_owned();
+        let body = input.body.map(|body| body.trim().to_owned());
+        let idempotency_key = input
+            .idempotency_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+
+        let parent_row = first_row(
+            transaction
+                .query(
+                    &format!("{TASK_SELECT} WHERE t.id = :task_id LIMIT 1"),
+                    [(":task_id", task_id)],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
+            other => StoreError::Turso(other),
+        })?;
+        let parent = task_from_row(parent_row)?;
+        let board_id = parent.board_id.clone();
+        if parent.archived_at.is_some() || parent.status == "archived" {
+            return Err(StoreError::InvalidTransition(
+                "archived parent task cannot receive steps".to_owned(),
+            ));
+        }
+        let board_row = first_row(
+            transaction
+                .query(
+                    "SELECT archived_at FROM boards WHERE id = :board_id LIMIT 1",
+                    [(":board_id", board_id.as_str())],
+                )
+                .await?,
+        )
+        .await?;
+        if optional_integer_value(board_row.get_value(0)?, "boards.archived_at")?.is_some() {
+            return Err(StoreError::InvalidTransition(
+                "archived board cannot receive steps".to_owned(),
+            ));
+        }
+        if let Some(idempotency_key) = idempotency_key.as_deref() {
+            let existing = first_row(
+                transaction
+                    .query(
+                        "SELECT id, board_id, parent_task_id, position, title, body, linked_task_id, required, status, resolution_note, resolved_by, resolved_at, created_by, created_at, updated_by, updated_at FROM task_steps WHERE board_id = :board_id AND parent_task_id = :parent_task_id AND idempotency_key = :idempotency_key LIMIT 1",
+                        [
+                            (":board_id", board_id.as_str()),
+                            (":parent_task_id", parent.id.as_str()),
+                            (":idempotency_key", idempotency_key),
+                        ],
+                    )
+                    .await?,
+            )
+            .await;
+            match existing {
+                Ok(row) => {
+                    let existing = step_from_row(&transaction, row).await?;
+                    let effective_position = input.position.unwrap_or(existing.position);
+                    if step_payload_matches(
+                        &existing,
+                        &title,
+                        body.as_deref(),
+                        input.linked_task_id.as_deref(),
+                        effective_position,
+                        input.required,
+                        &input.created_by,
+                    ) {
+                        transaction.commit().await?;
+                        return Ok(existing);
+                    }
+                    return Err(StoreError::IdempotencyConflict {
+                        board_id,
+                        key: idempotency_key.to_owned(),
+                        existing_task_id: existing.id,
+                    });
+                }
+                Err(turso::Error::QueryReturnedNoRows) => {}
+                Err(error) => return Err(StoreError::Turso(error)),
+            }
+        }
+
+        if input.expected_lock_version != parent.lock_version {
+            return Err(StoreError::InvalidTransition(
+                "step create requires matching fresh parent task".to_owned(),
+            ));
+        }
+        if input.expected_plan_state.trim() != parent.execution_plan_state {
+            return Err(StoreError::InvalidTransition(
+                "step create requires matching execution plan".to_owned(),
+            ));
+        }
+        if !matches!(
+            parent.status.as_str(),
+            "triage" | "todo" | "scheduled" | "ready" | "running" | "blocked" | "review"
+        ) {
+            return Err(StoreError::InvalidTransition(format!(
+                "cannot create a step for {} task",
+                parent.status
+            )));
+        }
+
+        if let Some(linked_task_id) = input.linked_task_id.as_deref() {
+            let linked_row = first_row(
+                transaction
+                    .query(
+                        &format!("{TASK_SELECT} WHERE t.id = :task_id LIMIT 1"),
+                        [(":task_id", linked_task_id)],
+                    )
+                    .await?,
+            )
+            .await
+            .map_err(|error| match error {
+                turso::Error::QueryReturnedNoRows => {
+                    StoreError::TaskNotFound(linked_task_id.to_owned())
+                }
+                other => StoreError::Turso(other),
+            })?;
+            let linked_task = task_from_row(linked_row)?;
+            if linked_task.board_id != board_id {
+                return Err(StoreError::InvalidInput(
+                    "linked task must belong to the parent board".to_owned(),
+                ));
+            }
+            if linked_task.id == parent.id {
+                return Err(StoreError::InvalidInput(
+                    "step cannot link to its parent task".to_owned(),
+                ));
+            }
+            if linked_task.archived_at.is_some() || linked_task.status == "archived" {
+                return Err(StoreError::InvalidInput(
+                    "archived linked task is not allowed".to_owned(),
+                ));
+            }
+        }
+
+        let position = match input.position {
+            Some(position) => position,
+            None => {
+                let row = first_row(
+                    transaction
+                        .query(
+                            "SELECT COALESCE(MAX(position), 0) FROM task_steps WHERE board_id = :board_id AND parent_task_id = :parent_task_id",
+                            [
+                                (":board_id", board_id.as_str()),
+                                (":parent_task_id", parent.id.as_str()),
+                            ],
+                        )
+                        .await?,
+                )
+                .await?;
+                integer_value(row.get_value(0)?, "task_steps.max_position")?
+                    .checked_add(1024)
+                    .ok_or_else(|| {
+                        StoreError::InvalidInput("step position is too large".to_owned())
+                    })?
+            }
+        };
+
+        transaction
+            .execute(
+                "INSERT INTO task_steps(id, board_id, parent_task_id, idempotency_key, position, title, body, linked_task_id, required, status, created_by, created_at, updated_by, updated_at) VALUES (:id, :board_id, :parent_task_id, :idempotency_key, :position, :title, :body, :linked_task_id, :required, 'todo', :created_by, :created_at, :created_by, :created_at)",
+                (
+                    (":id", input.id.as_str()),
+                    (":board_id", board_id.as_str()),
+                    (":parent_task_id", parent.id.as_str()),
+                    (":idempotency_key", idempotency_key.as_deref()),
+                    (":position", position),
+                    (":title", title.as_str()),
+                    (":body", body.as_deref()),
+                    (":linked_task_id", input.linked_task_id.as_deref()),
+                    (":required", if input.required { 1_i64 } else { 0_i64 }),
+                    (":created_by", input.created_by.as_str()),
+                    (":created_at", input.created_at),
+                ),
+            )
+            .await?;
+
+        let plan_changed = parent.execution_plan_state != "planned";
+        if plan_changed {
+            transaction
+                .execute(
+                    "INSERT INTO task_execution_plans(board_id, task_id, state, reason, updated_by, updated_at) VALUES (:board_id, :task_id, 'planned', NULL, :actor, :updated_at) ON CONFLICT(task_id) DO UPDATE SET board_id = excluded.board_id, state = excluded.state, reason = NULL, updated_by = excluded.updated_by, updated_at = excluded.updated_at",
+                    (
+                        (":board_id", board_id.as_str()),
+                        (":task_id", parent.id.as_str()),
+                        (":actor", input.created_by.as_str()),
+                        (":updated_at", input.created_at),
+                    ),
+                )
+                .await?;
+            transaction
+                .execute(
+                    "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'task.execution_plan.planned', :actor, '{\"state\":\"planned\"}', :created_at)",
+                    (
+                        (":event_id", input.plan_event_id.as_str()),
+                        (":board_id", board_id.as_str()),
+                        (":task_id", parent.id.as_str()),
+                        (":actor", input.created_by.as_str()),
+                        (":created_at", input.created_at),
+                    ),
+                )
+                .await?;
+        }
+
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'task.step.created', :actor, json_object('step_id', :step_id, 'linked_task_id', :linked_task_id, 'position', :position, 'required', json(CASE WHEN :required = 1 THEN 'true' ELSE 'false' END), 'status', 'todo'), :created_at)",
+                (
+                    (":event_id", input.event_id.as_str()),
+                    (":board_id", board_id.as_str()),
+                    (":task_id", parent.id.as_str()),
+                    (":actor", input.created_by.as_str()),
+                    (":step_id", input.id.as_str()),
+                    (":linked_task_id", input.linked_task_id.as_deref()),
+                    (":position", position),
+                    (":required", if input.required { 1_i64 } else { 0_i64 }),
+                    (":created_at", input.created_at),
+                ),
+            )
+            .await?;
+
+        if matches!(
+            parent.status.as_str(),
+            "triage" | "todo" | "scheduled" | "ready"
+        ) {
+            let dependencies_done = first_row(
+                transaction
+                    .query(
+                        "SELECT NOT EXISTS (SELECT 1 FROM task_dependencies AS d JOIN tasks AS dependency ON dependency.id = d.parent_task_id AND dependency.board_id = d.board_id WHERE d.board_id = :board_id AND d.child_task_id = :task_id AND dependency.status NOT IN ('done', 'archived'))",
+                        (
+                            (":board_id", board_id.as_str()),
+                            (":task_id", parent.id.as_str()),
+                        ),
+                    )
+                    .await?,
+            )
+            .await?;
+            let dependencies_done =
+                integer_value(dependencies_done.get_value(0)?, "task_dependencies.ready")? != 0;
+            let computed_target = canonical_ready_status(
+                &parent.title,
+                parent.description.as_deref(),
+                parent.scheduled_at,
+                dependencies_done,
+                input.created_at,
+            );
+            if computed_target != input.target_status.trim() {
+                return Err(StoreError::InvalidTransition(
+                    "step create readiness decision is stale".to_owned(),
+                ));
+            }
+            if computed_target != parent.status {
+                let changed = transaction
+                    .execute(
+                        "UPDATE tasks SET status = :target_status, status_reason = NULL, updated_at = :updated_at, lock_version = lock_version + 1 WHERE id = :task_id AND board_id = :board_id AND status = :current_status AND lock_version = :lock_version",
+                        (
+                            (":target_status", computed_target),
+                            (":updated_at", input.created_at),
+                            (":task_id", parent.id.as_str()),
+                            (":board_id", board_id.as_str()),
+                            (":current_status", parent.status.as_str()),
+                            (":lock_version", parent.lock_version),
+                        ),
+                    )
+                    .await?;
+                if changed != 1 {
+                    return Err(StoreError::InvalidTransition(
+                        "step create requires matching fresh parent task".to_owned(),
+                    ));
+                }
+                let payload = format!(r#"{{"to_status":"{computed_target}"}}"#);
+                transaction
+                    .execute(
+                        "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'task.recomputed', :actor, :payload, :created_at)",
+                        (
+                            (":event_id", input.recompute_event_id.as_str()),
+                            (":board_id", board_id.as_str()),
+                            (":task_id", parent.id.as_str()),
+                            (":actor", input.created_by.as_str()),
+                            (":payload", payload.as_str()),
+                            (":created_at", input.created_at),
+                        ),
+                    )
+                    .await?;
+            }
+        } else if input.target_status.trim() != parent.status {
+            return Err(StoreError::InvalidTransition(
+                "step create cannot recompute this parent status".to_owned(),
+            ));
+        }
+
+        let step = step_from_row(
+            &transaction,
+            first_row(
+                transaction
+                    .query(
+                        "SELECT id, board_id, parent_task_id, position, title, body, linked_task_id, required, status, resolution_note, resolved_by, resolved_at, created_by, created_at, updated_by, updated_at FROM task_steps WHERE board_id = :board_id AND parent_task_id = :parent_task_id AND id = :id LIMIT 1",
+                        [
+                            (":board_id", board_id.as_str()),
+                            (":parent_task_id", parent.id.as_str()),
+                            (":id", input.id.as_str()),
+                        ],
+                    )
+                    .await?,
+            )
+            .await?,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(step)
+    }
+
+    pub async fn list_steps(&self, task_id: &str) -> Result<TaskStepsRecord, StoreError> {
+        validate_task_id(task_id)?;
+        let connection = self.connection().await?;
+        let task = first_row(
+            connection
+                .query(
+                    "SELECT board_id FROM tasks WHERE id = :task_id LIMIT 1",
+                    [(":task_id", task_id)],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
+            other => StoreError::Turso(other),
+        })?;
+        let board_id = text_value(task.get_value(0)?, "tasks.board_id")?;
+        let mut rows = connection
+            .query(
+                "SELECT id, board_id, parent_task_id, position, title, body, linked_task_id, required, status, resolution_note, resolved_by, resolved_at, created_by, created_at, updated_by, updated_at FROM task_steps WHERE board_id = :board_id AND parent_task_id = :task_id ORDER BY position ASC, created_at ASC, id ASC",
+                [
+                    (":board_id", board_id.as_str()),
+                    (":task_id", task_id),
+                ],
+            )
+            .await?;
+        let mut steps = Vec::new();
+        while let Some(row) = rows.next().await? {
+            steps.push(step_from_row(&connection, row).await?);
+        }
+        let plan = first_row(
+            connection
+                .query(
+                    "SELECT board_id, task_id, state, reason, updated_by, updated_at FROM task_execution_plans WHERE board_id = :board_id AND task_id = :task_id LIMIT 1",
+                    [
+                        (":board_id", board_id.as_str()),
+                        (":task_id", task_id),
+                    ],
+                )
+                .await?,
+        )
+        .await;
+        let execution_plan = match plan {
+            Ok(row) => TaskExecutionPlanRecord {
+                board_id: text_value(row.get_value(0)?, "task_execution_plans.board_id")?,
+                task_id: text_value(row.get_value(1)?, "task_execution_plans.task_id")?,
+                state: text_value(row.get_value(2)?, "task_execution_plans.state")?,
+                reason: optional_text_value(row.get_value(3)?, "task_execution_plans.reason")?,
+                updated_by: text_value(row.get_value(4)?, "task_execution_plans.updated_by")?,
+                updated_at: integer_value(row.get_value(5)?, "task_execution_plans.updated_at")?,
+            },
+            Err(turso::Error::QueryReturnedNoRows) => TaskExecutionPlanRecord {
+                board_id: board_id.clone(),
+                task_id: task_id.to_owned(),
+                state: "unplanned".to_owned(),
+                reason: None,
+                updated_by: "system".to_owned(),
+                updated_at: 0,
+            },
+            Err(error) => return Err(StoreError::Turso(error)),
+        };
+        Ok(TaskStepsRecord {
+            task_id: task_id.to_owned(),
+            steps,
+            execution_plan,
+        })
     }
 
     pub async fn list_tasks(
@@ -3215,6 +3658,122 @@ fn validate_create_comment_input(
     Ok(())
 }
 
+fn validate_task_id(task_id: &str) -> Result<(), StoreError> {
+    if !task_id.starts_with("t_") || task_id.len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "task id must start with t_".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_create_step_input(task_id: &str, input: &CreateStepInput) -> Result<(), StoreError> {
+    validate_task_id(task_id)?;
+    if !input.id.trim().starts_with("step_") || input.id.trim().len() <= 5 {
+        return Err(StoreError::InvalidInput(
+            "step id must start with step_".to_owned(),
+        ));
+    }
+    if input.title.trim().is_empty() {
+        return Err(StoreError::InvalidInput(
+            "step title is required".to_owned(),
+        ));
+    }
+    if input
+        .idempotency_key
+        .as_deref()
+        .is_some_and(|key| key.trim().is_empty())
+    {
+        return Err(StoreError::InvalidInput(
+            "idempotency_key must not be empty".to_owned(),
+        ));
+    }
+    if input.position.is_some_and(|position| position < 0) {
+        return Err(StoreError::InvalidInput(
+            "step position must be non-negative".to_owned(),
+        ));
+    }
+    if input.created_by.trim().is_empty() {
+        return Err(StoreError::InvalidInput(
+            "created_by is required".to_owned(),
+        ));
+    }
+    if input.expected_lock_version < 0 {
+        return Err(StoreError::InvalidInput(
+            "expected_lock_version must be non-negative".to_owned(),
+        ));
+    }
+    if !matches!(
+        input.expected_plan_state.trim(),
+        "unplanned" | "planned" | "not_required"
+    ) {
+        return Err(StoreError::InvalidInput(
+            "expected_plan_state is invalid".to_owned(),
+        ));
+    }
+    if !matches!(
+        input.target_status.trim(),
+        "triage" | "todo" | "scheduled" | "ready" | "running" | "blocked" | "review"
+    ) {
+        return Err(StoreError::InvalidInput(
+            "target_status is invalid".to_owned(),
+        ));
+    }
+    for (name, value) in [
+        ("event_id", input.event_id.as_str()),
+        ("plan_event_id", input.plan_event_id.as_str()),
+        ("recompute_event_id", input.recompute_event_id.as_str()),
+    ] {
+        if !value.trim().starts_with("e_") || value.trim().len() <= 2 {
+            return Err(StoreError::InvalidInput(format!(
+                "{name} must start with e_"
+            )));
+        }
+    }
+    if input.created_at < 0 {
+        return Err(StoreError::InvalidInput(
+            "created_at must be non-negative".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn canonical_ready_status(
+    title: &str,
+    description: Option<&str>,
+    scheduled_at: Option<i64>,
+    dependencies_done: bool,
+    now: i64,
+) -> &'static str {
+    if title.trim().is_empty() || description.is_none_or(|value| value.trim().is_empty()) {
+        return "triage";
+    }
+    if scheduled_at.is_some_and(|scheduled| scheduled > now) {
+        return "scheduled";
+    }
+    if !dependencies_done {
+        return "todo";
+    }
+    "ready"
+}
+
+fn step_payload_matches(
+    existing: &TaskStepRecord,
+    title: &str,
+    body: Option<&str>,
+    linked_task_id: Option<&str>,
+    position: i64,
+    required: bool,
+    created_by: &str,
+) -> bool {
+    existing.title == title
+        && existing.body.as_deref() == body
+        && existing.linked_task.as_ref().map(|task| task.id.as_str()) == linked_task_id
+        && existing.position == position
+        && existing.required == required
+        && existing.created_by == created_by.trim()
+}
+
 fn canonical_payload_matches(
     existing: &TaskRecord,
     input: &CreateTaskInput,
@@ -3868,6 +4427,52 @@ fn comment_from_row(row: Row) -> Result<CommentRecord, StoreError> {
     })
 }
 
+async fn step_from_row(connection: &Connection, row: Row) -> Result<TaskStepRecord, StoreError> {
+    let board_id = text_value(row.get_value(1)?, "task_steps.board_id")?;
+    let linked_task_id = optional_text_value(row.get_value(6)?, "task_steps.linked_task_id")?;
+    let linked_task = if let Some(linked_task_id) = linked_task_id {
+        let linked_row = first_row(
+            connection
+                .query(
+                    &format!(
+                        "{TASK_SELECT} WHERE t.board_id = :board_id AND t.id = :task_id LIMIT 1"
+                    ),
+                    [
+                        (":board_id", board_id.as_str()),
+                        (":task_id", linked_task_id.as_str()),
+                    ],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(linked_task_id.clone()),
+            other => StoreError::Turso(other),
+        })?;
+        Some(task_from_row(linked_row)?)
+    } else {
+        None
+    };
+    Ok(TaskStepRecord {
+        id: text_value(row.get_value(0)?, "task_steps.id")?,
+        board_id,
+        parent_task_id: text_value(row.get_value(2)?, "task_steps.parent_task_id")?,
+        position: integer_value(row.get_value(3)?, "task_steps.position")?,
+        title: text_value(row.get_value(4)?, "task_steps.title")?,
+        body: optional_text_value(row.get_value(5)?, "task_steps.body")?,
+        linked_task,
+        required: integer_value(row.get_value(7)?, "task_steps.required")? != 0,
+        status: text_value(row.get_value(8)?, "task_steps.status")?,
+        resolution_note: optional_text_value(row.get_value(9)?, "task_steps.resolution_note")?,
+        resolved_by: optional_text_value(row.get_value(10)?, "task_steps.resolved_by")?,
+        resolved_at: optional_integer_value(row.get_value(11)?, "task_steps.resolved_at")?,
+        created_by: text_value(row.get_value(12)?, "task_steps.created_by")?,
+        created_at: integer_value(row.get_value(13)?, "task_steps.created_at")?,
+        updated_by: text_value(row.get_value(14)?, "task_steps.updated_by")?,
+        updated_at: integer_value(row.get_value(15)?, "task_steps.updated_at")?,
+    })
+}
+
 fn run_from_row(row: Row) -> Result<TaskRunRecord, StoreError> {
     Ok(TaskRunRecord {
         id: text_value(row.get_value(0)?, "task_runs.id")?,
@@ -3985,6 +4590,40 @@ mod tests {
             metadata_json: metadata_json.to_owned(),
             event_id: event_id.to_owned(),
             created_at,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn step_input(
+        id: &str,
+        key: Option<&str>,
+        title: &str,
+        position: Option<i64>,
+        actor: &str,
+        expected_lock_version: i64,
+        expected_plan_state: &str,
+        target_status: &str,
+        event_id: &str,
+        plan_event_id: &str,
+        recompute_event_id: &str,
+        created_at: i64,
+    ) -> CreateStepInput {
+        CreateStepInput {
+            id: id.to_owned(),
+            idempotency_key: key.map(str::to_owned),
+            title: title.to_owned(),
+            body: Some("body".to_owned()),
+            linked_task_id: None,
+            position,
+            required: true,
+            created_by: actor.to_owned(),
+            event_id: event_id.to_owned(),
+            plan_event_id: plan_event_id.to_owned(),
+            recompute_event_id: recompute_event_id.to_owned(),
+            created_at,
+            expected_lock_version,
+            expected_plan_state: expected_plan_state.to_owned(),
+            target_status: target_status.to_owned(),
         }
     }
 
@@ -12686,6 +13325,370 @@ mod tests {
             .await
             .expect_err("unknown task must fail");
         assert!(matches!(unknown, StoreError::TaskNotFound(id) if id == "t_comment_list_unknown"));
+    }
+
+    #[tokio::test]
+    async fn create_step_plans_parent_recomputes_status_and_lists_in_canonical_order() {
+        let (_directory, store, _path) = store("step-create-list").await;
+        store.initialize().await.expect("initialize");
+        let parent = store
+            .create_task(
+                "default",
+                create_input("t_step_parent", None, "Step parent"),
+            )
+            .await
+            .expect("create parent");
+        let first = store
+            .create_step(
+                &parent.id,
+                step_input(
+                    "step_first",
+                    Some("step-replay"),
+                    "  First step  ",
+                    None,
+                    "operator",
+                    parent.lock_version,
+                    "unplanned",
+                    "ready",
+                    "e_step_first",
+                    "e_step_plan",
+                    "e_step_recompute",
+                    500,
+                ),
+            )
+            .await
+            .expect("create step");
+        assert_eq!(first.id, "step_first");
+        assert_eq!(first.title, "First step");
+        assert_eq!(first.position, 1024);
+        assert_eq!(first.status, "todo");
+        let listed = store.list_steps(&parent.id).await.expect("list steps");
+        assert_eq!(listed.steps.len(), 1);
+        assert_eq!(listed.steps[0], first);
+        assert_eq!(listed.execution_plan.state, "planned");
+        let updated_parent = store
+            .get_task_global(&parent.id)
+            .await
+            .expect("read recomputed parent");
+        assert_eq!(updated_parent.status, "ready");
+        assert_eq!(updated_parent.lock_version, 1);
+
+        let connection = store.connection().await.expect("connection");
+        let events = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind IN ('task.step.created', 'task.execution_plan.planned', 'task.recomputed')",
+                    [parent.id.as_str()],
+                )
+                .await
+                .expect("step events"),
+        )
+        .await
+        .expect("step event row");
+        assert_eq!(
+            integer_value(events.get_value(0).expect("event count"), "events")
+                .expect("event integer"),
+            3
+        );
+    }
+
+    #[tokio::test]
+    async fn create_step_replays_same_payload_without_events_and_rejects_conflicts_or_archived_parents()
+     {
+        let (_directory, store, _path) = store("step-idempotency").await;
+        store.initialize().await.expect("initialize");
+        let parent = store
+            .create_task(
+                "default",
+                create_input("t_step_idempotent", None, "Step idempotent"),
+            )
+            .await
+            .expect("create parent");
+        let first_input = step_input(
+            "step_idempotent",
+            Some("step-replay"),
+            "step",
+            None,
+            "operator",
+            parent.lock_version,
+            "unplanned",
+            "ready",
+            "e_step_idempotent",
+            "e_step_idempotent_plan",
+            "e_step_idempotent_recompute",
+            500,
+        );
+        let first = store
+            .create_step(&parent.id, first_input.clone())
+            .await
+            .expect("first step");
+        let replay = store
+            .create_step(
+                &parent.id,
+                CreateStepInput {
+                    id: "step_retry_id".into(),
+                    event_id: "e_step_retry".into(),
+                    plan_event_id: "e_step_retry_plan".into(),
+                    recompute_event_id: "e_step_retry_recompute".into(),
+                    expected_lock_version: 1,
+                    expected_plan_state: "planned".into(),
+                    created_at: 900,
+                    ..first_input.clone()
+                },
+            )
+            .await
+            .expect("idempotent replay");
+        assert_eq!(replay, first);
+        let changed = store
+            .create_step(
+                &parent.id,
+                CreateStepInput {
+                    title: "different".into(),
+                    id: "step_changed".into(),
+                    event_id: "e_step_changed".into(),
+                    plan_event_id: "e_step_changed_plan".into(),
+                    recompute_event_id: "e_step_changed_recompute".into(),
+                    expected_lock_version: 1,
+                    expected_plan_state: "planned".into(),
+                    created_at: 1_000,
+                    ..first_input.clone()
+                },
+            )
+            .await
+            .expect_err("changed payload must conflict");
+        assert!(
+            matches!(changed, StoreError::IdempotencyConflict { key, .. } if key == "step-replay")
+        );
+        let events = first_row(
+            store
+                .connection()
+                .await
+                .expect("connection")
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.step.created'",
+                    [parent.id.as_str()],
+                )
+                .await
+                .expect("step event count"),
+        )
+        .await
+        .expect("step event row");
+        assert_eq!(
+            integer_value(events.get_value(0).expect("event count"), "events")
+                .expect("event integer"),
+            1
+        );
+
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'archived', archived_at = 1000 WHERE id = ?1",
+                [parent.id.as_str()],
+            )
+            .await
+            .expect("archive parent");
+        assert_eq!(
+            store
+                .list_steps(&parent.id)
+                .await
+                .expect("archived list")
+                .steps
+                .len(),
+            1
+        );
+        let archived_error = store
+            .create_step(
+                &parent.id,
+                CreateStepInput {
+                    id: "step_archived".into(),
+                    idempotency_key: None,
+                    title: "archived".into(),
+                    body: None,
+                    linked_task_id: None,
+                    position: Some(2048),
+                    required: true,
+                    created_by: "operator".into(),
+                    event_id: "e_step_archived".into(),
+                    plan_event_id: "e_step_archived_plan".into(),
+                    recompute_event_id: "e_step_archived_recompute".into(),
+                    created_at: 1_100,
+                    expected_lock_version: 1,
+                    expected_plan_state: "planned".into(),
+                    target_status: "ready".into(),
+                },
+            )
+            .await
+            .expect_err("archived create must fail");
+        assert!(
+            matches!(archived_error, StoreError::InvalidTransition(message) if message.contains("archived"))
+        );
+    }
+
+    #[tokio::test]
+    async fn create_step_rejects_cross_board_and_self_links_and_rolls_back_event_conflicts() {
+        let (_directory, store, _path) = store("step-guards").await;
+        store.initialize().await.expect("initialize");
+        let parent = store
+            .create_task(
+                "default",
+                create_input("t_step_guard_parent", None, "Step guard parent"),
+            )
+            .await
+            .expect("create parent");
+
+        let self_error = store
+            .create_step(
+                &parent.id,
+                CreateStepInput {
+                    id: "step_self_link".into(),
+                    idempotency_key: None,
+                    linked_task_id: Some(parent.id.clone()),
+                    event_id: "e_step_self_link".into(),
+                    plan_event_id: "e_step_self_link_plan".into(),
+                    recompute_event_id: "e_step_self_link_recompute".into(),
+                    expected_lock_version: parent.lock_version,
+                    expected_plan_state: "unplanned".into(),
+                    target_status: "ready".into(),
+                    created_at: 600,
+                    ..step_input(
+                        "step_self_link",
+                        None,
+                        "self link",
+                        None,
+                        "operator",
+                        parent.lock_version,
+                        "unplanned",
+                        "ready",
+                        "e_step_self_link",
+                        "e_step_self_link_plan",
+                        "e_step_self_link_recompute",
+                        600,
+                    )
+                },
+            )
+            .await
+            .expect_err("self link must fail");
+        assert!(matches!(
+            self_error,
+            StoreError::InvalidInput(message) if message.contains("parent")
+        ));
+
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO boards(id, slug, name, created_at, updated_at) VALUES ('b_step_other', 'step-other', 'Other steps', 1, 1)",
+                (),
+            )
+            .await
+            .expect("insert other board");
+        let linked = store
+            .create_task(
+                "step-other",
+                create_input("t_step_other", None, "Other linked task"),
+            )
+            .await
+            .expect("create linked task");
+        let cross_board_error = store
+            .create_step(
+                &parent.id,
+                CreateStepInput {
+                    id: "step_cross_board".into(),
+                    idempotency_key: None,
+                    linked_task_id: Some(linked.id),
+                    event_id: "e_step_cross_board".into(),
+                    plan_event_id: "e_step_cross_board_plan".into(),
+                    recompute_event_id: "e_step_cross_board_recompute".into(),
+                    created_at: 700,
+                    ..step_input(
+                        "step_cross_board",
+                        None,
+                        "cross board",
+                        None,
+                        "operator",
+                        parent.lock_version,
+                        "unplanned",
+                        "ready",
+                        "e_step_cross_board",
+                        "e_step_cross_board_plan",
+                        "e_step_cross_board_recompute",
+                        700,
+                    )
+                },
+            )
+            .await
+            .expect_err("cross-board link must fail");
+        assert!(matches!(
+            cross_board_error,
+            StoreError::InvalidInput(message) if message.contains("parent board")
+        ));
+
+        connection
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES ('e_step_rollback', 'b_default', ?1, NULL, 'test.event', 'tester', '{}', 800)",
+                [parent.id.as_str()],
+            )
+            .await
+            .expect("insert conflicting event");
+        let rollback_error = store
+            .create_step(
+                &parent.id,
+                CreateStepInput {
+                    id: "step_rollback".into(),
+                    idempotency_key: None,
+                    event_id: "e_step_rollback".into(),
+                    plan_event_id: "e_step_rollback_plan".into(),
+                    recompute_event_id: "e_step_rollback_recompute".into(),
+                    created_at: 900,
+                    ..step_input(
+                        "step_rollback",
+                        None,
+                        "rollback",
+                        None,
+                        "operator",
+                        parent.lock_version,
+                        "unplanned",
+                        "ready",
+                        "e_step_rollback",
+                        "e_step_rollback_plan",
+                        "e_step_rollback_recompute",
+                        900,
+                    )
+                },
+            )
+            .await
+            .expect_err("event conflict must abort the transaction");
+        assert!(matches!(rollback_error, StoreError::Turso(_)));
+        assert!(
+            store
+                .list_steps(&parent.id)
+                .await
+                .expect("list after rollback")
+                .steps
+                .is_empty()
+        );
+        let parent_after = store
+            .get_task_global(&parent.id)
+            .await
+            .expect("parent after rollback");
+        assert_eq!(parent_after.status, "todo");
+        assert_eq!(parent_after.lock_version, parent.lock_version);
+        assert_eq!(parent_after.execution_plan_state, "unplanned");
+        let leftovers = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND event_id IN ('e_step_rollback_plan', 'e_step_rollback_recompute')",
+                    [parent.id.as_str()],
+                )
+                .await
+                .expect("rollback events query"),
+        )
+        .await
+        .expect("rollback event row");
+        assert_eq!(
+            integer_value(leftovers.get_value(0).expect("leftover count"), "events")
+                .expect("leftover event integer"),
+            0
+        );
     }
 
     #[tokio::test]

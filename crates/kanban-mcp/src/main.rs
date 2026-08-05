@@ -4,12 +4,13 @@ use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, BlockTaskRequest, BlockTaskResponse,
     ClaimTaskRequest, ClaimTaskResponse, CommentAuthorType, CommentKind, CompleteTaskRequest,
-    CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse, CreateTaskRequest,
-    CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest, HeartbeatTaskResponse,
-    ListBoardsResponse, ListCommentsResponse, ListTasksQuery, ListTasksResponse,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
-    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse, CreateStepRequest,
+    CreateStepResponse, CreateTaskRequest, CreateTaskResponse, GetTaskResponse,
+    HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardsResponse, ListCommentsResponse,
+    ListStepsResponse, ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
+    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
+    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
+    TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -214,6 +215,35 @@ struct CommentListArgs {
     board: Option<String>,
     /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
     task_ref: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct StepCreateArgs {
+    /// Board used when task_ref or linked_task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+    title: String,
+    body: Option<String>,
+    linked_task_ref: Option<String>,
+    position: Option<i64>,
+    #[serde(default = "default_step_required")]
+    required: bool,
+    idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct StepListArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+}
+
+const fn default_step_required() -> bool {
+    true
 }
 
 const fn default_claim_ttl_ms() -> i64 {
@@ -441,6 +471,54 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(ListCommentsResponse { data: comments }))
+    }
+
+    #[tool(
+        name = "step_create",
+        description = "Create a todo execution-plan step through the canonical application service"
+    )]
+    async fn step_create(
+        &self,
+        Parameters(args): Parameters<StepCreateArgs>,
+    ) -> Result<Json<CreateStepResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let task_ref = args.task_ref;
+        let client = self.client.clone();
+        let request = CreateStepRequest {
+            idempotency_key: args.idempotency_key,
+            title: args.title,
+            body: args.body,
+            linked_task_ref: args.linked_task_ref,
+            position: args.position,
+            required: args.required,
+            actor: None,
+        };
+        let steps = tokio::task::spawn_blocking(move || {
+            client.create_step_by_selector(&board, &task_ref, &request)
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(CreateStepResponse { data: steps }))
+    }
+
+    #[tool(
+        name = "step_list",
+        description = "List execution-plan steps from the canonical application service"
+    )]
+    async fn step_list(
+        &self,
+        Parameters(args): Parameters<StepListArgs>,
+    ) -> Result<Json<ListStepsResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let task_ref = args.task_ref;
+        let client = self.client.clone();
+        let steps =
+            tokio::task::spawn_blocking(move || client.list_steps_by_selector(&board, &task_ref))
+                .await
+                .map_err(|error| McpError::internal_error(error.to_string(), None))?
+                .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(ListStepsResponse { data: steps }))
     }
 
     #[tool(

@@ -25,7 +25,7 @@ fn normalized(mut value: serde_json::Value) -> serde_json::Value {
                     map.insert("task_id".into(), json!("t_project_parent"));
                 }
                 if map.contains_key("parent_task_id") && map.contains_key("resolution_note") {
-                    map.insert("id".into(), json!("st_fixture"));
+                    map.insert("id".into(), json!("step_fixture"));
                     map.insert("parent_task_id".into(), json!("t_project_parent"));
                     map.insert("created_at".into(), json!(1));
                     map.insert("updated_at".into(), json!(1));
@@ -403,6 +403,7 @@ async fn reopen_step_path_fixture_is_consumed_by_real_router() -> anyhow::Result
 #[test]
 fn create_step_request_dto_serializes_to_committed_fixture() {
     let dto = kanban_contract::CreateStepRequest {
+        idempotency_key: Some("step.retry:fixed".into()),
         title: "Draft checks".into(),
         body: Some("Cover plan guards".into()),
         linked_task_ref: None,

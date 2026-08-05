@@ -7,11 +7,12 @@ use std::{
 
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiClaim, ApiComment, ApiErrorCode, ApiExecutionPlan, ApiTask,
-    BlockTaskRequest, BlockTaskResponse, ClaimTaskRequest, ClaimTaskResponse, CompleteTaskRequest,
-    CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse, CreateTaskRequest,
-    CreateTaskResponse, ErrorEnvelope, GetTaskResponse, HealthReport, HealthResponse,
-    HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse, ListBoardsResponse,
-    ListCommentsResponse, ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
+    ApiTaskSteps, BlockTaskRequest, BlockTaskResponse, ClaimTaskRequest, ClaimTaskResponse,
+    CompleteTaskRequest, CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse,
+    CreateStepRequest, CreateTaskRequest, CreateTaskResponse, ErrorEnvelope, GetTaskResponse,
+    HealthReport, HealthResponse, HeartbeatTaskRequest, HeartbeatTaskResponse,
+    ListBoardColumnsResponse, ListBoardsResponse, ListCommentsResponse, ListStepsResponse,
+    ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
     ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
 };
@@ -198,6 +199,63 @@ impl KanbanClient {
     ) -> Result<Vec<ApiComment>, ClientError> {
         let task_id = self.resolve_task_id(board, selector)?;
         self.list_comments(&task_id)
+    }
+
+    pub fn list_steps(&self, task_id: &str) -> Result<ApiTaskSteps, ClientError> {
+        let task_id = task_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(ClientError::InvalidInput(
+                "task selector must resolve to a global t_... id".to_owned(),
+            ));
+        }
+        let response: ListStepsResponse = self.get(&format!(
+            "/api/v1/tasks/{}/steps",
+            encode_path_segment(task_id)
+        ))?;
+        Ok(response.data)
+    }
+
+    pub fn list_steps_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+    ) -> Result<ApiTaskSteps, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        self.list_steps(&task_id)
+    }
+
+    pub fn create_step(
+        &self,
+        task_id: &str,
+        request: &CreateStepRequest,
+    ) -> Result<ApiTaskSteps, ClientError> {
+        let task_id = task_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(ClientError::InvalidInput(
+                "task selector must resolve to a global t_... id".to_owned(),
+            ));
+        }
+        let request = prepare_create_step_request(request.clone());
+        let response: kanban_contract::CreateStepResponse = self.post(
+            &format!("/api/v1/tasks/{}/steps", encode_path_segment(task_id)),
+            &request,
+        )?;
+        Ok(response.data)
+    }
+
+    pub fn create_step_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+        request: &CreateStepRequest,
+    ) -> Result<ApiTaskSteps, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        let mut request = request.clone();
+        if let Some(linked_task_ref) = request.linked_task_ref.as_deref() {
+            let linked_task_id = self.resolve_task_id(board, linked_task_ref)?;
+            request.linked_task_ref = Some(linked_task_id);
+        }
+        self.create_step(&task_id, &request)
     }
 
     pub fn resolve_task_id(&self, board: &str, selector: &str) -> Result<String, ClientError> {
@@ -485,6 +543,13 @@ fn prepare_create_comment_request(
     request
         .idempotency_key
         .get_or_insert_with(|| format!("comment.create:{}", kanban_core::new_typed_id("c")));
+    request
+}
+
+fn prepare_create_step_request(mut request: CreateStepRequest) -> CreateStepRequest {
+    request
+        .idempotency_key
+        .get_or_insert_with(|| format!("step.create:{}", kanban_core::new_typed_id("step")));
     request
 }
 

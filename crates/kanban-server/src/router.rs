@@ -17,9 +17,10 @@ use tower_http::{
 use crate::{
     dispatcher::{DispatcherConfig, ShutdownSignal, run_dispatcher},
     handlers::{
-        block_task, claim_task, complete_task, create_comment, create_task, get_task, health,
-        heartbeat_task, list_board_columns, list_boards, list_comments, list_tasks,
-        mark_execution_plan_not_required, promote_task, release_task, submit_review_task,
+        block_task, claim_task, complete_task, create_comment, create_step, create_task, get_task,
+        health, heartbeat_task, list_board_columns, list_boards, list_comments, list_steps,
+        list_tasks, mark_execution_plan_not_required, promote_task, release_task,
+        submit_review_task,
     },
     state::AppState,
 };
@@ -37,6 +38,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/tasks/:task_id/comments",
             get(list_comments).post(create_comment),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/steps",
+            get(list_steps).post(create_step),
         )
         .route(
             "/api/v1/tasks/:task_id/execution-plan/not-required",
@@ -208,10 +213,11 @@ mod tests {
     use http_body_util::BodyExt;
     use kanban_contract::{
         ApiErrorCode, ApiExecutionPlanState, ApiRunStatus, ApiTaskStatus, BlockTaskResponse,
-        ClaimTaskResponse, CompleteTaskResponse, CreateTaskResponse, ErrorEnvelope,
-        GetTaskResponse, HeartbeatTaskResponse, ListBoardColumnsResponse, ListBoardsResponse,
-        ListTasksResponse, MarkExecutionPlanNotRequiredResponse, PromoteTaskResponse,
-        ReleaseTaskResponse, SubmitReviewTaskResponse,
+        ClaimTaskResponse, CompleteTaskResponse, CreateStepResponse, CreateTaskResponse,
+        ErrorEnvelope, GetTaskResponse, HeartbeatTaskResponse, ListBoardColumnsResponse,
+        ListBoardsResponse, ListStepsResponse, ListTasksResponse,
+        MarkExecutionPlanNotRequiredResponse, PromoteTaskResponse, ReleaseTaskResponse,
+        SubmitReviewTaskResponse,
     };
     use tower::ServiceExt;
 
@@ -391,6 +397,107 @@ mod tests {
             error.error.code,
             kanban_contract::ApiErrorCode::FeatureNotAvailable
         );
+    }
+
+    #[tokio::test]
+    async fn step_create_and_list_use_application_path_and_entity_local_idempotency() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let router = build_router(state);
+
+        let task = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/boards/default/tasks",
+                serde_json::json!({
+                    "task_id": "t_http_step",
+                    "idempotency_key": "http-step-task",
+                    "title": "HTTP step parent",
+                    "description": null,
+                    "priority": 1,
+                    "metadata": {},
+                    "labels": [],
+                    "depends_on": [],
+                    "actor": "seed"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(task.status(), StatusCode::CREATED);
+
+        let request = serde_json::json!({
+            "idempotency_key": "http-step-retry",
+            "title": "first step",
+            "body": "step body",
+            "position": null,
+            "required": true,
+            "actor": "planner"
+        });
+        let first = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_step/steps",
+                request.clone(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::CREATED);
+        let first_body = first.into_body().collect().await.unwrap().to_bytes();
+        let first: CreateStepResponse = serde_json::from_slice(&first_body).unwrap();
+        assert!(first.data.steps[0].id.starts_with("step_"));
+        assert_eq!(first.data.steps[0].title, "first step");
+        assert_eq!(first.data.steps[0].position, 1024);
+        assert_eq!(
+            first.data.execution_plan.state,
+            ApiExecutionPlanState::Planned
+        );
+
+        let replay = router
+            .clone()
+            .oneshot(json_request("/api/v1/tasks/t_http_step/steps", request))
+            .await
+            .unwrap();
+        assert_eq!(replay.status(), StatusCode::CREATED);
+        let replay_body = replay.into_body().collect().await.unwrap().to_bytes();
+        let replay: CreateStepResponse = serde_json::from_slice(&replay_body).unwrap();
+        assert_eq!(replay.data.steps, first.data.steps);
+
+        let listed = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/tasks/t_http_step/steps")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(listed.status(), StatusCode::OK);
+        let listed_body = listed.into_body().collect().await.unwrap().to_bytes();
+        let listed: ListStepsResponse = serde_json::from_slice(&listed_body).unwrap();
+        assert_eq!(listed.data.steps, first.data.steps);
+
+        let conflict = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_step/steps",
+                serde_json::json!({
+                    "idempotency_key": "http-step-retry",
+                    "title": "changed step",
+                    "body": "step body",
+                    "required": true,
+                    "actor": "planner"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(conflict.status(), StatusCode::CONFLICT);
+        let conflict_body = conflict.into_body().collect().await.unwrap().to_bytes();
+        let error: ErrorEnvelope = serde_json::from_slice(&conflict_body).unwrap();
+        assert_eq!(error.error.code, ApiErrorCode::IdempotencyConflict);
     }
 
     #[tokio::test]

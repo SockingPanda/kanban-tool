@@ -636,6 +636,7 @@ export type BoardTaskMap = {
 }
 
 export type CreateStepInput = {
+  idempotency_key?: string
   title: string
   body?: string | null
   linked_task_ref?: string | null
@@ -1081,7 +1082,11 @@ export class KanbanApi {
   async createStep(taskId: string, input: CreateStepInput, options: RequestOptions = {}) {
     return parseCreateStepEnvelope(await this.requestRaw("/api/v1/tasks/" + taskId + "/steps", {
       method: "POST",
-      body: { ...input, actor: this.actor },
+      body: {
+        ...input,
+        idempotency_key: input.idempotency_key ?? `step.create:step_${crypto.randomUUID()}`,
+        actor: this.actor,
+      },
       signal: options.signal,
     })).data
   }

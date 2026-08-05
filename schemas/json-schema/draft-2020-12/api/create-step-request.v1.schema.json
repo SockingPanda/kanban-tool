@@ -15,6 +15,12 @@
         "null"
       ]
     },
+    "idempotency_key": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "linked_task_ref": {
       "type": [
         "string",

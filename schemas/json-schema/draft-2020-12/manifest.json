@@ -1751,7 +1751,7 @@
       "invalid_fixture": "schemas/fixtures/api/create-step-request.v1.invalid.json",
       "path": "api/create-step-request.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/create-step-request.v1.valid.json",
-      "sha256": "sha256:7d18d9c94edf9c45e611fe2b4bd29fb97212184767c42061df6cface4fd503a9",
+      "sha256": "sha256:7b0e117109a76e0cf5aab0d7cdebfe89c53f06d0ee86319d08c9dc3d86a89029",
       "strictness": "deny_unknown_fields"
     },
     {

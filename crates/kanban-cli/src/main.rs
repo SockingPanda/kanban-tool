@@ -13,11 +13,12 @@ use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, BlockTaskRequest, BlockTaskResponse,
     ClaimTaskRequest, ClaimTaskResponse, CommentAuthorType, CommentKind, CompleteTaskRequest,
-    CompleteTaskResponse, CreateCommentRequest, CreateTaskRequest, CreateTaskResponse,
-    GetTaskResponse, HeartbeatTaskRequest, HeartbeatTaskResponse, ListTasksQuery,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
-    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    CompleteTaskResponse, CreateCommentRequest, CreateStepRequest, CreateStepResponse,
+    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
+    HeartbeatTaskResponse, ListStepsResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
+    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
+    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
+    TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
 
@@ -249,8 +250,35 @@ struct TaskShowArgs {
 
 #[derive(Debug, Subcommand)]
 enum TaskStepCommand {
+    /// Add a todo step to a task execution plan.
+    Add(TaskStepAddArgs),
+    /// List the task execution plan steps.
+    List(TaskStepListArgs),
     /// Mark this task as not requiring structured execution steps.
     NotRequired(TaskPlanNotRequiredArgs),
+}
+
+#[derive(Debug, Args)]
+struct TaskStepAddArgs {
+    task_ref: String,
+    title: String,
+    #[arg(long)]
+    body: Option<String>,
+    #[arg(long = "link-task")]
+    linked_task_ref: Option<String>,
+    #[arg(long)]
+    position: Option<i64>,
+    #[arg(long, conflicts_with = "optional")]
+    required: bool,
+    #[arg(long, conflicts_with = "required")]
+    optional: bool,
+    #[arg(long)]
+    idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct TaskStepListArgs {
+    task_ref: String,
 }
 
 #[derive(Debug, Args)]
@@ -593,6 +621,46 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                     }
                 }
                 TaskCommand::Step { command } => match command {
+                    TaskStepCommand::Add(args) => {
+                        let steps = client.create_step_by_selector(
+                            &cli.board,
+                            &args.task_ref,
+                            &CreateStepRequest {
+                                idempotency_key: args.idempotency_key.clone(),
+                                title: args.title.clone(),
+                                body: args.body.clone(),
+                                linked_task_ref: args.linked_task_ref.clone(),
+                                position: args.position,
+                                required: !args.optional,
+                                actor: None,
+                            },
+                        )?;
+                        if cli.json {
+                            println!(
+                                "{}",
+                                serde_json::to_string(&CreateStepResponse { data: steps })
+                                    .expect("step create response is serializable")
+                            );
+                        } else {
+                            for (index, step) in steps.steps.iter().enumerate() {
+                                println!("S{} {} {}", index + 1, step.status.as_str(), step.title);
+                            }
+                        }
+                    }
+                    TaskStepCommand::List(args) => {
+                        let steps = client.list_steps_by_selector(&cli.board, &args.task_ref)?;
+                        if cli.json {
+                            println!(
+                                "{}",
+                                serde_json::to_string(&ListStepsResponse { data: steps })
+                                    .expect("step list response is serializable")
+                            );
+                        } else {
+                            for (index, step) in steps.steps.iter().enumerate() {
+                                println!("S{} {} {}", index + 1, step.status.as_str(), step.title);
+                            }
+                        }
+                    }
                     TaskStepCommand::NotRequired(args) => {
                         let plan = client.mark_execution_plan_not_required_by_selector(
                             &cli.board,

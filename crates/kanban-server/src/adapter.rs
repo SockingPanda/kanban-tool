@@ -4,23 +4,25 @@ use kanban_application::{
     ClaimTaskRecord as ApplicationClaimTask, CommentAuthorType as ApplicationCommentAuthorType,
     CommentKind as ApplicationCommentKind, CommentRecord as ApplicationComment,
     CompleteTaskRecord as ApplicationCompleteTask, CreateCommentRecord as ApplicationCreateComment,
-    CreateTaskRecord as ApplicationCreateTask, ExecutionPlanRecord as ApplicationExecutionPlan,
-    ExecutionPlanState, HeartbeatTaskRecord as ApplicationHeartbeatTask,
+    CreateStepRecord as ApplicationCreateStep, CreateTaskRecord as ApplicationCreateTask,
+    ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
+    HeartbeatTaskRecord as ApplicationHeartbeatTask,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
     PromoteTaskRecord as ApplicationPromoteTask,
     ReclaimExpiredTaskRecord as ApplicationReclaimExpiredTask,
     ReleaseTaskRecord as ApplicationReleaseTask, RunRecord as ApplicationRun,
-    RunStatus as ApplicationRunStatus, SubmitReviewTaskRecord as ApplicationSubmitReviewTask,
+    RunStatus as ApplicationRunStatus, StepRecord as ApplicationStep,
+    SubmitReviewTaskRecord as ApplicationSubmitReviewTask,
     TaskListOptions as ApplicationTaskListOptions, TaskListPage as ApplicationTaskListPage,
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
-    TaskRecord as ApplicationTask,
+    TaskRecord as ApplicationTask, TaskStepsRecord as ApplicationTaskSteps,
 };
 use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
     BlockTaskInput as StoreBlockTask, ClaimTaskInput as StoreClaimTask,
     ClaimTaskRecord as StoreClaim, CompleteTaskInput as StoreCompleteTask,
-    CreateCommentInput as StoreCreateComment, CreateTaskInput as StoreCreateTask,
-    HeartbeatTaskInput as StoreHeartbeatTask,
+    CreateCommentInput as StoreCreateComment, CreateStepInput as StoreCreateStep,
+    CreateTaskInput as StoreCreateTask, HeartbeatTaskInput as StoreHeartbeatTask,
     MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
     PromoteTaskInput as StorePromoteTask, ReclaimExpiredTaskInput as StoreReclaimExpiredTask,
     ReleaseTaskInput as StoreReleaseTask, StoreError,
@@ -147,6 +149,55 @@ impl ApplicationStore for TursoApplicationStore {
             .into_iter()
             .map(application_comment)
             .collect()
+    }
+
+    async fn create_step(
+        &self,
+        task_id: &str,
+        input: ApplicationCreateStep,
+    ) -> Result<ApplicationStep> {
+        self.store
+            .create_step(
+                task_id,
+                StoreCreateStep {
+                    id: input.id,
+                    idempotency_key: input.idempotency_key,
+                    title: input.title,
+                    body: input.body,
+                    linked_task_id: input.linked_task_id,
+                    position: input.position,
+                    required: input.required,
+                    created_by: input.created_by,
+                    event_id: input.event_id,
+                    plan_event_id: input.plan_event_id,
+                    recompute_event_id: input.recompute_event_id,
+                    created_at: input.created_at,
+                    expected_lock_version: input.expected_lock_version,
+                    expected_plan_state: match input.expected_plan_state {
+                        ExecutionPlanState::Unplanned => "unplanned",
+                        ExecutionPlanState::Planned => "planned",
+                        ExecutionPlanState::NotRequired => "not_required",
+                    }
+                    .to_owned(),
+                    target_status: input.target_status.as_str().to_owned(),
+                },
+            )
+            .await
+            .map_err(store_error)
+            .and_then(application_step)
+    }
+
+    async fn list_steps(&self, task_id: &str) -> Result<ApplicationTaskSteps> {
+        let steps = self.store.list_steps(task_id).await.map_err(store_error)?;
+        Ok(ApplicationTaskSteps {
+            task_id: steps.task_id,
+            steps: steps
+                .steps
+                .into_iter()
+                .map(application_step)
+                .collect::<Result<Vec<_>>>()?,
+            execution_plan: application_execution_plan(steps.execution_plan)?,
+        })
     }
 
     async fn list_tasks(
@@ -583,6 +634,26 @@ fn application_comment(comment: kanban_store_turso::CommentRecord) -> Result<App
         kind,
         metadata_json: comment.metadata_json,
         created_at: comment.created_at,
+    })
+}
+
+fn application_step(step: kanban_store_turso::TaskStepRecord) -> Result<ApplicationStep> {
+    Ok(ApplicationStep {
+        id: step.id,
+        parent_task_id: step.parent_task_id,
+        title: step.title,
+        body: step.body,
+        linked_task: step.linked_task.map(application_task).transpose()?,
+        position: step.position,
+        required: step.required,
+        status: step.status,
+        resolution_note: step.resolution_note,
+        resolved_by: step.resolved_by,
+        resolved_at: step.resolved_at,
+        created_by: step.created_by,
+        created_at: step.created_at,
+        updated_by: step.updated_by,
+        updated_at: step.updated_at,
     })
 }
 

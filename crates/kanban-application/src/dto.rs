@@ -338,6 +338,67 @@ pub struct CommentRecord {
     pub created_at: i64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateStepCommand {
+    pub task_id: String,
+    pub idempotency_key: Option<String>,
+    pub title: String,
+    pub body: Option<String>,
+    pub linked_task_id: Option<String>,
+    pub position: Option<i64>,
+    pub required: bool,
+    pub actor: String,
+}
+
+/// Canonicalized step mutation passed from the application service to the
+/// Turso store. The expected task facts keep the transaction CAS-guarded even
+/// if another caller changes the parent between the application read and the
+/// store mutation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateStepRecord {
+    pub id: String,
+    pub idempotency_key: Option<String>,
+    pub title: String,
+    pub body: Option<String>,
+    pub linked_task_id: Option<String>,
+    pub position: Option<i64>,
+    pub required: bool,
+    pub created_by: String,
+    pub event_id: String,
+    pub plan_event_id: String,
+    pub recompute_event_id: String,
+    pub created_at: i64,
+    pub expected_lock_version: i64,
+    pub expected_plan_state: ExecutionPlanState,
+    pub target_status: TaskStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StepRecord {
+    pub id: String,
+    pub parent_task_id: String,
+    pub title: String,
+    pub body: Option<String>,
+    pub linked_task: Option<TaskRecord>,
+    pub position: i64,
+    pub required: bool,
+    pub status: String,
+    pub resolution_note: Option<String>,
+    pub resolved_by: Option<String>,
+    pub resolved_at: Option<i64>,
+    pub created_by: String,
+    pub created_at: i64,
+    pub updated_by: String,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskStepsRecord {
+    pub task_id: String,
+    pub steps: Vec<StepRecord>,
+    pub execution_plan: ExecutionPlanRecord,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionPlanRecord {
     pub board_id: String,

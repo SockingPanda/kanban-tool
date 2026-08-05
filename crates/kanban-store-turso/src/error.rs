@@ -26,6 +26,11 @@ pub enum StoreError {
     AttachmentIntegrity(String),
     AttachmentIo(String),
     SignalNotFound(String),
+    EntityNotFound(String),
+    PredicateNotFound(String),
+    RelationNotFound(String),
+    EntityConflict(String),
+    RelationConflict(String),
     DependencyCycle(String),
     TaskConflict(String),
     SignalConflict(String),
@@ -79,6 +84,13 @@ impl Display for StoreError {
             }
             Self::AttachmentIo(message) => write!(formatter, "attachment I/O error: {message}"),
             Self::SignalNotFound(signal_id) => write!(formatter, "signal not found: {signal_id}"),
+            Self::EntityNotFound(uri) => write!(formatter, "entity not found: {uri}"),
+            Self::PredicateNotFound(name) => {
+                write!(formatter, "relation predicate not found: {name}")
+            }
+            Self::RelationNotFound(id) => write!(formatter, "relation not found: {id}"),
+            Self::EntityConflict(message) => write!(formatter, "entity conflict: {message}"),
+            Self::RelationConflict(message) => write!(formatter, "relation conflict: {message}"),
             Self::DependencyCycle(message) => write!(formatter, "dependency cycle: {message}"),
             Self::TaskConflict(task_id) => write!(formatter, "task id already exists: {task_id}"),
             Self::SignalConflict(message) => write!(formatter, "signal conflict: {message}"),

@@ -9,6 +9,9 @@ pub mod operations;
 pub mod ports;
 pub mod service;
 
+// Entity/relation/graph ports are re-exported below so every host adapter uses
+// the same canonical application boundary.
+
 pub use dto::*;
 pub use operations::LabelOntologyOperations;
 pub use operations::{
@@ -31,7 +34,10 @@ pub use operations::{
     TaskLabelAdd, TaskLabelList, TaskLabelRemove, TaskList, TaskPlanNotRequired, TaskPromote,
     TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen, TaskReview, TaskShow, TaskSpecify,
     TaskUnblock, TaskUpdate, UnblockTaskCommand, UnblockTaskRecord, UpdateTaskCommand,
-    UpdateTaskRecord, VacuumReportRecord,
+    UpdateTaskRecord, VacuumReportRecord, BoardTaskMapOptions, EntityListOptions, EntityQuery,
+    EntityUpsertCommand, GraphNeighborsOptions, GraphQuery, GraphQueryOptions,
+    ProjectionStatusOptions, RelationDeleteCommand, RelationListOptions, RelationPredicateCommand,
+    RelationQuery, RelationUpsertCommand, TaskNeighborhoodOptions,
 };
 pub use ports::ApplicationStore;
 pub use service::ApplicationService;

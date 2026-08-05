@@ -42,6 +42,9 @@ pub use operations::{
     ReopenStepInput, ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SignalListOptions,
     SkipStepInput, SpecifyTaskInput, SubmitReviewTaskInput, TaskListOptions, TaskListSort,
     TaskPlanFilter, UnblockTaskInput, UpdateStepInput, UpdateTaskInput, UpsertLabelSemanticsInput,
+    BoardTaskMapOptions, EntityListOptions, EntityUpsertInput, GraphNeighborsOptions,
+    GraphQueryOptions, ProjectionStatusOptions, RelationDeleteInput, RelationListOptions,
+    RelationPredicateInput, RelationUpsertInput, TaskNeighborhoodOptions,
 };
 pub use vector::{
     MAX_VECTOR_BATCH, MAX_VECTOR_CONTENT_BYTES, MAX_VECTOR_DIMENSIONS, ProjectionJobRecord,
@@ -61,3 +64,6 @@ mod db_constraints_tests;
 
 #[cfg(test)]
 mod capability_tests;
+
+#[cfg(test)]
+mod graph_tests;

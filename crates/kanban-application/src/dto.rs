@@ -238,6 +238,150 @@ pub struct TaskRecord {
     pub labels: Vec<LabelRecord>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntityRecord {
+    pub uri: String,
+    pub kind: String,
+    pub source_table: String,
+    pub source_id: String,
+    pub board_id: Option<String>,
+    pub task_id: Option<String>,
+    pub title: Option<String>,
+    pub summary: Option<String>,
+    pub content_hash: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub archived_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelationPredicateRecord {
+    pub name: String,
+    pub domain_kind: Option<String>,
+    pub range_kind: Option<String>,
+    pub cardinality: String,
+    pub authoritative_store: String,
+    pub description: Option<String>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelationRecord {
+    pub id: i64,
+    pub subject_uri: String,
+    pub predicate: String,
+    pub object_uri: String,
+    pub graph_uri: String,
+    pub board_id: Option<String>,
+    pub authoritative_store: String,
+    pub source_table: Option<String>,
+    pub source_id: Option<String>,
+    pub source_event_id: Option<i64>,
+    pub metadata_json: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectionStateRecord {
+    pub projection: String,
+    pub lifecycle_status: String,
+    pub active_generation: Option<String>,
+    pub active_fingerprint: Option<String>,
+    pub last_event_id: i64,
+    pub dirty: bool,
+    pub last_success_at: Option<i64>,
+    pub last_error: Option<String>,
+    pub updated_at: i64,
+    pub pending_jobs: i64,
+    pub running_jobs: i64,
+    pub failed_jobs: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphStatusRecord {
+    pub backend: String,
+    pub enabled: bool,
+    pub message: String,
+    pub projection: ProjectionStateRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphQueryBindingRecord {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphQueryRowRecord {
+    pub bindings: Vec<GraphQueryBindingRecord>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TaskGraphNodeRole {
+    Center,
+    DependencyParent,
+    DependencyChild,
+    StepParent,
+    StepChild,
+    Active,
+    Context,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TaskGraphEdgeKind {
+    Dependency,
+    Step,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskGraphNodeRecord {
+    pub task: TaskRecord,
+    pub role: TaskGraphNodeRole,
+    pub context_only: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskGraphEdgeRecord {
+    pub id: String,
+    pub source_task_id: String,
+    pub target_task_id: String,
+    pub kind: TaskGraphEdgeKind,
+    pub required: bool,
+    pub blocking: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskGraphMetaRecord {
+    pub depth: usize,
+    pub context_depth: usize,
+    pub generated_at: i64,
+    pub node_count: usize,
+    pub edge_count: usize,
+    pub truncated: bool,
+    pub active_statuses: Vec<TaskStatus>,
+    pub active_only: bool,
+    pub include_done_context: bool,
+    pub include_archived_context: bool,
+    pub hide_isolated: bool,
+    pub limit_nodes: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskNeighborhoodRecord {
+    pub center_task_id: String,
+    pub nodes: Vec<TaskGraphNodeRecord>,
+    pub edges: Vec<TaskGraphEdgeRecord>,
+    pub meta: TaskGraphMetaRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoardTaskMapRecord {
+    pub nodes: Vec<TaskGraphNodeRecord>,
+    pub edges: Vec<TaskGraphEdgeRecord>,
+    pub meta: TaskGraphMetaRecord,
+}
+
 // Compatibility facade for callers that historically imported all DTOs from
 // `kanban_application::dto`. Definitions now live next to their operation.
 pub use crate::operations::{

@@ -2,12 +2,15 @@ mod attachments;
 mod boards;
 mod comments;
 mod dependencies;
+mod entities;
 mod events;
+mod graph;
 mod labels;
 mod lifecycle;
 mod ontology;
 #[cfg(test)]
 mod ontology_tests;
+mod relations;
 mod runs;
 pub mod search;
 pub(crate) mod shared;
@@ -25,6 +28,11 @@ pub use dependencies::{
     AddDependencyInput, AddDependencyRecord, RemoveDependencyInput, RemoveDependencyRecord,
 };
 pub use labels::{AddTaskLabelsInput, AddTaskLabelsRecord, CreateLabelInput, RemoveTaskLabelInput};
+pub use graph::{
+    BoardTaskMapOptions, GraphNeighborsOptions, GraphQueryOptions, ProjectionStatusOptions,
+    TaskNeighborhoodOptions,
+};
+pub use entities::{EntityListOptions, EntityUpsertInput};
 pub use lifecycle::{
     ArchiveTaskInput, BlockTaskInput, ClaimTaskInput, ClaimTaskRecord, CompleteTaskInput,
     HeartbeatTaskInput, MarkExecutionPlanNotRequiredInput, PromoteTaskInput,
@@ -38,3 +46,6 @@ pub use steps::{
     UpdateStepInput,
 };
 pub use tasks::{CreateTaskInput, TaskListOptions, TaskListSort, TaskPlanFilter, UpdateTaskInput};
+pub use relations::{
+    RelationDeleteInput, RelationListOptions, RelationPredicateInput, RelationUpsertInput,
+};

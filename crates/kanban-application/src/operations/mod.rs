@@ -8,10 +8,13 @@ mod attachment;
 mod board;
 mod comment;
 mod dependency;
+mod entities;
 mod event;
+mod graph;
 mod labels;
 mod maintenance;
 mod ontology;
+mod relations;
 mod run;
 mod search;
 mod signal;
@@ -29,7 +32,12 @@ pub use board::{
 };
 pub use comment::{CommentCreate, CommentList};
 pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
+pub use entities::{EntityListOptions, EntityQuery, EntityUpsertCommand};
 pub use event::*;
+pub use graph::{
+    BoardTaskMapOptions, GraphNeighborsOptions, GraphQuery, GraphQueryOptions,
+    ProjectionStatusOptions, TaskNeighborhoodOptions,
+};
 pub use labels::{
     AddTaskLabelsCommand, AddTaskLabelsRecord, AddTaskLabelsRecordInput, BoardLabelCreate,
     BoardLabelList, CreateBoardLabelCommand, CreateLabelRecord, RemoveTaskLabelCommand,
@@ -37,6 +45,10 @@ pub use labels::{
 };
 pub use maintenance::*;
 pub use ontology::LabelOntologyOperations;
+pub use relations::{
+    RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationQuery,
+    RelationUpsertCommand,
+};
 pub use run::*;
 pub use search::{
     MAX_SEARCH_LIMIT, SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults,

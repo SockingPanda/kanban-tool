@@ -49,6 +49,39 @@ pub(crate) const PORTABLE_TABLES: &[&str] = &[
     "signals",
 ];
 
+/// replace 时必须先删除子表，再删除父表。该顺序与 `PORTABLE_TABLES` 的导入顺序
+/// 相反，保留外部 schema、migration 和 host 治理表不动。
+const PORTABLE_REPLACE_DELETE_TABLES: &[&str] = &[
+    "signals",
+    "signal_observations",
+    "label_ontology_action_atom_effects",
+    "label_ontology_action_signals",
+    "label_ontology_actions",
+    "label_ontology_signals",
+    "label_ontology_observations",
+    "label_semantic_proposals",
+    "label_atom_index_boards",
+    "label_atoms",
+    "label_semantics",
+    "entity_relations",
+    "relation_predicates",
+    "entities",
+    "task_subtasks",
+    "app_settings",
+    "task_labels",
+    "labels",
+    "task_attachments",
+    "task_events",
+    "task_comments",
+    "task_runs",
+    "task_dependencies",
+    "task_steps",
+    "task_execution_plans",
+    "tasks",
+    "board_columns",
+    "boards",
+];
+
 /// 诊断所依赖的 schema/identity 表清单；它们不属于 portable business facts。
 #[allow(dead_code)]
 const SCHEMA_TABLES: &[&str] = &[
@@ -407,9 +440,8 @@ impl TursoStore {
 
     /// 仅执行 replace 的 prepare/verify 阶段并返回 typed 状态。
     ///
-    /// 当前 Turso `Database` handle 没有 close/rebind seam；真正 publish 必须由 host
-    /// lifecycle 在停服后执行。普通 HTTP/CLI `import --replace` 仍返回 conflict，避免把
-    /// 已校验 staging 误报成 canonical 已替换。
+    /// 供 host lifecycle 预检使用的 typed seam。普通 HTTP/CLI `import --replace` 不走此
+    /// 预检路径，而是在当前 host-owned Turso handle 内完成真实事务替换。
     pub async fn prepare_import(
         &self,
         in_path: impl AsRef<Path>,
@@ -451,7 +483,8 @@ impl TursoStore {
         validate_portable_columns(&connection, &snapshot).await?;
         let target_fingerprint_before = self.database_fingerprint().await?;
 
-        if let Some(journal) = find_portable_journal(&connection, &snapshot_fingerprint).await? {
+        let journal = find_portable_journal(&connection, &snapshot_fingerprint).await?;
+        if let Some(journal) = &journal {
             match journal.phase.as_str() {
                 "completed" => {
                     verify_imported_target(&connection, &snapshot.header).await?;
@@ -459,7 +492,7 @@ impl TursoStore {
                     return Ok(import_report(
                         in_path,
                         &snapshot.header,
-                        journal.id,
+                        journal.id.clone(),
                         snapshot.header.record_count,
                         jobs,
                         "completed",
@@ -470,35 +503,8 @@ impl TursoStore {
                         Vec::new(),
                     ));
                 }
-                "validated" if replace => {
-                    let staged_path = journal.staged_database_path.ok_or_else(|| {
-                        StoreError::InvalidInput(
-                            "portable replace journal 缺少 staged database path".to_owned(),
-                        )
-                    })?;
-                    let (staged_fingerprint, jobs) =
-                        verify_staged_database(&staged_path, &snapshot.header).await?;
-                    let report = prepared_import_report(
-                        in_path,
-                        &snapshot.header,
-                        journal.id.clone(),
-                        staged_path.clone(),
-                        target_fingerprint_before.clone(),
-                        staged_fingerprint,
-                        jobs,
-                    );
-                    return if return_prepared {
-                        Ok(report)
-                    } else {
-                        Err(restart_required_error(
-                            &journal.id,
-                            &staged_path,
-                            target_fingerprint_before.as_str(),
-                            report.staged_fingerprint.as_deref().unwrap_or_default(),
-                        ))
-                    };
-                }
                 "failed" => {}
+                "validated" if replace => {}
                 phase => {
                     return Err(StoreError::MaintenanceBusy(format!(
                         "portable import journal {} 处于不可恢复阶段 {phase}，请先完成 recovery",
@@ -509,7 +515,41 @@ impl TursoStore {
         }
 
         let existing = canonical_record_count(&connection).await?;
-        if replace && (existing > 0 || return_prepared) {
+        if replace && !return_prepared {
+            return self
+                .replace_import_transaction(
+                    in_path,
+                    &snapshot,
+                    &manifest,
+                    &snapshot_fingerprint,
+                    &mut connection,
+                    journal.as_ref(),
+                    &target_fingerprint_before,
+                )
+                .await;
+        }
+
+        if replace && return_prepared {
+            if let Some(journal) = journal.as_ref()
+                && journal.phase == "validated"
+            {
+                let staged_path = journal.staged_database_path.clone().ok_or_else(|| {
+                    StoreError::InvalidInput(
+                        "portable replace journal 缺少 staged database path".to_owned(),
+                    )
+                })?;
+                let (staged_fingerprint, jobs) =
+                    verify_journal_staging(journal, &staged_path, &snapshot).await?;
+                return Ok(prepared_import_report(
+                    in_path,
+                    &snapshot.header,
+                    journal.id.clone(),
+                    staged_path,
+                    target_fingerprint_before,
+                    staged_fingerprint,
+                    jobs,
+                ));
+            }
             let journal_id = format!(
                 "ij_{}",
                 &snapshot_fingerprint[..snapshot_fingerprint.len().min(32)]
@@ -566,16 +606,7 @@ impl TursoStore {
                         staged_fingerprint,
                         jobs,
                     );
-                    return if return_prepared {
-                        Ok(report)
-                    } else {
-                        Err(restart_required_error(
-                            &journal_id,
-                            &staged_path,
-                            target_fingerprint_before.as_str(),
-                            report.staged_fingerprint.as_deref().unwrap_or_default(),
-                        ))
-                    };
+                    return Ok(report);
                 }
                 Err(error) => {
                     let _ = mark_import_journal_failed(
@@ -592,13 +623,10 @@ impl TursoStore {
 
         if existing > 0 {
             return Err(StoreError::InvalidInput(
-                "import target 非空；replace=true 需要停 host 后发布已校验 staging".to_owned(),
+                "import target 非空；需要 replace=true 才能替换 canonical facts".to_owned(),
             ));
         }
-        let journal_id = format!(
-            "ij_{}",
-            &snapshot_fingerprint[..snapshot_fingerprint.len().min(32)]
-        );
+        let journal_id = deterministic_journal_id(&snapshot_fingerprint);
         insert_import_journal(
             &connection,
             &journal_id,
@@ -644,6 +672,170 @@ impl TursoStore {
             None,
             Vec::new(),
         ))
+    }
+
+    /// 在当前 canonical Turso handle 内完成 replace。`BEGIN IMMEDIATE` 会阻止新的
+    /// writer 进入，事务失败时由 Turso 默认 rollback，旧 canonical facts 保持可启动。
+    async fn replace_import_transaction(
+        &self,
+        in_path: &Path,
+        snapshot: &PortableSnapshot,
+        manifest: &str,
+        snapshot_fingerprint: &str,
+        connection: &mut Connection,
+        journal: Option<&PortableJournal>,
+        target_fingerprint_before: &str,
+    ) -> Result<StoreImportReport, StoreError> {
+        let journal_id = journal
+            .map(|journal| journal.id.clone())
+            .unwrap_or_else(|| deterministic_journal_id(snapshot_fingerprint));
+
+        if let Some(journal) = journal
+            && journal.phase == "validated"
+        {
+            verify_journal_manifest(journal, &snapshot.header)?;
+            let staged_path = journal.staged_database_path.clone().ok_or_else(|| {
+                StoreError::InvalidInput(
+                    "portable replace journal 缺少 staged database path".to_owned(),
+                )
+            })?;
+            let _ = verify_journal_staging(journal, &staged_path, snapshot).await?;
+        }
+
+        // 已提交但尚未完成 journal 的恢复只重跑验证和 rebuild enqueue，不再次清空事实。
+        if let Some(journal) = journal
+            && journal.phase == "published"
+        {
+            let jobs = enqueue_rebuild_jobs(connection, snapshot_fingerprint).await?;
+            verify_imported_target(connection, &snapshot.header).await?;
+            let doctor = doctor_connection(connection).await?;
+            if !doctor_replace_safe(&doctor) {
+                return Err(StoreError::InvalidInput(
+                    "portable replace published target doctor 校验未通过".to_owned(),
+                ));
+            }
+            connection
+                .execute(
+                    "UPDATE import_journal SET phase='completed', error=NULL, updated_at=?1 WHERE id=?2",
+                    (now_ms(), journal.id.as_str()),
+                )
+                .await?;
+            return Ok(import_report(
+                in_path,
+                &snapshot.header,
+                journal.id.clone(),
+                snapshot.header.record_count,
+                jobs,
+                "completed",
+                false,
+                None,
+                target_fingerprint_before.to_owned(),
+                None,
+                Vec::new(),
+            ));
+        }
+
+        if journal.is_none() || journal.is_some_and(|journal| journal.phase == "failed") {
+            insert_import_journal(
+                connection,
+                &journal_id,
+                in_path,
+                snapshot_fingerprint,
+                "prepared",
+                manifest,
+                None,
+                Some(target_fingerprint_before),
+            )
+            .await?;
+        }
+
+        // backup 在事务前完成并验证；路径与 digest 写进 journal，便于失败恢复和审计。
+        let backup = match self.create_verified_replace_backup().await {
+            Ok(backup) => backup,
+            Err(error) => {
+                let _ =
+                    mark_import_journal_failed(connection, &journal_id, &error.to_string()).await;
+                return Err(error);
+            }
+        };
+        update_import_journal_backup(connection, &journal_id, target_fingerprint_before, &backup)
+            .await?;
+
+        let transaction_result = async {
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .await?;
+            let imported_records = replace_records_in_transaction(&transaction, snapshot).await?;
+            verify_imported_target(&transaction, &snapshot.header).await?;
+            let doctor = doctor_connection(&transaction).await?;
+            if !doctor_replace_safe(&doctor) {
+                return Err(StoreError::InvalidInput(format!(
+                    "portable replace transaction doctor 校验未通过: {doctor:?}"
+                )));
+            }
+            transaction
+                .execute(
+                    "UPDATE import_journal SET phase='published', error=NULL, updated_at=?1 WHERE id=?2",
+                    (now_ms(), journal_id.as_str()),
+                )
+                .await?;
+            transaction.commit().await?;
+            Ok::<u64, StoreError>(imported_records)
+        }
+        .await;
+
+        let imported_records = match transaction_result {
+            Ok(imported_records) => imported_records,
+            Err(error) => {
+                let _ =
+                    mark_import_journal_failed(connection, &journal_id, &error.to_string()).await;
+                return Err(error);
+            }
+        };
+
+        // rebuild job 是 derived projection，不参与 facts 清空；在 canonical commit 后入队。
+        // enqueue 失败时保留 `published` journal，下一次相同 fingerprint 请求可安全恢复。
+        let jobs = enqueue_rebuild_jobs(connection, snapshot_fingerprint).await?;
+        verify_imported_target(connection, &snapshot.header).await?;
+        let doctor = doctor_connection(connection).await?;
+        if !doctor_replace_safe(&doctor) {
+            return Err(StoreError::InvalidInput(
+                "portable replace committed target doctor 校验未通过".to_owned(),
+            ));
+        }
+        connection
+            .execute(
+                "UPDATE import_journal SET phase='completed', error=NULL, updated_at=?1 WHERE id=?2",
+                (now_ms(), journal_id.as_str()),
+            )
+            .await?;
+        Ok(import_report(
+            in_path,
+            &snapshot.header,
+            journal_id,
+            imported_records,
+            jobs,
+            "completed",
+            false,
+            None,
+            target_fingerprint_before.to_owned(),
+            None,
+            Vec::new(),
+        ))
+    }
+
+    async fn create_verified_replace_backup(&self) -> Result<VerifiedReplaceBackup, StoreError> {
+        let backup_path = temporary_sibling(self.database_path(), "portable-replace-backup")?;
+        let connection = self.connection().await?;
+        let _ = self.checkpoint_inner().await?;
+        vacuum_into(&connection, &backup_path).await?;
+        verify_database_file(&backup_path).await?;
+        let (checksum_sha256, bytes) = file_digest(&backup_path)?;
+        Ok(VerifiedReplaceBackup {
+            path: backup_path,
+            checksum_sha256,
+            bytes,
+        })
     }
 
     async fn prepare_replacement(
@@ -1190,6 +1382,15 @@ async fn doctor_connection(connection: &Connection) -> Result<StoreDoctorReport,
     })
 }
 
+/// doctor 的 `ok` 还包含现有产品的 migration/user_version 和计划提醒；replace 只允许
+/// canonical 完整性、引用完整性和 derived error 通过，不能把正常提醒误判为事务失败。
+fn doctor_replace_safe(report: &StoreDoctorReport) -> bool {
+    report.integrity_check.eq_ignore_ascii_case("ok")
+        && report.consistency_errors == 0
+        && report.outbox_failed == 0
+        && report.derived_error_stores == 0
+}
+
 async fn maintenance_status_connection(
     connection: &Connection,
 ) -> Result<StoreMaintenanceStatus, StoreError> {
@@ -1343,6 +1544,28 @@ async fn import_records_into_connection(
     transaction
         .execute("DELETE FROM relation_predicates", ())
         .await?;
+    let imported_records = import_records_into_transaction(&transaction, snapshot).await?;
+    transaction.commit().await?;
+    Ok(imported_records)
+}
+
+/// 在已持有的 canonical transaction 中按 FK 逆序清空事实表，再严格恢复 snapshot。
+async fn replace_records_in_transaction(
+    transaction: &turso::transaction::Transaction<'_>,
+    snapshot: &PortableSnapshot,
+) -> Result<u64, StoreError> {
+    for table in PORTABLE_REPLACE_DELETE_TABLES {
+        transaction
+            .execute(format!("DELETE FROM {table}"), ())
+            .await?;
+    }
+    import_records_into_transaction(transaction, snapshot).await
+}
+
+async fn import_records_into_transaction(
+    transaction: &turso::transaction::Transaction<'_>,
+    snapshot: &PortableSnapshot,
+) -> Result<u64, StoreError> {
     let mut deferred = Vec::new();
     for record in &snapshot.records {
         insert_portable_record(&transaction, record, &mut deferred).await?;
@@ -1362,7 +1585,6 @@ async fn import_records_into_connection(
             )));
         }
     }
-    transaction.commit().await?;
     Ok(snapshot.records.len() as u64)
 }
 
@@ -1394,7 +1616,7 @@ async fn insert_portable_record(
         .collect::<Vec<_>>()
         .join(", ");
     let sql = format!(
-        "INSERT OR IGNORE INTO {} ({quoted}) VALUES ({placeholders})",
+        "INSERT INTO {} ({quoted}) VALUES ({placeholders})",
         record.table
     );
     let id = record
@@ -1884,11 +2106,20 @@ fn database_file_fingerprint(path: &Path) -> Result<String, StoreError> {
     Ok(format!("{checksum}:{bytes}"))
 }
 
+#[derive(Debug, Clone)]
+struct VerifiedReplaceBackup {
+    path: PathBuf,
+    checksum_sha256: String,
+    bytes: u64,
+}
+
 #[derive(Debug)]
 struct PortableJournal {
     id: String,
     phase: String,
     staged_database_path: Option<PathBuf>,
+    manifest_json: String,
+    previous_identity_json: Option<String>,
 }
 
 async fn find_portable_journal(
@@ -1897,7 +2128,7 @@ async fn find_portable_journal(
 ) -> Result<Option<PortableJournal>, StoreError> {
     let mut rows = connection
         .query(
-            "SELECT id, phase, staged_database_path FROM import_journal WHERE source_kind='jsonl' AND snapshot_fingerprint=?1 ORDER BY updated_at DESC LIMIT 1",
+            "SELECT id, phase, staged_database_path, manifest_json, previous_identity_json FROM import_journal WHERE source_kind='jsonl' AND snapshot_fingerprint=?1 ORDER BY updated_at DESC LIMIT 1",
             [snapshot_fingerprint],
         )
         .await?;
@@ -1915,10 +2146,22 @@ async fn find_portable_journal(
             });
         }
     };
+    let manifest_json = text_value(row.get_value(3)?, "import_journal.manifest_json")?;
+    let previous_identity_json = match row.get_value(4)? {
+        Value::Null => None,
+        Value::Text(value) => Some(value),
+        _ => {
+            return Err(StoreError::InvalidStoredValue {
+                field: "import_journal.previous_identity_json",
+            });
+        }
+    };
     Ok(Some(PortableJournal {
         id,
         phase,
         staged_database_path,
+        manifest_json,
+        previous_identity_json,
     }))
 }
 
@@ -1933,10 +2176,10 @@ async fn insert_import_journal(
     target_fingerprint_before: Option<&str>,
 ) -> Result<(), StoreError> {
     let previous_identity = target_fingerprint_before
-        .map(|fingerprint| format!(r#"{{"target_fingerprint":"{fingerprint}"}}"#));
+        .map(|fingerprint| serde_json::json!({"target_fingerprint": fingerprint}).to_string());
     connection
         .execute(
-            "INSERT INTO import_journal(id, source_kind, source_path, snapshot_fingerprint, phase, staged_database_path, manifest_json, previous_identity_json, created_at, updated_at) VALUES (?1, 'jsonl', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
+            "INSERT INTO import_journal(id, source_kind, source_path, snapshot_fingerprint, phase, staged_database_path, manifest_json, previous_identity_json, created_at, updated_at) VALUES (?1, 'jsonl', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8) ON CONFLICT(id) DO UPDATE SET source_kind=excluded.source_kind, source_path=excluded.source_path, snapshot_fingerprint=excluded.snapshot_fingerprint, phase=excluded.phase, staged_database_path=excluded.staged_database_path, manifest_json=excluded.manifest_json, previous_identity_json=excluded.previous_identity_json, error=NULL, updated_at=excluded.updated_at",
             (
                 journal_id,
                 in_path.to_string_lossy().as_ref(),
@@ -1947,6 +2190,109 @@ async fn insert_import_journal(
                 previous_identity,
                 now_ms(),
             ),
+        )
+        .await?;
+    Ok(())
+}
+
+fn deterministic_journal_id(snapshot_fingerprint: &str) -> String {
+    format!(
+        "ij_{}",
+        &snapshot_fingerprint[..snapshot_fingerprint.len().min(32)]
+    )
+}
+
+fn journal_identity_value(journal: &PortableJournal) -> Result<serde_json::Value, StoreError> {
+    let Some(value) = journal.previous_identity_json.as_deref() else {
+        return Ok(serde_json::json!({}));
+    };
+    serde_json::from_str(value).map_err(json_error)
+}
+
+fn verify_journal_manifest(
+    journal: &PortableJournal,
+    header: &PortableHeader,
+) -> Result<(), StoreError> {
+    let expected = serde_json::to_value(header).map_err(json_error)?;
+    let observed =
+        serde_json::from_str::<serde_json::Value>(&journal.manifest_json).map_err(json_error)?;
+    if observed != expected {
+        return Err(StoreError::InvalidInput(
+            "portable replace journal manifest 与 source 不一致".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+async fn verify_journal_staging(
+    journal: &PortableJournal,
+    staged_path: &Path,
+    snapshot: &PortableSnapshot,
+) -> Result<(String, u64), StoreError> {
+    let (staged_fingerprint, jobs) = verify_staged_database(staged_path, &snapshot.header).await?;
+    if let Some(expected) = journal_identity_value(journal)?
+        .get("staged_fingerprint")
+        .and_then(serde_json::Value::as_str)
+        && expected != staged_fingerprint
+    {
+        return Err(StoreError::InvalidInput(
+            "portable replace staged fingerprint 与 journal 不一致".to_owned(),
+        ));
+    }
+    Ok((staged_fingerprint, jobs))
+}
+
+async fn update_import_journal_backup(
+    connection: &Connection,
+    journal_id: &str,
+    target_fingerprint_before: &str,
+    backup: &VerifiedReplaceBackup,
+) -> Result<(), StoreError> {
+    let mut rows = connection
+        .query(
+            "SELECT previous_identity_json FROM import_journal WHERE id=?1",
+            [journal_id],
+        )
+        .await?;
+    let mut identity = if let Some(row) = rows.next().await? {
+        match row.get_value(0)? {
+            Value::Null => serde_json::json!({}),
+            Value::Text(value) => serde_json::from_str(&value).map_err(json_error)?,
+            _ => {
+                return Err(StoreError::InvalidStoredValue {
+                    field: "import_journal.previous_identity_json",
+                });
+            }
+        }
+    } else {
+        return Err(StoreError::InvalidInput(format!(
+            "portable import journal 不存在: {journal_id}"
+        )));
+    };
+    let object = identity.as_object_mut().ok_or_else(|| {
+        StoreError::InvalidInput("portable import journal identity 不是 JSON object".to_owned())
+    })?;
+    object.insert(
+        "target_fingerprint".to_owned(),
+        serde_json::Value::String(target_fingerprint_before.to_owned()),
+    );
+    object.insert(
+        "backup_path".to_owned(),
+        serde_json::Value::String(backup.path.display().to_string()),
+    );
+    object.insert(
+        "backup_checksum_sha256".to_owned(),
+        serde_json::Value::String(backup.checksum_sha256.clone()),
+    );
+    object.insert(
+        "backup_bytes".to_owned(),
+        serde_json::Value::Number(backup.bytes.into()),
+    );
+    let identity = identity.to_string();
+    connection
+        .execute(
+            "UPDATE import_journal SET previous_identity_json=?1, updated_at=?2 WHERE id=?3",
+            (identity.as_str(), now_ms(), journal_id),
         )
         .await?;
     Ok(())
@@ -2050,18 +2396,6 @@ fn prepared_import_report(
                 .to_owned(),
         ],
     )
-}
-
-fn restart_required_error(
-    journal_id: &str,
-    staged_path: &Path,
-    target_fingerprint_before: &str,
-    staged_fingerprint: &str,
-) -> StoreError {
-    StoreError::MaintenanceBusy(format!(
-        "portable replace 已完成 prepare/verify，但当前 Turso handle 不能安全发布 inode；restart_required=true phase=validated journal_id={journal_id} staged_database_path={} target_fingerprint_before={target_fingerprint_before} staged_fingerprint={staged_fingerprint}；请停止 kanban serve 后由 host lifecycle 执行原子 publish，再重开并完成 journal",
-        staged_path.display()
-    ))
 }
 
 fn cleanup_staged_database(path: &Path) {
@@ -2337,6 +2671,8 @@ fn json_error(error: serde_json::Error) -> StoreError {
 #[cfg(test)]
 mod tests {
     use std::{fs, path::Path};
+
+    use turso::transaction::TransactionBehavior;
 
     use super::{integer_value, text_value};
     use crate::test_support::{create_input, store};
@@ -2668,7 +3004,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn replace_prepares_verified_staging_without_mutating_canonical_target() {
+    async fn replace_consumes_validated_staging_and_commits_canonical_transaction() {
         let (source_directory, source, _source_path) = store("maintenance-replace-source").await;
         source.initialize().await.expect("initialize source");
         source
@@ -2690,13 +3026,12 @@ mod tests {
             )
             .await
             .expect("existing task");
-        let error = target
-            .import(&export_path, true)
+        let prepared = target
+            .prepare_import(&export_path)
             .await
-            .expect_err("replace requires host lifecycle publish");
-        let message = error.to_string();
-        assert!(message.contains("restart_required=true"), "{message}");
-        assert!(message.contains("phase=validated"), "{message}");
+            .expect("prepare replace staging");
+        assert_eq!(prepared.phase, "validated");
+        assert!(prepared.restart_required);
         let tasks = target
             .list_tasks("default", crate::TaskListOptions::default())
             .await
@@ -2732,15 +3067,78 @@ mod tests {
         assert!(target_path.is_file());
 
         let resumed = target
-            .prepare_import(&export_path)
+            .import(&export_path, true)
             .await
-            .expect("validated portable replace is resumable");
-        assert_eq!(resumed.phase, "validated");
-        assert!(resumed.restart_required);
+            .expect("validated portable replace commits in host transaction");
+        assert_eq!(resumed.phase, "completed");
+        assert!(!resumed.restart_required);
         assert_eq!(resumed.journal_id, journal_id);
+        let tasks = target
+            .list_tasks("default", crate::TaskListOptions::default())
+            .await
+            .expect("replaced tasks");
+        assert!(tasks.tasks.iter().any(|task| task.id == "t_incoming"));
+        assert!(!tasks.tasks.iter().any(|task| task.id == "t_existing"));
+        assert!(target_path.is_file());
+
+        let mut rows = connection
+            .query(
+                "SELECT phase, previous_identity_json FROM import_journal WHERE id=?1",
+                [journal_id.as_str()],
+            )
+            .await
+            .expect("completed journal query");
+        let row = rows
+            .next()
+            .await
+            .expect("completed journal result")
+            .expect("completed journal row");
         assert_eq!(
-            resumed.staged_database_path.as_deref(),
-            Some(staged.as_str())
+            text_value(row.get_value(0).expect("completed phase"), "phase")
+                .expect("completed phase text"),
+            "completed"
+        );
+        let identity = text_value(
+            row.get_value(1).expect("backup identity"),
+            "previous_identity_json",
+        )
+        .expect("backup identity text");
+        let identity = serde_json::from_str::<serde_json::Value>(&identity).expect("identity json");
+        let backup_path = identity
+            .get("backup_path")
+            .and_then(serde_json::Value::as_str)
+            .expect("verified backup path");
+        assert!(
+            Path::new(backup_path).is_file(),
+            "backup path {backup_path}"
+        );
+        assert_eq!(
+            super::scalar_integer(
+                &connection,
+                "SELECT COUNT(*) FROM schema_identity WHERE singleton=1",
+                "schema identity",
+            )
+            .await
+            .expect("schema identity count"),
+            1
+        );
+        assert!(
+            super::scalar_integer(
+                &connection,
+                "SELECT COUNT(*) FROM schema_migrations",
+                "schema migrations",
+            )
+            .await
+            .expect("schema migration count")
+                > 0
+        );
+        assert!(
+            !target
+                .maintenance_status()
+                .await
+                .expect("maintenance status")
+                .owner
+                .active
         );
     }
 
@@ -2777,5 +3175,219 @@ mod tests {
                 .iter()
                 .any(|task| task.id == "t_replace_empty")
         );
+    }
+
+    #[tokio::test]
+    async fn replace_failure_rolls_back_old_facts_and_records_failed_journal() {
+        let (source_directory, source, _source_path) =
+            store("maintenance-replace-failure-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task(
+                "default",
+                create_input("t_incoming_invalid", None, "Invalid incoming fixture"),
+            )
+            .await
+            .expect("incoming task");
+        let export_path = source_directory.path().join("portable.jsonl");
+        source.export(&export_path).await.expect("portable export");
+        let mut snapshot = super::read_portable(&export_path).expect("read portable");
+        snapshot
+            .records
+            .iter_mut()
+            .find(|record| record.table == "tasks")
+            .expect("task record")
+            .data
+            .insert(
+                "board_id".to_owned(),
+                serde_json::Value::String("b_missing".to_owned()),
+            );
+        let (payload, table_counts) = super::serialize_portable_records(&snapshot.records)
+            .expect("serialize invalid payload");
+        snapshot.header.payload_checksum_sha256 = super::digest_bytes(&payload);
+        snapshot.header.table_counts = table_counts;
+        snapshot.header.record_count = snapshot.records.len() as u64;
+        snapshot.header.manifest_checksum_sha256 =
+            super::manifest_checksum(&snapshot.header).expect("manifest checksum");
+        let invalid_path = source_directory.path().join("portable-invalid.jsonl");
+        let mut bytes = serde_json::to_vec(&snapshot.header).expect("header json");
+        bytes.push(b'\n');
+        bytes.extend_from_slice(&payload);
+        fs::write(&invalid_path, bytes).expect("invalid export");
+
+        let (_target_directory, target, _target_path) =
+            store("maintenance-replace-failure-target").await;
+        target.initialize().await.expect("initialize target");
+        target
+            .create_task(
+                "default",
+                create_input("t_existing_safe", None, "Existing safe fixture"),
+            )
+            .await
+            .expect("existing task");
+        let error = target
+            .import(&invalid_path, true)
+            .await
+            .expect_err("foreign key failure must rollback replace");
+        assert!(error.to_string().contains("turso") || error.to_string().contains("foreign"));
+        let tasks = target
+            .list_tasks("default", crate::TaskListOptions::default())
+            .await
+            .expect("target tasks after rollback");
+        assert!(tasks.tasks.iter().any(|task| task.id == "t_existing_safe"));
+        assert!(
+            !tasks
+                .tasks
+                .iter()
+                .any(|task| task.id == "t_incoming_invalid")
+        );
+        let connection = target.connection().await.expect("journal connection");
+        let mut rows = connection
+            .query(
+                "SELECT phase FROM import_journal WHERE source_kind='jsonl' ORDER BY updated_at DESC LIMIT 1",
+                (),
+            )
+            .await
+            .expect("failed journal query");
+        let row = rows
+            .next()
+            .await
+            .expect("failed journal result")
+            .expect("failed journal row");
+        assert_eq!(
+            text_value(row.get_value(0).expect("failed phase"), "phase")
+                .expect("failed phase text"),
+            "failed"
+        );
+    }
+
+    #[tokio::test]
+    async fn replace_preserves_attachment_metadata_and_is_idempotent() {
+        let (source_directory, source, _source_path) =
+            store("maintenance-replace-attachment-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task(
+                "default",
+                create_input("t_attachment", None, "Attachment fixture"),
+            )
+            .await
+            .expect("attachment task");
+        source
+            .connection()
+            .await
+            .expect("source connection")
+            .execute(
+                "INSERT INTO task_attachments(id, board_id, task_id, filename, rel_path, content_type, size_bytes, sha256, created_by, created_at) VALUES ('a_fixture', 'b_default', 't_attachment', 'report.txt', 't_attachment/report.txt', 'text/plain', 12, 'sha256:fixture', 'tester', 424242)",
+                (),
+            )
+            .await
+            .expect("attachment metadata");
+        let export_path = source_directory.path().join("portable.jsonl");
+        source.export(&export_path).await.expect("portable export");
+
+        let (_target_directory, target, _target_path) =
+            store("maintenance-replace-attachment-target").await;
+        target.initialize().await.expect("initialize target");
+        let first = target
+            .import(&export_path, true)
+            .await
+            .expect("replace import");
+        assert_eq!(first.phase, "completed");
+        let connection = target.connection().await.expect("target connection");
+        let mut rows = connection
+            .query(
+                "SELECT filename, rel_path, content_type, size_bytes, sha256, created_at FROM task_attachments WHERE id='a_fixture'",
+                (),
+            )
+            .await
+            .expect("attachment query");
+        let row = rows
+            .next()
+            .await
+            .expect("attachment result")
+            .expect("attachment row");
+        assert_eq!(
+            text_value(row.get_value(0).expect("filename"), "filename").expect("filename text"),
+            "report.txt"
+        );
+        assert_eq!(
+            text_value(row.get_value(1).expect("rel path"), "rel_path").expect("rel path text"),
+            "t_attachment/report.txt"
+        );
+        assert_eq!(
+            text_value(row.get_value(2).expect("content type"), "content_type")
+                .expect("content type text"),
+            "text/plain"
+        );
+        assert_eq!(
+            integer_value(row.get_value(3).expect("size"), "size").expect("size integer"),
+            12
+        );
+        assert_eq!(
+            text_value(row.get_value(4).expect("sha"), "sha").expect("sha text"),
+            "sha256:fixture"
+        );
+        assert_eq!(
+            integer_value(row.get_value(5).expect("created"), "created").expect("created integer"),
+            424242
+        );
+        let repeated = target
+            .import(&export_path, true)
+            .await
+            .expect("idempotent replace");
+        assert_eq!(repeated.phase, "completed");
+        assert_eq!(repeated.journal_id, first.journal_id);
+        let count = super::scalar_integer(
+            &connection,
+            "SELECT COUNT(*) FROM task_attachments",
+            "attachments",
+        )
+        .await
+        .expect("attachment count");
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn replace_respects_existing_writer_lock_without_mutating_old_facts() {
+        let (source_directory, source, _source_path) =
+            store("maintenance-replace-lock-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task(
+                "default",
+                create_input("t_lock_incoming", None, "Lock incoming"),
+            )
+            .await
+            .expect("incoming task");
+        let export_path = source_directory.path().join("portable.jsonl");
+        source.export(&export_path).await.expect("portable export");
+        let (_target_directory, target, _target_path) =
+            store("maintenance-replace-lock-target").await;
+        target.initialize().await.expect("initialize target");
+        target
+            .create_task(
+                "default",
+                create_input("t_lock_existing", None, "Lock existing"),
+            )
+            .await
+            .expect("existing task");
+        let mut connection = target.connection().await.expect("lock connection");
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await
+            .expect("writer lock");
+        let error = target
+            .import(&export_path, true)
+            .await
+            .expect_err("existing writer must block replace");
+        drop(transaction);
+        assert!(error.to_string().contains("turso") || error.to_string().contains("busy"));
+        let tasks = target
+            .list_tasks("default", crate::TaskListOptions::default())
+            .await
+            .expect("tasks after writer lock");
+        assert!(tasks.tasks.iter().any(|task| task.id == "t_lock_existing"));
+        assert!(!tasks.tasks.iter().any(|task| task.id == "t_lock_incoming"));
     }
 }

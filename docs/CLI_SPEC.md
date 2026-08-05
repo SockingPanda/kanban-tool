@@ -5,8 +5,8 @@ Codex hook 和 `kanban serve` 这些本地 shell 命令外，所有命令都只�
 调用 `http://127.0.0.1:8721`；CLI 不打开、初始化或 fallback 到任何数据库。
 
 当前实现覆盖 board、task、comment、attachment、dependency、run、event、search、index、
-ontology、host-admin maintenance，以及本节列出的本地 shell 命令；这不是最终功能边界。
-labels、signals、graph、vector、context 和其他 projection 能力仍按 parity ledger 恢复为
+ontology、signal、host-admin maintenance，以及本节列出的本地 shell 命令；这不是最终功能边界。
+labels、graph、vector、context 和其他 projection 能力仍按 parity ledger 恢复为
 localhost client 命令。portable export/import 和 verified backup 已接入；旧的直接数据库
 执行路径不会恢复。
 
@@ -320,7 +320,26 @@ kanban comment list <TASK_SELECTOR>
 add 是 mutation，list 是 query。add 的 key 属于 task；相同 key 与相同 payload 可安全重放，
 不同 payload 返回 `idempotency_conflict`。未指定 author 时由 host actor 规则填充。
 
-## 10. Dependency
+## 10. Signal
+
+```text
+kanban signal record [--input <JSON-FILE|->]
+kanban signal list [--status <STATUS>] [--kind <KIND>] [--task <TASK_SELECTOR>]
+  [--include-all] [--limit <N>]
+kanban signal show <SIGNAL_ID>
+kanban signal review [--status <STATUS>] [--kind <KIND>] [--task <TASK_SELECTOR>]
+  [--limit <N>]
+kanban signal confirm <SIGNAL_ID>... --reason <TEXT>
+kanban signal reject <SIGNAL_ID>... --reason <TEXT>
+kanban signal resolve <SIGNAL_ID>... --reason <TEXT>
+kanban signal supersede <SIGNAL_ID>... --by <SIGNAL_ID> --reason <TEXT>
+```
+
+所有 signal 命令只通过 `kanban-client` 调用 host。record 的 JSON body 使用
+`RecordSignalRequest`；list/review/show 使用对应 typed response；四个 lifecycle 命令共享
+原子批量 review path。`--json` 输出分别遵循 `CliSignal*Output` contracts。
+
+## 11. Dependency
 
 顶层命令名为 `dep`，`dependency` 是 visible alias：
 
@@ -333,7 +352,7 @@ kanban dep remove <CHILD_TASK_SELECTOR> <PARENT_TASK_SELECTOR>
 add/remove 是 mutation，list 是 query。client 先解析两个 selector；server 负责同 board、FK、
 唯一约束和 cycle 检查。dependency create 没有额外 receipt/idempotency flag。
 
-## 11. Runs 与 events（只读）
+## 12. Runs 与 events（只读）
 
 ```text
 kanban runs <TASK_SELECTOR>
@@ -350,7 +369,7 @@ kanban events [TASK_SELECTOR] [--after <ID>] [--limit <N>]
 - `events` 可按当前 board 和 task selector 过滤，JSON 输出包含事件 `data`，但当前 CLI
   output 不保留 HTTP `meta.next_after`；事件 payload 对未知 kind 保持原 JSON。
 
-## 12. 未迁移命令与停止行为
+## 13. 未迁移命令与停止行为
 
 ```text
 kanban <未列出的旧命令>
@@ -371,7 +390,7 @@ kanban <未列出的旧命令>
 
 该路径不读取配置数据库、不创建文件、不 fallback 到 SQLite。未注册的嵌套子命令（例如
 `kanban task archive`）由 clap 在发起任何 HTTP/DB 操作前以参数错误退出 `2`；它们不使用
-runtime JSON envelope。尚未完成的 labels、signals、projection、
+runtime JSON envelope。尚未完成的 labels、projection、
 graph、vector 等顶层 surface 暂时返回 `feature_not_available`；只要该临时路径仍存在，
 对应 parity 项就不能标记完成。host 停止或端口不可达时，已迁移命令返回
 `server_unavailable`（exit code `9`），而不是切换到第二条执行路径。

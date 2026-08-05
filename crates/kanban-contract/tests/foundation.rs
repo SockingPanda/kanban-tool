@@ -299,7 +299,7 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
         .iter()
         .filter(|endpoint| endpoint.operation_id != "sse.stream-events")
         .collect::<Vec<_>>();
-    assert_eq!(endpoints.len(), 93);
+    assert_eq!(endpoints.len(), 98);
 
     for endpoint in endpoints {
         let expected_id = format!("{}.headers", endpoint.operation_id);
@@ -678,7 +678,7 @@ fn foundation_registry_contains_generated_roots() {
         .filter(|id| id.contains(":api:") && id.ends_with("-headers:v1"))
         .copied()
         .collect::<BTreeSet<_>>();
-    assert_eq!(header_roots.len(), 93);
+    assert_eq!(header_roots.len(), 98);
     actual.retain(|id| !header_roots.contains(id));
     let mut expected = BTreeSet::from([
         "urn:kanban-tool:schema:api:accept-label-proposal-body:v1",
@@ -772,6 +772,18 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:get-run-response:v1",
         "urn:kanban-tool:schema:api:get-signal-path:v1",
         "urn:kanban-tool:schema:api:get-signal-response:v1",
+        "urn:kanban-tool:schema:api:record-signal-path:v1",
+        "urn:kanban-tool:schema:api:record-signal-request:v1",
+        "urn:kanban-tool:schema:api:record-signal-response:v1",
+        "urn:kanban-tool:schema:api:confirm-signals-path:v1",
+        "urn:kanban-tool:schema:api:confirm-signals-response:v1",
+        "urn:kanban-tool:schema:api:reject-signals-path:v1",
+        "urn:kanban-tool:schema:api:reject-signals-response:v1",
+        "urn:kanban-tool:schema:api:resolve-signals-path:v1",
+        "urn:kanban-tool:schema:api:resolve-signals-response:v1",
+        "urn:kanban-tool:schema:api:supersede-signals-path:v1",
+        "urn:kanban-tool:schema:api:supersede-signals-response:v1",
+        "urn:kanban-tool:schema:api:review-signals-request:v1",
         "urn:kanban-tool:schema:api:get-task-path:v1",
         "urn:kanban-tool:schema:api:get-task-query:v1",
         "urn:kanban-tool:schema:api:get-task-response:v1",
@@ -1019,8 +1031,8 @@ fn endpoint_descriptor_catalog_is_complete_and_explicit() {
     let endpoints = endpoint_catalog();
     assert_eq!(
         endpoints.len(),
-        94,
-        "93 JSON API + 1 SSE 必须全部有 descriptor"
+        99,
+        "98 JSON API + 1 SSE 必须全部有 descriptor"
     );
     assert_eq!(
         endpoints
@@ -1790,7 +1802,7 @@ fn current_train_freeze_requires_closed_authority() {
             EndpointObligation::Excluded { .. } => excluded += 1,
         }
     }
-    assert_eq!((contract, todo, not_applicable, excluded), (325, 0, 238, 1));
+    assert_eq!((contract, todo, not_applicable, excluded), (345, 0, 248, 1));
     let unfinished_contracts = operation_inventory()
         .iter()
         .filter(|contract| {

@@ -6,10 +6,10 @@
 默认监听地址为 `http://127.0.0.1:8721`，只接受 loopback 绑定。所有产品路由的基础路径为
 `/api/v1`；健康检查是 `/health`。
 
-本文件描述当前已接入的 single-host 路由；它不是最终功能边界。task search 已通过 Turso
-FTS projection 接入，host-admin maintenance 只由 HTTP/CLI 调用，MCP 不暴露这些操作。
-labels、signals、graph、vector、context 与其他 projection 仍按 parity ledger 恢复到同一
-localhost API；旧的直接数据库路径不会恢复。
+本文件描述当前已接入的 single-host 路由；signals ledger 已通过同一 application/service
+path 接入，task search 已通过 Turso FTS projection 接入，host-admin maintenance 只由
+HTTP/CLI 调用，MCP 不暴露这些操作。labels、graph、vector、context 与其他 projection 仍按
+parity ledger 逐项恢复到同一 localhost API；旧的直接数据库路径不会恢复。
 
 ## 1. 通用契约
 
@@ -274,13 +274,41 @@ application transaction 中完成。
 
 请求为 `CreateCommentRequest`：`body` 必填；可选 `idempotency_key`、`author`、`kind`
 （wire enum 为 `note|decision|signal`）、`author_type`（`user|agent`）、`agent_type`、
-`metadata`。当前 canonical path 只接受 `note` 与 `decision`；`signal` 稳定返回
-`feature_not_available`。signals 切片必须恢复 `signal` 并保持 comment backlink。
+`metadata`。普通 comment 的 canonical path 接受 `note|decision`；signal backlink 由
+signal record 事务创建为 `kind=signal`，不绕过 comment service。
 成功返回 HTTP `201` 与 `CreateCommentResponse`（`data: ApiComment`）。idempotency key
 属于 task；相同 key/相同 payload 重放返回已有 comment，不同 payload 返回
 `idempotency_conflict`。
 
-## 7. Attachments
+## 7. Signals
+
+### `POST /api/v1/boards/{board}/signals`（mutation）
+
+请求为 `RecordSignalRequest`：`kind`、`title`、`summary` 必填；可选 `severity`、task/run/comment
+引用、actor、agent type、dedupe key、source、evidence object 和 comment body。成功返回
+HTTP `201` 与 `RecordSignalResponse`；当请求包含 task 与 comment body 时，response 同时返回
+`backlink_comment`。observation、signal、backlink comment 和事件在一个事务中提交；同一
+board 的相同 dedupe key 且 payload 相同为安全重放，payload 不同返回
+`idempotency_conflict`。
+
+### `GET /api/v1/boards/{board}/signals` 与 `/signals/review`（只读）
+
+查询参数可重复传入 `status`、`kind`，另有 `task_ref`、`include_all` 和 `limit`。list 默认只
+返回 `open|confirmed`；review 默认排除已处理状态。返回
+`MetadataEnvelope<Vec<SignalWire>, SignalFilterMeta>`。
+
+### `GET /api/v1/signals/{signal_id}`（只读）
+
+按全局 `sig_...` ID 返回 `GetSignalResponse`。
+
+### `POST /api/v1/boards/{board}/signals/{confirm|reject|resolve|supersede}`（mutation）
+
+请求为 `ReviewSignalsRequest`：`signal_ids` 与 `reason` 必填；supersede 额外需要
+`replacement_signal_id`（CLI/MCP 使用 `--by`/`by`）。批量 transition 校验同一 board、合法
+状态迁移和 supersede 环；更新 signal、backlink metadata 与 `signal.reviewed` events 原子
+提交，返回 `DataEnvelope<Vec<SignalWire>>`。
+
+## 8. Attachments
 
 ### `GET /api/v1/tasks/{task_id}/attachments`（只读）
 
@@ -309,7 +337,7 @@ metadata 指向的文件缺失或校验失败返回 storage error。
 canonical path；成功返回 `DeleteAttachmentResponse`。列表/下载/删除均按 task id 与 board-scoped
 metadata 查询，不能跨 task 读取文件。
 
-## 8. Steps 与 execution plan
+## 9. Steps 与 execution plan
 
 ### `GET /api/v1/tasks/{task_id}/steps`（只读）
 
@@ -327,7 +355,7 @@ metadata 查询，不能跨 task 读取文件。
 请求可更新 `title`、`body`、`linked_task_ref`/`unlink_task`、`position`、`required`、
 `actor`；不改变 step status。返回 `UpdateStepResponse`（同一 `ApiTaskSteps` 形状）。
 
-## 9. Dependencies
+## 10. Dependencies
 
 ### `GET /api/v1/tasks/{task_id}/dependencies`（只读）
 
@@ -344,7 +372,7 @@ cycle 拒绝。
 删除同一 board 的 parent edge，返回 `RemoveDependencyResponse`（当前 dependencies 快照）。
 目标 task 存在但 edge 已不存在时是成功 no-op，不追加 remove event。
 
-## 10. Runs 与 log（run 不是独立 mutation surface）
+## 11. Runs 与 log（run 不是独立 mutation surface）
 
 run 只能由 task claim 创建，并由 heartbeat/release/review/complete/block 同事务更新。HTTP
 没有 run create/update endpoint；以下全部是只读查询。
@@ -364,7 +392,7 @@ run 只能由 task claim 创建，并由 heartbeat/release/review/complete/block
 typed client 不发送 `tail` query，服务端也不会把未知 query 解释为可配置读取范围；没有
 任意文件路径输入或第二种 log 协议。
 
-## 11. Events
+## 12. Events
 
 ### `GET /api/v1/events`
 
@@ -375,9 +403,9 @@ known event kind 使用 typed payload；未知 kind 保留原 JSON payload，不
 
 event list 是只读；所有 mutation 通过 ApplicationService 写 canonical event。
 
-## 12. 停止路径
+## 13. 停止路径
 
 服务停止后，client 返回 `server_unavailable`，不得 fallback 到嵌入式数据库、旧 SQLite
-路径或另一个 host。迁移期间尚未接通的 labels/signals 等命令暂时返回
+路径或另一个 host。迁移期间尚未接通的 labels、graph、vector 等命令暂时返回
 `feature_not_available`，不会触碰数据库；只要该临时响应仍存在，对应 parity 项就不能
 标记完成。maintenance 路由不属于该临时路径。

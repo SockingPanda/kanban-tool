@@ -1,0 +1,1 @@
+{"kind":"failure","title":"Observed failure","summary":"The worker failed","severity":"error","task_ref":"fixture#1","task_id":"t_fixture","run_id":null,"comment_id":null,"actor":"fixture","agent_type":"worker","dedupe_key":"failure:fixture","source":"test","evidence":{"exit_code":1},"comment":{"body":"Investigate this failure"}}

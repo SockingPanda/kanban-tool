@@ -3611,6 +3611,156 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         &[]
     ),
     generated_api_contract!(
+        "api.record-signal.path",
+        "POST /api/v1/boards/:board/signals path",
+        "POST /api/v1/boards/:board/signals",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:record-signal-path:v1",
+        "schemas/fixtures/api/record-signal-path.v1.valid.json",
+        HttpTransportLocation::Path,
+        BOARD_PATH_PARAMETERS
+    ),
+    generated_api_contract!(
+        "api.record-signal.request",
+        "POST /api/v1/boards/:board/signals request",
+        "POST /api/v1/boards/:board/signals",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:record-signal-request:v1",
+        "schemas/fixtures/api/record-signal-request.v1.valid.json",
+        HttpTransportLocation::Body,
+        &[]
+    ),
+    generated_api_contract!(
+        "api.record-signal.response",
+        "POST /api/v1/boards/:board/signals success",
+        "POST /api/v1/boards/:board/signals",
+        ContractDirection::Serialize,
+        "urn:kanban-tool:schema:api:record-signal-response:v1",
+        "schemas/fixtures/api/record-signal-response.v1.valid.json",
+        HttpTransportLocation::Success,
+        &[]
+    ),
+    generated_api_contract!(
+        "api.confirm-signals.path",
+        "POST /api/v1/boards/:board/signals/confirm path",
+        "POST /api/v1/boards/:board/signals/confirm",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:confirm-signals-path:v1",
+        "schemas/fixtures/api/confirm-signals-path.v1.valid.json",
+        HttpTransportLocation::Path,
+        BOARD_PATH_PARAMETERS
+    ),
+    generated_api_contract!(
+        "api.confirm-signals.request",
+        "POST /api/v1/boards/:board/signals/confirm request",
+        "POST /api/v1/boards/:board/signals/confirm",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:review-signals-request:v1",
+        "schemas/fixtures/api/review-signals-request.v1.valid.json",
+        HttpTransportLocation::Body,
+        &[]
+    ),
+    generated_api_contract!(
+        "api.confirm-signals.response",
+        "POST /api/v1/boards/:board/signals/confirm success",
+        "POST /api/v1/boards/:board/signals/confirm",
+        ContractDirection::Serialize,
+        "urn:kanban-tool:schema:api:confirm-signals-response:v1",
+        "schemas/fixtures/api/confirm-signals-response.v1.valid.json",
+        HttpTransportLocation::Success,
+        &[]
+    ),
+    generated_api_contract!(
+        "api.reject-signals.path",
+        "POST /api/v1/boards/:board/signals/reject path",
+        "POST /api/v1/boards/:board/signals/reject",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:reject-signals-path:v1",
+        "schemas/fixtures/api/reject-signals-path.v1.valid.json",
+        HttpTransportLocation::Path,
+        BOARD_PATH_PARAMETERS
+    ),
+    generated_api_contract!(
+        "api.reject-signals.request",
+        "POST /api/v1/boards/:board/signals/reject request",
+        "POST /api/v1/boards/:board/signals/reject",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:review-signals-request:v1",
+        "schemas/fixtures/api/review-signals-request.v1.valid.json",
+        HttpTransportLocation::Body,
+        &[]
+    ),
+    generated_api_contract!(
+        "api.reject-signals.response",
+        "POST /api/v1/boards/:board/signals/reject success",
+        "POST /api/v1/boards/:board/signals/reject",
+        ContractDirection::Serialize,
+        "urn:kanban-tool:schema:api:reject-signals-response:v1",
+        "schemas/fixtures/api/reject-signals-response.v1.valid.json",
+        HttpTransportLocation::Success,
+        &[]
+    ),
+    generated_api_contract!(
+        "api.resolve-signals.path",
+        "POST /api/v1/boards/:board/signals/resolve path",
+        "POST /api/v1/boards/:board/signals/resolve",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:resolve-signals-path:v1",
+        "schemas/fixtures/api/resolve-signals-path.v1.valid.json",
+        HttpTransportLocation::Path,
+        BOARD_PATH_PARAMETERS
+    ),
+    generated_api_contract!(
+        "api.resolve-signals.request",
+        "POST /api/v1/boards/:board/signals/resolve request",
+        "POST /api/v1/boards/:board/signals/resolve",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:review-signals-request:v1",
+        "schemas/fixtures/api/review-signals-request.v1.valid.json",
+        HttpTransportLocation::Body,
+        &[]
+    ),
+    generated_api_contract!(
+        "api.resolve-signals.response",
+        "POST /api/v1/boards/:board/signals/resolve success",
+        "POST /api/v1/boards/:board/signals/resolve",
+        ContractDirection::Serialize,
+        "urn:kanban-tool:schema:api:resolve-signals-response:v1",
+        "schemas/fixtures/api/resolve-signals-response.v1.valid.json",
+        HttpTransportLocation::Success,
+        &[]
+    ),
+    generated_api_contract!(
+        "api.supersede-signals.path",
+        "POST /api/v1/boards/:board/signals/supersede path",
+        "POST /api/v1/boards/:board/signals/supersede",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:supersede-signals-path:v1",
+        "schemas/fixtures/api/supersede-signals-path.v1.valid.json",
+        HttpTransportLocation::Path,
+        BOARD_PATH_PARAMETERS
+    ),
+    generated_api_contract!(
+        "api.supersede-signals.request",
+        "POST /api/v1/boards/:board/signals/supersede request",
+        "POST /api/v1/boards/:board/signals/supersede",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:review-signals-request:v1",
+        "schemas/fixtures/api/review-signals-request.v1.valid.json",
+        HttpTransportLocation::Body,
+        &[]
+    ),
+    generated_api_contract!(
+        "api.supersede-signals.response",
+        "POST /api/v1/boards/:board/signals/supersede success",
+        "POST /api/v1/boards/:board/signals/supersede",
+        ContractDirection::Serialize,
+        "urn:kanban-tool:schema:api:supersede-signals-response:v1",
+        "schemas/fixtures/api/supersede-signals-response.v1.valid.json",
+        HttpTransportLocation::Success,
+        &[]
+    ),
+    generated_api_contract!(
         "api.bootstrap-task-label.path",
         "POST /api/v1/tasks/:task_id/labels/bootstrap path",
         "POST /api/v1/tasks/:task_id/labels/bootstrap",
@@ -5420,7 +5570,7 @@ macro_rules! phase5_api_request_contract {
     };
 }
 
-const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 48] = [
+const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 58] = [
     phase5_api_request_contract!(
         "api.list-board-labels.path",
         list_board_labels_request_fixture_reaches_handler
@@ -5500,6 +5650,46 @@ const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 48] = [
     phase5_api_request_contract!(
         "api.get-signal.path",
         get_signal_request_fixture_reaches_handler
+    ),
+    phase5_api_request_contract!(
+        "api.record-signal.path",
+        record_signal_request_fixtures_reach_handler
+    ),
+    phase5_api_request_contract!(
+        "api.record-signal.request",
+        record_signal_request_fixtures_reach_handler
+    ),
+    phase5_api_request_contract!(
+        "api.confirm-signals.path",
+        confirm_signals_request_fixtures_reach_handler
+    ),
+    phase5_api_request_contract!(
+        "api.confirm-signals.request",
+        confirm_signals_request_fixtures_reach_handler
+    ),
+    phase5_api_request_contract!(
+        "api.reject-signals.path",
+        reject_signals_request_fixtures_reach_handler
+    ),
+    phase5_api_request_contract!(
+        "api.reject-signals.request",
+        reject_signals_request_fixtures_reach_handler
+    ),
+    phase5_api_request_contract!(
+        "api.resolve-signals.path",
+        resolve_signals_request_fixtures_reach_handler
+    ),
+    phase5_api_request_contract!(
+        "api.resolve-signals.request",
+        resolve_signals_request_fixtures_reach_handler
+    ),
+    phase5_api_request_contract!(
+        "api.supersede-signals.path",
+        supersede_signals_request_fixtures_reach_handler
+    ),
+    phase5_api_request_contract!(
+        "api.supersede-signals.request",
+        supersede_signals_request_fixtures_reach_handler
     ),
     phase5_api_request_contract!(
         "api.bootstrap-task-label.path",
@@ -5615,7 +5805,7 @@ const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 48] = [
     ),
 ];
 
-const PHASE5_API_RESPONSE_CONTRACTS: [(&str, &str); 27] = [
+const PHASE5_API_RESPONSE_CONTRACTS: [(&str, &str); 32] = [
     (
         "api.list-board-labels.response",
         "suite::api_generated_adoption::generated_empty_collection_responses_are_produced_by_real_router",
@@ -5667,6 +5857,26 @@ const PHASE5_API_RESPONSE_CONTRACTS: [(&str, &str); 27] = [
     (
         "api.get-signal.response",
         "suite::api_generated_adoption::generated_generic_signal_response_is_produced_by_real_router",
+    ),
+    (
+        "api.record-signal.response",
+        "suite::api_generated_adoption::generated_signal_record_response_is_produced_by_real_router",
+    ),
+    (
+        "api.confirm-signals.response",
+        "suite::api_generated_adoption::generated_signal_action_responses_are_produced_by_real_router",
+    ),
+    (
+        "api.reject-signals.response",
+        "suite::api_generated_adoption::generated_signal_action_responses_are_produced_by_real_router",
+    ),
+    (
+        "api.resolve-signals.response",
+        "suite::api_generated_adoption::generated_signal_action_responses_are_produced_by_real_router",
+    ),
+    (
+        "api.supersede-signals.response",
+        "suite::api_generated_adoption::generated_signal_action_responses_are_produced_by_real_router",
     ),
     (
         "api.bootstrap-task-label.response",

@@ -30,32 +30,37 @@ use crate::{
     CliTaskStepRemoveOutput, CliTaskStepReopenOutput, CliTaskStepSkipOutput,
     CliTaskStepUpdateOutput, CliTaskUnblockOutput, CliTaskUpdateOutput, CliVacuumOutput,
     CompleteStepPath, CompleteStepRequest, CompleteStepResponse, CompleteTaskPath,
-    CompleteTaskRequest, CompleteTaskResponse, ContractDirection, ContractStrictness,
+    CompleteTaskRequest, CompleteTaskResponse, ConfirmSignalsResponse, ContractDirection,
+    ContractStrictness,
     CreateAttachmentPath, CreateAttachmentRequest, CreateAttachmentResponse, CreateBoardRequest,
     CreateBoardResponse, CreateCommentPath, CreateCommentRequest, CreateCommentResponse,
     CreateStepPath, CreateStepRequest, CreateStepResponse, CreateTaskPath, CreateTaskRequest,
     CreateTaskResponse, DecisionMetadata, DeleteAttachmentPath, DeleteAttachmentResponse,
     DeleteResponse, DoctorResponse, ErrorEnvelope, GetBoardPath, GetBoardResponse, GetRunLogPath,
-    GetRunLogResponse, GetRunPath, GetRunResponse, GetTaskPath, GetTaskQuery, GetTaskResponse,
+    GetRunLogResponse, GetRunPath, GetRunResponse, GetSignalResponse, GetTaskPath, GetTaskQuery,
+    GetTaskResponse,
     HealthResponse, HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse,
     LabelOntologySignalsResponse, ListAttachmentsPath, ListAttachmentsResponse,
     ListBoardColumnsPath, ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse,
     ListCommentsPath, ListCommentsResponse, ListDependenciesPath, ListDependenciesResponse,
-    ListEventsResponse, ListRunsPath, ListRunsResponse, ListStepsPath, ListStepsResponse,
+    ListEventsResponse, ListRunsPath, ListRunsResponse, ListSignalsResponse, ListStepsPath,
+    ListStepsResponse,
     ListTaskLabelsPath, ListTaskLabelsResponse, ListTasksByStatusPath, ListTasksByStatusQuery,
     ListTasksByStatusResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
     MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
-    ReclaimTaskPath, ReclaimTaskRequest, ReclaimTaskResponse, ReleaseTaskPath, ReleaseTaskRequest,
+    ReclaimTaskPath, ReclaimTaskRequest, ReclaimTaskResponse, RecordSignalRequest,
+    RecordSignalResponse, RejectSignalsResponse, ReleaseTaskPath, ReleaseTaskRequest,
     ReleaseTaskResponse, RemoveDependencyPath, RemoveDependencyResponse, RemoveStepPath,
     RemoveStepResponse, RemoveTaskLabelPath, RemoveTaskLabelResponse, ReopenStepPath,
     ReopenStepRequest, ReopenStepResponse, ReopenTaskPath, ReopenTaskRequest, ReopenTaskResponse,
-    SkipStepPath, SkipStepRequest, SkipStepResponse, SpecifyTaskPath, SpecifyTaskRequest,
-    SpecifyTaskResponse, StreamEventData, StreamEventsQuery, SubmitReviewTaskPath,
-    SubmitReviewTaskRequest, SubmitReviewTaskResponse, TaskNeighborhoodPath, TaskNeighborhoodQuery,
-    TaskNeighborhoodResponse, UnblockTaskPath, UnblockTaskRequest, UnblockTaskResponse,
-    UpdateStepPath, UpdateStepRequest, UpdateStepResponse, UpdateTaskPath, UpdateTaskRequest,
-    UpdateTaskResponse,
+    ResolveSignalsResponse, ReviewSignalsRequest, ReviewSignalsResponse, SkipStepPath,
+    SkipStepRequest, SkipStepResponse, SpecifyTaskPath, SpecifyTaskRequest, SpecifyTaskResponse,
+    StreamEventData, StreamEventsQuery, SubmitReviewTaskPath, SubmitReviewTaskRequest,
+    SubmitReviewTaskResponse, SupersedeSignalsResponse, TaskNeighborhoodPath,
+    TaskNeighborhoodQuery, TaskNeighborhoodResponse, UnblockTaskPath, UnblockTaskRequest,
+    UnblockTaskResponse, UpdateStepPath, UpdateStepRequest, UpdateStepResponse, UpdateTaskPath,
+    UpdateTaskRequest, UpdateTaskResponse,
 };
 
 use crate::{
@@ -2788,6 +2793,69 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         GetSignalResponse
     ),
     request_schema_root!(
+        "urn:kanban-tool:schema:api:record-signal-request:v1",
+        "api/record-signal-request.v1.schema.json",
+        "Record signal request v1",
+        "api.record-signal.request",
+        "schemas/fixtures/api/record-signal-request.v1.valid.json",
+        "schemas/fixtures/api/record-signal-request.v1.invalid.json",
+        RecordSignalRequest
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:record-signal-response:v1",
+        "api/record-signal-response.v1.schema.json",
+        "Record signal response v1",
+        "api.record-signal.response",
+        "schemas/fixtures/api/record-signal-response.v1.valid.json",
+        "schemas/fixtures/api/record-signal-response.v1.invalid.json",
+        RecordSignalResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:review-signals-request:v1",
+        "api/review-signals-request.v1.schema.json",
+        "Review signals request v1",
+        "api.review-signals.request",
+        "schemas/fixtures/api/review-signals-request.v1.valid.json",
+        "schemas/fixtures/api/review-signals-request.v1.invalid.json",
+        ReviewSignalsRequest
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:confirm-signals-response:v1",
+        "api/confirm-signals-response.v1.schema.json",
+        "Confirm signals response v1",
+        "api.confirm-signals.response",
+        "schemas/fixtures/api/confirm-signals-response.v1.valid.json",
+        "schemas/fixtures/api/confirm-signals-response.v1.invalid.json",
+        ConfirmSignalsResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:reject-signals-response:v1",
+        "api/reject-signals-response.v1.schema.json",
+        "Reject signals response v1",
+        "api.reject-signals.response",
+        "schemas/fixtures/api/reject-signals-response.v1.valid.json",
+        "schemas/fixtures/api/reject-signals-response.v1.invalid.json",
+        RejectSignalsResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:resolve-signals-response:v1",
+        "api/resolve-signals-response.v1.schema.json",
+        "Resolve signals response v1",
+        "api.resolve-signals.response",
+        "schemas/fixtures/api/resolve-signals-response.v1.valid.json",
+        "schemas/fixtures/api/resolve-signals-response.v1.invalid.json",
+        ResolveSignalsResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:supersede-signals-response:v1",
+        "api/supersede-signals-response.v1.schema.json",
+        "Supersede signals response v1",
+        "api.supersede-signals.response",
+        "schemas/fixtures/api/supersede-signals-response.v1.valid.json",
+        "schemas/fixtures/api/supersede-signals-response.v1.invalid.json",
+        SupersedeSignalsResponse
+    ),
+    request_schema_root!(
         "urn:kanban-tool:schema:api:bootstrap-task-label-request:v1",
         "api/bootstrap-task-label-request.v1.schema.json",
         "Bootstrap task label request v1",
@@ -3272,6 +3340,51 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/api/get-signal-path.v1.valid.json",
         "schemas/fixtures/api/get-signal-path.v1.invalid.json",
         SignalPath
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:record-signal-path:v1",
+        "api/record-signal-path.v1.schema.json",
+        "Record Signal Path v1",
+        "api.record-signal.path",
+        "schemas/fixtures/api/record-signal-path.v1.valid.json",
+        "schemas/fixtures/api/record-signal-path.v1.invalid.json",
+        BoardLabelPath
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:confirm-signals-path:v1",
+        "api/confirm-signals-path.v1.schema.json",
+        "Confirm Signals Path v1",
+        "api.confirm-signals.path",
+        "schemas/fixtures/api/confirm-signals-path.v1.valid.json",
+        "schemas/fixtures/api/confirm-signals-path.v1.invalid.json",
+        BoardLabelPath
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:reject-signals-path:v1",
+        "api/reject-signals-path.v1.schema.json",
+        "Reject Signals Path v1",
+        "api.reject-signals.path",
+        "schemas/fixtures/api/reject-signals-path.v1.valid.json",
+        "schemas/fixtures/api/reject-signals-path.v1.invalid.json",
+        BoardLabelPath
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:resolve-signals-path:v1",
+        "api/resolve-signals-path.v1.schema.json",
+        "Resolve Signals Path v1",
+        "api.resolve-signals.path",
+        "schemas/fixtures/api/resolve-signals-path.v1.valid.json",
+        "schemas/fixtures/api/resolve-signals-path.v1.invalid.json",
+        BoardLabelPath
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:supersede-signals-path:v1",
+        "api/supersede-signals-path.v1.schema.json",
+        "Supersede Signals Path v1",
+        "api.supersede-signals.path",
+        "schemas/fixtures/api/supersede-signals-path.v1.valid.json",
+        "schemas/fixtures/api/supersede-signals-path.v1.invalid.json",
+        BoardLabelPath
     ),
 ];
 

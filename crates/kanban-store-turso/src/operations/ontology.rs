@@ -1276,6 +1276,23 @@ impl TursoStore {
                     task_snapshot, agent_candidates, suggestion_snapshot, signal_fingerprint
                 ))
             });
+        {
+            let connection = self.connection().await?;
+            let existing = first_row(
+                connection
+                    .query(
+                        "SELECT id FROM label_ontology_observations WHERE board_id=:board AND capture_fingerprint=:fingerprint LIMIT 1",
+                        [ (":board", board_id.as_str()), (":fingerprint", capture.as_str()) ],
+                    )
+                    .await?,
+            )
+            .await
+            .ok();
+            if let Some(row) = existing {
+                let observation_id = text_value(row.get_value(0)?, "observations.id")?;
+                return self.observation_by_id(&board_id, &observation_id).await;
+            }
+        }
         let mut resolved_targets = Vec::with_capacity(input.signals.len());
         for signal in &input.signals {
             resolved_targets.push(match signal.target_label_ref.as_deref() {

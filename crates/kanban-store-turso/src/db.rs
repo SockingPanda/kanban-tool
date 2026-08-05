@@ -61,6 +61,24 @@ impl TursoStore {
         self.initialize_with_backup_hook(None).await
     }
 
+    /// 将旧 SQLite v30 逻辑导入当前 Turso canonical 数据库。
+    #[cfg(feature = "legacy-sqlite-import")]
+    pub async fn import_legacy_sqlite_v30(
+        &self,
+        options: crate::legacy_import::LegacyImportOptions,
+    ) -> Result<crate::legacy_import::LegacyImportResult, StoreError> {
+        crate::legacy_import::import_into_store(self, options).await
+    }
+
+    /// `import_legacy_sqlite_v30` 的简短别名，供 host 管理 operation 使用。
+    #[cfg(feature = "legacy-sqlite-import")]
+    pub async fn import_legacy_sqlite(
+        &self,
+        options: crate::legacy_import::LegacyImportOptions,
+    ) -> Result<crate::legacy_import::LegacyImportResult, StoreError> {
+        self.import_legacy_sqlite_v30(options).await
+    }
+
     /// 使用可选的升级前备份 hook 初始化。没有升级时不会调用 hook。
     pub async fn initialize_with_backup_hook(
         &self,
@@ -192,5 +210,10 @@ impl TursoStore {
         let connection = self.database.connect()?;
         connection.execute("PRAGMA foreign_keys = ON", ()).await?;
         Ok(connection)
+    }
+
+    #[cfg(feature = "legacy-sqlite-import")]
+    pub(crate) fn database_path(&self) -> &Path {
+        self.path.as_ref()
     }
 }

@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use kanban_core::{Board, TaskStatus};
 use serde::{Deserialize, Serialize};
 
@@ -29,92 +27,6 @@ pub enum ExecutionPlanState {
     Unplanned,
     Planned,
     NotRequired,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CreateTaskCommand {
-    pub task_id: String,
-    pub board: String,
-    pub idempotency_key: Option<String>,
-    pub title: String,
-    pub description: Option<String>,
-    pub requested_status: Option<TaskStatus>,
-    pub assignee: Option<String>,
-    pub priority: i64,
-    pub scheduled_at: Option<i64>,
-    pub due_at: Option<i64>,
-    pub max_retries: Option<i64>,
-    pub metadata: BTreeMap<String, serde_json::Value>,
-    pub actor: String,
-}
-
-/// Canonicalized input passed from the application service to persistence.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CreateTaskRecord {
-    pub id: String,
-    pub idempotency_key: Option<String>,
-    pub title: String,
-    pub description: Option<String>,
-    pub status: TaskStatus,
-    pub assignee: Option<String>,
-    pub priority: i64,
-    pub scheduled_at: Option<i64>,
-    pub due_at: Option<i64>,
-    pub max_retries: Option<i64>,
-    pub metadata_json: String,
-    pub created_by: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MarkExecutionPlanNotRequiredCommand {
-    pub task_id: String,
-    pub reason: String,
-    pub actor: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MarkExecutionPlanNotRequiredRecord {
-    pub reason: String,
-    pub actor: String,
-    pub event_id: String,
-    pub updated_at: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PromoteTaskCommand {
-    pub task_id: String,
-    pub actor: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PromoteTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub event_id: String,
-    pub updated_at: i64,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ClaimTaskCommand {
-    pub task_id: String,
-    pub actor: String,
-    pub ttl_ms: i64,
-    pub worker_profile: Option<String>,
-    pub metadata: serde_json::Value,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ClaimTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub claim_token: String,
-    pub run_id: String,
-    pub event_id: String,
-    pub worker_profile: String,
-    pub metadata_json: String,
-    pub log_path: Option<String>,
-    pub now: i64,
-    pub claim_expires_at: i64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,115 +67,6 @@ pub struct ClaimRecord {
     pub claim_expires_at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HeartbeatTaskCommand {
-    pub task_id: String,
-    pub actor: String,
-    pub claim_token: String,
-    pub ttl_ms: i64,
-    pub note: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HeartbeatTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub claim_token: String,
-    pub event_id: String,
-    pub note: Option<String>,
-    pub now: i64,
-    pub claim_expires_at: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReleaseTaskCommand {
-    pub task_id: String,
-    pub actor: String,
-    pub claim_token: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReleaseTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub claim_token: String,
-    pub event_id: String,
-    pub now: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReclaimExpiredTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub event_id: String,
-    pub target_status: TaskStatus,
-    pub retry_count: i64,
-    pub reason: String,
-    pub now: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubmitReviewTaskCommand {
-    pub task_id: String,
-    pub actor: String,
-    pub claim_token: Option<String>,
-    pub force: bool,
-    pub summary: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubmitReviewTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub claim_token: Option<String>,
-    pub force: bool,
-    pub summary: Option<String>,
-    pub event_id: String,
-    pub now: i64,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CompleteTaskCommand {
-    pub task_id: String,
-    pub actor: String,
-    pub claim_token: Option<String>,
-    pub force: bool,
-    pub summary: Option<String>,
-    pub result: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CompleteTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub claim_token: Option<String>,
-    pub force: bool,
-    pub summary: Option<String>,
-    pub result_json: Option<String>,
-    pub event_id: String,
-    pub now: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlockTaskCommand {
-    pub task_id: String,
-    pub actor: String,
-    pub reason: String,
-    pub claim_token: Option<String>,
-    pub force: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BlockTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub reason: String,
-    pub claim_token: Option<String>,
-    pub force: bool,
-    pub event_id: String,
-    pub now: i64,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CommentKind {
@@ -298,32 +101,6 @@ impl CommentAuthorType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct CreateCommentCommand {
-    pub task_id: String,
-    pub idempotency_key: Option<String>,
-    pub author: String,
-    pub author_type: CommentAuthorType,
-    pub agent_type: Option<String>,
-    pub body: String,
-    pub kind: CommentKind,
-    pub metadata: BTreeMap<String, serde_json::Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CreateCommentRecord {
-    pub id: String,
-    pub idempotency_key: Option<String>,
-    pub author: String,
-    pub author_type: CommentAuthorType,
-    pub agent_type: Option<String>,
-    pub body: String,
-    pub kind: CommentKind,
-    pub metadata_json: String,
-    pub event_id: String,
-    pub created_at: i64,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommentRecord {
     pub id: String,
@@ -339,23 +116,6 @@ pub struct CommentRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AddDependencyCommand {
-    pub child_task_id: String,
-    pub parent_task_id: String,
-    pub actor: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AddDependencyRecord {
-    pub expected_child_lock_version: i64,
-    pub target_child_status: TaskStatus,
-    pub actor: String,
-    pub event_id: String,
-    pub recompute_event_id: String,
-    pub now: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DependencyEdgeRecord {
     pub parent: TaskRecord,
     pub child: TaskRecord,
@@ -367,87 +127,6 @@ pub struct DependencySnapshotRecord {
     pub parents: Vec<TaskRecord>,
     pub children: Vec<TaskRecord>,
     pub edges: Vec<DependencyEdgeRecord>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AddDependencyResult {
-    pub added: bool,
-    pub dependencies: DependencySnapshotRecord,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RemoveDependencyCommand {
-    pub child_task_id: String,
-    pub parent_task_id: String,
-    pub actor: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RemoveDependencyResult {
-    pub removed: bool,
-    pub dependencies: DependencySnapshotRecord,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct CreateStepCommand {
-    pub task_id: String,
-    pub idempotency_key: Option<String>,
-    pub title: String,
-    pub body: Option<String>,
-    pub linked_task_id: Option<String>,
-    pub position: Option<i64>,
-    pub required: bool,
-    pub actor: String,
-}
-
-/// Canonicalized step mutation passed from the application service to the
-/// Turso store. The expected task facts keep the transaction CAS-guarded even
-/// if another caller changes the parent between the application read and the
-/// store mutation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CreateStepRecord {
-    pub id: String,
-    pub idempotency_key: Option<String>,
-    pub title: String,
-    pub body: Option<String>,
-    pub linked_task_id: Option<String>,
-    pub position: Option<i64>,
-    pub required: bool,
-    pub created_by: String,
-    pub event_id: String,
-    pub plan_event_id: String,
-    pub recompute_event_id: String,
-    pub created_at: i64,
-    pub expected_lock_version: i64,
-    pub expected_plan_state: ExecutionPlanState,
-    pub target_status: TaskStatus,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct UpdateStepCommand {
-    pub task_id: String,
-    pub step_id: String,
-    pub title: Option<String>,
-    pub body: Option<String>,
-    pub linked_task_id: Option<String>,
-    pub unlink_task: bool,
-    pub position: Option<i64>,
-    pub required: Option<bool>,
-    pub actor: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UpdateStepRecord {
-    pub title: Option<String>,
-    pub body: Option<String>,
-    pub linked_task_id: Option<String>,
-    pub unlink_task: bool,
-    pub position: Option<i64>,
-    pub required: Option<bool>,
-    pub updated_by: String,
-    pub event_id: String,
-    pub updated_at: i64,
-    pub expected_lock_version: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -527,53 +206,16 @@ pub struct TaskRecord {
     pub optional_step_count: i64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TaskPlanFilter {
-    PlanNeeded,
-    HasSteps,
-    IncompleteRequiredSteps,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum TaskListSort {
-    Seq,
-    SeqDesc,
-    Title,
-    TitleDesc,
-    Status,
-    StatusDesc,
-    #[default]
-    Position,
-    PositionDesc,
-    Priority,
-    PriorityDesc,
-    Assignee,
-    AssigneeDesc,
-    ScheduledAt,
-    ScheduledAtDesc,
-    DueAt,
-    DueAtDesc,
-    CreatedAt,
-    CreatedAtDesc,
-    UpdatedAt,
-    UpdatedAtDesc,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskListOptions {
-    pub statuses: Vec<TaskStatus>,
-    pub priorities: Vec<i64>,
-    pub plan_filters: Vec<TaskPlanFilter>,
-    pub assignee: Option<String>,
-    pub query: Option<String>,
-    pub include_archived: bool,
-    pub limit: usize,
-    pub offset: usize,
-    pub sort: TaskListSort,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TaskListPage {
-    pub tasks: Vec<TaskRecord>,
-    pub total: usize,
-}
+// Compatibility facade for callers that historically imported all DTOs from
+// `kanban_application::dto`. Definitions now live next to their operation.
+pub use crate::operations::{
+    AddDependencyCommand, AddDependencyRecord, AddDependencyResult, BlockTaskCommand,
+    BlockTaskRecord, ClaimTaskCommand, ClaimTaskRecord, CompleteTaskCommand, CompleteTaskRecord,
+    CreateCommentCommand, CreateCommentRecord, CreateStepCommand, CreateStepRecord,
+    CreateTaskCommand, CreateTaskRecord, HeartbeatTaskCommand, HeartbeatTaskRecord,
+    MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord, PromoteTaskCommand,
+    PromoteTaskRecord, ReclaimExpiredTaskRecord, ReleaseTaskCommand, ReleaseTaskRecord,
+    RemoveDependencyCommand, RemoveDependencyResult, SubmitReviewTaskCommand,
+    SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskListSort, TaskPlanFilter,
+    UpdateStepCommand, UpdateStepRecord,
+};

@@ -5,6 +5,7 @@
 //! storage handle; they reach it through the localhost API.
 
 pub mod dto;
+pub mod operations;
 pub mod ports;
 pub mod service;
 

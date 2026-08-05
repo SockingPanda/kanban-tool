@@ -859,6 +859,51 @@
   },
   {
     "contracts": [
+      "api.list-attachments.path",
+      "api.list-attachments.headers",
+      "api.list-attachments.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/tasks/:task_id/attachments",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.create-attachment.path",
+      "api.create-attachment.headers",
+      "api.create-attachment.request",
+      "api.create-attachment.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/tasks/:task_id/attachments",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.download-attachment.path",
+      "api.download-attachment.headers",
+      "api.download-attachment.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.delete-attachment.path",
+      "api.delete-attachment.headers",
+      "api.delete-attachment.response"
+    ],
+    "exclusion": null,
+    "key": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
       "api.get-stats.query",
       "api.get-stats.headers",
       "api.get-stats.response"
@@ -1082,6 +1127,40 @@
     "exclusion": null,
     "key": "comment list",
     "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.attachment-add.output"
+    ],
+    "exclusion": null,
+    "key": "attachment add",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.attachment-list.output"
+    ],
+    "exclusion": null,
+    "key": "attachment list",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.attachment-remove.output"
+    ],
+    "exclusion": null,
+    "key": "attachment remove",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "附件下载输出是原始 bytes 文件，不是 JSON machine envelope",
+    "key": "attachment download",
+    "migration": "excluded",
     "surface": "cli"
   },
   {

@@ -1,3 +1,4 @@
+mod attachments;
 mod boards;
 mod comments;
 mod dependencies;
@@ -20,6 +21,7 @@ pub(crate) fn router(state: AppState) -> Router {
     Router::new()
         .merge(health::router())
         .merge(boards::router())
+        .merge(attachments::router())
         .merge(tasks::router())
         .merge(comments::router())
         .merge(dependencies::router())

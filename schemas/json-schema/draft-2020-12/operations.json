@@ -20558,6 +20558,202 @@
   {
     "adoption": {
       "consumer": {
+        "contract_id": "api.list-attachments.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "GET /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.list-attachments.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "GET /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-attachments.headers",
+    "migration": "adopted",
+    "operation": "GET /api/v1/tasks/:task_id/attachments",
+    "path": "GET /api/v1/tasks/:task_id/attachments headers",
+    "schema_id": "urn:kanban-tool:schema:api:list-attachments-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/tasks/:task_id/attachments",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.create-attachment.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "POST /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.create-attachment.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "POST /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-attachment.headers",
+    "migration": "adopted",
+    "operation": "POST /api/v1/tasks/:task_id/attachments",
+    "path": "POST /api/v1/tasks/:task_id/attachments headers",
+    "schema_id": "urn:kanban-tool:schema:api:create-attachment-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/tasks/:task_id/attachments",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.download-attachment.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.download-attachment.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.download-attachment.headers",
+    "migration": "adopted",
+    "operation": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+    "path": "GET /api/v1/tasks/:task_id/attachments/:attachment_id headers",
+    "schema_id": "urn:kanban-tool:schema:api:download-attachment-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.delete-attachment.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.delete-attachment.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-actor-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.delete-attachment.headers",
+    "migration": "adopted",
+    "operation": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+    "path": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id headers",
+    "schema_id": "urn:kanban-tool:schema:api:delete-attachment-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
         "contract_id": "api.get-stats.headers",
         "direction": "deserialize",
         "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
@@ -21059,6 +21255,517 @@
           "name": "Accept-Language"
         }
       ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.list-attachments.path",
+        "direction": "deserialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "GET /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.list-attachments.path",
+        "direction": "deserialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "GET /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/list-attachments-path.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-attachments-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-attachments.path",
+    "migration": "adopted",
+    "operation": "GET /api/v1/tasks/:task_id/attachments",
+    "path": "GET /api/v1/tasks/:task_id/attachments path",
+    "schema_id": "urn:kanban-tool:schema:api:list-attachments-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/tasks/:task_id/attachments",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "task_id"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.list-attachments.response",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "GET /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.list-attachments.response",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "GET /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/list-attachments-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-attachments-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-attachments.response",
+    "migration": "adopted",
+    "operation": "GET /api/v1/tasks/:task_id/attachments",
+    "path": "GET /api/v1/tasks/:task_id/attachments success",
+    "schema_id": "urn:kanban-tool:schema:api:list-attachments-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/tasks/:task_id/attachments",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.create-attachment.path",
+        "direction": "deserialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "POST /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.create-attachment.path",
+        "direction": "deserialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "POST /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/create-attachment-path.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/create-attachment-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-attachment.path",
+    "migration": "adopted",
+    "operation": "POST /api/v1/tasks/:task_id/attachments",
+    "path": "POST /api/v1/tasks/:task_id/attachments path",
+    "schema_id": "urn:kanban-tool:schema:api:create-attachment-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/tasks/:task_id/attachments",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "task_id"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.create-attachment.request",
+        "direction": "deserialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "POST /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.create-attachment.request",
+        "direction": "deserialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "POST /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/create-attachment-request.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/create-attachment-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-attachment.request",
+    "migration": "adopted",
+    "operation": "POST /api/v1/tasks/:task_id/attachments",
+    "path": "POST /api/v1/tasks/:task_id/attachments body",
+    "schema_id": "urn:kanban-tool:schema:api:create-attachment-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/tasks/:task_id/attachments",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.create-attachment.response",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "POST /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.create-attachment.response",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "POST /api/v1/tasks/:task_id/attachments",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/create-attachment-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/create-attachment-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.create-attachment.response",
+    "migration": "adopted",
+    "operation": "POST /api/v1/tasks/:task_id/attachments",
+    "path": "POST /api/v1/tasks/:task_id/attachments success",
+    "schema_id": "urn:kanban-tool:schema:api:create-attachment-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/tasks/:task_id/attachments",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.download-attachment.path",
+        "direction": "deserialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.download-attachment.path",
+        "direction": "deserialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/download-attachment-path.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/download-attachment-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.download-attachment.path",
+    "migration": "adopted",
+    "operation": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+    "path": "GET /api/v1/tasks/:task_id/attachments/:attachment_id path",
+    "schema_id": "urn:kanban-tool:schema:api:download-attachment-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "task_id"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "attachment_id"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.download-attachment.response",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.download-attachment.response",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/download-attachment-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/download-attachment-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.download-attachment.response",
+    "migration": "adopted",
+    "operation": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+    "path": "GET /api/v1/tasks/:task_id/attachments/:attachment_id success",
+    "schema_id": "urn:kanban-tool:schema:api:download-attachment-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.delete-attachment.path",
+        "direction": "deserialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.delete-attachment.path",
+        "direction": "deserialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/delete-attachment-path.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/delete-attachment-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.delete-attachment.path",
+    "migration": "adopted",
+    "operation": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+    "path": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id path",
+    "schema_id": "urn:kanban-tool:schema:api:delete-attachment-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "task_id"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "attachment_id"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.delete-attachment.response",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.delete-attachment.response",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/delete-attachment-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/delete-attachment-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.delete-attachment.response",
+    "migration": "adopted",
+    "operation": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+    "path": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id success",
+    "schema_id": "urn:kanban-tool:schema:api:delete-attachment-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.attachment-add.output",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "attachment add",
+        "package": "kanban-server",
+        "surface": "cli",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "cli.attachment-add.output",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "attachment add",
+        "package": "kanban-server",
+        "surface": "cli",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/cli/attachment-add-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/attachment-add-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.attachment-add.output",
+    "migration": "adopted",
+    "operation": "attachment add",
+    "path": "attachment add",
+    "schema_id": "urn:kanban-tool:schema:cli:attachment-add-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.attachment-list.output",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "attachment list",
+        "package": "kanban-server",
+        "surface": "cli",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "cli.attachment-list.output",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "attachment list",
+        "package": "kanban-server",
+        "surface": "cli",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/cli/attachment-list-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/attachment-list-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.attachment-list.output",
+    "migration": "adopted",
+    "operation": "attachment list",
+    "path": "attachment list",
+    "schema_id": "urn:kanban-tool:schema:cli:attachment-list-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.attachment-remove.output",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "attachment remove",
+        "package": "kanban-server",
+        "surface": "cli",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "cli.attachment-remove.output",
+        "direction": "serialize",
+        "exact_test": "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+        "operation": "attachment remove",
+        "package": "kanban-server",
+        "surface": "cli",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/cli/attachment-remove-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/attachment-remove-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.attachment-remove.output",
+    "migration": "adopted",
+    "operation": "attachment remove",
+    "path": "attachment remove",
+    "schema_id": "urn:kanban-tool:schema:cli:attachment-remove-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
     }
   }
 ]

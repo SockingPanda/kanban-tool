@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ApiClaim, ApiComment, ApiExecutionPlan, ApiRun, ApiTask, ApiTaskStatus, ApiTaskStep,
-    ApiTaskSteps, CheckpointReport, ContractSurface, DataEnvelope, DoctorReport, GetTaskResponse,
-    MigrationState, ProjectionCorpusMetadata, QueueStats, SearchStatus, surface_operation_catalog,
+    ApiAttachment, ApiClaim, ApiComment, ApiExecutionPlan, ApiRun, ApiTask, ApiTaskStatus,
+    ApiTaskStep, ApiTaskSteps, CheckpointReport, ContractSurface, DataEnvelope, DoctorReport,
+    GetTaskResponse, MigrationState, ProjectionCorpusMetadata, QueueStats, SearchStatus,
+    surface_operation_catalog,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -647,6 +648,9 @@ pub struct CliTaskReclaimResult {
 pub type CliTaskReclaimOutput = DataEnvelope<CliTaskReclaimResult>;
 pub type CliCommentListOutput = DataEnvelope<Vec<ApiComment>>;
 pub type CliCommentAddOutput = DataEnvelope<ApiComment>;
+pub type CliAttachmentListOutput = DataEnvelope<Vec<ApiAttachment>>;
+pub type CliAttachmentAddOutput = DataEnvelope<ApiAttachment>;
+pub type CliAttachmentRemoveOutput = DataEnvelope<crate::DeleteResult>;
 pub type CliTaskStepListOutput = DataEnvelope<ApiTaskSteps>;
 pub type CliTaskStepAddOutput = DataEnvelope<ApiTaskStep>;
 pub type CliTaskStepUpdateOutput = DataEnvelope<ApiTaskStep>;

@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "ApiAttachment": {
+      "additionalProperties": false,
+      "description": "附件内容通过 download endpoint 的 bytes 返回；这个 DTO 仅代表 canonical metadata。",
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "created_by": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "rel_path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size_bytes": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "task_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "task_id",
+        "filename",
+        "rel_path",
+        "content_type",
+        "size_bytes",
+        "sha256",
+        "created_by",
+        "created_at"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:attachment-add-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/ApiAttachment"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI attachment add output v1",
+  "type": "object"
+}

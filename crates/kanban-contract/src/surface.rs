@@ -52,6 +52,14 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         adopted!(Cli, "checkpoint", "cli.checkpoint.output"),
         adopted!(Cli, "comment add", "cli.comment-add.output"),
         adopted!(Cli, "comment list", "cli.comment-list.output"),
+        adopted!(Cli, "attachment add", "cli.attachment-add.output"),
+        adopted!(Cli, "attachment list", "cli.attachment-list.output"),
+        adopted!(Cli, "attachment remove", "cli.attachment-remove.output"),
+        excluded!(
+            Cli,
+            "attachment download",
+            "附件下载输出是原始 bytes 文件，不是 JSON machine envelope"
+        ),
         excluded!(
             Cli,
             "completions",

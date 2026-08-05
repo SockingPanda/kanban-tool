@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::net::{IpAddr, SocketAddr};
 
 use kanban_contract::ErrorEnvelope;
@@ -87,6 +88,19 @@ impl KanbanClient {
             .set("X-KB-Actor", &self.actor);
         decode_text_response(request.call())
     }
+
+    pub(crate) fn get_bytes(
+        &self,
+        path: &str,
+        accept: &str,
+    ) -> Result<(Option<String>, Option<String>, Option<String>, Vec<u8>), ClientError> {
+        let request = self
+            .agent
+            .get(&format!("{}{path}", self.base_url))
+            .set("Accept", accept)
+            .set("X-KB-Actor", &self.actor);
+        decode_bytes_response(request.call())
+    }
 }
 
 fn decode_response<T>(response: Result<ureq::Response, ureq::Error>) -> Result<T, ClientError>
@@ -130,6 +144,39 @@ fn decode_text_response(
             let envelope = response.into_json::<ErrorEnvelope>().map_err(|error| {
                 ClientError::InvalidResponse(format!(
                     "HTTP {status} 响应不包含标准错误 envelope：{error}"
+                ))
+            })?;
+            Err(ClientError::Api {
+                status,
+                code: envelope.error.code,
+                message: envelope.error.message,
+            })
+        }
+        Err(ureq::Error::Transport(error)) => {
+            Err(ClientError::ServerUnavailable(error.to_string()))
+        }
+    }
+}
+
+fn decode_bytes_response(
+    response: Result<ureq::Response, ureq::Error>,
+) -> Result<(Option<String>, Option<String>, Option<String>, Vec<u8>), ClientError> {
+    match response {
+        Ok(response) => {
+            let content_type = response.header("Content-Type").map(str::to_owned);
+            let attachment_id = response.header("X-KB-Attachment-ID").map(str::to_owned);
+            let sha256 = response.header("X-KB-Attachment-SHA256").map(str::to_owned);
+            let mut reader = response.into_reader();
+            let mut bytes = Vec::new();
+            reader
+                .read_to_end(&mut bytes)
+                .map_err(|error| ClientError::InvalidResponse(error.to_string()))?;
+            Ok((content_type, attachment_id, sha256, bytes))
+        }
+        Err(ureq::Error::Status(status, response)) => {
+            let envelope = response.into_json::<ErrorEnvelope>().map_err(|error| {
+                ClientError::InvalidResponse(format!(
+                    "HTTP {status} did not contain the error envelope: {error}"
                 ))
             })?;
             Err(ClientError::Api {

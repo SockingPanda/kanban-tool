@@ -321,6 +321,22 @@ const COMMENT_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
     cardinality: Some(WireParameterCardinality::RequiredOne),
 }];
 
+const ATTACHMENT_TASK_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
+    name: "task_id",
+    cardinality: Some(WireParameterCardinality::RequiredOne),
+}];
+
+const ATTACHMENT_ITEM_PATH_PARAMETERS: &[WireParameter] = &[
+    WireParameter {
+        name: "task_id",
+        cardinality: Some(WireParameterCardinality::RequiredOne),
+    },
+    WireParameter {
+        name: "attachment_id",
+        cardinality: Some(WireParameterCardinality::RequiredOne),
+    },
+];
+
 const STEP_TASK_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
     name: "task_id",
     cardinality: Some(WireParameterCardinality::RequiredOne),
@@ -4842,9 +4858,237 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             inventory.extend(vector_projection_protocol_contracts());
             inventory.extend(portable_operation_contracts());
             inventory.extend(crate::headers::header_operation_contracts());
+            inventory.extend(attachment_api_contracts());
+            inventory.extend(attachment_cli_contracts());
             inventory
         })
         .as_slice()
+}
+
+fn attachment_api_contracts() -> Vec<OperationContract> {
+    const LIST: &str = "GET /api/v1/tasks/:task_id/attachments";
+    const CREATE: &str = "POST /api/v1/tasks/:task_id/attachments";
+    const ITEM: &str = "GET /api/v1/tasks/:task_id/attachments/:attachment_id";
+    const DELETE: &str = "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id";
+    fn contract(
+        id: &'static str,
+        path: &'static str,
+        operation: &'static str,
+        direction: ContractDirection,
+        strictness: ContractStrictness,
+        schema_id: &'static str,
+        fixture: &'static str,
+        location: HttpTransportLocation,
+        parameters: &'static [WireParameter],
+    ) -> OperationContract {
+        OperationContract {
+            id,
+            path,
+            surface: ContractSurface::Api,
+            operation,
+            direction,
+            granularity: ContractGranularity::Exact,
+            strictness,
+            schema_id: Some(schema_id),
+            fixture: Some(fixture),
+            adoption: Some(AdoptionEvidence {
+                producer_fixture: fixture,
+                producer: AdoptionWitness {
+                    operation,
+                    contract_id: id,
+                    surface: ContractSurface::Api,
+                    direction,
+                    package: "kanban-server",
+                    test_target: "lib",
+                    exact_test: "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+                },
+                consumer: AdoptionWitness {
+                    operation,
+                    contract_id: id,
+                    surface: ContractSurface::Api,
+                    direction,
+                    package: "kanban-server",
+                    test_target: "lib",
+                    exact_test: "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+                },
+            }),
+            exclusion: None,
+            migration: MigrationState::Adopted,
+            transport: ContractTransport::Http {
+                operation_key: Some(operation),
+                location,
+                parameters,
+            },
+            binding: ContractBinding::ExactSurface,
+        }
+    }
+    vec![
+        contract(
+            "api.list-attachments.path",
+            "GET /api/v1/tasks/:task_id/attachments path",
+            LIST,
+            ContractDirection::Deserialize,
+            ContractStrictness::DenyUnknownFields,
+            "urn:kanban-tool:schema:api:list-attachments-path:v1",
+            "schemas/fixtures/api/list-attachments-path.v1.valid.json",
+            HttpTransportLocation::Path,
+            ATTACHMENT_TASK_PATH_PARAMETERS,
+        ),
+        contract(
+            "api.list-attachments.response",
+            "GET /api/v1/tasks/:task_id/attachments success",
+            LIST,
+            ContractDirection::Serialize,
+            ContractStrictness::DenyUnknownFields,
+            "urn:kanban-tool:schema:api:list-attachments-response:v1",
+            "schemas/fixtures/api/list-attachments-response.v1.valid.json",
+            HttpTransportLocation::Success,
+            &[],
+        ),
+        contract(
+            "api.create-attachment.path",
+            "POST /api/v1/tasks/:task_id/attachments path",
+            CREATE,
+            ContractDirection::Deserialize,
+            ContractStrictness::DenyUnknownFields,
+            "urn:kanban-tool:schema:api:create-attachment-path:v1",
+            "schemas/fixtures/api/create-attachment-path.v1.valid.json",
+            HttpTransportLocation::Path,
+            ATTACHMENT_TASK_PATH_PARAMETERS,
+        ),
+        contract(
+            "api.create-attachment.request",
+            "POST /api/v1/tasks/:task_id/attachments body",
+            CREATE,
+            ContractDirection::Deserialize,
+            ContractStrictness::DenyUnknownFields,
+            "urn:kanban-tool:schema:api:create-attachment-request:v1",
+            "schemas/fixtures/api/create-attachment-request.v1.valid.json",
+            HttpTransportLocation::Body,
+            &[],
+        ),
+        contract(
+            "api.create-attachment.response",
+            "POST /api/v1/tasks/:task_id/attachments success",
+            CREATE,
+            ContractDirection::Serialize,
+            ContractStrictness::DenyUnknownFields,
+            "urn:kanban-tool:schema:api:create-attachment-response:v1",
+            "schemas/fixtures/api/create-attachment-response.v1.valid.json",
+            HttpTransportLocation::Success,
+            &[],
+        ),
+        contract(
+            "api.download-attachment.path",
+            "GET /api/v1/tasks/:task_id/attachments/:attachment_id path",
+            ITEM,
+            ContractDirection::Deserialize,
+            ContractStrictness::DenyUnknownFields,
+            "urn:kanban-tool:schema:api:download-attachment-path:v1",
+            "schemas/fixtures/api/download-attachment-path.v1.valid.json",
+            HttpTransportLocation::Path,
+            ATTACHMENT_ITEM_PATH_PARAMETERS,
+        ),
+        contract(
+            "api.download-attachment.response",
+            "GET /api/v1/tasks/:task_id/attachments/:attachment_id success",
+            ITEM,
+            ContractDirection::Serialize,
+            ContractStrictness::DenyUnknownFields,
+            "urn:kanban-tool:schema:api:download-attachment-response:v1",
+            "schemas/fixtures/api/download-attachment-response.v1.valid.json",
+            HttpTransportLocation::Success,
+            &[],
+        ),
+        contract(
+            "api.delete-attachment.path",
+            "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id path",
+            DELETE,
+            ContractDirection::Deserialize,
+            ContractStrictness::DenyUnknownFields,
+            "urn:kanban-tool:schema:api:delete-attachment-path:v1",
+            "schemas/fixtures/api/delete-attachment-path.v1.valid.json",
+            HttpTransportLocation::Path,
+            ATTACHMENT_ITEM_PATH_PARAMETERS,
+        ),
+        contract(
+            "api.delete-attachment.response",
+            "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id success",
+            DELETE,
+            ContractDirection::Serialize,
+            ContractStrictness::DenyUnknownFields,
+            "urn:kanban-tool:schema:api:delete-attachment-response:v1",
+            "schemas/fixtures/api/delete-attachment-response.v1.valid.json",
+            HttpTransportLocation::Success,
+            &[],
+        ),
+    ]
+}
+
+fn attachment_cli_contracts() -> Vec<OperationContract> {
+    fn contract(
+        id: &'static str,
+        operation: &'static str,
+        schema_id: &'static str,
+        fixture: &'static str,
+    ) -> OperationContract {
+        OperationContract {
+            id,
+            path: operation,
+            surface: ContractSurface::Cli,
+            operation,
+            direction: ContractDirection::Serialize,
+            granularity: ContractGranularity::Exact,
+            strictness: ContractStrictness::DenyUnknownFields,
+            schema_id: Some(schema_id),
+            fixture: Some(fixture),
+            adoption: Some(AdoptionEvidence {
+                producer_fixture: fixture,
+                producer: AdoptionWitness {
+                    operation,
+                    contract_id: id,
+                    surface: ContractSurface::Cli,
+                    direction: ContractDirection::Serialize,
+                    package: "kanban-server",
+                    test_target: "lib",
+                    exact_test: "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+                },
+                consumer: AdoptionWitness {
+                    operation,
+                    contract_id: id,
+                    surface: ContractSurface::Cli,
+                    direction: ContractDirection::Serialize,
+                    package: "kanban-server",
+                    test_target: "lib",
+                    exact_test: "http::operations::attachments::tests::attachment_round_trip_is_metadata_typed_and_file_backed",
+                },
+            }),
+            exclusion: None,
+            migration: MigrationState::Adopted,
+            transport: ContractTransport::NoTransport,
+            binding: ContractBinding::ExactSurface,
+        }
+    }
+    vec![
+        contract(
+            "cli.attachment-add.output",
+            "attachment add",
+            "urn:kanban-tool:schema:cli:attachment-add-output:v1",
+            "schemas/fixtures/cli/attachment-add-output.v1.valid.json",
+        ),
+        contract(
+            "cli.attachment-list.output",
+            "attachment list",
+            "urn:kanban-tool:schema:cli:attachment-list-output:v1",
+            "schemas/fixtures/cli/attachment-list-output.v1.valid.json",
+        ),
+        contract(
+            "cli.attachment-remove.output",
+            "attachment remove",
+            "urn:kanban-tool:schema:cli:attachment-remove-output:v1",
+            "schemas/fixtures/cli/attachment-remove-output.v1.valid.json",
+        ),
+    ]
 }
 
 fn vector_projection_protocol_contracts() -> [OperationContract; 2] {

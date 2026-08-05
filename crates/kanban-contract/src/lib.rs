@@ -8,6 +8,7 @@
 //! 位于独立的 `xtask` leaf crate。正常 runtime 依赖图只包含 Serde wire 类型。
 
 mod api_components;
+mod attachments;
 mod boards;
 mod cli;
 pub mod cli_helpers;
@@ -51,15 +52,21 @@ pub use api_components::{
     ApiExecutionPlanState, ApiLabel, ApiTask, ApiTaskPriority, ApiTaskStatus,
     ListTasksByStatusData, ListTasksByStatusResponse, ListTasksResponse, ListTasksStatusWindow,
 };
+pub use attachments::{
+    ApiAttachment, AttachmentDownloadResponse, CreateAttachmentPath, CreateAttachmentRequest,
+    CreateAttachmentResponse, DeleteAttachmentPath, DeleteAttachmentResponse, GetAttachmentPath,
+    ListAttachmentsPath, ListAttachmentsResponse,
+};
 pub use boards::{
     ApiBoard, ApiBoardColumn, ArchiveBoardPath, ArchiveBoardResponse, CreateBoardRequest,
     CreateBoardResponse, GetBoardPath, GetBoardResponse, ListBoardColumnsPath,
     ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse,
 };
 pub use cli::{
-    CliBackupOutput, CliBackupResult, CliBoardConfigSelection, CliBoardCurrentOutput,
-    CliBoardUseOutput, CliCheckpointOutput, CliCommentAddOutput, CliCommentListOutput,
-    CliConfigShow, CliConfigShowOutput, CliConfigSource, CliDependencyAddOutput, CliDependencyEdge,
+    CliAttachmentAddOutput, CliAttachmentListOutput, CliAttachmentRemoveOutput, CliBackupOutput,
+    CliBackupResult, CliBoardConfigSelection, CliBoardCurrentOutput, CliBoardUseOutput,
+    CliCheckpointOutput, CliCommentAddOutput, CliCommentListOutput, CliConfigShow,
+    CliConfigShowOutput, CliConfigSource, CliDependencyAddOutput, CliDependencyEdge,
     CliDependencyListOutput, CliDependencyMutation, CliDependencyRemoveOutput,
     CliDependencySnapshot, CliDependencyTask, CliDerivedStatusOutput, CliDerivedStoreStatus,
     CliDoctorOutput, CliEntity, CliEntityListOutput, CliEntityShowOutput, CliEvent,

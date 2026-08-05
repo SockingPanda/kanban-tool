@@ -1,7 +1,10 @@
 use crate::{context::CliContext, error::CliFailure, output};
 use clap::Args as ClapArgs;
 use kanban_client::KanbanClient;
-use kanban_contract::{CliChunkRef, CliVectorChunkHit, CliVectorQueryChunksOutput, VectorQuery};
+use kanban_contract::{
+    VectorQuery,
+    cli_helpers::{CliChunkRef, CliVectorChunkHit, CliVectorQueryChunksOutput},
+};
 
 #[derive(Debug, ClapArgs)]
 pub(crate) struct Args {

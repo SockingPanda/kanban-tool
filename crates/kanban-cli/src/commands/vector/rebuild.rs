@@ -1,7 +1,7 @@
 use crate::{context::CliContext, error::CliFailure, output};
 use clap::Args as ClapArgs;
 use kanban_client::KanbanClient;
-use kanban_contract::{CliVectorRebuildOutput, CliVectorStatus};
+use kanban_contract::cli_helpers::{CliVectorRebuildOutput, CliVectorStatus};
 
 #[derive(Debug, ClapArgs)]
 pub(crate) struct Args {}

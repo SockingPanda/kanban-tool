@@ -6,7 +6,6 @@ import { KanbanApi, loadRuntimeConfig, type ApiError, type Board, type SearchInd
 
 const runtimeConfig = {
   apiBaseUrl: "http://127.0.0.1:8721",
-  dbPath: "test.db",
   actor: "desktop-test",
   board: "default",
 }
@@ -275,6 +274,20 @@ describe("KanbanApi task search", () => {
     })
   })
 
+  it("gets task details from the external single-host endpoint", async () => {
+    const shown = task({ id: "t_show", title: "Shown" })
+    const fetchMock = mockFetch({ data: shown })
+    const api = new KanbanApi(runtimeConfig, { locale: "zh-CN" })
+
+    await expect(api.getTask("t_show")).resolves.toEqual(shown)
+
+    expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_show")
+    expect(calledInit(fetchMock)).toMatchObject({
+      method: "GET",
+      headers: { "Accept-Language": "zh-CN" },
+    })
+  })
+
   it("uses batch search windows by status", async () => {
     const ready = task({ id: "t_search_ready", status: "ready" })
     const searchMeta = {
@@ -415,8 +428,12 @@ describe("KanbanApi task search", () => {
   })
 
   it("uses event envelope cursor metadata instead of deriving only from row ids", async () => {
+    const payload = [
+      { nested: { values: [1, "two", null] } },
+      "future-event-payload",
+    ]
     const fetchMock = mockFetch({
-      data: [eventRecord({ id: 123, task_id: "t_1", kind: "task.claimed" })],
+      data: [eventRecord({ id: 123, task_id: "t_1", kind: "plugin.future.event", payload })],
       meta: { next_after: 130 },
     })
     const api = new KanbanApi(runtimeConfig)
@@ -424,6 +441,7 @@ describe("KanbanApi task search", () => {
     const page = await api.listEventsAfter(120)
 
     expect(page.events).toHaveLength(1)
+    expect(page.events[0]?.payload).toEqual(payload)
     expect(page.meta.next_after).toBe(130)
     const url = calledUrl(fetchMock)
     expect(url.searchParams.get("after")).toBe("120")
@@ -894,6 +912,58 @@ describe("KanbanApi task search", () => {
 
     expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_child/dependencies/t_parent")
     expect(calledInit(fetchMock).method).toBe("DELETE")
+    expect(calledInit(fetchMock).headers).toMatchObject({
+      "X-KB-Actor": "desktop-test",
+    })
+  })
+
+  it("lists and creates dependencies through the canonical task endpoint", async () => {
+    const parent = task({ id: "t_parent", ref: "default#1", title: "Parent", status: "done" })
+    const child = task({ id: "t_child", ref: "default#2", title: "Child", status: "todo" })
+    const compactParent = {
+      id: parent.id,
+      board_id: parent.board_id,
+      board_slug: parent.board_slug,
+      ref: parent.ref,
+      title: parent.title,
+      status: parent.status,
+    }
+    const compactChild = {
+      id: child.id,
+      board_id: child.board_id,
+      board_slug: child.board_slug,
+      ref: child.ref,
+      title: child.title,
+      status: child.status,
+    }
+    const response = {
+      data: {
+        task: compactChild,
+        parents: [parent],
+        children: [],
+        edges: [{ parent: compactParent, child: compactChild }],
+      },
+    }
+    const listFetch = mockFetch(response)
+    const api = new KanbanApi(runtimeConfig)
+
+    await expect(api.listDependencies(child.id)).resolves.toEqual(response.data)
+    expect(calledUrl(listFetch).pathname).toBe("/api/v1/tasks/t_child/dependencies")
+    expect(calledInit(listFetch).method).toBe("GET")
+
+    vi.unstubAllGlobals()
+    const addFetch = mockFetch(response)
+    await expect(api.addDependency(child.id, parent.id)).resolves.toEqual(response.data)
+    expect(calledUrl(addFetch).pathname).toBe("/api/v1/tasks/t_child/dependencies")
+    expect(calledInit(addFetch).method).toBe("POST")
+    expect(calledInit(addFetch).headers).toMatchObject({
+      "Content-Type": "application/json",
+      "X-KB-Actor": "desktop-test",
+    })
+    expect(JSON.parse(calledInit(addFetch).body as string)).toEqual({
+      parent_task_id: parent.id,
+      actor: "desktop-test",
+    })
   })
 
   it("uses step routes and includes the desktop actor", async () => {
@@ -942,7 +1012,8 @@ describe("KanbanApi task search", () => {
     ).resolves.toEqual(steps)
     expect(calledUrl(fetchMock).pathname).toBe("/api/v1/tasks/t_parent/steps")
     expect(calledInit(fetchMock).method).toBe("POST")
-    expect(JSON.parse(calledInit(fetchMock).body as string)).toEqual({
+    const createBody = JSON.parse(calledInit(fetchMock).body as string)
+    expect(createBody).toMatchObject({
       title: "Review child",
       body: "child context",
       linked_task_ref: "#123",
@@ -950,6 +1021,7 @@ describe("KanbanApi task search", () => {
       position: 2048,
       actor: "desktop-test",
     })
+    expect(createBody.idempotency_key).toMatch(/^step\.create:step_[0-9a-f-]+$/)
 
     vi.unstubAllGlobals()
     const updateFetch = mockFetch({ data: steps })
@@ -1041,7 +1113,6 @@ describe("loadRuntimeConfig web mode", () => {
 
     await expect(loadRuntimeConfig()).resolves.toEqual({
       apiBaseUrl: "/__kb_api__",
-      dbPath: "local kanban serve",
       actor: "desktop-dev",
       board: "kanban-tool",
     })
@@ -1054,15 +1125,13 @@ describe("loadRuntimeConfig web mode", () => {
     await expect(loadRuntimeConfig()).rejects.toThrow("VITE_KB_API_BASE_URL")
   })
 
-  it("uses the explicit API base URL and optional dev database label outside Tauri", async () => {
+  it("uses the explicit API base URL and adapter identity outside Tauri", async () => {
     vi.stubEnv("VITE_KB_API_BASE_URL", "/__kb_api__")
-    vi.stubEnv("VITE_KB_DB_PATH", "/tmp/current-kanban.db")
     vi.stubEnv("VITE_KB_ACTOR", "web-test")
     vi.stubEnv("VITE_KB_BOARD", "ops")
 
     await expect(loadRuntimeConfig()).resolves.toEqual({
       apiBaseUrl: "/__kb_api__",
-      dbPath: "/tmp/current-kanban.db",
       actor: "web-test",
       board: "ops",
     })

@@ -263,6 +263,7 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         adopted!(Cli, "task create", "cli.task-create.output"),
         adopted!(Cli, "task done", "cli.task-done.output"),
         adopted!(Cli, "task heartbeat", "cli.task-heartbeat.output"),
+        adopted!(Cli, "task release", "cli.task-release.output"),
         adopted!(Cli, "task list", "cli.task-list.output"),
         adopted!(Cli, "task promote", "cli.task-promote.output"),
         adopted!(Cli, "task reclaim", "cli.task-reclaim.output"),

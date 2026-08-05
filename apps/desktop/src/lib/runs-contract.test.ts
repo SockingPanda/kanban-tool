@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { KanbanApi } from "./api"
 
-const config = { apiBaseUrl: "http://127.0.0.1:8721", dbPath: "test.db", actor: "desktop-test", board: "default" }
+const config = { apiBaseUrl: "http://127.0.0.1:8721", actor: "desktop-test", board: "default" }
 const list = JSON.parse(readFileSync(new URL("../../../../schemas/fixtures/api/list-runs-response.v1.valid.json", import.meta.url), "utf8"))
 const get = JSON.parse(readFileSync(new URL("../../../../schemas/fixtures/api/get-run-response.v1.valid.json", import.meta.url), "utf8"))
+const log = { data: { run_id: "r_finished", content: "worker output\n", truncated: false } }
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } }) }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -28,6 +29,17 @@ describe("runs exact contracts", () => {
       ["http://127.0.0.1:8721/api/v1/runs/r_active", expect.objectContaining({ method: "GET", headers: { "Accept-Language": "zh-CN" } })],
     ])
     for (const [, init] of fetch.mock.calls as [string, RequestInit][]) expect((init.headers as Record<string, string>)["X-KB-Actor"]).toBeUndefined()
+  })
+
+  it("consumes run log response and sends the exact GET transport", async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(response(log))
+    vi.stubGlobal("fetch", fetch)
+    const api = new KanbanApi(config, { locale: "zh-CN" })
+    expect(await api.getRunLog("r_finished")).toEqual(log.data)
+    expect(fetch.mock.calls).toEqual([
+      ["http://127.0.0.1:8721/api/v1/runs/r_finished/log", expect.objectContaining({ method: "GET", headers: { "Accept-Language": "zh-CN" } })],
+    ])
+    expect((fetch.mock.calls[0][1] as RequestInit).headers).not.toHaveProperty("X-KB-Actor")
   })
 
   for (const [name, mutate] of [

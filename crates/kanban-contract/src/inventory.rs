@@ -1200,22 +1200,31 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "task_heartbeat_output_fixture_is_consumed_by_contract_root"
     ),
     adopted_cli_output_contract!(
+        "cli.task-release.output",
+        "task release",
+        "urn:kanban-tool:schema:cli:task-release-output:v1",
+        "schemas/fixtures/cli/task-release-output.v1.valid.json",
+        "cli_task_release_contract_adoption",
+        "task_release_output_fixture_is_produced_by_real_cli",
+        "task_release_output_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_cli_output_contract!(
         "cli.task-done.output",
         "task done",
         "urn:kanban-tool:schema:cli:task-done-output:v1",
         "schemas/fixtures/cli/task-done-output.v1.valid.json",
-        "cli_task_lifecycle_contract_adoption",
-        "task_done_output_fixture_is_produced_by_real_cli",
-        "task_done_output_fixture_is_consumed_by_contract_root"
+        "all",
+        "task_done_output_contract",
+        "task_done_output_contract"
     ),
     adopted_cli_output_contract!(
         "cli.task-complete.output",
         "task complete",
         "urn:kanban-tool:schema:cli:task-complete-output:v1",
         "schemas/fixtures/cli/task-complete-output.v1.valid.json",
-        "cli_task_lifecycle_contract_adoption",
-        "task_complete_output_fixture_is_produced_by_real_cli",
-        "task_complete_output_fixture_is_consumed_by_contract_root"
+        "all",
+        "task_complete_output_contract",
+        "task_complete_output_contract"
     ),
     adopted_cli_output_contract!(
         "cli.task-review.output",
@@ -1231,9 +1240,9 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "task block",
         "urn:kanban-tool:schema:cli:task-block-output:v1",
         "schemas/fixtures/cli/task-block-output.v1.valid.json",
-        "cli_task_lifecycle_contract_adoption",
-        "task_block_output_fixture_is_produced_by_real_cli",
-        "task_block_output_fixture_is_consumed_by_contract_root"
+        "all",
+        "task_block_output_contract",
+        "task_block_output_contract"
     ),
     adopted_cli_output_contract!(
         "cli.task-unblock.output",
@@ -2539,13 +2548,46 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "suite::transitions_adoption::heartbeat_task_response_fixture_is_consumed_by_contract_root"
     ),
     adopted_api_request!(
+        "api.release-task.request",
+        "POST /api/v1/tasks/:task_id/transitions/release",
+        "POST /api/v1/tasks/:task_id/transitions/release",
+        "urn:kanban-tool:schema:api:release-task-request:v1",
+        "schemas/fixtures/api/release-task-request.v1.valid.json",
+        "lifecycle_release_request_contract",
+        "router::tests::task_release_closes_the_application_path"
+    ),
+    adopted_comment_contract!(
+        "api.release-task.path",
+        "POST /api/v1/tasks/:task_id/transitions/release path",
+        "POST /api/v1/tasks/:task_id/transitions/release",
+        ContractDirection::Deserialize,
+        "urn:kanban-tool:schema:api:release-task-path:v1",
+        "schemas/fixtures/api/release-task-path.v1.valid.json",
+        HttpTransportLocation::Path,
+        TASK_TRANSITION_PATH_PARAMETERS,
+        "release_task_path_contract",
+        "router::tests::task_release_closes_the_application_path"
+    ),
+    adopted_comment_contract!(
+        "api.release-task.response",
+        "POST /api/v1/tasks/:task_id/transitions/release response",
+        "POST /api/v1/tasks/:task_id/transitions/release",
+        ContractDirection::Serialize,
+        "urn:kanban-tool:schema:api:release-task-response:v1",
+        "schemas/fixtures/api/release-task-response.v1.valid.json",
+        HttpTransportLocation::Success,
+        &[],
+        "router::tests::task_release_closes_the_application_path",
+        "release_task_response_contract"
+    ),
+    adopted_api_request!(
         "api.complete-task.request",
         "POST /api/v1/tasks/:task_id/transitions/complete",
         "POST /api/v1/tasks/:task_id/transitions/complete",
         "urn:kanban-tool:schema:api:complete-task-request:v1",
         "schemas/fixtures/api/complete-task-request.v1.valid.json",
-        "suite::lifecycle_request_adoption::complete_task_request_dto_serializes_to_committed_fixture",
-        "suite::lifecycle_request_adoption::complete_task_request_fixture_is_consumed_by_real_router"
+        "complete_task_request_contract",
+        "router::tests::task_done_closes_the_running_application_path"
     ),
     adopted_comment_contract!(
         "api.complete-task.path",
@@ -2556,8 +2598,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/complete-task-path.v1.valid.json",
         HttpTransportLocation::Path,
         TASK_TRANSITION_PATH_PARAMETERS,
-        "suite::transitions_adoption::complete_task_path_dto_serializes_to_committed_fixture",
-        "suite::transitions_adoption::complete_task_path_fixture_is_consumed_by_real_router"
+        "complete_task_path_contract",
+        "router::tests::task_done_closes_the_running_application_path"
     ),
     adopted_comment_contract!(
         "api.complete-task.response",
@@ -2568,8 +2610,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/complete-task-response.v1.valid.json",
         HttpTransportLocation::Success,
         &[],
-        "suite::transitions_adoption::complete_task_response_fixture_is_produced_by_real_router",
-        "suite::transitions_adoption::complete_task_response_fixture_is_consumed_by_contract_root"
+        "router::tests::task_done_closes_the_running_application_path",
+        "complete_task_response_contract"
     ),
     adopted_api_request!(
         "api.submit-review-task.request",
@@ -2577,8 +2619,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "urn:kanban-tool:schema:api:submit-review-task-request:v1",
         "schemas/fixtures/api/submit-review-task-request.v1.valid.json",
-        "suite::lifecycle_request_adoption::submit_review_task_request_dto_serializes_to_committed_fixture",
-        "suite::lifecycle_request_adoption::submit_review_task_request_fixture_is_consumed_by_real_router"
+        "submit_review_task_request_contract",
+        "router::tests::task_review_closes_the_application_path"
     ),
     adopted_comment_contract!(
         "api.submit-review-task.path",
@@ -2589,8 +2631,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/submit-review-task-path.v1.valid.json",
         HttpTransportLocation::Path,
         TASK_TRANSITION_PATH_PARAMETERS,
-        "suite::transitions_adoption::submit_review_task_path_dto_serializes_to_committed_fixture",
-        "suite::transitions_adoption::submit_review_task_path_fixture_is_consumed_by_real_router"
+        "submit_review_task_path_contract",
+        "router::tests::task_review_closes_the_application_path"
     ),
     adopted_comment_contract!(
         "api.submit-review-task.response",
@@ -2601,8 +2643,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/submit-review-task-response.v1.valid.json",
         HttpTransportLocation::Success,
         &[],
-        "suite::transitions_adoption::submit_review_task_response_fixture_is_produced_by_real_router",
-        "suite::transitions_adoption::submit_review_task_response_fixture_is_consumed_by_contract_root"
+        "router::tests::task_review_closes_the_application_path",
+        "submit_review_task_response_contract"
     ),
     adopted_api_request!(
         "api.block-task.request",
@@ -2610,8 +2652,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "POST /api/v1/tasks/:task_id/transitions/block",
         "urn:kanban-tool:schema:api:block-task-request:v1",
         "schemas/fixtures/api/block-task-request.v1.valid.json",
-        "suite::lifecycle_request_adoption::block_task_request_dto_serializes_to_committed_fixture",
-        "suite::lifecycle_request_adoption::block_task_request_fixture_is_consumed_by_real_router"
+        "block_task_request_contract",
+        "router::tests::task_block_closes_non_running_and_running_application_paths"
     ),
     adopted_comment_contract!(
         "api.block-task.path",
@@ -2622,8 +2664,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/block-task-path.v1.valid.json",
         HttpTransportLocation::Path,
         TASK_TRANSITION_PATH_PARAMETERS,
-        "suite::transitions_adoption::block_task_path_dto_serializes_to_committed_fixture",
-        "suite::transitions_adoption::block_task_path_fixture_is_consumed_by_real_router"
+        "block_task_path_contract",
+        "router::tests::task_block_closes_non_running_and_running_application_paths"
     ),
     adopted_comment_contract!(
         "api.block-task.response",
@@ -2634,8 +2676,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/block-task-response.v1.valid.json",
         HttpTransportLocation::Success,
         &[],
-        "suite::transitions_adoption::block_task_response_fixture_is_produced_by_real_router",
-        "suite::transitions_adoption::block_task_response_fixture_is_consumed_by_contract_root"
+        "router::tests::task_block_closes_non_running_and_running_application_paths",
+        "block_task_response_contract"
     ),
     adopted_api_request!(
         "api.unblock-task.request",

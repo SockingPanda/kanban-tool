@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:7786821ef48eb48a56b00dc76ba8a42f442c7137d09edb7384c224d7ca5eba48"
+    "sha256": "sha256:70dffcaea5ac25beb5a19c001284172be54fbf0e40599eee6373aeef4eb5ab84"
   },
   "roots": [
     {
@@ -532,6 +532,16 @@
       "path": "cli/task-heartbeat-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/task-heartbeat-output.v1.valid.json",
       "sha256": "sha256:9d7576de813226d1868ad8236c554d7f3fffda0ced3cc39cf3f41524a541becf",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "cli.task-release.output",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:cli:task-release-output:v1",
+      "invalid_fixture": "schemas/fixtures/cli/task-release-output.v1.invalid.json",
+      "path": "cli/task-release-output.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/cli/task-release-output.v1.valid.json",
+      "sha256": "sha256:260c6d20a3d813708eaa038ccfa377e950c14df0b592a8dc5092f085288c099f",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1431,7 +1441,7 @@
       "invalid_fixture": "schemas/fixtures/api/error-response.v1.invalid.json",
       "path": "api/error-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/error-response.v1.valid.json",
-      "sha256": "sha256:7c54a290ce28d53c6bc51a21d70eb7f596fdee873beb821f3198bb13ac8f0993",
+      "sha256": "sha256:1cf28b4d8a0466e93cf77dca4a99d53ad87ba1e96c8950efb174c7ff0d86f9db",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1561,7 +1571,7 @@
       "invalid_fixture": "schemas/fixtures/api/create-task-request.v1.invalid.json",
       "path": "api/create-task-request.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/create-task-request.v1.valid.json",
-      "sha256": "sha256:1091060116b33afc45d7c3baa0296f1ecec173f0a599504839a43f2a5cc61db1",
+      "sha256": "sha256:a94809187f6d4c34b4f1112c08fd053543ecc1ff842576654852c28201c0ceda",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1691,7 +1701,7 @@
       "invalid_fixture": "schemas/fixtures/api/create-comment-request.v1.invalid.json",
       "path": "api/create-comment-request.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/create-comment-request.v1.valid.json",
-      "sha256": "sha256:e1cc2de59ce4c0ad8a0d973b77f36f3ea87cea61ae1e4c223a2f11fe5bf62108",
+      "sha256": "sha256:6e7d6a9379080817e6c5d372510ed2caae05d00728cf32a22a63c161ba3157b5",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1741,7 +1751,7 @@
       "invalid_fixture": "schemas/fixtures/api/create-step-request.v1.invalid.json",
       "path": "api/create-step-request.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/create-step-request.v1.valid.json",
-      "sha256": "sha256:7d18d9c94edf9c45e611fe2b4bd29fb97212184767c42061df6cface4fd503a9",
+      "sha256": "sha256:7b0e117109a76e0cf5aab0d7cdebfe89c53f06d0ee86319d08c9dc3d86a89029",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2091,7 +2101,7 @@
       "invalid_fixture": "schemas/fixtures/api/list-events-response.v1.invalid.json",
       "path": "api/list-events-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-events-response.v1.valid.json",
-      "sha256": "sha256:d153f8b76605675a5f91cbfcb73aad1d7652724daf4fce9d4f627d7b985e17f8",
+      "sha256": "sha256:9ece9933de32d242327d442fb066a4a4910db52885dd5c9c48281811ca66b2f5",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2101,7 +2111,7 @@
       "invalid_fixture": "schemas/fixtures/sse/stream-event-data.v1.invalid.json",
       "path": "sse/stream-event-data.v1.schema.json",
       "schema_fixture": "schemas/fixtures/sse/stream-event-data.v1.valid.json",
-      "sha256": "sha256:c3fdd139cf2119a65f687865e99ac4cb7bdcefd69ccc27579008fd2ef79a4c6d",
+      "sha256": "sha256:d206a56f7b845aff3b6ffd4add18222ca151c486101b9a1f4e065c4f437cdd25",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -2332,6 +2342,36 @@
       "path": "api/heartbeat-task-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/heartbeat-task-response.v1.valid.json",
       "sha256": "sha256:17626a17af0adfc38a7919b26dbb784789c6b3b80188cce480c7153d085c48cb",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.release-task.request",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:release-task-request:v1",
+      "invalid_fixture": "schemas/fixtures/api/release-task-request.v1.invalid.json",
+      "path": "api/release-task-request.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/release-task-request.v1.valid.json",
+      "sha256": "sha256:55988de8ae76650daba4398baaed4f59741adb06999be57477a8665d7f97fc7f",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.release-task.path",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:release-task-path:v1",
+      "invalid_fixture": "schemas/fixtures/api/release-task-path.v1.invalid.json",
+      "path": "api/release-task-path.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/release-task-path.v1.valid.json",
+      "sha256": "sha256:a3da783f4afcbc85ea643d308c13c57bad1986462a3aa57e688f3a050b69d64c",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.release-task.response",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:api:release-task-response:v1",
+      "invalid_fixture": "schemas/fixtures/api/release-task-response.v1.invalid.json",
+      "path": "api/release-task-response.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/release-task-response.v1.valid.json",
+      "sha256": "sha256:24e9ce96e179f6ac75f0b81166e9e2c9f7b6173e5a7bb730ec4024b2449dc92e",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -4575,6 +4615,16 @@
       "strictness": "deny_unknown_fields"
     },
     {
+      "contract_id": "api.release-task.headers",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:release-task-headers:v1",
+      "invalid_fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.invalid.json",
+      "path": "api/release-task-headers.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+      "sha256": "sha256:91241c21f3331953dc506baef152bfd98507e0ed2bf24c4f141eff2b023faa42",
+      "strictness": "deny_unknown_fields"
+    },
+    {
       "contract_id": "api.complete-task.headers",
       "direction": "deserialize",
       "id": "urn:kanban-tool:schema:api:complete-task-headers:v1",
@@ -4898,6 +4948,6 @@
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "surface_catalog": {
     "path": "surface-operations.json",
-    "sha256": "sha256:ca3df4a4bb5846ca65708234a30a55ab262bcc37508a7d0ab6e503c9b7b652ab"
+    "sha256": "sha256:96739820610b50ea5441d250bf65c240a9a0e700e8c734673800ed1a732892f1"
   }
 }

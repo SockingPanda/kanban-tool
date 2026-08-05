@@ -2016,22 +2016,60 @@
   {
     "adoption": {
       "consumer": {
+        "contract_id": "cli.task-release.output",
+        "direction": "serialize",
+        "exact_test": "task_release_output_fixture_is_consumed_by_contract_root",
+        "operation": "task release",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_task_release_contract_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.task-release.output",
+        "direction": "serialize",
+        "exact_test": "task_release_output_fixture_is_produced_by_real_cli",
+        "operation": "task release",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_task_release_contract_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/task-release-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/task-release-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.task-release.output",
+    "migration": "adopted",
+    "operation": "task release",
+    "path": "kanban task release --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:task-release-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
         "contract_id": "cli.task-done.output",
         "direction": "serialize",
-        "exact_test": "task_done_output_fixture_is_consumed_by_contract_root",
+        "exact_test": "task_done_output_contract",
         "operation": "task done",
         "package": "kanban-cli",
         "surface": "cli",
-        "test_target": "cli_task_lifecycle_contract_adoption"
+        "test_target": "all"
       },
       "producer": {
         "contract_id": "cli.task-done.output",
         "direction": "serialize",
-        "exact_test": "task_done_output_fixture_is_produced_by_real_cli",
+        "exact_test": "task_done_output_contract",
         "operation": "task done",
         "package": "kanban-cli",
         "surface": "cli",
-        "test_target": "cli_task_lifecycle_contract_adoption"
+        "test_target": "all"
       },
       "producer_fixture": "schemas/fixtures/cli/task-done-output.v1.valid.json"
     },
@@ -2056,20 +2094,20 @@
       "consumer": {
         "contract_id": "cli.task-complete.output",
         "direction": "serialize",
-        "exact_test": "task_complete_output_fixture_is_consumed_by_contract_root",
+        "exact_test": "task_complete_output_contract",
         "operation": "task complete",
         "package": "kanban-cli",
         "surface": "cli",
-        "test_target": "cli_task_lifecycle_contract_adoption"
+        "test_target": "all"
       },
       "producer": {
         "contract_id": "cli.task-complete.output",
         "direction": "serialize",
-        "exact_test": "task_complete_output_fixture_is_produced_by_real_cli",
+        "exact_test": "task_complete_output_contract",
         "operation": "task complete",
         "package": "kanban-cli",
         "surface": "cli",
-        "test_target": "cli_task_lifecycle_contract_adoption"
+        "test_target": "all"
       },
       "producer_fixture": "schemas/fixtures/cli/task-complete-output.v1.valid.json"
     },
@@ -2132,20 +2170,20 @@
       "consumer": {
         "contract_id": "cli.task-block.output",
         "direction": "serialize",
-        "exact_test": "task_block_output_fixture_is_consumed_by_contract_root",
+        "exact_test": "task_block_output_contract",
         "operation": "task block",
         "package": "kanban-cli",
         "surface": "cli",
-        "test_target": "cli_task_lifecycle_contract_adoption"
+        "test_target": "all"
       },
       "producer": {
         "contract_id": "cli.task-block.output",
         "direction": "serialize",
-        "exact_test": "task_block_output_fixture_is_produced_by_real_cli",
+        "exact_test": "task_block_output_contract",
         "operation": "task block",
         "package": "kanban-cli",
         "surface": "cli",
-        "test_target": "cli_task_lifecycle_contract_adoption"
+        "test_target": "all"
       },
       "producer_fixture": "schemas/fixtures/cli/task-block-output.v1.valid.json"
     },
@@ -7838,9 +7876,137 @@
   {
     "adoption": {
       "consumer": {
+        "contract_id": "api.release-task.request",
+        "direction": "deserialize",
+        "exact_test": "router::tests::task_release_closes_the_application_path",
+        "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.release-task.request",
+        "direction": "deserialize",
+        "exact_test": "lifecycle_release_request_contract",
+        "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/release-task-request.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/release-task-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.release-task.request",
+    "migration": "adopted",
+    "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+    "path": "POST /api/v1/tasks/:task_id/transitions/release",
+    "schema_id": "urn:kanban-tool:schema:api:release-task-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/tasks/:task_id/transitions/release",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.release-task.path",
+        "direction": "deserialize",
+        "exact_test": "router::tests::task_release_closes_the_application_path",
+        "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.release-task.path",
+        "direction": "deserialize",
+        "exact_test": "release_task_path_contract",
+        "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/release-task-path.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/release-task-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.release-task.path",
+    "migration": "adopted",
+    "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+    "path": "POST /api/v1/tasks/:task_id/transitions/release path",
+    "schema_id": "urn:kanban-tool:schema:api:release-task-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "POST /api/v1/tasks/:task_id/transitions/release",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "task_id"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.release-task.response",
+        "direction": "serialize",
+        "exact_test": "release_task_response_contract",
+        "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.release-task.response",
+        "direction": "serialize",
+        "exact_test": "router::tests::task_release_closes_the_application_path",
+        "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/release-task-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/release-task-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.release-task.response",
+    "migration": "adopted",
+    "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+    "path": "POST /api/v1/tasks/:task_id/transitions/release response",
+    "schema_id": "urn:kanban-tool:schema:api:release-task-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/tasks/:task_id/transitions/release",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
         "contract_id": "api.complete-task.request",
         "direction": "deserialize",
-        "exact_test": "suite::lifecycle_request_adoption::complete_task_request_fixture_is_consumed_by_real_router",
+        "exact_test": "router::tests::task_done_closes_the_running_application_path",
         "operation": "POST /api/v1/tasks/:task_id/transitions/complete",
         "package": "kanban-server",
         "surface": "api",
@@ -7849,7 +8015,7 @@
       "producer": {
         "contract_id": "api.complete-task.request",
         "direction": "deserialize",
-        "exact_test": "suite::lifecycle_request_adoption::complete_task_request_dto_serializes_to_committed_fixture",
+        "exact_test": "complete_task_request_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/complete",
         "package": "kanban-server",
         "surface": "api",
@@ -7881,7 +8047,7 @@
       "consumer": {
         "contract_id": "api.complete-task.path",
         "direction": "deserialize",
-        "exact_test": "suite::transitions_adoption::complete_task_path_fixture_is_consumed_by_real_router",
+        "exact_test": "router::tests::task_done_closes_the_running_application_path",
         "operation": "POST /api/v1/tasks/:task_id/transitions/complete",
         "package": "kanban-server",
         "surface": "api",
@@ -7890,7 +8056,7 @@
       "producer": {
         "contract_id": "api.complete-task.path",
         "direction": "deserialize",
-        "exact_test": "suite::transitions_adoption::complete_task_path_dto_serializes_to_committed_fixture",
+        "exact_test": "complete_task_path_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/complete",
         "package": "kanban-server",
         "surface": "api",
@@ -7927,7 +8093,7 @@
       "consumer": {
         "contract_id": "api.complete-task.response",
         "direction": "serialize",
-        "exact_test": "suite::transitions_adoption::complete_task_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "complete_task_response_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/complete",
         "package": "kanban-server",
         "surface": "api",
@@ -7936,7 +8102,7 @@
       "producer": {
         "contract_id": "api.complete-task.response",
         "direction": "serialize",
-        "exact_test": "suite::transitions_adoption::complete_task_response_fixture_is_produced_by_real_router",
+        "exact_test": "router::tests::task_done_closes_the_running_application_path",
         "operation": "POST /api/v1/tasks/:task_id/transitions/complete",
         "package": "kanban-server",
         "surface": "api",
@@ -7968,7 +8134,7 @@
       "consumer": {
         "contract_id": "api.submit-review-task.request",
         "direction": "deserialize",
-        "exact_test": "suite::lifecycle_request_adoption::submit_review_task_request_fixture_is_consumed_by_real_router",
+        "exact_test": "router::tests::task_review_closes_the_application_path",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -7977,7 +8143,7 @@
       "producer": {
         "contract_id": "api.submit-review-task.request",
         "direction": "deserialize",
-        "exact_test": "suite::lifecycle_request_adoption::submit_review_task_request_dto_serializes_to_committed_fixture",
+        "exact_test": "submit_review_task_request_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -8009,7 +8175,7 @@
       "consumer": {
         "contract_id": "api.submit-review-task.path",
         "direction": "deserialize",
-        "exact_test": "suite::transitions_adoption::submit_review_task_path_fixture_is_consumed_by_real_router",
+        "exact_test": "router::tests::task_review_closes_the_application_path",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -8018,7 +8184,7 @@
       "producer": {
         "contract_id": "api.submit-review-task.path",
         "direction": "deserialize",
-        "exact_test": "suite::transitions_adoption::submit_review_task_path_dto_serializes_to_committed_fixture",
+        "exact_test": "submit_review_task_path_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -8055,7 +8221,7 @@
       "consumer": {
         "contract_id": "api.submit-review-task.response",
         "direction": "serialize",
-        "exact_test": "suite::transitions_adoption::submit_review_task_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "submit_review_task_response_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -8064,7 +8230,7 @@
       "producer": {
         "contract_id": "api.submit-review-task.response",
         "direction": "serialize",
-        "exact_test": "suite::transitions_adoption::submit_review_task_response_fixture_is_produced_by_real_router",
+        "exact_test": "router::tests::task_review_closes_the_application_path",
         "operation": "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "package": "kanban-server",
         "surface": "api",
@@ -8096,7 +8262,7 @@
       "consumer": {
         "contract_id": "api.block-task.request",
         "direction": "deserialize",
-        "exact_test": "suite::lifecycle_request_adoption::block_task_request_fixture_is_consumed_by_real_router",
+        "exact_test": "router::tests::task_block_closes_non_running_and_running_application_paths",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -8105,7 +8271,7 @@
       "producer": {
         "contract_id": "api.block-task.request",
         "direction": "deserialize",
-        "exact_test": "suite::lifecycle_request_adoption::block_task_request_dto_serializes_to_committed_fixture",
+        "exact_test": "block_task_request_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -8137,7 +8303,7 @@
       "consumer": {
         "contract_id": "api.block-task.path",
         "direction": "deserialize",
-        "exact_test": "suite::transitions_adoption::block_task_path_fixture_is_consumed_by_real_router",
+        "exact_test": "router::tests::task_block_closes_non_running_and_running_application_paths",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -8146,7 +8312,7 @@
       "producer": {
         "contract_id": "api.block-task.path",
         "direction": "deserialize",
-        "exact_test": "suite::transitions_adoption::block_task_path_dto_serializes_to_committed_fixture",
+        "exact_test": "block_task_path_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -8183,7 +8349,7 @@
       "consumer": {
         "contract_id": "api.block-task.response",
         "direction": "serialize",
-        "exact_test": "suite::transitions_adoption::block_task_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "block_task_response_contract",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -8192,7 +8358,7 @@
       "producer": {
         "contract_id": "api.block-task.response",
         "direction": "serialize",
-        "exact_test": "suite::transitions_adoption::block_task_response_fixture_is_produced_by_real_router",
+        "exact_test": "router::tests::task_block_closes_non_running_and_running_application_paths",
         "operation": "POST /api/v1/tasks/:task_id/transitions/block",
         "package": "kanban-server",
         "surface": "api",
@@ -19241,6 +19407,60 @@
       "kind": "http",
       "location": "headers",
       "operation_key": "POST /api/v1/tasks/:task_id/transitions/heartbeat",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "X-KB-Actor"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.release-task.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.release-task.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.release-task.headers",
+    "migration": "adopted",
+    "operation": "POST /api/v1/tasks/:task_id/transitions/release",
+    "path": "POST /api/v1/tasks/:task_id/transitions/release headers",
+    "schema_id": "urn:kanban-tool:schema:api:release-task-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/tasks/:task_id/transitions/release",
       "parameters": [
         {
           "cardinality": "optional_one",

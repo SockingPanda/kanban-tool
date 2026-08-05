@@ -10,7 +10,10 @@ from pathlib import Path
 from stat import S_IMODE
 from unittest.mock import patch
 
-import spec_bundle
+try:
+    from scripts import spec_bundle
+except ModuleNotFoundError:
+    import spec_bundle
 
 
 class SpecBundleTests(unittest.TestCase):
@@ -35,7 +38,10 @@ class SpecBundleTests(unittest.TestCase):
             self.assertGreater(offset, previous)
             previous = offset
 
-        self.assertIn("```sql\ncontents of migrations/001_initial.sql\n```", rendered)
+        self.assertIn(
+            "```rust\ncontents of crates/kanban-store-turso/src/schema.rs\n```",
+            rendered,
+        )
         self.assertTrue(rendered.endswith("\n"))
 
     def test_render_rebases_relative_links_to_bundle_root(self) -> None:
@@ -45,7 +51,7 @@ class SpecBundleTests(unittest.TestCase):
         )
         (self.root / "docs/SPEC.md").write_text(
             "[state](STATE_MACHINE.md) "
-            "[schema](../migrations/001_initial.sql) "
+            "[schema](../crates/kanban-store-turso/src/schema.rs) "
             "[section](#section)\n",
             encoding="utf-8",
         )
@@ -55,7 +61,9 @@ class SpecBundleTests(unittest.TestCase):
         self.assertIn("[spec](docs/SPEC.md)", rendered)
         self.assertIn("[external](https://example.com)", rendered)
         self.assertIn("[state](docs/STATE_MACHINE.md)", rendered)
-        self.assertIn("[schema](migrations/001_initial.sql)", rendered)
+        self.assertIn(
+            "[schema](crates/kanban-store-turso/src/schema.rs)", rendered
+        )
         self.assertEqual(rendered.count("[section](#section)"), 2)
 
     def test_check_detects_source_drift_until_bundle_is_rewritten(self) -> None:

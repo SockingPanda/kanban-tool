@@ -112,6 +112,11 @@ impl schemars::JsonSchema for StreamEventData {
                 "task.promoted" | "task.recomputed" | "task.specified" | "task.unblocked" => {
                     schema_for::<TaskToStatusPayload>(generator)
                 }
+                "task.released" => with_const(
+                    schema_for::<TaskToStatusPayload>(generator),
+                    "to_status",
+                    "ready",
+                ),
                 "task.execution_plan.not_required" => with_const(
                     schema_for::<ExecutionPlanPayload>(generator),
                     "state",

@@ -1,11 +1,11 @@
 import type { KanbanApi, Task, TaskStatus } from "@/lib/api"
-import { archiveTaskBody, canSpecifyTask, isBlockableStatus, specifyTaskBody } from "@/lib/action-policy"
+import { isBlockableStatus } from "@/lib/action-policy"
 import type { I18nMessage } from "@/i18n"
 
 export type DragTransitionPlan =
   | {
       ok: true
-      action: "specify" | "promote" | "claim" | "complete" | "submit-review" | "block" | "unblock" | "archive"
+      action: "promote" | "claim" | "complete" | "submit-review" | "block"
       body: Record<string, unknown>
       confirm?: I18nMessage
       promptReason?: boolean
@@ -19,30 +19,6 @@ export function planDragTransition(
   claimToken: string | null,
 ): DragTransitionPlan {
   if (task.status === targetStatus) return { ok: false, reason: message("Already in that column.") }
-
-  if (targetStatus === "archived") {
-    if (task.status === "archived") return { ok: false, reason: message("Already archived.") }
-    if (task.status === "running") {
-      return {
-        ok: true,
-        action: "archive",
-        body: archiveTaskBody(task.status),
-        confirm: message("Force archive running task #{seq}?", { seq: task.seq }),
-        message: message("Archive requested."),
-      }
-    }
-    return { ok: true, action: "archive", body: archiveTaskBody(task.status), message: message("Archive requested.") }
-  }
-
-  if (task.status === "triage" && targetStatus === "todo") {
-    if (!canSpecifyTask(task.status, task.description)) return { ok: false, reason: message("Triage tasks need a description before specify.") }
-    return {
-      ok: true,
-      action: "specify",
-      body: specifyTaskBody(task.description),
-      message: message("Specify requested."),
-    }
-  }
 
   if ((task.status === "todo" || task.status === "scheduled") && targetStatus === "ready") {
     return { ok: true, action: "promote", body: {}, message: message("Promote requested.") }
@@ -123,15 +99,6 @@ export function planDragTransition(
     }
   }
 
-  if (task.status === "blocked" && isExecutableTarget(targetStatus)) {
-    return {
-      ok: true,
-      action: "unblock",
-      body: {},
-      message: message("Unblock requested; the service will recompute the target state."),
-    }
-  }
-
   return { ok: false, reason: message("{status} cannot be dropped on {targetStatus}.", { status: task.status, targetStatus }) }
 }
 
@@ -141,10 +108,6 @@ export async function executeDragTransition(
   plan: Extract<DragTransitionPlan, { ok: true }>,
 ) {
   return api.transition(task, plan.action, plan.body)
-}
-
-function isExecutableTarget(status: TaskStatus) {
-  return status === "todo" || status === "scheduled" || status === "ready" || status === "running"
 }
 
 function message(key: string, values?: Record<string, string | number>): I18nMessage {

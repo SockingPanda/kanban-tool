@@ -67,6 +67,14 @@ pub struct HeartbeatTaskRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
+pub struct ReleaseTaskRequest {
+    pub actor: Option<String>,
+    pub claim_token: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct CompleteTaskRequest {
     pub actor: Option<String>,
     pub claim_token: Option<String>,

@@ -912,6 +912,23 @@ const ENDPOINTS: &[EndpointDescriptor] = &[
         },
     },
     EndpointDescriptor {
+        operation_id: "api.release-task",
+        surface: ContractSurface::Api,
+        method: HttpMethod::Post,
+        path: "/api/v1/tasks/:task_id/transitions/release",
+        migration: MigrationState::Adopted,
+        exclusion: None,
+        shared_components: &[],
+        obligations: EndpointObligations {
+            path: EndpointObligation::Contract("api.release-task.path"),
+            query: EndpointObligation::NotApplicable,
+            headers: EndpointObligation::Contract("api.release-task.headers"),
+            body: EndpointObligation::Contract("api.release-task.request"),
+            success: EndpointObligation::Contract("api.release-task.response"),
+            sse: EndpointObligation::NotApplicable,
+        },
+    },
+    EndpointDescriptor {
         operation_id: "api.complete-task",
         surface: ContractSurface::Api,
         method: HttpMethod::Post,

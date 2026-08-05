@@ -1,16 +1,14 @@
 export type OperatorView = "board" | "list" | "map" | "events" | "runs" | "signals" | "ontology" | "maintenance" | "health" | "settings"
 
-export const primaryViews: OperatorView[] = ["board", "list", "map", "events"]
+export type NavigableOperatorView = Exclude<OperatorView, "map" | "signals" | "ontology" | "maintenance">
 
-export const sidebarViews: OperatorView[] = [
+export const primaryViews: NavigableOperatorView[] = ["board", "list", "events"]
+
+export const sidebarViews: NavigableOperatorView[] = [
   "board",
   "list",
-  "map",
   "runs",
   "events",
-  "signals",
-  "ontology",
-  "maintenance",
   "health",
   "settings",
 ]

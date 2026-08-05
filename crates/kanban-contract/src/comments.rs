@@ -51,6 +51,8 @@ pub struct CreateCommentPath {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct CreateCommentRequest {
+    /// Entity-local retry key scoped to this task.
+    pub idempotency_key: Option<String>,
     pub author: Option<String>,
     pub body: String,
     pub kind: Option<CommentKind>,

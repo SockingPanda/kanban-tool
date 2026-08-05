@@ -4,13 +4,20 @@
 决策时快照，不会随着实现自动改写；当前行为和实时契约覆盖以对应的
 `docs/*_SPEC.md` 与 `docs/SCHEMA_CONTRACTS.md` 为准。
 
+ADR-0001 和 ADR-0004 保留为历史记录，但已被当前的 single-host 决策
+（ADR-0022）取代。它们中关于 CLI 直开数据库或旧文件名的内容不再描述当前产品。
+
 ---
 
 ## ADR-0001：仅使用 SQLite
 
 ### 状态
 
-已接受
+已被 ADR-0022 取代（历史决策）
+
+### 后续决策
+
+见 [ADR-0022：Turso single-host canonical application host](#adr-0022turso-single-host-canonical-application-host)。
 
 ### 背景
 
@@ -115,7 +122,11 @@ tasks snapshot + task_events append-only
 
 ### 状态
 
-已接受
+已被 ADR-0022 取代（历史决策）
+
+### 后续决策
+
+见 [ADR-0022：Turso single-host canonical application host](#adr-0022turso-single-host-canonical-application-host)。
 
 ### 背景
 
@@ -290,7 +301,7 @@ MVP 不提供 `0.0.0.0` 远程模式。
 
 ### 状态
 
-已接受
+已被 ADR-0022 取代（projection lane 非 active）
 
 ### 背景
 
@@ -965,7 +976,7 @@ action、atom 和 proposal 会增加 schema、outbox、query API 和重建复杂
 
 ### 状态
 
-已接受
+已被 ADR-0022 取代（signal surface 非 active）
 
 ### 背景
 
@@ -984,7 +995,10 @@ Signal 账本成为通用 agent/product 信号的权威存储。Label ontology �
 
 ### 状态
 
-已接受
+已被 ADR-0022 取代
+
+当前 Axum router 直接注册 active single-host paths；descriptor 是待清理的机器契约来源，
+不是运行时 route factory。
 
 ### 背景
 
@@ -1117,7 +1131,11 @@ pagination primitives。
 
 ### 状态
 
-已接受（第 2 阶段临时例外）
+已被 ADR-0022 取代
+
+该例外只适用于已经退出 active workspace 的 Oxigraph projection lane。当前根
+`Cargo.toml` 不再包含该 `[patch.crates-io]`；以下内容保留为历史决策记录，不描述当前
+产品依赖图。
 
 ### 背景
 
@@ -1130,3 +1148,54 @@ RUSTSEC-2026-0194/RUSTSEC-2026-0195 影响的 `quick-xml < 0.41`；仓库当前�
 允许根目录 `Cargo.toml` 中唯一的 `[patch.crates-io]` 例外，且仅接受 `oxrdfxml`/`sparesults` 两个精确仓内 vendor 路径、package name/version 与普通文件目标。`schema_dependency_policy` 对额外 key、非精确 source/path、path traversal、symlink、全部 `[replace]` 保持失败关闭；schema-tool 注册表闭包不变，产品依赖图继续禁止 schema tooling 泄漏。
 
 由安全负责人维护，待 crates.io 上游版本发布并确认 `quick-xml >= 0.41` 后移除 vendor、`[patch]`、lockfile 变更及本 ADR；advisory、provenance 或 vendor digest 变化必须重新审查。复核期限：2026-10-12。
+
+---
+
+## ADR-0022：Turso single-host canonical application host
+
+### 状态
+
+已接受（当前架构）
+
+### 背景
+
+CLI、MCP 和 Desktop 曾分别持有 storage/runtime 入口。即使它们读写同一份数据库文件，
+也可能各自解释 task transition、claim、comment 和 event，造成语义漂移。Turso 默认还要求
+同一本地数据库文件由一个 OS 进程 owner 打开；继续维护多进程直连、runtime framing 或兼容
+fallback 会把数据库 ownership 问题扩展成另一套产品协议。
+
+### 决策
+
+1. `kanban serve` 是唯一 application host，也是唯一可以打开、初始化和关闭 Turso 数据库的
+   进程。默认路径是 `~/.local/share/kb/kanban.db`，默认监听 `127.0.0.1:8721`。
+2. CLI、MCP、Desktop 统一通过 typed localhost HTTP client 调用 host。server 不可用时返回
+   `server_unavailable`；不允许“有 server 走 HTTP、没 server 直开数据库”的双路径。
+3. 所有 mutation 进入同一个 `ApplicationService`，由同一状态机、事务、board isolation、
+   CAS claim、owner/token 校验和 error contract 保护。adapter 只负责解析、调用和展示。
+4. 使用 `turso = 0.7.2`、`default-features = false`；不启用 `multiprocess_wal`。同一 host 进程
+   内按 operation 获取 connection，数据库文件不由其他入口或其他进程直接打开。
+5. dispatcher 只作为 `kanban serve --dispatcher-profile <path>` 的同进程 opt-in 单 worker
+   loop，复用 application commands；默认不自动消费队列。
+6. 不建设或保留自定义 framed IPC、named pipe、runtime protocol、capability negotiation、
+   generalized mutation receipt、projection control plane 或旧 API 兼容层。未迁移的 labels、
+   signals、search、graph、vector、projection 和 importer 留给独立后续工作。
+
+### 影响
+
+优点：
+
+- 三个入口共享同一条可验证的 command/query path，业务错误不会在 adapter 间分叉。
+- 单一 DB owner 简化 Turso 生命周期、重启恢复和并发边界；HTTP client 保持 adapter 薄。
+- 每个 operation 可以独立完成 store → application → HTTP → client → adapter 的纵向切片。
+
+代价：
+
+- 使用 CLI、MCP 或 Desktop 前必须先运行 `kanban serve`。
+- host 是本机单用户服务，不提供离线直连、多进程数据库访问或公网 API。
+- 未迁移能力会显式返回 `feature_not_available`，不以兼容 shim 掩盖未完成迁移。
+
+### 非目标
+
+本决策不定义 SQLite importer、自动 server supervision、跨机器 worker、备份/恢复产品、
+projection rebuild 或未来 backend。它只收敛当前 canonical application path；任何新增能力
+必须先证明不会引入第二条 mutation path。

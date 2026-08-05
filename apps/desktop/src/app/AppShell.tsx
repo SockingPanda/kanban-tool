@@ -1,15 +1,10 @@
 import { lazy, memo, Suspense, useEffect, useState, type ElementType, type FormEvent, type ReactNode, type TransitionEvent } from "react"
 import {
   Activity,
-  Bell,
   ChevronDown,
-  Database,
-  DatabaseBackup,
   HeartPulse,
   Inbox,
   Loader2,
-  Map,
-  Network,
   RefreshCcw,
   Search,
   Settings,
@@ -64,7 +59,7 @@ import { BoardView } from "@/features/board/BoardView"
 import { EventsView } from "@/features/events/EventsView"
 import { HealthView } from "@/features/health/HealthView"
 import { ListView } from "@/features/list/ListView"
-import type { OperatorView } from "@/features/navigation/view-types"
+import type { NavigableOperatorView, OperatorView } from "@/features/navigation/view-types"
 import { primaryViews, sidebarViews } from "@/features/navigation/view-types"
 import { RunsView } from "@/features/runs/RunsView"
 import { SettingsView } from "@/features/settings/SettingsView"
@@ -96,27 +91,15 @@ import type {
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/i18n"
 
-const viewMetadata: Record<OperatorView, { label: string; icon: ElementType }> = {
+const viewMetadata: Record<NavigableOperatorView, { label: string; icon: ElementType }> = {
   board: { label: "Board", icon: SquareKanban },
   list: { label: "List", icon: Inbox },
-  map: { label: "Map", icon: Map },
   events: { label: "Events", icon: Activity },
   runs: { label: "Runs", icon: TerminalSquare },
-  signals: { label: "Signals", icon: Bell },
-  ontology: { label: "Review", icon: Network },
-  maintenance: { label: "Maintenance", icon: DatabaseBackup },
   health: { label: "Health", icon: HeartPulse },
   settings: { label: "Settings", icon: Settings },
 }
 
-const BoardTaskMapView = lazy(() => import("@/features/task-map/BoardTaskMapView").then((module) => ({ default: module.BoardTaskMapView })))
-const MaintenanceView = lazy(() => import("@/features/maintenance/MaintenanceView").then((module) => ({ default: module.MaintenanceView })))
-const OntologyReviewWorkbench = lazy(() =>
-  import("@/features/ontology/OntologyReviewWorkbench").then((module) => ({ default: module.OntologyReviewWorkbench })),
-)
-const SignalsWorkbench = lazy(() =>
-  import("@/features/signals/SignalsWorkbench").then((module) => ({ default: module.SignalsWorkbench })),
-)
 const TaskDetail = lazy(() => import("@/features/task-detail/TaskDetail").then((module) => ({ default: module.TaskDetail })))
 
 export type AppShellRuntimeProps = {
@@ -552,7 +535,7 @@ function ShellSidebar({
       </SidebarHeader>
       <SidebarContent>
         <SidebarNavGroup label={t("Task Explorer")} open={contentOpen}>
-          {sidebarViews.filter((item) => ["board", "list", "map", "runs", "events", "signals", "ontology"].includes(item)).map((item) => (
+          {sidebarViews.filter((item) => ["board", "list", "runs", "events"].includes(item)).map((item) => (
             <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
@@ -564,7 +547,7 @@ function ShellSidebar({
           ))}
         </SidebarNavGroup>
         <SidebarNavGroup label={t("System")} open={contentOpen}>
-          {sidebarViews.filter((item) => ["maintenance", "health", "settings"].includes(item)).map((item) => (
+          {sidebarViews.filter((item) => ["health", "settings"].includes(item)).map((item) => (
             <SidebarNavItem
               key={item}
               icon={viewIcon(item)}
@@ -585,10 +568,6 @@ function ShellSidebar({
           switching={switchingBoard}
           onBoardChange={onBoardChange}
         />
-        <div className="flex items-center gap-2">
-          <Database className="h-3.5 w-3.5" />
-          <span className="truncate">{config?.dbPath ?? t("loading db")}</span>
-        </div>
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-2">
             <Server className="h-3.5 w-3.5" />
@@ -762,7 +741,7 @@ function ShellHeader({
       >
         {tasksRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
       </Button>
-      <Tabs value={primaryViews.includes(view) ? view : ""} onValueChange={(value) => onViewChange(value as OperatorView)}>
+      <Tabs value={primaryViews.some((item) => item === view) ? view : ""} onValueChange={(value) => onViewChange(value as OperatorView)}>
         <TabsList>
           {primaryViews.map((item) => (
             <TabsTrigger key={item} value={item}>
@@ -971,14 +950,6 @@ function MainView({
       />
     )
   }
-  if (view === "map") {
-    return (
-      <Suspense fallback={<LazyViewFallback label="Loading task map" />}>
-        <BoardTaskMapView api={api} selectedTaskId={selectedId} onSelectTask={onSelectTask} />
-      </Suspense>
-    )
-  }
-
   if (view === "list") {
     return (
       <ListView
@@ -1010,27 +981,6 @@ function MainView({
   }
   if (view === "events") return <EventsView api={api} />
   if (view === "runs") return <RunsView selectedTask={selectedTask} detail={detail} />
-  if (view === "signals") {
-    return (
-      <Suspense fallback={<LazyViewFallback label="Loading signals" />}>
-        <SignalsWorkbench api={api} />
-      </Suspense>
-    )
-  }
-  if (view === "ontology") {
-    return (
-      <Suspense fallback={<LazyViewFallback label="Loading review workbench" />}>
-        <OntologyReviewWorkbench api={api} />
-      </Suspense>
-    )
-  }
-  if (view === "maintenance") {
-    return (
-      <Suspense fallback={<LazyViewFallback label="Loading maintenance" />}>
-        <MaintenanceView api={api} />
-      </Suspense>
-    )
-  }
   if (view === "health") return <HealthView api={api} config={config} />
   return <SettingsView config={config} />
 }
@@ -1116,10 +1066,10 @@ function SidebarNavGroup({ label, open, children }: { label: string; open: boole
   )
 }
 
-function viewLabel(view: OperatorView, t: (key: string) => string): string {
+function viewLabel(view: NavigableOperatorView, t: (key: string) => string): string {
   return t(viewMetadata[view].label)
 }
 
-function viewIcon(view: OperatorView): ElementType {
+function viewIcon(view: NavigableOperatorView): ElementType {
   return viewMetadata[view].icon
 }

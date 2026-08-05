@@ -42,8 +42,11 @@ pub struct ErrorEnvelope {
 pub enum ApiErrorCode {
     NotFound,
     Conflict,
+    IdempotencyConflict,
     DependencyCycle,
     InvalidInput,
+    FeatureNotAvailable,
+    ServerUnavailable,
     ExecutionPlanRequired,
     StepsIncomplete,
     ClaimTokenMismatch,

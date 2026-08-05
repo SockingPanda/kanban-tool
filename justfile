@@ -13,27 +13,18 @@ set shell := ["bash", "-cu"]
 audit-ignore-flags := "--ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2024-0411 --ignore RUSTSEC-2024-0412 --ignore RUSTSEC-2024-0413 --ignore RUSTSEC-2024-0414 --ignore RUSTSEC-2024-0415 --ignore RUSTSEC-2024-0416 --ignore RUSTSEC-2024-0417 --ignore RUSTSEC-2024-0418 --ignore RUSTSEC-2024-0419 --ignore RUSTSEC-2024-0420 --ignore RUSTSEC-2024-0429 --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2025-0075 --ignore RUSTSEC-2025-0080 --ignore RUSTSEC-2025-0081 --ignore RUSTSEC-2025-0098 --ignore RUSTSEC-2025-0100"
 
 fmt:
-    cargo fmt -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search -p kanban-graph -p kanban-vector -p kanban-derived-io -p kanban-helper-protocol -p kanban-labels -p kanban-context -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli -- --check
+    cargo fmt -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -- --check
 
 fmt-check: fmt
 
 fmt-full:
-    cargo fmt -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search -p kanban-graph -p kanban-vector -p kanban-derived-io -p kanban-helper-protocol -p kanban-labels -p kanban-context -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli -p kanban-vector-lancedb -p kanban-graph-oxigraph -- --check
+    cargo fmt -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -p kanban-desktop -p kanban-schema-tool -- --check
 
 fix *args:
     scripts/cargo-build-lock.sh -- cargo clippy --fix --tests --allow-dirty "$@"
 
 clippy:
     just clippy-core
-
-bench-check *args:
-    scripts/cargo-build-lock.sh -- cargo bench --no-run -p kanban-sqlite "$@"
-
-bench-sqlite-service *args:
-    scripts/cargo-build-lock.sh -- cargo bench -p kanban-sqlite --bench sqlite_service "$@"
-
-bench-sqlite-service-compare baseline candidate *benchmarks:
-    scripts/compare-criterion-baseline.py --criterion-dir "$(scripts/cargo-build-lock.sh --print-target-dir)/criterion" --baseline "{{baseline}}" --candidate "{{candidate}}" {{benchmarks}}
 
 clippy-p package:
     scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --tests -- -D warnings
@@ -43,29 +34,16 @@ check: check-core
 check-core:
     scripts/cargo-build-lock.sh -- cargo check --tests \
         -p kanban-core \
+        -p kanban-application \
         -p kanban-contract \
-        -p kanban-entity \
-        -p kanban-indexer \
-        -p kanban-search \
-        -p kanban-graph \
-        -p kanban-vector \
-        -p kanban-derived-io \
-        -p kanban-helper-protocol \
-        -p kanban-labels \
-        -p kanban-context \
-        -p kanban-sqlite \
-        -p kanban-local \
+        -p kanban-store-turso \
+        -p kanban-client \
         -p kanban-server \
-        -p kanban-cli
-
-check-helpers:
-    scripts/cargo-build-lock.sh -- cargo check --tests \
-        -p kanban-vector-lancedb \
-        -p kanban-graph-oxigraph
+        -p kanban-cli \
+        -p kanban-mcp
 
 check-full:
     just check-core
-    just check-helpers
 
 test *args:
     just test-core "$@"
@@ -88,60 +66,33 @@ rust-fast:
 test-core *args:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run \
         -p kanban-core \
+        -p kanban-application \
         -p kanban-contract \
-        -p kanban-entity \
-        -p kanban-indexer \
-        -p kanban-search \
-        -p kanban-graph \
-        -p kanban-vector \
-        -p kanban-derived-io \
-        -p kanban-helper-protocol \
-        -p kanban-labels \
-        -p kanban-context \
-        -p kanban-sqlite \
-        -p kanban-local \
+        -p kanban-store-turso \
+        -p kanban-client \
         -p kanban-server \
         -p kanban-cli \
+        -p kanban-mcp \
         --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test \
-        -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search \
-        -p kanban-graph -p kanban-vector -p kanban-derived-io \
-        -p kanban-helper-protocol -p kanban-labels -p kanban-context \
-        -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli "$@"; fi
-
-test-helpers *args:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run \
-        -p kanban-vector-lancedb \
-        -p kanban-graph-oxigraph \
-        --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test \
-        -p kanban-vector-lancedb -p kanban-graph-oxigraph "$@"; fi
+        -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso \
+        -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@"; fi
 
 test-full *args:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --exclude kanban-schema-tool --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude kanban-schema-tool "$@"; fi
 
 clippy-core *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
-        -p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search \
-        -p kanban-graph -p kanban-vector -p kanban-derived-io \
-        -p kanban-helper-protocol -p kanban-labels -p kanban-context \
-        -p kanban-sqlite -p kanban-local -p kanban-server -p kanban-cli "$@" -- -D warnings
-
-clippy-helpers *args:
-    scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
-        -p kanban-vector-lancedb -p kanban-graph-oxigraph "$@" -- -D warnings
+        -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso \
+        -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@" -- -D warnings
 
 clippy-full *args:
     just clippy-core "$@"
-    just clippy-helpers "$@"
 
 rust-full:
     just fmt-full
     just check-full
     just test-full
     just clippy-full
-
-projection-release-cohort:
-    just feature-p kanban-cli "tantivy-backend,oxigraph-backend"
-    just feature-p kanban-server "tantivy-backend,oxigraph-backend"
 
 web-test:
     pnpm --dir apps/desktop test
@@ -153,11 +104,12 @@ web-build:
     pnpm --dir apps/desktop build
 
 desktop-check:
-    scripts/prepare-desktop-helper-binaries.sh
-    scripts/test-desktop-helper-sidecars.sh
     scripts/cargo-build-lock.sh -- cargo check -p kanban-desktop --tests
     pnpm --dir apps/desktop typecheck
     pnpm --dir apps/desktop test
+
+single-host-dependency-gate:
+    python3 -B scripts/check-single-host-dependencies.py
 
 desktop-build:
     pnpm --dir apps/desktop build
@@ -262,7 +214,6 @@ schema-adoption-witness:
 schema-surface-audit:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog; fi
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog; fi
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-sqlite jsonl_export_discriminators_match_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-sqlite jsonl_export_discriminators_match_exact_contract_catalog; fi
 
 schema-contract:
     just schema-dependency-isolation

@@ -1,10 +1,7 @@
-//! Application storage and runtime ports.
-//!
-//! This module is intentionally small because `kanban-application` is currently a
-//! selected vertical slice, not a full application-service crate. Concrete ports
-//! are added only when a use case is intentionally moved behind this boundary;
-//! SQLite transaction ownership remains in `kanban-sqlite::service` until a
-//! future extraction has a concrete, tested reason.
-
-/// Marker trait for storage implementations that back application use cases.
-pub trait ApplicationStore {}
+/// Marker bound shared by every application capability.
+///
+/// Persistence methods live on the narrow operation capability traits rather
+/// than on this common bound.  The concrete Turso implementation is adapted
+/// inside `kanban-server`, which keeps the storage crate out of every other
+/// product adapter.
+pub trait ApplicationStore: Clone + Send + Sync + 'static {}

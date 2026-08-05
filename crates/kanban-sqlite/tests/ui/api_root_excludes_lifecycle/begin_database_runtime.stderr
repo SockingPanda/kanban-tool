@@ -1,5 +1,0 @@
-error[E0432]: unresolved import `kanban_sqlite::api::begin_database_runtime`
- --> tests/ui/api_root_excludes_lifecycle/begin_database_runtime.rs:3:5
-  |
-3 | use kanban_sqlite::api::begin_database_runtime;
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `begin_database_runtime` in `api`

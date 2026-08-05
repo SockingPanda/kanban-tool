@@ -4,6 +4,8 @@ import { dirname, resolve } from "node:path"
 
 import { describe, expect, it } from "vitest"
 
+import { primaryViews, sidebarViews } from "@/features/navigation/view-types"
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 
 function source(path: string) {
@@ -207,28 +209,44 @@ describe("desktop shadcn control convergence", () => {
     }
   })
 
-  it("keeps graph and low-frequency desktop views behind lazy import boundaries", () => {
+  it("keeps task detail lazy while hiding unsupported graph content", () => {
     const shell = source("app/AppShell.tsx")
     const detail = source("features/task-detail/TaskDetail.tsx")
     const map = source("features/task-map/BoardTaskMapView.tsx")
     const layout = source("features/task-map/task-graph-layout.ts")
 
-    expect(shell).toContain("lazy(() => import(\"@/features/task-map/BoardTaskMapView\")")
     expect(shell).toContain("lazy(() => import(\"@/features/task-detail/TaskDetail\")")
-    expect(shell).toContain("lazy(() => import(\"@/features/maintenance/MaintenanceView\")")
     expect(shell).toContain("lazy(() =>")
     expect(shell).not.toContain("from \"@/features/task-map/BoardTaskMapView\"")
     expect(shell).not.toContain("from \"@/features/task-detail/TaskDetail\"")
-    expect(shell).not.toContain("from \"@/features/maintenance/MaintenanceView\"")
-    expect(shell).not.toContain("from \"@/features/ontology/OntologyReviewWorkbench\"")
+    for (const retiredImport of [
+      'lazy(() => import("@/features/task-map/BoardTaskMapView")',
+      'lazy(() => import("@/features/maintenance/MaintenanceView")',
+      'lazy(() => import("@/features/ontology/OntologyReviewWorkbench")',
+      'lazy(() => import("@/features/signals/SignalsWorkbench")',
+    ]) {
+      expect(shell).not.toContain(retiredImport)
+    }
 
-    expect(detail).toContain("lazy(() => import(\"@/features/task-map/TaskGraphCanvas\")")
-    expect(detail).not.toContain("from \"@/features/task-map/TaskGraphCanvas\"")
+    expect(detail).not.toContain("TaskGraphCanvas")
     expect(detail).toContain("<CollapsibleContent>{open ? children : null}</CollapsibleContent>")
     expect(map).toContain("lazy(() => import(\"./TaskGraphCanvas\")")
     expect(map).not.toContain("from \"./TaskGraphCanvas\"")
     expect(layout).toContain("import(\"elkjs/lib/elk.bundled.js\")")
     expect(layout).not.toContain("import ELK")
+  })
+
+  it("keeps retired views out of navigation and reachable shell branches", () => {
+    const shell = source("app/AppShell.tsx")
+    const retiredViews = ["map", "signals", "ontology", "maintenance"] as const
+
+    expect(primaryViews).toEqual(["board", "list", "events"])
+    expect(sidebarViews).toEqual(["board", "list", "runs", "events", "health", "settings"])
+    for (const retiredView of retiredViews) {
+      expect(primaryViews).not.toContain(retiredView)
+      expect(sidebarViews).not.toContain(retiredView)
+      expect(shell).not.toContain(`if (view === \"${retiredView}\")`)
+    }
   })
 
   it("uses the shadcn-compatible textarea composition for task comments", () => {

@@ -1,5 +1,0 @@
-error[E0432]: unresolved import `kanban_sqlite::api::connect_existing_database_read_only`
- --> tests/ui/api_root_excludes_db_init/connect_existing_database_read_only.rs:3:5
-  |
-3 | use kanban_sqlite::api::connect_existing_database_read_only;
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `connect_existing_database_read_only` in `api`

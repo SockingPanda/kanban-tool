@@ -1,7 +1,0 @@
-error[E0596]: cannot borrow data in dereference of `DatabaseConnection` as mutable
- --> tests/ui/database_connection_no_deref_mut.rs:5:5
-  |
-5 |     connection
-  |     ^^^^^^^^^^ cannot borrow as mutable
-  |
-  = help: trait `DerefMut` is required to modify through a dereference, but it is not implemented for `DatabaseConnection`

@@ -4,50 +4,18 @@ edition.workspace = true
 version.workspace = true
 license.workspace = true
 authors.workspace = true
+autotests = false
 
 [[bin]]
 name = "kanban"
 path = "src/main.rs"
 
-[features]
-default = ["tantivy-backend"]
-oxigraph-backend = [
-  "kanban-sqlite/oxigraph-backend",
-  "kanban-server/oxigraph-backend",
-]
-tantivy-backend = [
-  "kanban-search/tantivy-backend",
-  "kanban-sqlite/tantivy-backend",
-  "kanban-server/tantivy-backend",
-]
-
 [dependencies]
-tracing.workspace = true
-anyhow.workspace = true
 clap.workspace = true
-clap_complete = "4.5"
-kanban-core.workspace = true
+dirs-next.workspace = true
+kanban-client.workspace = true
 kanban-contract.workspace = true
-kanban-context.workspace = true
-kanban-derived-io.workspace = true
-kanban-helper-protocol.workspace = true
-kanban-entity.workspace = true
-kanban-graph.workspace = true
-kanban-local.workspace = true
-kanban-search.workspace = true
-fs-err.workspace = true
 kanban-server.workspace = true
-kanban-sqlite.workspace = true
-kanban-vector.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-
-[dev-dependencies]
-kanban-test-support.workspace = true
-anyhow.workspace = true
-assert_cmd = "2.0"
-insta = { version = "1.48.0", features = ["json"] }
-predicates = "3.1"
-pretty_assertions = "1.4"
-tempfile.workspace = true

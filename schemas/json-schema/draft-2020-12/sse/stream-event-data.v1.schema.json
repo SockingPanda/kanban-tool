@@ -2040,6 +2040,74 @@
           "type": "integer"
         },
         "kind": {
+          "const": "task.released"
+        },
+        "payload": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/TaskToStatusPayload"
+            },
+            {
+              "properties": {
+                "to_status": {
+                  "const": "ready"
+                }
+              },
+              "required": [
+                "to_status"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "event_id",
+        "board_id",
+        "task_id",
+        "run_id",
+        "kind",
+        "actor",
+        "payload",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "integer"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "id": {
+          "type": "integer"
+        },
+        "kind": {
           "const": "task.reopened"
         },
         "payload": {
@@ -2817,6 +2885,7 @@
               "task.promoted",
               "task.reclaimed",
               "task.recomputed",
+              "task.released",
               "task.reopened",
               "task.retry_policy.updated",
               "task.specified",

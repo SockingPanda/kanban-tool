@@ -45,6 +45,13 @@
     "body": {
       "type": "string"
     },
+    "idempotency_key": {
+      "description": "Entity-local retry key scoped to this task.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "kind": {
       "anyOf": [
         {

@@ -1,0 +1,13 @@
+[package]
+name = "kanban-store-turso"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+turso.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio.workspace = true

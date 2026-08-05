@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { Activity, Database, RefreshCcw } from "lucide-react"
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { MetricStrip, SectionCard } from "@/components/ui/composites"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
@@ -20,11 +20,6 @@ type HealthMetric = {
   tone: MetricTone
 }
 
-type RuntimeWarning = {
-  title: string
-  message: string
-}
-
 type Translate = (key: string, values?: Record<string, string | number>) => string
 
 const identityTranslate: Translate = (key, values = {}) =>
@@ -33,7 +28,7 @@ const identityTranslate: Translate = (key, values = {}) =>
     return value === undefined ? match : String(value)
   })
 
-export function buildHealthRuntimeModel(health: HealthStatus, config: RuntimeConfig | null, t: Translate = identityTranslate) {
+export function buildHealthRuntimeModel(health: HealthStatus, t: Translate = identityTranslate) {
   const metrics: HealthMetric[] = [
     { id: "ok", label: t("ok"), value: String(health.ok), tone: health.ok ? "ready" : "blocked" },
     { id: "db", label: t("db"), value: health.db, tone: health.db === "ok" ? "ready" : "blocked" },
@@ -44,7 +39,6 @@ export function buildHealthRuntimeModel(health: HealthStatus, config: RuntimeCon
 
   return {
     metrics,
-    warning: runtimeMismatchWarning(health.db_path, config?.dbPath, t),
   }
 }
 
@@ -52,7 +46,7 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
   const { t } = useI18n()
   const healthQuery = useQuery({
     enabled: Boolean(api),
-    queryKey: ["health", config?.apiBaseUrl ?? "pending", config?.dbPath ?? "pending"],
+    queryKey: ["health", config?.apiBaseUrl ?? "pending"],
     queryFn: ({ signal }) => {
       if (!api) throw new Error(t("API client is not ready."))
       return api.health({ signal })
@@ -60,7 +54,7 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
     placeholderData: keepPreviousData,
   })
 
-  const runtimeModel = healthQuery.data ? buildHealthRuntimeModel(healthQuery.data, config, t) : null
+  const runtimeModel = healthQuery.data ? buildHealthRuntimeModel(healthQuery.data, t) : null
 
   return (
     <ScrollArea className="flex-1 bg-card p-4">
@@ -87,12 +81,6 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
             </Empty>
           )
         )}
-        {runtimeModel?.warning ? (
-          <Alert className="mt-3 border-destructive/50">
-            <AlertTitle className="text-destructive">{runtimeModel.warning.title}</AlertTitle>
-            <AlertDescription className="text-destructive">{runtimeModel.warning.message}</AlertDescription>
-          </Alert>
-        ) : null}
         {healthQuery.error ? (
           <Alert className="mt-3 border-destructive/50">
             <AlertDescription className="text-destructive">{healthQuery.error.message}</AlertDescription>
@@ -105,7 +93,6 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
           <InfoRow label="board" value={config?.board ?? "-"} />
           <InfoRow label="actor" value={config?.actor ?? "-"} />
           <InfoRow label="api" value={config?.apiBaseUrl || "same-origin"} />
-          <InfoRow label="db" value={config?.dbPath ?? "-"} />
         </div>
       </SectionCard>
     </ScrollArea>
@@ -128,24 +115,4 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function reportedValue(value: string | undefined, t: Translate = identityTranslate) {
   const trimmed = value?.trim()
   return trimmed || t("not reported")
-}
-
-function runtimeMismatchWarning(healthDbPath: string | undefined, configDbPath: string | undefined, t: Translate = identityTranslate): RuntimeWarning | null {
-  const healthPath = normalizedConcretePath(healthDbPath)
-  const configPath = normalizedConcretePath(configDbPath)
-  if (!healthPath || !configPath || healthPath === configPath) return null
-
-  return {
-    title: t("Runtime database mismatch"),
-    message: t(
-      "Health is responding from {healthPath}, but the desktop runtime is configured for {configPath}. Restart kanban serve, check that this window is using the intended port, and verify VITE_KB_API_BASE_URL / VITE_KB_DEV_PROXY_TARGET.",
-      { healthPath, configPath },
-    ),
-  }
-}
-
-function normalizedConcretePath(path: string | undefined) {
-  const trimmed = path?.trim()
-  if (!trimmed || trimmed === "external API" || trimmed === "not reported") return null
-  return trimmed.replace(/[\\/]+$/, "")
 }

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { KanbanApi } from "./api"
 
-const config={apiBaseUrl:"http://127.0.0.1:8721",dbPath:"test.db",actor:"desktop-test",board:"project"}
+const config={apiBaseUrl:"http://127.0.0.1:8721",actor:"desktop-test",board:"project"}
 const fixture=(name:string)=>JSON.parse(readFileSync(new URL(`../../../../schemas/fixtures/api/${name}-step-response.v1.valid.json`,import.meta.url),"utf8"))
 const fixtures={list:JSON.parse(readFileSync(new URL("../../../../schemas/fixtures/api/list-steps-response.v1.valid.json",import.meta.url),"utf8")),create:fixture("create"),update:fixture("update"),remove:fixture("remove"),complete:fixture("complete"),skip:fixture("skip"),reopen:fixture("reopen")}
 const response=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers:{"Content-Type":"application/json"}})
@@ -31,11 +31,21 @@ describe("steps exact contracts",()=>{
   ] as const) it(`rejects ${name}`,async()=>{vi.stubGlobal("fetch",vi.fn(async()=>response(mutate(structuredClone(fixtures.list)))));await expect(new KanbanApi(config).listSteps("t_project_parent")).rejects.toMatchObject({code:"invalid_response"})})
 
   it("preserves exact production transports and actors",async()=>{
-    const fetch=vi.fn(async()=>response(fixtures.create,201));vi.stubGlobal("fetch",fetch)
-    await new KanbanApi(config,{locale:"zh-CN"}).createStep("t_project_parent",{title:"Draft checks",required:true})
+    const fetch=vi.fn()
+    fetch.mockResolvedValueOnce(response(fixtures.create,201)).mockResolvedValueOnce(response(fixtures.update,200))
+    vi.stubGlobal("fetch",fetch)
+    const api=new KanbanApi(config,{locale:"zh-CN"})
+    await api.createStep("t_project_parent",{title:"Draft checks",required:true})
+    await api.updateStep("t_project_parent","step_fixture",{title:"Verify checks",body:null,required:false})
     const [url,init]=(fetch.mock.calls as unknown as [RequestInfo|URL,RequestInit][])[0]!
     expect(url).toBe("http://127.0.0.1:8721/api/v1/tasks/t_project_parent/steps")
     expect(init).toMatchObject({method:"POST",headers:{"Accept-Language":"zh-CN","Content-Type":"application/json"}})
-    expect(JSON.parse(init.body as string)).toEqual({title:"Draft checks",required:true,actor:"desktop-test"})
+    const body=JSON.parse(init.body as string)
+    expect(body).toMatchObject({title:"Draft checks",required:true,actor:"desktop-test"})
+    expect(body.idempotency_key).toMatch(/^step\.create:step_[0-9a-f-]+$/)
+    const [updateUrl,updateInit]=(fetch.mock.calls as unknown as [RequestInfo|URL,RequestInit][])[1]!
+    expect(updateUrl).toBe("http://127.0.0.1:8721/api/v1/tasks/t_project_parent/steps/step_fixture")
+    expect(updateInit).toMatchObject({method:"PATCH",headers:{"Accept-Language":"zh-CN","Content-Type":"application/json"}})
+    expect(JSON.parse(updateInit.body as string)).toMatchObject({title:"Verify checks",body:null,required:false,actor:"desktop-test"})
   })
 })

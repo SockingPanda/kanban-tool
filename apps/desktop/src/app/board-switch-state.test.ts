@@ -7,7 +7,6 @@ describe("createBoardSwitchReset", () => {
     const reset = createBoardSwitchReset({
       config: {
         apiBaseUrl: "http://127.0.0.1:8721",
-        dbPath: "test.db",
         actor: "desktop-test",
         board: "default",
       },
@@ -38,7 +37,6 @@ describe("createBoardSwitchReset", () => {
     expect(reset).toEqual({
       config: {
         apiBaseUrl: "http://127.0.0.1:8721",
-        dbPath: "test.db",
         actor: "desktop-test",
         board: "default",
       },

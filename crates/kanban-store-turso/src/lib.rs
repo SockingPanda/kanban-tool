@@ -21,6 +21,7 @@ pub use legacy_import::{
 pub use operations::search::{
     StoreSearchHit, StoreSearchIndexStatus, StoreSearchMeta, StoreSearchQuery, StoreSearchResults,
 };
+pub use operations::CreateAttachmentInput;
 pub use operations::{
     AddDependencyInput, AddDependencyRecord, ArchiveBoardInput, ArchiveTaskInput, BlockTaskInput,
     ClaimTaskInput, ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput,

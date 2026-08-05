@@ -3,6 +3,7 @@
 //! Each operation module extends [`ApplicationService`] with one cohesive
 //! command or query. Shared service state remains in the service core.
 
+mod attachment;
 mod board;
 mod comment;
 mod dependency;
@@ -14,6 +15,10 @@ mod stats;
 mod step;
 mod task;
 
+pub use attachment::{
+    AttachmentCreate, AttachmentDelete, AttachmentList, AttachmentRead, CreateAttachmentCommand,
+    CreateAttachmentRecord, DeleteAttachmentCommand,
+};
 pub use board::{
     ArchiveBoardCommand, ArchiveBoardRecord, BoardArchive, BoardColumns, BoardCreate, BoardGet,
     BoardList, CreateBoardCommand, CreateBoardRecord,

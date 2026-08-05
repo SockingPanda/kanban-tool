@@ -1,3 +1,4 @@
+mod attachment;
 mod board;
 mod comment;
 mod dependency;

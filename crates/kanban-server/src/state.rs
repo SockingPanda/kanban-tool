@@ -15,6 +15,7 @@ pub(crate) type HostApplicationService = ApplicationService<TursoApplicationStor
 pub struct AppState {
     application: HostApplicationService,
     db_path: Arc<PathBuf>,
+    attachment_root: Arc<PathBuf>,
     default_actor: Arc<str>,
 }
 
@@ -39,6 +40,7 @@ impl AppState {
             Some(path) => Some(Arc::new(ensure_run_log_root(&path).await?)),
             None => None,
         };
+        let attachment_root = Arc::new(ensure_attachment_root(&db_path).await?);
         let store = TursoStore::open(&db_path)
             .await
             .map_err(|error| KanbanError::Storage(error.to_string()))?;
@@ -46,13 +48,12 @@ impl AppState {
             .initialize()
             .await
             .map_err(|error| KanbanError::Storage(error.to_string()))?;
-        let application_store = match run_log_root.as_ref() {
-            Some(root) => TursoApplicationStore::with_run_log_root(store, root.clone()),
-            None => TursoApplicationStore::new(store),
-        };
+        let application_store =
+            TursoApplicationStore::with_roots(store, run_log_root, attachment_root.clone());
         Ok(Self {
             application: ApplicationService::new(application_store),
             db_path: Arc::new(db_path),
+            attachment_root,
             default_actor: Arc::from(default_actor.into()),
         })
     }
@@ -63,6 +64,10 @@ impl AppState {
 
     pub fn db_path(&self) -> &Path {
         self.db_path.as_path()
+    }
+
+    pub fn attachment_root(&self) -> &Path {
+        self.attachment_root.as_path()
     }
 
     pub fn default_actor(&self) -> &str {
@@ -87,6 +92,25 @@ async fn ensure_run_log_root(path: &Path) -> Result<PathBuf> {
         .await
         .map_err(|error| KanbanError::Storage(error.to_string()))?;
     tokio::fs::canonicalize(path)
+        .await
+        .map_err(|error| KanbanError::Storage(error.to_string()))
+}
+
+async fn ensure_attachment_root(db_path: &Path) -> Result<PathBuf> {
+    let parent = db_path.parent().ok_or_else(|| {
+        KanbanError::InvalidInput(format!(
+            "database path has no parent directory: {}",
+            db_path.display()
+        ))
+    })?;
+    let root = parent.join("attachments");
+    tokio::fs::create_dir_all(&root)
+        .await
+        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+    tokio::fs::create_dir_all(root.join(".trash"))
+        .await
+        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+    tokio::fs::canonicalize(root)
         .await
         .map_err(|error| KanbanError::Storage(error.to_string()))
 }

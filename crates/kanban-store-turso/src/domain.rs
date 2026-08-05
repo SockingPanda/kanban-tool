@@ -48,6 +48,21 @@ pub struct CommentRecord {
     pub metadata_json: String,
     pub created_at: i64,
 }
+
+/// 附件只在 canonical 数据库中保存元数据；内容由 host 管理的附件根目录保存。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachmentRecord {
+    pub id: String,
+    pub board_id: String,
+    pub task_id: String,
+    pub filename: String,
+    pub rel_path: String,
+    pub content_type: Option<String>,
+    pub size_bytes: i64,
+    pub sha256: Option<String>,
+    pub created_by: String,
+    pub created_at: i64,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskStepRecord {
     pub id: String,

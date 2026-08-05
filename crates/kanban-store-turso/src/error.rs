@@ -19,6 +19,11 @@ pub enum StoreError {
     TaskNotFound(String),
     RunNotFound(String),
     StepNotFound(String),
+    AttachmentNotFound(String),
+    AttachmentFileMissing(String),
+    AttachmentConflict(String),
+    AttachmentIntegrity(String),
+    AttachmentIo(String),
     DependencyCycle(String),
     TaskConflict(String),
     IdempotencyConflict {
@@ -50,6 +55,19 @@ impl Display for StoreError {
             Self::TaskNotFound(task_id) => write!(formatter, "task not found: {task_id}"),
             Self::RunNotFound(run_id) => write!(formatter, "run not found: {run_id}"),
             Self::StepNotFound(step_id) => write!(formatter, "step not found: {step_id}"),
+            Self::AttachmentNotFound(attachment_id) => {
+                write!(formatter, "attachment not found: {attachment_id}")
+            }
+            Self::AttachmentFileMissing(path) => {
+                write!(formatter, "attachment file missing: {path}")
+            }
+            Self::AttachmentConflict(message) => {
+                write!(formatter, "attachment conflict: {message}")
+            }
+            Self::AttachmentIntegrity(message) => {
+                write!(formatter, "attachment integrity failure: {message}")
+            }
+            Self::AttachmentIo(message) => write!(formatter, "attachment I/O error: {message}"),
             Self::DependencyCycle(message) => write!(formatter, "dependency cycle: {message}"),
             Self::TaskConflict(task_id) => write!(formatter, "task id already exists: {task_id}"),
             Self::IdempotencyConflict {

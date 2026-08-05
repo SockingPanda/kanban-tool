@@ -12,9 +12,11 @@ pub mod service;
 pub use dto::*;
 pub use operations::LabelOntologyOperations;
 pub use operations::{
-    ArchiveBoardCommand, ArchiveBoardRecord, ArchiveTaskCommand, ArchiveTaskRecord, BoardArchive,
-    BoardColumns, BoardCreate, BoardGet, BoardList, CommentCreate, CommentList, CreateBoardCommand,
-    CreateBoardRecord, DependencyCreate, DependencyList, DependencyRemove, EventList,
+    ArchiveBoardCommand, ArchiveBoardRecord, ArchiveTaskCommand, ArchiveTaskRecord,
+    AttachmentCreate, AttachmentDelete, AttachmentList, AttachmentRead, BoardArchive,
+    BoardColumns, BoardCreate, BoardGet, BoardList, CommentCreate, CommentList,
+    CreateAttachmentCommand, CreateAttachmentRecord, CreateBoardCommand, CreateBoardRecord,
+    DeleteAttachmentCommand, DependencyCreate, DependencyList, DependencyRemove, EventList,
     EventListOptions, EventListPage, EventRecord, MAX_SEARCH_LIMIT, RUN_LOG_TAIL_BYTES,
     ReclaimTaskCommand, ReclaimTaskRecord, ReopenTaskCommand, ReopenTaskRecord, RunList, RunLog,
     RunLogRecord, RunShow, SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults,

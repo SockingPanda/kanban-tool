@@ -1,3 +1,4 @@
+mod attachments;
 mod boards;
 mod comments;
 mod dependencies;
@@ -11,6 +12,7 @@ mod stats;
 mod steps;
 mod tasks;
 
+pub use attachments::CreateAttachmentInput;
 pub use boards::{ArchiveBoardInput, CreateBoardInput};
 pub use comments::CreateCommentInput;
 pub use dependencies::{

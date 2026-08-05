@@ -115,6 +115,27 @@ pub struct CommentRecord {
     pub created_at: i64,
 }
 
+/// 附件内容不进入 DTO；host 仅返回受控读取得到的字节，canonical 数据库存元数据。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachmentRecord {
+    pub id: String,
+    pub board_id: String,
+    pub task_id: String,
+    pub filename: String,
+    pub rel_path: String,
+    pub content_type: Option<String>,
+    pub size_bytes: i64,
+    pub sha256: Option<String>,
+    pub created_by: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachmentContentRecord {
+    pub attachment: AttachmentRecord,
+    pub content: Vec<u8>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DependencyEdgeRecord {
     pub parent: TaskRecord,

@@ -25,6 +25,7 @@ mod operations;
 pub(crate) struct TursoApplicationStore {
     store: TursoStore,
     run_log_root: Option<Arc<PathBuf>>,
+    attachment_root: Option<Arc<PathBuf>>,
 }
 
 impl TursoApplicationStore {
@@ -32,6 +33,7 @@ impl TursoApplicationStore {
         Self {
             store,
             run_log_root: None,
+            attachment_root: None,
         }
     }
 
@@ -39,11 +41,28 @@ impl TursoApplicationStore {
         Self {
             store,
             run_log_root: Some(run_log_root),
+            attachment_root: None,
+        }
+    }
+
+    pub(crate) fn with_roots(
+        store: TursoStore,
+        run_log_root: Option<Arc<PathBuf>>,
+        attachment_root: Arc<PathBuf>,
+    ) -> Self {
+        Self {
+            store,
+            run_log_root,
+            attachment_root: Some(attachment_root),
         }
     }
 
     pub(crate) fn run_log_root(&self) -> Option<&Path> {
         self.run_log_root.as_deref().map(PathBuf::as_path)
+    }
+
+    pub(crate) fn attachment_root(&self) -> Option<&Path> {
+        self.attachment_root.as_deref().map(PathBuf::as_path)
     }
 }
 
@@ -55,6 +74,15 @@ fn store_error(error: StoreError) -> KanbanError {
         StoreError::TaskNotFound(task_id) => KanbanError::NotFound(format!("task {task_id}")),
         StoreError::RunNotFound(run_id) => KanbanError::NotFound(format!("run {run_id}")),
         StoreError::StepNotFound(step_id) => KanbanError::NotFound(format!("step {step_id}")),
+        StoreError::AttachmentNotFound(attachment_id) => {
+            KanbanError::NotFound(format!("attachment {attachment_id}"))
+        }
+        StoreError::AttachmentFileMissing(path) => {
+            KanbanError::Storage(format!("attachment file missing: {path}"))
+        }
+        StoreError::AttachmentConflict(message) => KanbanError::Conflict(message),
+        StoreError::AttachmentIntegrity(message) => KanbanError::Storage(message),
+        StoreError::AttachmentIo(message) => KanbanError::Storage(message),
         StoreError::DependencyCycle(message) => KanbanError::Conflict(message),
         StoreError::TaskConflict(task_id) => {
             KanbanError::Conflict(format!("task id already exists: {task_id}"))

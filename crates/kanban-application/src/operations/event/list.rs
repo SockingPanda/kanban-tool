@@ -82,6 +82,7 @@ mod tests {
 
     use kanban_core::{KanbanError, Result};
 
+    use super::MAX_EVENT_LIST_LIMIT;
     use crate::operations::test_support::{FixedClock, StubStore};
     use crate::*;
 

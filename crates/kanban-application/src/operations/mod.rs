@@ -14,7 +14,6 @@ mod task;
 pub use board::{BoardColumns, BoardList};
 pub use comment::{CommentCreate, CommentList};
 pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
-#[allow(unused_imports)]
 pub use event::*;
 pub use run::*;
 pub use step::{StepCreate, StepList, StepUpdate};

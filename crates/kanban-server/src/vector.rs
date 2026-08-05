@@ -611,7 +611,11 @@ fn now_ms() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Write, net::TcpListener, thread};
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+    };
 
     use axum::{
         body::Body,
@@ -765,6 +769,8 @@ mod tests {
             let Ok((mut stream, _)) = listener.accept() else {
                 return;
             };
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request);
             let reason = if status < 400 { "OK" } else { "Error" };
             let response = format!(
                 "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",

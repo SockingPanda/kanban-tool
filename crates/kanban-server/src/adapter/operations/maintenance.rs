@@ -126,14 +126,15 @@ impl MaintenanceQuery for TursoApplicationStore {
             .import(path, replace)
             .await
             .map_err(store_error)
-            .map(|value| ImportReportRecord {
-                in_path: value.in_path,
-                source_fingerprint: value.source_fingerprint,
-                imported_records: value.imported_records,
-                skipped_records: value.skipped_records,
-                rebuild_jobs_enqueued: value.rebuild_jobs_enqueued,
-                journal_id: value.journal_id,
-            })
+            .map(import_record)
+    }
+
+    async fn prepare_import(&self, path: &str) -> Result<ImportReportRecord> {
+        self.store
+            .prepare_import(path)
+            .await
+            .map_err(store_error)
+            .map(import_record)
     }
 
     async fn vacuum(&self) -> Result<VacuumReportRecord> {
@@ -204,6 +205,23 @@ impl MaintenanceQuery for TursoApplicationStore {
                     })
                     .collect(),
             })
+    }
+}
+
+fn import_record(value: kanban_store_turso::StoreImportReport) -> ImportReportRecord {
+    ImportReportRecord {
+        in_path: value.in_path,
+        source_fingerprint: value.source_fingerprint,
+        imported_records: value.imported_records,
+        skipped_records: value.skipped_records,
+        rebuild_jobs_enqueued: value.rebuild_jobs_enqueued,
+        journal_id: value.journal_id,
+        phase: value.phase,
+        restart_required: value.restart_required,
+        staged_database_path: value.staged_database_path,
+        target_fingerprint_before: value.target_fingerprint_before,
+        staged_fingerprint: value.staged_fingerprint,
+        publish_preconditions: value.publish_preconditions,
     }
 }
 

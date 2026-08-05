@@ -144,6 +144,12 @@ pub(crate) async fn import(
             skipped_records: report.skipped_records,
             rebuild_jobs_enqueued: report.rebuild_jobs_enqueued,
             journal_id: report.journal_id,
+            phase: report.phase,
+            restart_required: report.restart_required,
+            staged_database_path: report.staged_database_path,
+            target_fingerprint_before: report.target_fingerprint_before,
+            staged_fingerprint: report.staged_fingerprint,
+            publish_preconditions: report.publish_preconditions,
         })),
     ))
 }

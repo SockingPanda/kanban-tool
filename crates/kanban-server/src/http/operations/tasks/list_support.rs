@@ -2,7 +2,7 @@ use crate::error::ApiError;
 use kanban_service::{
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
 };
-use kanban_core::{KanbanError, TaskStatus};
+use kanban_service::{KanbanError, TaskStatus};
 use kanban_protocol::{
     ApiTaskPriority, ApiTaskStatus, ListTasksQuery, MAX_TASK_READ_ASSIGNEE_CHARS,
     MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS, MAX_TASK_READ_LIMIT,

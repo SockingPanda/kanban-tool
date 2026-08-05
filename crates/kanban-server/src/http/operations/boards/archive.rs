@@ -8,7 +8,7 @@ use axum::{
     routing::post,
 };
 use kanban_service::ArchiveBoardCommand;
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{ArchiveBoardPath, ArchiveBoardRequest, ArchiveBoardResponse};
 
 pub(crate) async fn archive_board(

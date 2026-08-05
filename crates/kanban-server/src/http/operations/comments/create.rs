@@ -11,7 +11,7 @@ use kanban_service::{
     CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
     CreateCommentCommand,
 };
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{CreateCommentPath, CreateCommentRequest, CreateCommentResponse};
 
 pub(crate) async fn create_comment(

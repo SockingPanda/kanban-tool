@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, Query, State},
     routing::{get, post},
 };
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use serde_json::{Value, json};
 
 use crate::{error::ApiError, state::AppState};

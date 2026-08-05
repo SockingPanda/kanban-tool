@@ -6,7 +6,7 @@ use axum::{
 };
 use kanban_service::dto::EntityRecord;
 use kanban_service::operations::{EntityListOptions, EntityUpsertCommand};
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{
     CliEntity, CliEntityListOutput, CliEntityShowOutput, DataEnvelope, EntityListQuery, EntityPath,
     EntityUpsertRequest,

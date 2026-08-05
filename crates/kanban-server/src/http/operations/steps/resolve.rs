@@ -8,7 +8,7 @@ use axum::{
     routing::post,
 };
 use kanban_service::operations::{CompleteStepCommand, ReopenStepCommand, SkipStepCommand};
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{
     CompleteStepPath, CompleteStepRequest, CompleteStepResponse, ReopenStepPath, ReopenStepRequest,
     ReopenStepResponse, SkipStepPath, SkipStepRequest, SkipStepResponse,

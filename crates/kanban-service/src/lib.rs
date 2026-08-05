@@ -27,6 +27,7 @@ pub mod legacy_import;
 // the same canonical application boundary, including host-admin maintenance.
 
 pub use dto::*;
+pub use kanban_core::{Board, BoardColumn, KanbanError, Result, TaskStatus, new_task_id};
 pub use operations::LabelOntologyOperations;
 pub use operations::{
     AddTaskLabelsCommand, AddTaskLabelsRecord, AddTaskLabelsRecordInput, ArchiveBoardCommand,

@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{
     GetTaskDetailsResponse, GetTaskPath, GetTaskQuery, GetTaskResponse, TaskDetailAggregate,
     TaskDetailOntology, TaskOntologySignalSummary, TaskOntologySummary,

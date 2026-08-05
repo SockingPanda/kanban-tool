@@ -9,7 +9,7 @@ pub(crate) async fn health(
     state.application().health().await?;
     let metadata = tokio::fs::metadata(state.db_path())
         .await
-        .map_err(|error| kanban_core::KanbanError::Storage(error.to_string()))?;
+        .map_err(|error| kanban_service::KanbanError::Storage(error.to_string()))?;
     let modified_ms = metadata
         .modified()
         .ok()

@@ -8,7 +8,7 @@ use axum::{
     routing::post,
 };
 use kanban_service::AddDependencyCommand;
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{AddDependencyPath, AddDependencyRequest, AddDependencyResponse};
 
 pub(crate) async fn add_dependency(

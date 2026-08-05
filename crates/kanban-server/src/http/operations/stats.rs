@@ -4,7 +4,7 @@ use axum::{
     extract::{Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_core::{KanbanError, TaskStatus};
+use kanban_service::{KanbanError, TaskStatus};
 use kanban_protocol::{
     ApiTaskStatus, BlockedReasonCount, BoardQuery, DataEnvelope, QueueStats, StaleClaim,
     StatsResponse, StatusCount,

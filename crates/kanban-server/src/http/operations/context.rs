@@ -4,7 +4,7 @@ use axum::{
     routing::get,
 };
 use kanban_service::{ContextBuildOptions, ContextPack as ApplicationContextPack};
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{
     BuildContextPath, BuildContextQuery, BuildContextResponse, ContextDiagnostic, ContextEvidence,
     ContextItem, ContextPack, ContextPolicy, ContextProviderStatus, DataEnvelope,

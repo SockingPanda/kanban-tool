@@ -8,7 +8,7 @@ use axum::{
     routing::post,
 };
 use kanban_service::ClaimTaskCommand;
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{ApiClaim, ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse};
 
 pub(crate) async fn claim_task(

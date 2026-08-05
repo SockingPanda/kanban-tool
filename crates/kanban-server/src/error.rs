@@ -3,7 +3,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{ApiErrorCode, ErrorBody, ErrorEnvelope};
 
 #[derive(Debug)]

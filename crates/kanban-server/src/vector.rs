@@ -11,7 +11,7 @@ use axum::{
     },
     routing::{get, post},
 };
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{
     DataEnvelope, VectorChunkResult, VectorConfigureRequest, VectorConfigureResponse,
     VectorLabelAtomResult, VectorProjectionRequest, VectorProjectionResponse, VectorQuery,

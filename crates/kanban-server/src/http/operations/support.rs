@@ -1,7 +1,7 @@
 use crate::error::ApiError;
 use axum::http::HeaderMap;
 use kanban_service::{RunRecord, RunStatus};
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{ApiRun, ApiRunStatus};
 
 pub(crate) fn api_run(run: RunRecord) -> Result<ApiRun, ApiError> {

@@ -33,7 +33,7 @@ mod tests {
         ClaimTaskCommand, CreateTaskCommand, MarkExecutionPlanNotRequiredCommand,
         PromoteTaskCommand,
     };
-    use kanban_core::TaskStatus;
+    use kanban_service::TaskStatus;
     use kanban_protocol::{ApiErrorCode, ErrorEnvelope, GetRunLogResponse};
 
     #[tokio::test]

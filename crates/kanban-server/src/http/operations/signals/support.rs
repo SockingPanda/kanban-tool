@@ -1,6 +1,6 @@
 use crate::error::ApiError;
 use kanban_service::{SignalRecord, SignalStatus};
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{SignalObservationWire, SignalWire};
 
 pub(crate) fn api_signal(signal: SignalRecord) -> Result<SignalWire, ApiError> {

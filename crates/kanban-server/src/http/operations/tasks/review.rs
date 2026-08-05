@@ -8,7 +8,7 @@ use axum::{
     routing::post,
 };
 use kanban_service::SubmitReviewTaskCommand;
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{SubmitReviewTaskPath, SubmitReviewTaskRequest, SubmitReviewTaskResponse};
 
 pub(crate) async fn submit_review_task(

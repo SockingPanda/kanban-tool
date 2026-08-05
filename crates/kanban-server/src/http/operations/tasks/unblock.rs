@@ -8,7 +8,7 @@ use axum::{
     routing::post,
 };
 use kanban_service::UnblockTaskCommand;
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{UnblockTaskPath, UnblockTaskRequest, UnblockTaskResponse};
 
 pub(crate) async fn unblock_task(

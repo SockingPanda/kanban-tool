@@ -1,6 +1,6 @@
 use crate::error::ApiError;
 use kanban_service::{ExecutionPlanRecord, ExecutionPlanState, LabelRecord, TaskRecord};
-use kanban_core::{KanbanError, TaskStatus};
+use kanban_service::{KanbanError, TaskStatus};
 use kanban_protocol::{
     ApiExecutionPlan, ApiExecutionPlanState, ApiStepStatus, ApiTask, ApiTaskPriority,
     ApiTaskStatus, ApiTaskStep,

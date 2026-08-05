@@ -8,7 +8,7 @@ use axum::{
     routing::post,
 };
 use kanban_service::ReleaseTaskCommand;
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{ReleaseTaskPath, ReleaseTaskRequest, ReleaseTaskResponse};
 
 pub(crate) async fn release_task(

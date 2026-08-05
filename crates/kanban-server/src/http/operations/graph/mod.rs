@@ -15,7 +15,7 @@ use kanban_service::dto::{
 use kanban_service::operations::{
     BoardTaskMapOptions, GraphNeighborsOptions, GraphQueryOptions, TaskNeighborhoodOptions,
 };
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::cli_helpers::{CliGraphQueryBinding, CliGraphQueryOutput, CliGraphQueryRow};
 use kanban_protocol::{
     ApiRelation, ApiRelationProvenance, BoardQuery, BoardTaskMap, BoardTaskMapPath,

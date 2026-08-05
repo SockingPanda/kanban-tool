@@ -8,7 +8,7 @@ use axum::{
     routing::post,
 };
 use kanban_service::SpecifyTaskCommand;
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{SpecifyTaskPath, SpecifyTaskRequest, SpecifyTaskResponse};
 
 pub(crate) async fn specify_task(

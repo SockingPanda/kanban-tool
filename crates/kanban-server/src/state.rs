@@ -4,7 +4,7 @@ use std::{
 };
 
 use kanban_service::{ApplicationService, TursoApplicationStore};
-use kanban_core::{KanbanError, Result};
+use kanban_service::{KanbanError, Result};
 
 pub(crate) type HostApplicationService = ApplicationService<TursoApplicationStore>;
 

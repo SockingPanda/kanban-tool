@@ -8,7 +8,7 @@ use axum::{
     routing::post,
 };
 use kanban_service::PromoteTaskCommand;
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse};
 
 pub(crate) async fn promote_task(

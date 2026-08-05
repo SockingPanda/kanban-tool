@@ -4,7 +4,7 @@ use axum::{
     routing::{get, post},
 };
 use kanban_service::{SearchIndexStatus, SearchMeta as AppSearchMeta, SearchQuery};
-use kanban_core::{KanbanError, TaskStatus};
+use kanban_service::{KanbanError, TaskStatus};
 use kanban_protocol::{
     ApiTaskStatus, BoardQuery, DataEnvelope, MetadataEnvelope, OffsetPaginationMeta, SearchMeta,
     SearchPageMeta, SearchStatus, SearchStatusResponse, SearchTaskHit, SearchTaskStatusWindow,

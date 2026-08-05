@@ -9,7 +9,7 @@ use kanban_service::{
     BlockTaskCommand, ClaimRecord, ClaimTaskCommand, CompleteTaskCommand, HeartbeatTaskCommand,
     ReleaseTaskCommand, SubmitReviewTaskCommand, TaskListOptions, TaskListSort,
 };
-use kanban_core::{KanbanError, Result, TaskStatus};
+use kanban_service::{KanbanError, Result, TaskStatus};
 use serde::Deserialize;
 use tokio::{
     process::{Child, Command},

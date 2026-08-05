@@ -2,7 +2,7 @@ use crate::error::ApiError;
 use kanban_service::{
     CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
 };
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::ApiComment;
 
 pub(crate) fn api_comment(

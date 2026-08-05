@@ -11,7 +11,7 @@ use axum::{
     routing::{delete, get},
 };
 use kanban_service::{AddTaskLabelsCommand, CreateBoardLabelCommand, RemoveTaskLabelCommand};
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{
     AddTaskLabelPath, AddTaskLabelRequest, AddTaskLabelResponse, BoardLabelPath,
     CreateBoardLabelRequest, CreateBoardLabelResponse, DataEnvelope, ListBoardLabelsResponse,

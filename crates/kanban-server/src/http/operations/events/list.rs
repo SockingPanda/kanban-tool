@@ -5,7 +5,7 @@ use axum::{
     routing::get,
 };
 use kanban_service::{EventListOptions as ApplicationEventListOptions, EventRecord};
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
 use kanban_protocol::{
     ListEventsQuery, ListEventsResponse, NextAfterMeta, StreamEventData,
     event_payload::EventPayload,

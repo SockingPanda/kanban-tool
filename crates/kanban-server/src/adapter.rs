@@ -24,8 +24,6 @@ mod operations;
 #[derive(Clone)]
 pub(crate) struct TursoApplicationStore {
     store: TursoStore,
-    // Consumed by the run.log leaf slice; keep the seam warning-free until then.
-    #[allow(dead_code)]
     run_log_root: Option<Arc<PathBuf>>,
 }
 
@@ -44,8 +42,6 @@ impl TursoApplicationStore {
         }
     }
 
-    // Consumed by the run.log leaf slice; keep the seam warning-free until then.
-    #[allow(dead_code)]
     pub(crate) fn run_log_root(&self) -> Option<&Path> {
         self.run_log_root.as_deref().map(PathBuf::as_path)
     }

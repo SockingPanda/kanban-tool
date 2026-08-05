@@ -40,7 +40,7 @@ mod tests {
                 serde_json::json!({
                     "task_id": "t_run_show",
                     "title": "run show",
-                    "description": null,
+                    "description": "run show test",
                     "status": "todo",
                     "assignee": null,
                     "priority": 3,

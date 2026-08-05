@@ -2864,21 +2864,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kanban-store-turso"
-version = "2.1.3"
-dependencies = [
- "kanban-core",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "tokio",
- "turso",
- "ulid",
-]
-
-[[package]]
 name = "keyboard-types"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -4,7 +4,6 @@ members = [
   "crates/kanban-service",
   "crates/kanban-protocol",
   "xtask",
-  "crates/kanban-store-turso",
   "crates/kanban-client",
   "crates/kanban-cli",
   "crates/kanban-mcp",
@@ -28,7 +27,6 @@ default-members = [
   "crates/kanban-core",
   "crates/kanban-service",
   "crates/kanban-protocol",
-  "crates/kanban-store-turso",
   "crates/kanban-client",
   "crates/kanban-cli",
   "crates/kanban-mcp",
@@ -82,6 +80,5 @@ ksni = { version = "0.3.5", default-features = false }
 kanban-core = { path = "crates/kanban-core" }
 kanban-service = { path = "crates/kanban-service" }
 kanban-protocol = { path = "crates/kanban-protocol", default-features = false }
-kanban-store-turso = { path = "crates/kanban-store-turso" }
 kanban-client = { path = "crates/kanban-client" }
 kanban-server = { path = "crates/kanban-server" }

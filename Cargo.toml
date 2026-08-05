@@ -11,6 +11,19 @@ members = [
   "crates/kanban-server",
   "apps/desktop/src-tauri",
 ]
+exclude = [
+  "crates/kanban-context",
+  "crates/kanban-derived-io",
+  "crates/kanban-entity",
+  "crates/kanban-graph",
+  "crates/kanban-graph-oxigraph",
+  "crates/kanban-helper-protocol",
+  "crates/kanban-indexer",
+  "crates/kanban-labels",
+  "crates/kanban-search",
+  "crates/kanban-vector",
+  "crates/kanban-vector-lancedb",
+]
 default-members = [
   "crates/kanban-core",
   "crates/kanban-application",
@@ -38,26 +51,15 @@ axum = "0.7"
 clap = { version = "4.5", features = ["derive", "env"] }
 dirs-next = "2.0"
 http-body-util = "0.1"
-fs-err = "3.1"
-fs4 = "0.13"
-lancedb = { version = "0.30.0", default-features = false }
-libc = "0.2"
-arrow-array = "58.0"
-arrow-schema = "58.0"
-futures = "0.3"
-rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_path_to_error = "0.1.20"
 schemars = { version = "1.2.1", default-features = false, features = ["std", "derive"] }
 jsonschema = { version = "0.47.0", default-features = false }
 sha2 = "0.10"
-rustix = { version = "1.1", features = ["fs", "linux_4_11"] }
 strum = { version = "0.26", features = ["derive"] }
-tantivy = "0.26.1"
 toml = "0.8"
 ureq = { version = "2.12", default-features = false, features = ["json"] }
-oxigraph = { version = "0.5.8", default-features = false }
 tempfile = "3.10"
 thiserror = "2.0"
 time = { version = "0.3", features = ["formatting", "parsing"] }
@@ -73,16 +75,9 @@ tokio = { version = "1.38", features = [
     "sync",
     "time",
 ] }
-tokio-util = { version = "0.7", features = ["rt"] }
 tower = { version = "0.5", features = ["util"] }
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 ulid = "1.1"
-windows-sys = { version = "0.61.2", features = [
-    "Win32_Storage_FileSystem",
-    "Win32_System_IO",
-] }
-assert_fs = "1.1"
 turso = { version = "=0.7.2", default-features = false }
 rmcp = { version = "=3.1.0", default-features = false, features = ["server", "transport-io", "macros"] }
 
@@ -91,18 +86,4 @@ kanban-application = { path = "crates/kanban-application" }
 kanban-contract = { path = "crates/kanban-contract", default-features = false }
 kanban-store-turso = { path = "crates/kanban-store-turso" }
 kanban-client = { path = "crates/kanban-client" }
-kanban-test-support = { path = "crates/kanban-test-support" }
-kanban-entity = { path = "crates/kanban-entity" }
-kanban-indexer = { path = "crates/kanban-indexer" }
-kanban-search = { path = "crates/kanban-search" }
-kanban-graph = { path = "crates/kanban-graph" }
-kanban-vector = { path = "crates/kanban-vector" }
-kanban-derived-io = { path = "crates/kanban-derived-io" }
-kanban-helper-protocol = { path = "crates/kanban-helper-protocol" }
-kanban-vector-lancedb = { path = "crates/kanban-vector-lancedb" }
-kanban-graph-oxigraph = { path = "crates/kanban-graph-oxigraph" }
-kanban-labels = { path = "crates/kanban-labels" }
-kanban-context = { path = "crates/kanban-context" }
-kanban-sqlite = { path = "crates/kanban-sqlite" }
-kanban-local = { path = "crates/kanban-local" }
 kanban-server = { path = "crates/kanban-server" }

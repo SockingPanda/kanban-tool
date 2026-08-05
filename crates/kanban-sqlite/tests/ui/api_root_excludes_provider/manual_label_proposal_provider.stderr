@@ -1,5 +1,0 @@
-error[E0432]: unresolved import `kanban_sqlite::api::ManualLabelProposalProvider`
- --> tests/ui/api_root_excludes_provider/manual_label_proposal_provider.rs:3:5
-  |
-3 | use kanban_sqlite::api::ManualLabelProposalProvider;
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `ManualLabelProposalProvider` in `api`

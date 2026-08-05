@@ -1,5 +1,0 @@
-error[E0432]: unresolved import `kanban_sqlite::api::graph_relation_snapshot`
- --> tests/ui/api_facade_excludes_non_slice_symbol.rs:1:5
-  |
-1 | use kanban_sqlite::api::graph_relation_snapshot;
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `graph_relation_snapshot` in `api`

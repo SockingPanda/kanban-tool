@@ -1,5 +1,0 @@
-error[E0432]: unresolved import `kanban_sqlite::api::connect`
- --> tests/ui/api_root_excludes_db_init/connect.rs:3:5
-  |
-3 | use kanban_sqlite::api::connect;
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `connect` in `api`

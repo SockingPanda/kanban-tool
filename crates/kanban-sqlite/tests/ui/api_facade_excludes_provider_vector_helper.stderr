@@ -1,5 +1,0 @@
-error[E0432]: unresolved import `kanban_sqlite::api::configured_vector_store_status`
- --> tests/ui/api_facade_excludes_provider_vector_helper.rs:1:5
-  |
-1 | use kanban_sqlite::api::configured_vector_store_status;
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `configured_vector_store_status` in `api`

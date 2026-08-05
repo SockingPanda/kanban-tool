@@ -1,5 +1,0 @@
-error[E0432]: unresolved import `kanban_sqlite::api::default_pragmas`
- --> tests/ui/api_root_excludes_db_init/default_pragmas.rs:3:5
-  |
-3 | use kanban_sqlite::api::default_pragmas;
-  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `default_pragmas` in `api`

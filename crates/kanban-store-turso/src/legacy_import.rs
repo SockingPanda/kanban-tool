@@ -1531,4 +1531,68 @@ mod tests {
         assert_eq!(MIGRATION_NAMES.len(), SOURCE_VERSION as usize);
         assert_eq!(MIGRATION_CHECKSUMS.len(), MIGRATION_NAMES.len());
     }
+
+    #[test]
+    fn source_preflight_rejects_non_v30_without_touching_source() {
+        let directory = tempfile::tempdir().expect("temporary source directory");
+        let source = directory.path().join("legacy.sqlite");
+        let connection = SqliteConnection::open(&source).expect("open source");
+        connection
+            .execute_batch("PRAGMA user_version=29; CREATE TABLE marker(value TEXT);")
+            .expect("write invalid fixture");
+        drop(connection);
+        let before = fs::read(&source).expect("read source before preflight");
+        let result = read_snapshot(&source);
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read(&source).expect("read source after preflight"),
+            before
+        );
+    }
+
+    #[tokio::test]
+    async fn initialized_default_target_is_logically_empty() {
+        let directory = tempfile::tempdir().expect("temporary target directory");
+        let path = directory.path().join("target.turso");
+        let store = TursoStore::open(&path).await.expect("open target");
+        store.initialize().await.expect("initialize target");
+        let connection = store.connection().await.expect("target connection");
+        let counts = target_counts(&connection).await.expect("target counts");
+        assert!(
+            logical_empty(&connection, &counts)
+                .await
+                .expect("empty proof")
+        );
+    }
+
+    #[test]
+    fn staging_rechecks_attachment_size_and_checksum() {
+        let directory = tempfile::tempdir().expect("temporary attachment directory");
+        let source = directory.path().join("source.bin");
+        fs::write(&source, b"immutable attachment").expect("write attachment");
+        let checksum = sha256_file(&source).expect("attachment checksum");
+        let snapshot = Snapshot {
+            source_path: directory.path().join("legacy.sqlite"),
+            schema_fingerprint: "schema".to_owned(),
+            source_fingerprint: "sha256:test".to_owned(),
+            rows: BTreeMap::new(),
+            columns: BTreeMap::new(),
+            counts: BTreeMap::new(),
+            attachments: vec![Attachment {
+                id: "a_test".to_owned(),
+                rel_path: "nested/file.bin".to_owned(),
+                sha256: checksum.clone(),
+                size: b"immutable attachment".len() as i64,
+                path: source,
+            }],
+        };
+        let staged = stage_attachments(&snapshot, &directory.path().join("staging"))
+            .expect("stage attachment");
+        assert_eq!(staged.len(), 1);
+        assert_eq!(staged[0].sha256, checksum);
+        assert_eq!(
+            fs::read(&staged[0].path).expect("read staged"),
+            b"immutable attachment"
+        );
+    }
 }

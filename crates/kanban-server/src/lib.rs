@@ -1,7 +1,7 @@
 mod adapter;
 mod dispatcher;
 mod error;
-mod handlers;
+mod http;
 mod router;
 mod state;
 

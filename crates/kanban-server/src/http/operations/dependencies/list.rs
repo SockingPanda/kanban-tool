@@ -1,0 +1,27 @@
+use super::support::*;
+use crate::{error::ApiError, state::AppState};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    routing::get,
+};
+use kanban_contract::{ListDependenciesPath, ListDependenciesResponse};
+
+pub(crate) async fn list_dependencies(
+    State(state): State<AppState>,
+    Path(ListDependenciesPath { task_id }): Path<ListDependenciesPath>,
+) -> Result<Json<ListDependenciesResponse>, ApiError> {
+    let dependencies = state.application().list_dependencies(&task_id).await?;
+    Ok(Json(ListDependenciesResponse {
+        data: api_dependencies(dependencies)?,
+    }))
+}
+
+pub(super) fn router() -> Router<AppState> {
+    Router::new().route(
+        "/api/v1/tasks/:task_id/dependencies",
+        get(list_dependencies),
+    )
+}
+#[cfg(test)]
+mod tests {}

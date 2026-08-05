@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::delete,
 };
-use kanban_application::RemoveStepCommand;
+use kanban_application::operations::RemoveStepCommand;
 use kanban_contract::{RemoveStepPath, RemoveStepResponse};
 
 pub(crate) async fn remove_step(

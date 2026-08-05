@@ -1,7 +1,9 @@
 use kanban_application::{
-    CompleteStepRecord as ApplicationCompleteStep, ReopenStepRecord as ApplicationReopenStep,
-    SkipStepRecord as ApplicationSkipStep, StepComplete, StepRecord as ApplicationStep, StepReopen,
-    StepSkip, TaskStepsRecord as ApplicationTaskSteps,
+    StepRecord as ApplicationStep, TaskStepsRecord as ApplicationTaskSteps,
+    operations::{
+        CompleteStepRecord as ApplicationCompleteStep, ReopenStepRecord as ApplicationReopenStep,
+        SkipStepRecord as ApplicationSkipStep, StepComplete, StepReopen, StepSkip,
+    },
 };
 use kanban_core::Result;
 use kanban_store_turso::{

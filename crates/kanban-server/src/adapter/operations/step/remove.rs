@@ -1,5 +1,6 @@
 use kanban_application::{
-    RemoveStepRecord as ApplicationRemoveStep, StepRecord as ApplicationStep, StepRemove,
+    StepRecord as ApplicationStep,
+    operations::{RemoveStepRecord as ApplicationRemoveStep, StepRemove},
 };
 use kanban_core::Result;
 use kanban_store_turso::RemoveStepInput as StoreRemoveStep;

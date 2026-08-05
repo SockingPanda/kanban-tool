@@ -62,17 +62,16 @@ use crate::{
 };
 
 use crate::{
-    BackupResponse, ExportResponse, ImportResponse, LegacyImportRequest, LegacyImportResponse,
-    MaintenanceImportRequest, MaintenancePathRequest, MaintenanceRunRequest,
-    MaintenanceRunResponse, MaintenanceStatusResponse, VacuumResponse,
-    BoardQuery, BuildContextPath, BuildContextQuery, BuildContextResponse, GraphNeighborsQuery,
-    GraphNeighborsResponse, GraphQueryQuery, GraphStatusResponse, ListEventsQuery,
+    BackupResponse, BoardQuery, BuildContextPath, BuildContextQuery, BuildContextResponse,
+    EntityListQuery, EntityListResponse, EntityPath, EntityResponse, EntityUpsertRequest,
+    ExportResponse, GraphMaintenanceResponse, GraphNeighborsQuery, GraphNeighborsResponse,
+    GraphQueryQuery, GraphStatusResponse, ImportResponse, LegacyImportRequest,
+    LegacyImportResponse, ListEventsQuery, MaintenanceImportRequest, MaintenancePathRequest,
+    MaintenanceRunRequest, MaintenanceRunResponse, MaintenanceStatusResponse, SearchStatusResponse,
     SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse, StatsResponse,
     VectorConfigureRequest, VectorConfigureResponse, VectorProjectionRequest,
     VectorProjectionResponse, VectorQuery, VectorQueryChunksResponse,
     VectorQueryLabelAtomsResponse, VectorStatusQuery, VectorStatusResponse,
-    SearchStatusResponse, EntityListQuery, EntityListResponse, EntityPath, EntityResponse,
-    EntityUpsertRequest, GraphMaintenanceResponse,
 };
 
 pub const DRAFT_2020_12: &str = "https://json-schema.org/draft/2020-12/schema";

@@ -8,8 +8,8 @@ mod shared;
 mod transport;
 
 pub use error::ClientError;
-pub use operations::attachment::DownloadedAttachment;
 pub use operations::EntityUpsertRequest;
+pub use operations::attachment::DownloadedAttachment;
 
 pub const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:8721";
 

@@ -36,9 +36,9 @@ pub use operations::{
     StepReopen, StepSkip, StepUpdate, TaskArchive, TaskBlock, TaskClaim, TaskCreate, TaskDone,
     TaskHeartbeat, TaskLabelAdd, TaskLabelList, TaskLabelRemove, TaskList, TaskNeighborhoodOptions,
     TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord, TaskPlanNotRequired, TaskPromote,
-    TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen,
-    TaskReview, TaskShow, TaskSpecify, TaskUnblock, TaskUpdate, UnblockTaskCommand,
-    UnblockTaskRecord, UpdateTaskCommand, UpdateTaskRecord, VacuumReportRecord,
+    TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen, TaskReview, TaskShow, TaskSpecify,
+    TaskUnblock, TaskUpdate, UnblockTaskCommand, UnblockTaskRecord, UpdateTaskCommand,
+    UpdateTaskRecord, VacuumReportRecord,
 };
 pub use ports::ApplicationStore;
 pub use service::ApplicationService;

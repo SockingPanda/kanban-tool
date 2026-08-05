@@ -828,7 +828,9 @@ impl TursoStore {
     async fn create_verified_replace_backup(&self) -> Result<VerifiedReplaceBackup, StoreError> {
         let backup_path = temporary_sibling(self.database_path(), "portable-replace-backup")?;
         let connection = self.connection().await?;
-        let _ = self.checkpoint_inner().await?;
+        // `VACUUM INTO` 直接从 canonical handle 生成一致快照；不要先做 WAL
+        // checkpoint，因为并发 reader 可能让 Turso 返回带 NULL frame 字段，
+        // 从而把本可验证的 backup 误判成失败。
         vacuum_into(&connection, &backup_path).await?;
         verify_database_file(&backup_path).await?;
         let (checksum_sha256, bytes) = file_digest(&backup_path)?;
@@ -3066,6 +3068,8 @@ mod tests {
         .expect("staged path");
         assert!(Path::new(&staged).is_file(), "staged path {staged}");
         assert!(target_path.is_file());
+        drop(rows);
+        drop(row);
 
         let resumed = target
             .import(&export_path, true)

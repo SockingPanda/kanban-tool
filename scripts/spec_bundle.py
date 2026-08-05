@@ -22,8 +22,7 @@ SOURCE_PATHS = (
     "docs/API_SPEC.md",
     "docs/SCHEMA_CONTRACTS.md",
     "docs/ADR.md",
-    "migrations/001_initial.sql",
-    "migrations/003_comment_author_identity.sql",
+    "crates/kanban-store-turso/src/schema.rs",
 )
 
 AUTHORITY_NOTE = (
@@ -100,8 +99,11 @@ def render_bundle(root: Path) -> str:
     for source in SOURCE_PATHS:
         content = _read_source(root, source)
         content = _rebase_relative_links(content, source)
-        if source.endswith(".sql"):
-            content = f"```sql\n{content}\n```"
+        fence_language = {".sql": "sql", ".rs": "rust"}.get(
+            Path(source).suffix
+        )
+        if fence_language is not None:
+            content = f"```{fence_language}\n{content}\n```"
         sections.append(f"---\n\n# 文件：{source}\n\n{content}")
     return "\n".join(header) + "\n\n\n" + "\n\n\n".join(sections) + "\n"
 

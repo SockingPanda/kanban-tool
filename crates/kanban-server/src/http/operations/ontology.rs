@@ -7,9 +7,15 @@ use axum::{
     extract::{Path, Query, State},
     routing::{get, post},
 };
+use kanban_core::KanbanError;
 use serde_json::{Value, json};
 
 use crate::{error::ApiError, state::AppState};
+
+/// IDs for signals and proposals are globally unique; these reads resolve the
+/// canonical record first and therefore do not pretend that they belong to
+/// the default board.
+const GLOBAL_RECORD_SCOPE: &str = "__global_record__";
 
 fn board_path(board: String) -> String {
     board
@@ -339,14 +345,33 @@ pub(crate) async fn query_index(
     Ok(Json(json!({"data": data})))
 }
 
+async fn resolve_task_board(
+    state: &AppState,
+    task_ref: &str,
+    requested_board: Option<&str>,
+) -> Result<String, ApiError> {
+    let task = state.application().get_task(task_ref).await?;
+    if let Some(requested_board) = requested_board
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        && requested_board != task.board_id
+        && requested_board != task.board_slug
+    {
+        return Err(ApiError(KanbanError::InvalidInput(format!(
+            "task {task_ref} does not belong to board {requested_board}"
+        ))));
+    }
+    Ok(task.board_id)
+}
+
 pub(crate) async fn suggestions(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
     Query(mut query): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, ApiError> {
-    let board = query
-        .remove("board")
-        .unwrap_or_else(|| "default".to_owned());
+    let requested_board = query.get("board").map(String::as_str);
+    let board = resolve_task_board(&state, &task_id, requested_board).await?;
+    query.remove("board");
     query.insert("task_ref".to_owned(), task_id);
     let Json(value) = run(
         State(state),
@@ -363,9 +388,9 @@ pub(crate) async fn list_proposals_for_task(
     Path(task_id): Path<String>,
     Query(mut query): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, ApiError> {
-    let board = query
-        .remove("board")
-        .unwrap_or_else(|| "default".to_owned());
+    let requested_board = query.get("board").map(String::as_str);
+    let board = resolve_task_board(&state, &task_id, requested_board).await?;
+    query.remove("board");
     let value = run(
         State(state),
         "list_proposals",
@@ -383,14 +408,15 @@ pub(crate) async fn propose_for_task(
     Query(query): Query<HashMap<String, String>>,
     body: Option<Json<Value>>,
 ) -> Result<Json<Value>, ApiError> {
-    let board = query.get("board").map(String::as_str).unwrap_or("default");
+    let requested_board = query.get("board").map(String::as_str);
+    let board = resolve_task_board(&state, &task_id, requested_board).await?;
     let mut input = body_or_empty(body);
     input["task_ref"] = Value::String(task_id);
     normalize_proposal_body(&mut input);
     if input.get("actor").is_none() {
         input["actor"] = Value::String("user".to_owned());
     }
-    let Json(value) = run(State(state), "propose_label", board, input).await?;
+    let Json(value) = run(State(state), "propose_label", &board, input).await?;
     Ok(Json(json!({"data": value})))
 }
 
@@ -400,10 +426,11 @@ pub(crate) async fn record_observation(
     Query(query): Query<HashMap<String, String>>,
     Json(mut body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
-    let board = query.get("board").map(String::as_str).unwrap_or("default");
+    let requested_board = query.get("board").map(String::as_str);
+    let board = resolve_task_board(&state, &task_id, requested_board).await?;
     body["task_ref"] = Value::String(task_id);
     normalize_observation_body(&mut body);
-    let Json(value) = run(State(state), "record_observation", board, body).await?;
+    let Json(value) = run(State(state), "record_observation", &board, body).await?;
     Ok(Json(json!({"data": value})))
 }
 
@@ -478,7 +505,7 @@ pub(crate) async fn get_signal(
     let Json(value) = run(
         State(state),
         "get_signal",
-        "default",
+        GLOBAL_RECORD_SCOPE,
         json!({"signal_id": signal_id}),
     )
     .await?;
@@ -492,7 +519,7 @@ pub(crate) async fn get_proposal(
     let Json(value) = run(
         State(state),
         "get_proposal",
-        "default",
+        GLOBAL_RECORD_SCOPE,
         json!({"proposal_id": proposal_id}),
     )
     .await?;
@@ -519,7 +546,7 @@ pub(crate) async fn decide_proposal(
     if body.get("actor").is_none() {
         body["actor"] = Value::String("user".to_owned());
     }
-    let Json(value) = run(State(state), "decide_proposal", "default", body).await?;
+    let Json(value) = run(State(state), "decide_proposal", GLOBAL_RECORD_SCOPE, body).await?;
     Ok(Json(json!({"data": value})))
 }
 

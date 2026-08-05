@@ -49,6 +49,20 @@ pub struct CreateTaskInput {
     pub created_by: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateCommentInput {
+    pub id: String,
+    pub idempotency_key: Option<String>,
+    pub author: String,
+    pub author_type: String,
+    pub agent_type: Option<String>,
+    pub body: String,
+    pub kind: String,
+    pub metadata_json: String,
+    pub event_id: String,
+    pub created_at: i64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskListSort {
     Seq,
@@ -113,6 +127,21 @@ impl Default for TaskListOptions {
 pub struct TaskListPage {
     pub tasks: Vec<TaskRecord>,
     pub total: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommentRecord {
+    pub id: String,
+    pub board_id: String,
+    pub task_id: String,
+    pub idempotency_key: Option<String>,
+    pub author: String,
+    pub author_type: String,
+    pub agent_type: Option<String>,
+    pub body: String,
+    pub kind: String,
+    pub metadata_json: String,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -545,6 +574,247 @@ impl TursoStore {
         debug_assert_eq!(task.board_id, board_id);
         debug_assert_eq!(task.board_slug, board_slug);
         Ok(task)
+    }
+
+    pub async fn create_comment(
+        &self,
+        task_id: &str,
+        input: CreateCommentInput,
+    ) -> Result<CommentRecord, StoreError> {
+        validate_create_comment_input(task_id, &input)?;
+        let id = input.id.trim().to_owned();
+        let idempotency_key = input
+            .idempotency_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        let author = input.author.trim().to_owned();
+        let author_type = input.author_type.trim().to_owned();
+        let agent_type = input
+            .agent_type
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        let body = input.body.trim().to_owned();
+        let kind = input.kind.trim().to_owned();
+        let metadata_json = input.metadata_json.trim();
+        let metadata_json = if metadata_json.is_empty() {
+            "{}".to_owned()
+        } else {
+            metadata_json.to_owned()
+        };
+        let event_id = input.event_id.trim().to_owned();
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+
+        let metadata_valid = first_row(
+            transaction
+                .query(
+                    "SELECT json_valid(:metadata_json)",
+                    [(":metadata_json", metadata_json.as_str())],
+                )
+                .await?,
+        )
+        .await?;
+        if integer_value(
+            metadata_valid.get_value(0)?,
+            "task_comments.metadata_json_valid",
+        )? == 0
+        {
+            return Err(StoreError::InvalidInput(
+                "metadata_json must be valid JSON".to_owned(),
+            ));
+        }
+        let metadata_object = first_row(
+            transaction
+                .query(
+                    "SELECT json_type(:metadata_json) = 'object'",
+                    [(":metadata_json", metadata_json.as_str())],
+                )
+                .await?,
+        )
+        .await?;
+        if integer_value(
+            metadata_object.get_value(0)?,
+            "task_comments.metadata_json_object",
+        )? == 0
+        {
+            return Err(StoreError::InvalidInput(
+                "metadata_json must be a JSON object".to_owned(),
+            ));
+        }
+        let decision_metadata_valid = first_row(
+            transaction
+                .query(
+                    r#"SELECT CASE
+                        WHEN :kind != 'decision' THEN 1
+                        WHEN COALESCE(json_type(:metadata_json, '$.options'), '') != 'array'
+                          OR json_array_length(json_extract(:metadata_json, '$.options')) <= 0 THEN 0
+                        WHEN COALESCE(json_type(:metadata_json, '$.selected'), '') != 'text'
+                          OR length(trim(json_extract(:metadata_json, '$.selected'))) = 0 THEN 0
+                        WHEN COALESCE(json_type(:metadata_json, '$.reason'), '') != 'text'
+                          OR length(trim(json_extract(:metadata_json, '$.reason'))) = 0 THEN 0
+                        WHEN json_type(:metadata_json, '$.risk') IS NOT NULL
+                          AND (COALESCE(json_type(:metadata_json, '$.risk'), '') != 'text'
+                            OR length(trim(json_extract(:metadata_json, '$.risk'))) = 0) THEN 0
+                        WHEN json_type(:metadata_json, '$.verification') IS NOT NULL
+                          AND (COALESCE(json_type(:metadata_json, '$.verification'), '') != 'text'
+                            OR length(trim(json_extract(:metadata_json, '$.verification'))) = 0) THEN 0
+                        WHEN EXISTS (
+                            SELECT 1 FROM json_each(json_extract(:metadata_json, '$.options')) AS option
+                            WHERE COALESCE(json_type(option.value), '') != 'object'
+                              OR COALESCE(json_type(option.value, '$.slug'), '') != 'text'
+                              OR length(trim(json_extract(option.value, '$.slug'))) = 0
+                              OR json_extract(option.value, '$.slug') GLOB '*[^a-z0-9-]*'
+                              OR substr(json_extract(option.value, '$.slug'), 1, 1) GLOB '[^a-z0-9]'
+                              OR COALESCE(json_type(option.value, '$.title'), '') != 'text'
+                              OR length(trim(json_extract(option.value, '$.title'))) = 0
+                              OR COALESCE(json_type(option.value, '$.detail'), '') != 'text'
+                              OR length(trim(json_extract(option.value, '$.detail'))) = 0
+                        ) THEN 0
+                        WHEN (SELECT COUNT(*) FROM json_each(json_extract(:metadata_json, '$.options')))
+                          != (SELECT COUNT(DISTINCT json_extract(option.value, '$.slug'))
+                              FROM json_each(json_extract(:metadata_json, '$.options')) AS option) THEN 0
+                        WHEN NOT EXISTS (
+                            SELECT 1 FROM json_each(json_extract(:metadata_json, '$.options')) AS option
+                            WHERE json_extract(option.value, '$.slug') = json_extract(:metadata_json, '$.selected')
+                        ) THEN 0
+                        ELSE 1
+                    END"#,
+                    [
+                        (":kind", kind.as_str()),
+                        (":metadata_json", metadata_json.as_str()),
+                    ],
+                )
+                .await?,
+        )
+        .await?;
+        if integer_value(
+            decision_metadata_valid.get_value(0)?,
+            "task_comments.decision_metadata_valid",
+        )? == 0
+        {
+            return Err(StoreError::InvalidInput(
+                "invalid decision comment metadata".to_owned(),
+            ));
+        }
+
+        let task = first_row(
+            transaction
+                .query(
+                    "SELECT t.board_id, t.archived_at, b.archived_at FROM tasks AS t JOIN boards AS b ON b.id = t.board_id WHERE t.id = :task_id LIMIT 1",
+                    [(":task_id", task_id)],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
+            other => StoreError::Turso(other),
+        })?;
+        let board_id = text_value(task.get_value(0)?, "tasks.board_id")?;
+        let task_archived_at = optional_integer_value(task.get_value(1)?, "tasks.archived_at")?;
+        let board_archived_at = optional_integer_value(task.get_value(2)?, "boards.archived_at")?;
+        if task_archived_at.is_some() || board_archived_at.is_some() {
+            return Err(StoreError::InvalidTransition(
+                "archived task or board cannot receive comments".to_owned(),
+            ));
+        }
+
+        if let Some(idempotency_key) = idempotency_key.as_deref() {
+            let existing = first_row(
+                transaction
+                    .query(
+                        "SELECT id, board_id, task_id, idempotency_key, author, author_type, agent_type, body, kind, metadata_json, created_at FROM task_comments WHERE board_id = :board_id AND task_id = :task_id AND idempotency_key = :idempotency_key LIMIT 1",
+                        [
+                            (":board_id", board_id.as_str()),
+                            (":task_id", task_id),
+                            (":idempotency_key", idempotency_key),
+                        ],
+                    )
+                    .await?,
+            )
+            .await;
+            match existing {
+                Ok(row) => {
+                    let existing = comment_from_row(row)?;
+                    if comment_payload_matches(
+                        &existing,
+                        idempotency_key,
+                        &author,
+                        &author_type,
+                        agent_type.as_deref(),
+                        &body,
+                        &kind,
+                        &metadata_json,
+                    ) {
+                        transaction.commit().await?;
+                        return Ok(existing);
+                    }
+                    return Err(StoreError::IdempotencyConflict {
+                        board_id,
+                        key: idempotency_key.to_owned(),
+                        existing_task_id: task_id.to_owned(),
+                    });
+                }
+                Err(turso::Error::QueryReturnedNoRows) => {}
+                Err(error) => return Err(StoreError::Turso(error)),
+            }
+        }
+
+        transaction
+            .execute(
+                "INSERT INTO task_comments(id, board_id, task_id, idempotency_key, author, author_type, agent_type, body, kind, metadata_json, created_at) VALUES (:id, :board_id, :task_id, :idempotency_key, :author, :author_type, :agent_type, :body, :kind, :metadata_json, :created_at)",
+                (
+                    (":id", id.as_str()),
+                    (":board_id", board_id.as_str()),
+                    (":task_id", task_id),
+                    (":idempotency_key", idempotency_key.as_deref()),
+                    (":author", author.as_str()),
+                    (":author_type", author_type.as_str()),
+                    (":agent_type", agent_type.as_deref()),
+                    (":body", body.as_str()),
+                    (":kind", kind.as_str()),
+                    (":metadata_json", metadata_json.as_str()),
+                    (":created_at", input.created_at),
+                ),
+            )
+            .await?;
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'task.comment.created', :actor, json_object('comment_id', :comment_id, 'kind', :kind, 'author_type', :author_type, 'agent_type', :agent_type), :created_at)",
+                (
+                    (":event_id", event_id.as_str()),
+                    (":board_id", board_id.as_str()),
+                    (":task_id", task_id),
+                    (":actor", author.as_str()),
+                    (":comment_id", id.as_str()),
+                    (":kind", kind.as_str()),
+                    (":author_type", author_type.as_str()),
+                    (":agent_type", agent_type.as_deref()),
+                    (":created_at", input.created_at),
+                ),
+            )
+            .await?;
+
+        let comment = comment_from_row(
+            first_row(
+                transaction
+                    .query(
+                        "SELECT id, board_id, task_id, idempotency_key, author, author_type, agent_type, body, kind, metadata_json, created_at FROM task_comments WHERE board_id = :board_id AND id = :id LIMIT 1",
+                        [(":board_id", board_id.as_str()), (":id", id.as_str())],
+                    )
+                    .await?,
+            )
+            .await?,
+        )?;
+
+        transaction.commit().await?;
+        Ok(comment)
     }
 
     pub async fn list_tasks(
@@ -2848,6 +3118,65 @@ fn validate_create_task_input(input: &CreateTaskInput) -> Result<(), StoreError>
     Ok(())
 }
 
+fn validate_create_comment_input(
+    task_id: &str,
+    input: &CreateCommentInput,
+) -> Result<(), StoreError> {
+    if !task_id.starts_with("t_") || task_id.len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "task id must start with t_".to_owned(),
+        ));
+    }
+    if !input.id.trim().starts_with("c_") || input.id.trim().len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "comment id must start with c_".to_owned(),
+        ));
+    }
+    if input
+        .idempotency_key
+        .as_deref()
+        .is_some_and(|key| key.trim().is_empty())
+    {
+        return Err(StoreError::InvalidInput(
+            "idempotency_key must not be empty".to_owned(),
+        ));
+    }
+    if input.author.trim().is_empty() {
+        return Err(StoreError::InvalidInput("author is required".to_owned()));
+    }
+    if !matches!(input.author_type.trim(), "user" | "agent") {
+        return Err(StoreError::InvalidInput(
+            "author_type must be user or agent".to_owned(),
+        ));
+    }
+    if input.agent_type.as_deref().is_some_and(|agent_type| {
+        !agent_type.trim().is_empty() && input.author_type.trim() != "agent"
+    }) {
+        return Err(StoreError::InvalidInput(
+            "agent_type is only allowed when author_type is agent".to_owned(),
+        ));
+    }
+    if input.body.trim().is_empty() {
+        return Err(StoreError::InvalidInput("body is required".to_owned()));
+    }
+    if !matches!(input.kind.trim(), "note" | "decision") {
+        return Err(StoreError::InvalidInput(
+            "kind must be note or decision".to_owned(),
+        ));
+    }
+    if !input.event_id.trim().starts_with("e_") || input.event_id.trim().len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "event_id must start with e_".to_owned(),
+        ));
+    }
+    if input.created_at < 0 {
+        return Err(StoreError::InvalidInput(
+            "created_at must be non-negative".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 fn canonical_payload_matches(
     existing: &TaskRecord,
     input: &CreateTaskInput,
@@ -2863,6 +3192,26 @@ fn canonical_payload_matches(
         && existing.max_retries == input.max_retries
         && existing.metadata_json == input.metadata_json
         && existing.created_by == input.created_by
+}
+
+#[allow(clippy::too_many_arguments)]
+fn comment_payload_matches(
+    existing: &CommentRecord,
+    idempotency_key: &str,
+    author: &str,
+    author_type: &str,
+    agent_type: Option<&str>,
+    body: &str,
+    kind: &str,
+    metadata_json: &str,
+) -> bool {
+    existing.idempotency_key.as_deref() == Some(idempotency_key)
+        && existing.author == author
+        && existing.author_type == author_type
+        && existing.agent_type.as_deref() == agent_type
+        && existing.body == body
+        && existing.kind == kind
+        && existing.metadata_json == metadata_json
 }
 
 fn validate_task_list_options(options: &TaskListOptions) -> Result<(), StoreError> {
@@ -3465,6 +3814,22 @@ fn task_from_row(row: Row) -> Result<TaskRecord, StoreError> {
     })
 }
 
+fn comment_from_row(row: Row) -> Result<CommentRecord, StoreError> {
+    Ok(CommentRecord {
+        id: text_value(row.get_value(0)?, "task_comments.id")?,
+        board_id: text_value(row.get_value(1)?, "task_comments.board_id")?,
+        task_id: text_value(row.get_value(2)?, "task_comments.task_id")?,
+        idempotency_key: optional_text_value(row.get_value(3)?, "task_comments.idempotency_key")?,
+        author: text_value(row.get_value(4)?, "task_comments.author")?,
+        author_type: text_value(row.get_value(5)?, "task_comments.author_type")?,
+        agent_type: optional_text_value(row.get_value(6)?, "task_comments.agent_type")?,
+        body: text_value(row.get_value(7)?, "task_comments.body")?,
+        kind: text_value(row.get_value(8)?, "task_comments.kind")?,
+        metadata_json: text_value(row.get_value(9)?, "task_comments.metadata_json")?,
+        created_at: integer_value(row.get_value(10)?, "task_comments.created_at")?,
+    })
+}
+
 fn run_from_row(row: Row) -> Result<TaskRunRecord, StoreError> {
     Ok(TaskRunRecord {
         id: text_value(row.get_value(0)?, "task_runs.id")?,
@@ -3555,6 +3920,33 @@ mod tests {
             max_retries: Some(2),
             metadata_json: r#"{"source":"test"}"#.to_owned(),
             created_by: "tester".to_owned(),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn comment_input(
+        id: &str,
+        idempotency_key: Option<&str>,
+        author: &str,
+        author_type: &str,
+        agent_type: Option<&str>,
+        body: &str,
+        kind: &str,
+        metadata_json: &str,
+        event_id: &str,
+        created_at: i64,
+    ) -> CreateCommentInput {
+        CreateCommentInput {
+            id: id.to_owned(),
+            idempotency_key: idempotency_key.map(str::to_owned),
+            author: author.to_owned(),
+            author_type: author_type.to_owned(),
+            agent_type: agent_type.map(str::to_owned),
+            body: body.to_owned(),
+            kind: kind.to_owned(),
+            metadata_json: metadata_json.to_owned(),
+            event_id: event_id.to_owned(),
+            created_at,
         }
     }
 
@@ -11922,6 +12314,375 @@ mod tests {
             .await
             .expect("archived task must be skipped");
         assert_eq!(archived, None);
+    }
+
+    #[tokio::test]
+    async fn create_comment_writes_comment_and_event_atomically() {
+        let (_directory, store, _path) = store("comment-create-success").await;
+        store.initialize().await.expect("initialize");
+        let task = store
+            .create_task(
+                "default",
+                create_input("t_comment_success", None, "Comment task"),
+            )
+            .await
+            .expect("create task");
+
+        let comment = store
+            .create_comment(
+                &task.id,
+                comment_input(
+                    "c_comment_success",
+                    Some("comment-key"),
+                    " operator ",
+                    "user",
+                    None,
+                    " handoff note ",
+                    "note",
+                    " {} ",
+                    "e_comment_success",
+                    500,
+                ),
+            )
+            .await
+            .expect("create comment");
+        assert_eq!(comment.id, "c_comment_success");
+        assert_eq!(comment.board_id, "b_default");
+        assert_eq!(comment.task_id, task.id);
+        assert_eq!(comment.idempotency_key.as_deref(), Some("comment-key"));
+        assert_eq!(comment.author, "operator");
+        assert_eq!(comment.author_type, "user");
+        assert_eq!(comment.agent_type, None);
+        assert_eq!(comment.body, "handoff note");
+        assert_eq!(comment.kind, "note");
+        assert_eq!(comment.metadata_json, "{}");
+        assert_eq!(comment.created_at, 500);
+
+        let connection = store.connection().await.expect("connection");
+        let event = first_row(
+            connection
+                .query(
+                    "SELECT board_id, task_id, kind, actor, payload_json, created_at FROM task_events WHERE event_id = ?1",
+                    ["e_comment_success"],
+                )
+                .await
+                .expect("event query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(event.get_value(0).expect("event board"), "event.board_id")
+                .expect("event board text"),
+            "b_default"
+        );
+        assert_eq!(
+            text_value(event.get_value(1).expect("event task"), "event.task_id")
+                .expect("event task text"),
+            task.id
+        );
+        assert_eq!(
+            text_value(event.get_value(2).expect("event kind"), "event.kind")
+                .expect("event kind text"),
+            "task.comment.created"
+        );
+        assert_eq!(
+            text_value(event.get_value(3).expect("event actor"), "event.actor")
+                .expect("event actor text"),
+            "operator"
+        );
+        assert_eq!(
+            text_value(event.get_value(4).expect("event payload"), "event.payload")
+                .expect("event payload text"),
+            r#"{"comment_id":"c_comment_success","kind":"note","author_type":"user","agent_type":null}"#
+        );
+        assert_eq!(
+            integer_value(
+                event.get_value(5).expect("event created"),
+                "event.created_at"
+            )
+            .expect("event created integer"),
+            500
+        );
+        let comment_events = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.comment.created'",
+                    [task.id.as_str()],
+                )
+                .await
+                .expect("comment event count"),
+        )
+        .await
+        .expect("comment event count row");
+        assert_eq!(
+            integer_value(
+                comment_events.get_value(0).expect("comment event count"),
+                "event.count",
+            )
+            .expect("comment event count integer"),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn create_comment_replays_same_payload_and_conflicts_on_changed_payload() {
+        let (_directory, store, _path) = store("comment-create-idempotency").await;
+        store.initialize().await.expect("initialize");
+        let task = store
+            .create_task(
+                "default",
+                create_input("t_comment_idempotency", None, "Comment idempotency"),
+            )
+            .await
+            .expect("create task");
+        let first_input = comment_input(
+            "c_comment_idempotency",
+            Some("comment-replay"),
+            "operator",
+            "agent",
+            Some("executor"),
+            "same body",
+            "decision",
+            r#"{"options":[{"slug":"keep","title":"Keep","detail":"Keep the existing path"}],"selected":"keep","reason":"Test the idempotency path"}"#,
+            "e_comment_idempotency_first",
+            500,
+        );
+        let first = store
+            .create_comment(&task.id, first_input.clone())
+            .await
+            .expect("first comment");
+        let mut replay_input = first_input;
+        replay_input.id = "c_comment_idempotency_retry".to_owned();
+        replay_input.event_id = "e_comment_idempotency_retry".to_owned();
+        replay_input.created_at = 900;
+        let replay = store
+            .create_comment(&task.id, replay_input)
+            .await
+            .expect("replay comment");
+        assert_eq!(replay, first);
+
+        let mut changed_input = comment_input(
+            "c_comment_idempotency_changed",
+            Some("comment-replay"),
+            "operator",
+            "agent",
+            Some("executor"),
+            "changed body",
+            "decision",
+            r#"{"options":[{"slug":"keep","title":"Keep","detail":"Keep the existing path"}],"selected":"keep","reason":"Test the idempotency path"}"#,
+            "e_comment_idempotency_changed",
+            1_000,
+        );
+        changed_input.body = "different body".to_owned();
+        let conflict = store
+            .create_comment(&task.id, changed_input)
+            .await
+            .expect_err("changed payload must conflict");
+        assert!(matches!(
+            conflict,
+            StoreError::IdempotencyConflict {
+                board_id,
+                key,
+                existing_task_id
+            } if board_id == "b_default" && key == "comment-replay" && existing_task_id == task.id
+        ));
+
+        let connection = store.connection().await.expect("connection");
+        let comments = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_comments WHERE board_id = ?1 AND task_id = ?2",
+                    ("b_default", task.id.as_str()),
+                )
+                .await
+                .expect("comment count"),
+        )
+        .await
+        .expect("comment count row");
+        assert_eq!(
+            integer_value(
+                comments.get_value(0).expect("comment count"),
+                "comment.count"
+            )
+            .expect("comment count integer"),
+            1
+        );
+        let events = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.comment.created'",
+                    [task.id.as_str()],
+                )
+                .await
+                .expect("comment event count"),
+        )
+        .await
+        .expect("comment event count row");
+        assert_eq!(
+            integer_value(events.get_value(0).expect("event count"), "event.count")
+                .expect("event count integer"),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn create_comment_enforces_task_board_isolation_and_rolls_back_event_conflicts() {
+        let (_directory, store, _path) = store("comment-create-isolation").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO boards(id, slug, name, created_at, updated_at) VALUES ('b_comment_other', 'comment-other', 'Comment other', 1, 1)",
+                (),
+            )
+            .await
+            .expect("insert other board");
+        let other = store
+            .create_task(
+                "comment-other",
+                create_input("t_comment_other", None, "Other comment task"),
+            )
+            .await
+            .expect("create other task");
+        let other_comment = store
+            .create_comment(
+                &other.id,
+                comment_input(
+                    "c_comment_other",
+                    None,
+                    "operator",
+                    "user",
+                    None,
+                    "other board",
+                    "note",
+                    "{}",
+                    "e_comment_other",
+                    500,
+                ),
+            )
+            .await
+            .expect("create other-board comment");
+        assert_eq!(other_comment.board_id, "b_comment_other");
+        let other_event = first_row(
+            connection
+                .query(
+                    "SELECT board_id FROM task_events WHERE event_id = ?1",
+                    ["e_comment_other"],
+                )
+                .await
+                .expect("other event query"),
+        )
+        .await
+        .expect("other event row");
+        assert_eq!(
+            text_value(
+                other_event.get_value(0).expect("event board"),
+                "event.board_id"
+            )
+            .expect("event board text"),
+            "b_comment_other"
+        );
+
+        let invalid_decision = store
+            .create_comment(
+                &other.id,
+                comment_input(
+                    "c_comment_invalid_decision",
+                    None,
+                    "operator",
+                    "user",
+                    None,
+                    "invalid decision",
+                    "decision",
+                    "{}",
+                    "e_comment_invalid_decision",
+                    500,
+                ),
+            )
+            .await
+            .expect_err("decision metadata must be validated");
+        assert!(matches!(
+            invalid_decision,
+            StoreError::InvalidInput(message) if message.contains("decision")
+        ));
+
+        connection
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, 'b_comment_other', ?2, NULL, 'other.event', 'tester', '{}', 1)",
+                ("e_comment_conflict", other.id.as_str()),
+            )
+            .await
+            .expect("insert conflicting event");
+        let event_error = store
+            .create_comment(
+                &other.id,
+                comment_input(
+                    "c_comment_conflict",
+                    None,
+                    "operator",
+                    "user",
+                    None,
+                    "must roll back",
+                    "note",
+                    "{}",
+                    "e_comment_conflict",
+                    500,
+                ),
+            )
+            .await
+            .expect_err("event conflict must fail");
+        assert!(matches!(event_error, StoreError::Turso(_)));
+        let rolled_back_comments = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_comments WHERE id = ?1",
+                    ["c_comment_conflict"],
+                )
+                .await
+                .expect("rolled-back comment count"),
+        )
+        .await
+        .expect("rolled-back comment count row");
+        assert_eq!(
+            integer_value(
+                rolled_back_comments
+                    .get_value(0)
+                    .expect("rolled-back comment count"),
+                "comment.count",
+            )
+            .expect("rolled-back comment count integer"),
+            0
+        );
+
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'archived', archived_at = 600 WHERE id = ?1",
+                [other.id.as_str()],
+            )
+            .await
+            .expect("archive task");
+        let archived_error = store
+            .create_comment(
+                &other.id,
+                comment_input(
+                    "c_comment_archived",
+                    None,
+                    "operator",
+                    "user",
+                    None,
+                    "archived task",
+                    "note",
+                    "{}",
+                    "e_comment_archived",
+                    700,
+                ),
+            )
+            .await
+            .expect_err("archived task must reject comments");
+        assert!(matches!(
+            archived_error,
+            StoreError::InvalidTransition(message) if message.contains("archived")
+        ));
     }
 
     #[tokio::test]

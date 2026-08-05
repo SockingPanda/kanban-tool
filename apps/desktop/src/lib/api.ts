@@ -1156,7 +1156,13 @@ export class KanbanApi {
 
   async createComment(taskId: string, body: string, options: RequestOptions = {}) {
     return parseCreateCommentEnvelope(await this.requestRaw(`/api/v1/tasks/${taskId}/comments`, {
-      method: "POST", body: { author: this.actor, body }, signal: options.signal,
+      method: "POST",
+      body: {
+        idempotency_key: options.idempotencyKey ?? `comment.create:c_${crypto.randomUUID()}`,
+        author: this.actor,
+        body,
+      },
+      signal: options.signal,
     })).data
   }
 
@@ -1443,6 +1449,7 @@ function newClientTaskId() {
 type RequestOptions = {
   method?: string
   body?: unknown
+  idempotencyKey?: string
   actorHeader?: boolean
   signal?: AbortSignal
 }

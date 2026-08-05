@@ -137,6 +137,7 @@ async fn create_comment_path_fixture_is_consumed_by_real_router() -> anyhow::Res
 #[test]
 fn create_comment_request_dto_serializes_to_committed_fixture() {
     let request = kanban_contract::CreateCommentRequest {
+        idempotency_key: Some("comment.create:fixture".into()),
         author: Some("codex".into()),
         body: "Choose A".into(),
         kind: Some(kanban_contract::CommentKind::Decision),

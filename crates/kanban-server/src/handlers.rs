@@ -9,18 +9,20 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use kanban_application::{
-    BlockTaskCommand, ClaimTaskCommand, CompleteTaskCommand, CreateTaskCommand,
-    ExecutionPlanRecord, ExecutionPlanState, HeartbeatTaskCommand,
+    BlockTaskCommand, ClaimTaskCommand, CommentAuthorType as ApplicationCommentAuthorType,
+    CommentKind as ApplicationCommentKind, CompleteTaskCommand, CreateCommentCommand,
+    CreateTaskCommand, ExecutionPlanRecord, ExecutionPlanState, HeartbeatTaskCommand,
     MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand, ReleaseTaskCommand, RunRecord,
     RunStatus, SubmitReviewTaskCommand, TaskListOptions as ApplicationTaskListOptions,
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
     TaskRecord,
 };
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, ApiClaim, ApiCreateTaskStatus, ApiExecutionPlan,
+    ApiBoard, ApiBoardColumn, ApiClaim, ApiComment, ApiCreateTaskStatus, ApiExecutionPlan,
     ApiExecutionPlanState, ApiRun, ApiRunStatus, ApiTask, ApiTaskPriority, ApiTaskStatus,
     BlockTaskPath, BlockTaskRequest, BlockTaskResponse, ClaimTaskPath, ClaimTaskRequest,
-    ClaimTaskResponse, CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse, CreateTaskPath,
+    ClaimTaskResponse, CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse,
+    CreateCommentPath, CreateCommentRequest, CreateCommentResponse, CreateTaskPath,
     CreateTaskRequest, CreateTaskResponse, GetTaskPath, GetTaskQuery, GetTaskResponse,
     HealthReport, HealthResponse, HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse,
     ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse, ListTasksPath, ListTasksQuery,
@@ -224,6 +226,57 @@ pub(crate) async fn get_task(
     }
     let task = state.application().get_task(&task_id).await?;
     Ok(Json(GetTaskResponse::new(api_task(task)?, None)))
+}
+
+pub(crate) async fn create_comment(
+    State(state): State<AppState>,
+    Path(CreateCommentPath { task_id }): Path<CreateCommentPath>,
+    headers: HeaderMap,
+    body: Result<Json<CreateCommentRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<CreateCommentResponse>), ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.author.as_deref(), &headers, state.default_actor())?;
+    let metadata = body.metadata.unwrap_or_else(|| serde_json::json!({}));
+    let metadata = metadata.as_object().cloned().ok_or_else(|| {
+        ApiError(KanbanError::InvalidInput(
+            "metadata must be a JSON object".to_owned(),
+        ))
+    })?;
+    let comment = state
+        .application()
+        .create_comment(CreateCommentCommand {
+            task_id,
+            idempotency_key: body.idempotency_key,
+            author: actor,
+            author_type: body
+                .author_type
+                .map(|value| match value {
+                    kanban_contract::CommentAuthorType::User => ApplicationCommentAuthorType::User,
+                    kanban_contract::CommentAuthorType::Agent => {
+                        ApplicationCommentAuthorType::Agent
+                    }
+                })
+                .unwrap_or(ApplicationCommentAuthorType::User),
+            agent_type: body.agent_type,
+            body: body.body,
+            kind: body
+                .kind
+                .map(|value| match value {
+                    kanban_contract::CommentKind::Note => ApplicationCommentKind::Note,
+                    kanban_contract::CommentKind::Decision => ApplicationCommentKind::Decision,
+                    kanban_contract::CommentKind::Signal => ApplicationCommentKind::Signal,
+                })
+                .unwrap_or(ApplicationCommentKind::Note),
+            metadata: metadata.into_iter().collect(),
+        })
+        .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateCommentResponse {
+            data: api_comment(comment)?,
+        }),
+    ))
 }
 
 pub(crate) async fn mark_execution_plan_not_required(
@@ -702,6 +755,31 @@ fn bounded_optional(
         .into());
     }
     Ok(Some(value.to_owned()))
+}
+
+fn api_comment(comment: kanban_application::CommentRecord) -> Result<ApiComment, ApiError> {
+    let metadata = serde_json::from_str(&comment.metadata_json).map_err(|error| {
+        KanbanError::Storage(format!("stored comment metadata is invalid JSON: {error}"))
+    })?;
+    Ok(ApiComment {
+        id: comment.id,
+        board_id: comment.board_id,
+        task_id: comment.task_id,
+        author: comment.author,
+        author_type: match comment.author_type {
+            ApplicationCommentAuthorType::User => kanban_contract::CommentAuthorType::User,
+            ApplicationCommentAuthorType::Agent => kanban_contract::CommentAuthorType::Agent,
+        },
+        agent_type: comment.agent_type,
+        body: comment.body,
+        kind: match comment.kind {
+            ApplicationCommentKind::Note => kanban_contract::CommentKind::Note,
+            ApplicationCommentKind::Decision => kanban_contract::CommentKind::Decision,
+            ApplicationCommentKind::Signal => kanban_contract::CommentKind::Signal,
+        },
+        metadata,
+        created_at: comment.created_at,
+    })
 }
 
 fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {

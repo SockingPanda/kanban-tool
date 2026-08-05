@@ -264,6 +264,80 @@ pub struct BlockTaskRecord {
     pub now: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommentKind {
+    Note,
+    Decision,
+    Signal,
+}
+
+impl CommentKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Note => "note",
+            Self::Decision => "decision",
+            Self::Signal => "signal",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommentAuthorType {
+    User,
+    Agent,
+}
+
+impl CommentAuthorType {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Agent => "agent",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CreateCommentCommand {
+    pub task_id: String,
+    pub idempotency_key: Option<String>,
+    pub author: String,
+    pub author_type: CommentAuthorType,
+    pub agent_type: Option<String>,
+    pub body: String,
+    pub kind: CommentKind,
+    pub metadata: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateCommentRecord {
+    pub id: String,
+    pub idempotency_key: Option<String>,
+    pub author: String,
+    pub author_type: CommentAuthorType,
+    pub agent_type: Option<String>,
+    pub body: String,
+    pub kind: CommentKind,
+    pub metadata_json: String,
+    pub event_id: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommentRecord {
+    pub id: String,
+    pub board_id: String,
+    pub task_id: String,
+    pub author: String,
+    pub author_type: CommentAuthorType,
+    pub agent_type: Option<String>,
+    pub body: String,
+    pub kind: CommentKind,
+    pub metadata_json: String,
+    pub created_at: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionPlanRecord {
     pub board_id: String,

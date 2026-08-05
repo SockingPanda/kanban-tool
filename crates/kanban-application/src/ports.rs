@@ -3,10 +3,11 @@ use std::future::Future;
 use kanban_core::Result;
 
 use crate::{
-    BlockTaskRecord, BoardColumnRecord, BoardRecord, ClaimRecord, ClaimTaskRecord,
-    CompleteTaskRecord, CreateTaskRecord, ExecutionPlanRecord, HeartbeatTaskRecord,
-    MarkExecutionPlanNotRequiredRecord, PromoteTaskRecord, ReclaimExpiredTaskRecord,
-    ReleaseTaskRecord, SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskRecord,
+    BlockTaskRecord, BoardColumnRecord, BoardRecord, ClaimRecord, ClaimTaskRecord, CommentRecord,
+    CompleteTaskRecord, CreateCommentRecord, CreateTaskRecord, ExecutionPlanRecord,
+    HeartbeatTaskRecord, MarkExecutionPlanNotRequiredRecord, PromoteTaskRecord,
+    ReclaimExpiredTaskRecord, ReleaseTaskRecord, SubmitReviewTaskRecord, TaskListOptions,
+    TaskListPage, TaskRecord,
 };
 
 /// Persistence port used only by the shared application service.
@@ -97,4 +98,10 @@ pub trait ApplicationStore: Clone + Send + Sync + 'static {
         task_id: &str,
         input: BlockTaskRecord,
     ) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn create_comment(
+        &self,
+        task_id: &str,
+        input: CreateCommentRecord,
+    ) -> impl Future<Output = Result<CommentRecord>> + Send;
 }

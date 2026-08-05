@@ -1701,7 +1701,7 @@
       "invalid_fixture": "schemas/fixtures/api/create-comment-request.v1.invalid.json",
       "path": "api/create-comment-request.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/create-comment-request.v1.valid.json",
-      "sha256": "sha256:e1cc2de59ce4c0ad8a0d973b77f36f3ea87cea61ae1e4c223a2f11fe5bf62108",
+      "sha256": "sha256:6e7d6a9379080817e6c5d372510ed2caae05d00728cf32a22a63c161ba3157b5",
       "strictness": "deny_unknown_fields"
     },
     {

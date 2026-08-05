@@ -1,7 +1,9 @@
 use kanban_application::{
     ApplicationStore, BlockTaskRecord as ApplicationBlockTask,
     BoardColumnRecord as ApplicationBoardColumn, BoardRecord, ClaimRecord as ApplicationClaim,
-    ClaimTaskRecord as ApplicationClaimTask, CompleteTaskRecord as ApplicationCompleteTask,
+    ClaimTaskRecord as ApplicationClaimTask, CommentAuthorType as ApplicationCommentAuthorType,
+    CommentKind as ApplicationCommentKind, CommentRecord as ApplicationComment,
+    CompleteTaskRecord as ApplicationCompleteTask, CreateCommentRecord as ApplicationCreateComment,
     CreateTaskRecord as ApplicationCreateTask, ExecutionPlanRecord as ApplicationExecutionPlan,
     ExecutionPlanState, HeartbeatTaskRecord as ApplicationHeartbeatTask,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
@@ -17,7 +19,8 @@ use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
     BlockTaskInput as StoreBlockTask, ClaimTaskInput as StoreClaimTask,
     ClaimTaskRecord as StoreClaim, CompleteTaskInput as StoreCompleteTask,
-    CreateTaskInput as StoreCreateTask, HeartbeatTaskInput as StoreHeartbeatTask,
+    CreateCommentInput as StoreCreateComment, CreateTaskInput as StoreCreateTask,
+    HeartbeatTaskInput as StoreHeartbeatTask,
     MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
     PromoteTaskInput as StorePromoteTask, ReclaimExpiredTaskInput as StoreReclaimExpiredTask,
     ReleaseTaskInput as StoreReleaseTask, StoreError,
@@ -108,6 +111,32 @@ impl ApplicationStore for TursoApplicationStore {
             .await
             .map_err(store_error)
             .and_then(application_task)
+    }
+
+    async fn create_comment(
+        &self,
+        task_id: &str,
+        input: ApplicationCreateComment,
+    ) -> Result<ApplicationComment> {
+        self.store
+            .create_comment(
+                task_id,
+                StoreCreateComment {
+                    id: input.id,
+                    idempotency_key: input.idempotency_key,
+                    author: input.author,
+                    author_type: input.author_type.as_str().to_owned(),
+                    agent_type: input.agent_type,
+                    body: input.body,
+                    kind: input.kind.as_str().to_owned(),
+                    metadata_json: input.metadata_json,
+                    event_id: input.event_id,
+                    created_at: input.created_at,
+                },
+            )
+            .await
+            .map_err(store_error)
+            .and_then(application_comment)
     }
 
     async fn list_tasks(
@@ -510,6 +539,40 @@ fn application_execution_plan(plan: StoreExecutionPlan) -> Result<ApplicationExe
         reason: plan.reason,
         updated_by: plan.updated_by,
         updated_at: plan.updated_at,
+    })
+}
+
+fn application_comment(comment: kanban_store_turso::CommentRecord) -> Result<ApplicationComment> {
+    let author_type = match comment.author_type.as_str() {
+        "user" => ApplicationCommentAuthorType::User,
+        "agent" => ApplicationCommentAuthorType::Agent,
+        other => {
+            return Err(KanbanError::Storage(format!(
+                "stored comment author_type is invalid: {other}"
+            )));
+        }
+    };
+    let kind = match comment.kind.as_str() {
+        "note" => ApplicationCommentKind::Note,
+        "decision" => ApplicationCommentKind::Decision,
+        "signal" => ApplicationCommentKind::Signal,
+        other => {
+            return Err(KanbanError::Storage(format!(
+                "stored comment kind is invalid: {other}"
+            )));
+        }
+    };
+    Ok(ApplicationComment {
+        id: comment.id,
+        board_id: comment.board_id,
+        task_id: comment.task_id,
+        author: comment.author,
+        author_type,
+        agent_type: comment.agent_type,
+        body: comment.body,
+        kind,
+        metadata_json: comment.metadata_json,
+        created_at: comment.created_at,
     })
 }
 

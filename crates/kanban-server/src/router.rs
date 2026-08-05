@@ -17,9 +17,9 @@ use tower_http::{
 use crate::{
     dispatcher::{DispatcherConfig, ShutdownSignal, run_dispatcher},
     handlers::{
-        block_task, claim_task, complete_task, create_task, get_task, health, heartbeat_task,
-        list_board_columns, list_boards, list_tasks, mark_execution_plan_not_required,
-        promote_task, release_task, submit_review_task,
+        block_task, claim_task, complete_task, create_comment, create_task, get_task, health,
+        heartbeat_task, list_board_columns, list_boards, list_tasks,
+        mark_execution_plan_not_required, promote_task, release_task, submit_review_task,
     },
     state::AppState,
 };
@@ -34,6 +34,7 @@ pub fn build_router(state: AppState) -> Router {
             get(list_tasks).post(create_task),
         )
         .route("/api/v1/tasks/:task_id", get(get_task))
+        .route("/api/v1/tasks/:task_id/comments", post(create_comment))
         .route(
             "/api/v1/tasks/:task_id/execution-plan/not-required",
             post(mark_execution_plan_not_required),
@@ -249,6 +250,113 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let columns: ListBoardColumnsResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(columns.data.len(), 9);
+    }
+
+    #[tokio::test]
+    async fn comment_create_uses_application_path_and_entity_local_idempotency() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let router = build_router(state);
+        let task = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/boards/default/tasks",
+                serde_json::json!({
+                    "task_id": "t_http_comment",
+                    "idempotency_key": "http-comment-task",
+                    "title": "HTTP comment",
+                    "description": "comment test",
+                    "priority": 1,
+                    "metadata": {},
+                    "labels": [],
+                    "depends_on": [],
+                    "actor": "seed"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(task.status(), StatusCode::CREATED);
+
+        let request = serde_json::json!({
+            "idempotency_key": "comment-retry",
+            "author": "alice",
+            "body": "handoff",
+            "kind": "note",
+            "author_type": "user",
+            "metadata": {"source": "router-test"}
+        });
+        let first = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_comment/comments",
+                request.clone(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::CREATED);
+        let first_body = first.into_body().collect().await.unwrap().to_bytes();
+        let first: kanban_contract::CreateCommentResponse =
+            serde_json::from_slice(&first_body).unwrap();
+
+        let replay = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_comment/comments",
+                request,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(replay.status(), StatusCode::CREATED);
+        let replay_body = replay.into_body().collect().await.unwrap().to_bytes();
+        let replay: kanban_contract::CreateCommentResponse =
+            serde_json::from_slice(&replay_body).unwrap();
+        assert_eq!(replay.data.id, first.data.id);
+
+        let conflict = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_comment/comments",
+                serde_json::json!({
+                    "idempotency_key": "comment-retry",
+                    "author": "alice",
+                    "body": "changed",
+                    "kind": "note",
+                    "author_type": "user",
+                    "metadata": {"source": "router-test"}
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(conflict.status(), StatusCode::CONFLICT);
+        let conflict_body = conflict.into_body().collect().await.unwrap().to_bytes();
+        let error: kanban_contract::ErrorEnvelope = serde_json::from_slice(&conflict_body).unwrap();
+        assert_eq!(
+            error.error.code,
+            kanban_contract::ApiErrorCode::IdempotencyConflict
+        );
+
+        let signal = router
+            .oneshot(json_request(
+                "/api/v1/tasks/t_http_comment/comments",
+                serde_json::json!({
+                    "idempotency_key": "comment-signal",
+                    "author": "alice",
+                    "body": "signal",
+                    "kind": "signal",
+                    "metadata": {}
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(signal.status(), StatusCode::NOT_IMPLEMENTED);
+        let signal_body = signal.into_body().collect().await.unwrap().to_bytes();
+        let error: kanban_contract::ErrorEnvelope = serde_json::from_slice(&signal_body).unwrap();
+        assert_eq!(
+            error.error.code,
+            kanban_contract::ApiErrorCode::FeatureNotAvailable
+        );
     }
 
     #[tokio::test]

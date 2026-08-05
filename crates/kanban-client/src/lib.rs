@@ -6,14 +6,14 @@ use std::{
 };
 
 use kanban_contract::{
-    ApiBoard, ApiBoardColumn, ApiClaim, ApiErrorCode, ApiExecutionPlan, ApiTask, BlockTaskRequest,
-    BlockTaskResponse, ClaimTaskRequest, ClaimTaskResponse, CompleteTaskRequest,
-    CompleteTaskResponse, CreateTaskRequest, CreateTaskResponse, ErrorEnvelope, GetTaskResponse,
-    HealthReport, HealthResponse, HeartbeatTaskRequest, HeartbeatTaskResponse,
-    ListBoardColumnsResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
-    SubmitReviewTaskResponse,
+    ApiBoard, ApiBoardColumn, ApiClaim, ApiComment, ApiErrorCode, ApiExecutionPlan, ApiTask,
+    BlockTaskRequest, BlockTaskResponse, ClaimTaskRequest, ClaimTaskResponse, CompleteTaskRequest,
+    CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse, CreateTaskRequest,
+    CreateTaskResponse, ErrorEnvelope, GetTaskResponse, HealthReport, HealthResponse,
+    HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse, ListBoardsResponse,
+    ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
+    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
+    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -146,6 +146,35 @@ impl KanbanClient {
             encode_path_segment(task_id.trim())
         ))?;
         Ok(response.data)
+    }
+
+    pub fn create_comment(
+        &self,
+        task_id: &str,
+        request: &CreateCommentRequest,
+    ) -> Result<ApiComment, ClientError> {
+        let task_id = task_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(ClientError::InvalidInput(
+                "task selector must resolve to a global t_... id".to_owned(),
+            ));
+        }
+        let request = prepare_create_comment_request(request.clone(), task_id);
+        let response: CreateCommentResponse = self.post(
+            &format!("/api/v1/tasks/{}/comments", encode_path_segment(task_id)),
+            &request,
+        )?;
+        Ok(response.data)
+    }
+
+    pub fn create_comment_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+        request: &CreateCommentRequest,
+    ) -> Result<ApiComment, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        self.create_comment(&task_id, request)
     }
 
     pub fn resolve_task_id(&self, board: &str, selector: &str) -> Result<String, ClientError> {
@@ -426,6 +455,16 @@ fn prepare_create_request(mut request: CreateTaskRequest) -> CreateTaskRequest {
     request
 }
 
+fn prepare_create_comment_request(
+    mut request: CreateCommentRequest,
+    _task_id: &str,
+) -> CreateCommentRequest {
+    request
+        .idempotency_key
+        .get_or_insert_with(|| format!("comment.create:{}", kanban_core::new_typed_id("c")));
+    request
+}
+
 fn is_board_local_task_selector(selector: &str) -> bool {
     let numeric = |value: &str| {
         !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
@@ -595,6 +634,46 @@ mod tests {
         assert_eq!(
             request.idempotency_key.as_deref(),
             Some(format!("task.create:{task_id}").as_str())
+        );
+    }
+
+    #[test]
+    fn comment_request_gets_unique_entity_local_idempotency_keys() {
+        let request = kanban_contract::CreateCommentRequest {
+            idempotency_key: None,
+            author: None,
+            body: " handoff ".into(),
+            kind: None,
+            author_type: None,
+            agent_type: None,
+            metadata: None,
+        };
+        let first = prepare_create_comment_request(request.clone(), "t_comment");
+        let second = prepare_create_comment_request(request, "t_comment");
+        let first_key = first.idempotency_key.as_deref().unwrap();
+        let second_key = second.idempotency_key.as_deref().unwrap();
+        assert!(first_key.starts_with("comment.create:c_"));
+        assert!(second_key.starts_with("comment.create:c_"));
+        assert_ne!(first_key, second_key);
+    }
+
+    #[test]
+    fn comment_request_preserves_explicit_entity_local_idempotency_key() {
+        let request = prepare_create_comment_request(
+            kanban_contract::CreateCommentRequest {
+                idempotency_key: Some("comment.retry:fixed".into()),
+                author: None,
+                body: "handoff".into(),
+                kind: None,
+                author_type: None,
+                agent_type: None,
+                metadata: None,
+            },
+            "t_comment",
+        );
+        assert_eq!(
+            request.idempotency_key.as_deref(),
+            Some("comment.retry:fixed")
         );
     }
 

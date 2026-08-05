@@ -12,12 +12,12 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use kanban_client::{ClientError, DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, BlockTaskRequest, BlockTaskResponse,
-    ClaimTaskRequest, ClaimTaskResponse, CompleteTaskRequest, CompleteTaskResponse,
-    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
-    HeartbeatTaskResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
-    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
-    TaskReadPlanFilter, TaskReadSort,
+    ClaimTaskRequest, ClaimTaskResponse, CommentAuthorType, CommentKind, CompleteTaskRequest,
+    CompleteTaskResponse, CreateCommentRequest, CreateTaskRequest, CreateTaskResponse,
+    GetTaskResponse, HeartbeatTaskRequest, HeartbeatTaskResponse, ListTasksQuery,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
+    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
+    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use serde::Serialize;
 
@@ -67,6 +67,11 @@ enum Command {
         #[command(subcommand)]
         command: TaskCommand,
     },
+    /// Manage task comments through the canonical localhost host.
+    Comment {
+        #[command(subcommand)]
+        command: CommentCommand,
+    },
     /// Removed direct-database initialization path.
     Init,
     /// Commands not yet migrated to the canonical host fail without touching storage.
@@ -99,6 +104,44 @@ enum BoardCommand {
     },
     /// List a board's fixed status columns.
     Columns { board: Option<String> },
+}
+
+#[derive(Debug, Subcommand)]
+enum CommentCommand {
+    /// Add one note or decision comment to a task.
+    Add(CommentAddArgs),
+}
+
+#[derive(Debug, Args)]
+struct CommentAddArgs {
+    task_ref: String,
+    body: String,
+    #[arg(long, value_enum)]
+    kind: Option<CommentKindArg>,
+    #[arg(long)]
+    author: Option<String>,
+    #[arg(long, value_enum)]
+    author_type: Option<CommentAuthorTypeArg>,
+    #[arg(long)]
+    agent_type: Option<String>,
+    /// JSON object stored as comment metadata.
+    #[arg(long = "metadata-json")]
+    metadata_json: Option<String>,
+    #[arg(long)]
+    idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum CommentKindArg {
+    Note,
+    Decision,
+    Signal,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum CommentAuthorTypeArg {
+    User,
+    Agent,
 }
 
 #[derive(Debug, Subcommand)]
@@ -405,6 +448,50 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
             }
             Ok(())
         }
+        Command::Comment { command } => {
+            let client = KanbanClient::new(&cli.server_url, actor(cli))?;
+            match command {
+                CommentCommand::Add(args) => {
+                    let metadata = parse_metadata(args.metadata_json.as_deref())?;
+                    let comment = client.create_comment_by_selector(
+                        &cli.board,
+                        &args.task_ref,
+                        &CreateCommentRequest {
+                            idempotency_key: args.idempotency_key.clone(),
+                            author: args.author.clone(),
+                            body: args.body.clone(),
+                            kind: args.kind.map(api_comment_kind),
+                            author_type: args.author_type.map(api_comment_author_type),
+                            agent_type: args.agent_type.clone(),
+                            metadata: metadata.map(|metadata| {
+                                serde_json::Value::Object(metadata.into_iter().collect())
+                            }),
+                        },
+                    )?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&kanban_contract::CliCommentAddOutput::new(
+                                comment,
+                            ))
+                            .expect("comment response is serializable")
+                        );
+                    } else {
+                        println!(
+                            "{} task={} created_at={} [{}] {} ({}): {}",
+                            comment.id,
+                            comment.task_id,
+                            comment.created_at,
+                            comment.kind.as_str(),
+                            comment.author,
+                            comment.author_type.as_str(),
+                            comment.body
+                        );
+                    }
+                }
+            }
+            Ok(())
+        }
         Command::Task { command } => {
             let client = KanbanClient::new(&cli.server_url, actor(cli))?;
             match command {
@@ -662,6 +749,21 @@ fn api_create_status(status: CreateStatus) -> ApiCreateTaskStatus {
         CreateStatus::Todo => ApiCreateTaskStatus::Todo,
         CreateStatus::Scheduled => ApiCreateTaskStatus::Scheduled,
         CreateStatus::Ready => ApiCreateTaskStatus::Ready,
+    }
+}
+
+fn api_comment_kind(kind: CommentKindArg) -> CommentKind {
+    match kind {
+        CommentKindArg::Note => CommentKind::Note,
+        CommentKindArg::Decision => CommentKind::Decision,
+        CommentKindArg::Signal => CommentKind::Signal,
+    }
+}
+
+fn api_comment_author_type(author_type: CommentAuthorTypeArg) -> CommentAuthorType {
+    match author_type {
+        CommentAuthorTypeArg::User => CommentAuthorType::User,
+        CommentAuthorTypeArg::Agent => CommentAuthorType::Agent,
     }
 }
 
@@ -924,6 +1026,39 @@ mod tests {
         let failure = feature_not_available("not migrated");
         assert_eq!(failure.code, "feature_not_available");
         assert_eq!(failure.exit_code, 10);
+    }
+
+    #[test]
+    fn parses_comment_add_command() {
+        let cli = Cli::try_parse_from([
+            "kanban",
+            "comment",
+            "add",
+            "default#1",
+            "handoff",
+            "--kind",
+            "decision",
+            "--author-type",
+            "agent",
+            "--agent-type",
+            "executor",
+            "--metadata-json",
+            "{\"options\":[]}",
+        ])
+        .expect("comment add args");
+        let Command::Comment {
+            command: CommentCommand::Add(args),
+        } = cli.command
+        else {
+            panic!("expected comment add");
+        };
+        assert_eq!(args.task_ref, "default#1");
+        assert_eq!(args.body, "handoff");
+        assert!(matches!(args.kind, Some(CommentKindArg::Decision)));
+        assert!(matches!(
+            args.author_type,
+            Some(CommentAuthorTypeArg::Agent)
+        ));
     }
 
     #[test]

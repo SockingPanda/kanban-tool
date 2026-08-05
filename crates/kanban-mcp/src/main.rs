@@ -3,12 +3,13 @@ use std::{collections::BTreeMap, env, sync::Arc};
 use kanban_client::{DEFAULT_SERVER_URL, KanbanClient};
 use kanban_contract::{
     ApiCreateTaskStatus, ApiTaskPriority, ApiTaskStatus, BlockTaskRequest, BlockTaskResponse,
-    ClaimTaskRequest, ClaimTaskResponse, CompleteTaskRequest, CompleteTaskResponse,
-    CreateTaskRequest, CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest,
-    HeartbeatTaskResponse, ListBoardsResponse, ListTasksQuery, ListTasksResponse,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
-    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
-    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
+    ClaimTaskRequest, ClaimTaskResponse, CommentAuthorType, CommentKind, CompleteTaskRequest,
+    CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse, CreateTaskRequest,
+    CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest, HeartbeatTaskResponse,
+    ListBoardsResponse, ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
+    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
+    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
+    TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -190,6 +191,22 @@ struct TaskBlockArgs {
     force: bool,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct CommentCreateArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+    body: String,
+    kind: Option<CommentKind>,
+    author: Option<String>,
+    author_type: Option<CommentAuthorType>,
+    agent_type: Option<String>,
+    metadata: Option<BTreeMap<String, serde_json::Value>>,
+    idempotency_key: Option<String>,
+}
+
 const fn default_claim_ttl_ms() -> i64 {
     300_000
 }
@@ -364,6 +381,37 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(PromoteTaskResponse::new(task)))
+    }
+
+    #[tool(
+        name = "comment_create",
+        description = "Create a note or decision comment through the canonical application service"
+    )]
+    async fn comment_create(
+        &self,
+        Parameters(args): Parameters<CommentCreateArgs>,
+    ) -> Result<Json<CreateCommentResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let task_ref = args.task_ref;
+        let client = self.client.clone();
+        let request = CreateCommentRequest {
+            idempotency_key: args.idempotency_key,
+            author: args.author,
+            body: args.body,
+            kind: args.kind,
+            author_type: args.author_type,
+            agent_type: args.agent_type,
+            metadata: args
+                .metadata
+                .map(|metadata| serde_json::Value::Object(metadata.into_iter().collect())),
+        };
+        let comment = tokio::task::spawn_blocking(move || {
+            client.create_comment_by_selector(&board, &task_ref, &request)
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(CreateCommentResponse { data: comment }))
     }
 
     #[tool(

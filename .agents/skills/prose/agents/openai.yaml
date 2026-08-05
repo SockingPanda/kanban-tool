@@ -1,0 +1,4 @@
+interface:
+  display_name: "项目文案"
+  short_description: "编写清楚、当前且可验证的中文用户文案和文档"
+  default_prompt: "使用 $prose 起草清晰、描述当前事实的用户文案、错误、示例或文档。"

@@ -428,8 +428,12 @@ describe("KanbanApi task search", () => {
   })
 
   it("uses event envelope cursor metadata instead of deriving only from row ids", async () => {
+    const payload = [
+      { nested: { values: [1, "two", null] } },
+      "future-event-payload",
+    ]
     const fetchMock = mockFetch({
-      data: [eventRecord({ id: 123, task_id: "t_1", kind: "task.claimed" })],
+      data: [eventRecord({ id: 123, task_id: "t_1", kind: "plugin.future.event", payload })],
       meta: { next_after: 130 },
     })
     const api = new KanbanApi(runtimeConfig)
@@ -437,6 +441,7 @@ describe("KanbanApi task search", () => {
     const page = await api.listEventsAfter(120)
 
     expect(page.events).toHaveLength(1)
+    expect(page.events[0]?.payload).toEqual(payload)
     expect(page.meta.next_after).toBe(130)
     const url = calledUrl(fetchMock)
     expect(url.searchParams.get("after")).toBe("120")

@@ -406,7 +406,7 @@ export type EventRecord = {
   run_id: string | null
   kind: string
   actor: string | null
-  payload: Record<string, unknown>
+  payload: unknown
   created_at: number
 }
 

@@ -67,6 +67,8 @@ enum Command {
         #[command(subcommand)]
         command: commands::dependency::DependencyCommand,
     },
+    /// List canonical task events through the localhost host.
+    Events(commands::event::ListArgs),
     /// List execution runs for a task through the canonical localhost host.
     Runs(commands::run::ListArgs),
     /// Inspect one execution run through the canonical localhost host.
@@ -97,6 +99,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Board { command } => commands::board::run(&ctx, command),
         Command::Comment { command } => commands::comment::run(&ctx, command),
         Command::Dependency { command } => commands::dependency::run(&ctx, command),
+        Command::Events(args) => commands::event::run(&ctx, args),
         Command::Run { command } => commands::run::run(&ctx, command),
         Command::Runs(args) => commands::run::list(&ctx, args),
         Command::Task { command } => commands::task::run(&ctx, command),
@@ -163,5 +166,25 @@ mod tests {
             Cli::try_parse_from(["kanban", "run", "logs", "r_example", "--tail-bytes", "1024"])
                 .is_err()
         );
+    }
+
+    #[test]
+    fn parses_event_list_command() {
+        let cli = Cli::try_parse_from([
+            "kanban",
+            "events",
+            "default#1",
+            "--after",
+            "10",
+            "--limit",
+            "25",
+        ])
+        .expect("event list command should parse");
+        let Command::Events(args) = cli.command else {
+            panic!("expected events command");
+        };
+        assert_eq!(args.task_ref.as_deref(), Some("default#1"));
+        assert_eq!(args.after, 10);
+        assert_eq!(args.limit, 25);
     }
 }

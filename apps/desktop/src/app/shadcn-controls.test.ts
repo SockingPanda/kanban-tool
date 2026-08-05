@@ -209,26 +209,20 @@ describe("desktop shadcn control convergence", () => {
     }
   })
 
-  it("keeps task detail lazy while hiding unsupported graph content", () => {
+  it("keeps graph and low-frequency desktop views behind lazy import boundaries", () => {
     const shell = source("app/AppShell.tsx")
     const detail = source("features/task-detail/TaskDetail.tsx")
     const map = source("features/task-map/BoardTaskMapView.tsx")
     const layout = source("features/task-map/task-graph-layout.ts")
 
     expect(shell).toContain("lazy(() => import(\"@/features/task-detail/TaskDetail\")")
+    expect(shell).toContain("lazy(() => import(\"@/features/task-map/BoardTaskMapView\")")
+    expect(shell).toContain("lazy(() => import(\"@/features/maintenance/MaintenanceView\")")
     expect(shell).toContain("lazy(() =>")
     expect(shell).not.toContain("from \"@/features/task-map/BoardTaskMapView\"")
     expect(shell).not.toContain("from \"@/features/task-detail/TaskDetail\"")
-    for (const retiredImport of [
-      'lazy(() => import("@/features/task-map/BoardTaskMapView")',
-      'lazy(() => import("@/features/maintenance/MaintenanceView")',
-      'lazy(() => import("@/features/ontology/OntologyReviewWorkbench")',
-      'lazy(() => import("@/features/signals/SignalsWorkbench")',
-    ]) {
-      expect(shell).not.toContain(retiredImport)
-    }
 
-    expect(detail).not.toContain("TaskGraphCanvas")
+    expect(detail).toContain("lazy(() => import(\"@/features/task-map/TaskGraphCanvas\")")
     expect(detail).toContain("<CollapsibleContent>{open ? children : null}</CollapsibleContent>")
     expect(map).toContain("lazy(() => import(\"./TaskGraphCanvas\")")
     expect(map).not.toContain("from \"./TaskGraphCanvas\"")
@@ -236,16 +230,14 @@ describe("desktop shadcn control convergence", () => {
     expect(layout).not.toContain("import ELK")
   })
 
-  it("keeps retired views out of navigation and reachable shell branches", () => {
+  it("keeps all operator views in navigation and reachable shell branches", () => {
     const shell = source("app/AppShell.tsx")
-    const retiredViews = ["map", "signals", "ontology", "maintenance"] as const
 
-    expect(primaryViews).toEqual(["board", "list", "events"])
-    expect(sidebarViews).toEqual(["board", "list", "runs", "events", "health", "settings"])
-    for (const retiredView of retiredViews) {
-      expect(primaryViews).not.toContain(retiredView)
-      expect(sidebarViews).not.toContain(retiredView)
-      expect(shell).not.toContain(`if (view === \"${retiredView}\")`)
+    expect(primaryViews).toEqual(["board", "list", "map", "events"])
+    expect(sidebarViews).toEqual(["board", "list", "map", "runs", "events", "signals", "ontology", "maintenance", "health", "settings"])
+    for (const view of ["map", "signals", "ontology", "maintenance"] as const) {
+      expect(sidebarViews).toContain(view)
+      expect(shell).toContain(`if (view === \"${view}\")`)
     }
   })
 

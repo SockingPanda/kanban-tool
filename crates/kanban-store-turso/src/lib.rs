@@ -18,10 +18,10 @@ pub use legacy_import::{
     LegacyImportOptions, LegacyImportResult, LegacyImportTableCount, LegacySqliteImportOptions,
     LegacySqliteImportResult, import_legacy_sqlite_v30,
 };
+pub use operations::CreateAttachmentInput;
 pub use operations::search::{
     StoreSearchHit, StoreSearchIndexStatus, StoreSearchMeta, StoreSearchQuery, StoreSearchResults,
 };
-pub use operations::CreateAttachmentInput;
 pub use operations::{
     AddDependencyInput, AddDependencyRecord, ArchiveBoardInput, ArchiveTaskInput, BlockTaskInput,
     ClaimTaskInput, ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput,

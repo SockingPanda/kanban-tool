@@ -37,10 +37,11 @@ pub(crate) fn run(ctx: &CliContext, command: &BoardCommand) -> Result<(), CliFai
         BoardCommand::Archive(args) => archive::run(ctx, args),
         BoardCommand::Columns(args) => columns::run(ctx, args),
         BoardCommand::Use { board } => {
-            let write =
-                crate::config::write_active_board(board).map_err(crate::error::CliFailure::from)?;
+            let selected_board = board.trim();
+            let write = crate::config::write_active_board(selected_board)
+                .map_err(crate::error::CliFailure::from)?;
             let output = CliBoardUseOutput::new(CliBoardConfigSelection {
-                board: board.clone(),
+                board: selected_board.to_owned(),
                 config_path: write.path.display().to_string(),
                 source: CliConfigSource::ProjectConfig {
                     path: write.path.display().to_string(),

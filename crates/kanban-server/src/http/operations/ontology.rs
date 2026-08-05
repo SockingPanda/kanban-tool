@@ -154,6 +154,52 @@ fn normalize_action_body(value: &mut Value) {
     }
 }
 
+fn contractize(value: Value) -> Value {
+    match value {
+        Value::Array(values) => Value::Array(values.into_iter().map(contractize).collect()),
+        Value::Object(object) => {
+            let mut output = serde_json::Map::new();
+            for (key, value) in object {
+                let value = contractize(value);
+                let target = match key.as_str() {
+                    "task_snapshot_json" => "task_snapshot",
+                    "agent_candidates_json" => "agent_candidates",
+                    "suggestion_snapshot_json" => "suggestion_snapshot",
+                    "final_decision_json" => "final_decision",
+                    "diagnostics_json" => "diagnostics",
+                    "related_labels_json" => "related_labels",
+                    "proposal_json" => "proposal",
+                    "change_json" => "change",
+                    "validation_json" => "validation",
+                    "labels_json" => "labels",
+                    "candidate_atom_variants_json" => "candidate_atom_variants",
+                    _ => key.as_str(),
+                };
+                if target == "labels" && value.is_string() {
+                    let labels = value
+                        .as_str()
+                        .and_then(|raw| serde_json::from_str::<Vec<String>>(raw).ok())
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|id| json!({"id": id, "name": Value::Null}))
+                        .collect::<Vec<_>>();
+                    output.insert(target.to_owned(), Value::Array(labels));
+                } else if key.ends_with("_json") && value.is_string() {
+                    let parsed = value
+                        .as_str()
+                        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+                        .unwrap_or(Value::Null);
+                    output.insert(target.to_owned(), parsed);
+                } else {
+                    output.insert(target.to_owned(), value);
+                }
+            }
+            Value::Object(output)
+        }
+        other => other,
+    }
+}
+
 async fn run(
     state: State<AppState>,
     operation: &str,
@@ -164,7 +210,7 @@ async fn run(
         .application()
         .label_ontology(operation, board, input)
         .await?;
-    Ok(Json(value))
+    Ok(Json(contractize(value)))
 }
 
 pub(crate) async fn list_semantics(
@@ -361,6 +407,20 @@ pub(crate) async fn review_signals(
     Path(board): Path<String>,
     Query(query): Query<HashMap<String, String>>,
 ) -> Result<Json<Value>, ApiError> {
+    if query.get("quality").is_some_and(|value| value == "true") {
+        let sample_limit = query
+            .get("sample_limit")
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(20);
+        let Json(value) = run(
+            State(state),
+            "quality",
+            &board,
+            json!({"sample_limit": sample_limit}),
+        )
+        .await?;
+        return Ok(Json(json!({"data": value})));
+    }
     let group_by = query
         .get("group_by")
         .cloned()

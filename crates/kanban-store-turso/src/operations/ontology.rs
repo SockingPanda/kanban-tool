@@ -1179,6 +1179,16 @@ impl TursoStore {
                     task_snapshot, agent_candidates, suggestion_snapshot, signal_fingerprint
                 ))
             });
+        let mut resolved_targets = Vec::with_capacity(input.signals.len());
+        for signal in &input.signals {
+            resolved_targets.push(match signal.target_label_ref.as_deref() {
+                Some(value) => {
+                    let (id, name) = self.ontology_label(&board_id, value).await?;
+                    (Some(id), Some(name))
+                }
+                None => (None, None),
+            });
+        }
         let now = now_ms();
         let mut connection = self.connection().await?;
         let transaction = connection
@@ -1204,13 +1214,7 @@ impl TursoStore {
                 .clone()
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_else(|| format!("{}-{index}", signal.kind));
-            let (target_label_id, target_label_name) = match signal.target_label_ref.as_deref() {
-                Some(value) => match self.ontology_label(&board_id, value).await {
-                    Ok(pair) => (Some(pair.0), Some(pair.1)),
-                    Err(error) => return Err(error),
-                },
-                None => (None, None),
-            };
+            let (target_label_id, target_label_name) = resolved_targets[index].clone();
             let candidate_hash = match (
                 &signal.candidate_atom_polarity,
                 &signal.candidate_atom_kind,
@@ -1437,6 +1441,22 @@ impl TursoStore {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
+        for signal_id in &input.signal_ids {
+            let row = first_row(
+                transaction
+                    .query(
+                        "SELECT id FROM label_ontology_signals WHERE board_id=:board AND id=:id LIMIT 1",
+                        [(":board", board_id.as_str()), (":id", signal_id.as_str())],
+                    )
+                    .await?,
+            )
+            .await;
+            if row.is_err() {
+                return Err(StoreError::InvalidInput(format!(
+                    "ontology signal does not exist on board: {signal_id}"
+                )));
+            }
+        }
         if matches!(
             input.action_type.as_str(),
             "confirm" | "reject" | "resolve_no_change" | "supersede"

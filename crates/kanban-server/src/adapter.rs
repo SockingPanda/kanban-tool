@@ -59,6 +59,9 @@ fn store_error(error: StoreError) -> KanbanError {
         StoreError::TaskConflict(task_id) => {
             KanbanError::Conflict(format!("task id already exists: {task_id}"))
         }
+        StoreError::InvalidInput(message) if message.contains("hash mismatch") => {
+            KanbanError::Conflict(message)
+        }
         StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),
         StoreError::InvalidTransition(message) => KanbanError::InvalidTransition(message),
         StoreError::ClaimConflict(message) => {

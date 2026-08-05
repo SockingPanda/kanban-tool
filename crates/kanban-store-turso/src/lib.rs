@@ -6,6 +6,7 @@ mod migration;
 mod operations;
 mod schema;
 mod shared;
+mod vector;
 
 #[cfg(feature = "legacy-sqlite-import")]
 pub mod legacy_import;
@@ -41,6 +42,12 @@ pub use operations::{
     ReopenStepInput, ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SignalListOptions,
     SkipStepInput, SpecifyTaskInput, SubmitReviewTaskInput, TaskListOptions, TaskListSort,
     TaskPlanFilter, UnblockTaskInput, UpdateStepInput, UpdateTaskInput, UpsertLabelSemanticsInput,
+};
+pub use vector::{
+    MAX_VECTOR_BATCH, MAX_VECTOR_CONTENT_BYTES, MAX_VECTOR_DIMENSIONS, ProjectionJobRecord,
+    VECTOR_BACKEND, VECTOR_LABEL_ATOMS_PROJECTION, VECTOR_TASKS_PROJECTION, VectorChunkHitRecord,
+    VectorConfig, VectorDocumentInput, VectorEmbeddingInput, VectorLabelAtomHitRecord,
+    VectorStatusRecord, content_hash, stable_id,
 };
 
 #[cfg(test)]

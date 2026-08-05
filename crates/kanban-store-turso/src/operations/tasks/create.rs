@@ -139,6 +139,19 @@ impl TursoStore {
         }
         transaction
                 .execute(
+                    "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, content_hash, created_at, updated_at, archived_at) VALUES (?1, 'task', 'tasks', ?2, ?3, ?2, ?4, ?5, NULL, ?6, ?6, NULL)",
+                    (
+                        format!("kb://task/{}", input.id).as_str(),
+                        input.id.as_str(),
+                        board_id.as_str(),
+                        title.as_str(),
+                        input.description.as_deref(),
+                        now,
+                    ),
+                )
+                .await?;
+        transaction
+                .execute(
                     "INSERT INTO task_execution_plans(board_id, task_id, state, reason, updated_by, updated_at) VALUES (?1, ?2, 'unplanned', NULL, ?3, ?4)",
                     (board_id.as_str(), input.id.as_str(), input.created_by.as_str(), now),
                 )

@@ -908,6 +908,10 @@ WHEN (NEW.source_event_id IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM task_events WHERE id = NEW.source_event_id AND board_id IS NEW.board_id
 )) OR (NEW.entity_uri IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM entities WHERE uri = NEW.entity_uri AND board_id IS NEW.board_id
+  UNION ALL
+  SELECT 1 FROM tasks WHERE NEW.entity_uri = 'kb://task/' || id AND board_id IS NEW.board_id
+  UNION ALL
+  SELECT 1 FROM label_atoms WHERE NEW.entity_uri = 'kb://label-atom/' || id AND board_id IS NEW.board_id
 ))
 BEGIN
   SELECT RAISE(ABORT, 'projection_jobs reference board mismatch');
@@ -919,9 +923,95 @@ WHEN (NEW.source_event_id IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM task_events WHERE id = NEW.source_event_id AND board_id IS NEW.board_id
 )) OR (NEW.entity_uri IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM entities WHERE uri = NEW.entity_uri AND board_id IS NEW.board_id
+  UNION ALL
+  SELECT 1 FROM tasks WHERE NEW.entity_uri = 'kb://task/' || id AND board_id IS NEW.board_id
+  UNION ALL
+  SELECT 1 FROM label_atoms WHERE NEW.entity_uri = 'kb://label-atom/' || id AND board_id IS NEW.board_id
 ))
 BEGIN
   SELECT RAISE(ABORT, 'projection_jobs reference board mismatch');
+END;
+
+-- canonical task event 成功写入后，自动为可重建 vector projection 留下 job。
+-- 该触发器只写 projection_jobs/projection_state，不改变 tasks 的事实状态。
+CREATE TRIGGER IF NOT EXISTS task_events_vector_projection_enqueue
+AFTER INSERT ON task_events
+WHEN NEW.task_id IS NOT NULL
+BEGIN
+  INSERT INTO projection_jobs(
+    board_id, source_event_id, target, entity_uri, dedupe_key, operation,
+    payload_json, status, attempts, max_attempts, next_attempt_at,
+    created_at, updated_at
+  ) VALUES (
+    NEW.board_id, NEW.id, 'vector_tasks',
+    'kb://task/' || NEW.task_id,
+    'vector_tasks:kb://task/' || NEW.task_id || ':upsert',
+    'upsert',
+    json_object('task_id', NEW.task_id), 'pending', 0, 10, NULL,
+    NEW.created_at, NEW.created_at
+  )
+  ON CONFLICT(target, dedupe_key) DO UPDATE SET
+    source_event_id=excluded.source_event_id,
+    payload_json=excluded.payload_json,
+    status=CASE WHEN projection_jobs.status='done' THEN 'pending' ELSE projection_jobs.status END,
+    next_attempt_at=NULL,
+    updated_at=excluded.updated_at;
+  UPDATE projection_state
+  SET dirty=1, lifecycle_status=CASE WHEN lifecycle_status='ready' THEN 'degraded' ELSE lifecycle_status END,
+      updated_at=NEW.created_at
+  WHERE projection IN ('vector_tasks', 'vector_label_atoms');
+END;
+
+CREATE TRIGGER IF NOT EXISTS label_atoms_vector_projection_enqueue
+AFTER INSERT ON label_atoms
+BEGIN
+  INSERT INTO projection_jobs(
+    board_id, source_event_id, target, entity_uri, dedupe_key, operation,
+    payload_json, status, attempts, max_attempts, next_attempt_at,
+    created_at, updated_at
+  ) VALUES (
+    NEW.board_id, NULL, 'vector_label_atoms',
+    'kb://label-atom/' || NEW.id,
+    'vector_label_atoms:kb://label-atom/' || NEW.id || ':upsert',
+    'upsert',
+    json_object('atom_id', NEW.id), 'pending', 0, 10, NULL,
+    NEW.created_at, NEW.created_at
+  )
+  ON CONFLICT(target, dedupe_key) DO UPDATE SET
+    payload_json=excluded.payload_json,
+    status=CASE WHEN projection_jobs.status='done' THEN 'pending' ELSE projection_jobs.status END,
+    next_attempt_at=NULL,
+    updated_at=excluded.updated_at;
+  UPDATE projection_state
+  SET dirty=1, lifecycle_status=CASE WHEN lifecycle_status='ready' THEN 'degraded' ELSE lifecycle_status END,
+      updated_at=NEW.updated_at
+  WHERE projection IN ('vector_label_atoms');
+END;
+
+CREATE TRIGGER IF NOT EXISTS label_atoms_vector_projection_update
+AFTER UPDATE OF text, content_hash, board_id ON label_atoms
+BEGIN
+  INSERT INTO projection_jobs(
+    board_id, source_event_id, target, entity_uri, dedupe_key, operation,
+    payload_json, status, attempts, max_attempts, next_attempt_at,
+    created_at, updated_at
+  ) VALUES (
+    NEW.board_id, NULL, 'vector_label_atoms',
+    'kb://label-atom/' || NEW.id,
+    'vector_label_atoms:kb://label-atom/' || NEW.id || ':upsert',
+    'upsert',
+    json_object('atom_id', NEW.id), 'pending', 0, 10, NULL,
+    NEW.created_at, NEW.updated_at
+  )
+  ON CONFLICT(target, dedupe_key) DO UPDATE SET
+    payload_json=excluded.payload_json,
+    status=CASE WHEN projection_jobs.status='done' THEN 'pending' ELSE projection_jobs.status END,
+    next_attempt_at=NULL,
+    updated_at=excluded.updated_at;
+  UPDATE projection_state
+  SET dirty=1, lifecycle_status=CASE WHEN lifecycle_status='ready' THEN 'degraded' ELSE lifecycle_status END,
+      updated_at=NEW.updated_at
+  WHERE projection IN ('vector_label_atoms');
 END;
 
 CREATE TRIGGER IF NOT EXISTS retrieval_documents_board_guard_insert

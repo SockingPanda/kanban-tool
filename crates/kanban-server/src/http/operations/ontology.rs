@@ -335,7 +335,8 @@ pub(crate) async fn query_index(
         "limit": query.get("limit").and_then(|value| value.parse::<usize>().ok()).unwrap_or(24),
     });
     let Json(value) = run(State(state), "query_atom_index", &board, input).await?;
-    Ok(Json(json!({"data": value})))
+    let data = value.get("data").cloned().unwrap_or(value);
+    Ok(Json(json!({"data": data})))
 }
 
 pub(crate) async fn suggestions(

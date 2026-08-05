@@ -2825,6 +2825,7 @@ dependencies = [
 name = "kanban-store-turso"
 version = "2.1.3"
 dependencies = [
+ "sha2",
  "tempfile",
  "tokio",
  "turso",

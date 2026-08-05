@@ -26,6 +26,8 @@ pub enum StoreError {
         key: String,
         existing_task_id: String,
     },
+    SchemaMismatch(String),
+    BackupRequired(String),
 }
 
 impl Display for StoreError {
@@ -57,6 +59,8 @@ impl Display for StoreError {
                 formatter,
                 "idempotency conflict for board {board_id}, key {key}, existing task {existing_task_id}"
             ),
+            Self::SchemaMismatch(message) => write!(formatter, "schema 不匹配: {message}"),
+            Self::BackupRequired(message) => write!(formatter, "需要备份: {message}"),
         }
     }
 }

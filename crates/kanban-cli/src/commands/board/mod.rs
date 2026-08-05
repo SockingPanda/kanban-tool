@@ -68,9 +68,7 @@ pub(crate) fn run(ctx: &CliContext, command: &BoardCommand) -> Result<(), CliFai
             Ok(())
         }
         BoardCommand::Current => {
-            let resolved =
-                crate::config::resolve_board(None).map_err(crate::error::CliFailure::from)?;
-            let config_path = match &resolved.source {
+            let config_path = match &ctx.board_source {
                 crate::config::ConfigValueSource::ProjectConfig { path, .. } => path.clone(),
                 _ => crate::config::project_config_path_for_write().map_err(|source| {
                     crate::error::CliFailure::from(crate::config::ConfigError::Io {
@@ -80,9 +78,9 @@ pub(crate) fn run(ctx: &CliContext, command: &BoardCommand) -> Result<(), CliFai
                 })?,
             };
             let output = CliBoardCurrentOutput::new(CliBoardConfigSelection {
-                board: resolved.value,
+                board: ctx.board.clone(),
                 config_path: config_path.display().to_string(),
-                source: source(&resolved.source),
+                source: source(&ctx.board_source),
                 created: false,
                 updated: false,
             });

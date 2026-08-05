@@ -70,6 +70,25 @@ fn board_current_output_fixture_is_produced_by_real_cli() {
 }
 
 #[test]
+fn board_current_uses_resolved_flag_selection_without_writing_config() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let output = isolated(&mut kanban(), &temp)
+        .args(["--json", "--board", "flag-board", "board", "current"])
+        .output()
+        .expect("run board current");
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let parsed: CliBoardCurrentOutput = serde_json::from_slice(&output.stdout).expect("contract");
+    assert_eq!(parsed.data.board, "flag-board");
+    assert!(matches!(parsed.data.source, CliConfigSource::Flag { .. }));
+    assert!(!parsed.data.created);
+    assert!(!temp.path().join(".kb").exists());
+}
+
+#[test]
 fn board_current_output_fixture_is_consumed_by_contract_root() {
     let fixture = include_str!("../../../schemas/fixtures/cli/board-current-output.v1.valid.json");
     let parsed: CliBoardCurrentOutput =

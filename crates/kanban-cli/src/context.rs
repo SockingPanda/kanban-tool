@@ -11,6 +11,7 @@ use crate::{Cli, config, error::CliFailure};
 pub(crate) struct CliContext {
     pub(crate) server_url: String,
     pub(crate) board: String,
+    pub(crate) board_source: config::ConfigValueSource,
     pub(crate) db: Option<std::path::PathBuf>,
     pub(crate) actor: Option<String>,
     pub(crate) json: bool,
@@ -18,10 +19,12 @@ pub(crate) struct CliContext {
 
 impl CliContext {
     pub(crate) fn from_cli(cli: &Cli) -> Result<Self, CliFailure> {
-        let board = config::resolve_board(cli.board.as_deref()).map_err(CliFailure::from)?;
+        let resolved_board =
+            config::resolve_board(cli.board.as_deref()).map_err(CliFailure::from)?;
         Ok(Self {
             server_url: cli.server_url.clone(),
-            board: board.value,
+            board: resolved_board.value,
+            board_source: resolved_board.source,
             db: cli.db.clone(),
             actor: cli.actor.clone(),
             json: cli.json,

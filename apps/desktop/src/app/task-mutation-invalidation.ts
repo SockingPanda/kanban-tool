@@ -5,6 +5,7 @@ import { queryKeys } from "@/lib/query-keys"
 export type TaskMutationInvalidationScope =
   | "none"
   | "task"
+  | "attachments"
   | "timeline"
   | "dependencies"
   | "steps"
@@ -45,6 +46,10 @@ export async function invalidateTaskMutationScope({
     invalidate(queryKeys.taskEvents(targetTaskId))
     invalidate(queryKeys.taskComments(targetTaskId))
   }
+  const invalidateAttachments = () => {
+    if (!targetTaskId) return
+    invalidate(queryKeys.taskAttachments(targetTaskId))
+  }
   const invalidateTask = () => {
     if (!targetTaskId) return
     invalidate(queryKeys.taskDetail(targetTaskId))
@@ -61,6 +66,9 @@ export async function invalidateTaskMutationScope({
       break
     case "task":
       invalidateTask()
+      break
+    case "attachments":
+      invalidateAttachments()
       break
     case "timeline":
       invalidateTimeline()

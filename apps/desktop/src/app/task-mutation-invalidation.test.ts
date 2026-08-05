@@ -63,4 +63,21 @@ describe("task mutation invalidation", () => {
       { queryKey: ["board-task-map", "default"] },
     ])
   })
+
+  it("keeps attachment mutations scoped to the task attachment bucket", async () => {
+    const queryClient = new QueryClient()
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries")
+
+    await invalidateTaskMutationScope({
+      board: "default",
+      queryClient,
+      scope: "attachments",
+      selectedTaskId: "t_1",
+      taskId: "t_1",
+    })
+
+    expect(invalidate.mock.calls.map(([arg]) => arg)).toEqual([
+      { queryKey: ["task-attachments", "t_1"] },
+    ])
+  })
 })

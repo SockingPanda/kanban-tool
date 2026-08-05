@@ -48,7 +48,7 @@ const TaskGraphCanvas = lazy(() => import("@/features/task-map/TaskGraphCanvas")
 type TaskDetailActionOptions = {
   label?: string
   fallbackTaskId?: string | null
-  invalidate?: "none" | "task" | "steps" | "board-and-task"
+  invalidate?: "none" | "task" | "attachments" | "steps" | "board-and-task"
 }
 
 export function TaskDetail({

@@ -16,7 +16,7 @@ import { formatRelativeTime } from "@/lib/utils"
 type AttachmentActionOptions = {
   label?: string
   fallbackTaskId?: string | null
-  invalidate?: "none" | "task"
+  invalidate?: "none" | "attachments"
 }
 
 export function TaskAttachmentsPanel(props: {
@@ -67,7 +67,7 @@ function ConnectedTaskAttachmentsPanel({
           content,
           content_type: selectedFile.type || null,
         }),
-      { fallbackTaskId: task.id, label: "attachment", invalidate: "task" },
+      { fallbackTaskId: task.id, label: "attachment", invalidate: "attachments" },
     )
     if (result) {
       setSelectedFile(null)
@@ -97,7 +97,7 @@ function ConnectedTaskAttachmentsPanel({
   async function removeAttachment(attachment: Attachment) {
     await onAction(
       () => api.deleteAttachment(task.id, attachment.id),
-      { fallbackTaskId: task.id, label: "attachment", invalidate: "task" },
+      { fallbackTaskId: task.id, label: "attachment", invalidate: "attachments" },
     )
   }
 

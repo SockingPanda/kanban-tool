@@ -34,10 +34,10 @@ where
         let board = command.board.trim().to_owned();
         let actor = command.actor.trim().to_owned();
         if board.is_empty() {
-            return Err(KanbanError::InvalidInput("board is required".to_owned()));
+            return Err(KanbanError::InvalidInput("看板不能为空".to_owned()));
         }
         if actor.is_empty() {
-            return Err(KanbanError::InvalidInput("actor is required".to_owned()));
+            return Err(KanbanError::InvalidInput("操作人不能为空".to_owned()));
         }
 
         let _mutation = self.mutation_gate.lock().await;

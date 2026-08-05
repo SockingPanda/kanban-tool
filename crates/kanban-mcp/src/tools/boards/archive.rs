@@ -11,7 +11,7 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 struct BoardArchiveArgs {
-    /// Board slug or id. Defaults to KB_BOARD/default.
+    /// 看板 slug 或 ID；默认使用 KB_BOARD/default。
     board: Option<String>,
 }
 
@@ -19,7 +19,7 @@ struct BoardArchiveArgs {
 impl KanbanMcp {
     #[tool(
         name = "board_archive",
-        description = "Archive a board through the canonical kanban host"
+        description = "通过 canonical kanban host 归档看板"
     )]
     async fn board_archive(
         &self,

@@ -29,3 +29,6 @@ pub(super) fn router() -> Router<AppState> {
         .merge(get::router())
         .merge(archive::router())
 }
+
+#[cfg(test)]
+mod tests;

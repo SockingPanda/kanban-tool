@@ -28,7 +28,7 @@ impl TursoStore {
         validate_create_task_input(&input)?;
         let board_selector = board_selector.trim();
         if board_selector.is_empty() {
-            return Err(StoreError::InvalidInput("board is required".to_owned()));
+            return Err(StoreError::InvalidInput("看板不能为空".to_owned()));
         }
         let title = input.title.trim().to_owned();
         let mut connection = self.connection().await?;
@@ -55,7 +55,7 @@ impl TursoStore {
         let board_slug = text_value(board.get_value(1)?, "boards.slug")?;
         if optional_integer_value(board.get_value(2)?, "boards.archived_at")?.is_some() {
             return Err(StoreError::InvalidTransition(
-                "archived board cannot receive tasks".to_owned(),
+                "已归档看板不能创建任务".to_owned(),
             ));
         }
 

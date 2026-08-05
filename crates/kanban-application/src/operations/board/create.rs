@@ -46,17 +46,13 @@ where
             .map(str::to_owned);
         let actor = command.actor.trim().to_owned();
         if slug.is_empty() {
-            return Err(KanbanError::InvalidInput(
-                "board slug is required".to_owned(),
-            ));
+            return Err(KanbanError::InvalidInput("看板 slug 不能为空".to_owned()));
         }
         if name.is_empty() {
-            return Err(KanbanError::InvalidInput(
-                "board name is required".to_owned(),
-            ));
+            return Err(KanbanError::InvalidInput("看板名称不能为空".to_owned()));
         }
         if actor.is_empty() {
-            return Err(KanbanError::InvalidInput("actor is required".to_owned()));
+            return Err(KanbanError::InvalidInput("操作人不能为空".to_owned()));
         }
 
         let _mutation = self.mutation_gate.lock().await;

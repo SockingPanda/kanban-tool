@@ -11,7 +11,7 @@ use crate::shared::{KanbanMcp, call_client_internal};
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 struct BoardListArgs {
-    /// Include archived boards in the result.
+    /// 是否在结果中包含已归档看板。
     include_archived: bool,
 }
 
@@ -19,7 +19,7 @@ struct BoardListArgs {
 impl KanbanMcp {
     #[tool(
         name = "board_list",
-        description = "List boards from the canonical kanban host"
+        description = "通过 canonical kanban host 列出看板"
     )]
     async fn board_list(
         &self,

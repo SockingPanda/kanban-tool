@@ -2,6 +2,8 @@ use turso::transaction::TransactionBehavior;
 
 use crate::{db::TursoStore, domain::BoardRecord, error::StoreError, shared::*};
 
+use super::get::get_board_including_archived;
+
 /// 归档看板时需要写入的审计信息。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveBoardInput {
@@ -19,7 +21,7 @@ impl TursoStore {
     ) -> Result<BoardRecord, StoreError> {
         let selector = selector.trim();
         if selector.is_empty() {
-            return Err(StoreError::InvalidInput("board is required".to_owned()));
+            return Err(StoreError::InvalidInput("看板不能为空".to_owned()));
         }
         let input = ArchiveBoardInput {
             actor: input.actor.trim().to_owned(),
@@ -27,11 +29,11 @@ impl TursoStore {
             archived_at: input.archived_at,
         };
         if input.actor.trim().is_empty() {
-            return Err(StoreError::InvalidInput("actor is required".to_owned()));
+            return Err(StoreError::InvalidInput("操作人不能为空".to_owned()));
         }
         if !input.event_id.starts_with("e_") || input.event_id.len() <= 2 {
             return Err(StoreError::InvalidInput(
-                "event id must start with e_".to_owned(),
+                "事件 ID 必须以 e_ 开头".to_owned(),
             ));
         }
 
@@ -39,24 +41,9 @@ impl TursoStore {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        let board = first_row(
-            transaction
-                .query(
-                    "SELECT id, slug, name, description, created_at, updated_at, archived_at FROM boards WHERE id = ?1 OR slug = ?1 LIMIT 1",
-                    [selector],
-                )
-                .await?,
-        )
-        .await
-        .map_err(|error| match error {
-            turso::Error::QueryReturnedNoRows => StoreError::BoardNotFound(selector.to_owned()),
-            other => StoreError::Turso(other),
-        })?;
-        let board = board_from_row(board)?;
+        let board = get_board_including_archived(&transaction, selector).await?;
         if board.archived_at.is_some() {
-            return Err(StoreError::InvalidTransition(
-                "board is already archived".to_owned(),
-            ));
+            return Err(StoreError::InvalidTransition("看板已经归档".to_owned()));
         }
 
         let running = first_row(
@@ -70,7 +57,7 @@ impl TursoStore {
         .await?;
         if integer_value(running.get_value(0)?, "running board work")? != 0 {
             return Err(StoreError::InvalidTransition(
-                "cannot archive board with running work".to_owned(),
+                "看板存在运行中的任务或执行记录，不能归档".to_owned(),
             ));
         }
 
@@ -81,9 +68,7 @@ impl TursoStore {
             )
             .await?;
         if changed == 0 {
-            return Err(StoreError::InvalidTransition(
-                "cannot archive board".to_owned(),
-            ));
+            return Err(StoreError::InvalidTransition("看板归档失败".to_owned()));
         }
 
         transaction

@@ -11,11 +11,11 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct BoardCreateArgs {
-    /// Board slug, using lowercase letters, digits, `-`, `_`, or `.`.
+    /// 看板 slug，只能使用小写字母、数字、`-`、`_` 或 `.`。
     slug: String,
-    /// Human-readable board name.
+    /// 看板名称。
     name: String,
-    /// Optional board description.
+    /// 可选的看板描述。
     description: Option<String>,
 }
 
@@ -23,7 +23,7 @@ struct BoardCreateArgs {
 impl KanbanMcp {
     #[tool(
         name = "board_create",
-        description = "Create a board through the canonical kanban host"
+        description = "通过 canonical kanban host 创建看板"
     )]
     async fn board_create(
         &self,

@@ -49,7 +49,7 @@ impl TursoStore {
         .await;
         if duplicate.is_ok() {
             return Err(StoreError::InvalidInput(format!(
-                "board slug already exists: {}",
+                "看板 slug 已存在：{}",
                 input.slug
             )));
         }
@@ -124,21 +124,19 @@ impl TursoStore {
 fn validate_create_board_input(input: &CreateBoardInput) -> Result<(), StoreError> {
     if !input.id.starts_with("b_") || input.id.len() <= 2 {
         return Err(StoreError::InvalidInput(
-            "board id must start with b_".to_owned(),
+            "看板 ID 必须以 b_ 开头".to_owned(),
         ));
     }
     validate_board_slug(&input.slug)?;
     if input.name.trim().is_empty() {
-        return Err(StoreError::InvalidInput(
-            "board name is required".to_owned(),
-        ));
+        return Err(StoreError::InvalidInput("看板名称不能为空".to_owned()));
     }
     if input.actor.trim().is_empty() {
-        return Err(StoreError::InvalidInput("actor is required".to_owned()));
+        return Err(StoreError::InvalidInput("操作人不能为空".to_owned()));
     }
     if !input.event_id.starts_with("e_") || input.event_id.len() <= 2 {
         return Err(StoreError::InvalidInput(
-            "event id must start with e_".to_owned(),
+            "事件 ID 必须以 e_ 开头".to_owned(),
         ));
     }
     Ok(())
@@ -157,9 +155,7 @@ fn validate_board_slug(slug: &str) -> Result<(), StoreError> {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
         })
     {
-        return Err(StoreError::InvalidInput(format!(
-            "invalid board slug: {slug}"
-        )));
+        return Err(StoreError::InvalidInput(format!("看板 slug 无效：{slug}")));
     }
     Ok(())
 }
@@ -167,7 +163,7 @@ fn validate_board_slug(slug: &str) -> Result<(), StoreError> {
 fn map_board_create_constraint(error: turso::Error) -> StoreError {
     match error {
         turso::Error::Constraint(message) if message.contains("boards.slug") => {
-            StoreError::InvalidInput("board slug already exists".to_owned())
+            StoreError::InvalidInput("看板 slug 已存在".to_owned())
         }
         other => StoreError::Turso(other),
     }

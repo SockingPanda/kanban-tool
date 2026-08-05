@@ -12,13 +12,13 @@ use crate::{context::CliContext, error::CliFailure};
 pub(crate) enum BoardCommand {
     /// 创建看板并初始化默认列。
     Create(create::CreateArgs),
-    /// List boards from the canonical application service.
+    /// 从 canonical application service 列出看板。
     List(list::ListArgs),
-    /// 查看看板，包括已归档历史。
+    /// 查找当前有效看板。
     Show(show::ShowArgs),
     /// 归档看板。
     Archive(archive::ArchiveArgs),
-    /// List a board's fixed status columns.
+    /// 列出看板的固定状态列。
     Columns(columns::ColumnsArgs),
 }
 

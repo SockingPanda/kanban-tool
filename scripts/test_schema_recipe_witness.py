@@ -22,9 +22,8 @@ REAL_JUST = shutil.which("just")
 EXPECTED_JUST_VERSION = "just 1.57.0"
 CORE_PACKAGES = (
     "kanban-core",
-    "kanban-application",
+    "kanban-service",
     "kanban-protocol",
-    "kanban-store-turso",
     "kanban-client",
     "kanban-server",
     "kanban-cli",
@@ -742,20 +741,20 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
 # 更新执行语义必须显式更新对应 hash，运行采样无法触达的 env/dead branch 仍然
 # fail closed。
 PROTECTED_RECIPE_AST_SHA256 = {
-    "fmt": "33feecc78fb8d5f8e326b84e616872e922434b17c16254e1b0be8bb8beacb50e",
+    "fmt": "aee44af4c2dd9295e8e17e2f35710ff3377263f9ddc366a7e3c1569d75600293",
     "fmt-check": "b2fdd96430312d9ee37d369ce26ff44dab2f6a10dfcbb29bb6380fa0c371d611",
-    "fmt-full": "a0f79f80c2a5f67aa4051168a96c38ce93262b5401ecde76c0f1fa361905ca35",
+    "fmt-full": "3d0813fde4f1443bfeb349dd3dc049ca74b29e875877eab08106fb765ed58069",
     "check": "cddd49fe5e50b59502f0a2a54cfd4e2acb4bb9b891f4de0c056e78f52e0783a7",
-    "check-core": "056f421df1a88b361b888568ba72425b6663d5e3aa7eaa87e99625d71c02d2f9",
+    "check-core": "8865c211856ebfb503191c5fcbf86c66cffe3a7de0113f14479fde6a229ea29c",
     "check-full": "d9c6422d7e92bb1ffa11bc2337072444304948070cf35c79e4ffc5340e32bd92",
     "test": "d136c26efda43f4482000099f4917c98ba3407f2072d58ee7a6ffefebba798db",
     "test-p": "16d14ffcf302b2f745a4b4a0724a96e5a38b600870d58f36c344e185595a6b00",
     "check-p": "afb9f318d2aa509feed7efd372318cbd4c2993742a26f078c6f740349400e33e",
     "rust-fast": "9a013d3f1005dc4c21c44e1fc21e8d05dc36c9de73e79470021e4f62ac2801c9",
-    "test-core": "22126e61bc9eb8e90a0b9958fd564140a32fa2bacff639ccb2a67e7a8db12d91",
+    "test-core": "c83ddaa0a72849fb1f3fde115be2eaae6c6f5298b3991b408b354b0794bab2a9",
     "test-full": "85fb187f2cafa975a8ec17ff2df582475331b7669301e6693936b6420d10f219",
     "clippy": "e487d817f0f09efb21d91eaa4e9793f05cb2883723cc59758c2eaa4314384010",
-    "clippy-core": "c9027f430ed1217be6e78daf36618151aee26f7226a906de103a3d62198dcc4c",
+    "clippy-core": "594b1222f3c71ad47d25b8f05ce2aab6fefff8498858ba7efbb8d6f947afc49a",
     "clippy-full": "bbed85a04f195152be482141830dc9309e369ee7c4a12de75798a448b1917ef9",
     "rust-full": "05bd1a7769cf8d0ebde0582f37444132adfafd19ae8ff0682b1a8c45307b5288",
     "projection-release-cohort": "fa986fe568697b3f4fa7e62e65280b461f2d0b7f34d18a351d0cae6c330641f4",
@@ -2156,8 +2155,8 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
 
     def test_test_core_branch_package_mismatch_is_rejected(self) -> None:
         self.assert_mutation_rejected(
-            "-p kanban-core -p kanban-application -p kanban-protocol -p kanban-store-turso \\\n",
-            "-p kanban-core -p kanban-application -p kanban-protocol -p kanban-cli \\\n",
+            "-p kanban-core -p kanban-service -p kanban-protocol \\\n",
+            "-p kanban-core -p kanban-service -p kanban-protocol -p kanban-cli \\\n",
             "test-core",
             _test_core,
             nextest=False,

@@ -36,7 +36,7 @@ assert_mcp_tree_uses_runtime_schema_only() {
 # kanban-protocol default graph 是产品采用基线；leaf tool 独立正向验证。
 # 产品 adopter 必须扫描所有 feature 与 target，且不得依赖 tooling owner。
 assert_default_tree_excludes_schema_tooling kanban-protocol
-for package in kanban-core kanban-application kanban-store-turso kanban-client \
+for package in kanban-core kanban-service kanban-client \
   kanban-cli; do
   assert_default_tree_excludes_schema_tooling "$package" --all-features
 done

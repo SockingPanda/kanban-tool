@@ -13,12 +13,12 @@ set shell := ["bash", "-cu"]
 audit-ignore-flags := "--ignore RUSTSEC-2024-0370 --ignore RUSTSEC-2024-0411 --ignore RUSTSEC-2024-0412 --ignore RUSTSEC-2024-0413 --ignore RUSTSEC-2024-0414 --ignore RUSTSEC-2024-0415 --ignore RUSTSEC-2024-0416 --ignore RUSTSEC-2024-0417 --ignore RUSTSEC-2024-0418 --ignore RUSTSEC-2024-0419 --ignore RUSTSEC-2024-0420 --ignore RUSTSEC-2024-0429 --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2025-0075 --ignore RUSTSEC-2025-0080 --ignore RUSTSEC-2025-0081 --ignore RUSTSEC-2025-0098 --ignore RUSTSEC-2025-0100"
 
 fmt:
-    cargo fmt -p kanban-core -p kanban-application -p kanban-protocol -p kanban-store-turso -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -- --check
+    cargo fmt -p kanban-core -p kanban-service -p kanban-protocol -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -- --check
 
 fmt-check: fmt
 
 fmt-full:
-    cargo fmt -p kanban-core -p kanban-application -p kanban-protocol -p kanban-store-turso -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -p kanban-desktop -p xtask -- --check
+    cargo fmt -p kanban-core -p kanban-service -p kanban-protocol -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -p kanban-desktop -p xtask -- --check
 
 fix *args:
     scripts/cargo-build-lock.sh -- cargo clippy --fix --tests --allow-dirty "$@"
@@ -34,9 +34,8 @@ check: check-core
 check-core:
     scripts/cargo-build-lock.sh -- cargo check --tests \
         -p kanban-core \
-        -p kanban-application \
+        -p kanban-service \
         -p kanban-protocol \
-        -p kanban-store-turso \
         -p kanban-client \
         -p kanban-server \
         -p kanban-cli \
@@ -66,15 +65,14 @@ rust-fast:
 test-core *args:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run \
         -p kanban-core \
-        -p kanban-application \
+        -p kanban-service \
         -p kanban-protocol \
-        -p kanban-store-turso \
         -p kanban-client \
         -p kanban-server \
         -p kanban-cli \
         -p kanban-mcp \
         --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test \
-        -p kanban-core -p kanban-application -p kanban-protocol -p kanban-store-turso \
+        -p kanban-core -p kanban-service -p kanban-protocol \
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@"; fi
 
 test-full *args:
@@ -82,7 +80,7 @@ test-full *args:
 
 clippy-core *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
-        -p kanban-core -p kanban-application -p kanban-protocol -p kanban-store-turso \
+        -p kanban-core -p kanban-service -p kanban-protocol \
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@" -- -D warnings
 
 clippy-full *args:

@@ -1,7 +1,7 @@
 # 任务状态机
 
 状态机由 `kanban-core` 的 readiness/claim/finish 规则和
-`kanban-application::ApplicationService` 统一执行。HTTP、CLI、MCP、Desktop 与
+`kanban-service::ApplicationService` 统一执行。HTTP、CLI、MCP、Desktop 与
 dispatcher 都调用这些显式 command；没有通用的“传入任意目标状态”入口。
 
 ## 1. Canonical 状态

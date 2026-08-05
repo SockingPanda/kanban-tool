@@ -22,7 +22,7 @@ SOURCE_PATHS = (
     "docs/API_SPEC.md",
     "docs/SCHEMA_CONTRACTS.md",
     "docs/ADR.md",
-    "crates/kanban-store-turso/src/schema.rs",
+    "crates/kanban-service/src/schema.rs",
 )
 
 AUTHORITY_NOTE = (

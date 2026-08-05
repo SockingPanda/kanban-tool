@@ -1,10 +1,9 @@
 # 架构
 
 kanban-tool 的稳定运行边界是本地优先、单机、单用户和单一 canonical Turso owner。
-本次重构收敛 crate、存储和维护方式，但不收缩产品能力：queue/history、labels、ontology、
-signals、entities、relations、search、vector、graph、context、maintenance、migration 以及
-Desktop 历史视图都必须在同一条 service path 上恢复。当前代码仍是过渡结构，文档分别标出
-“当前已 wiring”“schema 已就绪”和“目标 owner”，不把 roadmap 当成已完成实现。
+`kanban-service` 已收敛 use case、store、事务、projection 和 host provider；queue/history、
+labels、ontology、signals、entities、relations、search、vector、graph、context、maintenance、
+migration 以及 Desktop 历史视图都通过同一条 service path 提供。
 
 ```text
 CLI / MCP / Desktop
@@ -16,7 +15,7 @@ typed localhost HTTP / SSE client
 kanban serve（唯一 host）
   Axum routes + ApplicationService
   state machine + transaction boundary
-  dispatcher + projection worker（目标）
+  dispatcher + projection worker
         │
         ▼
 Turso canonical database
@@ -47,21 +46,21 @@ board isolation、外键、唯一约束、CAS 和事务边界由共享 service/s
 和 attachment staging 的 schema readiness，并探测 `fts`/`vector32` capabilities；本维护切片
 已把 doctor/checkpoint/verified backup/portable export-import/vacuum 以及 projection
 owner、generation、recovery status 接入 application → HTTP → typed client → CLI。SQLite v30
-importer 的 typed host-admin route/client/CLI wiring 已接入，但实际只读 importer 逻辑由
+importer 的 typed host-admin route/client/CLI wiring 已接入，实际只读 importer 逻辑由
 `legacy-sqlite-import` feature 提供；未启用 feature 时 fail-closed。真实 projection worker
-仍需后续纵向切片；Desktop maintenance controls 已通过 typed localhost HTTP 接入，不打开第二个
+已由 service 持有并在 host dispatcher 中运行；Desktop maintenance controls 已通过 typed localhost HTTP 接入，不打开第二个
 数据库，危险操作和 `restart_required` 结果由 UI 忠实呈现。
 
 ## 2. Workspace crate 边界
 
-### 2.1 当前过渡结构
+### 2.1 当前 workspace
 
-当前 workspace 仍包含：
+active workspace 包含：
 
 ```text
 kanban-core              领域类型、状态机和纯校验
-kanban-application       typed use case、ApplicationService 和 store port
-kanban-store-turso      Turso schema、migration 和 persistence
+kanban-service          use case、DTO/port、ApplicationService、Turso schema/migration、repository、
+                        transaction、projection、Ollama provider 和 SQLite 只读 importer
 kanban-protocol          HTTP/CLI/MCP DTO、错误 envelope、schema 描述
 kanban-client            typed localhost HTTP client
 kanban-server            Axum host、routes、dispatcher 装配
@@ -71,19 +70,19 @@ apps/desktop             Tauri shell、React UI、TS client
 xtask                    publish = false 的 schema/dependency/AGENTS 工具
 ```
 
-`kanban-store-turso` 是当前唯一直接依赖 `turso = 0.7.2` 的 canonical persistence owner；
+`kanban-service` 是唯一直接依赖 `turso = 0.7.2` 的 canonical persistence owner；
 被 workspace exclude 的旧 `search`、`vector`、`vector-lancedb`、`graph`、`graph-oxigraph`、
 `helper-protocol` 等不能再成为 active mutation path。它们的能力必须先由完整 parity ledger
 映射到目标 owner，才允许删除目录和依赖。
 
-### 2.2 目标结构
+### 2.2 当前结构
 
-最终产品单元是 7 个 Rust crate、Desktop 和 `xtask`：
+产品单元是 7 个 Rust crate、Desktop 和 `xtask`：
 
 | 单元 | 目标职责 |
 |---|---|
 | `kanban-core` | 纯领域类型、不变量、状态机、claim/lease、labels/ontology/signals、entity URI 和 board isolation；不依赖 Turso、HTTP 或异步 runtime |
-| `kanban-service` | 合并 `kanban-application` 与 `kanban-store-turso`；use case、schema/migration、repository、事务、projection、Ollama provider 和 SQLite 只读 importer |
+| `kanban-service` | use case、schema/migration、repository、事务、projection、Ollama provider 和 SQLite 只读 importer |
 | `kanban-protocol` | HTTP/SSE DTO、统一 error envelope、operation catalog 和 machine-readable schema |
 | `kanban-client` | typed localhost HTTP/SSE client；不持有领域规则和数据库依赖 |
 | `kanban-server` | Axum routes、唯一 host 生命周期、dispatcher、projection worker 和管理操作 |
@@ -104,9 +103,9 @@ kanban-core ◄── kanban-service ◄── kanban-server ◄── kanban-cl
 xtask ──► kanban-protocol[schema] + cargo metadata
 ```
 
-迁移期间保留 `kanban-application`/`kanban-store-turso` 和 `kanban-protocol` 的现有路径，
-但新能力不应再制造另一套 port、DTO 或 database adapter。合并完成前，不能把目标 crate
-名称写成已经存在的包，也不能以兼容 shim 掩盖未闭合的 service wiring。
+`kanban-service` 与 `kanban-protocol` 是当前 active 路径；新能力不得制造另一套 port、DTO
+或 database adapter。server 只负责 HTTP/SSE、host 生命周期、dispatcher 和 wiring，不能直接
+持有 Turso row 或 provider 实现。
 
 ## 3. 共享 service path 与 mutation boundary
 
@@ -133,7 +132,7 @@ attachment checksum 和 import journal phase 都不能由 adapter 自己实现�
 
 ## 4. Turso schema、search、vector 和 graph
 
-`kanban-store-turso` 当前实现 `kanban.turso` family 的 v1/v2 lineage：v2 包含 queue/history、
+`kanban-service` 当前实现 `kanban.turso` family 的 v1/v2 lineage：v2 包含 queue/history、
 labels/ontology/signals、entities/relations、projection、retrieval、import journal 和
 attachment staging。启动时比较精确 table/column/index/trigger/constraint witness，并将
 v2 SQL SHA-256 写入 migration ledger；v1 原地升级先通过 sibling `VACUUM INTO` 备份验证，
@@ -155,14 +154,13 @@ v2 SQL SHA-256 写入 migration ledger；v1 原地升级先通过 sibling `VACUU
 - **Projection**：canonical mutation 在事务中写事实、event 和 projection job；FTS、vector、
   graph/context 都可删除后重建，不接受旧 helper subprocess/protocol 或独立 control plane。
 
-当前 schema 能力已经有 capability probe 和 fail-closed shape validation；task search 的
-store → application → HTTP → typed client → CLI/MCP 纵向切片已接通；maintenance 查询和
-host-admin mutation 由 `kanban-server` 唯一 owner 串行执行。其他领域 service、worker 和
-Desktop 视图仍按纵向 slice 实现，文档不把 schema 存在等同于用户入口可用。
+当前 schema 能力已经有 capability probe 和 fail-closed shape validation；task search、vector、
+maintenance 查询和 host-admin mutation 均通过 `kanban-service` → HTTP → typed client → CLI/MCP
+纵向切片接通。文档不把单独 schema 存在等同于额外 mutation path。
 
 ## 5. 迁移与主机管理
 
-目标 `kanban-service` 内置两条数据路径：
+`kanban-service` 内置两条数据路径：
 
 1. **Turso v1 原地升级**：host 独占数据库；先生成并校验 sibling backup，再执行事务化
    migration。失败保留旧 schema/data，可再次启动；重复启动幂等。
@@ -227,7 +225,7 @@ kanban serve --dispatcher-profile profile.toml
 
 ## 8. 收敛和验收边界
 
-旧 crate 删除前必须完成：
+每次跨边界改动都必须保持：
 
 1. parity ledger 为所有旧表、operation、CLI/MCP/Desktop surface 和维护操作指定目标 owner、
    入口、迁移规则和验收测试；
@@ -237,6 +235,6 @@ kanban serve --dispatcher-profile profile.toml
 4. 通过迁移、失败回滚、崩溃恢复、重复执行、board isolation、claim/event 原子性和完整
    surface acceptance。
 
-当前 `kanban-application`、`kanban-store-turso` 和 `kanban-protocol` 仍是实现过渡态；最终
-前两者合并为 `kanban-service`，`kanban-protocol` 继续作为独立 wire/schema crate。在合并和删除发生前，所有缺口都必须在
-任务 ledger 中保持可审计，不能以“功能收缩”或新的兼容路径结束迁移。
+当前 active workspace 只保留一个合并后的 `kanban-service` 与独立的
+`kanban-protocol` wire/schema crate；所有缺口都必须在任务 ledger 中保持可审计，不能以
+“功能收缩”或新的兼容路径结束迁移。

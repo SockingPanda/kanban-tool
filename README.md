@@ -11,7 +11,7 @@ CLI / MCP / Desktop
         ↓
 ApplicationService + state machine
         ↓
-  kanban-store-turso
+  kanban-service
         ↓
 ~/.local/share/kb/kanban.db
 ```

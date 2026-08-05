@@ -17,7 +17,7 @@ SPEC.loader.exec_module(GATE)
 
 
 REQUIRED = (
-    "kanban-store-turso",
+    "kanban-service",
     "kanban-server",
     "kanban-client",
     "kanban-cli",
@@ -45,15 +45,15 @@ members = [
 
 [workspace.dependencies]
 turso = {{ version = \"=0.7.2\", default-features = false }}
-kanban-store-turso = {{ path = \"crates/kanban-store-turso\" }}
+kanban-service = {{ path = \"crates/kanban-service\" }}
 """,
         )
         for name in REQUIRED:
             dependencies = ""
-            if name == "kanban-store-turso":
+            if name == "kanban-service":
                 dependencies = "\n[dependencies]\nturso.workspace = true\n"
             elif name == "kanban-server":
-                dependencies = "\n[dependencies]\nkanban-store-turso.workspace = true\n"
+                dependencies = "\n[dependencies]\nkanban-service.workspace = true\n"
             self._write(
                 f"crates/{name}/Cargo.toml",
                 f"[package]\nname = \"{name}\"\n{dependencies}",
@@ -69,35 +69,35 @@ kanban-store-turso = {{ path = \"crates/kanban-store-turso\" }}
 
         self.assertEqual(GATE.check_workspace(self.root), [])
 
-    def test_renamed_store_dependency_is_rejected_from_cli(self) -> None:
+    def test_renamed_service_dependency_is_rejected_from_cli(self) -> None:
         self._write(
             "crates/kanban-cli/Cargo.toml",
             """[package]
 name = "kanban-cli"
 
 [dependencies]
-database = { package = "kanban-store-turso", path = "../kanban-store-turso" }
+database = { package = "kanban-service", path = "../kanban-service" }
 """,
         )
 
         failures = GATE.check_workspace(self.root)
 
-        self.assertTrue(any("only kanban-server may depend on kanban-store-turso" in failure for failure in failures))
+        self.assertTrue(any("only kanban-server may depend on kanban-service" in failure for failure in failures))
 
-    def test_path_store_dependency_is_resolved_from_target_manifest(self) -> None:
+    def test_path_service_dependency_is_resolved_from_target_manifest(self) -> None:
         self._write(
             "crates/kanban-cli/Cargo.toml",
             """[package]
 name = "kanban-cli"
 
 [dependencies]
-database = { path = "../kanban-store-turso" }
+database = { path = "../kanban-service" }
 """,
         )
 
         failures = GATE.check_workspace(self.root)
 
-        self.assertTrue(any("only kanban-server may depend on kanban-store-turso" in failure for failure in failures))
+        self.assertTrue(any("only kanban-server may depend on kanban-service" in failure for failure in failures))
 
     def test_target_specific_dev_dependency_is_checked(self) -> None:
         self._write(
@@ -106,7 +106,7 @@ database = { path = "../kanban-store-turso" }
 name = "kanban-cli"
 
 [target.'cfg(unix)'.dev-dependencies]
-store = { package = "kanban-store-turso", path = "../kanban-store-turso" }
+store = { package = "kanban-service", path = "../kanban-service" }
 """,
         )
 

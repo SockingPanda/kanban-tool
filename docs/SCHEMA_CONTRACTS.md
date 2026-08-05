@@ -14,7 +14,7 @@ kanban serve (HTTP)
         ↓
 ApplicationService + State Machine
         ↓
-kanban-store-turso → canonical Turso database
+kanban-service → canonical Turso database
 ```
 
 `kanban-protocol` 是公开 DTO、事件 payload、错误 envelope、operation inventory 和
@@ -29,7 +29,7 @@ artifact。`kanban-server`、`kanban-client`、CLI、MCP 和 Desktop 是运行�
   当前仍含尚未迁入单 Host 路径的历史条目；这些条目是完整功能 parity 义务。HTTP、CLI、
   MCP 身份必须同时由真实 router/adapter 证明，catalog 本身不创建 route，也不能单独证明
   adoption。
-- ApplicationService、`kanban-core` 状态机和 `kanban-store-turso`：事务、CAS、board
+- ApplicationService、`kanban-core` 状态机和 `kanban-service`：事务、CAS、board
   isolation、依赖和 run/event 一致性。
 - `docs/API_SPEC.md`、`docs/CLI_SPEC.md`：用户可见的 operation、HTTP/退出码和输出行为。
 
@@ -66,8 +66,7 @@ graph/vector 和维护命令条目。它们记录必须恢复的完整产品能�
 SQLite backend、`kanban-sqlite`/`kanban-local`、Tantivy/LanceDB/Oxigraph projection 以及
 helper subprocess 不属于目标 runtime 架构；旧源码只作为迁移证据，不得重新接入 active
 workspace。它们承载的 labels、signals、ontology、search、graph、vector、context 与维护
-语义必须迁入 `kanban-core`、`kanban-service`、`kanban-protocol` 及各 adapter 后，旧目录
-才允许删除。
+语义统一由 `kanban-core`、`kanban-service`、`kanban-protocol` 及各 adapter 提供。
 
 ## 3. 当前 active operation 的精确 contract
 
@@ -126,16 +125,16 @@ board selector、项目 `.kb/config.toml` 路径、配置来源及 `created`/`up
 
 ## 5. 依赖边界与单 Host gate
 
-active workspace 只保留 `kanban-core`、`kanban-application`、`kanban-protocol`、
-根目录私有 `xtask`、`kanban-store-turso`、`kanban-client`、`kanban-cli`、`kanban-mcp`、
+active workspace 只保留 `kanban-core`、`kanban-service`、`kanban-protocol`、
+根目录私有 `xtask`、`kanban-client`、`kanban-cli`、`kanban-mcp`、
 `kanban-server` 和 Desktop Tauri host。数据库依赖方向固定为：
 
 ```text
-kanban-server → kanban-store-turso → turso
+kanban-server → kanban-service → turso
 kanban-cli / kanban-mcp / Desktop → kanban-client → localhost HTTP
 ```
 
-CLI、MCP、Desktop、test fixture 和 test-support 不得依赖 `kanban-store-turso`、
+CLI、MCP、Desktop、test fixture 和 test-support 不得依赖 `kanban-service`、
 `kanban-sqlite`、`kanban-local`、`rusqlite` 或任何数据库-owning path；只有
 `kanban-server` 可以初始化、打开和关闭 Turso。该限制覆盖 normal、dev、build、target-
 specific dependency 和测试 fixture，不只检查源码 import。
@@ -248,7 +247,7 @@ just schema-audit-closed
 
 1. 在 `kanban-protocol` 定义精确 DTO、schema root、inventory 和 endpoint/surface descriptor。
 2. 添加 valid/invalid fixture，并为真实 producer 与 consumer 各提供独立 exact witness。
-3. 在 `kanban-store-turso`、ApplicationService、server、`kanban-client` 和所需 adapter
+3. 在 `kanban-service`、server、`kanban-client` 和所需 adapter
    中接通同一 operation；adapter 不得直连 store。
 4. 运行受影响 package tests、contract tests、`just schema-check`、
    `just schema-surface-audit`、`just schema-adoption-witness` 和 `just diff-check`。

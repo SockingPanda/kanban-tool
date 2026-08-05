@@ -16,12 +16,12 @@ from typing import Any, Iterator
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STORE_PACKAGE = "kanban-store-turso"
+STORE_PACKAGE = "kanban-service"
 SERVER_PACKAGE = "kanban-server"
 LEGACY_PACKAGES = {"kanban-sqlite", "kanban-local"}
 # ``rusqlite`` remains forbidden for the retired backend, but the host-owned
 # legacy import feature is an explicit, optional exception in
-# ``kanban-store-turso``.
+# ``kanban-service``.
 FORBIDDEN_LEGACY = LEGACY_PACKAGES | {"rusqlite"}
 LEGACY_IMPORT_FEATURE = "legacy-sqlite-import"
 
@@ -341,8 +341,8 @@ def main(root: Path = ROOT) -> int:
         return 1
 
     print(
-        "single-host dependency gate passed: only kanban-server reaches kanban-store-turso, "
-        "and only kanban-store-turso reaches turso"
+        "single-host dependency gate passed: only kanban-server reaches kanban-service, "
+        "and only kanban-service reaches turso"
     )
     return 0
 

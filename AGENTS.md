@@ -21,8 +21,7 @@
 ## 3. 工作区地图
 
 - `kanban-core`：领域 ID、枚举、状态机、纯校验和领域错误；不依赖内部 crate、HTTP 或 Turso。
-- `kanban-application`：use-case、DTO/port 和 application service；不复制 adapter 或存储规则。
-- `kanban-store-turso`：当前唯一直接依赖 `turso` 的 canonical persistence owner。
+- `kanban-service`：use-case、DTO/port、application service、Turso schema/migration、repository、事务、projection、Ollama provider 和 SQLite 只读 importer；是唯一直接依赖 `turso` 的 canonical persistence owner。
 - `kanban-server`：唯一 host、Axum routes、数据库装配、dispatcher 和 transport boundary。
 - `kanban-protocol`：当前 active wire DTO/error/schema；不承载数据库 row 或 server/store 规则。
 - `kanban-client`：typed localhost HTTP client；CLI、MCP 和 Desktop 不直连数据库。

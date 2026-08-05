@@ -31,7 +31,7 @@ description: 在 kanban-tool 新写或修改 Rust、Cargo manifest、模块、�
 - 新增或触及的第三方 dependency 在根 `Cargo.toml` 的 `[workspace.dependencies]` 只统一声明 version、source、path 或精确 pin；当 Cargo 禁止 leaf 关闭继承的默认 feature 时，根可额外声明 `default-features = false` 作为最小继承基线，但不得在根启用具体 `features`。
 - 成员 manifest 使用 `workspace = true`，并由实际使用该 crate 的成员声明所需 `features`；需要关闭默认 feature 时同时显式声明 `default-features = false`。不得依赖另一个成员偶然启用的 feature，不为未来用途 speculative enable。
 - 新增 dependency 必须服务当前任务，放在最窄的实际使用 crate；tooling-only dependency 不进入产品运行时。
-- active product workspace 的当前 ownership 规则：只有 `kanban-store-turso` 直接依赖 `turso`；只有 `kanban-server` 直接依赖 `axum`；只有 `kanban-client` 直接依赖 `ureq`；只有 `kanban-mcp` 直接依赖 `rmcp`；只有 Desktop crate 直接依赖 `tauri`。未来若接受 crate rename，必须同时更新根 map、ARCHITECTURE 和 gate，不得在本 skill 中预设未实现的名称。
+- active product workspace 的当前 ownership 规则：只有 `kanban-service` 直接依赖 `turso`；只有 `kanban-server` 直接依赖 `axum`；只有 `kanban-client` 直接依赖 `ureq`；只有 `kanban-mcp` 直接依赖 `rmcp`；只有 Desktop crate 直接依赖 `tauri`。crate ownership 变更必须同步根 map、ARCHITECTURE 和 gate。
 - `kanban-core` 不依赖内部 crate、HTTP、Turso 或 UI；`kanban-protocol` 不依赖 server/store；protocol、client、MCP、Desktop 不直连 canonical database。`kanban-cli` 可因 `serve` wrapper 链接 server，但 command modules 不复制 SQL、状态机或 fallback。
 - 新模块采用 `foo.rs` 与同级 `foo/` 目录；不得新建 `foo/mod.rs`。现有 59 个 `mod.rs` 不自动全量迁移，只有明确的机械迁移 lane 才移动，并与行为改动分开。
 - 同一概念保持相邻：struct 后紧接 inherent impl、trait impl，再进入下一个概念；`#[cfg(test)] mod tests` 放文件底部。peer modules 的共享代码放 `common`，barrel 对内部子模块可 glob re-export，第三方类型只 named re-export。

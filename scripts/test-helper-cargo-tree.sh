@@ -64,7 +64,7 @@ assert_release_backend_cohort() {
 # intentional cohort is verified separately below.
 assert_tree_excludes_heavy_helpers kanban-cli
 assert_tree_excludes_heavy_helpers kanban-server
-assert_tree_excludes_heavy_helpers kanban-store-turso
+assert_tree_excludes_heavy_helpers kanban-service
 
 assert_release_backend_cohort kanban-cli
 assert_release_backend_cohort kanban-server

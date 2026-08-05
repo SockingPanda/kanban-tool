@@ -64,9 +64,8 @@ def is_desktop(path: str) -> bool:
 
 CORE_CRATES = {
     "kanban-core",
-    "kanban-application",
+    "kanban-service",
     "kanban-protocol",
-    "kanban-store-turso",
     "kanban-client",
     "kanban-server",
     "kanban-cli",
@@ -99,9 +98,8 @@ def is_workspace_member_manifest(path: str) -> bool:
         path
         in {
             "crates/kanban-core/Cargo.toml",
-            "crates/kanban-application/Cargo.toml",
+            "crates/kanban-service/Cargo.toml",
             "crates/kanban-protocol/Cargo.toml",
-            "crates/kanban-store-turso/Cargo.toml",
             "crates/kanban-client/Cargo.toml",
             "crates/kanban-cli/Cargo.toml",
             "crates/kanban-mcp/Cargo.toml",

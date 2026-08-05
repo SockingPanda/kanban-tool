@@ -13,7 +13,7 @@ CLI / MCP / Desktop
         ↓
 ApplicationService + state machine
         ↓
-   kanban-store-turso
+   kanban-service
         ↓
    canonical kanban.db
 ```
@@ -21,7 +21,7 @@ ApplicationService + state machine
 硬性规则：
 
 1. 只有 `kanban serve` 可以打开、初始化和关闭 Turso 数据库。
-2. CLI、MCP、Desktop 只能依赖 `kanban-client`（或 Desktop 的 TS HTTP client），不得依赖 `kanban-store-turso`、SQLite 或任何 DB-owning crate。
+2. CLI、MCP、Desktop 只能依赖 `kanban-client`（或 Desktop 的 TS HTTP client），不得依赖 `kanban-service`、SQLite 或任何 DB-owning crate。
 3. 所有 mutation 必须进入同一组 typed application command；adapter 只解析输入、调用 client、映射结果或渲染输出。
 4. 不存在“server 运行时走 RPC、server 停止时直开数据库”的 fallback。
 5. 本轮不引入自定义 IPC、runtime protocol、capability catalog、通用 receipt 或第二 backend。
@@ -46,17 +46,17 @@ completion 和 Codex hook 是不触库的本地 shell 命令。它们可以解�
 以下能力不属于当前 canonical path：
 
 - 多用户、团队、邀请、RBAC、多租户、SaaS、云同步或远程 worker；
-- SQLite/Turso 双 backend、旧 SQLite importer、旧 API 完整 parity；
+- SQLite/Turso 双 backend、远程数据库或远程 worker；SQLite v30 importer 仅在显式 host feature 下启用；
 - `kanban-runtime*`、framed IPC、named pipe、跨版本握手、capability negotiation、mutation receipt 和 crash matrix；
 - 自动 server supervision、系统服务注册、Windows Job Object、`multiprocess_wal`；
-- labels、signals、graph、vector、Tantivy/LanceDB/Oxigraph projection、derived control plane；
+- 外部 Tantivy/LanceDB/Oxigraph projection、独立 derived control plane 或第二个数据库；
 - 为未来部署方式预先建设兼容层或通用 backend abstraction。
 
 这些项目可以作为独立后续工作，但不阻塞当前三阶段链路。
 
 ## 3. 当前公开 operation
 
-每个 operation 按纵向切片闭合 store → application → HTTP → typed client → adapter → test。
+每个 operation 按纵向切片闭合 service → protocol/HTTP → typed client → adapter → test。
 
 | 阶段 | operation |
 | --- | --- |
@@ -110,7 +110,7 @@ Durable queue 的不变量：
 
 ## 5. Canonical 数据与 schema
 
-`kanban-store-turso` 使用 `turso = 0.7.2`、`default-features = false`。schema 是 embedded SQL，使用简单的 `schema_migrations` 表和事务性、可重复执行的初始化。首次 host 启动幂等 seed `default` board 与固定 status columns。
+`kanban-service` 使用 `turso = 0.7.2`、`default-features = false`。schema 是 embedded SQL，使用简单的 `schema_migrations` 表和事务性、可重复执行的初始化。首次 host 启动幂等 seed `default` board 与固定 status columns。
 
 canonical baseline 包含：
 

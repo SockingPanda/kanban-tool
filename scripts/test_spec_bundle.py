@@ -39,7 +39,7 @@ class SpecBundleTests(unittest.TestCase):
             previous = offset
 
         self.assertIn(
-            "```rust\ncontents of crates/kanban-store-turso/src/schema.rs\n```",
+            "```rust\ncontents of crates/kanban-service/src/schema.rs\n```",
             rendered,
         )
         self.assertTrue(rendered.endswith("\n"))
@@ -51,7 +51,7 @@ class SpecBundleTests(unittest.TestCase):
         )
         (self.root / "docs/SPEC.md").write_text(
             "[state](STATE_MACHINE.md) "
-            "[schema](../crates/kanban-store-turso/src/schema.rs) "
+            "[schema](../crates/kanban-service/src/schema.rs) "
             "[section](#section)\n",
             encoding="utf-8",
         )
@@ -62,7 +62,7 @@ class SpecBundleTests(unittest.TestCase):
         self.assertIn("[external](https://example.com)", rendered)
         self.assertIn("[state](docs/STATE_MACHINE.md)", rendered)
         self.assertIn(
-            "[schema](crates/kanban-store-turso/src/schema.rs)", rendered
+            "[schema](crates/kanban-service/src/schema.rs)", rendered
         )
         self.assertEqual(rendered.count("[section](#section)"), 2)
 

@@ -90,12 +90,11 @@ WORKSPACE_CANONICAL_DEPENDENCIES = {
     "tauri-plugin-single-instance": "2",
     "ksni": {"version": "0.3.5", "default-features": False},
     "kanban-core": {"path": "crates/kanban-core"},
-    "kanban-application": {"path": "crates/kanban-application"},
+    "kanban-service": {"path": "crates/kanban-service"},
     CONTRACT_PACKAGE: {
         "path": "crates/kanban-protocol",
         "default-features": False,
     },
-    "kanban-store-turso": {"path": "crates/kanban-store-turso"},
     "kanban-client": {"path": "crates/kanban-client"},
     "kanban-server": {"path": "crates/kanban-server"},
 }
@@ -105,9 +104,8 @@ ROOT_DEPENDENCY_INHERITANCE_KEYS = ROOT_DEPENDENCY_IDENTITY_KEYS | {
 }
 ACTIVE_MANIFESTS = {
     "kanban-core": "crates/kanban-core/Cargo.toml",
-    "kanban-application": "crates/kanban-application/Cargo.toml",
+    "kanban-service": "crates/kanban-service/Cargo.toml",
     CONTRACT_PACKAGE: "crates/kanban-protocol/Cargo.toml",
-    "kanban-store-turso": "crates/kanban-store-turso/Cargo.toml",
     "kanban-client": "crates/kanban-client/Cargo.toml",
     "kanban-cli": "crates/kanban-cli/Cargo.toml",
     "kanban-mcp": "crates/kanban-mcp/Cargo.toml",
@@ -129,9 +127,8 @@ TOKIO_FEATURES = (
 )
 CORE_PACKAGES = (
     "kanban-core",
-    "kanban-application",
+    "kanban-service",
     "kanban-protocol",
-    "kanban-store-turso",
     "kanban-client",
     "kanban-cli",
     "kanban-mcp",
@@ -379,7 +376,7 @@ def _audit_workspace_dependency_policy(
                         )
                     )
 
-    store_manifest = repo_root / ACTIVE_MANIFESTS["kanban-store-turso"]
+    store_manifest = repo_root / ACTIVE_MANIFESTS["kanban-service"]
     with store_manifest.open("rb") as handle:
         store = tomllib.load(handle)
     turso = store.get("dependencies", {}).get("turso")
@@ -390,7 +387,7 @@ def _audit_workspace_dependency_policy(
     }:
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-store-turso 必须独占 turso = 0.7.2 的 default-features=false + fts"
+                "kanban-service 必须独占 turso = 0.7.2 的 default-features=false + fts"
             )
         )
 

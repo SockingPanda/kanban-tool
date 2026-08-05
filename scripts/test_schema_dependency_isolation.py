@@ -24,8 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / "scripts/test-schema-cargo-tree.sh"
 PRODUCTS = (
     "kanban-core",
-    "kanban-application",
-    "kanban-store-turso",
+    "kanban-service",
     "kanban-client",
     "kanban-cli",
     "kanban-mcp",
@@ -905,9 +904,9 @@ class DependencyIsolationGateTests(unittest.TestCase):
                 target = repo / relative_manifest
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)
-            store_path = repo / dependency_policy.ACTIVE_MANIFESTS["kanban-store-turso"]
-            store_path.write_text(
-                store_path.read_text(encoding="utf-8").replace(
+            service_path = repo / dependency_policy.ACTIVE_MANIFESTS["kanban-service"]
+            service_path.write_text(
+                service_path.read_text(encoding="utf-8").replace(
                     'features = ["fts"]', 'features = []'
                 ),
                 encoding="utf-8",
@@ -915,7 +914,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
             with self.assertRaises(dependency_policy.DependencyPolicyError):
                 dependency_policy._audit_workspace_dependency_policy(workspace, repo)
 
-            shutil.copy2(ROOT / dependency_policy.ACTIVE_MANIFESTS["kanban-store-turso"], store_path)
+            shutil.copy2(ROOT / dependency_policy.ACTIVE_MANIFESTS["kanban-service"], service_path)
             mcp_path = repo / dependency_policy.ACTIVE_MANIFESTS["kanban-mcp"]
             mcp_text = mcp_path.read_text(encoding="utf-8").replace(
                 'features = ["schema"]', 'features = []'
@@ -1501,7 +1500,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
 
     def test_product_renamed_contract_dependency_is_allowed(self) -> None:
         metadata = valid_phase_one_metadata()
-        workspace_package(metadata, "kanban-store-turso")["dependencies"].append(
+        workspace_package(metadata, "kanban-service")["dependencies"].append(
             dependency("kanban-protocol", rename="wire-contract")
         )
 

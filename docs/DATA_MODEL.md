@@ -1,8 +1,8 @@
 # Canonical 数据模型
 
-本文件描述 `kanban-store-turso` 当前提交所建立的 Turso schema，以及完整功能
+本文件描述 `kanban-service` 当前提交所建立的 Turso schema，以及完整功能
 迁移时必须保留的 canonical/derived 边界。权威实现是
-`crates/kanban-store-turso/src/schema.rs` 与 `migration.rs`；应用服务负责领域规则，
+`crates/kanban-service/src/schema.rs` 与 `migration.rs`；应用服务负责领域规则，
 数据库负责外键、唯一性、`CHECK`、board isolation 和事务约束。
 
 这里的“schema 已就绪”不等于所有 service、HTTP、CLI、MCP、Desktop 或 SQLite
@@ -216,7 +216,7 @@ binding）和错误。`attachment_staging`
 可直接复用 typed client endpoint。目标导入流程仍是只读打开 SQLite v30，先做 schema、计数、引用、attachment checksum 和 board
 isolation preflight，再将附件复制到同文件系统 staging；DB commit 后原子发布，崩溃后按
 journal resume。源文件永不修改，重复 fingerprint 返回已完成结果。当前 schema 与
-`kanban-store-turso` 已提供 portable JSONL service/HTTP/CLI 管理入口；SQLite v30 importer
+`kanban-service` 已提供 portable JSONL service/HTTP/CLI 管理入口；SQLite v30 importer
 与 attachment 文件发布仍是待闭合的 parity slice。
 
 ## 10. 事务、约束和当前 ownership
@@ -232,8 +232,6 @@ journal resume。源文件永不修改，重复 fingerprint 返回已完成结�
 5. FTS/vector/graph/context/缓存及其他索引始终可删除和重建；它们不能反向写 canonical
    事实，也不能成为导入计数或业务状态的依据。
 
-当前这些 schema/migration 能力仍位于 `kanban-store-turso`；application、server、client
-和各 adapter 尚未完成全功能 wiring。目标结构是把 application 与 Turso repository 合并
-为 `kanban-service`，再由 `kanban-protocol`、`kanban-client`、`kanban-server`、CLI、MCP 和
-Desktop 共享同一 service path。迁移删除旧 backend 前，必须由 parity ledger 和逐项测试证明
-全部业务语义及旧数据已经有 owner。
+这些 schema/migration 能力均由 `kanban-service` 持有；server、client 和各 adapter 通过
+`kanban-protocol` 共享同一 service path。旧 backend 仅作为迁移证据，不进入 active workspace；
+parity ledger 和逐项测试继续证明全部业务语义及旧数据都有 owner。

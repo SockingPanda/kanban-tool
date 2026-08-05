@@ -1167,9 +1167,9 @@ dispatcher 边界。第 6 条以及“非目标”中的 labels、signals、sear
 [`docs/migration/turso-full-feature-parity.md`](migration/turso-full-feature-parity.md)、
 [`ARCHITECTURE.md`](ARCHITECTURE.md) 和 [`DATA_MODEL.md`](DATA_MODEL.md) 为准。
 
-在过渡期，`kanban-application` + `kanban-store-turso` 仍然是当前实现；目标是合并为
-`kanban-service`，并保持当前 `kanban-protocol` 作为独立 wire/schema crate。这些名称变化不会改变
-single-host ownership，也不能用“暂不支持”替代 parity ledger 的闭合。
+当前实现已将 application service 与 Turso persistence 合并为 `kanban-service`，并保持
+`kanban-protocol` 作为独立 wire/schema crate。该收敛不改变 single-host ownership，也不能用
+“暂不支持”替代 parity ledger 的闭合。
 
 ### 背景
 

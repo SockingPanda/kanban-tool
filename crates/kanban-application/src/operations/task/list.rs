@@ -44,6 +44,7 @@ pub enum TaskListSort {
 pub struct TaskListOptions {
     pub statuses: Vec<TaskStatus>,
     pub priorities: Vec<i64>,
+    pub labels: Vec<String>,
     pub plan_filters: Vec<TaskPlanFilter>,
     pub assignee: Option<String>,
     pub query: Option<String>,
@@ -115,6 +116,12 @@ where
         }
         options.assignee = trimmed_optional(options.assignee);
         options.query = trimmed_optional(options.query);
+        options.labels = options
+            .labels
+            .into_iter()
+            .map(|label| label.trim().to_owned())
+            .filter(|label| !label.is_empty())
+            .collect();
         self.store.list_tasks(board, options).await
     }
 }
@@ -140,6 +147,7 @@ mod tests {
             assert_eq!(board, "default");
             assert_eq!(options.assignee.as_deref(), Some("worker"));
             assert_eq!(options.query.as_deref(), Some("needle"));
+            assert_eq!(options.labels, vec!["bug"]);
             Ok(TaskListPage {
                 tasks: Vec::new(),
                 total: 0,
@@ -160,6 +168,7 @@ mod tests {
                 TaskListOptions {
                     statuses: vec![TaskStatus::Todo],
                     priorities: vec![1],
+                    labels: vec![" bug ".into()],
                     plan_filters: Vec::new(),
                     assignee: Some(" worker ".into()),
                     query: Some(" needle ".into()),
@@ -179,6 +188,7 @@ mod tests {
                 TaskListOptions {
                     statuses: Vec::new(),
                     priorities: Vec::new(),
+                    labels: Vec::new(),
                     plan_filters: Vec::new(),
                     assignee: None,
                     query: None,

@@ -165,7 +165,8 @@ pub use steps::{
 };
 pub use surface::{SurfaceOperation, surface_operation_catalog, surface_operation_keys};
 pub use task_core::{
-    GetTaskPath, GetTaskQuery, GetTaskResponse, TaskOntologySummary, UpdateTaskPath,
+    GetTaskDetailsResponse, GetTaskPath, GetTaskQuery, GetTaskResponse, TaskDetailAggregate,
+    TaskDetailOntology, TaskOntologySignalSummary, TaskOntologySummary, UpdateTaskPath,
     UpdateTaskRequest, UpdateTaskResponse,
 };
 pub use task_graph::{

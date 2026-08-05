@@ -1,10 +1,11 @@
-use kanban_contract::GetTaskResponse;
+use kanban_contract::{GetTaskDetailsResponse, GetTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
     schemars, tool, tool_router,
 };
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::shared::{KanbanMcp, call_client};
 
@@ -15,6 +16,8 @@ struct TaskShowArgs {
     board: Option<String>,
     /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
     task_ref: String,
+    #[serde(default)]
+    include_details: bool,
 }
 
 #[tool_router(router = task_show_tools, vis = "pub(crate)")]
@@ -26,11 +29,23 @@ impl KanbanMcp {
     async fn task_show(
         &self,
         Parameters(args): Parameters<TaskShowArgs>,
-    ) -> Result<Json<GetTaskResponse>, McpError> {
+    ) -> Result<Json<Value>, McpError> {
         let board = self.board(args.board);
         let client = self.client.clone();
+        if args.include_details {
+            let detail =
+                call_client(move || client.get_task_details_by_selector(&board, &args.task_ref))
+                    .await?;
+            return Ok(Json(
+                serde_json::to_value(GetTaskDetailsResponse { data: detail })
+                    .map_err(|error| McpError::internal_error(error.to_string(), None))?,
+            ));
+        }
         let task = call_client(move || client.get_task_by_selector(&board, &args.task_ref)).await?;
-        Ok(Json(GetTaskResponse::new(task, None)))
+        Ok(Json(
+            serde_json::to_value(GetTaskResponse::new(task, None))
+                .map_err(|error| McpError::internal_error(error.to_string(), None))?,
+        ))
     }
 }
 

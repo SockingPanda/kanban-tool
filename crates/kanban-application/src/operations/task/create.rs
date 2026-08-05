@@ -20,6 +20,10 @@ pub struct CreateTaskCommand {
     pub due_at: Option<i64>,
     pub max_retries: Option<i64>,
     pub metadata: BTreeMap<String, serde_json::Value>,
+    /// 已存在的看板标签引用（名称或全局 label id）。
+    pub labels: Vec<String>,
+    /// 新任务创建时要挂接的父任务全局 id。
+    pub depends_on: Vec<String>,
     pub actor: String,
 }
 
@@ -37,6 +41,8 @@ pub struct CreateTaskRecord {
     pub due_at: Option<i64>,
     pub max_retries: Option<i64>,
     pub metadata_json: String,
+    pub labels: Vec<String>,
+    pub depends_on: Vec<String>,
     pub created_by: String,
 }
 
@@ -92,6 +98,18 @@ where
                     due_at: command.due_at,
                     max_retries: command.max_retries,
                     metadata_json,
+                    labels: command
+                        .labels
+                        .into_iter()
+                        .map(|label| label.trim().to_owned())
+                        .filter(|label| !label.is_empty())
+                        .collect(),
+                    depends_on: command
+                        .depends_on
+                        .into_iter()
+                        .map(|task_id| task_id.trim().to_owned())
+                        .filter(|task_id| !task_id.is_empty())
+                        .collect(),
                     created_by: command.actor.trim().to_owned(),
                 },
             )
@@ -123,6 +141,19 @@ fn validate_create_task(command: &CreateTaskCommand) -> Result<()> {
     }
     if command.actor.trim().is_empty() {
         return Err(KanbanError::InvalidInput("actor is required".to_owned()));
+    }
+    if command.labels.iter().any(|label| label.trim().is_empty()) {
+        return Err(KanbanError::InvalidInput(
+            "labels must not contain empty values".to_owned(),
+        ));
+    }
+    if command.depends_on.iter().any(|task_id| {
+        let task_id = task_id.trim();
+        !task_id.starts_with("t_") || task_id.len() <= 2
+    }) {
+        return Err(KanbanError::InvalidInput(
+            "depends_on must contain global t_... ids".to_owned(),
+        ));
     }
     if command
         .idempotency_key
@@ -173,6 +204,8 @@ mod tests {
             due_at: None,
             max_retries: Some(3),
             metadata: BTreeMap::from([("source".into(), serde_json::json!("test"))]),
+            labels: Vec::new(),
+            depends_on: Vec::new(),
             actor: "tester".into(),
         };
 
@@ -204,6 +237,8 @@ mod tests {
                 due_at: None,
                 max_retries: None,
                 metadata: BTreeMap::new(),
+                labels: Vec::new(),
+                depends_on: Vec::new(),
                 actor: "tester".into(),
             })
             .await

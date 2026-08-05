@@ -42,7 +42,7 @@ pub(crate) async fn list_events(
     )))
 }
 
-pub(super) fn api_event(event: EventRecord) -> Result<StreamEventData, ApiError> {
+pub(crate) fn api_event(event: EventRecord) -> Result<StreamEventData, ApiError> {
     let payload_value: Value = serde_json::from_str(&event.payload_json).map_err(|error| {
         KanbanError::Storage(format!(
             "stored event payload is invalid JSON for {}: {error}",

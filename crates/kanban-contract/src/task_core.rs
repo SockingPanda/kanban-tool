@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{ApiTask, DataEnvelope, OptionalMetadataEnvelope, TaskOntologyDetailsMeta};
+use crate::{
+    ApiComment, ApiDependencies, ApiExecutionPlan, ApiLabel, ApiRun, ApiTask, ApiTaskStep,
+    DataEnvelope, OptionalMetadataEnvelope, StreamEventData, TaskOntologyDetailsMeta,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -72,6 +75,39 @@ pub struct TaskOntologySignalSummary {
     pub updated_at: i64,
     pub latest_action_at: Option<i64>,
     pub action_count: i64,
+}
+
+/// Explicit opt-in task detail aggregate. The default task show response stays
+/// intentionally small; this shape is used by `include=details`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct TaskDetailAggregate {
+    pub task: ApiTask,
+    pub labels: Vec<ApiLabel>,
+    pub dependencies: ApiDependencies,
+    pub execution_plan: ApiExecutionPlan,
+    pub steps: Vec<ApiTaskStep>,
+    pub comments: Vec<ApiComment>,
+    pub runs: Vec<ApiRun>,
+    pub events: Vec<StreamEventData>,
+    pub ontology: TaskDetailOntology,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct TaskDetailOntology {
+    pub summary: Option<TaskOntologySummary>,
+    pub degraded: bool,
+    pub diagnostics: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct GetTaskDetailsResponse {
+    pub data: TaskDetailAggregate,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::test_support::*;
+    use crate::{AddTaskLabelsInput, CreateLabelInput};
 
     #[tokio::test]
     async fn list_tasks_excludes_archived_by_default_and_supports_status_priority_and_assignee_filters()
@@ -37,6 +38,32 @@ mod tests {
             )
             .await
             .expect("archive task");
+        store
+            .create_board_label(
+                "default",
+                CreateLabelInput {
+                    id: "l_filter_bug".to_owned(),
+                    name: "bug".to_owned(),
+                    color: None,
+                    created_at: 100,
+                },
+            )
+            .await
+            .expect("create label");
+        store
+            .add_task_labels(
+                &first.id,
+                AddTaskLabelsInput {
+                    names: vec!["bug".to_owned()],
+                    label_ids: vec!["l_filter_bug".to_owned()],
+                    event_ids: vec!["e_filter_label".to_owned()],
+                    create_missing: false,
+                    actor: "tester".to_owned(),
+                    now: 100,
+                },
+            )
+            .await
+            .expect("attach label");
 
         let default_page = store
             .list_tasks("default", TaskListOptions::default())
@@ -66,6 +93,19 @@ mod tests {
             .expect("filtered task list");
         assert_eq!(filtered.total, 1);
         assert_eq!(filtered.tasks[0].id, first.id);
+
+        let label_filtered = store
+            .list_tasks(
+                "default",
+                TaskListOptions {
+                    labels: vec!["bug".to_owned()],
+                    ..TaskListOptions::default()
+                },
+            )
+            .await
+            .expect("label filtered task list");
+        assert_eq!(label_filtered.total, 1);
+        assert_eq!(label_filtered.tasks[0].id, first.id);
 
         let with_archived = store
             .list_tasks(

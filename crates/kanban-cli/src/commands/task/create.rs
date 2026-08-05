@@ -32,6 +32,12 @@ pub(crate) struct CreateArgs {
     /// Optional client-selected typed task id.
     #[arg(long)]
     pub(crate) task_id: Option<String>,
+    /// Attach existing board labels by name or id (repeatable).
+    #[arg(long = "label")]
+    pub(crate) labels: Vec<String>,
+    /// Add existing parent tasks by global id (repeatable).
+    #[arg(long = "depends-on")]
+    pub(crate) depends_on: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -62,8 +68,8 @@ pub(crate) fn run(
             due_at: args.due_at,
             max_retries: args.max_retries,
             metadata,
-            labels: Vec::new(),
-            depends_on: Vec::new(),
+            labels: args.labels.clone(),
+            depends_on: args.depends_on.clone(),
             actor: None,
         },
     )?;

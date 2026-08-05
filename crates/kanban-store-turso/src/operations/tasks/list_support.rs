@@ -72,6 +72,14 @@ pub(crate) fn task_list_where(
         );
     }
 
+    for (index, label) in options.labels.iter().enumerate() {
+        let name = format!(":label_{index}");
+        clauses.push(format!(
+            "EXISTS (SELECT 1 FROM task_labels AS tl JOIN labels AS l ON l.id = tl.label_id AND l.board_id = tl.board_id WHERE tl.board_id = t.board_id AND tl.task_id = t.id AND (l.name = {name} OR l.id = {name}))"
+        ));
+        params.push((name, Value::Text(label.trim().to_owned())));
+    }
+
     for filter in &options.plan_filters {
         let clause = match filter {
             TaskPlanFilter::PlanNeeded => {

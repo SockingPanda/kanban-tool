@@ -2,6 +2,7 @@ mod archive;
 mod block;
 mod claim;
 mod create;
+mod details;
 mod done;
 mod heartbeat;
 mod list;
@@ -20,6 +21,10 @@ pub use archive::{ArchiveTaskCommand, ArchiveTaskRecord, TaskArchive};
 pub use block::{BlockTaskCommand, BlockTaskRecord, TaskBlock};
 pub use claim::{ClaimTaskCommand, ClaimTaskRecord, TaskClaim};
 pub use create::{CreateTaskCommand, CreateTaskRecord, TaskCreate};
+pub use details::{
+    TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskOntologySignalSummaryRecord,
+    TaskOntologySummaryRecord,
+};
 pub use done::{CompleteTaskCommand, CompleteTaskRecord, TaskDone};
 pub use heartbeat::{HeartbeatTaskCommand, HeartbeatTaskRecord, TaskHeartbeat};
 pub use list::{TaskList, TaskListOptions, TaskListPage, TaskListSort, TaskPlanFilter};

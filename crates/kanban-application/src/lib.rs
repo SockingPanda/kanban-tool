@@ -35,7 +35,8 @@ pub use operations::{
     SpecifyTaskCommand, SpecifyTaskRecord, StepComplete, StepCreate, StepList, StepRemove,
     StepReopen, StepSkip, StepUpdate, TaskArchive, TaskBlock, TaskClaim, TaskCreate, TaskDone,
     TaskHeartbeat, TaskLabelAdd, TaskLabelList, TaskLabelRemove, TaskList, TaskNeighborhoodOptions,
-    TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen,
+    TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord, TaskPlanNotRequired, TaskPromote,
+    TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen,
     TaskReview, TaskShow, TaskSpecify, TaskUnblock, TaskUpdate, UnblockTaskCommand,
     UnblockTaskRecord, UpdateTaskCommand, UpdateTaskRecord, VacuumReportRecord,
 };

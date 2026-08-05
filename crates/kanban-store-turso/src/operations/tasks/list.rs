@@ -37,6 +37,7 @@ pub enum TaskPlanFilter {
 pub struct TaskListOptions {
     pub statuses: Vec<String>,
     pub priorities: Vec<i64>,
+    pub labels: Vec<String>,
     pub include_archived: bool,
     pub assignee: Option<String>,
     pub q: Option<String>,
@@ -51,6 +52,7 @@ impl Default for TaskListOptions {
         Self {
             statuses: Vec::new(),
             priorities: Vec::new(),
+            labels: Vec::new(),
             include_archived: false,
             assignee: None,
             q: None,

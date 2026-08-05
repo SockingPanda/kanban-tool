@@ -248,6 +248,7 @@ async fn claim_next_ready(
             TaskListOptions {
                 statuses: vec![TaskStatus::Ready],
                 priorities: Vec::new(),
+                labels: Vec::new(),
                 plan_filters: Vec::new(),
                 assignee: None,
                 query: None,
@@ -844,6 +845,8 @@ on_success = "blocked"
                 due_at: None,
                 max_retries: None,
                 metadata: BTreeMap::new(),
+                labels: Vec::new(),
+                depends_on: Vec::new(),
                 actor: "test".to_owned(),
             })
             .await

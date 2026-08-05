@@ -27,6 +27,10 @@ struct TaskCreateArgs {
     metadata: Option<BTreeMap<String, serde_json::Value>>,
     task_id: Option<String>,
     idempotency_key: Option<String>,
+    #[serde(default)]
+    labels: Vec<String>,
+    #[serde(default)]
+    depends_on: Vec<String>,
 }
 
 const fn default_priority() -> i64 {
@@ -60,8 +64,8 @@ impl KanbanMcp {
                     due_at: args.due_at,
                     max_retries: args.max_retries,
                     metadata: args.metadata,
-                    labels: Vec::new(),
-                    depends_on: Vec::new(),
+                    labels: args.labels,
+                    depends_on: args.depends_on,
                     actor: None,
                 },
             )

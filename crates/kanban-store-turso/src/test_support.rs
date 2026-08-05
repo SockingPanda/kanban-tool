@@ -37,6 +37,8 @@ pub(crate) fn create_input(
         due_at: Some(200),
         max_retries: Some(2),
         metadata_json: r#"{"source":"test"}"#.to_owned(),
+        labels: Vec::new(),
+        depends_on: Vec::new(),
         created_by: "tester".to_owned(),
     }
 }

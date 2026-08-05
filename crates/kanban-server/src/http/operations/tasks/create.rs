@@ -28,13 +28,6 @@ pub(crate) async fn create_task(
 ) -> Result<(StatusCode, Json<CreateTaskResponse>), ApiError> {
     let Json(body) =
         body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
-    if !body.labels.is_empty() || !body.depends_on.is_empty() {
-        return Err(KanbanError::FeatureNotAvailable(
-            "task.create labels and dependencies are not available on the single-host path"
-                .to_owned(),
-        )
-        .into());
-    }
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let task = state
         .application()
@@ -51,6 +44,8 @@ pub(crate) async fn create_task(
             due_at: body.due_at,
             max_retries: body.max_retries,
             metadata: body.metadata.unwrap_or_default(),
+            labels: body.labels,
+            depends_on: body.depends_on,
             actor,
         })
         .await?;
@@ -484,10 +479,12 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(response.status(), StatusCode::OK);
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
-        let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(error.error.code, ApiErrorCode::FeatureNotAvailable);
+        let details: kanban_contract::GetTaskDetailsResponse =
+            serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(details.data.task.id, "t_http_create");
+        assert!(details.data.ontology.degraded);
 
         let response = router
             .oneshot(

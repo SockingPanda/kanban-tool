@@ -1,6 +1,6 @@
 use kanban_contract::{
-    ApiTaskPriority, ApiTaskStatus, ListTasksQuery, ListTasksResponse, TaskReadPlanFilter,
-    TaskReadSort,
+    ApiTaskPriority, ApiTaskStatus, ListTasksQuery, ListTasksResponse, TaskReadLabel,
+    TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError,
@@ -18,6 +18,7 @@ struct TaskListArgs {
     board: Option<String>,
     status: Vec<ApiTaskStatus>,
     priority: Vec<i64>,
+    label: Vec<String>,
     plan_filter: Vec<TaskReadPlanFilter>,
     assignee: Option<String>,
     query: Option<String>,
@@ -57,7 +58,15 @@ impl KanbanMcp {
         let query = ListTasksQuery {
             status: args.status,
             priority,
-            label: Vec::new(),
+            label: args
+                .label
+                .into_iter()
+                .map(|value| {
+                    TaskReadLabel::new(value.clone()).ok_or_else(|| {
+                        McpError::invalid_params(format!("invalid label: {value}"), None)
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
             plan_filter: args.plan_filter,
             assignee: args.assignee,
             q: args.query,

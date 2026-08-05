@@ -64,6 +64,8 @@ mod tests {
                 due_at: None,
                 max_retries: None,
                 metadata: BTreeMap::new(),
+                labels: Vec::new(),
+                depends_on: Vec::new(),
                 actor: "test".to_owned(),
             })
             .await

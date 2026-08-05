@@ -3,7 +3,7 @@ use std::str::FromStr;
 use clap::{Args, ValueEnum};
 use kanban_client::KanbanClient;
 use kanban_contract::{
-    ApiTaskPriority, ApiTaskStatus, ListTasksQuery, TaskReadPlanFilter, TaskReadSort,
+    ApiTaskPriority, ApiTaskStatus, ListTasksQuery, TaskReadLabel, TaskReadPlanFilter, TaskReadSort,
 };
 
 use crate::{context::CliContext, error::CliFailure, output};
@@ -14,6 +14,8 @@ pub(crate) struct ListArgs {
     pub(crate) status: Vec<ListStatus>,
     #[arg(long)]
     pub(crate) priority: Vec<i64>,
+    #[arg(long = "label")]
+    pub(crate) label: Vec<String>,
     #[arg(long = "plan-filter")]
     pub(crate) plan_filter: Vec<String>,
     #[arg(long)]
@@ -92,7 +94,17 @@ fn list_tasks_query(args: &ListArgs) -> Result<ListTasksQuery, CliFailure> {
     Ok(ListTasksQuery {
         status: args.status.iter().copied().map(api_list_status).collect(),
         priority: priorities,
-        label: Vec::new(),
+        label: args
+            .label
+            .iter()
+            .map(|value| {
+                TaskReadLabel::new(value.clone()).ok_or_else(|| CliFailure {
+                    code: "invalid_input",
+                    message: format!("invalid --label: {value}"),
+                    exit_code: 2,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
         plan_filter,
         assignee: args.assignee.clone(),
         q: args.query.clone(),

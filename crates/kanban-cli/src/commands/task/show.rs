@@ -1,17 +1,13 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::GetTaskResponse;
+use kanban_contract::{GetTaskDetailsResponse, GetTaskResponse};
 
-use crate::{
-    context::CliContext,
-    error::{CliFailure, feature_not_available},
-    output,
-};
+use crate::{context::CliContext, error::CliFailure, output};
 
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {
     pub(crate) task_ref: String,
-    /// Ontology details are intentionally unavailable on the single-host path.
+    /// Include canonical labels, dependencies, plan, steps, comments, runs and events.
     #[arg(long)]
     pub(crate) details: bool,
 }
@@ -22,9 +18,24 @@ pub(crate) fn run(
     args: &ShowArgs,
 ) -> Result<(), CliFailure> {
     if args.details {
-        return Err(feature_not_available(
-            "`task show --details` requires the deferred ontology projection",
-        ));
+        let detail = client.get_task_details_by_selector(&ctx.board, &args.task_ref)?;
+        if ctx.json {
+            output::print_json(&GetTaskDetailsResponse { data: detail });
+        } else {
+            println!(
+                "{} {} {} (labels: {}, dependencies: {}, steps: {}, comments: {}, runs: {}, events: {})",
+                detail.task.task_ref,
+                detail.task.status.as_str(),
+                detail.task.title,
+                detail.labels.len(),
+                detail.dependencies.parents.len(),
+                detail.steps.len(),
+                detail.comments.len(),
+                detail.runs.len(),
+                detail.events.len(),
+            );
+        }
+        return Ok(());
     }
     let task = client.get_task_by_selector(&ctx.board, &args.task_ref)?;
     if ctx.json {

@@ -8,7 +8,6 @@ use axum::{
 };
 use kanban_application::TaskListOptions as ApplicationTaskListOptions;
 use kanban_contract::{ListTasksPath, ListTasksResponse, TotalPaginationMeta};
-use kanban_core::KanbanError;
 
 pub(crate) async fn list_tasks(
     State(state): State<AppState>,
@@ -16,18 +15,17 @@ pub(crate) async fn list_tasks(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<ListTasksResponse>, ApiError> {
     let query = parse_list_tasks_query(raw_query.as_deref())?;
-    if !query.label.is_empty() {
-        return Err(KanbanError::FeatureNotAvailable(
-            "task.list label filters are not available on the single-host path".to_owned(),
-        )
-        .into());
-    }
     let options = ApplicationTaskListOptions {
         statuses: query.status.into_iter().map(task_status).collect(),
         priorities: query
             .priority
             .into_iter()
             .map(|priority| i64::from(priority.get()))
+            .collect(),
+        labels: query
+            .label
+            .into_iter()
+            .map(|label| label.into_string())
             .collect(),
         plan_filters: query
             .plan_filter

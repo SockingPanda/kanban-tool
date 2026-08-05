@@ -1,7 +1,7 @@
 mod create;
 mod list;
 mod remove;
-mod support;
+pub(crate) mod support;
 
 use crate::state::AppState;
 use axum::Router;

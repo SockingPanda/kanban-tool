@@ -1,5 +1,7 @@
 use turso::transaction::TransactionBehavior;
 
+use crate::operations::dependencies::support::dependency_task_in_transaction;
+use crate::operations::labels::{list_task_labels_in_transaction, resolve_label_in_transaction};
 use crate::{db::TursoStore, domain::*, error::StoreError, shared::*};
 
 use super::create_support::*;
@@ -17,6 +19,8 @@ pub struct CreateTaskInput {
     pub due_at: Option<i64>,
     pub max_retries: Option<i64>,
     pub metadata_json: String,
+    pub labels: Vec<String>,
+    pub depends_on: Vec<String>,
     pub created_by: String,
 }
 impl TursoStore {
@@ -31,6 +35,8 @@ impl TursoStore {
             return Err(StoreError::InvalidInput("看板不能为空".to_owned()));
         }
         let title = input.title.trim().to_owned();
+        let labels = canonical_refs(&input.labels);
+        let depends_on = canonical_refs(&input.depends_on);
         let mut connection = self.connection().await?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -73,8 +79,14 @@ impl TursoStore {
             .await;
             match existing {
                 Ok(row) => {
-                    let existing = task_from_row(row)?;
-                    if canonical_payload_matches(&existing, &input, &title) {
+                    let mut existing = task_from_row(row)?;
+                    existing.labels =
+                        list_task_labels_in_transaction(&transaction, &board_id, &existing.id)
+                            .await?;
+                    if canonical_payload_matches(&existing, &input, &title)
+                        && task_relations_match(&transaction, &existing, &labels, &depends_on)
+                            .await?
+                    {
                         transaction.commit().await?;
                         return Ok(existing);
                     }
@@ -171,7 +183,78 @@ impl TursoStore {
                     ),
                 )
                 .await?;
-        let task = task_from_row(
+        for label_ref in &labels {
+            let label = resolve_label_in_transaction(&transaction, &board_id, label_ref)
+                .await?
+                .ok_or_else(|| StoreError::LabelNotFound(label_ref.to_owned()))?;
+            let changed = transaction
+                .execute(
+                    "INSERT INTO task_labels(board_id, task_id, label_id, created_at) VALUES (:board_id, :task_id, :label_id, :created_at) ON CONFLICT(task_id, label_id) DO NOTHING",
+                    (
+                        (":board_id", board_id.as_str()),
+                        (":task_id", input.id.as_str()),
+                        (":label_id", label.id.as_str()),
+                        (":created_at", now),
+                    ),
+                )
+                .await?;
+            if changed > 0 {
+                let event_id = kanban_core::new_event_id();
+                transaction
+                    .execute(
+                        "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'task.label.added', :actor, json_object('label_id', :label_id, 'label', :label), :created_at)",
+                        (
+                            (":event_id", event_id.as_str()),
+                            (":board_id", board_id.as_str()),
+                            (":task_id", input.id.as_str()),
+                            (":actor", input.created_by.as_str()),
+                            (":label_id", label.id.as_str()),
+                            (":label", label.name.as_str()),
+                            (":created_at", now),
+                        ),
+                    )
+                    .await?;
+            }
+        }
+        for parent_id in &depends_on {
+            let parent = dependency_task_in_transaction(&transaction, parent_id).await?;
+            if parent.board_id != board_id {
+                return Err(StoreError::InvalidInput(
+                    "cross-board dependency is not allowed".to_owned(),
+                ));
+            }
+            if parent.id == input.id {
+                return Err(StoreError::InvalidInput(
+                    "dependency cannot point to itself".to_owned(),
+                ));
+            }
+            transaction
+                .execute(
+                    "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES (:board_id, :parent_task_id, :child_task_id, :created_at) ON CONFLICT(parent_task_id, child_task_id) DO NOTHING",
+                    (
+                        (":board_id", board_id.as_str()),
+                        (":parent_task_id", parent.id.as_str()),
+                        (":child_task_id", input.id.as_str()),
+                        (":created_at", now),
+                    ),
+                )
+                .await?;
+            let event_id = kanban_core::new_event_id();
+            transaction
+                .execute(
+                    "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'dependency.added', :actor, json_object('parent_task_id', :parent_task_id), :created_at)",
+                    (
+                        (":event_id", event_id.as_str()),
+                        (":board_id", board_id.as_str()),
+                        (":task_id", input.id.as_str()),
+                        (":actor", input.created_by.as_str()),
+                        (":parent_task_id", parent.id.as_str()),
+                        (":created_at", now),
+                    ),
+                )
+                .await?;
+        }
+        let mut task = task_from_row(
             first_row(
                 transaction
                     .query(
@@ -182,6 +265,7 @@ impl TursoStore {
             )
             .await?,
         )?;
+        task.labels = list_task_labels_in_transaction(&transaction, &board_id, &input.id).await?;
 
         transaction.commit().await?;
         debug_assert_eq!(task.board_id, board_id);

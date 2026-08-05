@@ -76,6 +76,8 @@ pub(crate) fn task_for_id(task_id: &str) -> TaskRecord {
         due_at: None,
         max_retries: None,
         metadata_json: "{}".into(),
+        labels: Vec::new(),
+        depends_on: Vec::new(),
         created_by: "tester".into(),
     });
     match task_id {

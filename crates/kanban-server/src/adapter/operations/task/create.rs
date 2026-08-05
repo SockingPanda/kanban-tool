@@ -27,6 +27,8 @@ impl TaskCreate for TursoApplicationStore {
                     due_at: input.due_at,
                     max_retries: input.max_retries,
                     metadata_json: input.metadata_json,
+                    labels: input.labels,
+                    depends_on: input.depends_on,
                     created_by: input.created_by,
                 },
             )

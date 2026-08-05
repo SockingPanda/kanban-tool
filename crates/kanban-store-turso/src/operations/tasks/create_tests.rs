@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::CreateLabelInput;
     use crate::test_support::*;
 
     #[tokio::test]
@@ -73,6 +74,52 @@ mod tests {
                 .expect("event payload text"),
             r#"{"status":"todo"}"#
         );
+    }
+
+    #[tokio::test]
+    async fn create_task_attaches_existing_labels_and_dependencies_atomically() {
+        let (_directory, store, _path) = store("create-relations").await;
+        store.initialize().await.expect("initialize");
+        let parent = store
+            .create_task(
+                "default",
+                create_input("t_create_parent", Some("create-parent"), "Parent"),
+            )
+            .await
+            .expect("parent task");
+        store
+            .create_board_label(
+                "default",
+                CreateLabelInput {
+                    id: "l_create_bug".to_owned(),
+                    name: "bug".to_owned(),
+                    color: None,
+                    created_at: 100,
+                },
+            )
+            .await
+            .expect("label");
+        let mut input = create_input("t_create_child", Some("create-child"), "Child");
+        input.labels = vec!["bug".to_owned()];
+        input.depends_on = vec![parent.id.clone()];
+        let child = store
+            .create_task("default", input.clone())
+            .await
+            .expect("child task");
+        assert_eq!(child.labels.len(), 1);
+        assert_eq!(child.labels[0].name, "bug");
+        let dependencies = store
+            .list_dependencies(&child.id)
+            .await
+            .expect("dependencies");
+        assert_eq!(dependencies.parents.len(), 1);
+        assert_eq!(dependencies.parents[0].id, parent.id);
+
+        let replay = store
+            .create_task("b_default", input)
+            .await
+            .expect("idempotent replay");
+        assert_eq!(replay, child);
     }
 
     #[tokio::test]

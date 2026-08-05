@@ -397,7 +397,7 @@ async fn labels_from_rows(rows: &mut turso::Rows) -> Result<Vec<LabelRecord>, St
     Ok(labels)
 }
 
-async fn list_task_labels_in_transaction(
+pub(crate) async fn list_task_labels_in_transaction(
     transaction: &Transaction<'_>,
     board_id: &str,
     task_id: &str,
@@ -473,7 +473,7 @@ async fn label_by_id_in_transaction(
     }
 }
 
-async fn resolve_label_in_transaction(
+pub(crate) async fn resolve_label_in_transaction(
     transaction: &Transaction<'_>,
     board_id: &str,
     label_ref: &str,

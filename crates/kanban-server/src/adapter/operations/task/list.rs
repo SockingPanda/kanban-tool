@@ -28,6 +28,7 @@ impl TaskList for TursoApplicationStore {
                         .map(|status| status.as_str().to_owned())
                         .collect(),
                     priorities: options.priorities,
+                    labels: options.labels,
                     include_archived: options.include_archived,
                     assignee: options.assignee,
                     q: options.query,

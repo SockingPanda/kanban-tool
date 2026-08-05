@@ -58,9 +58,10 @@ pub use signal::*;
 pub use stats::*;
 pub use step::{StepComplete, StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate};
 pub use task::{
-    TaskArchive, TaskBlock, TaskClaim, TaskCreate, TaskDone, TaskHeartbeat, TaskList,
-    TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen,
-    TaskReview, TaskShow, TaskSpecify, TaskUnblock, TaskUpdate,
+    TaskArchive, TaskBlock, TaskClaim, TaskCreate, TaskDetailOntologyRecord, TaskDetailRead,
+    TaskDetailRecord, TaskDone, TaskHeartbeat, TaskList, TaskOntologySignalSummaryRecord,
+    TaskOntologySummaryRecord, TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskReclaimExplicit,
+    TaskRelease, TaskReopen, TaskReview, TaskShow, TaskSpecify, TaskUnblock, TaskUpdate,
 };
 
 pub use comment::{CreateCommentCommand, CreateCommentRecord};

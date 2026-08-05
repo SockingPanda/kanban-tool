@@ -607,3 +607,56 @@ fn now_ms() -> i64 {
         .try_into()
         .unwrap_or(i64::MAX)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{io::Write, net::TcpListener, thread};
+
+    use super::{OllamaEmbeddingProvider, ProviderFailure, VectorConfig};
+
+    fn mock_provider(status: u16, body: &str) -> Result<Vec<Vec<f32>>, ProviderFailure> {
+        let listener = TcpListener::bind(("127.0.0.1", 0))
+            .map_err(|error| ProviderFailure::retryable(error.to_string()))?;
+        let port = listener
+            .local_addr()
+            .map_err(|error| ProviderFailure::retryable(error.to_string()))?
+            .port();
+        let body = body.to_owned();
+        let server = thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            let reason = if status < 400 { "OK" } else { "Error" };
+            let response = format!(
+                "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+        let provider = OllamaEmbeddingProvider::new(VectorConfig {
+            provider: "ollama".to_owned(),
+            endpoint: format!("http://127.0.0.1:{port}"),
+            model: "test-model".to_owned(),
+            dimensions: 2,
+        });
+        let result = provider.embed_batch(&["hello".to_owned()]);
+        server
+            .join()
+            .map_err(|_| ProviderFailure::retryable("mock server panicked"))?;
+        result
+    }
+
+    #[test]
+    fn ollama_provider_accepts_mock_embedding_response() {
+        let vectors = mock_provider(200, r#"{"embeddings":[[0.25,-0.5]]}"#)
+            .expect("mock embedding should parse");
+        assert_eq!(vectors, vec![vec![0.25, -0.5]]);
+    }
+
+    #[test]
+    fn ollama_server_error_is_reported_as_retryable() {
+        let error = mock_provider(503, r#"{"error":"busy"}"#).expect_err("503 must fail");
+        assert!(error.retryable);
+        assert_eq!(error.message, "Ollama HTTP 503");
+    }
+}

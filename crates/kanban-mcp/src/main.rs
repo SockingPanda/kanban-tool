@@ -51,6 +51,7 @@ mod tests {
                 "dependency_list",
                 "dependency_remove",
                 "run_list",
+                "run_show",
                 "step_create",
                 "step_list",
                 "step_update",

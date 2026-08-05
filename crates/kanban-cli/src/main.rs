@@ -69,6 +69,11 @@ enum Command {
     },
     /// List execution runs for a task through the canonical localhost host.
     Runs(commands::run::ListArgs),
+    /// Inspect one execution run through the canonical localhost host.
+    Run {
+        #[command(subcommand)]
+        command: commands::run::RunCommand,
+    },
     /// Removed direct-database initialization path.
     Init,
     /// Commands not yet migrated to the canonical host fail without touching storage.
@@ -92,6 +97,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Board { command } => commands::board::run(&ctx, command),
         Command::Comment { command } => commands::comment::run(&ctx, command),
         Command::Dependency { command } => commands::dependency::run(&ctx, command),
+        Command::Run { command } => commands::run::run(&ctx, command),
         Command::Runs(args) => commands::run::list(&ctx, args),
         Command::Task { command } => commands::task::run(&ctx, command),
         Command::Init => Err(feature_not_available(
@@ -126,5 +132,18 @@ mod tests {
             panic!("expected runs command");
         };
         assert_eq!(args.task_ref, "default#1");
+    }
+
+    #[test]
+    fn parses_run_show_command() {
+        let cli = Cli::try_parse_from(["kanban", "run", "show", "r_example"])
+            .expect("run show command should parse");
+        let Command::Run {
+            command: crate::commands::run::RunCommand::Show(args),
+        } = cli.command
+        else {
+            panic!("expected run show command");
+        };
+        assert_eq!(args.run_id, "r_example");
     }
 }

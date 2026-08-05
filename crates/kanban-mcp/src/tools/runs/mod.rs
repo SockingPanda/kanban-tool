@@ -7,6 +7,6 @@ mod show;
 
 impl KanbanMcp {
     pub(crate) fn run_tools() -> ToolRouter<Self> {
-        Self::run_list_tools()
+        Self::run_list_tools() + Self::run_show_tools()
     }
 }

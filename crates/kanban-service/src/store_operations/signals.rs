@@ -91,31 +91,29 @@ impl TursoStore {
             .await?;
         }
 
-        if let Some(dedupe_key) = input.dedupe_key.as_deref() {
-            if let Some(existing) =
+        if let Some(dedupe_key) = input.dedupe_key.as_deref()
+            && let Some(existing) =
                 find_signal_by_dedupe_tx(&mut transaction, &board_id, dedupe_key).await?
-            {
-                let matches = signal_payload_matches(
-                    &existing,
-                    &input,
-                    task.as_ref().map(|value| value.0.as_str()),
-                    evidence_json.as_str(),
-                );
-                if matches {
-                    let backlink =
-                        find_backlink_tx(&mut transaction, &board_id, &existing.id).await?;
-                    transaction.commit().await?;
-                    return Ok(SignalRecordResult {
-                        signal: existing,
-                        backlink_comment: backlink,
-                    });
-                }
-                return Err(StoreError::SignalIdempotencyConflict {
-                    board_id,
-                    key: dedupe_key.to_owned(),
-                    existing_signal_id: existing.id,
+        {
+            let matches = signal_payload_matches(
+                &existing,
+                &input,
+                task.as_ref().map(|value| value.0.as_str()),
+                evidence_json.as_str(),
+            );
+            if matches {
+                let backlink = find_backlink_tx(&mut transaction, &board_id, &existing.id).await?;
+                transaction.commit().await?;
+                return Ok(SignalRecordResult {
+                    signal: existing,
+                    backlink_comment: backlink,
                 });
             }
+            return Err(StoreError::SignalIdempotencyConflict {
+                board_id,
+                key: dedupe_key.to_owned(),
+                existing_signal_id: existing.id,
+            });
         }
 
         let task_id = task.as_ref().map(|value| value.0.clone());
@@ -281,12 +279,12 @@ impl TursoStore {
         let mut current: Vec<SignalRecord> = Vec::with_capacity(input.signal_ids.len());
         for signal_id in &input.signal_ids {
             let signal = load_signal_tx(&mut transaction, signal_id).await?;
-            if let Some(first) = current.first() {
-                if first.board_id != signal.board_id {
-                    return Err(StoreError::InvalidInput(
-                        "all reviewed signals must belong to the same board".to_owned(),
-                    ));
-                }
+            if let Some(first) = current.first()
+                && first.board_id != signal.board_id
+            {
+                return Err(StoreError::InvalidInput(
+                    "all reviewed signals must belong to the same board".to_owned(),
+                ));
             }
             current.push(signal);
         }

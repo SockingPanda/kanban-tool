@@ -660,19 +660,18 @@ fn search_filters(
         clauses.push("t.assignee=:assignee".to_owned());
         params.push((":assignee".to_owned(), Value::Text(assignee.to_owned())));
     }
-    if !fts {
-        if let Some((name, value)) = query
+    if !fts
+        && let Some((name, value)) = query
             .q
             .as_deref()
             .and_then(|value| exact_reference_clause(value, board))
-        {
-            if name == ":exact_seq" {
-                clauses.push("t.seq=:exact_seq".to_owned());
-            } else {
-                clauses.push("t.id=:exact_task_id".to_owned());
-            }
-            params.push((name, value));
+    {
+        if name == ":exact_seq" {
+            clauses.push("t.seq=:exact_seq".to_owned());
+        } else {
+            clauses.push("t.id=:exact_task_id".to_owned());
         }
+        params.push((name, value));
     }
     (clauses.join(" AND "), params)
 }

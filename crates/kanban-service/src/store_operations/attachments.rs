@@ -322,11 +322,11 @@ impl TursoStore {
             }
             _ => StoreError::AttachmentIo(error.to_string()),
         })?;
-        if let Some(parent) = path.parent() {
-            if let Err(error) = sync_directory(parent) {
-                let _ = restore_deleted_file(&trash_path, &path);
-                return Err(error);
-            }
+        if let Some(parent) = path.parent()
+            && let Err(error) = sync_directory(parent)
+        {
+            let _ = restore_deleted_file(&trash_path, &path);
+            return Err(error);
         }
         if let Err(error) = sync_directory(&trash_root) {
             let _ = restore_deleted_file(&trash_path, &path);

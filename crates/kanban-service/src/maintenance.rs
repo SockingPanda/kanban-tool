@@ -1571,7 +1571,7 @@ async fn import_records_into_transaction(
 ) -> Result<u64, StoreError> {
     let mut deferred = Vec::new();
     for record in &snapshot.records {
-        insert_portable_record(&transaction, record, &mut deferred).await?;
+        insert_portable_record(transaction, record, &mut deferred).await?;
     }
     for value in deferred {
         let sql = format!(
@@ -2553,7 +2553,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 fn hex_decode(value: &str) -> Option<Vec<u8>> {
-    if value.len() % 2 != 0 {
+    if !value.len().is_multiple_of(2) {
         return None;
     }
     let mut bytes = Vec::with_capacity(value.len() / 2);

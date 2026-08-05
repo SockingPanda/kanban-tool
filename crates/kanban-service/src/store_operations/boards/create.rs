@@ -53,10 +53,10 @@ impl TursoStore {
                 input.slug
             )));
         }
-        if let Err(error) = duplicate {
-            if !matches!(error, turso::Error::QueryReturnedNoRows) {
-                return Err(StoreError::Turso(error));
-            }
+        if let Err(error) = duplicate
+            && !matches!(error, turso::Error::QueryReturnedNoRows)
+        {
+            return Err(StoreError::Turso(error));
         }
 
         transaction

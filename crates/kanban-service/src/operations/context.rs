@@ -337,7 +337,7 @@ fn merge_candidate(existing: &mut ContextItem, candidate: ContextCandidate) {
     if existing.score.is_none() || candidate.score > existing.score {
         existing.score = candidate.score;
     }
-    if existing.reason == "" {
+    if existing.reason.is_empty() {
         existing.reason = candidate.reason;
     }
 }

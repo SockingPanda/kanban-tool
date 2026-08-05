@@ -62,14 +62,12 @@ fn options(value: Value) -> Result<LabelSuggestionOptions> {
 }
 
 fn actor_aliases(mut value: Value) -> Value {
-    if let Some(object) = value.as_object_mut() {
-        if let Some(actor) = object.get_mut("actor").and_then(Value::as_object_mut) {
-            if actor.get("actor_type").is_none() {
-                if let Some(actor_type) = actor.remove("type") {
-                    actor.insert("actor_type".to_owned(), actor_type);
-                }
-            }
-        }
+    if let Some(object) = value.as_object_mut()
+        && let Some(actor) = object.get_mut("actor").and_then(Value::as_object_mut)
+        && actor.get("actor_type").is_none()
+        && let Some(actor_type) = actor.remove("type")
+    {
+        actor.insert("actor_type".to_owned(), actor_type);
     }
     value
 }

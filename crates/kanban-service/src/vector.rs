@@ -612,7 +612,7 @@ impl TursoStore {
                 .await?,
         )
         .await?;
-        Ok(integer_value(row.get_value(0)?, "projection_jobs.id")?)
+        integer_value(row.get_value(0)?, "projection_jobs.id")
     }
 
     /// 原子 claim ready vector jobs。只 claim vector target，不会触碰 review/task queue。

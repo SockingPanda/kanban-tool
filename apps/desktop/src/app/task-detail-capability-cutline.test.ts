@@ -14,12 +14,18 @@ describe("task detail capability surface", () => {
 
   it("renders neighborhood, labels, label mutation, and edit controls", () => {
     const taskDetailSource = readFileSync(new URL("../features/task-detail/TaskDetail.tsx", import.meta.url), "utf8")
+    const attachmentsSource = readFileSync(new URL("../features/task-detail/TaskAttachmentsPanel.tsx", import.meta.url), "utf8")
     const headerSource = readFileSync(new URL("../features/task-detail/TaskSummaryHeader.tsx", import.meta.url), "utf8")
 
     expect(taskDetailSource).toContain("One-hop map")
     expect(taskDetailSource).toContain("<TaskLabelsPanel")
     expect(taskDetailSource).toContain("api.addTaskLabel")
     expect(taskDetailSource).toContain("api.removeTaskLabel")
+    expect(taskDetailSource).toContain("<TaskAttachmentsPanel")
+    expect(attachmentsSource).toContain("api.listAttachments")
+    expect(attachmentsSource).toContain("api.createAttachment")
+    expect(attachmentsSource).toContain("api.downloadAttachment")
+    expect(attachmentsSource).toContain("api.deleteAttachment")
     expect(headerSource).toContain("onEdit")
     expect(headerSource).toContain("Pencil")
     expect(headerSource).toContain('t("Edit")')

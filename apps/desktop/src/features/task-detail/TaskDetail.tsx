@@ -31,6 +31,7 @@ import { TaskCommentsPanel } from "./TaskCommentsPanel"
 import { TaskDependencyPanel } from "./TaskDependencyPanel"
 import { TaskEditForm } from "./TaskEditForm"
 import { TaskExecutionPlanPanel } from "./TaskExecutionPlanPanel"
+import { TaskAttachmentsPanel } from "./TaskAttachmentsPanel"
 import { applySuggestedTaskLabel, TaskLabelsPanel } from "./TaskLabelsPanel"
 import { TaskMetadataPanel } from "./TaskMetadataPanel"
 import { TaskEventsPanel, TaskRunsPanel } from "./TaskRunsEventsPanel"
@@ -47,7 +48,7 @@ const TaskGraphCanvas = lazy(() => import("@/features/task-map/TaskGraphCanvas")
 type TaskDetailActionOptions = {
   label?: string
   fallbackTaskId?: string | null
-  invalidate?: "task" | "steps" | "board-and-task"
+  invalidate?: "none" | "task" | "steps" | "board-and-task"
 }
 
 export function TaskDetail({
@@ -405,6 +406,14 @@ export function TaskDetail({
                   onRemoveLabel={handleRemoveLabel}
                   onRequestLabelSuggestions={onRequestLabelSuggestions}
                   onApplySuggestedLabel={handleApplySuggestedLabel}
+                />
+              </Section>
+              <Section title={t("Attachments")}>
+                <TaskAttachmentsPanel
+                  api={api}
+                  task={task}
+                  pending={pendingAction === "attachment"}
+                  onAction={onAction}
                 />
               </Section>
             </aside>

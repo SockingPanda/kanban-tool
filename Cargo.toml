@@ -10,19 +10,6 @@ members = [
   "crates/kanban-server",
   "apps/desktop/src-tauri",
 ]
-exclude = [
-  "crates/kanban-context",
-  "crates/kanban-derived-io",
-  "crates/kanban-entity",
-  "crates/kanban-graph",
-  "crates/kanban-graph-oxigraph",
-  "crates/kanban-helper-protocol",
-  "crates/kanban-indexer",
-  "crates/kanban-labels",
-  "crates/kanban-search",
-  "crates/kanban-vector",
-  "crates/kanban-vector-lancedb",
-]
 default-members = [
   "crates/kanban-core",
   "crates/kanban-service",

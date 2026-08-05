@@ -259,10 +259,6 @@ fn check_active_maps(root: &Path) -> xtask::ToolResult<()> {
         "kanban-schema-tool",
         "kanban-sqlite",
         "kanban-local",
-        "kanban-context",
-        "kanban-entity",
-        "kanban-indexer",
-        "kanban-labels",
     ];
     for relative in ACTIVE_MAPS {
         let path = root.join(relative);

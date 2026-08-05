@@ -26,15 +26,6 @@ fix *args:
 clippy:
     just clippy-core
 
-bench-check *args:
-    scripts/cargo-build-lock.sh -- cargo bench --no-run -p kanban-sqlite "$@"
-
-bench-sqlite-service *args:
-    scripts/cargo-build-lock.sh -- cargo bench -p kanban-sqlite --bench sqlite_service "$@"
-
-bench-sqlite-service-compare baseline candidate *benchmarks:
-    scripts/compare-criterion-baseline.py --criterion-dir "$(scripts/cargo-build-lock.sh --print-target-dir)/criterion" --baseline "{{baseline}}" --candidate "{{candidate}}" {{benchmarks}}
-
 clippy-p package:
     scripts/cargo-build-lock.sh -- cargo clippy -p {{package}} --tests -- -D warnings
 
@@ -51,14 +42,8 @@ check-core:
         -p kanban-cli \
         -p kanban-mcp
 
-check-helpers:
-    scripts/cargo-build-lock.sh -- cargo check --tests \
-        -p kanban-vector-lancedb \
-        -p kanban-graph-oxigraph
-
 check-full:
     just check-core
-    just check-helpers
 
 test *args:
     just test-core "$@"
@@ -92,13 +77,6 @@ test-core *args:
         -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso \
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@"; fi
 
-test-helpers *args:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run \
-        -p kanban-vector-lancedb \
-        -p kanban-graph-oxigraph \
-        --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test \
-        -p kanban-vector-lancedb -p kanban-graph-oxigraph "$@"; fi
-
 test-full *args:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --exclude kanban-schema-tool --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude kanban-schema-tool "$@"; fi
 
@@ -107,23 +85,14 @@ clippy-core *args:
         -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso \
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@" -- -D warnings
 
-clippy-helpers *args:
-    scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
-        -p kanban-vector-lancedb -p kanban-graph-oxigraph "$@" -- -D warnings
-
 clippy-full *args:
     just clippy-core "$@"
-    just clippy-helpers "$@"
 
 rust-full:
     just fmt-full
     just check-full
     just test-full
     just clippy-full
-
-projection-release-cohort:
-    just feature-p kanban-cli "tantivy-backend,oxigraph-backend"
-    just feature-p kanban-server "tantivy-backend,oxigraph-backend"
 
 web-test:
     pnpm --dir apps/desktop test
@@ -245,7 +214,6 @@ schema-adoption-witness:
 schema-surface-audit:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog; fi
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog; fi
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-sqlite jsonl_export_discriminators_match_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-sqlite jsonl_export_discriminators_match_exact_contract_catalog; fi
 
 schema-contract:
     just schema-dependency-isolation

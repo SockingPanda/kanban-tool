@@ -150,6 +150,11 @@ enum Command {
         #[command(subcommand)]
         command: commands::hook::HookCommand,
     },
+    /// 管理 host 内 Ollama + Turso vector projection。
+    Vector {
+        #[command(subcommand)]
+        command: commands::vector::VectorCommand,
+    },
     /// Commands not yet migrated to the canonical host fail without touching storage.
     #[command(external_subcommand)]
     FeatureNotAvailable(Vec<String>),
@@ -214,6 +219,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Label { command } => commands::label::run(&ctx, command),
         Command::Search(args) => commands::search::run(&ctx, args),
         Command::Index { command } => commands::index::run(&ctx, command),
+        Command::Vector { command } => commands::vector::run(&ctx, command),
         Command::Config { .. }
         | Command::Init { .. }
         | Command::Hook { .. }
@@ -340,5 +346,17 @@ mod tests {
                 },
             }
         ));
+    }
+
+    #[test]
+    fn parses_vector_status_command() {
+        let cli = Cli::try_parse_from(["kanban", "vector", "status"])
+            .expect("vector status command should parse");
+        let Command::Vector {
+            command: crate::commands::vector::VectorCommand::Status(_),
+        } = cli.command
+        else {
+            panic!("expected vector status command");
+        };
     }
 }

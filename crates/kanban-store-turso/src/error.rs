@@ -28,6 +28,7 @@ pub enum StoreError {
     },
     SchemaMismatch(String),
     BackupRequired(String),
+    LegacyImport(String),
 }
 
 impl Display for StoreError {
@@ -61,6 +62,7 @@ impl Display for StoreError {
             ),
             Self::SchemaMismatch(message) => write!(formatter, "schema 不匹配: {message}"),
             Self::BackupRequired(message) => write!(formatter, "需要备份: {message}"),
+            Self::LegacyImport(message) => write!(formatter, "旧 SQLite 导入失败: {message}"),
         }
     }
 }

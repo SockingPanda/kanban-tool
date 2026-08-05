@@ -5,8 +5,14 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[features]
+default = []
+legacy-sqlite-import = ["dep:rusqlite", "dep:serde_json"]
+
 [dependencies]
 sha2.workspace = true
+rusqlite = { workspace = true, optional = true, features = ["bundled"] }
+serde_json = { workspace = true, optional = true }
 turso = { workspace = true, default-features = false, features = ["fts"] }
 
 [dev-dependencies]

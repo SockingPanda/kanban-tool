@@ -1,3 +1,4 @@
+mod archive;
 mod block;
 mod claim;
 mod create;
@@ -8,5 +9,9 @@ mod plan_not_required;
 mod promote;
 mod reclaim;
 mod release;
+mod reopen;
 mod review;
 mod show;
+mod specify;
+mod unblock;
+mod update;

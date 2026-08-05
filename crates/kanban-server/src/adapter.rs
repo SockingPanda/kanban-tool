@@ -9,11 +9,11 @@ use kanban_application::{
     CommentRecord as ApplicationComment, DependencyEdgeRecord as ApplicationDependencyEdge,
     DependencySnapshotRecord as ApplicationDependencySnapshot,
     ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
-    LabelRecord as ApplicationLabel,
-    RunRecord as ApplicationRun, RunStatus as ApplicationRunStatus,
-    SignalObservationRecord as ApplicationSignalObservation, SignalRecord as ApplicationSignal,
-    SignalRecordResult as ApplicationSignalResult, SignalStatus as ApplicationSignalStatus,
-    StepRecord as ApplicationStep, TaskRecord as ApplicationTask,
+    LabelRecord as ApplicationLabel, RunRecord as ApplicationRun,
+    RunStatus as ApplicationRunStatus, SignalObservationRecord as ApplicationSignalObservation,
+    SignalRecord as ApplicationSignal, SignalRecordResult as ApplicationSignalResult,
+    SignalStatus as ApplicationSignalStatus, StepRecord as ApplicationStep,
+    TaskRecord as ApplicationTask,
 };
 use kanban_core::{KanbanError, Result, TaskStatus};
 use kanban_store_turso::{

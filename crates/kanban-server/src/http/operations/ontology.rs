@@ -283,7 +283,7 @@ pub(crate) async fn delete_semantics(
     let mut input = json!(query);
     input["label_ref"] = Value::String(label_id);
     let Json(value) = run(State(state), "delete_semantics", &board, input).await?;
-    Ok(Json(json!({"data": value})))
+    Ok(Json(json!({"data": {"deleted": value}})))
 }
 
 pub(crate) async fn list_atoms(

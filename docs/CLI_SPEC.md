@@ -4,9 +4,10 @@
 所有命令都只创建 `kanban-client` 并调用 `http://127.0.0.1:8721`；CLI 不打开、初始化或
 fallback 到任何数据库。
 
-当前公开命令只覆盖 board、task、comment、dependency、run 和 event。labels、signals、
-search、graph、vector、projection、maintenance、旧导入/初始化以及旧的直接数据库命令
-不属于本轮 surface。
+当前实现只覆盖 board、task、comment、dependency、run 和 event；这不是最终功能边界。
+labels、signals、ontology、search、graph、vector、context、projection、maintenance、
+init/import 等能力必须按 parity ledger 恢复为 localhost client 命令。旧的直接数据库
+执行路径不会恢复。
 
 ## 1. 全局选项
 
@@ -29,6 +30,7 @@ option 解析。
 `--json` 成功输出为 `{ "data": ... }`；CLI 使用自己的 output DTO，不保证保留 HTTP
 response 的 pagination/cursor `meta`。运行期错误输出为：
 
+<!-- schema-doc-ignore: CLI runtime error 的说明性示例，不绑定某个具体 command output contract -->
 ```json
 {
   "error": {
@@ -104,9 +106,10 @@ kanban task show <TASK_SELECTOR>
 
 `TASK_SELECTOR` 可为全局 `t_...`、`board#seq`、`#seq` 或数字 seq；client 在发 HTTP mutation
 前将 board-local ref 解析为全局 ID。`task show --details` 需要 deferred ontology
-projection，稳定返回 `feature_not_available`。
+projection，当前暂时返回 `feature_not_available`；ontology 切片恢复后必须改为真实查询。
 
-`task create` 的 labels/dependencies 不在 CLI surface；`task list` 不接受 label filter。
+当前 `task create` 尚未接通 labels/dependencies，`task list` 也尚未接通 label filter；
+这些都是 parity ledger 中必须恢复的 CLI surface。
 `--search` 是 `--query` 的隐藏兼容 alias。成功输出分别使用 task create、CLI task-list
 （只含 `data`，不保留 HTTP pagination `meta`）和 task show 的公开 output DTO。
 
@@ -213,6 +216,7 @@ kanban <未列出的旧命令>
 
 `init` 和未知的顶层 clap external subcommand 稳定返回：
 
+<!-- schema-doc-ignore: 迁移期间 feature_not_available 的说明性错误示例 -->
 ```json
 {
   "error": {
@@ -225,6 +229,7 @@ kanban <未列出的旧命令>
 
 该路径不读取配置数据库、不创建文件、不 fallback 到 SQLite。未注册的嵌套子命令（例如
 `kanban task archive`）由 clap 在发起任何 HTTP/DB 操作前以参数错误退出 `2`；它们不使用
-runtime JSON envelope。labels、signals、search、maintenance、projection、graph、vector
-等未知顶层 surface 返回 `feature_not_available`。host 停止或端口不可达时，已迁移命令
-返回 `server_unavailable`（exit code `9`），而不是切换到第二条执行路径。
+runtime JSON envelope。尚未完成的 labels、signals、search、maintenance、projection、
+graph、vector 等顶层 surface 暂时返回 `feature_not_available`；只要该临时路径仍存在，
+对应 parity 项就不能标记完成。host 停止或端口不可达时，已迁移命令返回
+`server_unavailable`（exit code `9`），而不是切换到第二条执行路径。

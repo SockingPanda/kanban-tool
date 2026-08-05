@@ -377,9 +377,12 @@ crates/
 
 apps/
 └── desktop              Tauri shell、React UI、TS HTTP client
+
+xtask/
+└── 私有离线工具          schema、依赖和 AGENTS 检查
 ```
 
-`kanban-schema-tool` 是离线 contract/schema 工具，不进入 host runtime path。旧的 search、graph、vector、helper 和 projection crate 目前位于 workspace exclude 或仅作为源码保留，不是 active canonical dependency。
+根目录 `xtask/` 是 `publish = false` 的私有 workspace leaf，负责离线 contract/schema artifact、catalog 审计与 witness，以及依赖和 AGENTS 检查；不进入 host runtime path。它提供 `schema generate|check|audit|witnesses`、`deps check` 和 `agents check`。开发者入口仍是 `just`；相关 recipe 调用 `xtask`，而 `xtask` 只直接调用必要脚本，不反向调用 `just`。旧的 search、graph、vector、helper 和 projection crate 目前位于 workspace exclude 或仅作为迁移证据保留，不是 active canonical dependency；其业务能力必须迁入目标单 Host crate 与公开 surface，parity ledger 闭合后才允许删除旧目录。
 
 依赖方向固定为：
 
@@ -867,9 +870,10 @@ HTTP run.log 只接受配置的 canonical log root 下、精确 run 文件名的
 所有命令都只创建 `kanban-client` 并调用 `http://127.0.0.1:8721`；CLI 不打开、初始化或
 fallback 到任何数据库。
 
-当前公开命令只覆盖 board、task、comment、dependency、run 和 event。labels、signals、
-search、graph、vector、projection、maintenance、旧导入/初始化以及旧的直接数据库命令
-不属于本轮 surface。
+当前实现只覆盖 board、task、comment、dependency、run 和 event；这不是最终功能边界。
+labels、signals、ontology、search、graph、vector、context、projection、maintenance、
+init/import 等能力必须按 parity ledger 恢复为 localhost client 命令。旧的直接数据库
+执行路径不会恢复。
 
 ## 1. 全局选项
 
@@ -892,6 +896,7 @@ option 解析。
 `--json` 成功输出为 `{ "data": ... }`；CLI 使用自己的 output DTO，不保证保留 HTTP
 response 的 pagination/cursor `meta`。运行期错误输出为：
 
+<!-- schema-doc-ignore: CLI runtime error 的说明性示例，不绑定某个具体 command output contract -->
 ```json
 {
   "error": {
@@ -967,9 +972,10 @@ kanban task show <TASK_SELECTOR>
 
 `TASK_SELECTOR` 可为全局 `t_...`、`board#seq`、`#seq` 或数字 seq；client 在发 HTTP mutation
 前将 board-local ref 解析为全局 ID。`task show --details` 需要 deferred ontology
-projection，稳定返回 `feature_not_available`。
+projection，当前暂时返回 `feature_not_available`；ontology 切片恢复后必须改为真实查询。
 
-`task create` 的 labels/dependencies 不在 CLI surface；`task list` 不接受 label filter。
+当前 `task create` 尚未接通 labels/dependencies，`task list` 也尚未接通 label filter；
+这些都是 parity ledger 中必须恢复的 CLI surface。
 `--search` 是 `--query` 的隐藏兼容 alias。成功输出分别使用 task create、CLI task-list
 （只含 `data`，不保留 HTTP pagination `meta`）和 task show 的公开 output DTO。
 
@@ -1076,6 +1082,7 @@ kanban <未列出的旧命令>
 
 `init` 和未知的顶层 clap external subcommand 稳定返回：
 
+<!-- schema-doc-ignore: 迁移期间 feature_not_available 的说明性错误示例 -->
 ```json
 {
   "error": {
@@ -1088,9 +1095,10 @@ kanban <未列出的旧命令>
 
 该路径不读取配置数据库、不创建文件、不 fallback 到 SQLite。未注册的嵌套子命令（例如
 `kanban task archive`）由 clap 在发起任何 HTTP/DB 操作前以参数错误退出 `2`；它们不使用
-runtime JSON envelope。labels、signals、search、maintenance、projection、graph、vector
-等未知顶层 surface 返回 `feature_not_available`。host 停止或端口不可达时，已迁移命令
-返回 `server_unavailable`（exit code `9`），而不是切换到第二条执行路径。
+runtime JSON envelope。尚未完成的 labels、signals、search、maintenance、projection、
+graph、vector 等顶层 surface 暂时返回 `feature_not_available`；只要该临时路径仍存在，
+对应 parity 项就不能标记完成。host 停止或端口不可达时，已迁移命令返回
+`server_unavailable`（exit code `9`），而不是切换到第二条执行路径。
 
 
 ---
@@ -1105,8 +1113,10 @@ runtime JSON envelope。labels、signals、search、maintenance、projection、g
 默认监听地址为 `http://127.0.0.1:8721`，只接受 loopback 绑定。所有产品路由的基础路径为
 `/api/v1`；健康检查是 `/health`。
 
-本文件只描述当前 single-host 路由。labels、signals、search、graph、vector、projection、
-maintenance、SSE 和旧的直接数据库路径不属于本 API。
+本文件先描述当前已接入的 single-host 路由；它不是最终功能边界。labels、signals、
+ontology、search、graph、vector、context、projection、maintenance 与 SSE 必须按 parity
+ledger 恢复到同一 localhost API，并随每个纵向切片补齐本规范。旧的直接数据库路径不会
+恢复。
 
 ## 1. 通用契约
 
@@ -1119,12 +1129,14 @@ maintenance、SSE 和旧的直接数据库路径不属于本 API。
 - 服务端只绑定 loopback；client 也拒绝非 loopback URL。
 - 正常响应使用 `{ "data": ... }`；事件列表额外包含 `meta`。
 
+<!-- schema-doc-ignore: 通用 data envelope 的说明性最小示例，不代表具体 endpoint contract -->
 ```json
 { "data": {} }
 ```
 
 分页/游标响应使用：
 
+<!-- schema-doc-ignore: 分页 meta 的说明性示例，具体 endpoint 仍以各自 fixture 为准 -->
 ```json
 { "data": [], "meta": { "limit": 100, "offset": 0, "total": 0 } }
 ```
@@ -1148,6 +1160,7 @@ actor；body 未提供 author 时才回退到 header 和 host 默认值。
 
 由 handler/ApplicationService 返回的产品错误使用：
 
+<!-- schema-doc-ignore: 错误 envelope 的说明性示例，code/message 用于解释状态码映射 -->
 ```json
 {
   "error": {
@@ -1230,14 +1243,16 @@ ApplicationService 读取 canonical Turso snapshot，不执行 claim/reclaim 或
   `-assignee`、`scheduled_at`、`-scheduled_at`、`due_at`、`-due_at`、
   `created_at`、`-created_at`、`updated_at`、`-updated_at`（默认 `position`）。
 
-当前 task list 不提供 label filter；传入 `label` 会返回 `feature_not_available`。
+当前 task list 尚未接通 label filter；传入 `label` 会暂时返回
+`feature_not_available`。labels 切片完成后必须恢复该 query contract。
 
 ### `POST /api/v1/boards/{board}/tasks`（mutation）
 
 请求为 `CreateTaskRequest`：`title` 必填；可选 `task_id`、`idempotency_key`、
 `description`、`status`（`triage|todo|scheduled|ready`）、`assignee`、`priority`、
 `scheduled_at`、`due_at`、`max_retries`、`metadata`、`actor`。`labels` 和 `depends_on`
-字段必须为空；这两个 surface 不属于本轮 host。
+字段当前必须为空；queue/labels 切片必须在共享 application transaction 中恢复这两个
+surface。
 
 成功返回 HTTP `201` 与 `CreateTaskResponse { data: ApiTask }`。同一 board 内相同
 `idempotency_key` 与相同 canonical payload 返回已有 task；payload 不同返回
@@ -1247,7 +1262,7 @@ execution-plan、依赖与排期 guard，例如尚未满足 ready 条件时返�
 ### `GET /api/v1/tasks/{task_id}`（只读）
 
 `task_id` 必须是全局 `t_...`。返回 `GetTaskResponse`：`data: ApiTask`，当前不带 ontology
-`meta`。`include=ontology` 和其他 include 值均不在 single-host 路径上。
+`meta`。`include=ontology` 当前尚未接通，ontology 切片完成后必须恢复。
 
 ## 4. Execution plan 与 task state machine
 
@@ -1311,7 +1326,7 @@ application transaction 中完成。
 请求为 `CreateCommentRequest`：`body` 必填；可选 `idempotency_key`、`author`、`kind`
 （wire enum 为 `note|decision|signal`）、`author_type`（`user|agent`）、`agent_type`、
 `metadata`。当前 canonical path 只接受 `note` 与 `decision`；`signal` 稳定返回
-`feature_not_available`。
+`feature_not_available`。signals 切片必须恢复 `signal` 并保持 comment backlink。
 成功返回 HTTP `201` 与 `CreateCommentResponse`（`data: ApiComment`）。idempotency key
 属于 task；相同 key/相同 payload 重放返回已有 comment，不同 payload 返回
 `idempotency_conflict`。
@@ -1385,8 +1400,9 @@ event list 是只读；所有 mutation 通过 ApplicationService 写 canonical e
 ## 10. 停止路径
 
 服务停止后，client 返回 `server_unavailable`，不得 fallback 到嵌入式数据库、旧 SQLite
-路径或另一个 host。未迁移的 labels/signals/search/maintenance 等命令返回
-`feature_not_available`，不会触碰数据库。
+路径或另一个 host。迁移期间尚未接通的 labels/signals/search/maintenance 等命令暂时返回
+`feature_not_available`，不会触碰数据库；只要该临时响应仍存在，对应 parity 项就不能
+标记完成。
 
 
 ---
@@ -1413,7 +1429,7 @@ kanban-store-turso → canonical Turso database
 ```
 
 `kanban-contract` 是公开 DTO、事件 payload、错误 envelope、operation inventory 和
-transport descriptor 的 Rust 权威来源；只有 `kanban-schema-tool` 生成和校验 JSON Schema
+transport descriptor 的 Rust 权威来源；只有根目录私有 `xtask` 生成和校验 JSON Schema
 artifact。`kanban-server`、`kanban-client`、CLI、MCP 和 Desktop 是运行时 producer/consumer，
 不能各自复制一套 DTO 或业务错误解释。
 
@@ -1421,15 +1437,16 @@ artifact。`kanban-server`、`kanban-client`、CLI、MCP 和 Desktop 是运行�
 
 - DTO/schema：字段、类型、必填/可选、未知字段策略和基础值域。
 - `endpoint_catalog()` 与 `surface_operation_catalog()`：机器契约的 source inventory。
-  当前仍含 retired 条目；active HTTP、CLI、MCP 身份必须同时由真实 router/adapter 证明，
-  catalog 本身不创建 route，也不能单独证明 adoption。
+  当前仍含尚未迁入单 Host 路径的历史条目；这些条目是完整功能 parity 义务。HTTP、CLI、
+  MCP 身份必须同时由真实 router/adapter 证明，catalog 本身不创建 route，也不能单独证明
+  adoption。
 - ApplicationService、`kanban-core` 状态机和 `kanban-store-turso`：事务、CAS、board
   isolation、依赖和 run/event 一致性。
 - `docs/API_SPEC.md`、`docs/CLI_SPEC.md`：用户可见的 operation、HTTP/退出码和输出行为。
 
 `schemas/` 中的文件是生成/提交产物，不是新的事实来源。若 source inventory、真实
 server route、adapter 或测试与 committed artifact 冲突，以当前 source 和运行时为准，
-先修正 contract source，再运行 `schema-generate`；不得手工改 generated JSON 来掩盖漂移。
+先修正 contract source，再运行 `just schema-generate`；不得手工改 generated JSON 来掩盖漂移。
 
 ## 2. 契约状态与当前迁移边界
 
@@ -1450,15 +1467,18 @@ helper。
 
 当前 committed `schemas/json-schema/draft-2020-12/operations.json` 与
 `surface-operations.json` 仍可见历史的 SQLite、projection、label、signal、search、
-graph/vector 和维护命令条目。它们是待清理的 source/artifact 遗留，不能解释为当前单 Host
-产品能力，也不能作为新 adapter 的可用 API。当前阶段不新增这些 retired surface 的 DTO、
-fixture、route 或 witness；待 source inventory 清理后再用 `schema-generate`、
-`schema-check` 和相关 audit 重新生成/确认 artifact。在此之前，不能声称
-`schema-audit-closed` 或整个 schema catalog 已完全收口。
+graph/vector 和维护命令条目。它们记录必须恢复的完整产品能力，但不能仅凭 catalog 解释为
+当前单 Host runtime 已经采用。尚未接入真实 adapter 的条目必须保持 `planned` 或
+`generated`，并在对应纵向切片完成 DTO、fixture、route/tool/command 与 exact witness 后
+才能改为 `adopted`。除非某条记录只是重复 wire 表达且业务能力已有明确的新 owner，不得把
+它改成 `excluded` 来缩小功能范围。在所有 parity 项有真实证据前，不能声称
+`just schema-audit-closed` 或整个 schema catalog 已完全收口。
 
 SQLite backend、`kanban-sqlite`/`kanban-local`、Tantivy/LanceDB/Oxigraph projection 以及
-labels、signals、search、graph、vector surface 均不属于本轮 active contract。它们若仍在
-仓库中，只能作为待删除或只读参考源码；不得重新接入单 Host workspace。
+helper subprocess 不属于目标 runtime 架构；旧源码只作为迁移证据，不得重新接入 active
+workspace。它们承载的 labels、signals、ontology、search、graph、vector、context 与维护
+语义必须迁入 `kanban-core`、`kanban-service`、`kanban-protocol` 及各 adapter 后，旧目录
+才允许删除。
 
 ## 3. 当前 active operation 的精确 contract
 
@@ -1513,7 +1533,7 @@ heartbeat、release、review、done、block 的共享 ApplicationService mutatio
 ## 5. 依赖边界与单 Host gate
 
 active workspace 只保留 `kanban-core`、`kanban-application`、`kanban-contract`、
-`kanban-schema-tool`、`kanban-store-turso`、`kanban-client`、`kanban-cli`、`kanban-mcp`、
+根目录私有 `xtask`、`kanban-store-turso`、`kanban-client`、`kanban-cli`、`kanban-mcp`、
 `kanban-server` 和 Desktop Tauri host。数据库依赖方向固定为：
 
 ```text
@@ -1528,10 +1548,10 @@ specific dependency 和测试 fixture，不只检查源码 import。
 
 `scripts/check-single-host-dependencies.py` 是单 Host manifest gate；它拒绝 legacy package
 进入 workspace、projection helper 进入 active workspace，以及任意 adapter 的 forbidden
-dependency alias。schema tooling 另有独立边界：`kanban-schema-tool` 只能作为离线生成/
+dependency alias。schema tooling 另有独立边界：根目录私有 `xtask` 只能作为离线生成/
 校验工具，不能进入产品 runtime graph。`kanban-mcp` 会启用 `kanban-contract/schema`
-来生成 RMCP tool input schema；这不授权它依赖 `kanban-schema-tool`、`jsonschema`
-runtime 或数据库 crate。
+来生成 RMCP tool input schema；这不授权它依赖 `xtask`、`jsonschema` runtime 或数据库
+crate。
 
 ## 6. Artifact 目录与生成规则
 
@@ -1563,6 +1583,29 @@ descriptor、fixture、adoption witness 和 generated artifact；不能用 famil
 
 ## 7. Schema recipes 与验证顺序
 
+根目录 `xtask/` 是 `publish = false` 的私有 workspace leaf。其命令面如下：
+
+```text
+xtask schema generate
+xtask schema check
+xtask schema audit
+xtask schema witnesses
+xtask deps check
+xtask agents check
+```
+
+`schema generate` 生成并随后校验 committed schema tree；`schema check` 只读检查重新生成
+结果、fixture、manifest 和 hash 漂移；`schema audit` 校验 operation/surface catalog，可
+附加 `--require-closed` 要求没有未闭合项；`schema witnesses` 在 audit 后输出 `adopted`
+operation inventory 的 JSON；`deps check` 运行 schema dependency policy、cargo tree 隔离
+和 single-host 依赖检查；`agents check` 检查根 `AGENTS.md`、技能包结构以及 active
+recipe/package 映射。
+
+开发者入口仍由 `justfile` 提供：`just schema-generate`、`just schema-check` 和
+`just schema-audit-closed` 使用 `xtask`，通用的 `just schema ...`、`just deps ...` 和
+`just agents ...` 透传对应命令。`xtask` 不反向调用 `just`；它只直接调用必要的脚本和
+自身的 schema/catalog 逻辑。
+
 当前 `justfile` 仍提供以下 schema 入口：
 
 ```text
@@ -1582,6 +1625,8 @@ just schema-audit-closed
 
 - `schema-generate` 生成 source inventory 对应的 committed tree；`schema-check` 只读检查
   fresh generation、fixture、manifest 和 hash 漂移。
+- `schema-tool` 保留现有 recipe 名称，但实际对私有 `xtask` 执行 check、test 和 clippy，
+  不再调用已迁移的 `kanban-schema-tool`。
 - `schema-docs` 检查 spec bundle、marker、JSON fence 与 fixture 映射；它不把 prose 示例
   变成新的 contract。
 - `schema-surface-audit` 的目标是对照真实 server route 与 CLI Clap leaf command；当前
@@ -1589,10 +1634,14 @@ just schema-audit-closed
   MCP inventory 以实际 tool router 测试为准。
 - `schema-adoption-witness` 先按 `(package, test_target)` 分组列出并执行 exact witness，
   再报告 producer/consumer；缺失、重复、ignored 或未执行均失败。
+- `just schema-contract` 仍是现有 schema-contract composite gate，继续组合
+  `just schema-dependency-isolation`、`just schema-fmt`、`just feature-p kanban-contract schema`、
+  `just schema-tool`、`just schema-check`、`just schema-docs`、`just schema-surface-audit` 和
+  `just schema-adoption-witness`；它没有被 `xtask` 替代，也不会被 `xtask` 反向调用。
 - `schema-dependency-isolation`、`schema-surface-audit`、`schema-adoption-witness` 和
-  `schema-contract` 仍包含旧 catalog/registry closure 的收口责任；在 retired source 与
-  artifact 清理完成前，它们不是本轮 single-host 完成证明，也不得为使其通过而重新接入
-  legacy/projection crate。
+  `schema-contract` 仍包含旧 catalog/registry closure 的收口责任；在 legacy source 与
+  artifact 被重新分类并由真实单 Host surface 接管前，它们不是完整功能完成证明，也不得
+  为使其通过而伪造 witness 或重新接入 legacy/projection crate。
 - `schema-audit-closed` 仅用于 source inventory 已清理且没有 `planned`/`generated`/未闭合
   endpoint obligation 的阶段性收口。本分支当前仍有 legacy artifact，不能据此宣称 closed。
 
@@ -1607,14 +1656,15 @@ just schema-audit-closed
 2. 添加 valid/invalid fixture，并为真实 producer 与 consumer 各提供独立 exact witness。
 3. 在 `kanban-store-turso`、ApplicationService、server、`kanban-client` 和所需 adapter
    中接通同一 operation；adapter 不得直连 store。
-4. 运行受影响 package tests、contract tests、`schema-check`、`schema-surface-audit`、
-   `schema-adoption-witness` 和 `just diff-check`。
+4. 运行受影响 package tests、contract tests、`just schema-check`、
+   `just schema-surface-audit`、`just schema-adoption-witness` 和 `just diff-check`。
 5. 若 operation 实际被取消，状态改为 `excluded` 并写明理由；不得留下看似 adopted 的
    fixture 或 route。
 
-这套闭环只覆盖当前单 Host active path。labels、signals、search、graph、vector、
-projection、自动 server supervision、旧 SQLite importer 和历史兼容 API 另行处理，不在
-本轮 schema catalog 中恢复。
+这套闭环适用于完整单 Host 产品路径。labels、signals、ontology、search、graph、vector、
+context、projection、运维、旧 SQLite importer 与 Desktop 历史视图按 parity ledger
+分片恢复；每一片都必须同步 contract catalog 与真实 surface。旧 wire/CLI 兼容不是目标，
+但不得借此删除业务能力或数据迁移语义。
 
 
 ---
@@ -3032,6 +3082,571 @@ CREATE INDEX IF NOT EXISTS idx_task_events_task_created
 
 pub(crate) const SCHEMA_VERSION: i64 = 1;
 pub(crate) const SCHEMA_NAME: &str = "001_canonical_baseline";
+
+/// schema family 与数字 migration version 有意分离。`version = 1` 但 family 不匹配时，
+/// 即使表名为 `schema_migrations` 也不是 Turso 数据库，不能被自动采用。
+pub(crate) const SCHEMA_FAMILY: &str = "kanban.turso";
+pub(crate) const SCHEMA_LINEAGE: &str = "v1";
+
+/// 对上方精确嵌入的 v1 SQL 计算 FNV-1a。该字面量必须保持稳定，作为完整 substrate
+/// 引入前由原始 Turso store 创建的数据库 adoption witness。
+pub(crate) const CURRENT_V1_SCHEMA_FINGERPRINT: &str = "fnv64:a4d97e8f57776d3a";
+
+pub(crate) const FULL_SCHEMA_VERSION: i64 = 2;
+pub(crate) const FULL_SCHEMA_NAME: &str = "002_turso_full_feature_baseline";
+
+/// 完整 feature migration 新增的表。这里使用 Turso-native additive migration；本 crate
+/// 不执行旧 SQLite v30 的 table-rebuild 脚本。
+pub(crate) const FULL_SCHEMA: &str = r#"
+CREATE TABLE IF NOT EXISTS schema_identity (
+  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+  family TEXT NOT NULL,
+  lineage TEXT NOT NULL,
+  version INTEGER NOT NULL CHECK(version >= 1),
+  fingerprint TEXT NOT NULL,
+  migration_checksum TEXT NOT NULL,
+  upgraded_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS schema_capabilities (
+  capability TEXT PRIMARY KEY,
+  available INTEGER NOT NULL CHECK(available IN (0, 1)),
+  detail TEXT NOT NULL,
+  checked_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_attachments (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'a_%'),
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  task_id TEXT NOT NULL,
+  filename TEXT NOT NULL CHECK(length(trim(filename)) > 0),
+  rel_path TEXT NOT NULL CHECK(length(trim(rel_path)) > 0),
+  content_type TEXT,
+  size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0),
+  sha256 TEXT,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(id, board_id),
+  FOREIGN KEY(task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS labels (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'l_%'),
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+  color TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(board_id, name),
+  UNIQUE(id, board_id)
+);
+
+CREATE TABLE IF NOT EXISTS task_labels (
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  task_id TEXT NOT NULL,
+  label_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(task_id, label_id),
+  FOREIGN KEY(task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE,
+  FOREIGN KEY(label_id, board_id) REFERENCES labels(id, board_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value_json TEXT NOT NULL CHECK(json_valid(value_json)),
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS task_subtasks (
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  parent_task_id TEXT NOT NULL,
+  child_task_id TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  required INTEGER NOT NULL DEFAULT 1 CHECK(required IN (0, 1)),
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(parent_task_id, child_task_id),
+  CHECK(parent_task_id != child_task_id),
+  FOREIGN KEY(parent_task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE,
+  FOREIGN KEY(child_task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS entities (
+  uri TEXT PRIMARY KEY CHECK(uri LIKE 'kb://%'),
+  kind TEXT NOT NULL,
+  source_table TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  board_id TEXT REFERENCES boards(id) ON DELETE CASCADE,
+  task_id TEXT,
+  title TEXT,
+  summary TEXT,
+  content_hash TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  archived_at INTEGER,
+  UNIQUE(source_table, source_id),
+  FOREIGN KEY(task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS relation_predicates (
+  name TEXT PRIMARY KEY,
+  domain_kind TEXT,
+  range_kind TEXT,
+  cardinality TEXT NOT NULL DEFAULT 'many',
+  authoritative_store TEXT NOT NULL DEFAULT 'turso',
+  description TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS entity_relations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject_uri TEXT NOT NULL REFERENCES entities(uri) ON DELETE CASCADE,
+  predicate TEXT NOT NULL REFERENCES relation_predicates(name) ON DELETE RESTRICT,
+  object_uri TEXT NOT NULL REFERENCES entities(uri) ON DELETE CASCADE,
+  graph_uri TEXT NOT NULL CHECK(graph_uri LIKE 'kb://%'),
+  board_id TEXT REFERENCES boards(id) ON DELETE CASCADE,
+  authoritative_store TEXT NOT NULL DEFAULT 'turso',
+  source_table TEXT,
+  source_id TEXT,
+  source_event_id INTEGER,
+  metadata_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(metadata_json)),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(subject_uri, predicate, object_uri, graph_uri)
+);
+
+CREATE TABLE IF NOT EXISTS index_outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_event_id INTEGER,
+  target TEXT NOT NULL CHECK(target IN ('fts', 'vector', 'relations', 'all')),
+  projection_store TEXT,
+  entity_uri TEXT NOT NULL CHECK(entity_uri LIKE 'kb://%'),
+  board_id TEXT REFERENCES boards(id) ON DELETE CASCADE,
+  action TEXT NOT NULL CHECK(action IN ('upsert', 'delete', 'rebuild')),
+  payload_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(payload_json)),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'done', 'failed')),
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+  claim_owner TEXT,
+  claim_token TEXT,
+  claim_expires_at INTEGER,
+  fence_epoch INTEGER NOT NULL DEFAULT 0 CHECK(fence_epoch >= 0),
+  generation TEXT,
+  next_attempt_at INTEGER,
+  last_error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  CHECK(projection_store IS NULL OR target IN ('fts', 'vector', 'relations')),
+  CHECK((status = 'running') = (claim_owner IS NOT NULL AND claim_token IS NOT NULL AND claim_expires_at IS NOT NULL))
+);
+
+CREATE TABLE IF NOT EXISTS derived_store_state (
+  store_name TEXT PRIMARY KEY,
+  schema_version INTEGER NOT NULL,
+  last_event_id INTEGER NOT NULL DEFAULT 0 CHECK(last_event_id >= 0),
+  dirty INTEGER NOT NULL DEFAULT 1 CHECK(dirty IN (0, 1)),
+  last_rebuild_at INTEGER,
+  last_sync_at INTEGER,
+  last_error TEXT,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS label_semantics (
+  label_id TEXT PRIMARY KEY,
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  applies_when TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(applies_when) AND json_type(applies_when) = 'array'),
+  excludes_when TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(excludes_when) AND json_type(excludes_when) = 'array'),
+  positive_examples TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(positive_examples) AND json_type(positive_examples) = 'array'),
+  negative_examples TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(negative_examples) AND json_type(negative_examples) = 'array'),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY(label_id, board_id) REFERENCES labels(id, board_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS label_atoms (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'la_%'),
+  label_id TEXT NOT NULL,
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  polarity TEXT NOT NULL CHECK(polarity IN ('positive', 'negative')),
+  kind TEXT NOT NULL CHECK(kind IN ('name', 'description', 'applies_when', 'positive_example', 'excludes_when', 'negative_example')),
+  text TEXT NOT NULL CHECK(length(trim(text)) > 0),
+  ordinal INTEGER NOT NULL DEFAULT 0 CHECK(ordinal >= 0),
+  content_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(label_id, polarity, kind, ordinal),
+  UNIQUE(label_id, content_hash),
+  FOREIGN KEY(label_id, board_id) REFERENCES labels(id, board_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS label_atom_index_boards (
+  store_name TEXT NOT NULL,
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  dirty INTEGER NOT NULL DEFAULT 1 CHECK(dirty IN (0, 1)),
+  last_rebuild_at INTEGER,
+  last_error TEXT,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(store_name, board_id)
+);
+
+CREATE TABLE IF NOT EXISTS label_semantic_proposals (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'lp_%'),
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  task_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN ('proposed', 'accepted', 'rejected')),
+  name TEXT NOT NULL,
+  applies_when TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(applies_when)),
+  excludes_when TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(excludes_when)),
+  positive_examples TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(positive_examples)),
+  negative_examples TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(negative_examples)),
+  diagnostics TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(diagnostics)),
+  heuristic_coverage REAL CHECK(heuristic_coverage IS NULL OR heuristic_coverage BETWEEN 0 AND 1),
+  heuristic_residual REAL CHECK(heuristic_residual IS NULL OR heuristic_residual BETWEEN 0 AND 1),
+  heuristic_coverage_cosine REAL CHECK(heuristic_coverage_cosine IS NULL OR heuristic_coverage_cosine BETWEEN 0 AND 1),
+  top1_existing_label_id TEXT,
+  resolved_label_id TEXT,
+  created_at INTEGER NOT NULL,
+  decided_at INTEGER,
+  FOREIGN KEY(task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE CASCADE,
+  FOREIGN KEY(resolved_label_id, board_id) REFERENCES labels(id, board_id) ON DELETE SET NULL,
+  UNIQUE(id, board_id)
+);
+
+CREATE TABLE IF NOT EXISTS label_ontology_observations (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'lor_%'),
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  task_id TEXT,
+  task_snapshot TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(task_snapshot)),
+  agent_candidates TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(agent_candidates)),
+  suggestion_snapshot TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(suggestion_snapshot)),
+  final_decision TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(final_decision)),
+  diagnostics TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(diagnostics)),
+  suggest_needs_new_label INTEGER NOT NULL DEFAULT 0 CHECK(suggest_needs_new_label IN (0, 1)),
+  suggest_degraded INTEGER NOT NULL DEFAULT 0 CHECK(suggest_degraded IN (0, 1)),
+  capture_fingerprint TEXT NOT NULL,
+  suggest_input_hash TEXT,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(board_id, capture_fingerprint),
+  UNIQUE(id, board_id),
+  FOREIGN KEY(task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS label_ontology_signals (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'los_%'),
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  observation_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('false_negative', 'false_positive', 'vocabulary_gap', 'name_issue', 'boundary_issue', 'structure_issue')),
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'confirmed', 'resolved', 'rejected', 'superseded')),
+  target_label_id TEXT,
+  related_labels TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(related_labels)),
+  candidate_atom_polarity TEXT,
+  candidate_atom_kind TEXT,
+  candidate_atom_text TEXT,
+  proposal TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(proposal)),
+  agent_selected INTEGER NOT NULL DEFAULT 0 CHECK(agent_selected IN (0, 1)),
+  final_selected INTEGER NOT NULL DEFAULT 0 CHECK(final_selected IN (0, 1)),
+  rationale TEXT,
+  confidence REAL CHECK(confidence IS NULL OR confidence BETWEEN 0 AND 1),
+  signal_key TEXT NOT NULL,
+  superseded_by_signal_id TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(board_id, signal_key),
+  UNIQUE(id, board_id),
+  FOREIGN KEY(observation_id, board_id) REFERENCES label_ontology_observations(id, board_id) ON DELETE CASCADE,
+  FOREIGN KEY(target_label_id, board_id) REFERENCES labels(id, board_id) ON DELETE SET NULL,
+  FOREIGN KEY(superseded_by_signal_id, board_id) REFERENCES label_ontology_signals(id, board_id) ON DELETE SET NULL,
+  CHECK(id != superseded_by_signal_id)
+);
+
+CREATE TABLE IF NOT EXISTS label_ontology_actions (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'loa_%'),
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  parent_action_id TEXT,
+  action_type TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  target_label_id TEXT,
+  result_label_id TEXT,
+  result_atom_id TEXT,
+  result_proposal_id TEXT,
+  before_hash TEXT,
+  after_hash TEXT,
+  change TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(change)),
+  validation TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(validation)),
+  validation_status TEXT NOT NULL DEFAULT 'none' CHECK(validation_status IN ('none', 'required', 'unsupported', 'passed', 'failed')),
+  validation_requirement TEXT NOT NULL DEFAULT 'none' CHECK(validation_requirement IN ('none', 'required', 'unsupported')),
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY(parent_action_id, board_id) REFERENCES label_ontology_actions(id, board_id) ON DELETE SET NULL,
+  FOREIGN KEY(target_label_id, board_id) REFERENCES labels(id, board_id) ON DELETE SET NULL,
+  FOREIGN KEY(result_label_id, board_id) REFERENCES labels(id, board_id) ON DELETE SET NULL,
+  FOREIGN KEY(result_proposal_id, board_id) REFERENCES label_semantic_proposals(id, board_id) ON DELETE SET NULL,
+  UNIQUE(id, board_id)
+);
+
+CREATE TABLE IF NOT EXISTS label_ontology_action_signals (
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  action_id TEXT NOT NULL,
+  signal_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(action_id, signal_id),
+  FOREIGN KEY(action_id, board_id) REFERENCES label_ontology_actions(id, board_id) ON DELETE CASCADE,
+  FOREIGN KEY(signal_id, board_id) REFERENCES label_ontology_signals(id, board_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS label_ontology_action_atom_effects (
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  action_id TEXT NOT NULL,
+  label_id TEXT,
+  atom_id TEXT,
+  atom_polarity TEXT,
+  atom_kind TEXT,
+  atom_text TEXT,
+  atom_hash TEXT NOT NULL,
+  effect TEXT NOT NULL CHECK(effect IN ('added', 'removed')),
+  created_at INTEGER NOT NULL,
+  UNIQUE(action_id, atom_hash, effect),
+  FOREIGN KEY(action_id, board_id) REFERENCES label_ontology_actions(id, board_id) ON DELETE CASCADE,
+  FOREIGN KEY(label_id, board_id) REFERENCES labels(id, board_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS signal_observations (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'obs_%'),
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  task_id TEXT,
+  run_id TEXT,
+  comment_id TEXT,
+  task_ref_snapshot TEXT,
+  actor TEXT NOT NULL CHECK(length(trim(actor)) > 0),
+  agent_type TEXT,
+  source TEXT,
+  evidence TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(evidence) AND json_type(evidence) = 'object'),
+  created_at INTEGER NOT NULL,
+  UNIQUE(id, board_id),
+  FOREIGN KEY(task_id, board_id) REFERENCES tasks(id, board_id) ON DELETE SET NULL,
+  FOREIGN KEY(run_id, board_id) REFERENCES task_runs(id, board_id) ON DELETE SET NULL,
+  FOREIGN KEY(comment_id, board_id) REFERENCES task_comments(id, board_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS signals (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'sig_%'),
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  observation_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(length(trim(kind)) > 0),
+  title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+  summary TEXT NOT NULL CHECK(length(trim(summary)) > 0),
+  severity TEXT NOT NULL DEFAULT 'info',
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'confirmed', 'rejected', 'superseded', 'resolved')),
+  dedupe_key TEXT,
+  superseded_by_signal_id TEXT,
+  reviewed_by TEXT,
+  reviewed_at INTEGER,
+  review_reason TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(id, board_id),
+  UNIQUE(observation_id, board_id),
+  FOREIGN KEY(observation_id, board_id) REFERENCES signal_observations(id, board_id) ON DELETE CASCADE,
+  FOREIGN KEY(superseded_by_signal_id, board_id) REFERENCES signals(id, board_id) ON DELETE SET NULL,
+  CHECK(id != superseded_by_signal_id)
+);
+
+CREATE TABLE IF NOT EXISTS projection_database (
+  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+  database_instance_id TEXT NOT NULL UNIQUE CHECK(database_instance_id LIKE 'db_%'),
+  protocol_version INTEGER NOT NULL DEFAULT 2,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS projection_store_state (
+  store_name TEXT PRIMARY KEY,
+  database_instance_id TEXT NOT NULL REFERENCES projection_database(database_instance_id) ON DELETE CASCADE,
+  protocol_version INTEGER NOT NULL DEFAULT 2,
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  control_plane TEXT NOT NULL DEFAULT 'v2' CHECK(control_plane = 'v2'),
+  lifecycle_status TEXT NOT NULL DEFAULT 'bootstrap_required' CHECK(lifecycle_status IN ('bootstrap_required', 'idle', 'rebuilding', 'ready', 'error')),
+  active_generation TEXT,
+  active_fingerprint TEXT,
+  previous_generation TEXT,
+  previous_fingerprint TEXT,
+  building_generation TEXT,
+  building_fingerprint TEXT,
+  building_phase TEXT,
+  snapshot_cursor INTEGER NOT NULL DEFAULT 0 CHECK(snapshot_cursor >= 0),
+  checkpoint_cursor INTEGER NOT NULL DEFAULT 0 CHECK(checkpoint_cursor >= 0),
+  lease_owner TEXT,
+  lease_token TEXT,
+  lease_expires_at INTEGER,
+  fence_epoch INTEGER NOT NULL DEFAULT 0 CHECK(fence_epoch >= 0),
+  provider TEXT,
+  provider_fingerprint TEXT,
+  corpus_schema TEXT,
+  corpus_fingerprint TEXT,
+  embedding_model TEXT,
+  embedding_dimensions INTEGER,
+  last_success_at INTEGER,
+  last_error TEXT,
+  updated_at INTEGER NOT NULL,
+  CHECK(embedding_dimensions IS NULL OR embedding_dimensions > 0)
+);
+
+CREATE TABLE IF NOT EXISTS projection_deliveries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  outbox_id INTEGER NOT NULL REFERENCES index_outbox(id) ON DELETE RESTRICT,
+  store_name TEXT NOT NULL REFERENCES projection_store_state(store_name) ON DELETE RESTRICT,
+  board_id TEXT REFERENCES boards(id) ON DELETE RESTRICT,
+  source_event_id INTEGER,
+  cursor INTEGER NOT NULL CHECK(cursor > 0),
+  action TEXT NOT NULL,
+  entity_uri TEXT NOT NULL CHECK(entity_uri LIKE 'kb://%'),
+  payload_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(payload_json)),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'done', 'failed')),
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+  next_attempt_at INTEGER,
+  claim_owner TEXT,
+  claim_token TEXT,
+  lease_expires_at INTEGER,
+  fence_epoch INTEGER,
+  generation TEXT,
+  published_generation TEXT,
+  last_error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(outbox_id, store_name),
+  UNIQUE(store_name, cursor),
+  CHECK((status = 'running') = (claim_owner IS NOT NULL AND claim_token IS NOT NULL AND lease_expires_at IS NOT NULL))
+);
+
+CREATE TABLE IF NOT EXISTS projection_maintenance_owner (
+  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+  owner TEXT,
+  lease_token TEXT,
+  mode TEXT,
+  lease_expires_at INTEGER,
+  fence_epoch INTEGER NOT NULL DEFAULT 0 CHECK(fence_epoch >= 0),
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS retrieval_documents (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'doc_%'),
+  board_id TEXT REFERENCES boards(id) ON DELETE CASCADE,
+  entity_uri TEXT REFERENCES entities(uri) ON DELETE CASCADE,
+  source_kind TEXT NOT NULL,
+  content TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(board_id, entity_uri, source_kind)
+);
+
+CREATE TABLE IF NOT EXISTS retrieval_vectors (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'vec_%'),
+  board_id TEXT REFERENCES boards(id) ON DELETE CASCADE,
+  entity_uri TEXT REFERENCES entities(uri) ON DELETE CASCADE,
+  document_id TEXT REFERENCES retrieval_documents(id) ON DELETE CASCADE,
+  embedding BLOB NOT NULL,
+  dimensions INTEGER NOT NULL CHECK(dimensions > 0),
+  embedding_model TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(document_id, embedding_model)
+);
+
+CREATE TABLE IF NOT EXISTS import_journal (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'ij_%'),
+  source_kind TEXT NOT NULL CHECK(source_kind IN ('jsonl', 'sqlite_v30')),
+  source_path TEXT NOT NULL,
+  snapshot_fingerprint TEXT NOT NULL,
+  phase TEXT NOT NULL CHECK(phase IN ('prepared', 'staged', 'validated', 'published', 'completed', 'failed')),
+  staged_database_path TEXT,
+  staged_attachment_root TEXT,
+  canonical_attachment_root TEXT,
+  manifest_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(manifest_json)),
+  previous_identity_json TEXT CHECK(previous_identity_json IS NULL OR json_valid(previous_identity_json)),
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS attachment_staging (
+  id TEXT PRIMARY KEY CHECK(id LIKE 'as_%'),
+  journal_id TEXT NOT NULL REFERENCES import_journal(id) ON DELETE CASCADE,
+  attachment_id TEXT NOT NULL,
+  source_rel_path TEXT NOT NULL,
+  staged_rel_path TEXT NOT NULL,
+  expected_sha256 TEXT,
+  expected_size_bytes INTEGER NOT NULL CHECK(expected_size_bytes >= 0),
+  observed_sha256 TEXT,
+  observed_size_bytes INTEGER,
+  phase TEXT NOT NULL DEFAULT 'planned' CHECK(phase IN ('planned', 'copied', 'verified', 'published', 'failed')),
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(journal_id, attachment_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_attachments_task_created ON task_attachments(task_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_task_labels_label ON task_labels(label_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_subtasks_parent_position ON task_subtasks(parent_task_id, position);
+CREATE INDEX IF NOT EXISTS idx_entities_board_kind ON entities(board_id, kind, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entities_task ON entities(task_id);
+CREATE INDEX IF NOT EXISTS idx_entity_relations_subject ON entity_relations(subject_uri);
+CREATE INDEX IF NOT EXISTS idx_entity_relations_object ON entity_relations(object_uri);
+CREATE INDEX IF NOT EXISTS idx_index_outbox_pending ON index_outbox(status, updated_at ASC);
+CREATE INDEX IF NOT EXISTS idx_index_outbox_board ON index_outbox(board_id, status, updated_at ASC);
+CREATE INDEX IF NOT EXISTS idx_index_outbox_ready ON index_outbox(status, next_attempt_at, updated_at ASC);
+CREATE INDEX IF NOT EXISTS idx_index_outbox_claim ON index_outbox(claim_owner, claim_expires_at);
+CREATE INDEX IF NOT EXISTS idx_derived_store_dirty ON derived_store_state(dirty, updated_at ASC);
+CREATE INDEX IF NOT EXISTS idx_label_atoms_board_kind ON label_atoms(board_id, polarity, kind, ordinal);
+CREATE INDEX IF NOT EXISTS idx_label_proposals_board_status ON label_semantic_proposals(board_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ontology_observation_task ON label_ontology_observations(task_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ontology_signal_status ON label_ontology_signals(board_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ontology_action_created ON label_ontology_actions(board_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_signal_observation_created ON signal_observations(board_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_signals_status ON signals(board_id, status, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_dedupe_key ON signals(board_id, dedupe_key) WHERE dedupe_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_projection_delivery_ready ON projection_deliveries(store_name, status, next_attempt_at, cursor);
+CREATE INDEX IF NOT EXISTS idx_projection_delivery_claim ON projection_deliveries(claim_owner, lease_expires_at);
+CREATE INDEX IF NOT EXISTS idx_projection_delivery_board ON projection_deliveries(board_id, cursor);
+CREATE INDEX IF NOT EXISTS idx_retrieval_documents_board ON retrieval_documents(board_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_retrieval_vectors_board ON retrieval_vectors(board_id, embedding_model);
+CREATE INDEX IF NOT EXISTS idx_import_journal_phase ON import_journal(phase, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_import_journal_fingerprint ON import_journal(source_kind, snapshot_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_attachment_staging_phase ON attachment_staging(journal_id, phase);
+CREATE TRIGGER IF NOT EXISTS task_events_board_guard_insert
+BEFORE INSERT ON task_events
+WHEN NEW.task_id IS NOT NULL AND NOT EXISTS (
+  SELECT 1 FROM tasks WHERE id = NEW.task_id AND board_id = NEW.board_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'task_events task board mismatch');
+END;
+
+CREATE TRIGGER IF NOT EXISTS task_events_board_guard_update
+BEFORE UPDATE OF board_id, task_id, run_id ON task_events
+WHEN (NEW.task_id IS NOT NULL AND NOT EXISTS (
+  SELECT 1 FROM tasks WHERE id = NEW.task_id AND board_id = NEW.board_id
+)) OR (NEW.run_id IS NOT NULL AND NOT EXISTS (
+  SELECT 1 FROM task_runs WHERE id = NEW.run_id AND board_id = NEW.board_id
+))
+BEGIN
+  SELECT RAISE(ABORT, 'task_events reference board mismatch');
+END;
+
+CREATE TRIGGER IF NOT EXISTS import_attachment_path_guard
+BEFORE INSERT ON task_attachments
+WHEN instr(rel_path, '..') > 0 OR substr(rel_path, 1, 1) = '/'
+BEGIN
+  SELECT RAISE(ABORT, 'attachment rel_path escapes database directory');
+END;
+"#;
+
+/// 可选 FTS index。它独立于 `FULL_SCHEMA`，因为当前 workspace 以
+/// `default-features = false` 编译 `turso`；缺少 `fts` feature 时记录 capability 降级，
+/// 不让 queue 初始化失败。
+pub(crate) const FTS_SCHEMA: &str = "CREATE INDEX IF NOT EXISTS idx_retrieval_documents_fts ON retrieval_documents USING fts (content);";
 
 pub(crate) const DEFAULT_COLUMNS: [(&str, &str, i64, bool); 9] = [
     ("triage", "Triage", 10, false),

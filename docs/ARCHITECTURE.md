@@ -45,9 +45,12 @@ crates/
 
 apps/
 └── desktop              Tauri shell、React UI、TS HTTP client
+
+xtask/
+└── 私有离线工具          schema、依赖和 AGENTS 检查
 ```
 
-`kanban-schema-tool` 是离线 contract/schema 工具，不进入 host runtime path。旧的 search、graph、vector、helper 和 projection crate 目前位于 workspace exclude 或仅作为源码保留，不是 active canonical dependency。
+根目录 `xtask/` 是 `publish = false` 的私有 workspace leaf，负责离线 contract/schema artifact、catalog 审计与 witness，以及依赖和 AGENTS 检查；不进入 host runtime path。它提供 `schema generate|check|audit|witnesses`、`deps check` 和 `agents check`。开发者入口仍是 `just`；相关 recipe 调用 `xtask`，而 `xtask` 只直接调用必要脚本，不反向调用 `just`。旧的 search、graph、vector、helper 和 projection crate 目前位于 workspace exclude 或仅作为迁移证据保留，不是 active canonical dependency；其业务能力必须迁入目标单 Host crate 与公开 surface，parity ledger 闭合后才允许删除旧目录。
 
 依赖方向固定为：
 

@@ -18,7 +18,7 @@ kanban-store-turso → canonical Turso database
 ```
 
 `kanban-contract` 是公开 DTO、事件 payload、错误 envelope、operation inventory 和
-transport descriptor 的 Rust 权威来源；只有 `kanban-schema-tool` 生成和校验 JSON Schema
+transport descriptor 的 Rust 权威来源；只有根目录私有 `xtask` 生成和校验 JSON Schema
 artifact。`kanban-server`、`kanban-client`、CLI、MCP 和 Desktop 是运行时 producer/consumer，
 不能各自复制一套 DTO 或业务错误解释。
 
@@ -26,15 +26,16 @@ artifact。`kanban-server`、`kanban-client`、CLI、MCP 和 Desktop 是运行�
 
 - DTO/schema：字段、类型、必填/可选、未知字段策略和基础值域。
 - `endpoint_catalog()` 与 `surface_operation_catalog()`：机器契约的 source inventory。
-  当前仍含 retired 条目；active HTTP、CLI、MCP 身份必须同时由真实 router/adapter 证明，
-  catalog 本身不创建 route，也不能单独证明 adoption。
+  当前仍含尚未迁入单 Host 路径的历史条目；这些条目是完整功能 parity 义务。HTTP、CLI、
+  MCP 身份必须同时由真实 router/adapter 证明，catalog 本身不创建 route，也不能单独证明
+  adoption。
 - ApplicationService、`kanban-core` 状态机和 `kanban-store-turso`：事务、CAS、board
   isolation、依赖和 run/event 一致性。
 - `docs/API_SPEC.md`、`docs/CLI_SPEC.md`：用户可见的 operation、HTTP/退出码和输出行为。
 
 `schemas/` 中的文件是生成/提交产物，不是新的事实来源。若 source inventory、真实
 server route、adapter 或测试与 committed artifact 冲突，以当前 source 和运行时为准，
-先修正 contract source，再运行 `schema-generate`；不得手工改 generated JSON 来掩盖漂移。
+先修正 contract source，再运行 `just schema-generate`；不得手工改 generated JSON 来掩盖漂移。
 
 ## 2. 契约状态与当前迁移边界
 
@@ -55,15 +56,18 @@ helper。
 
 当前 committed `schemas/json-schema/draft-2020-12/operations.json` 与
 `surface-operations.json` 仍可见历史的 SQLite、projection、label、signal、search、
-graph/vector 和维护命令条目。它们是待清理的 source/artifact 遗留，不能解释为当前单 Host
-产品能力，也不能作为新 adapter 的可用 API。当前阶段不新增这些 retired surface 的 DTO、
-fixture、route 或 witness；待 source inventory 清理后再用 `schema-generate`、
-`schema-check` 和相关 audit 重新生成/确认 artifact。在此之前，不能声称
-`schema-audit-closed` 或整个 schema catalog 已完全收口。
+graph/vector 和维护命令条目。它们记录必须恢复的完整产品能力，但不能仅凭 catalog 解释为
+当前单 Host runtime 已经采用。尚未接入真实 adapter 的条目必须保持 `planned` 或
+`generated`，并在对应纵向切片完成 DTO、fixture、route/tool/command 与 exact witness 后
+才能改为 `adopted`。除非某条记录只是重复 wire 表达且业务能力已有明确的新 owner，不得把
+它改成 `excluded` 来缩小功能范围。在所有 parity 项有真实证据前，不能声称
+`just schema-audit-closed` 或整个 schema catalog 已完全收口。
 
 SQLite backend、`kanban-sqlite`/`kanban-local`、Tantivy/LanceDB/Oxigraph projection 以及
-labels、signals、search、graph、vector surface 均不属于本轮 active contract。它们若仍在
-仓库中，只能作为待删除或只读参考源码；不得重新接入单 Host workspace。
+helper subprocess 不属于目标 runtime 架构；旧源码只作为迁移证据，不得重新接入 active
+workspace。它们承载的 labels、signals、ontology、search、graph、vector、context 与维护
+语义必须迁入 `kanban-core`、`kanban-service`、`kanban-protocol` 及各 adapter 后，旧目录
+才允许删除。
 
 ## 3. 当前 active operation 的精确 contract
 
@@ -118,7 +122,7 @@ heartbeat、release、review、done、block 的共享 ApplicationService mutatio
 ## 5. 依赖边界与单 Host gate
 
 active workspace 只保留 `kanban-core`、`kanban-application`、`kanban-contract`、
-`kanban-schema-tool`、`kanban-store-turso`、`kanban-client`、`kanban-cli`、`kanban-mcp`、
+根目录私有 `xtask`、`kanban-store-turso`、`kanban-client`、`kanban-cli`、`kanban-mcp`、
 `kanban-server` 和 Desktop Tauri host。数据库依赖方向固定为：
 
 ```text
@@ -133,10 +137,10 @@ specific dependency 和测试 fixture，不只检查源码 import。
 
 `scripts/check-single-host-dependencies.py` 是单 Host manifest gate；它拒绝 legacy package
 进入 workspace、projection helper 进入 active workspace，以及任意 adapter 的 forbidden
-dependency alias。schema tooling 另有独立边界：`kanban-schema-tool` 只能作为离线生成/
+dependency alias。schema tooling 另有独立边界：根目录私有 `xtask` 只能作为离线生成/
 校验工具，不能进入产品 runtime graph。`kanban-mcp` 会启用 `kanban-contract/schema`
-来生成 RMCP tool input schema；这不授权它依赖 `kanban-schema-tool`、`jsonschema`
-runtime 或数据库 crate。
+来生成 RMCP tool input schema；这不授权它依赖 `xtask`、`jsonschema` runtime 或数据库
+crate。
 
 ## 6. Artifact 目录与生成规则
 
@@ -168,6 +172,29 @@ descriptor、fixture、adoption witness 和 generated artifact；不能用 famil
 
 ## 7. Schema recipes 与验证顺序
 
+根目录 `xtask/` 是 `publish = false` 的私有 workspace leaf。其命令面如下：
+
+```text
+xtask schema generate
+xtask schema check
+xtask schema audit
+xtask schema witnesses
+xtask deps check
+xtask agents check
+```
+
+`schema generate` 生成并随后校验 committed schema tree；`schema check` 只读检查重新生成
+结果、fixture、manifest 和 hash 漂移；`schema audit` 校验 operation/surface catalog，可
+附加 `--require-closed` 要求没有未闭合项；`schema witnesses` 在 audit 后输出 `adopted`
+operation inventory 的 JSON；`deps check` 运行 schema dependency policy、cargo tree 隔离
+和 single-host 依赖检查；`agents check` 检查根 `AGENTS.md`、技能包结构以及 active
+recipe/package 映射。
+
+开发者入口仍由 `justfile` 提供：`just schema-generate`、`just schema-check` 和
+`just schema-audit-closed` 使用 `xtask`，通用的 `just schema ...`、`just deps ...` 和
+`just agents ...` 透传对应命令。`xtask` 不反向调用 `just`；它只直接调用必要的脚本和
+自身的 schema/catalog 逻辑。
+
 当前 `justfile` 仍提供以下 schema 入口：
 
 ```text
@@ -187,6 +214,8 @@ just schema-audit-closed
 
 - `schema-generate` 生成 source inventory 对应的 committed tree；`schema-check` 只读检查
   fresh generation、fixture、manifest 和 hash 漂移。
+- `schema-tool` 保留现有 recipe 名称，但实际对私有 `xtask` 执行 check、test 和 clippy，
+  不再调用已迁移的 `kanban-schema-tool`。
 - `schema-docs` 检查 spec bundle、marker、JSON fence 与 fixture 映射；它不把 prose 示例
   变成新的 contract。
 - `schema-surface-audit` 的目标是对照真实 server route 与 CLI Clap leaf command；当前
@@ -194,10 +223,14 @@ just schema-audit-closed
   MCP inventory 以实际 tool router 测试为准。
 - `schema-adoption-witness` 先按 `(package, test_target)` 分组列出并执行 exact witness，
   再报告 producer/consumer；缺失、重复、ignored 或未执行均失败。
+- `just schema-contract` 仍是现有 schema-contract composite gate，继续组合
+  `just schema-dependency-isolation`、`just schema-fmt`、`just feature-p kanban-contract schema`、
+  `just schema-tool`、`just schema-check`、`just schema-docs`、`just schema-surface-audit` 和
+  `just schema-adoption-witness`；它没有被 `xtask` 替代，也不会被 `xtask` 反向调用。
 - `schema-dependency-isolation`、`schema-surface-audit`、`schema-adoption-witness` 和
-  `schema-contract` 仍包含旧 catalog/registry closure 的收口责任；在 retired source 与
-  artifact 清理完成前，它们不是本轮 single-host 完成证明，也不得为使其通过而重新接入
-  legacy/projection crate。
+  `schema-contract` 仍包含旧 catalog/registry closure 的收口责任；在 legacy source 与
+  artifact 被重新分类并由真实单 Host surface 接管前，它们不是完整功能完成证明，也不得
+  为使其通过而伪造 witness 或重新接入 legacy/projection crate。
 - `schema-audit-closed` 仅用于 source inventory 已清理且没有 `planned`/`generated`/未闭合
   endpoint obligation 的阶段性收口。本分支当前仍有 legacy artifact，不能据此宣称 closed。
 
@@ -212,11 +245,12 @@ just schema-audit-closed
 2. 添加 valid/invalid fixture，并为真实 producer 与 consumer 各提供独立 exact witness。
 3. 在 `kanban-store-turso`、ApplicationService、server、`kanban-client` 和所需 adapter
    中接通同一 operation；adapter 不得直连 store。
-4. 运行受影响 package tests、contract tests、`schema-check`、`schema-surface-audit`、
-   `schema-adoption-witness` 和 `just diff-check`。
+4. 运行受影响 package tests、contract tests、`just schema-check`、
+   `just schema-surface-audit`、`just schema-adoption-witness` 和 `just diff-check`。
 5. 若 operation 实际被取消，状态改为 `excluded` 并写明理由；不得留下看似 adopted 的
    fixture 或 route。
 
-这套闭环只覆盖当前单 Host active path。labels、signals、search、graph、vector、
-projection、自动 server supervision、旧 SQLite importer 和历史兼容 API 另行处理，不在
-本轮 schema catalog 中恢复。
+这套闭环适用于完整单 Host 产品路径。labels、signals、ontology、search、graph、vector、
+context、projection、运维、旧 SQLite importer 与 Desktop 历史视图按 parity ledger
+分片恢复；每一片都必须同步 contract catalog 与真实 surface。旧 wire/CLI 兼容不是目标，
+但不得借此删除业务能力或数据迁移语义。

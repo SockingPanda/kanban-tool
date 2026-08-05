@@ -69,7 +69,7 @@
 
 ## 8. 语言与 Git 边界
 
-- 项目自有 prose 以简体中文为主；命令、路径、代码符号、API/JSON 字段、枚举和库名保留精确原文。
+- 项目自有文档、skill、用户文案、代码注释与 rustdoc 以简体中文为主；命令、路径、代码符号、API/JSON 字段、枚举和库名保留精确原文。
 - 中文和 Unicode 可用于 prose；代码、shell、TOML、JSON、schema 等机器语法遵循其 parser 的精确字符要求，不做全局 ASCII 化。
 - 保护既有 dirty work；diff 必须聚焦当前任务，不覆盖或回滚无关改动，不使用破坏性 reset/checkout。
 - 不 push、开 PR、merge、rebase 或发布；仓库没有 PR skill。创建本地 commit 必须得到当前用户明确授权，不能从“完成/收尾”推断。

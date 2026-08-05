@@ -6,8 +6,10 @@
 默认监听地址为 `http://127.0.0.1:8721`，只接受 loopback 绑定。所有产品路由的基础路径为
 `/api/v1`；健康检查是 `/health`。
 
-本文件只描述当前 single-host 路由。labels、signals、search、graph、vector、projection、
-maintenance、SSE 和旧的直接数据库路径不属于本 API。
+本文件先描述当前已接入的 single-host 路由；它不是最终功能边界。labels、signals、
+ontology、search、graph、vector、context、projection、maintenance 与 SSE 必须按 parity
+ledger 恢复到同一 localhost API，并随每个纵向切片补齐本规范。旧的直接数据库路径不会
+恢复。
 
 ## 1. 通用契约
 
@@ -20,12 +22,14 @@ maintenance、SSE 和旧的直接数据库路径不属于本 API。
 - 服务端只绑定 loopback；client 也拒绝非 loopback URL。
 - 正常响应使用 `{ "data": ... }`；事件列表额外包含 `meta`。
 
+<!-- schema-doc-ignore: 通用 data envelope 的说明性最小示例，不代表具体 endpoint contract -->
 ```json
 { "data": {} }
 ```
 
 分页/游标响应使用：
 
+<!-- schema-doc-ignore: 分页 meta 的说明性示例，具体 endpoint 仍以各自 fixture 为准 -->
 ```json
 { "data": [], "meta": { "limit": 100, "offset": 0, "total": 0 } }
 ```
@@ -49,6 +53,7 @@ actor；body 未提供 author 时才回退到 header 和 host 默认值。
 
 由 handler/ApplicationService 返回的产品错误使用：
 
+<!-- schema-doc-ignore: 错误 envelope 的说明性示例，code/message 用于解释状态码映射 -->
 ```json
 {
   "error": {
@@ -131,14 +136,16 @@ ApplicationService 读取 canonical Turso snapshot，不执行 claim/reclaim 或
   `-assignee`、`scheduled_at`、`-scheduled_at`、`due_at`、`-due_at`、
   `created_at`、`-created_at`、`updated_at`、`-updated_at`（默认 `position`）。
 
-当前 task list 不提供 label filter；传入 `label` 会返回 `feature_not_available`。
+当前 task list 尚未接通 label filter；传入 `label` 会暂时返回
+`feature_not_available`。labels 切片完成后必须恢复该 query contract。
 
 ### `POST /api/v1/boards/{board}/tasks`（mutation）
 
 请求为 `CreateTaskRequest`：`title` 必填；可选 `task_id`、`idempotency_key`、
 `description`、`status`（`triage|todo|scheduled|ready`）、`assignee`、`priority`、
 `scheduled_at`、`due_at`、`max_retries`、`metadata`、`actor`。`labels` 和 `depends_on`
-字段必须为空；这两个 surface 不属于本轮 host。
+字段当前必须为空；queue/labels 切片必须在共享 application transaction 中恢复这两个
+surface。
 
 成功返回 HTTP `201` 与 `CreateTaskResponse { data: ApiTask }`。同一 board 内相同
 `idempotency_key` 与相同 canonical payload 返回已有 task；payload 不同返回
@@ -148,7 +155,7 @@ execution-plan、依赖与排期 guard，例如尚未满足 ready 条件时返�
 ### `GET /api/v1/tasks/{task_id}`（只读）
 
 `task_id` 必须是全局 `t_...`。返回 `GetTaskResponse`：`data: ApiTask`，当前不带 ontology
-`meta`。`include=ontology` 和其他 include 值均不在 single-host 路径上。
+`meta`。`include=ontology` 当前尚未接通，ontology 切片完成后必须恢复。
 
 ## 4. Execution plan 与 task state machine
 
@@ -212,7 +219,7 @@ application transaction 中完成。
 请求为 `CreateCommentRequest`：`body` 必填；可选 `idempotency_key`、`author`、`kind`
 （wire enum 为 `note|decision|signal`）、`author_type`（`user|agent`）、`agent_type`、
 `metadata`。当前 canonical path 只接受 `note` 与 `decision`；`signal` 稳定返回
-`feature_not_available`。
+`feature_not_available`。signals 切片必须恢复 `signal` 并保持 comment backlink。
 成功返回 HTTP `201` 与 `CreateCommentResponse`（`data: ApiComment`）。idempotency key
 属于 task；相同 key/相同 payload 重放返回已有 comment，不同 payload 返回
 `idempotency_conflict`。
@@ -286,5 +293,6 @@ event list 是只读；所有 mutation 通过 ApplicationService 写 canonical e
 ## 10. 停止路径
 
 服务停止后，client 返回 `server_unavailable`，不得 fallback 到嵌入式数据库、旧 SQLite
-路径或另一个 host。未迁移的 labels/signals/search/maintenance 等命令返回
-`feature_not_available`，不会触碰数据库。
+路径或另一个 host。迁移期间尚未接通的 labels/signals/search/maintenance 等命令暂时返回
+`feature_not_available`，不会触碰数据库；只要该临时响应仍存在，对应 parity 项就不能
+标记完成。

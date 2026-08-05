@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     ExecutionPlanRecord as ApplicationExecutionPlan,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
     TaskPlanNotRequired,

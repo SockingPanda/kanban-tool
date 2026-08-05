@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     TaskRecord as ApplicationTask, TaskUnblock, UnblockTaskRecord as ApplicationUnblockTask,
 };
 use kanban_core::Result;

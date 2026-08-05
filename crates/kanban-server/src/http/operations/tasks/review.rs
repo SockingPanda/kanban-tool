@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::SubmitReviewTaskCommand;
+use kanban_service::SubmitReviewTaskCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{SubmitReviewTaskPath, SubmitReviewTaskRequest, SubmitReviewTaskResponse};
 

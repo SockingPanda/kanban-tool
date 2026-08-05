@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
-use kanban_application::LegacyImportOptionsRecord;
+use kanban_service::LegacyImportOptionsRecord;
 use kanban_protocol::{
     BackupReport, BackupResponse, CheckpointResponse, DataEnvelope, DoctorReport, DoctorResponse,
     ExportReport, ExportResponse, ImportReport, ImportResponse, LegacyImportReport,
@@ -260,7 +260,7 @@ pub(crate) async fn maintenance_cleanup(
     Ok(Json(DataEnvelope::new(run_report(report))))
 }
 
-fn projection_status(value: kanban_application::ProjectionStatusRecord) -> ProjectionStoreStatus {
+fn projection_status(value: kanban_service::ProjectionStatusRecord) -> ProjectionStoreStatus {
     ProjectionStoreStatus {
         store_name: value.store_name,
         active_generation: value.active_generation,
@@ -282,7 +282,7 @@ fn projection_status(value: kanban_application::ProjectionStatusRecord) -> Proje
     }
 }
 
-fn run_report(value: kanban_application::MaintenanceRunRecord) -> MaintenanceRunReport {
+fn run_report(value: kanban_service::MaintenanceRunRecord) -> MaintenanceRunReport {
     MaintenanceRunReport {
         database_instance_id: value.database_instance_id,
         protocol_version: value.protocol_version,

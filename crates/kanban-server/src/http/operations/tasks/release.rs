@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::ReleaseTaskCommand;
+use kanban_service::ReleaseTaskCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{ReleaseTaskPath, ReleaseTaskRequest, ReleaseTaskResponse};
 

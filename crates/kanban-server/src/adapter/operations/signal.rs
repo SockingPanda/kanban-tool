@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     SignalCreateRecord as ApplicationCreateSignal, SignalLedger,
     SignalListOptions as ApplicationSignalListOptions, SignalRecord as ApplicationSignal,
     SignalRecordResult as ApplicationSignalResult, SignalReviewRecord as ApplicationReviewSignals,
@@ -89,10 +89,10 @@ impl SignalLedger for TursoApplicationStore {
                 board: input.board,
                 signal_ids: input.signal_ids,
                 lifecycle: match input.lifecycle {
-                    kanban_application::SignalLifecycle::Confirm => StoreSignalLifecycle::Confirm,
-                    kanban_application::SignalLifecycle::Reject => StoreSignalLifecycle::Reject,
-                    kanban_application::SignalLifecycle::Resolve => StoreSignalLifecycle::Resolve,
-                    kanban_application::SignalLifecycle::Supersede => {
+                    kanban_service::SignalLifecycle::Confirm => StoreSignalLifecycle::Confirm,
+                    kanban_service::SignalLifecycle::Reject => StoreSignalLifecycle::Reject,
+                    kanban_service::SignalLifecycle::Resolve => StoreSignalLifecycle::Resolve,
+                    kanban_service::SignalLifecycle::Supersede => {
                         StoreSignalLifecycle::Supersede
                     }
                 },

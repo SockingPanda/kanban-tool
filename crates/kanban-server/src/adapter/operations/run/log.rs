@@ -1,6 +1,6 @@
 use std::path::{Component, Path, PathBuf};
 
-use kanban_application::{RunLog, RunLogRecord};
+use kanban_service::{RunLog, RunLogRecord};
 use kanban_core::{KanbanError, Result};
 use tokio::{
     fs::File,

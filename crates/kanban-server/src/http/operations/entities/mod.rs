@@ -4,8 +4,8 @@ use axum::{
     extract::{Path, Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_application::dto::EntityRecord;
-use kanban_application::operations::{EntityListOptions, EntityUpsertCommand};
+use kanban_service::dto::EntityRecord;
+use kanban_service::operations::{EntityListOptions, EntityUpsertCommand};
 use kanban_core::KanbanError;
 use kanban_protocol::{
     CliEntity, CliEntityListOutput, CliEntityShowOutput, DataEnvelope, EntityListQuery, EntityPath,

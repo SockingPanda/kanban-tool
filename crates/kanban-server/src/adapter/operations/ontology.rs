@@ -3,7 +3,7 @@
 //! HTTP、CLI 与 MCP 都只传递 JSON command；这里是唯一把 command 解析为
 //! Turso store input 的边界，避免入口各自复制事务或 board 解析逻辑。
 
-use kanban_application::LabelOntologyOperations;
+use kanban_service::LabelOntologyOperations;
 use kanban_core::{KanbanError, Result};
 use kanban_store_turso::{
     LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions, OntologyActionInput,

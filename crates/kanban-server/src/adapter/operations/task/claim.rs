@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     ClaimRecord as ApplicationClaim, ClaimTaskRecord as ApplicationClaimTask, TaskClaim,
     TaskRecord as ApplicationTask,
 };

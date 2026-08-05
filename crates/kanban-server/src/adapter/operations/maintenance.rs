@@ -1,11 +1,11 @@
-use kanban_application::{
+use kanban_service::{
     BackupReportRecord, CheckpointReportRecord, DoctorDerivedStoreRecord, DoctorIssueRecord,
     DoctorReportRecord, ExportReportRecord, ImportReportRecord, MaintenanceOwnerRecord,
     MaintenanceQuery, MaintenanceRunRecord, MaintenanceStatusRecord, ProjectionStatusRecord,
     VacuumReportRecord,
 };
 #[cfg(feature = "legacy-sqlite-import")]
-use kanban_application::{
+use kanban_service::{
     LegacyImportOptionsRecord, LegacyImportResultRecord, LegacyImportTableCountRecord,
 };
 use kanban_core::Result;

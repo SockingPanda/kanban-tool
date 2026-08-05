@@ -1,5 +1,5 @@
 use crate::error::ApiError;
-use kanban_application::{
+use kanban_service::{
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
 };
 use kanban_core::{KanbanError, TaskStatus};

@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     DependencyList, DependencySnapshotRecord as ApplicationDependencySnapshot,
 };
 use kanban_core::Result;

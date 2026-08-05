@@ -1,5 +1,5 @@
 use crate::error::ApiError;
-use kanban_application::{SignalRecord, SignalStatus};
+use kanban_service::{SignalRecord, SignalStatus};
 use kanban_core::KanbanError;
 use kanban_protocol::{SignalObservationWire, SignalWire};
 

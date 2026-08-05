@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults, SearchTasks,
 };
 use kanban_core::Result;

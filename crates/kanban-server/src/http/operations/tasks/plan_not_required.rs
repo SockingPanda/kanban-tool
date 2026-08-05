@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::MarkExecutionPlanNotRequiredCommand;
+use kanban_service::MarkExecutionPlanNotRequiredCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{
     MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,

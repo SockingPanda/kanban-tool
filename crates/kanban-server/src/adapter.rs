@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use kanban_application::{
+use kanban_service::{
     AddTaskLabelsRecord as ApplicationAddTaskLabelsRecord, ApplicationStore,
     CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
     CommentRecord as ApplicationComment, DependencyEdgeRecord as ApplicationDependencyEdge,

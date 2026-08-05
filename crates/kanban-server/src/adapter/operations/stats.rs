@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     BlockedReasonCountRecord as ApplicationBlockedReasonCount,
     QueueStatsRecord as ApplicationQueueStats, StaleClaimRecord as ApplicationStaleClaim,
     StatsQuery, StatusCountRecord as ApplicationStatusCount,

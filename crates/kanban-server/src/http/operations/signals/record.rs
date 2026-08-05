@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     routing::post,
 };
-use kanban_application::SignalRecordCommand;
+use kanban_service::SignalRecordCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{
     BoardLabelPath, DataEnvelope, RecordSignalRequest, RecordSignalResponse, SignalRecordResult,

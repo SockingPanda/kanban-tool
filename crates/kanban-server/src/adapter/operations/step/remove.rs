@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     StepRecord as ApplicationStep,
     operations::{RemoveStepRecord as ApplicationRemoveStep, StepRemove},
 };
@@ -8,7 +8,7 @@ use kanban_store_turso::RemoveStepInput as StoreRemoveStep;
 use crate::adapter::{TursoApplicationStore, application_step, store_error};
 
 impl StepRemove for TursoApplicationStore {
-    async fn get_task(&self, task_id: &str) -> Result<kanban_application::TaskRecord> {
+    async fn get_task(&self, task_id: &str) -> Result<kanban_service::TaskRecord> {
         self.store
             .get_task_global(task_id)
             .await
@@ -39,9 +39,9 @@ impl StepRemove for TursoApplicationStore {
             .and_then(application_step)
     }
 
-    async fn list_steps(&self, task_id: &str) -> Result<kanban_application::TaskStepsRecord> {
+    async fn list_steps(&self, task_id: &str) -> Result<kanban_service::TaskStepsRecord> {
         let steps = self.store.list_steps(task_id).await.map_err(store_error)?;
-        Ok(kanban_application::TaskStepsRecord {
+        Ok(kanban_service::TaskStepsRecord {
             task_id: steps.task_id,
             steps: steps
                 .steps

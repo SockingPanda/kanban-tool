@@ -6,7 +6,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::{SignalLifecycle, SignalReviewCommand};
+use kanban_service::{SignalLifecycle, SignalReviewCommand};
 use kanban_core::KanbanError;
 use kanban_protocol::{BoardLabelPath, DataEnvelope, ReviewSignalsRequest, SignalWire};
 

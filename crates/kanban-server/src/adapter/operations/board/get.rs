@@ -1,4 +1,4 @@
-use kanban_application::{BoardGet, BoardRecord};
+use kanban_service::{BoardGet, BoardRecord};
 use kanban_core::Result;
 
 use crate::adapter::{TursoApplicationStore, store_error};

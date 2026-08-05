@@ -8,11 +8,11 @@ use axum::{
     extract::{Path, Query, State, rejection::QueryRejection},
     routing::{get, post},
 };
-use kanban_application::dto::{
+use kanban_service::dto::{
     BoardTaskMapRecord, RelationRecord, TaskGraphEdgeRecord, TaskGraphMetaRecord,
     TaskGraphNodeRecord, TaskNeighborhoodRecord,
 };
-use kanban_application::operations::{
+use kanban_service::operations::{
     BoardTaskMapOptions, GraphNeighborsOptions, GraphQueryOptions, TaskNeighborhoodOptions,
 };
 use kanban_core::KanbanError;
@@ -178,7 +178,7 @@ fn api_relation(relation: RelationRecord) -> Result<ApiRelation, ApiError> {
 }
 
 fn api_graph_maintenance(
-    maintenance: kanban_application::dto::GraphMaintenanceRecord,
+    maintenance: kanban_service::dto::GraphMaintenanceRecord,
 ) -> GraphMaintenance {
     GraphMaintenance {
         mode: maintenance.mode,
@@ -232,25 +232,25 @@ fn api_graph_node(node: TaskGraphNodeRecord) -> Result<TaskGraphNode, ApiError> 
     Ok(TaskGraphNode {
         task: api_task(node.task)?,
         role: match node.role {
-            kanban_application::dto::TaskGraphNodeRole::Center => {
+            kanban_service::dto::TaskGraphNodeRole::Center => {
                 kanban_protocol::ApiTaskGraphNodeRole::Center
             }
-            kanban_application::dto::TaskGraphNodeRole::DependencyParent => {
+            kanban_service::dto::TaskGraphNodeRole::DependencyParent => {
                 kanban_protocol::ApiTaskGraphNodeRole::DependencyParent
             }
-            kanban_application::dto::TaskGraphNodeRole::DependencyChild => {
+            kanban_service::dto::TaskGraphNodeRole::DependencyChild => {
                 kanban_protocol::ApiTaskGraphNodeRole::DependencyChild
             }
-            kanban_application::dto::TaskGraphNodeRole::StepParent => {
+            kanban_service::dto::TaskGraphNodeRole::StepParent => {
                 kanban_protocol::ApiTaskGraphNodeRole::StepParent
             }
-            kanban_application::dto::TaskGraphNodeRole::StepChild => {
+            kanban_service::dto::TaskGraphNodeRole::StepChild => {
                 kanban_protocol::ApiTaskGraphNodeRole::StepChild
             }
-            kanban_application::dto::TaskGraphNodeRole::Active => {
+            kanban_service::dto::TaskGraphNodeRole::Active => {
                 kanban_protocol::ApiTaskGraphNodeRole::Active
             }
-            kanban_application::dto::TaskGraphNodeRole::Context => {
+            kanban_service::dto::TaskGraphNodeRole::Context => {
                 kanban_protocol::ApiTaskGraphNodeRole::Context
             }
         },
@@ -264,10 +264,10 @@ fn api_graph_edge(edge: TaskGraphEdgeRecord) -> Result<TaskGraphEdge, ApiError> 
         source_task_id: edge.source_task_id,
         target_task_id: edge.target_task_id,
         kind: match edge.kind {
-            kanban_application::dto::TaskGraphEdgeKind::Dependency => {
+            kanban_service::dto::TaskGraphEdgeKind::Dependency => {
                 kanban_protocol::ApiTaskGraphEdgeKind::Dependency
             }
-            kanban_application::dto::TaskGraphEdgeKind::Step => {
+            kanban_service::dto::TaskGraphEdgeKind::Step => {
                 kanban_protocol::ApiTaskGraphEdgeKind::Step
             }
         },

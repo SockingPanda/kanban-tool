@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::ClaimTaskCommand;
+use kanban_service::ClaimTaskCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{ApiClaim, ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse};
 

@@ -4,7 +4,7 @@ use axum::{
     extract::{Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_application::{EventListOptions as ApplicationEventListOptions, EventRecord};
+use kanban_service::{EventListOptions as ApplicationEventListOptions, EventRecord};
 use kanban_core::KanbanError;
 use kanban_protocol::{
     ListEventsQuery, ListEventsResponse, NextAfterMeta, StreamEventData,

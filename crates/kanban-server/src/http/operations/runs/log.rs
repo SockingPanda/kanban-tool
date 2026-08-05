@@ -29,7 +29,7 @@ mod tests {
     use std::{collections::BTreeMap, fs};
 
     use crate::http::operations::test_support::*;
-    use kanban_application::{
+    use kanban_service::{
         ClaimTaskCommand, CreateTaskCommand, MarkExecutionPlanNotRequiredCommand,
         PromoteTaskCommand,
     };

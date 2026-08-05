@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     CreateStepRecord as ApplicationCreateStep, ExecutionPlanState, StepCreate,
     StepRecord as ApplicationStep, TaskStepsRecord as ApplicationTaskSteps,
 };
@@ -11,7 +11,7 @@ use crate::adapter::{
 };
 
 impl StepCreate for TursoApplicationStore {
-    async fn get_task(&self, task_id: &str) -> Result<kanban_application::TaskRecord> {
+    async fn get_task(&self, task_id: &str) -> Result<kanban_service::TaskRecord> {
         self.store
             .get_task_global(task_id)
             .await

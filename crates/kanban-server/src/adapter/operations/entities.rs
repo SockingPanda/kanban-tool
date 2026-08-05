@@ -1,5 +1,5 @@
-use kanban_application::dto::EntityRecord;
-use kanban_application::operations::{EntityListOptions, EntityQuery, EntityUpsertCommand};
+use kanban_service::dto::EntityRecord;
+use kanban_service::operations::{EntityListOptions, EntityQuery, EntityUpsertCommand};
 use kanban_core::Result;
 use kanban_store_turso::{EntityListOptions as StoreEntityListOptions, EntityUpsertInput};
 

@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::SpecifyTaskCommand;
+use kanban_service::SpecifyTaskCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{SpecifyTaskPath, SpecifyTaskRequest, SpecifyTaskResponse};
 

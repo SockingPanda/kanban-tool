@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use kanban_application::ApplicationService;
+use kanban_service::ApplicationService;
 use kanban_core::{KanbanError, Result};
 use kanban_store_turso::TursoStore;
 

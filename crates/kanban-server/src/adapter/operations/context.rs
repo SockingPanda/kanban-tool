@@ -4,7 +4,7 @@
 //! This adapter only translates Turso/host provider records into source
 //! candidates and preserves degraded provider diagnostics.
 
-use kanban_application::{
+use kanban_service::{
     ContextBuild, ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence,
     ContextProviderStatus, ContextSources,
 };

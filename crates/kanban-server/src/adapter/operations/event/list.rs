@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     EventList, EventListOptions as ApplicationEventListOptions,
     EventListPage as ApplicationEventListPage, EventRecord as ApplicationEventRecord,
 };

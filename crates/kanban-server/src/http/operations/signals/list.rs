@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_application::SignalListOptions as ApplicationSignalListOptions;
+use kanban_service::SignalListOptions as ApplicationSignalListOptions;
 use kanban_core::KanbanError;
 use kanban_protocol::{BoardLabelPath, MetadataEnvelope, SignalFilterMeta, SignalQuery};
 

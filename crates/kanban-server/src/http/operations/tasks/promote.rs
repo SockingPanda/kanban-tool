@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::PromoteTaskCommand;
+use kanban_service::PromoteTaskCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse};
 

@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     PromoteTaskRecord as ApplicationPromoteTask, TaskPromote, TaskRecord as ApplicationTask,
 };
 use kanban_core::Result;

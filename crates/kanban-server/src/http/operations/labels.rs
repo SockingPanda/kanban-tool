@@ -10,7 +10,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::{delete, get},
 };
-use kanban_application::{AddTaskLabelsCommand, CreateBoardLabelCommand, RemoveTaskLabelCommand};
+use kanban_service::{AddTaskLabelsCommand, CreateBoardLabelCommand, RemoveTaskLabelCommand};
 use kanban_core::KanbanError;
 use kanban_protocol::{
     AddTaskLabelPath, AddTaskLabelRequest, AddTaskLabelResponse, BoardLabelPath,

@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     CommentCreate, CommentRecord as ApplicationComment,
     CreateCommentRecord as ApplicationCreateComment,
 };

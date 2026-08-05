@@ -3,7 +3,7 @@ use axum::{
     extract::{Query, State, rejection::QueryRejection},
     routing::{get, post},
 };
-use kanban_application::{SearchIndexStatus, SearchMeta as AppSearchMeta, SearchQuery};
+use kanban_service::{SearchIndexStatus, SearchMeta as AppSearchMeta, SearchQuery};
 use kanban_core::{KanbanError, TaskStatus};
 use kanban_protocol::{
     ApiTaskStatus, BoardQuery, DataEnvelope, MetadataEnvelope, OffsetPaginationMeta, SearchMeta,

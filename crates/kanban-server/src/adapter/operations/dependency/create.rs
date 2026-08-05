@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     AddDependencyRecord as ApplicationAddDependency,
     AddDependencyResult as ApplicationAddDependencyResult, DependencyCreate,
     TaskRecord as ApplicationTask,

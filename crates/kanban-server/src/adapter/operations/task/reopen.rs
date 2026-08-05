@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     ReopenTaskRecord as ApplicationReopenTask, TaskRecord as ApplicationTask, TaskReopen,
 };
 use kanban_core::Result;

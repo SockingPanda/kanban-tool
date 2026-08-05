@@ -2754,16 +2754,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kanban-application"
-version = "2.1.3"
-dependencies = [
- "kanban-core",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "kanban-cli"
 version = "2.1.3"
 dependencies = [
@@ -2845,9 +2835,9 @@ version = "2.1.3"
 dependencies = [
  "axum",
  "http-body-util",
- "kanban-application",
  "kanban-core",
  "kanban-protocol",
+ "kanban-service",
  "kanban-store-turso",
  "serde",
  "serde_json",
@@ -2857,6 +2847,16 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+]
+
+[[package]]
+name = "kanban-service"
+version = "2.1.3"
+dependencies = [
+ "kanban-core",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

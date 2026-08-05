@@ -1,4 +1,4 @@
-use kanban_application::{RunRecord as ApplicationRun, RunShow};
+use kanban_service::{RunRecord as ApplicationRun, RunShow};
 use kanban_core::Result;
 
 use crate::adapter::{TursoApplicationStore, application_run, store_error};

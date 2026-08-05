@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     SubmitReviewTaskRecord as ApplicationSubmitReviewTask, TaskRecord as ApplicationTask,
     TaskReview,
 };

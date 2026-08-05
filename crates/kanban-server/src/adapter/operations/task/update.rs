@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     TaskRecord as ApplicationTask, TaskUpdate, UpdateTaskRecord as ApplicationUpdateTask,
 };
 use kanban_core::Result;

@@ -1,12 +1,12 @@
 use crate::error::ApiError;
-use kanban_application::{ExecutionPlanRecord, ExecutionPlanState, LabelRecord, TaskRecord};
+use kanban_service::{ExecutionPlanRecord, ExecutionPlanState, LabelRecord, TaskRecord};
 use kanban_core::{KanbanError, TaskStatus};
 use kanban_protocol::{
     ApiExecutionPlan, ApiExecutionPlanState, ApiStepStatus, ApiTask, ApiTaskPriority,
     ApiTaskStatus, ApiTaskStep,
 };
 
-pub(crate) fn api_task_step(step: kanban_application::StepRecord) -> Result<ApiTaskStep, ApiError> {
+pub(crate) fn api_task_step(step: kanban_service::StepRecord) -> Result<ApiTaskStep, ApiError> {
     let status = match step.status.as_str() {
         "todo" => ApiStepStatus::Todo,
         "done" => ApiStepStatus::Done,

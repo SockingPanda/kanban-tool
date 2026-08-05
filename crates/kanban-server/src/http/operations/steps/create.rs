@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
-use kanban_application::CreateStepCommand;
+use kanban_service::CreateStepCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{CreateStepPath, CreateStepRequest, CreateStepResponse};
 

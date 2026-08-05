@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::ReopenTaskCommand;
+use kanban_service::ReopenTaskCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{ReopenTaskPath, ReopenTaskRequest, ReopenTaskResponse};
 

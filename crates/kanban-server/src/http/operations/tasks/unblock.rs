@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::UnblockTaskCommand;
+use kanban_service::UnblockTaskCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{UnblockTaskPath, UnblockTaskRequest, UnblockTaskResponse};
 

@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use kanban_application::{
+use kanban_service::{
     BlockTaskCommand, ClaimRecord, ClaimTaskCommand, CompleteTaskCommand, HeartbeatTaskCommand,
     ReleaseTaskCommand, SubmitReviewTaskCommand, TaskListOptions, TaskListSort,
 };
@@ -540,7 +540,7 @@ const fn default_heartbeat_interval_ms() -> i64 {
 mod tests {
     use std::{collections::BTreeMap, net::Ipv4Addr};
 
-    use kanban_application::{
+    use kanban_service::{
         ClaimTaskCommand, CreateTaskCommand, MarkExecutionPlanNotRequiredCommand,
         PromoteTaskCommand, SubmitReviewTaskCommand,
     };

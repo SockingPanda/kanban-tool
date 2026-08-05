@@ -1,4 +1,4 @@
-use kanban_application::{TaskRecord as ApplicationTask, TaskShow};
+use kanban_service::{TaskRecord as ApplicationTask, TaskShow};
 use kanban_core::Result;
 
 use crate::adapter::{TursoApplicationStore, application_task, store_error};

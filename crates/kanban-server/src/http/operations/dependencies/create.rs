@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
-use kanban_application::AddDependencyCommand;
+use kanban_service::AddDependencyCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{AddDependencyPath, AddDependencyRequest, AddDependencyResponse};
 

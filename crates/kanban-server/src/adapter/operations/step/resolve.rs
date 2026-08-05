@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     StepRecord as ApplicationStep, TaskStepsRecord as ApplicationTaskSteps,
     operations::{
         CompleteStepRecord as ApplicationCompleteStep, ReopenStepRecord as ApplicationReopenStep,
@@ -29,7 +29,7 @@ fn application_steps(steps: kanban_store_turso::TaskStepsRecord) -> Result<Appli
 }
 
 impl StepComplete for TursoApplicationStore {
-    async fn get_task(&self, task_id: &str) -> Result<kanban_application::TaskRecord> {
+    async fn get_task(&self, task_id: &str) -> Result<kanban_service::TaskRecord> {
         self.store
             .get_task_global(task_id)
             .await
@@ -66,7 +66,7 @@ impl StepComplete for TursoApplicationStore {
 }
 
 impl StepSkip for TursoApplicationStore {
-    async fn get_task(&self, task_id: &str) -> Result<kanban_application::TaskRecord> {
+    async fn get_task(&self, task_id: &str) -> Result<kanban_service::TaskRecord> {
         self.store
             .get_task_global(task_id)
             .await
@@ -103,7 +103,7 @@ impl StepSkip for TursoApplicationStore {
 }
 
 impl StepReopen for TursoApplicationStore {
-    async fn get_task(&self, task_id: &str) -> Result<kanban_application::TaskRecord> {
+    async fn get_task(&self, task_id: &str) -> Result<kanban_service::TaskRecord> {
         self.store
             .get_task_global(task_id)
             .await

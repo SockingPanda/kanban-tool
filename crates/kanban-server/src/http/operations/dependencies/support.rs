@@ -1,10 +1,10 @@
 use crate::error::ApiError;
 use crate::http::operations::tasks::support::{api_task, api_task_status};
-use kanban_application::TaskRecord;
+use kanban_service::TaskRecord;
 use kanban_protocol::{ApiDependencies, ApiDependencyEdge, ApiDependencyTask};
 
 pub(crate) fn api_dependencies(
-    dependencies: kanban_application::DependencySnapshotRecord,
+    dependencies: kanban_service::DependencySnapshotRecord,
 ) -> Result<ApiDependencies, ApiError> {
     Ok(ApiDependencies {
         task: api_dependency_task(&dependencies.task),

@@ -6,7 +6,7 @@ use axum::{
     response::Response,
     routing::get,
 };
-use kanban_application::EventListOptions as ApplicationEventListOptions;
+use kanban_service::EventListOptions as ApplicationEventListOptions;
 use kanban_core::KanbanError;
 use kanban_protocol::{StreamEventData, StreamEventsQuery};
 

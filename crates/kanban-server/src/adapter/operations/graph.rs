@@ -1,9 +1,9 @@
-use kanban_application::dto::{
+use kanban_service::dto::{
     BoardTaskMapRecord, GraphMaintenanceRecord, GraphQueryRowRecord, GraphStatusRecord,
     ProjectionStateRecord, RelationRecord, TaskGraphEdgeKind, TaskGraphEdgeRecord,
     TaskGraphMetaRecord, TaskGraphNodeRecord, TaskGraphNodeRole, TaskNeighborhoodRecord,
 };
-use kanban_application::operations::{
+use kanban_service::operations::{
     BoardTaskMapOptions, GraphNeighborsOptions, GraphQuery, GraphQueryOptions,
     ProjectionStatusOptions, TaskNeighborhoodOptions,
 };
@@ -91,7 +91,7 @@ impl GraphQuery for TursoApplicationStore {
                         bindings: row
                             .bindings
                             .into_iter()
-                            .map(|binding| kanban_application::GraphQueryBindingRecord {
+                            .map(|binding| kanban_service::GraphQueryBindingRecord {
                                 name: binding.name,
                                 value: binding.value,
                             })

@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     ReclaimExpiredTaskRecord as ApplicationReclaimExpiredTask,
     ReclaimTaskRecord as ApplicationReclaimTask, TaskReclaim, TaskReclaimExplicit,
     TaskRecord as ApplicationTask,

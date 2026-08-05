@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::HeartbeatTaskCommand;
+use kanban_service::HeartbeatTaskCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse};
 

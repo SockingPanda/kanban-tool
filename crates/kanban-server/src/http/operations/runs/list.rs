@@ -26,7 +26,7 @@ pub(super) fn router() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use crate::http::operations::test_support::*;
-    use kanban_application::ClaimTaskCommand;
+    use kanban_service::ClaimTaskCommand;
 
     #[tokio::test]
     async fn run_list_uses_application_path_and_preserves_run_contract() {

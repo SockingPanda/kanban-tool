@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_application::{ContextBuildOptions, ContextPack as ApplicationContextPack};
+use kanban_service::{ContextBuildOptions, ContextPack as ApplicationContextPack};
 use kanban_core::KanbanError;
 use kanban_protocol::{
     BuildContextPath, BuildContextQuery, BuildContextResponse, ContextDiagnostic, ContextEvidence,
@@ -79,7 +79,7 @@ fn context_pack(value: ApplicationContextPack) -> ContextPack {
     }
 }
 
-fn context_item(value: kanban_application::ContextItem) -> ContextItem {
+fn context_item(value: kanban_service::ContextItem) -> ContextItem {
     ContextItem {
         entity_uri: value.entity_uri,
         source: value.source,

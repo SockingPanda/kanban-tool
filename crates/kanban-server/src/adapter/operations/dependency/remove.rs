@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     DependencyRemove, RemoveDependencyResult as ApplicationRemoveDependencyResult,
 };
 use kanban_core::Result;

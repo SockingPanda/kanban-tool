@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::patch,
 };
-use kanban_application::UpdateStepCommand;
+use kanban_service::UpdateStepCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{UpdateStepPath, UpdateStepRequest, UpdateStepResponse};
 

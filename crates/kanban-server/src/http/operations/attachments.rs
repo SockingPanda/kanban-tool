@@ -8,7 +8,7 @@ use axum::{
     response::Response,
     routing::get,
 };
-use kanban_application::{CreateAttachmentCommand, DeleteAttachmentCommand};
+use kanban_service::{CreateAttachmentCommand, DeleteAttachmentCommand};
 use kanban_core::KanbanError;
 use kanban_protocol::{
     ApiAttachment, CreateAttachmentPath, CreateAttachmentRequest, CreateAttachmentResponse,
@@ -118,7 +118,7 @@ pub(crate) async fn delete_attachment(
     }))
 }
 
-fn api_attachment(attachment: kanban_application::AttachmentRecord) -> ApiAttachment {
+fn api_attachment(attachment: kanban_service::AttachmentRecord) -> ApiAttachment {
     ApiAttachment {
         id: attachment.id,
         board_id: attachment.board_id,

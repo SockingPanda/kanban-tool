@@ -1,4 +1,4 @@
-use kanban_application::{CommentList, CommentRecord as ApplicationComment};
+use kanban_service::{CommentList, CommentRecord as ApplicationComment};
 use kanban_core::Result;
 
 use crate::adapter::{TursoApplicationStore, application_comment, store_error};

@@ -51,7 +51,7 @@ pub(crate) async fn get_task(
 }
 
 fn api_task_details(
-    detail: kanban_application::TaskDetailRecord,
+    detail: kanban_service::TaskDetailRecord,
 ) -> Result<TaskDetailAggregate, ApiError> {
     let labels = detail.labels.into_iter().map(api_label).collect();
     let task = api_task(detail.task)?;
@@ -95,7 +95,7 @@ fn api_task_details(
 }
 
 fn api_task_ontology_summary(
-    summary: kanban_application::TaskOntologySummaryRecord,
+    summary: kanban_service::TaskOntologySummaryRecord,
 ) -> TaskOntologySummary {
     TaskOntologySummary {
         task_id: summary.task_id,
@@ -126,7 +126,7 @@ fn api_task_ontology_summary(
 }
 
 fn api_task_ontology_signal_summary(
-    signal: kanban_application::TaskOntologySignalSummaryRecord,
+    signal: kanban_service::TaskOntologySignalSummaryRecord,
 ) -> TaskOntologySignalSummary {
     TaskOntologySignalSummary {
         id: signal.id,

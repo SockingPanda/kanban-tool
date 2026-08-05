@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     ReleaseTaskRecord as ApplicationReleaseTask, TaskRecord as ApplicationTask, TaskRelease,
 };
 use kanban_core::Result;

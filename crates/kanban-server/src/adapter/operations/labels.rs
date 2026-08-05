@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     AddTaskLabelsRecord as ApplicationAddTaskLabelsRecord, AddTaskLabelsRecordInput,
     BoardLabelCreate, BoardLabelList, CreateLabelRecord, LabelRecord as ApplicationLabel,
     TaskLabelAdd, TaskLabelList, TaskLabelRemove,
@@ -84,8 +84,8 @@ impl TaskLabelRemove for TursoApplicationStore {
     async fn remove_task_label(
         &self,
         task_id: &str,
-        input: kanban_application::RemoveTaskLabelRecord,
-    ) -> Result<kanban_application::TaskRecord> {
+        input: kanban_service::RemoveTaskLabelRecord,
+    ) -> Result<kanban_service::TaskRecord> {
         self.store
             .remove_task_label(
                 task_id,

@@ -1,4 +1,4 @@
-use kanban_application::{BoardColumnRecord as ApplicationBoardColumn, BoardColumns};
+use kanban_service::{BoardColumnRecord as ApplicationBoardColumn, BoardColumns};
 use kanban_core::{Result, TaskStatus};
 
 use crate::adapter::{TursoApplicationStore, store_error};

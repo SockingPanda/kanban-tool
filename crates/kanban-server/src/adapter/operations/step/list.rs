@@ -1,4 +1,4 @@
-use kanban_application::{StepList, TaskStepsRecord as ApplicationTaskSteps};
+use kanban_service::{StepList, TaskStepsRecord as ApplicationTaskSteps};
 use kanban_core::Result;
 
 use crate::adapter::{

@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     AttachmentContentRecord, AttachmentCreate, AttachmentDelete, AttachmentList, AttachmentRead,
     AttachmentRecord as ApplicationAttachment,
     CreateAttachmentRecord as ApplicationCreateAttachment, DeleteAttachmentCommand,

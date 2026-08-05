@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
-use kanban_application::{
+use kanban_service::{
     CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
     CreateCommentCommand,
 };

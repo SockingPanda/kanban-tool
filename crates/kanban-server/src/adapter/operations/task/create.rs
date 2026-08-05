@@ -1,4 +1,4 @@
-use kanban_application::{
+use kanban_service::{
     CreateTaskRecord as ApplicationCreateTask, TaskCreate, TaskRecord as ApplicationTask,
 };
 use kanban_core::Result;

@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::delete,
 };
-use kanban_application::RemoveDependencyCommand;
+use kanban_service::RemoveDependencyCommand;
 use kanban_protocol::{RemoveDependencyPath, RemoveDependencyResponse};
 
 pub(crate) async fn remove_dependency(

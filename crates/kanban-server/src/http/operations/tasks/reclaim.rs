@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::ReclaimTaskCommand;
+use kanban_service::ReclaimTaskCommand;
 use kanban_core::{KanbanError, TaskStatus};
 use kanban_protocol::{
     ReclaimTargetStatus, ReclaimTaskPath, ReclaimTaskRequest, ReclaimTaskResponse,

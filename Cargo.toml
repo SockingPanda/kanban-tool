@@ -1,7 +1,7 @@
 [workspace]
 members = [
   "crates/kanban-core",
-  "crates/kanban-application",
+  "crates/kanban-service",
   "crates/kanban-protocol",
   "xtask",
   "crates/kanban-store-turso",
@@ -26,7 +26,7 @@ exclude = [
 ]
 default-members = [
   "crates/kanban-core",
-  "crates/kanban-application",
+  "crates/kanban-service",
   "crates/kanban-protocol",
   "crates/kanban-store-turso",
   "crates/kanban-client",
@@ -80,7 +80,7 @@ tauri-plugin-single-instance = "2"
 ksni = { version = "0.3.5", default-features = false }
 
 kanban-core = { path = "crates/kanban-core" }
-kanban-application = { path = "crates/kanban-application" }
+kanban-service = { path = "crates/kanban-service" }
 kanban-protocol = { path = "crates/kanban-protocol", default-features = false }
 kanban-store-turso = { path = "crates/kanban-store-turso" }
 kanban-client = { path = "crates/kanban-client" }

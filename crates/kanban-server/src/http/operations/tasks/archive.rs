@@ -7,7 +7,7 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::ArchiveTaskCommand;
+use kanban_service::ArchiveTaskCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{ArchiveTaskPath, ArchiveTaskRequest, ArchiveTaskResponse};
 

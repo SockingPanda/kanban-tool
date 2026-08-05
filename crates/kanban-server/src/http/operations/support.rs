@@ -1,6 +1,6 @@
 use crate::error::ApiError;
 use axum::http::HeaderMap;
-use kanban_application::{RunRecord, RunStatus};
+use kanban_service::{RunRecord, RunStatus};
 use kanban_core::KanbanError;
 use kanban_protocol::{ApiRun, ApiRunStatus};
 

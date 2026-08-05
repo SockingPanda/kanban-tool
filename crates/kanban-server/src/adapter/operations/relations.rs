@@ -1,5 +1,5 @@
-use kanban_application::dto::{RelationPredicateRecord, RelationRecord};
-use kanban_application::operations::{
+use kanban_service::dto::{RelationPredicateRecord, RelationRecord};
+use kanban_service::operations::{
     RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationQuery,
     RelationUpsertCommand,
 };

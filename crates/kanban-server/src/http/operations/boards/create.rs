@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
-use kanban_application::CreateBoardCommand;
+use kanban_service::CreateBoardCommand;
 use kanban_core::KanbanError;
 use kanban_protocol::{CreateBoardRequest, CreateBoardResponse};
 

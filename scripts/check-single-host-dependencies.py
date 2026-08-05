@@ -19,10 +19,11 @@ ROOT = Path(__file__).resolve().parents[1]
 STORE_PACKAGE = "kanban-store-turso"
 SERVER_PACKAGE = "kanban-server"
 LEGACY_PACKAGES = {"kanban-sqlite", "kanban-local"}
-# ``rusqlite`` is retained here because it is the implementation dependency of
-# the retired SQLite backend.  It must not re-enter an active package through a
-# renamed dependency alias either.
+# ``rusqlite`` remains forbidden for the retired backend, but the host-owned
+# legacy import feature is an explicit, optional exception in
+# ``kanban-store-turso``.
 FORBIDDEN_LEGACY = LEGACY_PACKAGES | {"rusqlite"}
+LEGACY_IMPORT_FEATURE = "legacy-sqlite-import"
 
 # These crates are intentionally kept as source/archive material, but are not
 # part of the single-host active workspace.  Package names are checked only
@@ -115,6 +116,24 @@ def package_name(manifest: dict[str, Any]) -> str | None:
         return None
     name = package.get("name")
     return name if isinstance(name, str) else None
+
+
+def allows_store_legacy_import(
+    package: str,
+    manifest: dict[str, Any],
+    table_name: str,
+    alias: str,
+    value: Any,
+) -> bool:
+    """Allow only the optional rusqlite dependency owned by the store importer."""
+
+    if package != STORE_PACKAGE or alias != "rusqlite" or table_name != "dependencies":
+        return False
+    if not isinstance(value, dict) or value.get("optional") is not True:
+        return False
+    features = manifest.get("features")
+    enabled = features.get(LEGACY_IMPORT_FEATURE) if isinstance(features, dict) else None
+    return isinstance(enabled, list) and "dep:rusqlite" in enabled
 
 
 def workspace_member_paths(
@@ -271,7 +290,7 @@ def check_workspace(root: Path = ROOT) -> list[str]:
                 manifest_path=workspace_path,
             )
             workspace_dependency_packages[alias] = dependency
-            if dependency in FORBIDDEN_LEGACY:
+            if dependency in FORBIDDEN_LEGACY and dependency != "rusqlite":
                 failures.append(
                     f"Cargo.toml [workspace.dependencies]: legacy dependency {dependency} is retired"
                 )
@@ -287,7 +306,9 @@ def check_workspace(root: Path = ROOT) -> list[str]:
                     workspace_dependencies=workspace_dependency_packages,
                 )
                 location = f"{manifest_path.relative_to(root)} [{table_name}]"
-                if dependency in FORBIDDEN_LEGACY:
+                if dependency in FORBIDDEN_LEGACY and not allows_store_legacy_import(
+                    name, manifest, table_name, alias, value
+                ):
                     failures.append(
                         f"{location}: active package {name} depends on legacy {dependency}"
                     )

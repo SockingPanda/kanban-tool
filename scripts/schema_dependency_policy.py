@@ -69,6 +69,7 @@ WORKSPACE_CANONICAL_DEPENDENCIES = {
     "schemars": {"version": "1.2.1", "default-features": False},
     "jsonschema": {"version": "0.47.0", "default-features": False},
     "sha2": "0.10",
+    "rusqlite": "0.32",
     "strum": "0.26",
     "toml": "0.8",
     "ureq": {"version": "2.12", "default-features": False},

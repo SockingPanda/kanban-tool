@@ -139,10 +139,13 @@ canonical 数据重建，不能成为 mutation path。
 `kanban serve [--db <path>] [--dispatcher-profile <path>]` 是唯一 DB owner。其他 domain 命令
 通过 `kanban-client` 访问默认 `http://127.0.0.1:8721`，支持 `--json`、`--board`、`--actor`
 和 board-local/global task selector。`kanban search` 与 `kanban index
-status|doctor|rebuild|sync` 复用同一 search service。`kanban config show`、`kanban init`、`kanban board
-use/current`、`kanban completions`、隐藏 `__complete` 以及 `kanban hook codex ...` 只处理
-本地配置、completion 或 hook 文件，不打开数据库；host 不可用时，domain 命令返回
-`server_unavailable`。
+status|doctor|rebuild|sync` 复用同一 search service。`doctor`、`stats`、`checkpoint`、verified
+`backup`、portable `export/import`、`import-v30`、`vacuum` 和 `maintenance
+status/run/rebuild/cleanup` 也只通过该 host 执行；它们不在 MCP surface 中。`import-v30`
+需要 host 的 `legacy-sqlite-import` feature，未启用时返回 `feature_not_available`。
+`kanban config show`、`kanban init`、`kanban board use/current`、`kanban completions`、隐藏
+`__complete` 以及 `kanban hook codex ...` 只处理本地配置、completion 或 hook 文件，不打开
+数据库；host 不可用时，domain 命令返回 `server_unavailable`。
 
 ### 6.2 MCP
 

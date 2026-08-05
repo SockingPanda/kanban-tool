@@ -44,8 +44,12 @@ board isolation、外键、唯一约束、CAS 和事务边界由共享 service/s
   通过 helper subprocess、framed protocol 或第二个数据库写事实。
 
 3b61aa5 已建立 migration、projection job/state、retrieval、ontology/signal、import journal
-和 attachment staging 的 schema readiness，并探测 `fts`/`vector32` capabilities；service
-use case、worker loop、完整管理 API 和 SQLite importer 仍需按 parity ledger 接通。
+和 attachment staging 的 schema readiness，并探测 `fts`/`vector32` capabilities；本维护切片
+已把 doctor/checkpoint/verified backup/portable export-import/vacuum 以及 projection
+owner、generation、recovery status 接入 application → HTTP → typed client → CLI。SQLite v30
+importer 的 typed host-admin route/client/CLI wiring 已接入，但实际只读 importer 逻辑由
+`legacy-sqlite-import` feature 提供；未启用 feature 时 fail-closed。真实 projection worker
+和 Desktop maintenance controls 仍需后续纵向切片。
 
 ## 2. Workspace crate 边界
 
@@ -151,8 +155,9 @@ v2 SQL SHA-256 写入 migration ledger；v1 原地升级先通过 sibling `VACUU
   graph/context 都可删除后重建，不接受旧 helper subprocess/protocol 或独立 control plane。
 
 当前 schema 能力已经有 capability probe 和 fail-closed shape validation；task search 的
-store → application → HTTP → typed client → CLI/MCP 纵向切片已接通，Desktop 视图仍按独立
-slice 实现。文档不把 schema 存在等同于其他尚未接通的用户入口可用。
+store → application → HTTP → typed client → CLI/MCP 纵向切片已接通；maintenance 查询和
+host-admin mutation 由 `kanban-server` 唯一 owner 串行执行。其他领域 service、worker 和
+Desktop 视图仍按纵向 slice 实现，文档不把 schema 存在等同于用户入口可用。
 
 ## 5. 迁移与主机管理
 
@@ -160,11 +165,11 @@ slice 实现。文档不把 schema 存在等同于其他尚未接通的用户入
 
 1. **Turso v1 原地升级**：host 独占数据库；先生成并校验 sibling backup，再执行事务化
    migration。失败保留旧 schema/data，可再次启动；重复启动幂等。
-2. **SQLite v30 逻辑导入**：CLI 通过 localhost 管理 API 请求运行中的 host；service 只读
-   打开源 SQLite，目标 Turso 必须为空。先做 schema、计数、引用、board、attachment 和
-   checksum preflight，再按 `import_journal`/`attachment_staging` 做 staging、commit 后
-   原子发布和崩溃 resume。派生 FTS/vector 不迁移，导入后重建；源文件不修改，重复
-   fingerprint 返回已完成结果。
+2. **portable/SQLite 导入**：当前 CLI 通过 localhost 管理 API 请求运行中的 host，portable
+   JSONL 只导入 canonical facts，目标保留 host bootstrap board/columns；事务阶段写入
+   `import_journal`，失败标记 `failed`，派生 FTS/vector 不迁移，导入后由 rebuild 处理。
+   SQLite v30 的 route/client/CLI 入口已预留；只读 schema、attachment staging、原子文件发布和
+   崩溃 resume 仅在显式启用 `legacy-sqlite-import` feature 后提供，默认构建保持不可用。
 
 备份、portable export/import、maintenance、rebuild、cleanup、native compaction 或“导出
 到新 Turso 后校验并原子替换”都属于 host 管理面。它们不能成为 MCP tool；CLI、HTTP 和

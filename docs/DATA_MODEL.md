@@ -53,9 +53,11 @@ canonical 表保存业务事实或不可由索引重建的迁移事实；derived
 | 导入耐久性 | `import_journal` 记录 source fingerprint、阶段和 resume 所需的事务事实 | `attachment_staging` 记录 staging 文件的 checksum/size/发布阶段；staging 文件本身不是 canonical attachment |
 | schema 元数据 | `schema_migrations`、`schema_identity`、`schema_capabilities` | capability probe 结果可刷新，不改变业务事实 |
 
-旧 SQLite v30 的导入目标必须是空的 canonical Turso 数据库。v2 已提供 journal 和
-attachment staging 的持久化结构，但 importer、管理 API 和文件发布流程仍需在 service
-纵向切片中接通；不能因为表已经存在就声称导入已完成。
+portable JSONL 导入目标可以是只含 host bootstrap board/columns 的新 Turso 数据库，且不
+把 projection/FTS/vector/graph 派生表当作业务事实；事务阶段写入 `import_journal`，失败
+会记录 `failed`。旧 SQLite v30 的 schema/attachment preflight、staging 和原子文件发布
+仍需专门 importer 逻辑（默认 feature 不启用）；typed host-admin 入口可以在启用
+`legacy-sqlite-import` 后调用它，不能因为表已经存在就声称 SQLite 导入已完成。
 
 ## 3. ID、时间和 JSON
 
@@ -209,8 +211,9 @@ attachment root、canonical root、manifest、previous identity 和错误。`att
 公开 attachment API 已由 `kanban-server`/`kanban-client`、CLI、MCP 接通；Desktop task detail
 可直接复用 typed client endpoint。目标导入流程仍是只读打开 SQLite v30，先做 schema、计数、引用、attachment checksum 和 board
 isolation preflight，再将附件复制到同文件系统 staging；DB commit 后原子发布，崩溃后按
-journal resume。源文件永不修改，重复 fingerprint 返回已完成结果。当前 schema 已提供
-这些耐久结构，但 importer/service/HTTP/CLI 管理入口仍是待闭合的 parity slice。
+journal resume。源文件永不修改，重复 fingerprint 返回已完成结果。当前 schema 与
+`kanban-store-turso` 已提供 portable JSONL service/HTTP/CLI 管理入口；SQLite v30 importer
+与 attachment 文件发布仍是待闭合的 parity slice。
 
 ## 10. 事务、约束和当前 ownership
 

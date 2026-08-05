@@ -281,7 +281,7 @@ canonical 数据是业务事实。搜索、图、向量、缓存和 projection �
 
 ### 6.1 CLI
 
-`kanban serve [--db <path>] [--dispatcher-profile <path>]` 是唯一 DB owner。其他命令通过 `kanban-client` 访问默认 `http://127.0.0.1:8721`，支持 `--json`、`--board`、`--actor` 和 board-local/global task selector。`kanban init` 与未迁移命令在触库前返回 `feature_not_available`；host 不可用返回 `server_unavailable`。
+`kanban serve [--db <path>] [--dispatcher-profile <path>]` 是唯一 DB owner。其他命令通过 `kanban-client` 访问默认 `http://127.0.0.1:8721`，支持 `--json`、`--board`、`--actor` 和 board-local/global task selector。`doctor`、`stats`、`checkpoint`、verified `backup`、portable `export/import`、`import-v30`、`vacuum` 和 `maintenance status/run/rebuild/cleanup` 也只通过该 host 执行；它们不在 MCP surface 中。`import-v30` 需要 host 的 `legacy-sqlite-import` feature，未启用时返回 `feature_not_available`。`kanban init` 与未迁移命令在触库前返回 `feature_not_available`；host 不可用返回 `server_unavailable`。
 
 ### 6.2 MCP
 
@@ -376,8 +376,12 @@ board isolation、外键、唯一约束、CAS 和事务边界由共享 service/s
   通过 helper subprocess、framed protocol 或第二个数据库写事实。
 
 3b61aa5 已建立 migration、projection job/state、retrieval、ontology/signal、import journal
-和 attachment staging 的 schema readiness，并探测 `fts`/`vector32` capabilities；service
-use case、worker loop、完整管理 API 和 SQLite importer 仍需按 parity ledger 接通。
+和 attachment staging 的 schema readiness，并探测 `fts`/`vector32` capabilities；本维护切片
+已把 doctor/checkpoint/verified backup/portable export-import/vacuum 以及 projection
+owner、generation、recovery status 接入 application → HTTP → typed client → CLI。SQLite v30
+importer 的 typed host-admin route/client/CLI wiring 已接入，但实际只读 importer 逻辑由
+`legacy-sqlite-import` feature 提供；未启用 feature 时 fail-closed。真实 projection worker
+和 Desktop maintenance controls 仍需后续纵向切片。
 
 ## 2. Workspace crate 边界
 
@@ -479,9 +483,9 @@ v2 SQL SHA-256 写入 migration ledger；v1 原地升级先通过 sibling `VACUU
 - **Projection**：canonical mutation 在事务中写事实、event 和 projection job；FTS、vector、
   graph/context 都可删除后重建，不接受旧 helper subprocess/protocol 或独立 control plane。
 
-当前 schema 能力已经有 capability probe 和 fail-closed shape validation，但完整 service
-查询、worker、HTTP/CLI/MCP/停机恢复和 Desktop 视图仍按纵向 slice 实现；文档不把 schema
-存在等同于用户入口可用。
+当前 schema 能力已经有 capability probe 和 fail-closed shape validation。maintenance
+查询和 host-admin mutation 由 `kanban-server` 唯一 owner 串行执行；其他领域 service、worker
+和 Desktop 视图仍按纵向 slice 实现，文档不把 schema 存在等同于用户入口可用。
 
 ## 5. 迁移与主机管理
 
@@ -489,11 +493,11 @@ v2 SQL SHA-256 写入 migration ledger；v1 原地升级先通过 sibling `VACUU
 
 1. **Turso v1 原地升级**：host 独占数据库；先生成并校验 sibling backup，再执行事务化
    migration。失败保留旧 schema/data，可再次启动；重复启动幂等。
-2. **SQLite v30 逻辑导入**：CLI 通过 localhost 管理 API 请求运行中的 host；service 只读
-   打开源 SQLite，目标 Turso 必须为空。先做 schema、计数、引用、board、attachment 和
-   checksum preflight，再按 `import_journal`/`attachment_staging` 做 staging、commit 后
-   原子发布和崩溃 resume。派生 FTS/vector 不迁移，导入后重建；源文件不修改，重复
-   fingerprint 返回已完成结果。
+2. **portable/SQLite 导入**：当前 CLI 通过 localhost 管理 API 请求运行中的 host，portable
+   JSONL 只导入 canonical facts，目标保留 host bootstrap board/columns；事务阶段写入
+   `import_journal`，失败标记 `failed`，派生 FTS/vector 不迁移，导入后由 rebuild 处理。
+   SQLite v30 的 route/client/CLI 入口已预留；只读 schema、attachment staging、原子文件发布和
+   崩溃 resume 仅在显式启用 `legacy-sqlite-import` feature 后提供，默认构建保持不可用。
 
 备份、portable export/import、maintenance、rebuild、cleanup、native compaction 或“导出
 到新 Turso 后校验并原子替换”都属于 host 管理面。它们不能成为 MCP tool；CLI、HTTP 和
@@ -805,9 +809,11 @@ canonical 表保存业务事实或不可由索引重建的迁移事实；derived
 | 导入耐久性 | `import_journal` 记录 source fingerprint、阶段和 resume 所需的事务事实 | `attachment_staging` 记录 staging 文件的 checksum/size/发布阶段；staging 文件本身不是 canonical attachment |
 | schema 元数据 | `schema_migrations`、`schema_identity`、`schema_capabilities` | capability probe 结果可刷新，不改变业务事实 |
 
-旧 SQLite v30 的导入目标必须是空的 canonical Turso 数据库。v2 已提供 journal 和
-attachment staging 的持久化结构，但 importer、管理 API 和文件发布流程仍需在 service
-纵向切片中接通；不能因为表已经存在就声称导入已完成。
+portable JSONL 导入目标可以是只含 host bootstrap board/columns 的新 Turso 数据库，且不
+把 projection/FTS/vector/graph 派生表当作业务事实；事务阶段写入 `import_journal`，失败
+会记录 `failed`。旧 SQLite v30 的 schema/attachment preflight、staging 和原子文件发布
+仍需专门 importer 逻辑（默认 feature 不启用）；typed host-admin 入口可以在启用
+`legacy-sqlite-import` 后调用它，不能因为表已经存在就声称 SQLite 导入已完成。
 
 ## 3. ID、时间和 JSON
 
@@ -957,8 +963,9 @@ attachment root、canonical root、manifest、previous identity 和错误。`att
 
 目标流程是只读打开 SQLite v30，先做 schema、计数、引用、attachment checksum 和 board
 isolation preflight，再将附件复制到同文件系统 staging；DB commit 后原子发布，崩溃后按
-journal resume。源文件永不修改，重复 fingerprint 返回已完成结果。当前 schema 已提供
-这些耐久结构，但 importer/service/HTTP/CLI 管理入口仍是待闭合的 parity slice。
+journal resume。源文件永不修改，重复 fingerprint 返回已完成结果。当前 schema 与
+`kanban-store-turso` 已提供 portable JSONL service/HTTP/CLI 管理入口；SQLite v30 importer
+与 attachment 文件发布仍是待闭合的 parity slice。
 
 ## 10. 事务、约束和当前 ownership
 
@@ -990,9 +997,10 @@ Desktop 共享同一 service path。迁移删除旧 backend 前，必须由 pari
 所有命令都只创建 `kanban-client` 并调用 `http://127.0.0.1:8721`；CLI 不打开、初始化或
 fallback 到任何数据库。
 
-当前实现只覆盖 board、task、comment、dependency、run 和 event；这不是最终功能边界。
-labels、signals、ontology、search、graph、vector、context、projection、maintenance、
-init/import 等能力必须按 parity ledger 恢复为 localhost client 命令。旧的直接数据库
+当前实现覆盖 board、task、comment、dependency、run、event 和 host-admin maintenance；其他
+能力仍按 parity ledger 逐步接入。
+labels、signals、ontology、search、graph、vector、context、projection、
+init/import 等能力必须按 parity ledger 恢复为 localhost client 命令；host-admin maintenance、portable export/import 和 verified backup 已接入 localhost client。旧的直接数据库
 执行路径不会恢复。
 
 ## 1. 全局选项
@@ -1058,6 +1066,32 @@ kanban serve [--db <PATH>] [--dispatcher-profile <PATH>]
 
 启动后 host 负责初始化 schema、打开/关闭 Turso 和提供全部 HTTP route。其他 CLI 命令在 host
 未启动时只返回 `server_unavailable`，不会创建数据库文件。
+
+### 2.1 Host maintenance
+
+这些命令只通过 `kanban-client` 请求 canonical `kanban serve`，不会打开数据库或 fallback：
+
+```text
+kanban doctor
+kanban stats [--board <BOARD>]
+kanban checkpoint
+kanban backup --path <PATH>
+kanban export --path <PATH>
+kanban import --path <PATH> [--replace]
+kanban import-v30 --path <PATH> [--attachment-root <PATH>]
+kanban vacuum
+kanban maintenance status
+kanban maintenance run [--owner <OWNER>]
+kanban maintenance rebuild [--owner <OWNER>]
+kanban maintenance cleanup [--owner <OWNER>]
+```
+
+成功默认输出人类可读摘要，`--json` 输出 `{ "data": ... }`。backup/export 目标不得已存在
+（包括 symlink）；导入通过 `import_journal` 记录阶段，`--replace` 只在已验证 backup 和
+host 独占窗口内使用。maintenance owner lease 忙时返回 `conflict`，MCP 不提供这些命令。
+`import-v30` 是 legacy SQLite v30 的 host-admin 入口，仅在构建时启用
+`legacy-sqlite-import` feature 后可用；未启用时保持 typed client 路由并返回
+`feature_not_available`，不会由 CLI 直接打开 SQLite。
 
 ## 3. Board
 
@@ -1215,7 +1249,7 @@ kanban <未列出的旧命令>
 
 该路径不读取配置数据库、不创建文件、不 fallback 到 SQLite。未注册的嵌套子命令（例如
 `kanban task archive`）由 clap 在发起任何 HTTP/DB 操作前以参数错误退出 `2`；它们不使用
-runtime JSON envelope。尚未完成的 labels、signals、search、maintenance、projection、
+runtime JSON envelope。尚未完成的 labels、signals、search、projection、
 graph、vector 等顶层 surface 暂时返回 `feature_not_available`；只要该临时路径仍存在，
 对应 parity 项就不能标记完成。host 停止或端口不可达时，已迁移命令返回
 `server_unavailable`（exit code `9`），而不是切换到第二条执行路径。
@@ -1233,10 +1267,8 @@ graph、vector 等顶层 surface 暂时返回 `feature_not_available`；只要�
 默认监听地址为 `http://127.0.0.1:8721`，只接受 loopback 绑定。所有产品路由的基础路径为
 `/api/v1`；健康检查是 `/health`。
 
-本文件先描述当前已接入的 single-host 路由；它不是最终功能边界。labels、signals、
-ontology、search、graph、vector、context、projection、maintenance 与 SSE 必须按 parity
-ledger 恢复到同一 localhost API，并随每个纵向切片补齐本规范。旧的直接数据库路径不会
-恢复。
+本文件描述当前已接入的 single-host 路由。host-admin maintenance 只由 HTTP/CLI 调用，
+MCP 不暴露这些操作；旧的直接数据库路径不会恢复。
 
 ## 1. 通用契约
 
@@ -1298,7 +1330,7 @@ envelope；typed client 不会主动构造这类请求。
 |---|---:|---|
 | `invalid_input` | 400 | handler 已接收的 JSON、path/query value 或字段值无效 |
 | `not_found` | 404 | board、task、step、dependency 或 run 不存在 |
-| `conflict` | 409 | 一般业务冲突或唯一性冲突 |
+| `conflict` | 409 | 一般业务冲突、维护 lease 忙、目标文件已存在或导入目标非空 |
 | `idempotency_conflict` | 409 | 同一实体 key 重放但 canonical payload 不同 |
 | `dependency_cycle` | 409 | dependency 会形成环 |
 | `execution_plan_required` | 409 | promote 前没有计划或 not-required 标记 |
@@ -1343,6 +1375,30 @@ Query：`board`（默认 `default`）。返回 `StatsResponse`（`data: QueueSta
 `board_id`、`generated_at`、按 status 计数、过期 running claim、blocked reason 计数、
 未规划 active task 数，以及仍有未完成 required step 的 active parent 数。该 query 通过
 ApplicationService 读取 canonical Turso snapshot，不执行 claim/reclaim 或其他 mutation。
+
+## 2.1 Host maintenance（只允许 canonical host）
+
+以下 route 都通过 `kanban-server` 的唯一 Turso owner 执行。成功响应使用 `{ "data": ... }`；
+backup/export 先写同目录临时文件、校验后原子 rename，并拒绝覆盖既有文件或 symlink。
+
+| Method | Path | 请求 | 结果 |
+|---|---|---|---|
+| GET | `/api/v1/maintenance/doctor` | 无 | `DoctorResponse`，含 integrity、migration、task/run、FK 和 projection 检查 |
+| POST | `/api/v1/maintenance/checkpoint` | `{}` | `CheckpointResponse` |
+| POST | `/api/v1/maintenance/backup` | `MaintenancePathRequest { path }` | `201 BackupResponse`，含 SHA-256 和字节数 |
+| POST | `/api/v1/maintenance/export` | `MaintenancePathRequest { path }` | `201 ExportResponse`，portable canonical JSONL |
+| POST | `/api/v1/maintenance/import` | `MaintenanceImportRequest { path, replace }` | `ImportResponse`，写入 `import_journal`；派生 projection 需随后 rebuild |
+| POST | `/api/v1/maintenance/import-v30` | `LegacyImportRequest { path, canonical_attachment_root? }` | `LegacyImportResponse`；仅在 host 的 `legacy-sqlite-import` feature 启用时执行，否则返回 `feature_not_available` |
+| POST | `/api/v1/maintenance/vacuum` | `{}` | `VacuumResponse`，host-owned compaction |
+| GET | `/api/v1/maintenance/status` | 无 | `MaintenanceStatusResponse`，owner lease、fence/generation、dirty/error 和 job 计数 |
+| POST | `/api/v1/maintenance/run` | `MaintenanceRunRequest { owner?, action? }` | `MaintenanceRunResponse`；`action` 为 `run|compact|rebuild|cleanup` |
+| POST | `/api/v1/maintenance/rebuild` | `MaintenanceRunRequest { owner? }` | 等价 `action=rebuild` |
+| POST | `/api/v1/maintenance/cleanup` | `MaintenanceRunRequest { owner? }` | 等价 `action=cleanup` |
+
+每个写入 maintenance operation 在 `projection_maintenance_owner` 上使用 immediate lease，
+成功后释放；并发持有有效 lease 时返回 `409 conflict`。portable export 只包含 canonical
+表，不把 FTS/vector/graph/projection 表当作业务事实；`replace=true` 仍要求 host 管理方
+已完成备份并在独占窗口内执行，当前运行中的 host 不替换数据库 inode。
 
 ## 3. Task 读取与创建
 
@@ -1520,9 +1576,8 @@ event list 是只读；所有 mutation 通过 ApplicationService 写 canonical e
 ## 10. 停止路径
 
 服务停止后，client 返回 `server_unavailable`，不得 fallback 到嵌入式数据库、旧 SQLite
-路径或另一个 host。迁移期间尚未接通的 labels/signals/search/maintenance 等命令暂时返回
-`feature_not_available`，不会触碰数据库；只要该临时响应仍存在，对应 parity 项就不能
-标记完成。
+路径或另一个 host。尚未接通的其他命令仍返回 `feature_not_available`，不会触碰数据库；
+maintenance 路由不属于该临时路径。
 
 
 ---

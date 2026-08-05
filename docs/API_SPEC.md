@@ -6,10 +6,10 @@
 默认监听地址为 `http://127.0.0.1:8721`，只接受 loopback 绑定。所有产品路由的基础路径为
 `/api/v1`；健康检查是 `/health`。
 
-本文件先描述当前已接入的 single-host 路由；它不是最终功能边界。labels、signals、graph、
-vector、context、projection、maintenance 与 SSE 仍按 parity ledger 恢复到同一 localhost
-API，并随每个纵向切片补齐本规范。task search 已通过 Turso FTS projection 接入；旧的直接
-数据库路径不会恢复。
+本文件描述当前已接入的 single-host 路由；它不是最终功能边界。task search 已通过 Turso
+FTS projection 接入，host-admin maintenance 只由 HTTP/CLI 调用，MCP 不暴露这些操作。
+labels、signals、graph、vector、context 与其他 projection 仍按 parity ledger 恢复到同一
+localhost API；旧的直接数据库路径不会恢复。
 
 ## 1. 通用契约
 
@@ -71,7 +71,7 @@ envelope；typed client 不会主动构造这类请求。
 |---|---:|---|
 | `invalid_input` | 400 | handler 已接收的 JSON、path/query value 或字段值无效 |
 | `not_found` | 404 | board、task、step、dependency 或 run 不存在 |
-| `conflict` | 409 | 一般业务冲突或唯一性冲突 |
+| `conflict` | 409 | 一般业务冲突、维护 lease 忙、目标文件已存在或导入目标非空 |
 | `idempotency_conflict` | 409 | 同一实体 key 重放但 canonical payload 不同 |
 | `dependency_cycle` | 409 | dependency 会形成环 |
 | `execution_plan_required` | 409 | promote 前没有计划或 not-required 标记 |
@@ -116,6 +116,30 @@ Query：`board`（默认 `default`）。返回 `StatsResponse`（`data: QueueSta
 `board_id`、`generated_at`、按 status 计数、过期 running claim、blocked reason 计数、
 未规划 active task 数，以及仍有未完成 required step 的 active parent 数。该 query 通过
 ApplicationService 读取 canonical Turso snapshot，不执行 claim/reclaim 或其他 mutation。
+
+## 2.1 Host maintenance（只允许 canonical host）
+
+以下 route 都通过 `kanban-server` 的唯一 Turso owner 执行。成功响应使用 `{ "data": ... }`；
+backup/export 先写同目录临时文件、校验后原子 rename，并拒绝覆盖既有文件或 symlink。
+
+| Method | Path | 请求 | 结果 |
+|---|---|---|---|
+| GET | `/api/v1/maintenance/doctor` | 无 | `DoctorResponse`，含 integrity、migration、task/run、FK 和 projection 检查 |
+| POST | `/api/v1/maintenance/checkpoint` | `{}` | `CheckpointResponse` |
+| POST | `/api/v1/maintenance/backup` | `MaintenancePathRequest { path }` | `201 BackupResponse`，含 SHA-256 和字节数 |
+| POST | `/api/v1/maintenance/export` | `MaintenancePathRequest { path }` | `201 ExportResponse`，portable canonical JSONL |
+| POST | `/api/v1/maintenance/import` | `MaintenanceImportRequest { path, replace }` | `ImportResponse`，写入 `import_journal`；派生 projection 需随后 rebuild |
+| POST | `/api/v1/maintenance/import-v30` | `LegacyImportRequest { path, canonical_attachment_root? }` | `LegacyImportResponse`；仅在 host 的 `legacy-sqlite-import` feature 启用时执行，否则返回 `feature_not_available` |
+| POST | `/api/v1/maintenance/vacuum` | `{}` | `VacuumResponse`，host-owned compaction |
+| GET | `/api/v1/maintenance/status` | 无 | `MaintenanceStatusResponse`，owner lease、fence/generation、dirty/error 和 job 计数 |
+| POST | `/api/v1/maintenance/run` | `MaintenanceRunRequest { owner?, action? }` | `MaintenanceRunResponse`；`action` 为 `run|compact|rebuild|cleanup` |
+| POST | `/api/v1/maintenance/rebuild` | `MaintenanceRunRequest { owner? }` | 等价 `action=rebuild` |
+| POST | `/api/v1/maintenance/cleanup` | `MaintenanceRunRequest { owner? }` | 等价 `action=cleanup` |
+
+每个写入 maintenance operation 在 `projection_maintenance_owner` 上使用 immediate lease，
+成功后释放；并发持有有效 lease 时返回 `409 conflict`。portable export 只包含 canonical
+表，不把 FTS/vector/graph/projection 表当作业务事实；`replace=true` 仍要求 host 管理方
+已完成备份并在独占窗口内执行，当前运行中的 host 不替换数据库 inode。
 
 ## 3. Task 读取与创建
 
@@ -354,6 +378,6 @@ event list 是只读；所有 mutation 通过 ApplicationService 写 canonical e
 ## 12. 停止路径
 
 服务停止后，client 返回 `server_unavailable`，不得 fallback 到嵌入式数据库、旧 SQLite
-路径或另一个 host。迁移期间尚未接通的 labels/signals/maintenance 等命令暂时返回
+路径或另一个 host。迁移期间尚未接通的 labels/signals 等命令暂时返回
 `feature_not_available`，不会触碰数据库；只要该临时响应仍存在，对应 parity 项就不能
-标记完成。
+标记完成。maintenance 路由不属于该临时路径。

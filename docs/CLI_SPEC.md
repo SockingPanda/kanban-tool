@@ -4,10 +4,11 @@
 Codex hook 和 `kanban serve` 这些本地 shell 命令外，所有命令都只创建 `kanban-client` 并
 调用 `http://127.0.0.1:8721`；CLI 不打开、初始化或 fallback 到任何数据库。
 
-当前实现覆盖 board、task、comment、attachment、dependency、run、event、search、index，以及
-本节列出的本地 shell 命令；这不是最终功能边界。labels、signals、ontology、graph、vector、
-context、projection、maintenance、import 等 domain 能力必须按 parity ledger 恢复为
-localhost client 命令。旧的直接数据库执行路径不会恢复。
+当前实现覆盖 board、task、comment、attachment、dependency、run、event、search、index、
+ontology、host-admin maintenance，以及本节列出的本地 shell 命令；这不是最终功能边界。
+labels、signals、graph、vector、context 和其他 projection 能力仍按 parity ledger 恢复为
+localhost client 命令。portable export/import 和 verified backup 已接入；旧的直接数据库
+执行路径不会恢复。
 
 ## 1. 全局选项
 
@@ -77,6 +78,32 @@ kanban serve [--db <PATH>] [--dispatcher-profile <PATH>]
 
 启动后 host 负责初始化 schema、打开/关闭 Turso 和提供全部 HTTP route。其他 CLI 命令在 host
 未启动时只返回 `server_unavailable`，不会创建数据库文件。
+
+### 2.1 Host maintenance
+
+这些命令只通过 `kanban-client` 请求 canonical `kanban serve`，不会打开数据库或 fallback：
+
+```text
+kanban doctor
+kanban stats [--board <BOARD>]
+kanban checkpoint
+kanban backup --path <PATH>
+kanban export --path <PATH>
+kanban import --path <PATH> [--replace]
+kanban import-v30 --path <PATH> [--attachment-root <PATH>]
+kanban vacuum
+kanban maintenance status
+kanban maintenance run [--owner <OWNER>]
+kanban maintenance rebuild [--owner <OWNER>]
+kanban maintenance cleanup [--owner <OWNER>]
+```
+
+成功默认输出人类可读摘要，`--json` 输出 `{ "data": ... }`。backup/export 目标不得已存在
+（包括 symlink）；导入通过 `import_journal` 记录阶段，`--replace` 只在已验证 backup 和
+host 独占窗口内使用。maintenance owner lease 忙时返回 `conflict`，MCP 不提供这些命令。
+`import-v30` 是 legacy SQLite v30 的 host-admin 入口，仅在构建时启用
+`legacy-sqlite-import` feature 后可用；未启用时保持 typed client 路由并返回
+`feature_not_available`，不会由 CLI 直接打开 SQLite。
 
 ## 3. 本地配置与项目 shell
 
@@ -344,7 +371,7 @@ kanban <未列出的旧命令>
 
 该路径不读取配置数据库、不创建文件、不 fallback 到 SQLite。未注册的嵌套子命令（例如
 `kanban task archive`）由 clap 在发起任何 HTTP/DB 操作前以参数错误退出 `2`；它们不使用
-runtime JSON envelope。尚未完成的 labels、signals、maintenance、projection、
+runtime JSON envelope。尚未完成的 labels、signals、projection、
 graph、vector 等顶层 surface 暂时返回 `feature_not_available`；只要该临时路径仍存在，
 对应 parity 项就不能标记完成。host 停止或端口不可达时，已迁移命令返回
 `server_unavailable`（exit code `9`），而不是切换到第二条执行路径。

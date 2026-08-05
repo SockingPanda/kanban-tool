@@ -69,7 +69,7 @@ use crate::{
     LegacyImportResponse, ListEventsQuery, MaintenanceImportRequest, MaintenancePathRequest,
     MaintenanceRunRequest, MaintenanceRunResponse, MaintenanceStatusResponse, SearchStatusResponse,
     SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse, StatsResponse,
-    VectorConfigureRequest, VectorConfigureResponse, VectorProjectionRequest,
+    VacuumResponse, VectorConfigureRequest, VectorConfigureResponse, VectorProjectionRequest,
     VectorProjectionResponse, VectorQuery, VectorQueryChunksResponse,
     VectorQueryLabelAtomsResponse, VectorStatusQuery, VectorStatusResponse,
 };

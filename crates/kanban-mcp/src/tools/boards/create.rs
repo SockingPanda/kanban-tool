@@ -6,7 +6,7 @@ use rmcp::{
 };
 use serde::Deserialize;
 
-use crate::shared::{KanbanMcp, call_client_internal};
+use crate::shared::{KanbanMcp, call_client};
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -30,7 +30,7 @@ impl KanbanMcp {
         Parameters(args): Parameters<BoardCreateArgs>,
     ) -> Result<Json<CreateBoardResponse>, McpError> {
         let client = self.client.clone();
-        let board = call_client_internal(move || {
+        let board = call_client(move || {
             client.create_board(CreateBoardRequest {
                 slug: args.slug,
                 name: args.name,

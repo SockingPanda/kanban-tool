@@ -57,7 +57,6 @@ export async function invalidateTaskMutationScope({
     invalidate(queryKeys.taskSteps(targetTaskId))
     invalidate(queryKeys.taskNeighborhood(targetTaskId))
     invalidate(queryKeys.taskRuns(targetTaskId))
-    invalidate(queryKeys.taskAttachments(targetTaskId))
     invalidateTimeline()
   }
 

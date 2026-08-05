@@ -33,13 +33,13 @@ TOOL_DIRECT_DEPENDENCY_NAMES = (
 )
 CONTRACT_DIRECT_DEPENDENCY_NAMES = ("schemars", "serde", "serde_json")
 TOOL_MANIFEST_DEPENDENCIES = {
-    "jsonschema": {"workspace": True},
+    "jsonschema": {"workspace": True, "default-features": False},
     CONTRACT_PACKAGE: {
         "workspace": True,
         "default-features": False,
         "features": ["schema"],
     },
-    "serde": {"workspace": True},
+    "serde": {"workspace": True, "features": ["derive"]},
     "serde_json": {"workspace": True},
     "sha2": {"workspace": True},
 }
@@ -48,25 +48,83 @@ CONTRACT_MANIFEST_FEATURES = {
     "schema": ["dep:schemars"],
 }
 CONTRACT_MANIFEST_DEPENDENCIES = {
-    "schemars": {"workspace": True, "optional": True},
-    "serde": {"workspace": True},
+    "schemars": {
+        "workspace": True,
+        "default-features": False,
+        "features": ["std", "derive"],
+        "optional": True,
+    },
+    "serde": {"workspace": True, "features": ["derive"]},
     "serde_json": {"workspace": True},
 }
 WORKSPACE_CANONICAL_DEPENDENCIES = {
+    "anyhow": "1.0",
+    "axum": "0.7",
+    "clap": "4.5",
+    "dirs-next": "2.0",
+    "http-body-util": "0.1",
+    "serde": "1.0",
+    "serde_json": "1.0",
+    "serde_path_to_error": "0.1.20",
+    "schemars": {"version": "1.2.1", "default-features": False},
     "jsonschema": {"version": "0.47.0", "default-features": False},
+    "sha2": "0.10",
+    "strum": "0.26",
+    "toml": "0.8",
+    "ureq": {"version": "2.12", "default-features": False},
+    "tempfile": "3.10",
+    "thiserror": "2.0",
+    "time": "0.3",
+    "tokio": "1.38",
+    "tower": "0.5",
+    "tracing": "0.1.44",
+    "ulid": "1.1",
+    "turso": {"version": "=0.7.2", "default-features": False},
+    "rmcp": {"version": "=3.1.0", "default-features": False},
+    "tower-http": "0.6",
+    "proptest": {"version": "1.11.0", "default-features": False},
+    "tauri-build": "2",
+    "tauri": "2",
+    "tauri-plugin-single-instance": "2",
+    "ksni": {"version": "0.3.5", "default-features": False},
+    "kanban-core": {"path": "crates/kanban-core"},
+    "kanban-application": {"path": "crates/kanban-application"},
     CONTRACT_PACKAGE: {
         "path": "crates/kanban-contract",
         "default-features": False,
     },
-    "serde": {"version": "1.0", "features": ["derive"]},
-    "schemars": {
-        "version": "1.2.1",
-        "default-features": False,
-        "features": ["std", "derive"],
-    },
-    "serde_json": "1.0",
-    "sha2": "0.10",
+    "kanban-store-turso": {"path": "crates/kanban-store-turso"},
+    "kanban-client": {"path": "crates/kanban-client"},
+    "kanban-server": {"path": "crates/kanban-server"},
 }
+ROOT_DEPENDENCY_IDENTITY_KEYS = {"version", "source", "path"}
+ROOT_DEPENDENCY_INHERITANCE_KEYS = ROOT_DEPENDENCY_IDENTITY_KEYS | {
+    "default-features"
+}
+ACTIVE_MANIFESTS = {
+    "kanban-core": "crates/kanban-core/Cargo.toml",
+    "kanban-application": "crates/kanban-application/Cargo.toml",
+    CONTRACT_PACKAGE: "crates/kanban-contract/Cargo.toml",
+    "kanban-store-turso": "crates/kanban-store-turso/Cargo.toml",
+    "kanban-client": "crates/kanban-client/Cargo.toml",
+    "kanban-cli": "crates/kanban-cli/Cargo.toml",
+    "kanban-mcp": "crates/kanban-mcp/Cargo.toml",
+    "kanban-server": "crates/kanban-server/Cargo.toml",
+    "kanban-desktop": "apps/desktop/src-tauri/Cargo.toml",
+    TOOL_PACKAGE: "xtask/Cargo.toml",
+}
+TOKIO_FEATURES = (
+    "fs",
+    "io-std",
+    "io-util",
+    "macros",
+    "net",
+    "process",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+    "time",
+)
 CORE_PACKAGES = (
     "kanban-core",
     "kanban-application",
@@ -197,6 +255,157 @@ def _audit_root_patch(workspace_manifest: dict[str, Any], repo_root: Path) -> No
             raise DependencyPolicyError(_phase_two_message(
                 f"approved patch package identity/version 错误: {package}"
             ))
+
+
+def _dependency_sections(manifest: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """返回 manifest 中所有 Cargo dependency section，包含 target-specific section。"""
+
+    sections: list[tuple[str, dict[str, Any]]] = []
+    for section_name in ("dependencies", "dev-dependencies", "build-dependencies"):
+        section = manifest.get(section_name)
+        if section is not None:
+            if not isinstance(section, dict):
+                raise DependencyPolicyError(f"[{section_name}] 必须是 table")
+            sections.append((section_name, section))
+    targets = manifest.get("target")
+    if targets is not None:
+        if not isinstance(targets, dict):
+            raise DependencyPolicyError("[target] 必须是 table")
+        for target_name, target in targets.items():
+            if not isinstance(target, dict):
+                raise DependencyPolicyError(f"target {target_name} 必须是 table")
+            for section_name in ("dependencies", "dev-dependencies", "build-dependencies"):
+                section = target.get(section_name)
+                if section is not None:
+                    if not isinstance(section, dict):
+                        raise DependencyPolicyError(
+                            f"target {target_name} [{section_name}] 必须是 table"
+                        )
+                    sections.append((f"target.{target_name}.{section_name}", section))
+    return sections
+
+
+def _audit_workspace_dependency_policy(
+    workspace_manifest: dict[str, Any], repo_root: Path = ROOT
+) -> None:
+    """锁定 root identity 与 active leaf 的 feature ownership。"""
+
+    workspace = workspace_manifest.get("workspace")
+    if not isinstance(workspace, dict):
+        raise DependencyPolicyError("root Cargo.toml 缺少 [workspace]")
+    declarations = workspace.get("dependencies")
+    if not isinstance(declarations, dict):
+        raise DependencyPolicyError("root Cargo.toml 缺少 [workspace.dependencies]")
+    actual_names = set(declarations)
+    expected_names = set(WORKSPACE_CANONICAL_DEPENDENCIES)
+    if actual_names != expected_names:
+        raise DependencyPolicyError(
+            _phase_two_message(
+                "root [workspace.dependencies] 必须精确覆盖 active dependency registry: "
+                f"missing={sorted(expected_names - actual_names)}, "
+                f"unexpected={sorted(actual_names - expected_names)}"
+            )
+        )
+    for name, expected in WORKSPACE_CANONICAL_DEPENDENCIES.items():
+        actual = declarations[name]
+        if actual != expected:
+            raise DependencyPolicyError(
+                _phase_two_message(
+                    f"root workspace dependency {name} identity 漂移: "
+                    f"expected={expected}, actual={actual}"
+                )
+            )
+        if isinstance(actual, dict):
+            if set(actual) - ROOT_DEPENDENCY_INHERITANCE_KEYS:
+                raise DependencyPolicyError(
+                    _phase_two_message(
+                        f"root workspace dependency {name} 只能声明 version/source/path，"
+                        "或 Cargo 继承所需的 default-features=false"
+                    )
+                )
+            if "default-features" in actual and actual["default-features"] is not False:
+                raise DependencyPolicyError(
+                    _phase_two_message(
+                        f"root workspace dependency {name} 的 default-features 只能是 false"
+                    )
+                )
+        elif not isinstance(actual, str):
+            raise DependencyPolicyError(
+                f"root workspace dependency {name} 必须是 version string 或 identity table"
+            )
+
+    for package_name, relative_manifest in ACTIVE_MANIFESTS.items():
+        manifest_path = repo_root / relative_manifest
+        try:
+            with manifest_path.open("rb") as handle:
+                manifest = tomllib.load(handle)
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            raise DependencyPolicyError(
+                f"读取 active manifest 失败: {manifest_path}: {error}"
+            ) from error
+        for section_name, section in _dependency_sections(manifest):
+            for dependency_name, declaration in section.items():
+                if dependency_name not in expected_names:
+                    raise DependencyPolicyError(
+                        _phase_two_message(
+                            f"{package_name} {section_name} dependency {dependency_name} "
+                            "必须先注册到 root workspace"
+                        )
+                    )
+                if not isinstance(declaration, dict):
+                    raise DependencyPolicyError(
+                        f"{package_name} {section_name} dependency {dependency_name} "
+                        "必须使用 workspace = true table"
+                    )
+                if declaration.get("workspace") is not True:
+                    raise DependencyPolicyError(
+                        _phase_two_message(
+                            f"{package_name} {section_name} dependency {dependency_name} "
+                            "必须使用 workspace = true"
+                        )
+                    )
+                forbidden_identity = {
+                    key
+                    for key in ("version", "source", "path", "git", "registry")
+                    if key in declaration
+                }
+                if forbidden_identity:
+                    raise DependencyPolicyError(
+                        _phase_two_message(
+                            f"{package_name} {section_name} dependency {dependency_name} "
+                            f"禁止 leaf inline identity: {sorted(forbidden_identity)}"
+                        )
+                    )
+
+    store_manifest = repo_root / ACTIVE_MANIFESTS["kanban-store-turso"]
+    with store_manifest.open("rb") as handle:
+        store = tomllib.load(handle)
+    turso = store.get("dependencies", {}).get("turso")
+    if turso != {
+        "workspace": True,
+        "default-features": False,
+        "features": ["fts"],
+    }:
+        raise DependencyPolicyError(
+            _phase_two_message(
+                "kanban-store-turso 必须独占 turso = 0.7.2 的 default-features=false + fts"
+            )
+        )
+
+    mcp_manifest = repo_root / ACTIVE_MANIFESTS["kanban-mcp"]
+    with mcp_manifest.open("rb") as handle:
+        mcp = tomllib.load(handle)
+    mcp_contract = mcp.get("dependencies", {}).get(CONTRACT_PACKAGE)
+    if mcp_contract != {
+        "workspace": True,
+        "default-features": False,
+        "features": ["schema"],
+    }:
+        raise DependencyPolicyError(
+            _phase_two_message(
+                "kanban-mcp 必须显式声明 kanban-contract/schema 运行时 schema exception"
+            )
+        )
 
 
 def _package_records_by_id(
@@ -1054,6 +1263,7 @@ def audit_manifest_data(
     workspace = workspace_manifest.get("workspace")
     if not isinstance(workspace, dict):
         raise DependencyPolicyError("root Cargo.toml 缺少 [workspace]")
+    _audit_workspace_dependency_policy(workspace_manifest, repo_root)
     members = workspace.get("members")
     defaults = workspace.get("default-members")
     if not isinstance(members, list) or members.count(TOOL_MEMBER_PATH) != 1:
@@ -1072,14 +1282,10 @@ def audit_manifest_data(
     workspace_dependencies = workspace.get("dependencies")
     if not isinstance(workspace_dependencies, dict):
         raise DependencyPolicyError("root Cargo.toml 缺少 [workspace.dependencies]")
-    for name, expected in WORKSPACE_CANONICAL_DEPENDENCIES.items():
-        actual = workspace_dependencies.get(name)
-        if actual != expected:
+    for name in TOOL_DIRECT_DEPENDENCY_NAMES:
+        if name not in workspace_dependencies:
             raise DependencyPolicyError(
-                _phase_two_message(
-                    f"workspace canonical dependency {name} 偏离 Phase 1: "
-                    f"expected={expected}, actual={actual}"
-                )
+                _phase_two_message(f"root workspace dependencies 缺少 xtask 依赖 {name}")
             )
 
     package = tool_manifest.get("package")
@@ -1157,6 +1363,7 @@ def audit_contract_manifest_data(
     workspace = workspace_manifest.get("workspace")
     if not isinstance(workspace, dict):
         raise DependencyPolicyError("root Cargo.toml 缺少 [workspace]")
+    _audit_workspace_dependency_policy(workspace_manifest, repo_root)
     _audit_root_patch(workspace_manifest, repo_root)
     if "replace" in workspace_manifest:
         raise DependencyPolicyError(_phase_two_message("root Cargo.toml 禁止声明 [replace] override"))

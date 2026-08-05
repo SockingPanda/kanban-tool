@@ -28,6 +28,6 @@ default = []
 schema = ["dep:schemars"]
 
 [dependencies]
-schemars = { workspace = true, optional = true }
-serde.workspace = true
+schemars = { workspace = true, default-features = false, features = ["std", "derive"], optional = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

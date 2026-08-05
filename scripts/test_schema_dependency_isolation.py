@@ -107,13 +107,13 @@ CONTRACT_EDGE_SIGNATURES = {
 }
 
 TOOL_MANIFEST_DEPENDENCIES = {
-    "jsonschema": {"workspace": True},
+    "jsonschema": {"workspace": True, "default-features": False},
     "kanban-contract": {
         "workspace": True,
         "default-features": False,
         "features": ["schema"],
     },
-    "serde": {"workspace": True},
+    "serde": {"workspace": True, "features": ["derive"]},
     "serde_json": {"workspace": True},
     "sha2": {"workspace": True},
 }
@@ -122,25 +122,16 @@ CONTRACT_MANIFEST_FEATURES = {
     "schema": ["dep:schemars"],
 }
 CONTRACT_MANIFEST_DEPENDENCIES = {
-    "schemars": {"workspace": True, "optional": True},
-    "serde": {"workspace": True},
-    "serde_json": {"workspace": True},
-}
-WORKSPACE_CANONICAL_DEPENDENCIES = {
-    "jsonschema": {"version": "0.47.0", "default-features": False},
-    "kanban-contract": {
-        "path": "crates/kanban-contract",
-        "default-features": False,
-    },
-    "serde": {"version": "1.0", "features": ["derive"]},
     "schemars": {
-        "version": "1.2.1",
+        "workspace": True,
         "default-features": False,
         "features": ["std", "derive"],
+        "optional": True,
     },
-    "serde_json": "1.0",
-    "sha2": "0.10",
+    "serde": {"workspace": True, "features": ["derive"]},
+    "serde_json": {"workspace": True},
 }
+WORKSPACE_CANONICAL_DEPENDENCIES = dependency_policy.WORKSPACE_CANONICAL_DEPENDENCIES
 
 
 def dependency(
@@ -856,12 +847,84 @@ class DependencyIsolationGateTests(unittest.TestCase):
             workspace = tomllib.load(handle)
         with (ROOT / TOOL_MEMBER / "Cargo.toml").open("rb") as handle:
             tool = tomllib.load(handle)
-        workspace["workspace"]["dependencies"]["jsonschema"][
-            "default-features"
-        ] = True
+        workspace["workspace"]["dependencies"]["jsonschema"] = {
+            "version": "0.47.0",
+            "default-features": True,
+        }
 
         with self.assertRaises(dependency_policy.DependencyPolicyError):
             dependency_policy.audit_manifest_data(workspace, tool, ROOT)
+
+    def test_workspace_dependency_policy_rejects_leaf_identity_and_feature_leaks(self) -> None:
+        with (ROOT / "Cargo.toml").open("rb") as handle:
+            workspace = tomllib.load(handle)
+
+        def copied_root():
+            holder = tempfile.TemporaryDirectory()
+            repo = Path(holder.name)
+            for relative_manifest in dependency_policy.ACTIVE_MANIFESTS.values():
+                source = ROOT / relative_manifest
+                target = repo / relative_manifest
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+            return holder, repo
+
+        holder, repo = copied_root()
+        try:
+            mutated_root = copy.deepcopy(workspace)
+            mutated_root["workspace"]["dependencies"]["serde"] = {
+                "version": "1.0",
+                "features": ["derive"],
+            }
+            with self.assertRaises(dependency_policy.DependencyPolicyError):
+                dependency_policy._audit_workspace_dependency_policy(mutated_root, repo)
+
+            client_path = repo / dependency_policy.ACTIVE_MANIFESTS["kanban-client"]
+            with client_path.open("rb") as handle:
+                client = tomllib.load(handle)
+            client["dependencies"]["ureq"] = {"version": "2.12"}
+            client_path.write_text(
+                "[dependencies]\nureq = { version = \"2.12\" }\n",
+                encoding="utf-8",
+            )
+            with self.assertRaises(dependency_policy.DependencyPolicyError):
+                dependency_policy._audit_workspace_dependency_policy(workspace, repo)
+            self.assertEqual(client["dependencies"]["ureq"]["version"], "2.12")
+        finally:
+            holder.cleanup()
+
+    def test_workspace_dependency_policy_locks_turso_fts_and_mcp_schema_exception(self) -> None:
+        with (ROOT / "Cargo.toml").open("rb") as handle:
+            workspace = tomllib.load(handle)
+
+        holder = tempfile.TemporaryDirectory()
+        repo = Path(holder.name)
+        try:
+            for relative_manifest in dependency_policy.ACTIVE_MANIFESTS.values():
+                source = ROOT / relative_manifest
+                target = repo / relative_manifest
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+            store_path = repo / dependency_policy.ACTIVE_MANIFESTS["kanban-store-turso"]
+            store_path.write_text(
+                store_path.read_text(encoding="utf-8").replace(
+                    'features = ["fts"]', 'features = []'
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(dependency_policy.DependencyPolicyError):
+                dependency_policy._audit_workspace_dependency_policy(workspace, repo)
+
+            shutil.copy2(ROOT / dependency_policy.ACTIVE_MANIFESTS["kanban-store-turso"], store_path)
+            mcp_path = repo / dependency_policy.ACTIVE_MANIFESTS["kanban-mcp"]
+            mcp_text = mcp_path.read_text(encoding="utf-8").replace(
+                'features = ["schema"]', 'features = []'
+            )
+            mcp_path.write_text(mcp_text, encoding="utf-8")
+            with self.assertRaises(dependency_policy.DependencyPolicyError):
+                dependency_policy._audit_workspace_dependency_policy(workspace, repo)
+        finally:
+            holder.cleanup()
 
     def test_root_patch_and_replace_sections_are_rejected(self) -> None:
         with (ROOT / "Cargo.toml").open("rb") as handle:
@@ -1915,9 +1978,10 @@ class DependencyIsolationGateTests(unittest.TestCase):
         }
         mutations.append((workspace, feature_drift))
         root_drift = copy.deepcopy(workspace)
-        root_drift["workspace"]["dependencies"]["schemars"][
-            "default-features"
-        ] = True
+        root_drift["workspace"]["dependencies"]["schemars"] = {
+            "version": "1.2.1",
+            "default-features": True,
+        }
         mutations.append((root_drift, baseline))
 
         for root, contract in mutations:

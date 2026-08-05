@@ -49,7 +49,8 @@ board isolation、外键、唯一约束、CAS 和事务边界由共享 service/s
 owner、generation、recovery status 接入 application → HTTP → typed client → CLI。SQLite v30
 importer 的 typed host-admin route/client/CLI wiring 已接入，但实际只读 importer 逻辑由
 `legacy-sqlite-import` feature 提供；未启用 feature 时 fail-closed。真实 projection worker
-和 Desktop maintenance controls 仍需后续纵向切片。
+仍需后续纵向切片；Desktop maintenance controls 已通过 typed localhost HTTP 接入，不打开第二个
+数据库，危险操作和 `restart_required` 结果由 UI 忠实呈现。
 
 ## 2. Workspace crate 边界
 

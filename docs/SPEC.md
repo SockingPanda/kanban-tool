@@ -155,6 +155,10 @@ MCP 是最小 Rust stdio server，使用官方 `rmcp` tools/stdio transport；�
 
 Desktop 保留已有页面结构和 TS `KanbanApi`，只通过 external host HTTP 工作。`RuntimeConfig`
 只有 `apiBaseUrl`、`actor`、`board`；claim token 只在当前会话内保存，不写入磁盘。
+Maintenance 页面通过同一 `KanbanApi` 访问 host-owned 的 `backup`、portable
+`export/import`、`import-v30`、`vacuum` 和 `maintenance status/run/rebuild/cleanup`；危险操作
+必须二次确认，`server_unavailable` 与 `restart_required` 需要显示可执行提示。Desktop 不打开
+canonical 数据库，也不把这些 host-admin 操作暴露到 MCP。
 labels/signals/neighborhood 等未迁移视图必须隐藏或禁用，不发送失败请求；Desktop search
 view 仍需独立 slice 接入。
 

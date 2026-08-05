@@ -2,6 +2,7 @@ export * from "./api/types"
 import { ApiTransport } from "./api/transport"
 import { ApiError, loadRuntimeConfig } from "./api/transport"
 import * as boards from "./api/boards"
+import * as attachments from "./api/attachments"
 import * as comments from "./api/comments"
 import * as events from "./api/events"
 import * as health from "./api/health"
@@ -17,6 +18,7 @@ import type { DesktopLocale } from "@/i18n"
 import type {
   BoardListOptions,
   ClaimResponse,
+  CreateAttachmentInput,
   CreateBoardInput,
   CreateStepInput,
   CreateTaskInput,
@@ -30,6 +32,7 @@ import type {
   Task,
   TaskListOptions,
   UpdateStepInput,
+  DownloadedAttachment,
 } from "./api/types"
 
 export { ApiError, loadRuntimeConfig }
@@ -54,6 +57,10 @@ export class KanbanApi {
   createBoard(input: CreateBoardInput, options: RequestOptions = {}) { return boards.createBoard(this.transport, input, options) }
   getBoard(board: string, options: RequestOptions = {}) { return boards.getBoard(this.transport, board, options) }
   archiveBoard(board: string, options: RequestOptions = {}) { return boards.archiveBoard(this.transport, board, options) }
+  listAttachments(taskId: string, options: RequestOptions = {}) { return attachments.listAttachments(this.transport, taskId, options) }
+  createAttachment(taskId: string, input: CreateAttachmentInput, options: RequestOptions = {}) { return attachments.createAttachment(this.transport, taskId, input, options) }
+  downloadAttachment(taskId: string, attachmentId: string, options: RequestOptions = {}): Promise<DownloadedAttachment> { return attachments.downloadAttachment(this.transport, taskId, attachmentId, options) }
+  deleteAttachment(taskId: string, attachmentId: string, options: RequestOptions = {}) { return attachments.deleteAttachment(this.transport, taskId, attachmentId, options) }
   stats(options: RequestOptions = {}) { return health.stats(this.transport, options) }
   searchStatus(options: RequestOptions = {}) { return health.searchStatus(this.transport, options) }
   doctor(options: RequestOptions = {}) { return maintenance.doctor(this.transport, options) }

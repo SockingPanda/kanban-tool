@@ -88,6 +88,37 @@ export type LabelRecord = {
   updated_at: number
 }
 
+/** Canonical attachment metadata; bytes are fetched only through the download operation. */
+export type Attachment = {
+  id: string
+  board_id: string
+  task_id: string
+  filename: string
+  rel_path: string
+  content_type: string | null
+  size_bytes: number
+  sha256: string | null
+  created_by: string
+  created_at: number
+}
+
+export type CreateAttachmentInput = {
+  id?: string
+  filename: string
+  content: number[]
+  content_type?: string | null
+  rel_path?: string | null
+  sha256?: string | null
+  actor?: string | null
+}
+
+export type DownloadedAttachment = {
+  content_type: string | null
+  attachment_id: string | null
+  sha256: string | null
+  content: Uint8Array
+}
+
 export type LabelSuggestionEvidenceAtom = {
   atom_id: string
   label_id: string

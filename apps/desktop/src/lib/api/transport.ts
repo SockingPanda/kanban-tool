@@ -67,6 +67,37 @@ export class ApiTransport {
     return json
   }
 
+  async requestBytes(path: string, init: RequestOptions = {}) {
+    const method = init.method ?? "GET"
+    const headers: Record<string, string> = { "Accept-Language": this.options.locale ?? getCurrentDesktopLocale() }
+    if (init.body !== undefined) headers["Content-Type"] = "application/json"
+    if (method.toUpperCase() !== "GET" || init.actorHeader) headers["X-KB-Actor"] = this.actor
+    const response = await fetch(`${this.config.apiBaseUrl}${path}`, {
+      method,
+      headers,
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      signal: init.signal,
+    })
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    if (!response.ok) {
+      const text = new TextDecoder().decode(bytes)
+      let json: unknown = null
+      try { json = text ? JSON.parse(text) : null } catch { /* fall through to status error */ }
+      const record = json && typeof json === "object" && !Array.isArray(json) ? json as Record<string, unknown> : null
+      if (record && "error" in record) {
+        const error = parseTaskReadErrorEnvelope(record)
+        throw new ApiError(error.code, error.message, error.details)
+      }
+      throw new ApiError("http_error", `${response.status} ${response.statusText}`.trim())
+    }
+    return {
+      bytes,
+      contentType: response.headers.get("Content-Type"),
+      attachmentId: response.headers.get("X-KB-Attachment-ID"),
+      sha256: response.headers.get("X-KB-Attachment-SHA256"),
+    }
+  }
+
   async requestEnvelope<T, M = Record<string, unknown>>(path: string, init: RequestOptions = {}) {
     const method = init.method ?? "GET"
     const headers: Record<string, string> = {

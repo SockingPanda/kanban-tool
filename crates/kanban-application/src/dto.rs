@@ -241,8 +241,10 @@ pub use crate::operations::{
     ReclaimTaskCommand, ReclaimTaskRecord, ReleaseTaskCommand, ReleaseTaskRecord,
     RemoveDependencyCommand, RemoveDependencyResult, RemoveStepCommand, RemoveStepRecord,
     ReopenStepCommand, ReopenStepRecord, ReopenTaskCommand, ReopenTaskRecord, SkipStepCommand,
-    SkipStepRecord, SpecifyTaskCommand, SpecifyTaskRecord, StaleClaimRecord, StatsQuery,
-    StatusCountRecord, SubmitReviewTaskCommand, SubmitReviewTaskRecord, TaskListOptions,
+    SignalCreateRecord, SignalLedger, SignalLifecycle, SignalListOptions, SignalObservationRecord,
+    SignalRecord, SignalRecordCommand, SignalRecordResult, SignalReviewCommand, SignalReviewRecord,
+    SignalStatus, SkipStepRecord, SpecifyTaskCommand, SpecifyTaskRecord, StaleClaimRecord,
+    StatsQuery, StatusCountRecord, SubmitReviewTaskCommand, SubmitReviewTaskRecord, TaskListOptions,
     TaskListPage, TaskListSort, TaskPlanFilter, UnblockTaskCommand, UnblockTaskRecord,
     UpdateStepCommand, UpdateStepRecord, UpdateTaskCommand, UpdateTaskRecord,
 };

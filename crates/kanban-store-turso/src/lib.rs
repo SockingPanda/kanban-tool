@@ -31,15 +31,15 @@ pub use operations::search::{
 pub use operations::{
     AddDependencyInput, AddDependencyRecord, ArchiveBoardInput, ArchiveTaskInput, BlockTaskInput,
     ClaimTaskInput, ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput,
-    CreateCommentInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
+    CreateCommentInput, CreateSignalInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
     LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
     MarkExecutionPlanNotRequiredInput, OntologyActionInput, OntologyActorInput,
     OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
     PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput, ReleaseTaskInput,
     RemoveDependencyInput, RemoveDependencyRecord, RemoveStepInput, ReopenStepInput,
-    ReopenTaskInput, SkipStepInput, SpecifyTaskInput, SubmitReviewTaskInput, TaskListOptions,
-    TaskListSort, TaskPlanFilter, UnblockTaskInput, UpdateStepInput, UpdateTaskInput,
-    UpsertLabelSemanticsInput,
+    ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SignalListOptions, SkipStepInput,
+    SpecifyTaskInput, SubmitReviewTaskInput, TaskListOptions, TaskListSort, TaskPlanFilter,
+    UnblockTaskInput, UpdateStepInput, UpdateTaskInput, UpsertLabelSemanticsInput,
 };
 
 #[cfg(test)]

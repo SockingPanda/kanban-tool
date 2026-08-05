@@ -9,8 +9,10 @@ use kanban_application::{
     DependencyEdgeRecord as ApplicationDependencyEdge,
     DependencySnapshotRecord as ApplicationDependencySnapshot,
     ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
-    RunRecord as ApplicationRun, RunStatus as ApplicationRunStatus, StepRecord as ApplicationStep,
-    TaskRecord as ApplicationTask,
+    RunRecord as ApplicationRun, RunStatus as ApplicationRunStatus,
+    SignalObservationRecord as ApplicationSignalObservation, SignalRecord as ApplicationSignal,
+    SignalRecordResult as ApplicationSignalResult, SignalStatus as ApplicationSignalStatus,
+    StepRecord as ApplicationStep, TaskRecord as ApplicationTask,
 };
 use kanban_core::{KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
@@ -83,6 +85,9 @@ fn store_error(error: StoreError) -> KanbanError {
         StoreError::AttachmentConflict(message) => KanbanError::Conflict(message),
         StoreError::AttachmentIntegrity(message) => KanbanError::Storage(message),
         StoreError::AttachmentIo(message) => KanbanError::Storage(message),
+        StoreError::SignalNotFound(signal_id) => {
+            KanbanError::NotFound(format!("signal {signal_id}"))
+        }
         StoreError::DependencyCycle(message) => KanbanError::Conflict(message),
         StoreError::TaskConflict(task_id) => {
             KanbanError::Conflict(format!("task id already exists: {task_id}"))
@@ -90,6 +95,14 @@ fn store_error(error: StoreError) -> KanbanError {
         StoreError::InvalidInput(message) if message.contains("hash mismatch") => {
             KanbanError::Conflict(message)
         }
+        StoreError::SignalConflict(message) => KanbanError::Conflict(message),
+        StoreError::SignalIdempotencyConflict {
+            board_id,
+            key,
+            existing_signal_id,
+        } => KanbanError::IdempotencyConflict(format!(
+            "board {board_id}, key {key}, existing signal {existing_signal_id}"
+        )),
         StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),
         StoreError::InvalidTransition(message) => KanbanError::InvalidTransition(message),
         StoreError::ClaimConflict(message) => {
@@ -280,6 +293,66 @@ fn application_comment(comment: kanban_store_turso::CommentRecord) -> Result<App
         kind,
         metadata_json: comment.metadata_json,
         created_at: comment.created_at,
+    })
+}
+
+pub(crate) fn application_signal_status(status: String) -> Result<ApplicationSignalStatus> {
+    match status.as_str() {
+        "open" => Ok(ApplicationSignalStatus::Open),
+        "confirmed" => Ok(ApplicationSignalStatus::Confirmed),
+        "rejected" => Ok(ApplicationSignalStatus::Rejected),
+        "superseded" => Ok(ApplicationSignalStatus::Superseded),
+        "resolved" => Ok(ApplicationSignalStatus::Resolved),
+        other => Err(KanbanError::Storage(format!(
+            "stored signal status is invalid: {other}"
+        ))),
+    }
+}
+
+pub(crate) fn application_signal(
+    signal: kanban_store_turso::SignalRecord,
+) -> Result<ApplicationSignal> {
+    Ok(ApplicationSignal {
+        id: signal.id,
+        board_id: signal.board_id,
+        observation_id: signal.observation_id,
+        kind: signal.kind,
+        title: signal.title,
+        summary: signal.summary,
+        severity: signal.severity,
+        status: application_signal_status(signal.status)?,
+        dedupe_key: signal.dedupe_key,
+        superseded_by_signal_id: signal.superseded_by_signal_id,
+        reviewed_by: signal.reviewed_by,
+        reviewed_at: signal.reviewed_at,
+        review_reason: signal.review_reason,
+        created_at: signal.created_at,
+        updated_at: signal.updated_at,
+        observation: ApplicationSignalObservation {
+            id: signal.observation.id,
+            board_id: signal.observation.board_id,
+            task_id: signal.observation.task_id,
+            task_ref_snapshot: signal.observation.task_ref_snapshot,
+            run_id: signal.observation.run_id,
+            comment_id: signal.observation.comment_id,
+            actor: signal.observation.actor,
+            agent_type: signal.observation.agent_type,
+            source: signal.observation.source,
+            evidence_json: signal.observation.evidence_json,
+            created_at: signal.observation.created_at,
+        },
+    })
+}
+
+pub(crate) fn application_signal_result(
+    result: kanban_store_turso::SignalRecordResult,
+) -> Result<ApplicationSignalResult> {
+    Ok(ApplicationSignalResult {
+        signal: application_signal(result.signal)?,
+        backlink_comment: result
+            .backlink_comment
+            .map(application_comment)
+            .transpose()?,
     })
 }
 

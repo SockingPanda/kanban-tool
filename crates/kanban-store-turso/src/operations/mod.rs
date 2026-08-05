@@ -10,6 +10,9 @@ mod ontology_tests;
 mod runs;
 pub mod search;
 pub(crate) mod shared;
+mod signals;
+#[cfg(test)]
+mod signals_tests;
 mod stats;
 mod steps;
 mod tasks;
@@ -27,6 +30,7 @@ pub use lifecycle::{
     SubmitReviewTaskInput, UnblockTaskInput,
 };
 pub use ontology::*;
+pub use signals::{CreateSignalInput, ReviewSignalsInput, SignalLifecycleInput, SignalListOptions};
 pub use steps::{
     CompleteStepInput, CreateStepInput, RemoveStepInput, ReopenStepInput, SkipStepInput,
     UpdateStepInput,

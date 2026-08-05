@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS task_comments (
   author_type TEXT NOT NULL DEFAULT 'user' CHECK(author_type IN ('user', 'agent')),
   agent_type TEXT CHECK(author_type = 'agent' OR agent_type IS NULL),
   body TEXT NOT NULL CHECK(length(trim(body)) > 0),
-  kind TEXT NOT NULL DEFAULT 'note' CHECK(kind IN ('note', 'decision')),
+  kind TEXT NOT NULL DEFAULT 'note' CHECK(kind IN ('note', 'decision', 'signal')),
   metadata_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(metadata_json) AND json_type(metadata_json) = 'object'),
   created_at INTEGER NOT NULL,
   UNIQUE(id, board_id),

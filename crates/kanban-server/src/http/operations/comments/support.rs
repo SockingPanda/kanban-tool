@@ -5,7 +5,7 @@ use kanban_application::{
 use kanban_contract::ApiComment;
 use kanban_core::KanbanError;
 
-pub(super) fn api_comment(
+pub(crate) fn api_comment(
     comment: kanban_application::CommentRecord,
 ) -> Result<ApiComment, ApiError> {
     let metadata = serde_json::from_str(&comment.metadata_json).map_err(|error| {

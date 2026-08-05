@@ -63,6 +63,47 @@ pub struct AttachmentRecord {
     pub created_by: String,
     pub created_at: i64,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignalObservationRecord {
+    pub id: String,
+    pub board_id: String,
+    pub task_id: Option<String>,
+    pub task_ref_snapshot: Option<String>,
+    pub run_id: Option<String>,
+    pub comment_id: Option<String>,
+    pub actor: String,
+    pub agent_type: Option<String>,
+    pub source: Option<String>,
+    pub evidence_json: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignalRecord {
+    pub id: String,
+    pub board_id: String,
+    pub observation_id: String,
+    pub kind: String,
+    pub title: String,
+    pub summary: String,
+    pub severity: String,
+    pub status: String,
+    pub dedupe_key: Option<String>,
+    pub superseded_by_signal_id: Option<String>,
+    pub reviewed_by: Option<String>,
+    pub reviewed_at: Option<i64>,
+    pub review_reason: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub observation: SignalObservationRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignalRecordResult {
+    pub signal: SignalRecord,
+    pub backlink_comment: Option<CommentRecord>,
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskStepRecord {
     pub id: String,

@@ -6,6 +6,7 @@
 //! 真实 producer/consumer 已迁移；只有绑定双方测试证据的 `Adopted` 才表示运行时采用。
 //! schema model 生成由显式 `schema` feature 启用；离线校验、artifact 管理和 CLI
 //! 位于独立的 `xtask` leaf crate。正常 runtime 依赖图只包含 Serde wire 类型。
+// Generic signal DTOs are shared by HTTP, client, CLI, and MCP.
 
 mod api_components;
 mod attachments;
@@ -35,6 +36,7 @@ mod projection;
 mod protocol_tests;
 mod protocols;
 mod runs;
+mod signals;
 mod sse;
 mod steps;
 pub mod structured_metadata;
@@ -144,6 +146,11 @@ pub use protocols::*;
 pub use runs::{
     ApiClaim, ApiRun, ApiRunLog, ApiRunStatus, GetRunLogPath, GetRunLogResponse, GetRunPath,
     GetRunResponse, ListRunsPath, ListRunsResponse,
+};
+pub use signals::{
+    ConfirmSignalsResponse, RecordSignalRequest, RecordSignalResponse, RejectSignalsResponse,
+    ResolveSignalsResponse, ReviewSignalsRequest, SignalCommentRequest, SignalRecordResult,
+    SupersedeSignalsResponse,
 };
 pub use sse::{StreamEventData, StreamEventsQuery};
 pub use steps::{

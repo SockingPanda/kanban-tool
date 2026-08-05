@@ -1,6 +1,6 @@
 mod attachments;
 mod boards;
-mod comments;
+pub(crate) mod comments;
 mod dependencies;
 mod events;
 mod health;
@@ -8,6 +8,7 @@ mod maintenance;
 mod ontology;
 mod runs;
 mod search;
+mod signals;
 mod stats;
 mod steps;
 mod support;
@@ -32,6 +33,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(search::router())
         .merge(stats::router())
         .merge(ontology::router())
+        .merge(signals::router())
         .merge(events::router())
         .with_state(state)
 }

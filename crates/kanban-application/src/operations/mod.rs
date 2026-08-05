@@ -2,6 +2,7 @@
 //!
 //! Each operation module extends [`ApplicationService`] with one cohesive
 //! command or query. Shared service state remains in the service core.
+// Signal ledger operations are shared by all adapters.
 
 mod attachment;
 mod board;
@@ -12,6 +13,7 @@ mod maintenance;
 mod ontology;
 mod run;
 mod search;
+mod signal;
 mod stats;
 mod step;
 mod task;
@@ -34,6 +36,7 @@ pub use search::{
     MAX_SEARCH_LIMIT, SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults,
     SearchTasks,
 };
+pub use signal::*;
 pub use stats::*;
 pub use step::{StepComplete, StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate};
 pub use task::{

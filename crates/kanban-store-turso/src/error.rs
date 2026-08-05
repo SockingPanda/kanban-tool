@@ -24,8 +24,15 @@ pub enum StoreError {
     AttachmentConflict(String),
     AttachmentIntegrity(String),
     AttachmentIo(String),
+    SignalNotFound(String),
     DependencyCycle(String),
     TaskConflict(String),
+    SignalConflict(String),
+    SignalIdempotencyConflict {
+        board_id: String,
+        key: String,
+        existing_signal_id: String,
+    },
     IdempotencyConflict {
         board_id: String,
         key: String,
@@ -69,8 +76,18 @@ impl Display for StoreError {
                 write!(formatter, "attachment integrity failure: {message}")
             }
             Self::AttachmentIo(message) => write!(formatter, "attachment I/O error: {message}"),
+            Self::SignalNotFound(signal_id) => write!(formatter, "signal not found: {signal_id}"),
             Self::DependencyCycle(message) => write!(formatter, "dependency cycle: {message}"),
             Self::TaskConflict(task_id) => write!(formatter, "task id already exists: {task_id}"),
+            Self::SignalConflict(message) => write!(formatter, "signal conflict: {message}"),
+            Self::SignalIdempotencyConflict {
+                board_id,
+                key,
+                existing_signal_id,
+            } => write!(
+                formatter,
+                "signal idempotency conflict for board {board_id}, key {key}, existing signal {existing_signal_id}"
+            ),
             Self::IdempotencyConflict {
                 board_id,
                 key,

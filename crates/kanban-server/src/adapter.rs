@@ -139,6 +139,16 @@ impl ApplicationStore for TursoApplicationStore {
             .and_then(application_comment)
     }
 
+    async fn list_comments(&self, task_id: &str) -> Result<Vec<ApplicationComment>> {
+        self.store
+            .list_comments(task_id)
+            .await
+            .map_err(store_error)?
+            .into_iter()
+            .map(application_comment)
+            .collect()
+    }
+
     async fn list_tasks(
         &self,
         board: &str,

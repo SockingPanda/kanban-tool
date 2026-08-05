@@ -18,7 +18,7 @@ use crate::{
     dispatcher::{DispatcherConfig, ShutdownSignal, run_dispatcher},
     handlers::{
         block_task, claim_task, complete_task, create_comment, create_task, get_task, health,
-        heartbeat_task, list_board_columns, list_boards, list_tasks,
+        heartbeat_task, list_board_columns, list_boards, list_comments, list_tasks,
         mark_execution_plan_not_required, promote_task, release_task, submit_review_task,
     },
     state::AppState,
@@ -34,7 +34,10 @@ pub fn build_router(state: AppState) -> Router {
             get(list_tasks).post(create_task),
         )
         .route("/api/v1/tasks/:task_id", get(get_task))
-        .route("/api/v1/tasks/:task_id/comments", post(create_comment))
+        .route(
+            "/api/v1/tasks/:task_id/comments",
+            get(list_comments).post(create_comment),
+        )
         .route(
             "/api/v1/tasks/:task_id/execution-plan/not-required",
             post(mark_execution_plan_not_required),
@@ -313,6 +316,37 @@ mod tests {
         let replay: kanban_contract::CreateCommentResponse =
             serde_json::from_slice(&replay_body).unwrap();
         assert_eq!(replay.data.id, first.data.id);
+
+        let listed = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/tasks/t_http_comment/comments")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(listed.status(), StatusCode::OK);
+        let listed_body = listed.into_body().collect().await.unwrap().to_bytes();
+        let listed: kanban_contract::ListCommentsResponse =
+            serde_json::from_slice(&listed_body).unwrap();
+        assert_eq!(listed.data.len(), 1);
+        assert_eq!(listed.data[0].id, first.data.id);
+
+        let missing = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/tasks/t_http_missing/comments")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
 
         let conflict = router
             .clone()

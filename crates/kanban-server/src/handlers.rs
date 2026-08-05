@@ -25,15 +25,16 @@ use kanban_contract::{
     CreateCommentPath, CreateCommentRequest, CreateCommentResponse, CreateTaskPath,
     CreateTaskRequest, CreateTaskResponse, GetTaskPath, GetTaskQuery, GetTaskResponse,
     HealthReport, HealthResponse, HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse,
-    ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse, ListTasksPath, ListTasksQuery,
-    ListTasksResponse, MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS,
-    MAX_TASK_READ_LABELS, MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS,
-    MAX_TASK_READ_PRIORITIES, MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES,
-    MAX_TASK_READ_QUERY_PAIRS, MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath,
-    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskPath,
-    PromoteTaskRequest, PromoteTaskResponse, ReleaseTaskPath, ReleaseTaskRequest,
-    ReleaseTaskResponse, SubmitReviewTaskPath, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
-    TaskReadLabel, TaskReadPlanFilter, TaskReadSort, TotalPaginationMeta,
+    ListBoardColumnsResponse, ListBoardsQuery, ListBoardsResponse, ListCommentsPath,
+    ListCommentsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
+    MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS,
+    MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES,
+    MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
+    MAX_TASK_READ_STATUSES, MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
+    MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
+    ReleaseTaskPath, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskPath,
+    SubmitReviewTaskRequest, SubmitReviewTaskResponse, TaskReadLabel, TaskReadPlanFilter,
+    TaskReadSort, TotalPaginationMeta,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
@@ -277,6 +278,20 @@ pub(crate) async fn create_comment(
             data: api_comment(comment)?,
         }),
     ))
+}
+
+pub(crate) async fn list_comments(
+    State(state): State<AppState>,
+    Path(ListCommentsPath { task_id }): Path<ListCommentsPath>,
+) -> Result<Json<ListCommentsResponse>, ApiError> {
+    let data = state
+        .application()
+        .list_comments(&task_id)
+        .await?
+        .into_iter()
+        .map(api_comment)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Json(ListCommentsResponse { data }))
 }
 
 pub(crate) async fn mark_execution_plan_not_required(

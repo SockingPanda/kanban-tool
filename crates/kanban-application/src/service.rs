@@ -236,6 +236,16 @@ where
             .await
     }
 
+    pub async fn list_comments(&self, task_id: &str) -> Result<Vec<CommentRecord>> {
+        let task_id = task_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(KanbanError::InvalidInput(
+                "task_id must be a global t_... id".to_owned(),
+            ));
+        }
+        self.store.list_comments(task_id).await
+    }
+
     pub async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
         let task_id = task_id.trim();
         if !task_id.starts_with("t_") || task_id.len() <= 2 {
@@ -1207,6 +1217,22 @@ mod tests {
                 created_at: input.created_at,
             })
         }
+
+        async fn list_comments(&self, task_id: &str) -> Result<Vec<CommentRecord>> {
+            assert_eq!(task_id, "t_comment");
+            Ok(vec![CommentRecord {
+                id: "c_comment".into(),
+                board_id: "b_default".into(),
+                task_id: task_id.into(),
+                author: "alice".into(),
+                author_type: CommentAuthorType::User,
+                agent_type: None,
+                body: "handoff".into(),
+                kind: CommentKind::Note,
+                metadata_json: r#"{"source":"test"}"#.into(),
+                created_at: 100,
+            }])
+        }
     }
 
     #[derive(Clone, Copy)]
@@ -1333,6 +1359,26 @@ mod tests {
             .await
             .expect_err("signal comments are deferred");
         assert!(matches!(error, KanbanError::FeatureNotAvailable(_)));
+    }
+
+    #[tokio::test]
+    async fn list_comments_requires_global_task_id_and_preserves_history() {
+        let service = ApplicationService::with_clock(
+            StubStore {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            FixedClock(100),
+        );
+        let comments = service.list_comments(" t_comment ").await.unwrap();
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].task_id, "t_comment");
+        assert_eq!(comments[0].metadata_json, r#"{"source":"test"}"#);
+
+        let error = service
+            .list_comments("default#1")
+            .await
+            .expect_err("board-local selectors must be resolved by the client");
+        assert!(matches!(error, KanbanError::InvalidInput(message) if message.contains("global")));
     }
 
     #[tokio::test]

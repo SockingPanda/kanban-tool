@@ -104,4 +104,9 @@ pub trait ApplicationStore: Clone + Send + Sync + 'static {
         task_id: &str,
         input: CreateCommentRecord,
     ) -> impl Future<Output = Result<CommentRecord>> + Send;
+
+    fn list_comments(
+        &self,
+        task_id: &str,
+    ) -> impl Future<Output = Result<Vec<CommentRecord>>> + Send;
 }

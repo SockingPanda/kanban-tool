@@ -6,10 +6,10 @@ use kanban_contract::{
     ClaimTaskRequest, ClaimTaskResponse, CommentAuthorType, CommentKind, CompleteTaskRequest,
     CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse, CreateTaskRequest,
     CreateTaskResponse, GetTaskResponse, HeartbeatTaskRequest, HeartbeatTaskResponse,
-    ListBoardsResponse, ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
-    MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
-    ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
-    TaskReadPlanFilter, TaskReadSort,
+    ListBoardsResponse, ListCommentsResponse, ListTasksQuery, ListTasksResponse,
+    MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest,
+    PromoteTaskResponse, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest,
+    SubmitReviewTaskResponse, TaskReadPlanFilter, TaskReadSort,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -205,6 +205,15 @@ struct CommentCreateArgs {
     agent_type: Option<String>,
     metadata: Option<BTreeMap<String, serde_json::Value>>,
     idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct CommentListArgs {
+    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
 }
 
 const fn default_claim_ttl_ms() -> i64 {
@@ -412,6 +421,26 @@ impl KanbanMcp {
         .map_err(|error| McpError::internal_error(error.to_string(), None))?
         .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(CreateCommentResponse { data: comment }))
+    }
+
+    #[tool(
+        name = "comment_list",
+        description = "List task comments from the canonical kanban application service"
+    )]
+    async fn comment_list(
+        &self,
+        Parameters(args): Parameters<CommentListArgs>,
+    ) -> Result<Json<ListCommentsResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let task_ref = args.task_ref;
+        let client = self.client.clone();
+        let comments = tokio::task::spawn_blocking(move || {
+            client.list_comments_by_selector(&board, &task_ref)
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(ListCommentsResponse { data: comments }))
     }
 
     #[tool(

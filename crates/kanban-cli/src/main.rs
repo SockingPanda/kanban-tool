@@ -110,6 +110,8 @@ enum BoardCommand {
 enum CommentCommand {
     /// Add one note or decision comment to a task.
     Add(CommentAddArgs),
+    /// List task comments from the canonical application host.
+    List(CommentListArgs),
 }
 
 #[derive(Debug, Args)]
@@ -129,6 +131,11 @@ struct CommentAddArgs {
     metadata_json: Option<String>,
     #[arg(long)]
     idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct CommentListArgs {
+    task_ref: String,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -487,6 +494,31 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                             comment.author_type.as_str(),
                             comment.body
                         );
+                    }
+                }
+                CommentCommand::List(args) => {
+                    let comments = client.list_comments_by_selector(&cli.board, &args.task_ref)?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&kanban_contract::CliCommentListOutput::new(
+                                comments,
+                            ))
+                            .expect("comment list response is serializable")
+                        );
+                    } else {
+                        for comment in comments {
+                            println!(
+                                "{} task={} created_at={} [{}] {} ({}): {}",
+                                comment.id,
+                                comment.task_id,
+                                comment.created_at,
+                                comment.kind.as_str(),
+                                comment.author,
+                                comment.author_type.as_str(),
+                                comment.body
+                            );
+                        }
                     }
                 }
             }
@@ -1059,6 +1091,19 @@ mod tests {
             args.author_type,
             Some(CommentAuthorTypeArg::Agent)
         ));
+    }
+
+    #[test]
+    fn parses_comment_list_command() {
+        let cli = Cli::try_parse_from(["kanban", "comment", "list", "default#1"])
+            .expect("comment list args");
+        let Command::Comment {
+            command: CommentCommand::List(args),
+        } = cli.command
+        else {
+            panic!("expected comment list");
+        };
+        assert_eq!(args.task_ref, "default#1");
     }
 
     #[test]

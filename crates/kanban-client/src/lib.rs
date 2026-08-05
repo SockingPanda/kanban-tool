@@ -11,7 +11,7 @@ use kanban_contract::{
     CompleteTaskResponse, CreateCommentRequest, CreateCommentResponse, CreateTaskRequest,
     CreateTaskResponse, ErrorEnvelope, GetTaskResponse, HealthReport, HealthResponse,
     HeartbeatTaskRequest, HeartbeatTaskResponse, ListBoardColumnsResponse, ListBoardsResponse,
-    ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
+    ListCommentsResponse, ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
     ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
 };
@@ -175,6 +175,29 @@ impl KanbanClient {
     ) -> Result<ApiComment, ClientError> {
         let task_id = self.resolve_task_id(board, selector)?;
         self.create_comment(&task_id, request)
+    }
+
+    pub fn list_comments(&self, task_id: &str) -> Result<Vec<ApiComment>, ClientError> {
+        let task_id = task_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(ClientError::InvalidInput(
+                "task selector must resolve to a global t_... id".to_owned(),
+            ));
+        }
+        let response: ListCommentsResponse = self.get(&format!(
+            "/api/v1/tasks/{}/comments",
+            encode_path_segment(task_id)
+        ))?;
+        Ok(response.data)
+    }
+
+    pub fn list_comments_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+    ) -> Result<Vec<ApiComment>, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        self.list_comments(&task_id)
     }
 
     pub fn resolve_task_id(&self, board: &str, selector: &str) -> Result<String, ClientError> {
@@ -675,6 +698,15 @@ mod tests {
             request.idempotency_key.as_deref(),
             Some("comment.retry:fixed")
         );
+    }
+
+    #[test]
+    fn list_comments_requires_a_global_task_id_before_http() {
+        let client = KanbanClient::new(DEFAULT_SERVER_URL, "test").unwrap();
+        let error = client
+            .list_comments("default#1")
+            .expect_err("board-local selectors must be resolved first");
+        assert_eq!(error.code(), "invalid_input");
     }
 
     #[test]

@@ -11,10 +11,9 @@ pub(crate) fn run(
     let (path, created, _configured_board) =
         config::init_project_config().map_err(CliFailure::from)?;
     let resolved_db = config::resolve_db_path(db).map_err(CliFailure::from)?;
-    let board = match config::resolve_board(board).map_err(CliFailure::from) {
-        Ok(resolved) => resolved.value,
-        Err(error) => return Err(error),
-    };
+    let board = config::resolve_board(board)
+        .map_err(CliFailure::from)?
+        .value;
     let result = CliInitResult {
         db_path: resolved_db.value.display().to_string(),
         board_id: "not_initialized".to_owned(),

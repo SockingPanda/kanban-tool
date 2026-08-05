@@ -14,6 +14,7 @@ pub(crate) type HostApplicationService = ApplicationService<TursoApplicationStor
 #[derive(Clone)]
 pub struct AppState {
     application: HostApplicationService,
+    vector_store: TursoStore,
     db_path: Arc<PathBuf>,
     attachment_root: Arc<PathBuf>,
     default_actor: Arc<str>,
@@ -48,10 +49,12 @@ impl AppState {
             .initialize()
             .await
             .map_err(|error| KanbanError::Storage(error.to_string()))?;
+        let vector_store = store.clone();
         let application_store =
             TursoApplicationStore::with_roots(store, run_log_root, attachment_root.clone());
         Ok(Self {
             application: ApplicationService::new(application_store),
+            vector_store,
             db_path: Arc::new(db_path),
             attachment_root,
             default_actor: Arc::from(default_actor.into()),
@@ -60,6 +63,10 @@ impl AppState {
 
     pub(crate) fn application(&self) -> &HostApplicationService {
         &self.application
+    }
+
+    pub(crate) fn vector_store(&self) -> &TursoStore {
+        &self.vector_store
     }
 
     pub fn db_path(&self) -> &Path {

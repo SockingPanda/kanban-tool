@@ -204,6 +204,12 @@ pub(crate) async fn run_dispatcher(
             return Ok(());
         }
 
+        if let Err(error) =
+            crate::vector::worker_tick(state.vector_store().clone(), "vector-worker").await
+        {
+            warn!(error = %error, "vector projection worker tick failed; canonical task queue continues");
+        }
+
         let reclaimed = state
             .application()
             .reclaim_expired(&config.board, DISPATCHER_ACTOR)

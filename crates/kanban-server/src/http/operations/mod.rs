@@ -37,5 +37,6 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(ontology::router())
         .merge(signals::router())
         .merge(events::router())
+        .merge(crate::vector::router())
         .with_state(state)
 }

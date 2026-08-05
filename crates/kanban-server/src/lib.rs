@@ -4,6 +4,7 @@ mod error;
 mod http;
 mod router;
 mod state;
+pub(crate) mod vector;
 
 #[cfg(test)]
 mod suite;

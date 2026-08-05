@@ -1,0 +1,206 @@
+use turso::transaction::TransactionBehavior;
+
+use crate::{db::TursoStore, domain::*, error::StoreError, shared::*};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromoteTaskInput {
+    pub expected_lock_version: i64,
+    pub actor: String,
+    pub event_id: String,
+    pub updated_at: i64,
+}
+impl TursoStore {
+    pub async fn promote_task(
+        &self,
+        task_id: &str,
+        input: PromoteTaskInput,
+    ) -> Result<TaskRecord, StoreError> {
+        validate_promote_task_input(task_id, &input)?;
+        let actor = input.actor.trim().to_owned();
+        let event_id = input.event_id.trim().to_owned();
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+
+        let task = first_row(
+                transaction
+                    .query(
+                        "SELECT t.board_id, t.status, t.archived_at, b.archived_at, t.lock_version, t.title, t.description, t.scheduled_at FROM tasks AS t JOIN boards AS b ON b.id = t.board_id WHERE t.id = :task_id LIMIT 1",
+                        [(":task_id", task_id)],
+                    )
+                    .await?,
+            )
+            .await
+            .map_err(|error| match error {
+                turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
+                other => StoreError::Turso(other),
+            })?;
+        let board_id = text_value(task.get_value(0)?, "tasks.board_id")?;
+        let status = text_value(task.get_value(1)?, "tasks.status")?;
+        let archived_at = optional_integer_value(task.get_value(2)?, "tasks.archived_at")?;
+        let board_archived_at = optional_integer_value(task.get_value(3)?, "boards.archived_at")?;
+        if status == "archived" || archived_at.is_some() || board_archived_at.is_some() {
+            return Err(StoreError::InvalidTransition(
+                "archived task or board cannot be promoted".to_owned(),
+            ));
+        }
+
+        let lock_version = integer_value(task.get_value(4)?, "tasks.lock_version")?;
+        if lock_version != input.expected_lock_version {
+            return Err(StoreError::InvalidTransition(
+                "lock_version mismatch".to_owned(),
+            ));
+        }
+        if !matches!(status.as_str(), "todo" | "scheduled") {
+            return Err(StoreError::InvalidTransition(format!(
+                "cannot promote from {status}"
+            )));
+        }
+
+        let title = text_value(task.get_value(5)?, "tasks.title")?;
+        let description = optional_text_value(task.get_value(6)?, "tasks.description")?;
+        if title.trim().is_empty()
+            || description
+                .as_deref()
+                .is_none_or(|description| description.trim().is_empty())
+        {
+            return Err(StoreError::InvalidTransition(
+                "task spec is incomplete".to_owned(),
+            ));
+        }
+
+        let scheduled_at = optional_integer_value(task.get_value(7)?, "tasks.scheduled_at")?;
+        if status == "scheduled" && scheduled_at.is_none() {
+            return Err(StoreError::InvalidTransition(
+                "scheduled task requires scheduled_at".to_owned(),
+            ));
+        }
+        if scheduled_at.is_some_and(|scheduled_at| scheduled_at > input.updated_at) {
+            return Err(StoreError::InvalidTransition(
+                "scheduled_at is in the future".to_owned(),
+            ));
+        }
+
+        let dependency_blocked = first_row(
+                transaction
+                    .query(
+                        "SELECT EXISTS (SELECT 1 FROM task_dependencies AS d JOIN tasks AS p ON p.id = d.parent_task_id AND p.board_id = d.board_id WHERE d.board_id = :board_id AND d.child_task_id = :task_id AND p.status NOT IN ('done', 'archived'))",
+                        [
+                            (":board_id", board_id.as_str()),
+                            (":task_id", task_id),
+                        ],
+                    )
+                    .await?,
+            )
+            .await?;
+        if integer_value(
+            dependency_blocked.get_value(0)?,
+            "task_dependencies.unfinished_parent",
+        )? != 0
+        {
+            return Err(StoreError::InvalidTransition(
+                "dependency blocked".to_owned(),
+            ));
+        }
+
+        let execution_plan_ready = first_row(
+                transaction
+                    .query(
+                        "SELECT EXISTS (SELECT 1 FROM task_steps AS s WHERE s.board_id = :board_id AND s.parent_task_id = :task_id) OR EXISTS (SELECT 1 FROM task_execution_plans AS ep WHERE ep.board_id = :board_id AND ep.task_id = :task_id AND ep.state = 'not_required')",
+                        [
+                            (":board_id", board_id.as_str()),
+                            (":task_id", task_id),
+                        ],
+                    )
+                    .await?,
+            )
+            .await?;
+        if integer_value(
+            execution_plan_ready.get_value(0)?,
+            "task_execution_plans.ready",
+        )? == 0
+        {
+            return Err(StoreError::InvalidTransition(
+                "execution plan is required".to_owned(),
+            ));
+        }
+
+        let changed = transaction
+                .execute(
+                    "UPDATE tasks SET status = 'ready', status_reason = NULL, updated_at = :updated_at, lock_version = lock_version + 1 WHERE id = :task_id AND board_id = :board_id AND status IN ('todo', 'scheduled') AND lock_version = :expected_lock_version",
+                    (
+                        (":updated_at", input.updated_at),
+                        (":task_id", task_id),
+                        (":board_id", board_id.as_str()),
+                        (":expected_lock_version", input.expected_lock_version),
+                    ),
+                )
+                .await?;
+        if changed != 1 {
+            return Err(StoreError::InvalidTransition(
+                "promote requires matching fresh task".to_owned(),
+            ));
+        }
+
+        transaction
+                .execute(
+                    "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'task.promoted', :actor, '{\"to_status\":\"ready\"}', :created_at)",
+                    (
+                        (":event_id", event_id.as_str()),
+                        (":board_id", board_id.as_str()),
+                        (":task_id", task_id),
+                        (":actor", actor.as_str()),
+                        (":created_at", input.updated_at),
+                    ),
+                )
+                .await?;
+
+        let promoted = task_from_row(
+            first_row(
+                transaction
+                    .query(
+                        &format!(
+                            "{TASK_SELECT} WHERE t.board_id = :board_id AND t.id = :task_id LIMIT 1"
+                        ),
+                        [(":board_id", board_id.as_str()), (":task_id", task_id)],
+                    )
+                    .await?,
+            )
+            .await?,
+        )?;
+
+        transaction.commit().await?;
+        Ok(promoted)
+    }
+}
+
+pub(crate) fn validate_promote_task_input(
+    task_id: &str,
+    input: &PromoteTaskInput,
+) -> Result<(), StoreError> {
+    if !task_id.starts_with("t_") || task_id.len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "task id must start with t_".to_owned(),
+        ));
+    }
+    if input.expected_lock_version < 0 {
+        return Err(StoreError::InvalidInput(
+            "expected_lock_version must be non-negative".to_owned(),
+        ));
+    }
+    if input.actor.trim().is_empty() {
+        return Err(StoreError::InvalidInput("actor is required".to_owned()));
+    }
+    if !input.event_id.trim().starts_with("e_") || input.event_id.trim().len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "event_id must start with e_".to_owned(),
+        ));
+    }
+    if input.updated_at < 0 {
+        return Err(StoreError::InvalidInput(
+            "updated_at must be non-negative".to_owned(),
+        ));
+    }
+    Ok(())
+}

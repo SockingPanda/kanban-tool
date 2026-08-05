@@ -72,3 +72,176 @@ pub struct CheckpointReport {
 }
 
 pub type CheckpointResponse = DataEnvelope<CheckpointReport>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct BackupReport {
+    pub out_path: String,
+    pub checksum_sha256: String,
+    pub bytes: u64,
+    pub source_fingerprint: String,
+}
+
+pub type BackupResponse = DataEnvelope<BackupReport>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct ExportReport {
+    pub out_path: String,
+    pub checksum_sha256: String,
+    pub bytes: u64,
+    pub record_count: u64,
+    pub source_fingerprint: String,
+}
+
+pub type ExportResponse = DataEnvelope<ExportReport>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct ImportReport {
+    pub in_path: String,
+    pub source_fingerprint: String,
+    pub imported_records: u64,
+    pub skipped_records: u64,
+    pub rebuild_jobs_enqueued: u64,
+    pub journal_id: String,
+}
+
+pub type ImportResponse = DataEnvelope<ImportReport>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VacuumReport {
+    pub ok: bool,
+    pub before_bytes: u64,
+    pub after_bytes: u64,
+    pub source_fingerprint: String,
+}
+
+pub type VacuumResponse = DataEnvelope<VacuumReport>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct MaintenanceOwnerStatus {
+    pub owner: Option<String>,
+    pub mode: Option<String>,
+    pub lease_expires_at: Option<i64>,
+    pub fence_epoch: i64,
+    pub build_identity: Option<String>,
+    pub last_heartbeat_at: Option<i64>,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionStoreStatus {
+    pub store_name: String,
+    pub active_generation: Option<String>,
+    pub active_fingerprint: Option<String>,
+    pub previous_generation: Option<String>,
+    pub building_generation: Option<String>,
+    pub lifecycle_status: String,
+    pub fence_epoch: i64,
+    pub last_event_id: i64,
+    pub dirty: bool,
+    pub pending: i64,
+    pub running: i64,
+    pub failed: i64,
+    pub last_error: Option<String>,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct MaintenanceStatusReport {
+    pub database_instance_id: String,
+    pub protocol_version: i64,
+    pub owner: MaintenanceOwnerStatus,
+    pub stores: Vec<ProjectionStoreStatus>,
+}
+
+pub type MaintenanceStatusResponse = DataEnvelope<MaintenanceStatusReport>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct MaintenanceRunReport {
+    pub database_instance_id: String,
+    pub protocol_version: i64,
+    pub owner: String,
+    pub mode: String,
+    pub action: String,
+    pub processed: u64,
+    pub stores: Vec<ProjectionStoreStatus>,
+}
+
+pub type MaintenanceRunResponse = DataEnvelope<MaintenanceRunReport>;
+pub type MaintenanceRebuildResponse = DataEnvelope<MaintenanceRunReport>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct MaintenancePathRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct MaintenanceImportRequest {
+    pub path: String,
+    #[serde(default)]
+    pub replace: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct MaintenanceRunRequest {
+    pub owner: Option<String>,
+    pub action: Option<String>,
+}
+
+/// Legacy SQLite v30 import request.  This host-admin path is deliberately
+/// separate from portable JSONL import because it reads an old on-disk schema
+/// and may need an explicit attachment-root mapping.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct LegacyImportRequest {
+    pub path: String,
+    #[serde(default)]
+    pub canonical_attachment_root: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct LegacyImportTableCount {
+    pub table: String,
+    pub source_rows: u64,
+    pub target_rows: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct LegacyImportReport {
+    pub journal_id: String,
+    pub phase: String,
+    pub source_path: String,
+    pub source_fingerprint: String,
+    pub schema_fingerprint: String,
+    pub resumed: bool,
+    pub attachment_count: u64,
+    pub table_counts: Vec<LegacyImportTableCount>,
+}
+
+pub type LegacyImportResponse = DataEnvelope<LegacyImportReport>;

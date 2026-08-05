@@ -59,6 +59,11 @@ use crate::{
 };
 
 use crate::{
+    BackupResponse, ExportResponse, ImportResponse, LegacyImportRequest, LegacyImportResponse,
+    MaintenanceImportRequest, MaintenancePathRequest, MaintenanceRunRequest,
+    MaintenanceRunResponse, MaintenanceStatusResponse, VacuumResponse,
+};
+use crate::{
     BoardQuery, BuildContextPath, BuildContextQuery, BuildContextResponse, GraphNeighborsQuery,
     GraphNeighborsResponse, GraphStatusResponse, ListEventsQuery, SearchStatusResponse,
     SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse, StatsResponse,
@@ -316,6 +321,87 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/cli/vacuum-output.v1.valid.json",
         "schemas/fixtures/cli/vacuum-output.v1.invalid.json",
         CliVacuumOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-backup-output:v1",
+        "cli/maintenance-backup-output.v1.schema.json",
+        "Kanban CLI maintenance backup output v1",
+        "cli.maintenance-backup.output",
+        "schemas/fixtures/cli/maintenance-backup-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-backup-output.v1.invalid.json",
+        BackupResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-export-output:v1",
+        "cli/maintenance-export-output.v1.schema.json",
+        "Kanban CLI maintenance export output v1",
+        "cli.maintenance-export.output",
+        "schemas/fixtures/cli/maintenance-export-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-export-output.v1.invalid.json",
+        ExportResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-import-output:v1",
+        "cli/maintenance-import-output.v1.schema.json",
+        "Kanban CLI maintenance import output v1",
+        "cli.maintenance-import.output",
+        "schemas/fixtures/cli/maintenance-import-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-import-output.v1.invalid.json",
+        ImportResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-vacuum-output:v1",
+        "cli/maintenance-vacuum-output.v1.schema.json",
+        "Kanban CLI maintenance vacuum output v1",
+        "cli.maintenance-vacuum.output",
+        "schemas/fixtures/cli/maintenance-vacuum-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-vacuum-output.v1.invalid.json",
+        VacuumResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-status-output:v1",
+        "cli/maintenance-status-output.v1.schema.json",
+        "Kanban CLI maintenance status output v1",
+        "cli.maintenance-status-v1.output",
+        "schemas/fixtures/cli/maintenance-status-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-status-output.v1.invalid.json",
+        MaintenanceStatusResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-run-output:v1",
+        "cli/maintenance-run-output.v1.schema.json",
+        "Kanban CLI maintenance run output v1",
+        "cli.maintenance-run-v1.output",
+        "schemas/fixtures/cli/maintenance-run-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-run-output.v1.invalid.json",
+        MaintenanceRunResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-rebuild-output.v1",
+        "cli/maintenance-rebuild-output.v1.schema.json",
+        "Kanban CLI maintenance rebuild output v1",
+        "cli.maintenance-rebuild-v1.output",
+        "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-rebuild-output.v1.invalid.json",
+        MaintenanceRunResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:maintenance-cleanup-output.v1",
+        "cli/maintenance-cleanup-output.v1.schema.json",
+        "Kanban CLI maintenance cleanup output v1",
+        "cli.maintenance-cleanup.output",
+        "schemas/fixtures/cli/maintenance-cleanup-output.v1.valid.json",
+        "schemas/fixtures/cli/maintenance-cleanup-output.v1.invalid.json",
+        MaintenanceRunResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:import-v30-output:v1",
+        "cli/import-v30-output.v1.schema.json",
+        "Kanban CLI legacy SQLite v30 import output v1",
+        "cli.import-v30.output",
+        "schemas/fixtures/cli/import-v30-output.v1.valid.json",
+        "schemas/fixtures/cli/import-v30-output.v1.invalid.json",
+        LegacyImportResponse
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:board-list-output:v1",
@@ -1076,6 +1162,159 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         invalid_fixture: "schemas/fixtures/api/checkpoint-response.v1.invalid.json",
         generate: generate_for::<CheckpointResponse>,
     },
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-path-request:v1",
+        "api/maintenance-path-request.v1.schema.json",
+        "Kanban maintenance path request v1",
+        "api.maintenance-path.request",
+        "schemas/fixtures/api/maintenance-path-request.v1.valid.json",
+        "schemas/fixtures/api/maintenance-path-request.v1.invalid.json",
+        MaintenancePathRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-backup-request:v1",
+        "api/maintenance-backup-request.v1.schema.json",
+        "Kanban maintenance backup request v1",
+        "api.maintenance-backup.request",
+        "schemas/fixtures/api/maintenance-backup-request.v1.valid.json",
+        "schemas/fixtures/api/maintenance-backup-request.v1.invalid.json",
+        MaintenancePathRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-export-request:v1",
+        "api/maintenance-export-request.v1.schema.json",
+        "Kanban maintenance export request v1",
+        "api.maintenance-export.request",
+        "schemas/fixtures/api/maintenance-export-request.v1.valid.json",
+        "schemas/fixtures/api/maintenance-export-request.v1.invalid.json",
+        MaintenancePathRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-import-request:v1",
+        "api/maintenance-import-request.v1.schema.json",
+        "Kanban maintenance import request v1",
+        "api.maintenance-import.request",
+        "schemas/fixtures/api/maintenance-import-request.v1.valid.json",
+        "schemas/fixtures/api/maintenance-import-request.v1.invalid.json",
+        MaintenanceImportRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-import-v30-request:v1",
+        "api/maintenance-import-v30-request.v1.schema.json",
+        "Kanban legacy SQLite v30 import request v1",
+        "api.maintenance-import-v30.request",
+        "schemas/fixtures/api/maintenance-import-v30-request.v1.valid.json",
+        "schemas/fixtures/api/maintenance-import-v30-request.v1.invalid.json",
+        LegacyImportRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-run-request:v1",
+        "api/maintenance-run-request.v1.schema.json",
+        "Kanban maintenance run request v1",
+        "api.maintenance-run.request",
+        "schemas/fixtures/api/maintenance-run-request.v1.valid.json",
+        "schemas/fixtures/api/maintenance-run-request.v1.invalid.json",
+        MaintenanceRunRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-rebuild-request:v1",
+        "api/maintenance-rebuild-request.v1.schema.json",
+        "Kanban maintenance rebuild request v1",
+        "api.maintenance-rebuild.request",
+        "schemas/fixtures/api/maintenance-rebuild-request.v1.valid.json",
+        "schemas/fixtures/api/maintenance-rebuild-request.v1.invalid.json",
+        MaintenanceRunRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-cleanup-request:v1",
+        "api/maintenance-cleanup-request.v1.schema.json",
+        "Kanban maintenance cleanup request v1",
+        "api.maintenance-cleanup.request",
+        "schemas/fixtures/api/maintenance-cleanup-request.v1.valid.json",
+        "schemas/fixtures/api/maintenance-cleanup-request.v1.invalid.json",
+        MaintenanceRunRequest
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-backup-response:v1",
+        "api/maintenance-backup-response.v1.schema.json",
+        "Kanban maintenance backup response v1",
+        "api.maintenance-backup.response",
+        "schemas/fixtures/api/maintenance-backup-response.v1.valid.json",
+        "schemas/fixtures/api/maintenance-backup-response.v1.invalid.json",
+        BackupResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-export-response:v1",
+        "api/maintenance-export-response.v1.schema.json",
+        "Kanban maintenance export response v1",
+        "api.maintenance-export.response",
+        "schemas/fixtures/api/maintenance-export-response.v1.valid.json",
+        "schemas/fixtures/api/maintenance-export-response.v1.invalid.json",
+        ExportResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-import-response:v1",
+        "api/maintenance-import-response.v1.schema.json",
+        "Kanban maintenance import response v1",
+        "api.maintenance-import.response",
+        "schemas/fixtures/api/maintenance-import-response.v1.valid.json",
+        "schemas/fixtures/api/maintenance-import-response.v1.invalid.json",
+        ImportResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-import-v30-response:v1",
+        "api/maintenance-import-v30-response.v1.schema.json",
+        "Kanban legacy SQLite v30 import response v1",
+        "api.maintenance-import-v30.response",
+        "schemas/fixtures/api/maintenance-import-v30-response.v1.valid.json",
+        "schemas/fixtures/api/maintenance-import-v30-response.v1.invalid.json",
+        LegacyImportResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-vacuum-response:v1",
+        "api/maintenance-vacuum-response.v1.schema.json",
+        "Kanban maintenance vacuum response v1",
+        "api.maintenance-vacuum.response",
+        "schemas/fixtures/api/maintenance-vacuum-response.v1.valid.json",
+        "schemas/fixtures/api/maintenance-vacuum-response.v1.invalid.json",
+        VacuumResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-status-response:v1",
+        "api/maintenance-status-response.v1.schema.json",
+        "Kanban maintenance status response v1",
+        "api.maintenance-status.response",
+        "schemas/fixtures/api/maintenance-status-response.v1.valid.json",
+        "schemas/fixtures/api/maintenance-status-response.v1.invalid.json",
+        MaintenanceStatusResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-run-response:v1",
+        "api/maintenance-run-response.v1.schema.json",
+        "Kanban maintenance run response v1",
+        "api.maintenance-run.response",
+        "schemas/fixtures/api/maintenance-run-response.v1.valid.json",
+        "schemas/fixtures/api/maintenance-run-response.v1.invalid.json",
+        MaintenanceRunResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-rebuild-response:v1",
+        "api/maintenance-rebuild-response.v1.schema.json",
+        "Kanban maintenance rebuild response v1",
+        "api.maintenance-rebuild.response",
+        "schemas/fixtures/api/maintenance-rebuild-response.v1.valid.json",
+        "schemas/fixtures/api/maintenance-rebuild-response.v1.invalid.json",
+        MaintenanceRunResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:maintenance-cleanup-response:v1",
+        "api/maintenance-cleanup-response.v1.schema.json",
+        "Kanban maintenance cleanup response v1",
+        "api.maintenance-cleanup.response",
+        "schemas/fixtures/api/maintenance-cleanup-response.v1.valid.json",
+        "schemas/fixtures/api/maintenance-cleanup-response.v1.invalid.json",
+        MaintenanceRunResponse
+    ),
     SchemaRoot {
         id: "urn:kanban-tool:schema:api:error-response:v1",
         artifact_path: "api/error-response.v1.schema.json",

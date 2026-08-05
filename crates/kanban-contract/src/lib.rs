@@ -194,6 +194,11 @@ pub mod schema;
 pub use schema::{generated_artifacts, generated_schema_ids, schema_registry};
 mod maintenance;
 pub use maintenance::{
-    CheckpointReport, CheckpointResponse, DoctorDerivedStore, DoctorIssue, DoctorReport,
-    DoctorResponse,
+    BackupReport, BackupResponse, CheckpointReport, CheckpointResponse, DoctorDerivedStore,
+    DoctorIssue, DoctorReport, DoctorResponse, ExportReport, ExportResponse, ImportReport,
+    ImportResponse, LegacyImportReport, LegacyImportRequest, LegacyImportResponse,
+    LegacyImportTableCount, MaintenanceImportRequest, MaintenanceOwnerStatus,
+    MaintenancePathRequest, MaintenanceRebuildResponse, MaintenanceRunReport,
+    MaintenanceRunRequest, MaintenanceRunResponse, MaintenanceStatusReport,
+    MaintenanceStatusResponse, ProjectionStoreStatus, VacuumReport, VacuumResponse,
 };

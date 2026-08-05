@@ -1,0 +1,1 @@
+{"data":{"journal_id":"legacy-import-1","phase":"completed","source_path":"/tmp/legacy-v30.sqlite","source_fingerprint":"sha256:source","schema_fingerprint":"sha256:schema","resumed":false,"attachment_count":0,"table_counts":[{"table":"tasks","source_rows":1,"target_rows":1}]}}

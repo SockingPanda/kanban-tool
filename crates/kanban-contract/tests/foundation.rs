@@ -299,7 +299,7 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
         .iter()
         .filter(|endpoint| endpoint.operation_id != "sse.stream-events")
         .collect::<Vec<_>>();
-    assert_eq!(endpoints.len(), 84);
+    assert_eq!(endpoints.len(), 93);
 
     for endpoint in endpoints {
         let expected_id = format!("{}.headers", endpoint.operation_id);
@@ -678,7 +678,7 @@ fn foundation_registry_contains_generated_roots() {
         .filter(|id| id.contains(":api:") && id.ends_with("-headers:v1"))
         .copied()
         .collect::<BTreeSet<_>>();
-    assert_eq!(header_roots.len(), 84);
+    assert_eq!(header_roots.len(), 93);
     actual.retain(|id| !header_roots.contains(id));
     let mut expected = BTreeSet::from([
         "urn:kanban-tool:schema:api:accept-label-proposal-body:v1",
@@ -709,6 +709,23 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:bootstrap-task-label-request:v1",
         "urn:kanban-tool:schema:api:bootstrap-task-label-response:v1",
         "urn:kanban-tool:schema:api:checkpoint-response:v1",
+        "urn:kanban-tool:schema:api:maintenance-path-request:v1",
+        "urn:kanban-tool:schema:api:maintenance-backup-request:v1",
+        "urn:kanban-tool:schema:api:maintenance-export-request:v1",
+        "urn:kanban-tool:schema:api:maintenance-import-request:v1",
+        "urn:kanban-tool:schema:api:maintenance-import-v30-request:v1",
+        "urn:kanban-tool:schema:api:maintenance-run-request:v1",
+        "urn:kanban-tool:schema:api:maintenance-rebuild-request:v1",
+        "urn:kanban-tool:schema:api:maintenance-cleanup-request:v1",
+        "urn:kanban-tool:schema:api:maintenance-backup-response:v1",
+        "urn:kanban-tool:schema:api:maintenance-export-response:v1",
+        "urn:kanban-tool:schema:api:maintenance-import-response:v1",
+        "urn:kanban-tool:schema:api:maintenance-import-v30-response:v1",
+        "urn:kanban-tool:schema:api:maintenance-vacuum-response:v1",
+        "urn:kanban-tool:schema:api:maintenance-status-response:v1",
+        "urn:kanban-tool:schema:api:maintenance-run-response:v1",
+        "urn:kanban-tool:schema:api:maintenance-rebuild-response:v1",
+        "urn:kanban-tool:schema:api:maintenance-cleanup-response:v1",
         "urn:kanban-tool:schema:api:claim-task-path:v1",
         "urn:kanban-tool:schema:api:claim-task-request:v1",
         "urn:kanban-tool:schema:api:claim-task-response:v1",
@@ -1002,8 +1019,8 @@ fn endpoint_descriptor_catalog_is_complete_and_explicit() {
     let endpoints = endpoint_catalog();
     assert_eq!(
         endpoints.len(),
-        85,
-        "84 JSON API + 1 SSE 必须全部有 descriptor"
+        94,
+        "93 JSON API + 1 SSE 必须全部有 descriptor"
     );
     assert_eq!(
         endpoints
@@ -1773,7 +1790,7 @@ fn current_train_freeze_requires_closed_authority() {
             EndpointObligation::Excluded { .. } => excluded += 1,
         }
     }
-    assert_eq!((contract, todo, not_applicable, excluded), (300, 0, 209, 1));
+    assert_eq!((contract, todo, not_applicable, excluded), (325, 0, 238, 1));
     let unfinished_contracts = operation_inventory()
         .iter()
         .filter(|contract| {

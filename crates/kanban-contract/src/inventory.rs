@@ -1988,8 +1988,8 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
     ),
     adopted_api_response_contract!(
         "api.doctor.response",
-        "POST /api/v1/maintenance/doctor response",
-        "POST /api/v1/maintenance/doctor",
+        "GET /api/v1/maintenance/doctor response",
+        "GET /api/v1/maintenance/doctor",
         "urn:kanban-tool:schema:api:doctor-response:v1",
         "schemas/fixtures/api/doctor-response.v1.valid.json",
         "suite::maintenance_adoption::doctor_response_maps_real_non_default_report_before_fixture_normalization",
@@ -4860,6 +4860,7 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             inventory.extend(crate::headers::header_operation_contracts());
             inventory.extend(attachment_api_contracts());
             inventory.extend(attachment_cli_contracts());
+            inventory.extend(maintenance_operation_contracts());
             inventory
         })
         .as_slice()
@@ -5087,6 +5088,245 @@ fn attachment_cli_contracts() -> Vec<OperationContract> {
             "attachment remove",
             "urn:kanban-tool:schema:cli:attachment-remove-output:v1",
             "schemas/fixtures/cli/attachment-remove-output.v1.valid.json",
+        ),
+    ]
+}
+
+fn maintenance_operation_contracts() -> Vec<OperationContract> {
+    vec![
+        adopted_api_request!(
+            "api.maintenance-path.request",
+            "POST /api/v1/maintenance/{operation} body",
+            "POST /api/v1/maintenance/{operation}",
+            "urn:kanban-tool:schema:api:maintenance-path-request:v1",
+            "schemas/fixtures/api/maintenance-path-request.v1.valid.json",
+            "maintenance_adoption::maintenance_path_request_producer",
+            "maintenance_adoption::maintenance_path_request_consumer"
+        ),
+        adopted_api_request!(
+            "api.maintenance-import.request",
+            "POST /api/v1/maintenance/import body",
+            "POST /api/v1/maintenance/import",
+            "urn:kanban-tool:schema:api:maintenance-import-request:v1",
+            "schemas/fixtures/api/maintenance-import-request.v1.valid.json",
+            "maintenance_adoption::maintenance_import_request_producer",
+            "maintenance_adoption::maintenance_import_request_consumer"
+        ),
+        adopted_api_request!(
+            "api.maintenance-backup.request",
+            "POST /api/v1/maintenance/backup body",
+            "POST /api/v1/maintenance/backup",
+            "urn:kanban-tool:schema:api:maintenance-backup-request:v1",
+            "schemas/fixtures/api/maintenance-backup-request.v1.valid.json",
+            "maintenance_adoption::maintenance_backup_request_producer",
+            "maintenance_adoption::maintenance_backup_request_consumer"
+        ),
+        adopted_api_request!(
+            "api.maintenance-export.request",
+            "POST /api/v1/maintenance/export body",
+            "POST /api/v1/maintenance/export",
+            "urn:kanban-tool:schema:api:maintenance-export-request:v1",
+            "schemas/fixtures/api/maintenance-export-request.v1.valid.json",
+            "maintenance_adoption::maintenance_export_request_producer",
+            "maintenance_adoption::maintenance_export_request_consumer"
+        ),
+        adopted_api_request!(
+            "api.maintenance-run.request",
+            "POST /api/v1/maintenance/run body",
+            "POST /api/v1/maintenance/run",
+            "urn:kanban-tool:schema:api:maintenance-run-request:v1",
+            "schemas/fixtures/api/maintenance-run-request.v1.valid.json",
+            "maintenance_adoption::maintenance_run_request_producer",
+            "maintenance_adoption::maintenance_run_request_consumer"
+        ),
+        adopted_api_request!(
+            "api.maintenance-rebuild.request",
+            "POST /api/v1/maintenance/rebuild body",
+            "POST /api/v1/maintenance/rebuild",
+            "urn:kanban-tool:schema:api:maintenance-rebuild-request:v1",
+            "schemas/fixtures/api/maintenance-rebuild-request.v1.valid.json",
+            "maintenance_adoption::maintenance_rebuild_request_producer",
+            "maintenance_adoption::maintenance_rebuild_request_consumer"
+        ),
+        adopted_api_request!(
+            "api.maintenance-cleanup.request",
+            "POST /api/v1/maintenance/cleanup body",
+            "POST /api/v1/maintenance/cleanup",
+            "urn:kanban-tool:schema:api:maintenance-cleanup-request:v1",
+            "schemas/fixtures/api/maintenance-cleanup-request.v1.valid.json",
+            "maintenance_adoption::maintenance_cleanup_request_producer",
+            "maintenance_adoption::maintenance_cleanup_request_consumer"
+        ),
+        adopted_api_request!(
+            "api.maintenance-import-v30.request",
+            "POST /api/v1/maintenance/import-v30 body",
+            "POST /api/v1/maintenance/import-v30",
+            "urn:kanban-tool:schema:api:maintenance-import-v30-request:v1",
+            "schemas/fixtures/api/maintenance-import-v30-request.v1.valid.json",
+            "maintenance_adoption::legacy_import_v30_request_producer",
+            "maintenance_adoption::legacy_import_v30_request_consumer"
+        ),
+        adopted_api_response_contract!(
+            "api.maintenance-backup.response",
+            "POST /api/v1/maintenance/backup response",
+            "POST /api/v1/maintenance/backup",
+            "urn:kanban-tool:schema:api:maintenance-backup-response:v1",
+            "schemas/fixtures/api/maintenance-backup-response.v1.valid.json",
+            "maintenance_adoption::maintenance_backup_response_producer",
+            "maintenance_adoption::maintenance_backup_response_consumer"
+        ),
+        adopted_api_response_contract!(
+            "api.maintenance-export.response",
+            "POST /api/v1/maintenance/export response",
+            "POST /api/v1/maintenance/export",
+            "urn:kanban-tool:schema:api:maintenance-export-response:v1",
+            "schemas/fixtures/api/maintenance-export-response.v1.valid.json",
+            "maintenance_adoption::maintenance_export_response_producer",
+            "maintenance_adoption::maintenance_export_response_consumer"
+        ),
+        adopted_api_response_contract!(
+            "api.maintenance-import.response",
+            "POST /api/v1/maintenance/import response",
+            "POST /api/v1/maintenance/import",
+            "urn:kanban-tool:schema:api:maintenance-import-response:v1",
+            "schemas/fixtures/api/maintenance-import-response.v1.valid.json",
+            "maintenance_adoption::maintenance_import_response_producer",
+            "maintenance_adoption::maintenance_import_response_consumer"
+        ),
+        adopted_api_response_contract!(
+            "api.maintenance-vacuum.response",
+            "POST /api/v1/maintenance/vacuum response",
+            "POST /api/v1/maintenance/vacuum",
+            "urn:kanban-tool:schema:api:maintenance-vacuum-response:v1",
+            "schemas/fixtures/api/maintenance-vacuum-response.v1.valid.json",
+            "maintenance_adoption::maintenance_vacuum_response_producer",
+            "maintenance_adoption::maintenance_vacuum_response_consumer"
+        ),
+        adopted_api_response_contract!(
+            "api.maintenance-status.response",
+            "GET /api/v1/maintenance/status response",
+            "GET /api/v1/maintenance/status",
+            "urn:kanban-tool:schema:api:maintenance-status-response:v1",
+            "schemas/fixtures/api/maintenance-status-response.v1.valid.json",
+            "maintenance_adoption::maintenance_status_response_producer",
+            "maintenance_adoption::maintenance_status_response_consumer"
+        ),
+        adopted_api_response_contract!(
+            "api.maintenance-run.response",
+            "POST /api/v1/maintenance/run response",
+            "POST /api/v1/maintenance/run",
+            "urn:kanban-tool:schema:api:maintenance-run-response:v1",
+            "schemas/fixtures/api/maintenance-run-response.v1.valid.json",
+            "maintenance_adoption::maintenance_run_response_producer",
+            "maintenance_adoption::maintenance_run_response_consumer"
+        ),
+        adopted_api_response_contract!(
+            "api.maintenance-rebuild.response",
+            "POST /api/v1/maintenance/rebuild response",
+            "POST /api/v1/maintenance/rebuild",
+            "urn:kanban-tool:schema:api:maintenance-rebuild-response:v1",
+            "schemas/fixtures/api/maintenance-rebuild-response.v1.valid.json",
+            "maintenance_adoption::maintenance_rebuild_response_producer",
+            "maintenance_adoption::maintenance_rebuild_response_consumer"
+        ),
+        adopted_api_response_contract!(
+            "api.maintenance-cleanup.response",
+            "POST /api/v1/maintenance/cleanup response",
+            "POST /api/v1/maintenance/cleanup",
+            "urn:kanban-tool:schema:api:maintenance-cleanup-response:v1",
+            "schemas/fixtures/api/maintenance-cleanup-response.v1.valid.json",
+            "maintenance_adoption::maintenance_cleanup_response_producer",
+            "maintenance_adoption::maintenance_cleanup_response_consumer"
+        ),
+        adopted_api_response_contract!(
+            "api.maintenance-import-v30.response",
+            "POST /api/v1/maintenance/import-v30 response",
+            "POST /api/v1/maintenance/import-v30",
+            "urn:kanban-tool:schema:api:maintenance-import-v30-response:v1",
+            "schemas/fixtures/api/maintenance-import-v30-response.v1.valid.json",
+            "maintenance_adoption::legacy_import_v30_response_producer",
+            "maintenance_adoption::legacy_import_v30_response_consumer"
+        ),
+        adopted_cli_output_contract!(
+            "cli.maintenance-backup.output",
+            "backup",
+            "urn:kanban-tool:schema:cli:maintenance-backup-output:v1",
+            "schemas/fixtures/cli/maintenance-backup-output.v1.valid.json",
+            "all",
+            "maintenance_adoption::maintenance_backup_cli_producer",
+            "maintenance_adoption::maintenance_backup_cli_consumer"
+        ),
+        adopted_cli_output_contract!(
+            "cli.maintenance-export.output",
+            "export",
+            "urn:kanban-tool:schema:cli:maintenance-export-output:v1",
+            "schemas/fixtures/cli/maintenance-export-output.v1.valid.json",
+            "all",
+            "maintenance_adoption::maintenance_export_cli_producer",
+            "maintenance_adoption::maintenance_export_cli_consumer"
+        ),
+        adopted_cli_output_contract!(
+            "cli.maintenance-import.output",
+            "import",
+            "urn:kanban-tool:schema:cli:maintenance-import-output:v1",
+            "schemas/fixtures/cli/maintenance-import-output.v1.valid.json",
+            "all",
+            "maintenance_adoption::maintenance_import_cli_producer",
+            "maintenance_adoption::maintenance_import_cli_consumer"
+        ),
+        adopted_cli_output_contract!(
+            "cli.maintenance-vacuum.output",
+            "vacuum",
+            "urn:kanban-tool:schema:cli:maintenance-vacuum-output:v1",
+            "schemas/fixtures/cli/maintenance-vacuum-output.v1.valid.json",
+            "all",
+            "maintenance_adoption::maintenance_vacuum_cli_producer",
+            "maintenance_adoption::maintenance_vacuum_cli_consumer"
+        ),
+        adopted_cli_output_contract!(
+            "cli.maintenance-status-v1.output",
+            "maintenance status",
+            "urn:kanban-tool:schema:cli:maintenance-status-output:v1",
+            "schemas/fixtures/cli/maintenance-status-output.v1.valid.json",
+            "all",
+            "maintenance_adoption::maintenance_status_cli_producer",
+            "maintenance_adoption::maintenance_status_cli_consumer"
+        ),
+        adopted_cli_output_contract!(
+            "cli.maintenance-run-v1.output",
+            "maintenance run",
+            "urn:kanban-tool:schema:cli:maintenance-run-output:v1",
+            "schemas/fixtures/cli/maintenance-run-output.v1.valid.json",
+            "all",
+            "maintenance_adoption::maintenance_run_cli_producer",
+            "maintenance_adoption::maintenance_run_cli_consumer"
+        ),
+        adopted_cli_output_contract!(
+            "cli.maintenance-rebuild-v1.output",
+            "maintenance rebuild",
+            "urn:kanban-tool:schema:cli:maintenance-rebuild-output.v1",
+            "schemas/fixtures/cli/maintenance-rebuild-output.v1.valid.json",
+            "all",
+            "maintenance_adoption::maintenance_rebuild_cli_producer",
+            "maintenance_adoption::maintenance_rebuild_cli_consumer"
+        ),
+        adopted_cli_output_contract!(
+            "cli.maintenance-cleanup.output",
+            "maintenance cleanup",
+            "urn:kanban-tool:schema:cli:maintenance-cleanup-output.v1",
+            "schemas/fixtures/cli/maintenance-cleanup-output.v1.valid.json",
+            "all",
+            "maintenance_adoption::maintenance_cleanup_cli_producer",
+            "maintenance_adoption::maintenance_cleanup_cli_consumer"
+        ),
+        adopted_cli_output_contract!(
+            "cli.import-v30.output",
+            "import-v30",
+            "urn:kanban-tool:schema:cli:import-v30-output:v1",
+            "schemas/fixtures/cli/import-v30-output.v1.valid.json",
+            "all",
+            "maintenance_adoption::legacy_import_v30_cli_producer",
+            "maintenance_adoption::legacy_import_v30_cli_consumer"
         ),
     ]
 }

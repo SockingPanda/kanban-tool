@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::test_support::*;
     use crate::RemoveStepInput;
+    use crate::test_support::*;
 
     #[tokio::test]
     async fn remove_last_step_unplans_parent_recomputes_status_and_keeps_events_atomic() {
@@ -110,8 +110,11 @@ mod tests {
             "task.recomputed"
         );
         assert_eq!(
-            text_value(recompute.get_value(1).expect("重算 payload"), "event.payload")
-                .expect("重算 payload 类型"),
+            text_value(
+                recompute.get_value(1).expect("重算 payload"),
+                "event.payload"
+            )
+            .expect("重算 payload 类型"),
             r#"{"to_status":"ready"}"#
         );
     }

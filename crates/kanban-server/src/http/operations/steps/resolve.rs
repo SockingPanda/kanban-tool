@@ -162,7 +162,10 @@ mod tests {
         let done_body = done.into_body().collect().await.unwrap().to_bytes();
         let done: CompleteStepResponse = serde_json::from_slice(&done_body).unwrap();
         assert_eq!(done.data.steps[0].status, ApiStepStatus::Done);
-        assert_eq!(done.data.steps[0].resolution_note.as_deref(), Some("finished"));
+        assert_eq!(
+            done.data.steps[0].resolution_note.as_deref(),
+            Some("finished")
+        );
 
         let skipped = router
             .clone()
@@ -209,6 +212,9 @@ mod tests {
         let removed_body = removed.into_body().collect().await.unwrap().to_bytes();
         let removed: RemoveStepResponse = serde_json::from_slice(&removed_body).unwrap();
         assert!(removed.data.steps.is_empty());
-        assert_eq!(removed.data.execution_plan.state, ApiExecutionPlanState::Unplanned);
+        assert_eq!(
+            removed.data.execution_plan.state,
+            ApiExecutionPlanState::Unplanned
+        );
     }
 }

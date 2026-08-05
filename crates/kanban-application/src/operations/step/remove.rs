@@ -89,8 +89,8 @@ mod tests {
     };
 
     use super::*;
-    use crate::{ExecutionPlanRecord, ExecutionPlanState};
     use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
+    use crate::{ExecutionPlanRecord, ExecutionPlanState};
 
     impl StepRemove for StubStore {
         async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {

@@ -19,8 +19,8 @@ pub use legacy_import::{
     LegacySqliteImportResult, import_legacy_sqlite_v30,
 };
 pub use operations::{
-    AddDependencyInput, AddDependencyRecord, ArchiveBoardInput, BlockTaskInput, ClaimTaskInput,
-    ArchiveTaskInput, ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput,
+    AddDependencyInput, AddDependencyRecord, ArchiveBoardInput, ArchiveTaskInput, BlockTaskInput,
+    ClaimTaskInput, ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput,
     CreateCommentInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
     MarkExecutionPlanNotRequiredInput, PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput,
     ReleaseTaskInput, RemoveDependencyInput, RemoveDependencyRecord, RemoveStepInput,

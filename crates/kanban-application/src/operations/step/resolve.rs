@@ -249,8 +249,8 @@ mod tests {
     };
 
     use super::*;
-    use crate::{ExecutionPlanRecord, ExecutionPlanState};
     use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
+    use crate::{ExecutionPlanRecord, ExecutionPlanState};
 
     fn steps(task_id: &str) -> TaskStepsRecord {
         TaskStepsRecord {

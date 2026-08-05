@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
-import { ChevronDown, ListChecks, MessageSquare, Network } from "lucide-react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { ChevronDown, ListChecks, Map, MessageSquare, Network } from "lucide-react"
 
 import {
   AlertDialog,
@@ -13,9 +13,12 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { legalActions, type LegalTaskAction } from "@/features/task-actions/legal-actions"
+import { apiTaskGraphToCanvasGraph } from "@/features/task-map/task-graph-adapter"
 import { useI18n } from "@/i18n"
 import type { KanbanApi, LabelSuggestionResult, Run, Task } from "@/lib/api"
 
@@ -26,15 +29,20 @@ import { MarkdownDescription } from "./markdown"
 import { TaskActionPanel, taskActionView } from "./TaskActionPanel"
 import { TaskCommentsPanel } from "./TaskCommentsPanel"
 import { TaskDependencyPanel } from "./TaskDependencyPanel"
+import { TaskEditForm } from "./TaskEditForm"
 import { TaskExecutionPlanPanel } from "./TaskExecutionPlanPanel"
+import { applySuggestedTaskLabel, TaskLabelsPanel } from "./TaskLabelsPanel"
 import { TaskMetadataPanel } from "./TaskMetadataPanel"
 import { TaskEventsPanel, TaskRunsPanel } from "./TaskRunsEventsPanel"
 import { TaskSummaryHeader } from "./TaskSummaryHeader"
 import type { TaskEditDraft } from "./task-draft"
 import { Section } from "./task-detail-shared"
 
+export { applySuggestedTaskLabel } from "./TaskLabelsPanel"
 export { DependencyGroup } from "./TaskDependencyPanel"
 export { MarkdownDescription } from "./markdown"
+
+const TaskGraphCanvas = lazy(() => import("@/features/task-map/TaskGraphCanvas").then((module) => ({ default: module.TaskGraphCanvas })))
 
 type TaskDetailActionOptions = {
   label?: string
@@ -46,6 +54,10 @@ export function TaskDetail({
   api,
   task,
   detail,
+  labelSuggestions = null,
+  labelSuggestionsRequested = false,
+  labelSuggestionsLoading = false,
+  labelSuggestionsError = null,
   activeRun,
   blockReason,
   setBlockReason,
@@ -54,21 +66,29 @@ export function TaskDetail({
   claimToken,
   commentBody,
   setCommentBody,
+  editDraft,
+  draftDirty,
+  setEditDraft,
   detailLoading,
   commentsExpanded = false,
   dependenciesExpanded = false,
   eventsExpanded = false,
+  graphExpanded = false,
   runsExpanded = false,
   stepsExpanded = false,
   pendingAction,
   onAction,
   onAddDependency,
   onRemoveDependency,
+  onRequestLabelSuggestions,
   onSelectTask,
+  onSaveTask,
+  onCancelEdit,
   onAddComment,
   onCommentsExpandedChange = () => {},
   onDependenciesExpandedChange = () => {},
   onEventsExpandedChange = () => {},
+  onGraphExpandedChange = () => {},
   onRunsExpandedChange = () => {},
   onStepsExpandedChange = () => {},
 }: {
@@ -115,6 +135,8 @@ export function TaskDetail({
 }) {
   const { t } = useI18n()
   const [descriptionExpanded, setDescriptionExpanded] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [labelInput, setLabelInput] = useState("")
   const [commentSortOrder, setCommentSortOrder] = useState<CommentSortOrder>("newest")
   const [commentPage, setCommentPage] = useState(0)
   const [stepTitle, setStepTitle] = useState("")
@@ -124,6 +146,8 @@ export function TaskDetail({
 
   useEffect(() => {
     setDescriptionExpanded(false)
+    setEditing(false)
+    setLabelInput("")
     setCommentSortOrder("newest")
     setCommentPage(0)
     setStepTitle("")
@@ -132,6 +156,7 @@ export function TaskDetail({
     setConfirmAction(null)
   }, [task.id])
 
+  const graph = useMemo(() => apiTaskGraphToCanvasGraph(detail.neighborhood), [detail.neighborhood])
   const actions = useMemo(() => legalActions(task, claimToken, blockReason), [blockReason, claimToken, task])
   const longDescription = useMemo(() => isLongDescription(task.description), [task.description])
   const renderedDescription = useMemo(
@@ -144,6 +169,35 @@ export function TaskDetail({
   )
   const actionView = useMemo(() => taskActionView(task, actions), [actions, task])
   const currentTask = task
+
+  const saveAndClose = useCallback(async () => {
+    const saved = await onSaveTask()
+    if (saved) setEditing(false)
+  }, [onSaveTask])
+
+  const cancelEdit = useCallback(() => {
+    onCancelEdit()
+    setEditing(false)
+  }, [onCancelEdit])
+
+  const addLabel = useCallback(async () => {
+    if (!api || !labelInput.trim()) return
+    const name = labelInput.trim()
+    await onAction(async () => {
+      const updated = await api.addTaskLabel(currentTask.id, name)
+      setLabelInput("")
+      return updated
+    }, { fallbackTaskId: currentTask.id, label: "label", invalidate: "task" })
+  }, [api, currentTask.id, labelInput, onAction])
+
+  const removeLabel = useCallback(async (labelId: string) => {
+    if (!api) return
+    await onAction(() => api.removeTaskLabel(currentTask.id, labelId), { fallbackTaskId: currentTask.id, label: "label", invalidate: "task" })
+  }, [api, currentTask.id, onAction])
+
+  const applySuggestedLabel = useCallback(async (labelName: string) => {
+    await applySuggestedTaskLabel(api, currentTask.id, labelName, onAction)
+  }, [api, currentTask.id, onAction])
 
   const createStep = useCallback(async () => {
     if (!api || !stepTitle.trim()) return
@@ -188,19 +242,51 @@ export function TaskDetail({
     })
   }, [api, currentTask, onAction])
 
+  const handleSaveTask = useCallback(() => void saveAndClose(), [saveAndClose])
   const handleCreateStep = useCallback(() => void createStep(), [createStep])
   const handleAttachStep = useCallback(() => void attachStep(), [attachStep])
   const handleMarkPlanNotRequired = useCallback(() => void markPlanNotRequired(), [markPlanNotRequired])
   const handleAddDependency = useCallback(() => void onAddDependency(), [onAddDependency])
   const handleRemoveDependency = useCallback((parentTaskId: string) => void onRemoveDependency(parentTaskId), [onRemoveDependency])
+  const handleAddLabel = useCallback(() => void addLabel(), [addLabel])
+  const handleRemoveLabel = useCallback((labelId: string) => void removeLabel(labelId), [removeLabel])
+  const handleApplySuggestedLabel = useCallback((labelName: string) => void applySuggestedLabel(labelName), [applySuggestedLabel])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <TaskSummaryHeader task={task} detailLoading={detailLoading} />
+      <TaskSummaryHeader task={task} editing={editing} editEnabled={Boolean(editDraft)} detailLoading={detailLoading} onEdit={() => setEditing(true)} />
 
       <ScrollArea className="flex-1 p-4">
-        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(260px,320px)_minmax(420px,1fr)_minmax(220px,260px)] lg:grid-cols-[minmax(260px,320px)_minmax(420px,1fr)]">
+        {editing && editDraft ? (
+          <TaskEditForm
+            api={api}
+            editDraft={editDraft}
+            draftDirty={draftDirty}
+            pendingAction={pendingAction}
+            setEditDraft={setEditDraft}
+            onSave={handleSaveTask}
+            onCancel={cancelEdit}
+          />
+        ) : (
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(260px,320px)_minmax(420px,1fr)_minmax(220px,260px)] lg:grid-cols-[minmax(260px,320px)_minmax(420px,1fr)]">
             <aside className="min-w-0 space-y-4">
+              <TaskDetailPanel
+                title={t("One-hop map")}
+                icon={<Map className="h-4 w-4" />}
+                open={graphExpanded}
+                summary={graphExpanded ? t(graph.nodes.length === 1 ? "{count} node" : "{count} nodes", { count: graph.nodes.length }) : t("Load map")}
+                onOpenChange={onGraphExpandedChange}
+              >
+                {graph.nodes.length ? (
+                  <Suspense fallback={<TaskDetailGraphSkeleton />}>
+                    <TaskGraphCanvas graph={graph} selectedTaskId={task.id} onSelectTask={onSelectTask} className="h-[420px] min-h-[320px]" />
+                  </Suspense>
+                ) : (
+                  <Empty className="items-start rounded-md border border-border bg-muted/20 p-3 text-left">
+                    <EmptyDescription>{t("No task context graph yet.")}</EmptyDescription>
+                  </Empty>
+                )}
+              </TaskDetailPanel>
               <TaskDetailPanel
                 title={t("Dependencies")}
                 icon={<Network className="h-4 w-4" />}
@@ -304,8 +390,26 @@ export function TaskDetail({
 
             <aside className="min-w-0 space-y-4 lg:col-span-2 xl:col-span-1">
               <TaskMetadataPanel task={task} />
+              <Section title={t("Labels")}>
+                <TaskLabelsPanel
+                  api={api}
+                  task={task}
+                  labelInput={labelInput}
+                  setLabelInput={setLabelInput}
+                  suggestions={labelSuggestions}
+                  suggestionsRequested={labelSuggestionsRequested}
+                  suggestionsLoading={labelSuggestionsLoading}
+                  suggestionsError={labelSuggestionsError}
+                  pending={pendingAction === "label"}
+                  onAddLabel={handleAddLabel}
+                  onRemoveLabel={handleRemoveLabel}
+                  onRequestLabelSuggestions={onRequestLabelSuggestions}
+                  onApplySuggestedLabel={handleApplySuggestedLabel}
+                />
+              </Section>
             </aside>
           </div>
+        )}
       </ScrollArea>
 
       <AlertDialog open={Boolean(confirmAction)} onOpenChange={(open) => !open && setConfirmAction(null)}>
@@ -330,6 +434,16 @@ export function TaskDetail({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  )
+}
+
+function TaskDetailGraphSkeleton() {
+  return (
+    <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+      <Skeleton className="h-20 w-2/3" />
+      <Skeleton className="ml-auto h-20 w-3/4" />
+      <Skeleton className="h-20 w-1/2" />
     </div>
   )
 }

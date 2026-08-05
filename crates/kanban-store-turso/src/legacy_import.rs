@@ -7,6 +7,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Component, Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use rusqlite::{
@@ -362,6 +363,19 @@ struct Snapshot {
     attachments: Vec<Attachment>,
 }
 
+/// SQLite 在 WAL 模式下可能需要创建 `-shm`；将源文件及其现有 sidecar 复制到临时目录，
+/// 让只读预检不会在用户提供的源目录创建或修改任何 SQLite sidecar。
+struct ReadOnlySource {
+    directory: PathBuf,
+    path: PathBuf,
+}
+
+impl Drop for ReadOnlySource {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.directory);
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Attachment {
     id: String,
@@ -509,9 +523,11 @@ fn result(
 }
 
 fn read_snapshot(path: &Path) -> Result<Snapshot, StoreError> {
-    let path = path.to_path_buf();
-    let connection = SqliteConnection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|e| error(format!("只读打开源 SQLite 失败: {e}")))?;
+    let path = fs::canonicalize(path).map_err(|e| error(format!("解析源 SQLite 路径失败: {e}")))?;
+    let readonly = copy_source_for_read(&path)?;
+    let connection =
+        SqliteConnection::open_with_flags(&readonly.path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|e| error(format!("只读打开源 SQLite 失败: {e}")))?;
     verify_schema(&connection)?;
     let mut columns = BTreeMap::new();
     for (table, manifest) in LEGACY_COLUMNS {
@@ -556,6 +572,55 @@ fn read_snapshot(path: &Path) -> Result<Snapshot, StoreError> {
         columns,
         counts,
         attachments,
+    })
+}
+
+fn copy_source_for_read(path: &Path) -> Result<ReadOnlySource, StoreError> {
+    let base = std::env::temp_dir();
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| error(format!("生成只读快照临时目录名失败: {e}")))?
+        .as_nanos();
+    let mut directory = None;
+    for attempt in 0..100_u32 {
+        let candidate = base.join(format!(
+            "kanban-legacy-import-{}-{timestamp}-{attempt}",
+            std::process::id()
+        ));
+        match fs::create_dir(&candidate) {
+            Ok(()) => {
+                directory = Some(candidate);
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(io_error) => {
+                return Err(error(format!("创建只读 SQLite 临时目录失败: {io_error}")));
+            }
+        }
+    }
+    let directory = directory.ok_or_else(|| error("无法分配只读 SQLite 临时目录"))?;
+    let copied_path = directory.join("source.sqlite");
+    if let Err(io_error) = fs::copy(path, &copied_path) {
+        let _ = fs::remove_dir_all(&directory);
+        return Err(error(format!(
+            "复制源 SQLite 到只读临时目录失败: {io_error}"
+        )));
+    }
+    for suffix in ["-wal", "-shm"] {
+        let source_sidecar = PathBuf::from(format!("{}{suffix}", path.display()));
+        if source_sidecar.is_file() {
+            let target_sidecar = PathBuf::from(format!("{}{suffix}", copied_path.display()));
+            if let Err(io_error) = fs::copy(&source_sidecar, target_sidecar) {
+                let _ = fs::remove_dir_all(&directory);
+                return Err(error(format!(
+                    "复制源 SQLite {suffix} sidecar 失败: {io_error}"
+                )));
+            }
+        }
+    }
+    Ok(ReadOnlySource {
+        directory,
+        path: copied_path,
     })
 }
 
@@ -1543,6 +1608,8 @@ mod tests {
             .execute_batch("PRAGMA user_version=29; CREATE TABLE marker(value TEXT);")
             .expect("write invalid fixture");
         drop(connection);
+        let wal = PathBuf::from(format!("{}-wal", source.display()));
+        let shm = PathBuf::from(format!("{}-shm", source.display()));
         let before = fs::read(&source).expect("read source before preflight");
         let result = read_snapshot(&source);
         assert!(result.is_err());
@@ -1550,6 +1617,8 @@ mod tests {
             fs::read(&source).expect("read source after preflight"),
             before
         );
+        assert!(!wal.exists());
+        assert!(!shm.exists());
     }
 
     #[tokio::test]

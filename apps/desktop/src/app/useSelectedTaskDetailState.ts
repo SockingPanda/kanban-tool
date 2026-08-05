@@ -1,12 +1,10 @@
-import { useEffect, useMemo, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { reconcileSelectedTaskId, shouldLoadTaskDetail } from "@/app/task-selection"
-import { requestTaskLabelSuggestions, taskDetailOrEmpty, useTaskDetail } from "@/features/task-detail/useTaskDetail"
+import { taskDetailOrEmpty, useTaskDetail } from "@/features/task-detail/useTaskDetail"
 import { reconcileTaskDraft, type TaskDraftState } from "@/features/task-detail/task-draft"
 import type { KanbanApi, Task } from "@/lib/api"
 import { reconcileClaimTokenForTask, reconcileClaimTokensForTasks } from "@/lib/claim-tokens"
-import { queryKeys } from "@/lib/query-keys"
 import type { OperatorView } from "@/features/navigation/view-types"
 
 export function useSelectedTaskDetailState(
@@ -23,7 +21,6 @@ export function useSelectedTaskDetailState(
   const [commentBody, setCommentBody] = useState("")
   const [draftState, setDraftState] = useState<TaskDraftState | null>(null)
   const [claimTokens, setClaimTokens] = useState<Record<string, string>>({})
-  const [labelSuggestionsRequested, setLabelSuggestionsRequested] = useState(false)
   const [taskDependenciesExpanded, setTaskDependenciesExpanded] = useState(true)
   const [taskGraphExpanded, setTaskGraphExpanded] = useState(true)
   const [taskStepsExpanded, setTaskStepsExpanded] = useState(true)
@@ -35,21 +32,25 @@ export function useSelectedTaskDetailState(
   const detailQuery = useTaskDetail(api, selectedId, {
     enabled,
     dependenciesEnabled: enabled,
-    neighborhoodEnabled: enabled,
+    neighborhoodEnabled: false,
     stepsEnabled: enabled,
     runsEnabled: view === "runs" || taskRunsExpanded,
     eventsEnabled: taskEventsExpanded,
     commentsEnabled: enabled,
     runLogEnabled: view === "runs" || taskRunsExpanded,
   })
-  const labelSuggestionsQuery = useQuery({
-    enabled: false,
-    queryKey: selectedId ? queryKeys.taskLabelSuggestions(selectedId) : ["task-label-suggestions", "none"],
-    queryFn: ({ signal }) => {
-      if (!api || !selectedId) throw new Error("Label suggestions query is not ready")
-      return requestTaskLabelSuggestions(api, selectedId, signal)
-    },
-  })
+  // Keep the existing controller contract until AppShell drops the legacy label props.
+  // This disabled shape deliberately has no query observer or network-capable refetch.
+  const labelSuggestionsQuery = useMemo(
+    () => ({
+      data: null,
+      error: null,
+      isFetching: false,
+      refetch: async () => ({ data: null }),
+    }),
+    [],
+  )
+  const setLabelSuggestionsRequested = useCallback((_requested: boolean) => undefined, [])
 
   const boardSelectedTask = useMemo(
     () => (selectedId ? tasks.find((task) => task.id === selectedId) ?? null : null),
@@ -84,7 +85,6 @@ export function useSelectedTaskDetailState(
   }, [selectedTask])
 
   useEffect(() => {
-    setLabelSuggestionsRequested(false)
     setTaskDependenciesExpanded(true)
     setTaskGraphExpanded(true)
     setTaskStepsExpanded(true)
@@ -121,12 +121,8 @@ export function useSelectedTaskDetailState(
       draftState,
       enabled,
       labelSuggestionsQuery,
-      labelSuggestionsRequested:
-        labelSuggestionsRequested ||
-        labelSuggestionsQuery.isFetched ||
-        labelSuggestionsQuery.isFetching ||
-        Boolean(labelSuggestionsQuery.error),
-      labelSuggestionsRequestedExplicitly: labelSuggestionsRequested,
+      labelSuggestionsRequested: false,
+      labelSuggestionsRequestedExplicitly: false,
       selectedId,
       selectedTask,
       setBlockReason,
@@ -162,9 +158,9 @@ export function useSelectedTaskDetailState(
       draftState,
       enabled,
       labelSuggestionsQuery,
-      labelSuggestionsRequested,
       selectedId,
       selectedTask,
+      setLabelSuggestionsRequested,
       taskCommentsExpanded,
       taskDependenciesExpanded,
       taskEventsExpanded,

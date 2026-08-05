@@ -209,7 +209,7 @@ describe("desktop shadcn control convergence", () => {
     }
   })
 
-  it("keeps task detail lazy while hiding unsupported navigation views", () => {
+  it("keeps task detail lazy while hiding unsupported graph content", () => {
     const shell = source("app/AppShell.tsx")
     const detail = source("features/task-detail/TaskDetail.tsx")
     const map = source("features/task-map/BoardTaskMapView.tsx")
@@ -228,8 +228,7 @@ describe("desktop shadcn control convergence", () => {
       expect(shell).not.toContain(retiredImport)
     }
 
-    expect(detail).toContain("lazy(() => import(\"@/features/task-map/TaskGraphCanvas\")")
-    expect(detail).not.toContain("from \"@/features/task-map/TaskGraphCanvas\"")
+    expect(detail).not.toContain("TaskGraphCanvas")
     expect(detail).toContain("<CollapsibleContent>{open ? children : null}</CollapsibleContent>")
     expect(map).toContain("lazy(() => import(\"./TaskGraphCanvas\")")
     expect(map).not.toContain("from \"./TaskGraphCanvas\"")

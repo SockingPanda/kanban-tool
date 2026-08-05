@@ -332,7 +332,7 @@ describe("MarkdownDescription", () => {
     expect(html).not.toContain("Body 01")
   })
 
-  it("renders task labels and label input controls", () => {
+  it("hides unsupported task labels and label input controls", () => {
     const html = renderToStaticMarkup(
       <Sheet open>
         <TaskDetail
@@ -367,17 +367,17 @@ describe("MarkdownDescription", () => {
       </Sheet>,
     )
 
-    expect(html).toContain("Labels")
-    expect(html).toContain("backend")
-    expect(html).toContain('aria-label="Label name"')
-    expect(html).toContain('aria-label="Add label"')
-    expect(html).toContain('aria-label="Remove label backend"')
-    expect(html).toContain("Suggest labels")
+    expect(html).not.toContain("Labels")
+    expect(html).not.toContain("backend")
+    expect(html).not.toContain('aria-label="Label name"')
+    expect(html).not.toContain('aria-label="Add label"')
+    expect(html).not.toContain('aria-label="Remove label backend"')
+    expect(html).not.toContain("Suggest labels")
     expect(html).not.toContain("Suggestions unavailable")
     expect(html).not.toContain("No label suggestions.")
   })
 
-  it("renders degraded label suggestions and already applied state", () => {
+  it("ignores legacy label suggestion props", () => {
     const html = renderToStaticMarkup(
       <Sheet open>
         <TaskDetail
@@ -465,20 +465,19 @@ describe("MarkdownDescription", () => {
       </Sheet>,
     )
 
-    expect(html).toContain("Suggestions")
-    expect(html).toContain("Degraded")
-    expect(html).toContain("label_atom_index_dirty")
-    expect(html).toContain("Applied")
-    expect(html).toContain("coverage 82%")
-    expect(html).toContain("cosine 91%")
-    expect(html).toContain("residual 0.180")
-    expect(html).not.toContain("new label may be needed")
-    expect(html).toContain("touches Rust service code")
-    expect(html).toContain("add API handler")
-    expect(html).toContain("negative evidence 1")
+    expect(html).not.toContain("Suggestions")
+    expect(html).not.toContain("Degraded")
+    expect(html).not.toContain("label_atom_index_dirty")
+    expect(html).not.toContain("Applied")
+    expect(html).not.toContain("coverage 82%")
+    expect(html).not.toContain("cosine 91%")
+    expect(html).not.toContain("residual 0.180")
+    expect(html).not.toContain("touches Rust service code")
+    expect(html).not.toContain("add API handler")
+    expect(html).not.toContain("negative evidence 1")
   })
 
-  it("renders the workbench map, execution plan, and gated primary action", () => {
+  it("renders dependencies, execution plan, and gated primary action", () => {
     const parentTask: Task = { ...task, id: "t_parent", ref: "default#2", seq: 2, title: "Parent blocker", status: "blocked" }
     const childTask: Task = { ...task, id: "t_child", ref: "default#3", seq: 3, title: "Unlocked child", status: "todo" }
     const html = renderToStaticMarkup(
@@ -529,7 +528,7 @@ describe("MarkdownDescription", () => {
       </Sheet>,
     )
 
-    expect(html).toContain("One-hop map")
+    expect(html).not.toContain("One-hop map")
     expect(html).toContain("Parent blocker")
     expect(html).toContain("Unlocked child")
     expect(html).toContain("Execution plan")

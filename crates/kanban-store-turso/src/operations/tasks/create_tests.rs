@@ -173,6 +173,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_task_rejects_duplicate_id_without_idempotency_key() {
+        let (_directory, store, _path) = store("create-duplicate-id").await;
+        store.initialize().await.expect("initialize");
+        store
+            .create_task("default", create_input("t_duplicate_id", None, "Original"))
+            .await
+            .expect("first create");
+
+        let error = store
+            .create_task("default", create_input("t_duplicate_id", None, "Different"))
+            .await
+            .expect_err("duplicate task id must conflict");
+        assert!(matches!(error, StoreError::TaskConflict(task_id) if task_id == "t_duplicate_id"));
+
+        let connection = store.connection().await.expect("connection");
+        assert_eq!(count_rows(&connection, "tasks").await, 1);
+        assert_eq!(count_rows(&connection, "task_execution_plans").await, 1);
+        assert_eq!(count_rows(&connection, "task_events").await, 1);
+    }
+
+    #[tokio::test]
+    async fn create_task_does_not_classify_event_constraint_as_task_conflict() {
+        let (_directory, store, _path) = store("create-event-conflict").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, 'b_default', NULL, NULL, 'test.event', 'tester', '{}', 1)",
+                ["e_event_conflict_created"],
+            )
+            .await
+            .expect("insert conflicting event");
+
+        let error = store
+            .create_task(
+                "default",
+                create_input("t_event_conflict", None, "Event conflict"),
+            )
+            .await
+            .expect_err("event constraint must remain a storage error");
+        assert!(matches!(
+            error,
+            StoreError::Turso(turso::Error::Constraint(message))
+                if message.starts_with("UNIQUE constraint failed: task_events.event_id")
+        ));
+        assert_eq!(count_rows(&connection, "tasks").await, 0);
+        assert_eq!(count_rows(&connection, "task_execution_plans").await, 0);
+        assert_eq!(count_rows(&connection, "task_events").await, 1);
+    }
+
+    #[tokio::test]
     async fn create_task_assigns_monotonic_board_local_sequences() {
         let (_directory, store, _path) = store("create-seq").await;
         store.initialize().await.expect("initialize");

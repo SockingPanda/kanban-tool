@@ -20,6 +20,7 @@ pub enum StoreError {
     RunNotFound(String),
     StepNotFound(String),
     DependencyCycle(String),
+    TaskConflict(String),
     IdempotencyConflict {
         board_id: String,
         key: String,
@@ -47,6 +48,7 @@ impl Display for StoreError {
             Self::RunNotFound(run_id) => write!(formatter, "run not found: {run_id}"),
             Self::StepNotFound(step_id) => write!(formatter, "step not found: {step_id}"),
             Self::DependencyCycle(message) => write!(formatter, "dependency cycle: {message}"),
+            Self::TaskConflict(task_id) => write!(formatter, "task id already exists: {task_id}"),
             Self::IdempotencyConflict {
                 board_id,
                 key,

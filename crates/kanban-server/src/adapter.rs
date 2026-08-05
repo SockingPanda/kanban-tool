@@ -56,6 +56,9 @@ fn store_error(error: StoreError) -> KanbanError {
         StoreError::RunNotFound(run_id) => KanbanError::NotFound(format!("run {run_id}")),
         StoreError::StepNotFound(step_id) => KanbanError::NotFound(format!("step {step_id}")),
         StoreError::DependencyCycle(message) => KanbanError::Conflict(message),
+        StoreError::TaskConflict(task_id) => {
+            KanbanError::Conflict(format!("task id already exists: {task_id}"))
+        }
         StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),
         StoreError::InvalidTransition(message) => KanbanError::InvalidTransition(message),
         StoreError::ClaimConflict(message) => {

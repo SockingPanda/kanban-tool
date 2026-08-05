@@ -96,7 +96,7 @@ impl TursoStore {
             .checked_mul(1024)
             .ok_or_else(|| StoreError::InvalidInput("task sequence is too large".to_owned()))?;
         let now = now_ms();
-        transaction
+        match transaction
                 .execute(
                     "INSERT INTO tasks(id, board_id, seq, idempotency_key, title, description, status, assignee, priority, position, scheduled_at, due_at, created_by, created_at, updated_at, max_retries, metadata_json, lock_version) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14, ?15, ?16, 0)",
                     (
@@ -118,7 +118,17 @@ impl TursoStore {
                         input.metadata_json.as_str(),
                     ),
                 )
-                .await?;
+                .await
+        {
+            Ok(_) => {}
+            Err(turso::Error::Constraint(message))
+                if input.idempotency_key.is_none()
+                    && is_duplicate_task_id_constraint(&message) =>
+            {
+                return Err(StoreError::TaskConflict(input.id.clone()));
+            }
+            Err(error) => return Err(StoreError::Turso(error)),
+        }
         transaction
                 .execute(
                     "INSERT INTO task_execution_plans(board_id, task_id, state, reason, updated_by, updated_at) VALUES (?1, ?2, 'unplanned', NULL, ?3, ?4)",
@@ -157,4 +167,10 @@ impl TursoStore {
         debug_assert_eq!(task.board_slug, board_slug);
         Ok(task)
     }
+}
+
+fn is_duplicate_task_id_constraint(message: &str) -> bool {
+    message.starts_with("UNIQUE constraint failed: tasks.id")
+        || message.starts_with("UNIQUE constraint failed: tasks.(id, board_id)")
+        || message.starts_with("UNIQUE constraint failed: tasks.(board_id, id)")
 }

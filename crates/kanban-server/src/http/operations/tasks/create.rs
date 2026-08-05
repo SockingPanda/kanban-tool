@@ -70,6 +70,41 @@ mod tests {
     use crate::http::operations::test_support::*;
 
     #[tokio::test]
+    async fn task_create_duplicate_id_without_idempotency_key_returns_conflict() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let router = build_router(state);
+        let body = serde_json::json!({
+            "task_id": "t_http_duplicate_id",
+            "title": "HTTP duplicate",
+            "description": "duplicate id",
+            "priority": 1,
+            "metadata": {},
+            "labels": [],
+            "depends_on": [],
+            "actor": "body-actor"
+        });
+
+        let response = router
+            .clone()
+            .oneshot(json_request("/api/v1/boards/default/tasks", body.clone()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let response = router
+            .oneshot(json_request("/api/v1/boards/default/tasks", body))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(error.error.code, ApiErrorCode::Conflict);
+    }
+
+    #[tokio::test]
     async fn task_create_closes_the_application_and_idempotency_path() {
         let directory = tempfile::tempdir().unwrap();
         let state = AppState::open(directory.path().join("kanban.db"), "test")

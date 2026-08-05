@@ -5,9 +5,10 @@ use kanban_application::{
     CreateTaskRecord as ApplicationCreateTask, ExecutionPlanRecord as ApplicationExecutionPlan,
     ExecutionPlanState, HeartbeatTaskRecord as ApplicationHeartbeatTask,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
-    PromoteTaskRecord as ApplicationPromoteTask, ReleaseTaskRecord as ApplicationReleaseTask,
-    RunRecord as ApplicationRun, RunStatus as ApplicationRunStatus,
-    SubmitReviewTaskRecord as ApplicationSubmitReviewTask,
+    PromoteTaskRecord as ApplicationPromoteTask,
+    ReclaimExpiredTaskRecord as ApplicationReclaimExpiredTask,
+    ReleaseTaskRecord as ApplicationReleaseTask, RunRecord as ApplicationRun,
+    RunStatus as ApplicationRunStatus, SubmitReviewTaskRecord as ApplicationSubmitReviewTask,
     TaskListOptions as ApplicationTaskListOptions, TaskListPage as ApplicationTaskListPage,
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
     TaskRecord as ApplicationTask,
@@ -18,7 +19,8 @@ use kanban_store_turso::{
     ClaimTaskRecord as StoreClaim, CompleteTaskInput as StoreCompleteTask,
     CreateTaskInput as StoreCreateTask, HeartbeatTaskInput as StoreHeartbeatTask,
     MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired,
-    PromoteTaskInput as StorePromoteTask, ReleaseTaskInput as StoreReleaseTask, StoreError,
+    PromoteTaskInput as StorePromoteTask, ReclaimExpiredTaskInput as StoreReclaimExpiredTask,
+    ReleaseTaskInput as StoreReleaseTask, StoreError,
     SubmitReviewTaskInput as StoreSubmitReviewTask, TaskExecutionPlanRecord as StoreExecutionPlan,
     TaskListOptions as StoreTaskListOptions, TaskListSort as StoreTaskListSort,
     TaskPlanFilter as StoreTaskPlanFilter, TaskRecord as StoreTask, TaskRunRecord as StoreRun,
@@ -213,6 +215,7 @@ impl ApplicationStore for TursoApplicationStore {
                     event_id: input.event_id,
                     worker_profile: input.worker_profile,
                     metadata_json: input.metadata_json,
+                    log_path: input.log_path,
                     now: input.now,
                     claim_expires_at: input.claim_expires_at,
                 },
@@ -264,6 +267,40 @@ impl ApplicationStore for TursoApplicationStore {
             .await
             .map_err(store_error)
             .and_then(application_task)
+    }
+
+    async fn list_expired_claims(&self, board: &str, now: i64) -> Result<Vec<ApplicationTask>> {
+        self.store
+            .list_expired_claims(board, now)
+            .await
+            .map_err(store_error)?
+            .into_iter()
+            .map(application_task)
+            .collect()
+    }
+
+    async fn reclaim_expired_task(
+        &self,
+        task_id: &str,
+        input: ApplicationReclaimExpiredTask,
+    ) -> Result<Option<ApplicationTask>> {
+        self.store
+            .reclaim_expired_task(
+                task_id,
+                StoreReclaimExpiredTask {
+                    expected_lock_version: input.expected_lock_version,
+                    actor: input.actor,
+                    event_id: input.event_id,
+                    target_status: input.target_status.as_str().to_owned(),
+                    retry_count: input.retry_count,
+                    reason: input.reason,
+                    now: input.now,
+                },
+            )
+            .await
+            .map_err(store_error)?
+            .map(application_task)
+            .transpose()
     }
 
     async fn submit_review_task(

@@ -1,16 +1,21 @@
-use std::{future::Future, net::SocketAddr};
+use std::{
+    future::{Future, IntoFuture},
+    net::SocketAddr,
+};
 
 use axum::{
     Router,
     http::{HeaderValue, Method, header},
     routing::{get, post},
 };
+use tokio::sync::{oneshot, watch};
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
     trace::TraceLayer,
 };
 
 use crate::{
+    dispatcher::{DispatcherConfig, ShutdownSignal, run_dispatcher},
     handlers::{
         block_task, claim_task, complete_task, create_task, get_task, health, heartbeat_task,
         list_board_columns, list_boards, list_tasks, mark_execution_plan_not_required,
@@ -82,6 +87,88 @@ where
     axum::serve(listener, build_router(state))
         .with_graceful_shutdown(shutdown)
         .await
+}
+
+pub async fn serve_with_dispatcher_shutdown(
+    addr: SocketAddr,
+    state: AppState,
+    dispatcher: Option<DispatcherConfig>,
+    shutdown: watch::Receiver<ShutdownSignal>,
+) -> std::io::Result<()> {
+    if !addr.ip().is_loopback() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "kanban serve only accepts a loopback address",
+        ));
+    }
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let (http_shutdown_tx, http_shutdown_rx) = oneshot::channel();
+    let mut http = std::pin::pin!(
+        axum::serve(listener, build_router(state.clone()))
+            .with_graceful_shutdown(async move {
+                let _ = http_shutdown_rx.await;
+            })
+            .into_future()
+    );
+    let dispatcher_shutdown = shutdown.clone();
+    let mut dispatcher = std::pin::pin!(async move {
+        if let Some(config) = dispatcher {
+            run_dispatcher(state, config, addr, dispatcher_shutdown).await
+        } else {
+            wait_for_graceful(dispatcher_shutdown).await;
+            Ok(())
+        }
+    });
+    let mut force_shutdown = shutdown.clone();
+
+    let dispatcher_result = tokio::select! {
+        result = &mut http => return result,
+        result = &mut dispatcher => result,
+        () = wait_for_force(&mut force_shutdown) => {
+            return Err(force_shutdown_error());
+        }
+    };
+    if *shutdown.borrow() == ShutdownSignal::Force {
+        return Err(force_shutdown_error());
+    }
+    http_shutdown_tx.send(()).ok();
+    if let Err(error) = dispatcher_result {
+        return Err(std::io::Error::other(error.to_string()));
+    }
+
+    tokio::select! {
+        result = &mut http => result,
+        () = wait_for_force(&mut force_shutdown) => Err(force_shutdown_error()),
+    }
+}
+
+async fn wait_for_graceful(mut shutdown: watch::Receiver<ShutdownSignal>) {
+    loop {
+        if *shutdown.borrow() != ShutdownSignal::Running {
+            return;
+        }
+        if shutdown.changed().await.is_err() {
+            return;
+        }
+    }
+}
+
+async fn wait_for_force(shutdown: &mut watch::Receiver<ShutdownSignal>) {
+    loop {
+        if *shutdown.borrow() == ShutdownSignal::Force {
+            return;
+        }
+        if shutdown.changed().await.is_err() {
+            return;
+        }
+    }
+}
+
+fn force_shutdown_error() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::Interrupted,
+        "kanban serve was force-stopped",
+    )
 }
 
 fn desktop_cors_layer() -> CorsLayer {

@@ -112,6 +112,7 @@ pub struct ClaimTaskRecord {
     pub event_id: String,
     pub worker_profile: String,
     pub metadata_json: String,
+    pub log_path: Option<String>,
     pub now: i64,
     pub claim_expires_at: i64,
 }
@@ -187,6 +188,17 @@ pub struct ReleaseTaskRecord {
     pub actor: String,
     pub claim_token: String,
     pub event_id: String,
+    pub now: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReclaimExpiredTaskRecord {
+    pub expected_lock_version: i64,
+    pub actor: String,
+    pub event_id: String,
+    pub target_status: TaskStatus,
+    pub retry_count: i64,
+    pub reason: String,
     pub now: i64,
 }
 

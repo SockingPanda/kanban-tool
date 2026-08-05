@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, SystemClock, TaskStatus, can_promote_from,
     initial_status, is_claimable_task, new_event_id, new_run_id, new_typed_id,
-    recompute_ready_status, running_claim_is_present,
+    recompute_ready_status, retry_decision, running_claim_is_present,
 };
 use tokio::sync::Mutex;
 
@@ -13,8 +13,8 @@ use crate::{
     CompleteTaskRecord, CreateTaskCommand, CreateTaskRecord, ExecutionPlanRecord,
     ExecutionPlanState, HeartbeatTaskCommand, HeartbeatTaskRecord,
     MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord, PromoteTaskCommand,
-    PromoteTaskRecord, ReleaseTaskCommand, ReleaseTaskRecord, SubmitReviewTaskCommand,
-    SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskRecord,
+    PromoteTaskRecord, ReclaimExpiredTaskRecord, ReleaseTaskCommand, ReleaseTaskRecord,
+    SubmitReviewTaskCommand, SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskRecord,
 };
 
 const MAX_TASK_LIST_LIMIT: usize = 1_000;
@@ -262,6 +262,28 @@ where
     }
 
     pub async fn claim_task(&self, command: ClaimTaskCommand) -> Result<ClaimRecord> {
+        self.claim_task_inner(command, None).await
+    }
+
+    /// Claim a task for the in-process dispatcher and atomically attach its run log path.
+    pub async fn claim_task_with_run_log_dir(
+        &self,
+        command: ClaimTaskCommand,
+        run_log_dir: &Path,
+    ) -> Result<ClaimRecord> {
+        if run_log_dir.as_os_str().is_empty() {
+            return Err(KanbanError::InvalidInput(
+                "run_log_dir is required".to_owned(),
+            ));
+        }
+        self.claim_task_inner(command, Some(run_log_dir)).await
+    }
+
+    async fn claim_task_inner(
+        &self,
+        command: ClaimTaskCommand,
+        run_log_dir: Option<&Path>,
+    ) -> Result<ClaimRecord> {
         let task_id = command.task_id.trim();
         if !task_id.starts_with("t_") || task_id.len() <= 2 {
             return Err(KanbanError::InvalidInput(
@@ -306,6 +328,15 @@ where
         let claim_expires_at = now.checked_add(command.ttl_ms).ok_or_else(|| {
             KanbanError::InvalidInput("ttl_ms produces an invalid claim expiry".to_owned())
         })?;
+        let run_id = new_run_id();
+        let log_path = run_log_dir
+            .map(|directory| directory.join(format!("{run_id}.log")))
+            .map(|path| {
+                path.into_os_string().into_string().map_err(|_| {
+                    KanbanError::InvalidInput("run log path must be valid UTF-8".to_owned())
+                })
+            })
+            .transpose()?;
         self.store
             .claim_task(
                 task_id,
@@ -313,10 +344,11 @@ where
                     expected_lock_version: task.lock_version,
                     actor: actor.to_owned(),
                     claim_token: new_typed_id("claim"),
-                    run_id: new_run_id(),
+                    run_id,
                     event_id: new_event_id(),
                     worker_profile,
                     metadata_json,
+                    log_path,
                     now,
                     claim_expires_at,
                 },
@@ -448,6 +480,69 @@ where
                 },
             )
             .await
+    }
+
+    /// Reclaim only expired running leases for the in-process dispatcher.
+    pub async fn reclaim_expired(&self, board: &str, actor: &str) -> Result<usize> {
+        let board = board.trim();
+        if board.is_empty() {
+            return Err(KanbanError::InvalidInput("board is required".to_owned()));
+        }
+        let actor = actor.trim();
+        if actor.is_empty() {
+            return Err(KanbanError::InvalidInput("actor is required".to_owned()));
+        }
+        let _mutation = self.mutation_gate.lock().await;
+        let now = self.clock.now_ms();
+        let expired = self.store.list_expired_claims(board, now).await?;
+        let mut reclaimed = 0;
+        for task in expired {
+            let decision = retry_decision(task.retry_count, task.max_retries, TaskStatus::Ready);
+            let mut target_status = decision.status;
+            if target_status == TaskStatus::Ready {
+                target_status = recompute_ready_status(
+                    ReadinessFacts {
+                        title: &task.title,
+                        description: task.description.as_deref(),
+                        scheduled_at: task.scheduled_at,
+                        dependencies_done: !task.dependency_blocked,
+                    },
+                    now,
+                );
+                let has_executable_plan = task.execution_plan_state
+                    == ExecutionPlanState::NotRequired
+                    || task.required_step_count > 0
+                    || task.optional_step_count > 0;
+                if target_status == TaskStatus::Ready && !has_executable_plan {
+                    target_status = TaskStatus::Todo;
+                }
+            }
+            let reason = if decision.max_retries_reached {
+                "max retries reached"
+            } else {
+                "claim expired"
+            };
+            if self
+                .store
+                .reclaim_expired_task(
+                    &task.id,
+                    ReclaimExpiredTaskRecord {
+                        expected_lock_version: task.lock_version,
+                        actor: actor.to_owned(),
+                        event_id: new_event_id(),
+                        target_status,
+                        retry_count: decision.retry_count,
+                        reason: reason.to_owned(),
+                        now,
+                    },
+                )
+                .await?
+                .is_some()
+            {
+                reclaimed += 1;
+            }
+        }
+        Ok(reclaimed)
     }
 
     pub async fn submit_review_task(&self, command: SubmitReviewTaskCommand) -> Result<TaskRecord> {
@@ -780,8 +875,20 @@ mod tests {
             assert!(input.claim_token.starts_with("claim_"));
             assert!(input.run_id.starts_with("r_"));
             assert!(input.event_id.starts_with("e_"));
-            assert_eq!(input.worker_profile, "manual");
-            assert_eq!(input.metadata_json, r#"{"source":"test"}"#);
+            match input.worker_profile.as_str() {
+                "manual" => {
+                    assert_eq!(input.metadata_json, r#"{"source":"test"}"#);
+                    assert_eq!(input.log_path, None);
+                }
+                "dispatcher" => {
+                    assert_eq!(input.metadata_json, "{}");
+                    assert_eq!(
+                        input.log_path.as_deref(),
+                        Some(format!("dispatcher-logs/{}.log", input.run_id).as_str())
+                    );
+                }
+                profile => panic!("unexpected worker profile: {profile}"),
+            }
             assert_eq!(input.now, 100);
             assert_eq!(input.claim_expires_at, 400);
             let claim_expires_at = input.claim_expires_at;
@@ -812,7 +919,7 @@ mod tests {
                     exit_code: None,
                     summary: None,
                     error: None,
-                    log_path: None,
+                    log_path: input.log_path,
                     metadata_json: input.metadata_json,
                 },
                 claim_token: input.claim_token,
@@ -870,6 +977,51 @@ mod tests {
             task.updated_at = input.now;
             task.lock_version += 1;
             Ok(task)
+        }
+
+        async fn list_expired_claims(&self, board: &str, now: i64) -> Result<Vec<TaskRecord>> {
+            assert_eq!(board, "default");
+            assert_eq!(now, 100);
+            let mut task = task_for_id("t_expired");
+            task.status = TaskStatus::Running;
+            task.execution_plan_state = ExecutionPlanState::NotRequired;
+            task.has_claim_token = true;
+            task.claim_owner = Some("worker".to_owned());
+            task.claim_expires_at = Some(90);
+            task.last_heartbeat_at = Some(80);
+            task.current_run_id = Some("r_expired".to_owned());
+            task.lock_version = 2;
+            task.max_retries = Some(2);
+            let mut planned_without_steps = task.clone();
+            planned_without_steps.id = "t_expired_planned".to_owned();
+            planned_without_steps.current_run_id = Some("r_expired_planned".to_owned());
+            planned_without_steps.execution_plan_state = ExecutionPlanState::Planned;
+            Ok(vec![task, planned_without_steps])
+        }
+
+        async fn reclaim_expired_task(
+            &self,
+            task_id: &str,
+            input: ReclaimExpiredTaskRecord,
+        ) -> Result<Option<TaskRecord>> {
+            assert!(matches!(task_id, "t_expired" | "t_expired_planned"));
+            assert_eq!(input.expected_lock_version, 2);
+            assert_eq!(input.actor, "dispatcher");
+            assert!(input.event_id.starts_with("e_"));
+            let expected_status = if task_id == "t_expired" {
+                TaskStatus::Ready
+            } else {
+                TaskStatus::Todo
+            };
+            assert_eq!(input.target_status, expected_status);
+            assert_eq!(input.retry_count, 1);
+            assert_eq!(input.reason, "claim expired");
+            assert_eq!(input.now, 100);
+            let mut task = task_for_id(task_id);
+            task.status = input.target_status;
+            task.retry_count = input.retry_count;
+            task.lock_version = input.expected_lock_version + 1;
+            Ok(Some(task))
         }
 
         async fn submit_review_task(
@@ -1218,6 +1370,24 @@ mod tests {
         assert!(claim.claim_token.starts_with("claim_"));
         assert_eq!(claim.claim_expires_at, 400);
 
+        let dispatcher_claim = service
+            .claim_task_with_run_log_dir(
+                ClaimTaskCommand {
+                    task_id: "t_claim".into(),
+                    actor: "worker".into(),
+                    ttl_ms: 300,
+                    worker_profile: Some("dispatcher".into()),
+                    metadata: serde_json::json!({}),
+                },
+                Path::new("dispatcher-logs"),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            dispatcher_claim.run.log_path.as_deref(),
+            Some(format!("dispatcher-logs/{}.log", dispatcher_claim.run.id).as_str())
+        );
+
         let claimed = service
             .claim_task(ClaimTaskCommand {
                 task_id: "t_claimed".into(),
@@ -1543,6 +1713,31 @@ mod tests {
                 Err(KanbanError::InvalidInput(_))
             ));
         }
+    }
+
+    #[tokio::test]
+    async fn reclaim_expired_uses_canonical_retry_and_readiness_decision() {
+        let service = ApplicationService::with_clock(
+            StubStore {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            FixedClock(100),
+        );
+        assert_eq!(
+            service
+                .reclaim_expired(" default ", " dispatcher ")
+                .await
+                .unwrap(),
+            2
+        );
+        assert!(matches!(
+            service.reclaim_expired("", "dispatcher").await,
+            Err(KanbanError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            service.reclaim_expired("default", " ").await,
+            Err(KanbanError::InvalidInput(_))
+        ));
     }
 
     #[tokio::test]

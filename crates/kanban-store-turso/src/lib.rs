@@ -150,6 +150,7 @@ pub struct ClaimTaskInput {
     pub event_id: String,
     pub worker_profile: String,
     pub metadata_json: String,
+    pub log_path: Option<String>,
     pub now: i64,
     pub claim_expires_at: i64,
 }
@@ -200,6 +201,17 @@ pub struct ReleaseTaskInput {
     pub actor: String,
     pub claim_token: String,
     pub event_id: String,
+    pub now: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReclaimExpiredTaskInput {
+    pub expected_lock_version: i64,
+    pub actor: String,
+    pub event_id: String,
+    pub target_status: String,
+    pub retry_count: i64,
+    pub reason: String,
     pub now: i64,
 }
 
@@ -941,6 +953,7 @@ impl TursoStore {
         let run_id = input.run_id.trim().to_owned();
         let event_id = input.event_id.trim().to_owned();
         let worker_profile = input.worker_profile.trim().to_owned();
+        let log_path = input.log_path.as_deref().map(str::trim).map(str::to_owned);
         let mut connection = self.connection().await?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -1101,7 +1114,7 @@ impl TursoStore {
 
         transaction
             .execute(
-                "INSERT INTO task_runs(id, board_id, task_id, status, worker_profile, worker_pid, claim_token, claim_owner, claim_expires_at, started_at, last_heartbeat_at, metadata_json) VALUES (:run_id, :board_id, :task_id, 'running', :worker_profile, NULL, :claim_token, :claim_owner, :claim_expires_at, :started_at, :last_heartbeat_at, :metadata_json)",
+                "INSERT INTO task_runs(id, board_id, task_id, status, worker_profile, worker_pid, claim_token, claim_owner, claim_expires_at, started_at, last_heartbeat_at, log_path, metadata_json) VALUES (:run_id, :board_id, :task_id, 'running', :worker_profile, NULL, :claim_token, :claim_owner, :claim_expires_at, :started_at, :last_heartbeat_at, :log_path, :metadata_json)",
                 (
                     (":run_id", run_id.as_str()),
                     (":board_id", board_id.as_str()),
@@ -1112,6 +1125,7 @@ impl TursoStore {
                     (":claim_expires_at", input.claim_expires_at),
                     (":started_at", input.now),
                     (":last_heartbeat_at", input.now),
+                    (":log_path", log_path.as_deref()),
                     (":metadata_json", input.metadata_json.as_str()),
                 ),
             )
@@ -1617,6 +1631,341 @@ impl TursoStore {
 
         transaction.commit().await?;
         Ok(released)
+    }
+
+    pub async fn list_expired_claims(
+        &self,
+        board_selector: &str,
+        now: i64,
+    ) -> Result<Vec<TaskRecord>, StoreError> {
+        if now < 0 {
+            return Err(StoreError::InvalidInput(
+                "now must be non-negative".to_owned(),
+            ));
+        }
+        let board_selector = board_selector.trim();
+        if board_selector.is_empty() {
+            return Err(StoreError::InvalidInput("board is required".to_owned()));
+        }
+
+        let connection = self.connection().await?;
+        let board = first_row(
+            connection
+                .query(
+                    "SELECT id, archived_at FROM boards WHERE id = :board OR slug = :board LIMIT 1",
+                    [(":board", board_selector)],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => {
+                StoreError::BoardNotFound(board_selector.to_owned())
+            }
+            other => StoreError::Turso(other),
+        })?;
+        let board_id = text_value(board.get_value(0)?, "boards.id")?;
+        if optional_integer_value(board.get_value(1)?, "boards.archived_at")?.is_some() {
+            return Ok(Vec::new());
+        }
+
+        let mut rows = connection
+            .query(
+                &format!(
+                    "{TASK_SELECT} WHERE t.board_id = :board_id AND b.archived_at IS NULL AND t.archived_at IS NULL AND t.status = 'running' AND t.claim_expires_at <= :now ORDER BY t.claim_expires_at ASC, t.id ASC"
+                ),
+                vec![
+                    (":board_id".to_owned(), Value::Text(board_id.to_owned())),
+                    (":now".to_owned(), Value::Integer(now)),
+                ],
+            )
+            .await?;
+        let mut tasks = Vec::new();
+        while let Some(row) = rows.next().await? {
+            tasks.push(task_from_row(row)?);
+        }
+        Ok(tasks)
+    }
+
+    pub async fn reclaim_expired_task(
+        &self,
+        task_id: &str,
+        input: ReclaimExpiredTaskInput,
+    ) -> Result<Option<TaskRecord>, StoreError> {
+        validate_reclaim_expired_task_input(task_id, &input)?;
+        let actor = input.actor.trim().to_owned();
+        let event_id = input.event_id.trim().to_owned();
+        let target_status = input.target_status.trim().to_owned();
+        let reason = input.reason.trim().to_owned();
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+
+        let task = first_row(
+            transaction
+                .query(
+                    "SELECT t.board_id, t.status, t.archived_at, b.archived_at, t.lock_version, t.claim_token, t.claim_owner, t.claim_expires_at, t.last_heartbeat_at, t.current_run_id, t.retry_count, t.max_retries, t.title, t.description, t.scheduled_at FROM tasks AS t JOIN boards AS b ON b.id = t.board_id WHERE t.id = :task_id LIMIT 1",
+                    [(":task_id", task_id)],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
+            other => StoreError::Turso(other),
+        })?;
+        let board_id = text_value(task.get_value(0)?, "tasks.board_id")?;
+        let status = text_value(task.get_value(1)?, "tasks.status")?;
+        let task_archived_at = optional_integer_value(task.get_value(2)?, "tasks.archived_at")?;
+        let board_archived_at = optional_integer_value(task.get_value(3)?, "boards.archived_at")?;
+        if status == "archived" || task_archived_at.is_some() || board_archived_at.is_some() {
+            return Ok(None);
+        }
+        if status != "running" {
+            return Ok(None);
+        }
+
+        let lock_version = integer_value(task.get_value(4)?, "tasks.lock_version")?;
+        if lock_version != input.expected_lock_version {
+            return Ok(None);
+        }
+        let claim_token = optional_text_value(task.get_value(5)?, "tasks.claim_token")?
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                StoreError::InvalidTransition(
+                    "reclaim requires a matching task claim token".to_owned(),
+                )
+            })?;
+        let claim_owner = optional_text_value(task.get_value(6)?, "tasks.claim_owner")?
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                StoreError::InvalidTransition(
+                    "reclaim requires a matching task claim owner".to_owned(),
+                )
+            })?;
+        let claim_expires_at = optional_integer_value(
+            task.get_value(7)?,
+            "tasks.claim_expires_at",
+        )?
+        .ok_or_else(|| {
+            StoreError::InvalidTransition("reclaim requires an expiring task claim".to_owned())
+        })?;
+        if claim_expires_at > input.now {
+            return Ok(None);
+        }
+        let run_id = optional_text_value(task.get_value(9)?, "tasks.current_run_id")?
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                StoreError::InvalidTransition("reclaim requires a current running run".to_owned())
+            })?;
+        let retry_count = integer_value(task.get_value(10)?, "tasks.retry_count")?;
+        let max_retries = optional_integer_value(task.get_value(11)?, "tasks.max_retries")?;
+        let title = text_value(task.get_value(12)?, "tasks.title")?;
+        let description = optional_text_value(task.get_value(13)?, "tasks.description")?;
+        let scheduled_at = optional_integer_value(task.get_value(14)?, "tasks.scheduled_at")?;
+
+        let active_run_count = first_row(
+            transaction
+                .query(
+                    "SELECT COUNT(*) FROM task_runs WHERE board_id = :board_id AND task_id = :task_id AND status = 'running'",
+                    [
+                        (":board_id", board_id.as_str()),
+                        (":task_id", task_id),
+                    ],
+                )
+                .await?,
+        )
+        .await?;
+        if integer_value(active_run_count.get_value(0)?, "task_runs.active_count")? != 1 {
+            return Err(StoreError::InvalidTransition(
+                "reclaim requires exactly one running run".to_owned(),
+            ));
+        }
+
+        let run = first_row(
+            transaction
+                .query(
+                    "SELECT status, claim_token, claim_owner, claim_expires_at FROM task_runs WHERE id = :run_id AND board_id = :board_id AND task_id = :task_id LIMIT 1",
+                    [
+                        (":run_id", run_id.as_str()),
+                        (":board_id", board_id.as_str()),
+                        (":task_id", task_id),
+                    ],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::InvalidTransition(
+                "reclaim requires a matching running run".to_owned(),
+            ),
+            other => StoreError::Turso(other),
+        })?;
+        if text_value(run.get_value(0)?, "task_runs.status")? != "running" {
+            return Err(StoreError::InvalidTransition(
+                "reclaim requires a matching running run".to_owned(),
+            ));
+        }
+        let run_claim_token = text_value(run.get_value(1)?, "task_runs.claim_token")?;
+        let run_claim_owner = text_value(run.get_value(2)?, "task_runs.claim_owner")?;
+        let run_claim_expires_at = integer_value(run.get_value(3)?, "task_runs.claim_expires_at")?;
+        if run_claim_token != claim_token
+            || run_claim_owner != claim_owner
+            || run_claim_expires_at != claim_expires_at
+        {
+            return Err(StoreError::InvalidTransition(
+                "active run claim is inconsistent".to_owned(),
+            ));
+        }
+        if run_claim_expires_at > input.now {
+            return Err(StoreError::InvalidTransition(
+                "active run claim is not expired".to_owned(),
+            ));
+        }
+
+        let dependency_blocked = first_row(
+            transaction
+                .query(
+                    "SELECT EXISTS (SELECT 1 FROM task_dependencies AS d JOIN tasks AS p ON p.id = d.parent_task_id AND p.board_id = d.board_id WHERE d.board_id = :board_id AND d.child_task_id = :task_id AND p.status NOT IN ('done', 'archived'))",
+                    [
+                        (":board_id", board_id.as_str()),
+                        (":task_id", task_id),
+                    ],
+                )
+                .await?,
+        )
+        .await?;
+        let dependency_blocked = integer_value(
+            dependency_blocked.get_value(0)?,
+            "task_dependencies.unfinished_parent",
+        )? != 0;
+        let execution_plan_ready = first_row(
+            transaction
+                .query(
+                    "SELECT EXISTS (SELECT 1 FROM task_steps AS s WHERE s.board_id = :board_id AND s.parent_task_id = :task_id) OR EXISTS (SELECT 1 FROM task_execution_plans AS ep WHERE ep.board_id = :board_id AND ep.task_id = :task_id AND ep.state = 'not_required')",
+                    [
+                        (":board_id", board_id.as_str()),
+                        (":task_id", task_id),
+                    ],
+                )
+                .await?,
+        )
+        .await?;
+        let execution_plan_ready = integer_value(
+            execution_plan_ready.get_value(0)?,
+            "task_execution_plans.ready",
+        )? != 0;
+
+        let next_retry_count = retry_count
+            .checked_add(1)
+            .ok_or_else(|| StoreError::InvalidTransition("retry_count overflow".to_owned()))?;
+        if input.retry_count != next_retry_count {
+            return Err(StoreError::InvalidTransition(
+                "retry_count does not match canonical task state".to_owned(),
+            ));
+        }
+        let canonical_status = if max_retries.is_some_and(|max| next_retry_count >= max) {
+            "blocked"
+        } else if title.trim().is_empty()
+            || description
+                .as_deref()
+                .is_none_or(|description| description.trim().is_empty())
+        {
+            "triage"
+        } else if scheduled_at.is_some_and(|scheduled_at| scheduled_at > input.now) {
+            "scheduled"
+        } else if dependency_blocked || !execution_plan_ready {
+            "todo"
+        } else {
+            "ready"
+        };
+        if target_status != canonical_status {
+            return Err(StoreError::InvalidTransition(
+                "target_status does not match canonical task state".to_owned(),
+            ));
+        }
+
+        let changed = transaction
+            .execute(
+                "UPDATE task_runs SET status = 'expired', finished_at = :finished_at, error = 'claim expired' WHERE id = :run_id AND board_id = :board_id AND task_id = :task_id AND status = 'running' AND claim_token = :claim_token AND claim_owner = :claim_owner AND claim_expires_at = :claim_expires_at AND claim_expires_at <= :now",
+                (
+                    (":finished_at", input.now),
+                    (":run_id", run_id.as_str()),
+                    (":board_id", board_id.as_str()),
+                    (":task_id", task_id),
+                    (":claim_token", claim_token.as_str()),
+                    (":claim_owner", claim_owner.as_str()),
+                    (":claim_expires_at", claim_expires_at),
+                    (":now", input.now),
+                ),
+            )
+            .await?;
+        if changed != 1 {
+            return Err(StoreError::InvalidTransition(
+                "reclaim requires a matching expired running run".to_owned(),
+            ));
+        }
+
+        let status_reason = (canonical_status == "blocked").then_some(reason.as_str());
+        let changed = transaction
+            .execute(
+                "UPDATE tasks SET status = :status, status_reason = :status_reason, claim_token = NULL, claim_owner = NULL, claim_expires_at = NULL, last_heartbeat_at = NULL, current_run_id = NULL, retry_count = :retry_count, updated_at = :updated_at, lock_version = lock_version + 1 WHERE id = :task_id AND board_id = :board_id AND status = 'running' AND claim_token = :claim_token AND claim_owner = :claim_owner AND claim_expires_at = :claim_expires_at AND current_run_id = :run_id AND lock_version = :expected_lock_version",
+                (
+                    (":status", canonical_status),
+                    (":status_reason", status_reason),
+                    (":retry_count", input.retry_count),
+                    (":updated_at", input.now),
+                    (":task_id", task_id),
+                    (":board_id", board_id.as_str()),
+                    (":claim_token", claim_token.as_str()),
+                    (":claim_owner", claim_owner.as_str()),
+                    (":claim_expires_at", claim_expires_at),
+                    (":run_id", run_id.as_str()),
+                    (":expected_lock_version", input.expected_lock_version),
+                ),
+            )
+            .await?;
+        if changed != 1 {
+            return Err(StoreError::ClaimConflict(
+                "reclaim compare-and-set failed".to_owned(),
+            ));
+        }
+
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, :run_id, 'task.reclaimed', :actor, json_object('retry_count', :retry_count, 'max_retries', :max_retries, 'to_status', :to_status, 'reason', :reason), :created_at)",
+                (
+                    (":event_id", event_id.as_str()),
+                    (":board_id", board_id.as_str()),
+                    (":task_id", task_id),
+                    (":run_id", run_id.as_str()),
+                    (":actor", actor.as_str()),
+                    (":retry_count", input.retry_count),
+                    (":max_retries", max_retries),
+                    (":to_status", canonical_status),
+                    (":reason", reason.as_str()),
+                    (":created_at", input.now),
+                ),
+            )
+            .await?;
+
+        let reclaimed = task_from_row(
+            first_row(
+                transaction
+                    .query(
+                        &format!(
+                            "{TASK_SELECT} WHERE t.board_id = :board_id AND t.id = :task_id LIMIT 1"
+                        ),
+                        [(":board_id", board_id.as_str()), (":task_id", task_id)],
+                    )
+                    .await?,
+            )
+            .await?,
+        )?;
+
+        transaction.commit().await?;
+        Ok(Some(reclaimed))
     }
 
     pub async fn submit_review_task(
@@ -2832,6 +3181,15 @@ fn validate_claim_task_input(task_id: &str, input: &ClaimTaskInput) -> Result<()
             "worker_profile is required".to_owned(),
         ));
     }
+    if input
+        .log_path
+        .as_deref()
+        .is_some_and(|log_path| log_path.trim().is_empty())
+    {
+        return Err(StoreError::InvalidInput(
+            "log_path must not be empty".to_owned(),
+        ));
+    }
     if input.now < 0 {
         return Err(StoreError::InvalidInput(
             "now must be non-negative".to_owned(),
@@ -2908,6 +3266,52 @@ fn validate_release_task_input(task_id: &str, input: &ReleaseTaskInput) -> Resul
         return Err(StoreError::InvalidInput(
             "event_id must start with e_".to_owned(),
         ));
+    }
+    if input.now < 0 {
+        return Err(StoreError::InvalidInput(
+            "now must be non-negative".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_reclaim_expired_task_input(
+    task_id: &str,
+    input: &ReclaimExpiredTaskInput,
+) -> Result<(), StoreError> {
+    if !task_id.starts_with("t_") || task_id.len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "task id must start with t_".to_owned(),
+        ));
+    }
+    if input.expected_lock_version < 0 {
+        return Err(StoreError::InvalidInput(
+            "expected_lock_version must be non-negative".to_owned(),
+        ));
+    }
+    if input.actor.trim().is_empty() {
+        return Err(StoreError::InvalidInput("actor is required".to_owned()));
+    }
+    if !input.event_id.trim().starts_with("e_") || input.event_id.trim().len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "event_id must start with e_".to_owned(),
+        ));
+    }
+    if !matches!(
+        input.target_status.trim(),
+        "triage" | "todo" | "scheduled" | "ready" | "blocked"
+    ) {
+        return Err(StoreError::InvalidInput(
+            "target_status must be triage, todo, scheduled, ready, or blocked".to_owned(),
+        ));
+    }
+    if input.retry_count < 0 {
+        return Err(StoreError::InvalidInput(
+            "retry_count must be non-negative".to_owned(),
+        ));
+    }
+    if input.reason.trim().is_empty() {
+        return Err(StoreError::InvalidInput("reason is required".to_owned()));
     }
     if input.now < 0 {
         return Err(StoreError::InvalidInput(
@@ -3201,6 +3605,7 @@ mod tests {
             event_id: event_id.to_owned(),
             worker_profile: "manual".to_owned(),
             metadata_json: metadata_json.to_owned(),
+            log_path: None,
             now,
             claim_expires_at: now.saturating_add(ttl_ms),
         }
@@ -3238,6 +3643,26 @@ mod tests {
             actor: actor.to_owned(),
             claim_token: claim_token.to_owned(),
             event_id: event_id.to_owned(),
+            now,
+        }
+    }
+
+    fn reclaim_input(
+        expected_lock_version: i64,
+        actor: &str,
+        event_id: &str,
+        target_status: &str,
+        retry_count: i64,
+        reason: &str,
+        now: i64,
+    ) -> ReclaimExpiredTaskInput {
+        ReclaimExpiredTaskInput {
+            expected_lock_version,
+            actor: actor.to_owned(),
+            event_id: event_id.to_owned(),
+            target_status: target_status.to_owned(),
+            retry_count,
+            reason: reason.to_owned(),
             now,
         }
     }
@@ -4934,6 +5359,129 @@ mod tests {
             )
             .expect("event created_at integer"),
             300
+        );
+    }
+
+    #[tokio::test]
+    async fn claim_task_persists_optional_log_path_and_rejects_blank_without_writes() {
+        let (_directory, store, _path) = store("claim-log-path").await;
+        store.initialize().await.expect("initialize");
+
+        let with_path = ready_task_for_claim(
+            &store,
+            "t_claim_log_path",
+            "claim-log-path",
+            "With log path",
+        )
+        .await;
+        let mut with_path_input = claim_input(
+            1,
+            "worker",
+            "claim_log_path",
+            "r_claim_log_path",
+            "e_claim_log_path",
+            "{}",
+            300,
+            1_000,
+        );
+        with_path_input.log_path = Some(" /tmp/claim.log ".to_owned());
+        let claimed_with_path = store
+            .claim_task(&with_path.id, with_path_input)
+            .await
+            .expect("claim with log path");
+        assert_eq!(
+            claimed_with_path.run.log_path.as_deref(),
+            Some("/tmp/claim.log")
+        );
+
+        let none_path =
+            ready_task_for_claim(&store, "t_claim_no_log_path", "claim-no-log", "No log path")
+                .await;
+        let claimed_without_path = store
+            .claim_task(
+                &none_path.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_no_log_path",
+                    "r_claim_no_log_path",
+                    "e_claim_no_log_path",
+                    "{}",
+                    300,
+                    1_000,
+                ),
+            )
+            .await
+            .expect("claim without log path");
+        assert_eq!(claimed_without_path.run.log_path, None);
+
+        let invalid_task = ready_task_for_claim(
+            &store,
+            "t_claim_blank_log_path",
+            "claim-blank-log",
+            "Blank log path",
+        )
+        .await;
+        let mut invalid_input = claim_input(
+            1,
+            "worker",
+            "claim_blank_log_path",
+            "r_claim_blank_log_path",
+            "e_claim_blank_log_path",
+            "{}",
+            300,
+            1_000,
+        );
+        invalid_input.log_path = Some(" \t ".to_owned());
+        let error = store
+            .claim_task(&invalid_task.id, invalid_input)
+            .await
+            .expect_err("blank log path must fail");
+        assert!(matches!(
+            error,
+            StoreError::InvalidInput(message) if message.contains("log_path")
+        ));
+        let unchanged = store
+            .get_task_global(&invalid_task.id)
+            .await
+            .expect("get unchanged task");
+        assert_eq!(unchanged.status, "ready");
+        assert_eq!(unchanged.lock_version, invalid_task.lock_version);
+        let connection = store.connection().await.expect("connection");
+        let run_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_runs WHERE task_id = ?1",
+                    [invalid_task.id.as_str()],
+                )
+                .await
+                .expect("run count query"),
+        )
+        .await
+        .expect("run count row");
+        assert_eq!(
+            integer_value(run_count.get_value(0).expect("run count"), "run.count")
+                .expect("run count integer"),
+            0
+        );
+        let event_count = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.claimed'",
+                    [invalid_task.id.as_str()],
+                )
+                .await
+                .expect("event count query"),
+        )
+        .await
+        .expect("event count row");
+        assert_eq!(
+            integer_value(
+                event_count.get_value(0).expect("event count"),
+                "event.count"
+            )
+            .expect("event count integer"),
+            0
         );
     }
 
@@ -10612,6 +11160,768 @@ mod tests {
             .expect("event count integer"),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn reclaim_expired_task_returns_ready_and_closes_run_atomically() {
+        let (_directory, store, _path) = store("reclaim-expired-success").await;
+        store.initialize().await.expect("initialize");
+        let task = ready_task_for_claim(
+            &store,
+            "t_reclaim_expired_success",
+            "reclaim-expired-success",
+            "Reclaim expired",
+        )
+        .await;
+        let claimed = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_reclaim_success",
+                    "r_reclaim_success",
+                    "e_reclaim_success_claim",
+                    "{}",
+                    300,
+                    100,
+                ),
+            )
+            .await
+            .expect("claim task");
+
+        let expired = store
+            .list_expired_claims(" default ", 500)
+            .await
+            .expect("list expired claims");
+        assert_eq!(expired.len(), 1);
+        assert_eq!(expired[0].id, task.id);
+
+        let reclaimed = store
+            .reclaim_expired_task(
+                &task.id,
+                reclaim_input(
+                    claimed.task.lock_version,
+                    "dispatcher",
+                    "e_reclaim_success",
+                    "ready",
+                    1,
+                    "claim expired",
+                    500,
+                ),
+            )
+            .await
+            .expect("reclaim expired task")
+            .expect("expired task must be reclaimed");
+        assert_eq!(reclaimed.status, "ready");
+        assert_eq!(reclaimed.retry_count, 1);
+        assert_eq!(reclaimed.lock_version, claimed.task.lock_version + 1);
+        assert_eq!(reclaimed.claim_token, None);
+        assert_eq!(reclaimed.claim_owner, None);
+        assert_eq!(reclaimed.claim_expires_at, None);
+        assert_eq!(reclaimed.last_heartbeat_at, None);
+        assert_eq!(reclaimed.current_run_id, None);
+
+        let connection = store.connection().await.expect("connection");
+        let run = first_row(
+            connection
+                .query(
+                    "SELECT status, finished_at, error FROM task_runs WHERE id = ?1",
+                    ["r_reclaim_success"],
+                )
+                .await
+                .expect("run query"),
+        )
+        .await
+        .expect("run row");
+        assert_eq!(
+            text_value(run.get_value(0).expect("run status"), "run.status")
+                .expect("run status text"),
+            "expired"
+        );
+        assert_eq!(
+            integer_value(run.get_value(1).expect("run finished"), "run.finished_at")
+                .expect("run finished integer"),
+            500
+        );
+        assert_eq!(
+            text_value(run.get_value(2).expect("run error"), "run.error").expect("run error text"),
+            "claim expired"
+        );
+        let event = first_row(
+            connection
+                .query(
+                    "SELECT board_id, task_id, run_id, kind, actor, payload_json, created_at FROM task_events WHERE event_id = ?1",
+                    ["e_reclaim_success"],
+                )
+                .await
+                .expect("event query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(event.get_value(0).expect("event board"), "event.board_id")
+                .expect("event board text"),
+            "b_default"
+        );
+        assert_eq!(
+            text_value(event.get_value(1).expect("event task"), "event.task_id")
+                .expect("event task text"),
+            task.id
+        );
+        assert_eq!(
+            text_value(event.get_value(2).expect("event run"), "event.run_id")
+                .expect("event run text"),
+            "r_reclaim_success"
+        );
+        assert_eq!(
+            text_value(event.get_value(3).expect("event kind"), "event.kind")
+                .expect("event kind text"),
+            "task.reclaimed"
+        );
+        assert_eq!(
+            text_value(event.get_value(4).expect("event actor"), "event.actor")
+                .expect("event actor text"),
+            "dispatcher"
+        );
+        assert_eq!(
+            text_value(event.get_value(5).expect("event payload"), "event.payload")
+                .expect("event payload text"),
+            r#"{"retry_count":1,"max_retries":2,"to_status":"ready","reason":"claim expired"}"#
+        );
+        assert_eq!(
+            integer_value(
+                event.get_value(6).expect("event created"),
+                "event.created_at"
+            )
+            .expect("event created integer"),
+            500
+        );
+    }
+
+    #[tokio::test]
+    async fn reclaim_expired_task_recomputes_retry_target_from_canonical_facts() {
+        let (_directory, store, _path) = store("reclaim-expired-targets").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+
+        let maxed =
+            ready_task_for_claim(&store, "t_reclaim_maxed", "reclaim-maxed", "Maxed retry").await;
+        connection
+            .execute(
+                "UPDATE tasks SET max_retries = 1 WHERE id = ?1",
+                [maxed.id.as_str()],
+            )
+            .await
+            .expect("set max retries");
+        let maxed_claim = store
+            .claim_task(
+                &maxed.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_reclaim_maxed",
+                    "r_reclaim_maxed",
+                    "e_reclaim_maxed_claim",
+                    "{}",
+                    300,
+                    100,
+                ),
+            )
+            .await
+            .expect("claim maxed task");
+        let maxed_reclaimed = store
+            .reclaim_expired_task(
+                &maxed.id,
+                reclaim_input(
+                    maxed_claim.task.lock_version,
+                    "dispatcher",
+                    "e_reclaim_maxed",
+                    "blocked",
+                    1,
+                    "max retries reached",
+                    500,
+                ),
+            )
+            .await
+            .expect("reclaim maxed task")
+            .expect("maxed task reclaimed");
+        assert_eq!(maxed_reclaimed.status, "blocked");
+        assert_eq!(
+            maxed_reclaimed.status_reason.as_deref(),
+            Some("max retries reached")
+        );
+        assert_eq!(maxed_reclaimed.retry_count, 1);
+
+        let dependency = ready_task_for_claim(
+            &store,
+            "t_reclaim_dependency",
+            "reclaim-dependency",
+            "Dependency retry",
+        )
+        .await;
+        let parent = store
+            .create_task(
+                "default",
+                create_input(
+                    "t_reclaim_dependency_parent",
+                    Some("reclaim-dependency-parent"),
+                    "Unfinished parent",
+                ),
+            )
+            .await
+            .expect("create dependency parent");
+        let dependency_claim = store
+            .claim_task(
+                &dependency.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_reclaim_dependency",
+                    "r_reclaim_dependency",
+                    "e_reclaim_dependency_claim",
+                    "{}",
+                    300,
+                    100,
+                ),
+            )
+            .await
+            .expect("claim dependency task");
+        connection
+            .execute(
+                "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES ('b_default', ?1, ?2, 400)",
+                (parent.id.as_str(), dependency.id.as_str()),
+            )
+            .await
+            .expect("insert dependency");
+        let dependency_reclaimed = store
+            .reclaim_expired_task(
+                &dependency.id,
+                reclaim_input(
+                    dependency_claim.task.lock_version,
+                    "dispatcher",
+                    "e_reclaim_dependency",
+                    "todo",
+                    1,
+                    "claim expired",
+                    500,
+                ),
+            )
+            .await
+            .expect("reclaim dependency task")
+            .expect("dependency task reclaimed");
+        assert_eq!(dependency_reclaimed.status, "todo");
+
+        let unplanned = ready_task_for_claim(
+            &store,
+            "t_reclaim_unplanned",
+            "reclaim-unplanned",
+            "Unplanned retry",
+        )
+        .await;
+        let unplanned_claim = store
+            .claim_task(
+                &unplanned.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_reclaim_unplanned",
+                    "r_reclaim_unplanned",
+                    "e_reclaim_unplanned_claim",
+                    "{}",
+                    300,
+                    100,
+                ),
+            )
+            .await
+            .expect("claim unplanned task");
+        connection
+            .execute(
+                "UPDATE task_execution_plans SET state = 'planned' WHERE task_id = ?1",
+                [unplanned.id.as_str()],
+            )
+            .await
+            .expect("make plan non-ready");
+        let unplanned_reclaimed = store
+            .reclaim_expired_task(
+                &unplanned.id,
+                reclaim_input(
+                    unplanned_claim.task.lock_version,
+                    "dispatcher",
+                    "e_reclaim_unplanned",
+                    "todo",
+                    1,
+                    "claim expired",
+                    500,
+                ),
+            )
+            .await
+            .expect("reclaim unplanned task")
+            .expect("unplanned task reclaimed");
+        assert_eq!(unplanned_reclaimed.status, "todo");
+
+        let scheduled = ready_task_for_claim(
+            &store,
+            "t_reclaim_scheduled",
+            "reclaim-scheduled",
+            "Scheduled retry",
+        )
+        .await;
+        let scheduled_claim = store
+            .claim_task(
+                &scheduled.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_reclaim_scheduled",
+                    "r_reclaim_scheduled",
+                    "e_reclaim_scheduled_claim",
+                    "{}",
+                    300,
+                    100,
+                ),
+            )
+            .await
+            .expect("claim scheduled task");
+        connection
+            .execute(
+                "UPDATE tasks SET scheduled_at = 1_000 WHERE id = ?1",
+                [scheduled.id.as_str()],
+            )
+            .await
+            .expect("schedule task");
+        let scheduled_reclaimed = store
+            .reclaim_expired_task(
+                &scheduled.id,
+                reclaim_input(
+                    scheduled_claim.task.lock_version,
+                    "dispatcher",
+                    "e_reclaim_scheduled",
+                    "scheduled",
+                    1,
+                    "claim expired",
+                    500,
+                ),
+            )
+            .await
+            .expect("reclaim scheduled task")
+            .expect("scheduled task reclaimed");
+        assert_eq!(scheduled_reclaimed.status, "scheduled");
+
+        let triage =
+            ready_task_for_claim(&store, "t_reclaim_triage", "reclaim-triage", "Triage retry")
+                .await;
+        let triage_claim = store
+            .claim_task(
+                &triage.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_reclaim_triage",
+                    "r_reclaim_triage",
+                    "e_reclaim_triage_claim",
+                    "{}",
+                    300,
+                    100,
+                ),
+            )
+            .await
+            .expect("claim triage task");
+        connection
+            .execute(
+                "UPDATE tasks SET description = NULL WHERE id = ?1",
+                [triage.id.as_str()],
+            )
+            .await
+            .expect("remove task description");
+        let triage_reclaimed = store
+            .reclaim_expired_task(
+                &triage.id,
+                reclaim_input(
+                    triage_claim.task.lock_version,
+                    "dispatcher",
+                    "e_reclaim_triage",
+                    "triage",
+                    1,
+                    "claim expired",
+                    500,
+                ),
+            )
+            .await
+            .expect("reclaim triage task")
+            .expect("triage task reclaimed");
+        assert_eq!(triage_reclaimed.status, "triage");
+    }
+
+    #[tokio::test]
+    async fn reclaim_expired_task_skips_fresh_heartbeat_and_lock_races_without_writes() {
+        let (_directory, store, _path) = store("reclaim-expired-races").await;
+        store.initialize().await.expect("initialize");
+        let task =
+            ready_task_for_claim(&store, "t_reclaim_races", "reclaim-races", "Reclaim races").await;
+        let claimed = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_reclaim_races",
+                    "r_reclaim_races",
+                    "e_reclaim_races_claim",
+                    "{}",
+                    300,
+                    100,
+                ),
+            )
+            .await
+            .expect("claim task");
+
+        assert!(
+            store
+                .list_expired_claims("default", 350)
+                .await
+                .expect("list fresh claims")
+                .is_empty()
+        );
+        let fresh = store
+            .reclaim_expired_task(
+                &task.id,
+                reclaim_input(
+                    claimed.task.lock_version,
+                    "dispatcher",
+                    "e_reclaim_fresh",
+                    "ready",
+                    1,
+                    "claim expired",
+                    350,
+                ),
+            )
+            .await
+            .expect("fresh claim must be skipped");
+        assert_eq!(fresh, None);
+
+        let heartbeated = store
+            .heartbeat_task(
+                &task.id,
+                heartbeat_input(
+                    claimed.task.lock_version,
+                    "worker",
+                    "claim_reclaim_races",
+                    "e_reclaim_races_heartbeat",
+                    None,
+                    400,
+                    2_000,
+                ),
+            )
+            .await
+            .expect("heartbeat task");
+        let heartbeat_race = store
+            .reclaim_expired_task(
+                &task.id,
+                reclaim_input(
+                    heartbeated.lock_version,
+                    "dispatcher",
+                    "e_reclaim_heartbeat_race",
+                    "ready",
+                    1,
+                    "claim expired",
+                    1_000,
+                ),
+            )
+            .await
+            .expect("heartbeated claim must be skipped");
+        assert_eq!(heartbeat_race, None);
+
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE tasks SET lock_version = lock_version + 1 WHERE id = ?1",
+                [task.id.as_str()],
+            )
+            .await
+            .expect("advance task lock");
+        let lock_race = store
+            .reclaim_expired_task(
+                &task.id,
+                reclaim_input(
+                    heartbeated.lock_version,
+                    "dispatcher",
+                    "e_reclaim_lock_race",
+                    "ready",
+                    1,
+                    "claim expired",
+                    2_500,
+                ),
+            )
+            .await
+            .expect("lock race must be skipped");
+        assert_eq!(lock_race, None);
+        let unchanged = store
+            .get_task_global(&task.id)
+            .await
+            .expect("get unchanged race task");
+        assert_eq!(unchanged.status, "running");
+        assert_eq!(unchanged.retry_count, 0);
+        assert_eq!(unchanged.current_run_id.as_deref(), Some("r_reclaim_races"));
+        let reclaimed_events = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.reclaimed'",
+                    [task.id.as_str()],
+                )
+                .await
+                .expect("reclaimed event count"),
+        )
+        .await
+        .expect("reclaimed event count row");
+        assert_eq!(
+            integer_value(
+                reclaimed_events.get_value(0).expect("event count"),
+                "event.count",
+            )
+            .expect("event count integer"),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn reclaim_expired_task_rejects_inconsistent_run_and_rolls_back_event_conflict() {
+        let (_directory, store, _path) = store("reclaim-expired-rollback").await;
+        store.initialize().await.expect("initialize");
+        let task = ready_task_for_claim(
+            &store,
+            "t_reclaim_rollback",
+            "reclaim-rollback",
+            "Reclaim rollback",
+        )
+        .await;
+        let claimed = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_reclaim_rollback",
+                    "r_reclaim_rollback",
+                    "e_reclaim_rollback_claim",
+                    "{}",
+                    300,
+                    100,
+                ),
+            )
+            .await
+            .expect("claim task");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE task_runs SET claim_owner = 'different-worker' WHERE id = ?1",
+                ["r_reclaim_rollback"],
+            )
+            .await
+            .expect("corrupt run owner");
+        let inconsistent = store
+            .reclaim_expired_task(
+                &task.id,
+                reclaim_input(
+                    claimed.task.lock_version,
+                    "dispatcher",
+                    "e_reclaim_inconsistent",
+                    "ready",
+                    1,
+                    "claim expired",
+                    500,
+                ),
+            )
+            .await
+            .expect_err("inconsistent run must fail");
+        assert!(matches!(
+            inconsistent,
+            StoreError::InvalidTransition(message) if message.contains("inconsistent")
+        ));
+        let unchanged = store
+            .get_task_global(&task.id)
+            .await
+            .expect("get inconsistent task");
+        assert_eq!(unchanged.status, "running");
+        assert_eq!(unchanged.lock_version, claimed.task.lock_version);
+
+        connection
+            .execute(
+                "UPDATE task_runs SET claim_owner = ?1 WHERE id = ?2",
+                ("worker", "r_reclaim_rollback"),
+            )
+            .await
+            .expect("restore run owner");
+        connection
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (?1, 'b_default', ?2, NULL, 'other.event', 'tester', '{}', 1)",
+                ("e_reclaim_event_conflict", task.id.as_str()),
+            )
+            .await
+            .expect("insert conflicting event");
+        let event_error = store
+            .reclaim_expired_task(
+                &task.id,
+                reclaim_input(
+                    claimed.task.lock_version,
+                    "dispatcher",
+                    "e_reclaim_event_conflict",
+                    "ready",
+                    1,
+                    "claim expired",
+                    500,
+                ),
+            )
+            .await
+            .expect_err("event conflict must fail");
+        assert!(matches!(event_error, StoreError::Turso(_)));
+        let rolled_back = store
+            .get_task_global(&task.id)
+            .await
+            .expect("get rolled back task");
+        assert_eq!(rolled_back.status, "running");
+        assert_eq!(rolled_back.lock_version, claimed.task.lock_version);
+        let run = first_row(
+            connection
+                .query(
+                    "SELECT status, finished_at, error FROM task_runs WHERE id = ?1",
+                    ["r_reclaim_rollback"],
+                )
+                .await
+                .expect("run query"),
+        )
+        .await
+        .expect("run row");
+        assert_eq!(
+            text_value(run.get_value(0).expect("run status"), "run.status")
+                .expect("run status text"),
+            "running"
+        );
+        assert!(matches!(
+            run.get_value(1).expect("run finished"),
+            Value::Null
+        ));
+        assert!(matches!(run.get_value(2).expect("run error"), Value::Null));
+        let reclaimed_events = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = ?1 AND kind = 'task.reclaimed'",
+                    [task.id.as_str()],
+                )
+                .await
+                .expect("reclaimed event count"),
+        )
+        .await
+        .expect("reclaimed event count row");
+        assert_eq!(
+            integer_value(
+                reclaimed_events.get_value(0).expect("event count"),
+                "event.count",
+            )
+            .expect("event count integer"),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn list_expired_claims_is_board_isolated_and_excludes_archived_records() {
+        let (_directory, store, _path) = store("reclaim-expired-isolation").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO boards(id, slug, name, created_at, updated_at) VALUES ('b_reclaim_other', 'reclaim-other', 'Reclaim other', 1, 1)",
+                (),
+            )
+            .await
+            .expect("insert other board");
+        let other = store
+            .create_task(
+                "reclaim-other",
+                create_input(
+                    "t_reclaim_other",
+                    Some("reclaim-other"),
+                    "Other board reclaim",
+                ),
+            )
+            .await
+            .expect("create other-board task");
+        store
+            .mark_execution_plan_not_required(
+                &other.id,
+                plan_input("No plan", "planner", "e_reclaim_other_plan", 100),
+            )
+            .await
+            .expect("mark other plan");
+        store
+            .promote_task(
+                &other.id,
+                promote_input(0, "promoter", "e_reclaim_other_promote", 200),
+            )
+            .await
+            .expect("promote other task");
+        let other_claim = store
+            .claim_task(
+                &other.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim_reclaim_other",
+                    "r_reclaim_other",
+                    "e_reclaim_other_claim",
+                    "{}",
+                    300,
+                    100,
+                ),
+            )
+            .await
+            .expect("claim other task");
+        assert!(
+            store
+                .list_expired_claims("default", 500)
+                .await
+                .expect("list default expired claims")
+                .is_empty()
+        );
+        let other_expired = store
+            .list_expired_claims("reclaim-other", 500)
+            .await
+            .expect("list other expired claims");
+        assert_eq!(other_expired.len(), 1);
+        assert_eq!(other_expired[0].id, other.id);
+        assert_eq!(other_expired[0].board_id, "b_reclaim_other");
+        assert_eq!(other_expired[0].lock_version, other_claim.task.lock_version);
+
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'archived', archived_at = 600 WHERE id = ?1",
+                [other.id.as_str()],
+            )
+            .await
+            .expect("archive other task");
+        assert!(
+            store
+                .list_expired_claims("reclaim-other", 700)
+                .await
+                .expect("list archived task claims")
+                .is_empty()
+        );
+        let archived = store
+            .reclaim_expired_task(
+                &other.id,
+                reclaim_input(
+                    other_claim.task.lock_version,
+                    "dispatcher",
+                    "e_reclaim_archived",
+                    "ready",
+                    1,
+                    "claim expired",
+                    700,
+                ),
+            )
+            .await
+            .expect("archived task must be skipped");
+        assert_eq!(archived, None);
     }
 
     #[tokio::test]

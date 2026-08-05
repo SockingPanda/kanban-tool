@@ -5,8 +5,8 @@ use kanban_core::Result;
 use crate::{
     BlockTaskRecord, BoardColumnRecord, BoardRecord, ClaimRecord, ClaimTaskRecord,
     CompleteTaskRecord, CreateTaskRecord, ExecutionPlanRecord, HeartbeatTaskRecord,
-    MarkExecutionPlanNotRequiredRecord, PromoteTaskRecord, ReleaseTaskRecord,
-    SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskRecord,
+    MarkExecutionPlanNotRequiredRecord, PromoteTaskRecord, ReclaimExpiredTaskRecord,
+    ReleaseTaskRecord, SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskRecord,
 };
 
 /// Persistence port used only by the shared application service.
@@ -67,6 +67,18 @@ pub trait ApplicationStore: Clone + Send + Sync + 'static {
         task_id: &str,
         input: ReleaseTaskRecord,
     ) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn list_expired_claims(
+        &self,
+        board: &str,
+        now: i64,
+    ) -> impl Future<Output = Result<Vec<TaskRecord>>> + Send;
+
+    fn reclaim_expired_task(
+        &self,
+        task_id: &str,
+        input: ReclaimExpiredTaskRecord,
+    ) -> impl Future<Output = Result<Option<TaskRecord>>> + Send;
 
     fn submit_review_task(
         &self,

@@ -186,7 +186,7 @@ impl TursoStore {
         config: &VectorConfig,
     ) -> Result<VectorStatusRecord, StoreError> {
         config.validate()?;
-        let connection = self.connection().await?;
+        let mut connection = self.connection().await?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
@@ -559,7 +559,7 @@ impl TursoStore {
             ));
         }
         let limit = limit.clamp(1, MAX_VECTOR_BATCH);
-        let connection = self.connection().await?;
+        let mut connection = self.connection().await?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;

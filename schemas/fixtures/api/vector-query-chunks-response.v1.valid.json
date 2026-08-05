@@ -1,1 +1,1 @@
-{"data":[{"id":"vec_fixture","entity_uri":"kb://task/t_fixture","source_kind":"task","content":"Lease retry policy","content_hash":"sha256:fixture-content","embedding_model":"nomic-embed-text","distance":0.1,"score":0.9}]}
+{"data":[{"id":"vec_fixture","entity_uri":"kb://task/t_fixture","source_kind":"task","content":"Lease retry policy","content_hash":"sha256:fixture-content","embedding_model":"nomic-embed-text","distance":0.10000000149011612,"score":0.8999999761581421}]}

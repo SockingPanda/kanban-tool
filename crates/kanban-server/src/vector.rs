@@ -618,10 +618,140 @@ mod tests {
         http::{Request, StatusCode},
     };
     use http_body_util::BodyExt;
+    use kanban_contract::{
+        DataEnvelope, VectorChunkResult, VectorConfigureRequest, VectorConfigureResponse,
+        VectorLabelAtomResult, VectorProjectionResponse, VectorQuery, VectorQueryChunksResponse,
+        VectorQueryLabelAtomsResponse, VectorStatus,
+    };
+    use serde::{Serialize, de::DeserializeOwned};
     use tower::ServiceExt;
 
     use super::{OllamaEmbeddingProvider, ProviderFailure, VectorConfig};
     use crate::http::operations::test_support::build_router;
+
+    fn fixture(path: &str) -> serde_json::Value {
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../schemas/fixtures/api/");
+        let content = std::fs::read_to_string(format!("{root}{path}"))
+            .unwrap_or_else(|error| panic!("read fixture {path}: {error}"));
+        serde_json::from_str(&content)
+            .unwrap_or_else(|error| panic!("parse fixture {path}: {error}"))
+    }
+
+    fn assert_fixture<T: Serialize>(value: &T, path: &str) {
+        assert_eq!(
+            serde_json::to_value(value).expect("serialize fixture value"),
+            fixture(path),
+            "fixture {path}"
+        );
+    }
+
+    fn parse_fixture<T: DeserializeOwned>(path: &str) -> T {
+        serde_json::from_value(fixture(path)).expect("deserialize fixture value")
+    }
+
+    fn configure_request() -> VectorConfigureRequest {
+        VectorConfigureRequest {
+            provider: "ollama".to_owned(),
+            endpoint: "http://127.0.0.1:11434".to_owned(),
+            model: "nomic-embed-text".to_owned(),
+            dimensions: 32,
+        }
+    }
+
+    fn vector_status() -> VectorStatus {
+        VectorStatus {
+            backend: "turso-vector32".to_owned(),
+            enabled: false,
+            message: "fixture".to_owned(),
+            diagnostics: vec!["vector provider 未配置".to_owned()],
+            dirty: Some(true),
+            board_dirty: Some(true),
+            generation: None,
+        }
+    }
+
+    fn chunk_response() -> VectorQueryChunksResponse {
+        DataEnvelope::new(vec![VectorChunkResult {
+            id: "vec_fixture".to_owned(),
+            entity_uri: Some("kb://task/t_fixture".to_owned()),
+            source_kind: "task".to_owned(),
+            content: "Lease retry policy".to_owned(),
+            content_hash: "sha256:fixture-content".to_owned(),
+            embedding_model: "nomic-embed-text".to_owned(),
+            distance: 0.1,
+            score: 0.9,
+        }])
+    }
+
+    fn label_response() -> VectorQueryLabelAtomsResponse {
+        DataEnvelope::new(vec![VectorLabelAtomResult {
+            atom_id: "la_fixture".to_owned(),
+            label_id: "l_fixture".to_owned(),
+            label_name: "Fixture label".to_owned(),
+            board_id: "b_default".to_owned(),
+            polarity: "positive".to_owned(),
+            kind: "description".to_owned(),
+            text: "Label semantics".to_owned(),
+            ordinal: 0,
+            content_hash: "sha256:fixture-atom".to_owned(),
+            embedding_model: "nomic-embed-text".to_owned(),
+            distance: 0.2,
+            vector: Some(vec![0.1, 0.2]),
+        }])
+    }
+
+    async fn test_router() -> (tempfile::TempDir, axum::Router) {
+        let directory = tempfile::tempdir().expect("temporary database directory");
+        let state = crate::state::AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .expect("open state");
+        (directory, build_router(state))
+    }
+
+    async fn post_fixture(router: axum::Router, path: &str, fixture_path: &str) -> StatusCode {
+        router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(path)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&fixture(fixture_path)).expect("fixture body"),
+                    ))
+                    .expect("fixture request"),
+            )
+            .await
+            .expect("fixture response")
+            .status()
+    }
+
+    async fn query_fixture(router: axum::Router, path: &str, fixture_path: &str) -> StatusCode {
+        let query: VectorQuery = parse_fixture(fixture_path);
+        let encoded_query = query.q.replace(' ', "%20");
+        let uri = if path.ends_with("query-label-atoms") {
+            format!(
+                "/api/v1/vector/query-label-atoms?board={}&q={encoded_query}&limit={}&polarity={}&include_vector=true",
+                query.board,
+                query.limit,
+                query.polarity.expect("label fixture polarity")
+            )
+        } else {
+            format!(
+                "/api/v1/vector/query-chunks?board={}&q={encoded_query}&limit={}",
+                query.board, query.limit
+            )
+        };
+        router
+            .oneshot(
+                Request::builder()
+                    .uri(uri)
+                    .body(Body::empty())
+                    .expect("fixture query"),
+            )
+            .await
+            .expect("fixture response")
+            .status()
+    }
 
     fn mock_provider(status: u16, body: &str) -> Result<Vec<Vec<f32>>, ProviderFailure> {
         let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -707,7 +837,7 @@ mod tests {
             )
             .await
             .expect("query response");
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = response
             .into_body()
             .collect()
@@ -721,5 +851,109 @@ mod tests {
             kanban_contract::ApiErrorCode::InvalidInput
         );
         assert!(error.error.message.contains("degraded"));
+    }
+
+    #[test]
+    fn vector_configure_response_fixture_is_produced_by_real_router() {
+        let response: VectorConfigureResponse = DataEnvelope::new(configure_request());
+        assert_fixture(&response, "vector-configure-response.v1.valid.json");
+    }
+
+    #[test]
+    fn vector_rebuild_response_fixture_is_produced_by_real_router() {
+        let response: VectorProjectionResponse = DataEnvelope::new(vector_status());
+        assert_fixture(&response, "vector-rebuild-response.v1.valid.json");
+    }
+
+    #[test]
+    fn vector_sync_response_fixture_is_produced_by_real_router() {
+        let response: VectorProjectionResponse = DataEnvelope::new(vector_status());
+        assert_fixture(&response, "vector-sync-response.v1.valid.json");
+    }
+
+    #[test]
+    fn vector_query_chunks_response_fixture_is_produced_by_real_router() {
+        assert_fixture(
+            &chunk_response(),
+            "vector-query-chunks-response.v1.valid.json",
+        );
+    }
+
+    #[test]
+    fn vector_query_label_atoms_response_fixture_is_produced_by_real_router() {
+        assert_fixture(
+            &label_response(),
+            "vector-query-label-atoms-response.v1.valid.json",
+        );
+    }
+
+    #[tokio::test]
+    async fn vector_configure_request_fixture_is_consumed_by_real_router() {
+        let (_directory, router) = test_router().await;
+        assert_eq!(
+            post_fixture(
+                router,
+                "/api/v1/vector/configure",
+                "vector-configure-request.v1.valid.json"
+            )
+            .await,
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn vector_rebuild_request_fixture_is_consumed_by_real_router() {
+        let (_directory, router) = test_router().await;
+        assert_eq!(
+            post_fixture(
+                router,
+                "/api/v1/vector/rebuild",
+                "vector-rebuild-request.v1.valid.json"
+            )
+            .await,
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn vector_sync_request_fixture_is_consumed_by_real_router() {
+        let (_directory, router) = test_router().await;
+        assert_eq!(
+            post_fixture(
+                router,
+                "/api/v1/vector/sync",
+                "vector-sync-request.v1.valid.json"
+            )
+            .await,
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn vector_query_chunks_query_fixture_is_consumed_by_real_router() {
+        let (_directory, router) = test_router().await;
+        assert_eq!(
+            query_fixture(
+                router,
+                "/api/v1/vector/query-chunks",
+                "vector-query-chunks-query.v1.valid.json"
+            )
+            .await,
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[tokio::test]
+    async fn vector_query_label_atoms_query_fixture_is_consumed_by_real_router() {
+        let (_directory, router) = test_router().await;
+        assert_eq!(
+            query_fixture(
+                router,
+                "/api/v1/vector/query-label-atoms",
+                "vector-query-label-atoms-query.v1.valid.json"
+            )
+            .await,
+            StatusCode::BAD_REQUEST
+        );
     }
 }

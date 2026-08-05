@@ -708,7 +708,7 @@ CREATE INDEX IF NOT EXISTS idx_entity_relations_object ON entity_relations(objec
 CREATE INDEX IF NOT EXISTS idx_projection_jobs_ready ON projection_jobs(status, next_attempt_at, updated_at ASC);
 CREATE INDEX IF NOT EXISTS idx_projection_jobs_board ON projection_jobs(board_id, status, updated_at ASC);
 CREATE INDEX IF NOT EXISTS idx_projection_jobs_lease ON projection_jobs(lease_owner, lease_expires_at);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_projection_jobs_dedupe ON projection_jobs(target, dedupe_key) WHERE dedupe_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projection_jobs_dedupe ON projection_jobs(target, dedupe_key);
 CREATE INDEX IF NOT EXISTS idx_projection_state_dirty ON projection_state(dirty, updated_at ASC);
 CREATE INDEX IF NOT EXISTS idx_label_semantics_board_updated ON label_semantics(board_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_label_atoms_board_kind ON label_atoms(board_id, polarity, kind, ordinal);
@@ -908,9 +908,9 @@ WHEN (NEW.source_event_id IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM task_events WHERE id = NEW.source_event_id AND board_id IS NEW.board_id
 )) OR (NEW.entity_uri IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM entities WHERE uri = NEW.entity_uri AND board_id IS NEW.board_id
-  UNION ALL
+) AND NOT EXISTS (
   SELECT 1 FROM tasks WHERE NEW.entity_uri = 'kb://task/' || id AND board_id IS NEW.board_id
-  UNION ALL
+) AND NOT EXISTS (
   SELECT 1 FROM label_atoms WHERE NEW.entity_uri = 'kb://label-atom/' || id AND board_id IS NEW.board_id
 ))
 BEGIN
@@ -923,9 +923,9 @@ WHEN (NEW.source_event_id IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM task_events WHERE id = NEW.source_event_id AND board_id IS NEW.board_id
 )) OR (NEW.entity_uri IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM entities WHERE uri = NEW.entity_uri AND board_id IS NEW.board_id
-  UNION ALL
+) AND NOT EXISTS (
   SELECT 1 FROM tasks WHERE NEW.entity_uri = 'kb://task/' || id AND board_id IS NEW.board_id
-  UNION ALL
+) AND NOT EXISTS (
   SELECT 1 FROM label_atoms WHERE NEW.entity_uri = 'kb://label-atom/' || id AND board_id IS NEW.board_id
 ))
 BEGIN
@@ -959,7 +959,7 @@ BEGIN
   UPDATE projection_state
   SET dirty=1, lifecycle_status=CASE WHEN lifecycle_status='ready' THEN 'degraded' ELSE lifecycle_status END,
       updated_at=NEW.created_at
-  WHERE projection IN ('vector_tasks', 'vector_label_atoms');
+  WHERE projection = 'vector_tasks' OR projection = 'vector_label_atoms';
 END;
 
 CREATE TRIGGER IF NOT EXISTS label_atoms_vector_projection_enqueue
@@ -985,7 +985,7 @@ BEGIN
   UPDATE projection_state
   SET dirty=1, lifecycle_status=CASE WHEN lifecycle_status='ready' THEN 'degraded' ELSE lifecycle_status END,
       updated_at=NEW.updated_at
-  WHERE projection IN ('vector_label_atoms');
+  WHERE projection = 'vector_label_atoms';
 END;
 
 CREATE TRIGGER IF NOT EXISTS label_atoms_vector_projection_update
@@ -1011,7 +1011,7 @@ BEGIN
   UPDATE projection_state
   SET dirty=1, lifecycle_status=CASE WHEN lifecycle_status='ready' THEN 'degraded' ELSE lifecycle_status END,
       updated_at=NEW.updated_at
-  WHERE projection IN ('vector_label_atoms');
+  WHERE projection = 'vector_label_atoms';
 END;
 
 CREATE TRIGGER IF NOT EXISTS retrieval_documents_board_guard_insert

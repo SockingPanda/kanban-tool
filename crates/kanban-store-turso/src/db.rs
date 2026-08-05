@@ -49,6 +49,7 @@ impl TursoStore {
         }
         let database = Builder::new_local(path)
             .experimental_index_method(true)
+            .experimental_vacuum(true)
             .build()
             .await?;
         Ok(Self {
@@ -223,8 +224,7 @@ impl TursoStore {
         Ok(connection)
     }
 
-    #[cfg(feature = "legacy-sqlite-import")]
     pub(crate) fn database_path(&self) -> &Path {
-        self.path.as_ref()
+        self.path.as_path()
     }
 }

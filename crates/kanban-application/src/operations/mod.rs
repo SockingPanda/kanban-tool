@@ -8,6 +8,7 @@ mod board;
 mod comment;
 mod dependency;
 mod event;
+mod maintenance;
 mod ontology;
 mod run;
 mod search;
@@ -26,6 +27,7 @@ pub use board::{
 pub use comment::{CommentCreate, CommentList};
 pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
 pub use event::*;
+pub use maintenance::*;
 pub use ontology::LabelOntologyOperations;
 pub use run::*;
 pub use search::{

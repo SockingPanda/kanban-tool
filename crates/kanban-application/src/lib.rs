@@ -14,6 +14,11 @@ pub use operations::LabelOntologyOperations;
 pub use operations::{
     ArchiveBoardCommand, ArchiveBoardRecord, ArchiveTaskCommand, ArchiveTaskRecord,
     AttachmentCreate, AttachmentDelete, AttachmentList, AttachmentRead, BoardArchive, BoardColumns,
+    BackupReportRecord, CheckpointReportRecord, DoctorDerivedStoreRecord, DoctorIssueRecord,
+    DoctorReportRecord, ExportReportRecord, ImportReportRecord, LegacyImportOptionsRecord,
+    LegacyImportResultRecord, LegacyImportTableCountRecord, MaintenanceOwnerRecord,
+    MaintenanceQuery, MaintenanceRunRecord, MaintenanceStatusRecord, ProjectionStatusRecord,
+    VacuumReportRecord,
     BoardCreate, BoardGet, BoardList, CommentCreate, CommentList, CreateAttachmentCommand,
     CreateAttachmentRecord, CreateBoardCommand, CreateBoardRecord, DeleteAttachmentCommand,
     DependencyCreate, DependencyList, DependencyRemove, EventList, EventListOptions, EventListPage,

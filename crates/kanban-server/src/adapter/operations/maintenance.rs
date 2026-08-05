@@ -189,7 +189,7 @@ impl MaintenanceQuery for TursoApplicationStore {
             .map(|value| LegacyImportResultRecord {
                 journal_id: value.journal_id,
                 phase: value.phase,
-                source_path: value.source_path,
+                source_path: value.source_path.to_string_lossy().into_owned(),
                 source_fingerprint: value.source_fingerprint,
                 schema_fingerprint: value.schema_fingerprint,
                 resumed: value.resumed,

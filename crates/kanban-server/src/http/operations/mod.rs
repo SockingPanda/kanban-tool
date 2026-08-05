@@ -2,7 +2,9 @@ mod attachments;
 mod boards;
 pub(crate) mod comments;
 mod dependencies;
+mod entities;
 mod events;
+mod graph;
 mod health;
 mod labels;
 mod maintenance;
@@ -13,7 +15,7 @@ mod signals;
 mod stats;
 mod steps;
 mod support;
-mod tasks;
+pub(crate) mod tasks;
 #[cfg(test)]
 pub(crate) mod test_support;
 
@@ -30,6 +32,8 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(labels::router())
         .merge(comments::router())
         .merge(dependencies::router())
+        .merge(entities::router())
+        .merge(graph::router())
         .merge(steps::router())
         .merge(runs::router())
         .merge(search::router())

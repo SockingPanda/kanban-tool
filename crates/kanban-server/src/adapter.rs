@@ -91,6 +91,14 @@ fn store_error(error: StoreError) -> KanbanError {
         StoreError::SignalNotFound(signal_id) => {
             KanbanError::NotFound(format!("signal {signal_id}"))
         }
+        StoreError::EntityNotFound(uri) => KanbanError::NotFound(format!("entity {uri}")),
+        StoreError::PredicateNotFound(name) => {
+            KanbanError::NotFound(format!("relation predicate {name}"))
+        }
+        StoreError::RelationNotFound(id) => KanbanError::NotFound(format!("relation {id}")),
+        StoreError::EntityConflict(message) | StoreError::RelationConflict(message) => {
+            KanbanError::Conflict(message)
+        }
         StoreError::DependencyCycle(message) => KanbanError::Conflict(message),
         StoreError::TaskConflict(task_id) => {
             KanbanError::Conflict(format!("task id already exists: {task_id}"))

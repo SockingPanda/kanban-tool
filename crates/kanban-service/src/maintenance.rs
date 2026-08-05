@@ -2894,7 +2894,7 @@ mod tests {
                 .active
         );
         let tasks = target
-            .list_tasks("default", crate::TaskListOptions::default())
+            .list_tasks("default", crate::StoreTaskListOptions::default())
             .await
             .expect("imported tasks");
         assert!(tasks.tasks.iter().any(|task| task.id == "t_maintenance"));
@@ -2907,7 +2907,7 @@ mod tests {
         assert_eq!(repeated.phase, "completed");
         assert_eq!(
             target
-                .list_tasks("default", crate::TaskListOptions::default())
+                .list_tasks("default", crate::StoreTaskListOptions::default())
                 .await
                 .expect("repeated tasks")
                 .tasks
@@ -2943,7 +2943,7 @@ mod tests {
             .expect_err("tampered payload must be rejected");
         assert!(error.to_string().contains("checksum"));
         let tasks = target
-            .list_tasks("default", crate::TaskListOptions::default())
+            .list_tasks("default", crate::StoreTaskListOptions::default())
             .await
             .expect("target tasks");
         assert!(tasks.tasks.is_empty());
@@ -3036,7 +3036,7 @@ mod tests {
         assert_eq!(prepared.phase, "validated");
         assert!(prepared.restart_required);
         let tasks = target
-            .list_tasks("default", crate::TaskListOptions::default())
+            .list_tasks("default", crate::StoreTaskListOptions::default())
             .await
             .expect("target tasks");
         assert!(tasks.tasks.iter().any(|task| task.id == "t_existing"));
@@ -3079,7 +3079,7 @@ mod tests {
         assert!(!resumed.restart_required);
         assert_eq!(resumed.journal_id, journal_id);
         let tasks = target
-            .list_tasks("default", crate::TaskListOptions::default())
+            .list_tasks("default", crate::StoreTaskListOptions::default())
             .await
             .expect("replaced tasks");
         assert!(tasks.tasks.iter().any(|task| task.id == "t_incoming"));
@@ -3173,7 +3173,7 @@ mod tests {
         assert!(!report.restart_required);
         assert!(
             target
-                .list_tasks("default", crate::TaskListOptions::default())
+                .list_tasks("default", crate::StoreTaskListOptions::default())
                 .await
                 .expect("imported tasks")
                 .tasks
@@ -3236,7 +3236,7 @@ mod tests {
             .expect_err("foreign key failure must rollback replace");
         assert!(error.to_string().contains("turso") || error.to_string().contains("foreign"));
         let tasks = target
-            .list_tasks("default", crate::TaskListOptions::default())
+            .list_tasks("default", crate::StoreTaskListOptions::default())
             .await
             .expect("target tasks after rollback");
         assert!(tasks.tasks.iter().any(|task| task.id == "t_existing_safe"));
@@ -3389,7 +3389,7 @@ mod tests {
         drop(transaction);
         assert!(error.to_string().contains("turso") || error.to_string().contains("busy"));
         let tasks = target
-            .list_tasks("default", crate::TaskListOptions::default())
+            .list_tasks("default", crate::StoreTaskListOptions::default())
             .await
             .expect("tasks after writer lock");
         assert!(tasks.tasks.iter().any(|task| task.id == "t_lock_existing"));

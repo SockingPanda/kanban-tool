@@ -14,6 +14,9 @@ mod schema;
 mod shared;
 mod store_operations;
 
+#[cfg(test)]
+mod test_support;
+
 pub mod dto;
 pub mod operations;
 pub mod ports;

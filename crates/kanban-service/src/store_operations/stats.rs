@@ -134,7 +134,7 @@ impl TursoStore {
 #[cfg(test)]
 mod tests {
     use crate::test_support::*;
-    use crate::{BlockedReasonCountRecord, StoreError};
+    use crate::{StoreError, domain::BlockedReasonCountRecord};
 
     #[tokio::test]
     async fn stats_resolves_board_and_counts_statuses_and_blocked_reasons() {

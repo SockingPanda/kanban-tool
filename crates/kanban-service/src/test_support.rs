@@ -2,15 +2,16 @@ use std::path::PathBuf;
 
 use turso::Connection;
 
-use crate::TaskRecord;
+pub(crate) use crate::domain::{TaskExecutionPlanRecord, TaskRecord};
 pub(crate) use crate::shared::{Value, first_row, integer_value, optional_text_value, text_value};
 pub(crate) use crate::{
     AddDependencyInput, ArchiveTaskInput, BlockTaskInput, ClaimTaskInput, CompleteTaskInput,
     CreateCommentInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
     MarkExecutionPlanNotRequiredInput, PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput,
     ReleaseTaskInput, RemoveDependencyInput, ReopenTaskInput, SpecifyTaskInput, StoreError,
-    SubmitReviewTaskInput, TaskExecutionPlanRecord, TaskListOptions, TaskListSort, TaskPlanFilter,
-    TursoStore, UnblockTaskInput, UpdateStepInput, UpdateTaskInput,
+    StoreTaskListOptions as TaskListOptions, StoreTaskListSort as TaskListSort,
+    StoreTaskPlanFilter as TaskPlanFilter, SubmitReviewTaskInput, TursoStore, UnblockTaskInput,
+    UpdateStepInput, UpdateTaskInput,
 };
 
 pub(crate) async fn store(name: &str) -> (tempfile::TempDir, TursoStore, PathBuf) {

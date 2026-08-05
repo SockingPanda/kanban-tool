@@ -122,8 +122,7 @@ impl TursoStore {
         {
             Ok(_) => {}
             Err(turso::Error::Constraint(message))
-                if input.idempotency_key.is_none()
-                    && is_duplicate_task_id_constraint(&message) =>
+                if is_duplicate_task_id_constraint(&message) =>
             {
                 return Err(StoreError::TaskConflict(input.id.clone()));
             }

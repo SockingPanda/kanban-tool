@@ -105,6 +105,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn task_create_duplicate_id_with_different_idempotency_keys_returns_conflict() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let router = build_router(state);
+        let body = serde_json::json!({
+            "task_id": "t_http_duplicate_keyed_id",
+            "idempotency_key": "http-duplicate-key-1",
+            "title": "HTTP keyed duplicate",
+            "description": "first payload",
+            "priority": 1,
+            "metadata": {},
+            "labels": [],
+            "depends_on": [],
+            "actor": "body-actor"
+        });
+
+        let response = router
+            .clone()
+            .oneshot(json_request("/api/v1/boards/default/tasks", body.clone()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let mut conflicting = body;
+        conflicting["idempotency_key"] = serde_json::json!("http-duplicate-key-2");
+        conflicting["description"] = serde_json::json!("different payload");
+        let response = router
+            .oneshot(json_request("/api/v1/boards/default/tasks", conflicting))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let error: ErrorEnvelope = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(error.error.code, ApiErrorCode::Conflict);
+    }
+
+    #[tokio::test]
     async fn task_create_closes_the_application_and_idempotency_path() {
         let directory = tempfile::tempdir().unwrap();
         let state = AppState::open(directory.path().join("kanban.db"), "test")

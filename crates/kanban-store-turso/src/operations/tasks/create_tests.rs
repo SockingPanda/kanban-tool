@@ -194,6 +194,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_task_rejects_duplicate_id_with_different_idempotency_key() {
+        let (_directory, store, _path) = store("create-duplicate-id-key").await;
+        store.initialize().await.expect("initialize");
+        store
+            .create_task(
+                "default",
+                create_input("t_duplicate_id_key", Some("key-1"), "Original"),
+            )
+            .await
+            .expect("first create");
+
+        let error = store
+            .create_task(
+                "default",
+                create_input("t_duplicate_id_key", Some("key-2"), "Different"),
+            )
+            .await
+            .expect_err("duplicate task id with a different key must conflict");
+        assert!(matches!(
+            error,
+            StoreError::TaskConflict(task_id) if task_id == "t_duplicate_id_key"
+        ));
+
+        let connection = store.connection().await.expect("connection");
+        assert_eq!(count_rows(&connection, "tasks").await, 1);
+        assert_eq!(count_rows(&connection, "task_execution_plans").await, 1);
+        assert_eq!(count_rows(&connection, "task_events").await, 1);
+    }
+
+    #[tokio::test]
     async fn create_task_does_not_classify_event_constraint_as_task_conflict() {
         let (_directory, store, _path) = store("create-event-conflict").await;
         store.initialize().await.expect("initialize");

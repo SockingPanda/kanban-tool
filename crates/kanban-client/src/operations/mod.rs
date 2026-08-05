@@ -11,3 +11,4 @@ mod search;
 mod signal;
 mod step;
 mod task;
+mod vector;

@@ -123,6 +123,9 @@ pub struct ProjectionStatusRecord {
     pub running: i64,
     pub failed: i64,
     pub last_error: Option<String>,
+    pub phase: String,
+    pub degraded: bool,
+    pub errors: Vec<String>,
     pub updated_at: i64,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -140,6 +143,9 @@ pub struct MaintenanceRunRecord {
     pub mode: String,
     pub action: String,
     pub processed: u64,
+    pub phase: String,
+    pub degraded: bool,
+    pub errors: Vec<String>,
     pub stores: Vec<ProjectionStatusRecord>,
 }
 

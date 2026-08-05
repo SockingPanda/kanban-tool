@@ -160,6 +160,15 @@ pub struct ProjectionStoreStatus {
     pub running: i64,
     pub failed: i64,
     pub last_error: Option<String>,
+    /// 最后一个已提交的实际阶段，例如 `ready`、`pending` 或 `degraded`。
+    #[serde(default)]
+    pub phase: String,
+    /// provider/job 尚未恢复时为 true；不能把此状态报告为 ready。
+    #[serde(default)]
+    pub degraded: bool,
+    /// 阶段错误列表；旧客户端可继续读取 `last_error`。
+    #[serde(default)]
+    pub errors: Vec<String>,
     pub updated_at: i64,
 }
 
@@ -185,6 +194,12 @@ pub struct MaintenanceRunReport {
     pub mode: String,
     pub action: String,
     pub processed: u64,
+    #[serde(default)]
+    pub phase: String,
+    #[serde(default)]
+    pub degraded: bool,
+    #[serde(default)]
+    pub errors: Vec<String>,
     pub stores: Vec<ProjectionStoreStatus>,
 }
 

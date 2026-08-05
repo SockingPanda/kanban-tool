@@ -170,6 +170,9 @@ impl MaintenanceQuery for TursoApplicationStore {
                 mode: value.mode,
                 action: value.action,
                 processed: value.processed,
+                phase: value.phase,
+                degraded: value.degraded,
+                errors: value.errors,
                 stores: value.stores.into_iter().map(projection_record).collect(),
             })
     }
@@ -257,6 +260,9 @@ fn projection_record(value: kanban_store_turso::StoreProjectionStatus) -> Projec
         running: value.running,
         failed: value.failed,
         last_error: value.last_error,
+        phase: value.phase,
+        degraded: value.degraded,
+        errors: value.errors,
         updated_at: value.updated_at,
     }
 }

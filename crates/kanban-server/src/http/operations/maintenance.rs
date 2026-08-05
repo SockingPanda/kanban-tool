@@ -275,6 +275,9 @@ fn projection_status(value: kanban_application::ProjectionStatusRecord) -> Proje
         running: value.running,
         failed: value.failed,
         last_error: value.last_error,
+        phase: value.phase,
+        degraded: value.degraded,
+        errors: value.errors,
         updated_at: value.updated_at,
     }
 }
@@ -287,6 +290,9 @@ fn run_report(value: kanban_application::MaintenanceRunRecord) -> MaintenanceRun
         mode: value.mode,
         action: value.action,
         processed: value.processed,
+        phase: value.phase,
+        degraded: value.degraded,
+        errors: value.errors,
         stores: value.stores.into_iter().map(projection_status).collect(),
     }
 }

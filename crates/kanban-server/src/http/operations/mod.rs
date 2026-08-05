@@ -4,6 +4,7 @@ mod dependencies;
 mod events;
 mod health;
 mod runs;
+mod stats;
 mod steps;
 mod support;
 mod tasks;
@@ -22,6 +23,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(dependencies::router())
         .merge(steps::router())
         .merge(runs::router())
+        .merge(stats::router())
         .merge(events::router())
         .with_state(state)
 }

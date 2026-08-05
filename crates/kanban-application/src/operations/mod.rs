@@ -8,6 +8,7 @@ mod comment;
 mod dependency;
 mod event;
 mod run;
+mod stats;
 mod step;
 mod task;
 
@@ -16,6 +17,7 @@ pub use comment::{CommentCreate, CommentList};
 pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
 pub use event::*;
 pub use run::*;
+pub use stats::*;
 pub use step::{StepCreate, StepList, StepUpdate};
 pub use task::{
     TaskBlock, TaskClaim, TaskCreate, TaskDone, TaskHeartbeat, TaskList, TaskPlanNotRequired,

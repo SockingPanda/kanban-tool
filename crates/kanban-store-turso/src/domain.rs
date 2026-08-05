@@ -124,6 +124,42 @@ pub struct TaskEventListPage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatusCountRecord {
+    pub status: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StaleClaimRecord {
+    pub task_id: String,
+    pub seq: i64,
+    pub title: String,
+    pub claim_owner: Option<String>,
+    pub claim_expires_at: Option<i64>,
+    pub last_heartbeat_at: Option<i64>,
+    pub current_run_id: Option<String>,
+    pub retry_count: i64,
+    pub max_retries: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockedReasonCountRecord {
+    pub reason: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueueStatsRecord {
+    pub board_id: String,
+    pub generated_at: i64,
+    pub status_counts: Vec<StatusCountRecord>,
+    pub stale_claims: Vec<StaleClaimRecord>,
+    pub blocked_reasons: Vec<BlockedReasonCountRecord>,
+    pub unplanned_active_tasks: i64,
+    pub active_parents_with_incomplete_required_steps: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskRecord {
     pub id: String,
     pub board_id: String,

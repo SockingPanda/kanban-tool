@@ -5,6 +5,7 @@ mod events;
 mod lifecycle;
 mod runs;
 pub(crate) mod shared;
+mod stats;
 mod steps;
 mod tasks;
 

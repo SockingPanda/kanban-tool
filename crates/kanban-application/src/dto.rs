@@ -210,12 +210,13 @@ pub struct TaskRecord {
 // `kanban_application::dto`. Definitions now live next to their operation.
 pub use crate::operations::{
     AddDependencyCommand, AddDependencyRecord, AddDependencyResult, BlockTaskCommand,
-    BlockTaskRecord, ClaimTaskCommand, ClaimTaskRecord, CompleteTaskCommand, CompleteTaskRecord,
-    CreateCommentCommand, CreateCommentRecord, CreateStepCommand, CreateStepRecord,
-    CreateTaskCommand, CreateTaskRecord, HeartbeatTaskCommand, HeartbeatTaskRecord,
-    MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord, PromoteTaskCommand,
-    PromoteTaskRecord, ReclaimExpiredTaskRecord, ReleaseTaskCommand, ReleaseTaskRecord,
-    RemoveDependencyCommand, RemoveDependencyResult, SubmitReviewTaskCommand,
+    BlockTaskRecord, BlockedReasonCountRecord, ClaimTaskCommand, ClaimTaskRecord,
+    CompleteTaskCommand, CompleteTaskRecord, CreateCommentCommand, CreateCommentRecord,
+    CreateStepCommand, CreateStepRecord, CreateTaskCommand, CreateTaskRecord, HeartbeatTaskCommand,
+    HeartbeatTaskRecord, MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord,
+    PromoteTaskCommand, PromoteTaskRecord, QueueStatsRecord, ReclaimExpiredTaskRecord,
+    ReleaseTaskCommand, ReleaseTaskRecord, RemoveDependencyCommand, RemoveDependencyResult,
+    StaleClaimRecord, StatsQuery, StatusCountRecord, SubmitReviewTaskCommand,
     SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskListSort, TaskPlanFilter,
     UpdateStepCommand, UpdateStepRecord,
 };

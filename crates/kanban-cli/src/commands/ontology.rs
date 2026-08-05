@@ -1,7 +1,6 @@
 //! CLI adapter for the label semantics and ontology ledger.
 
 use clap::{Args, Subcommand};
-use kanban_client::KanbanClient;
 use serde_json::{Value, json};
 
 use crate::{context::CliContext, error::CliFailure, output};

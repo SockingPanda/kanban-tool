@@ -12,12 +12,12 @@ use turso::{Connection, Row, transaction::TransactionBehavior};
 use crate::{
     db::TursoStore,
     domain::{
-        LabelAtomExplainActionRecord, LabelAtomExplainRecord, LabelAtomExplainSignalRecord,
-        LabelAtomExplainValidationRecord, LabelAtomIndexStatusRecord, LabelAtomRecord,
-        LabelOntologyActionRecord, LabelOntologyObservationRecord, LabelOntologyQualityRecord,
-        LabelOntologyReviewGroupRecord, LabelOntologySignalDetailRecord, LabelOntologySignalRecord,
-        LabelProposalAttemptRecord, LabelSemanticProposalRecord, LabelSemanticsRecord,
-        LabelSuggestionCandidateRecord, LabelSuggestionEvidenceRecord, LabelSuggestionResultRecord,
+        LabelAtomExplainActionRecord, LabelAtomExplainRecord, LabelAtomIndexStatusRecord,
+        LabelAtomRecord, LabelOntologyActionRecord, LabelOntologyObservationRecord,
+        LabelOntologyQualityRecord, LabelOntologyReviewGroupRecord,
+        LabelOntologySignalDetailRecord, LabelOntologySignalRecord, LabelProposalAttemptRecord,
+        LabelSemanticProposalRecord, LabelSemanticsRecord, LabelSuggestionCandidateRecord,
+        LabelSuggestionEvidenceRecord, LabelSuggestionResultRecord,
     },
     error::StoreError,
     shared::{
@@ -2236,7 +2236,7 @@ fn review_group(
     signals: Vec<LabelOntologySignalRecord>,
 ) -> LabelOntologyReviewGroupRecord {
     let mut status = BTreeMap::<String, i64>::new();
-    let mut task_refs = BTreeSet::new();
+    let task_refs = BTreeSet::new();
     let mut ids = Vec::new();
     let mut labels = BTreeSet::new();
     let mut proposals = BTreeSet::new();
@@ -2317,7 +2317,7 @@ async fn insert_action(
     board_id: &str,
     action_type: &str,
     reason: &str,
-    actor: &str,
+    _actor: &str,
     signal_ids: &[String],
     target_label_id: Option<&str>,
     result_label_id: Option<&str>,

@@ -5,9 +5,8 @@ use std::collections::HashMap;
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    routing::{delete, get, post, put},
+    routing::{get, post},
 };
-use kanban_core::KanbanError;
 use serde_json::{Value, json};
 
 use crate::{error::ApiError, state::AppState};

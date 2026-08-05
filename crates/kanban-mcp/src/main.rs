@@ -19,6 +19,7 @@ impl KanbanMcp {
             + Self::dependency_tools()
             + Self::event_tools()
             + Self::label_tools()
+            + Self::graph_tools()
             + Self::run_tools()
             + Self::search_tools()
             + Self::signal_tools()
@@ -59,6 +60,7 @@ mod tests {
                 "board_create",
                 "board_list",
                 "board_show",
+                "board_task_map",
                 "comment_create",
                 "comment_list",
                 "dependency_create",
@@ -91,6 +93,9 @@ mod tests {
                 "label_semantics_show",
                 "label_semantics_upsert",
                 "label_suggest",
+                "graph_neighbors",
+                "graph_query",
+                "graph_status",
                 "run_list",
                 "run_log",
                 "run_show",
@@ -121,6 +126,7 @@ mod tests {
                 "task_label_list",
                 "task_label_remove",
                 "task_list",
+                "task_neighborhood",
                 "task_plan_not_required",
                 "task_promote",
                 "task_reclaim",

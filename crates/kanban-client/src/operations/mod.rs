@@ -2,7 +2,9 @@ pub(crate) mod attachment;
 mod board;
 mod comment;
 mod dependency;
+mod entities;
 mod event;
+mod graph;
 mod labels;
 mod maintenance;
 mod ontology;
@@ -12,3 +14,5 @@ mod signal;
 mod step;
 mod task;
 mod vector;
+
+pub use entities::EntityUpsertRequest;

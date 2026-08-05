@@ -91,6 +91,17 @@ enum Command {
         #[command(subcommand)]
         command: commands::dependency::DependencyCommand,
     },
+    /// Inspect and maintain canonical graph entities.
+    #[command(name = "entity", visible_alias = "entities")]
+    Entity {
+        #[command(subcommand)]
+        command: commands::entities::EntityCommand,
+    },
+    /// Query the bounded canonical task/entity graph.
+    Graph {
+        #[command(subcommand)]
+        command: commands::graph::GraphCommand,
+    },
     /// List canonical task events through the localhost host.
     Events(commands::event::ListArgs),
     /// List execution runs for a task through the canonical localhost host.
@@ -202,6 +213,8 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Comment { command } => commands::comment::run(&ctx, command),
         Command::Attachment { command } => commands::attachment::run(&ctx, command),
         Command::Dependency { command } => commands::dependency::run(&ctx, command),
+        Command::Entity { command } => commands::entities::run(&ctx, command),
+        Command::Graph { command } => commands::graph::run(&ctx, command),
         Command::Events(args) => commands::event::run(&ctx, args),
         Command::Run { command } => commands::run::run(&ctx, command),
         Command::Signal { command } => commands::signal::run(&ctx, command),

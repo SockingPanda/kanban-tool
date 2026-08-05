@@ -2,6 +2,7 @@ pub(crate) mod attachment;
 pub(crate) mod board;
 pub(crate) mod comment;
 pub(crate) mod config;
+pub(crate) mod context;
 pub(crate) mod dependency;
 pub(crate) mod entities;
 pub(crate) mod event;

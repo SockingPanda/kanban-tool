@@ -4,6 +4,7 @@ import { ApiError, loadRuntimeConfig } from "./api/transport"
 import * as boards from "./api/boards"
 import * as attachments from "./api/attachments"
 import * as comments from "./api/comments"
+import * as context from "./api/context"
 import * as events from "./api/events"
 import * as health from "./api/health"
 import * as labels from "./api/labels"
@@ -22,6 +23,7 @@ import type {
   CreateBoardInput,
   CreateStepInput,
   CreateTaskInput,
+  ContextBuildOptions,
   LabelOntologyActionCreateInput,
   LabelOntologyReviewOptions,
   LabelOntologySignalListOptions,
@@ -100,6 +102,7 @@ export class KanbanApi {
   removeDependency(taskId: string, parentTaskId: string, options: RequestOptions = {}) { return tasks.removeDependency(this.transport, taskId, parentTaskId, options) }
   getTaskNeighborhood(taskId: string, options: RequestOptions & { depth?: number; limitNodes?: number } = {}) { return tasks.getTaskNeighborhood(this.transport, taskId, options) }
   getBoardTaskMap(board = this.board, options: RequestOptions & { activeOnly?: boolean; contextDepth?: number; includeDoneContext?: boolean; includeArchivedContext?: boolean; hideIsolated?: boolean; limitNodes?: number } = {}) { return tasks.getBoardTaskMap(this.transport, board, options) }
+  buildContext(taskId: string, options: ContextBuildOptions = {}) { return context.buildContext(this.transport, taskId, options) }
   listSteps(taskId: string, options: RequestOptions = {}) { return steps.listSteps(this.transport, taskId, options) }
   createStep(taskId: string, input: CreateStepInput, options: RequestOptions = {}) { return steps.createStep(this.transport, taskId, input, options) }
   updateStep(taskId: string, stepId: string, input: UpdateStepInput, options: RequestOptions = {}) { return steps.updateStep(this.transport, taskId, stepId, input, options) }

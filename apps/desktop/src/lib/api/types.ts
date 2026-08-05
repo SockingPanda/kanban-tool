@@ -983,3 +983,71 @@ export type LabelOntologyActionCreateInput = {
 }
 
 export type PageEnvelopeMeta = Partial<PageMeta>
+
+export type ContextBuildOptions = RequestOptions & {
+  board?: string
+  task?: string
+  reference?: string
+  query?: string
+  depth?: number
+  lexicalLimit?: number
+  graphLimit?: number
+  vectorLimit?: number
+  maxItems?: number
+  budget?: number
+}
+
+export type ContextEvidence = {
+  kind: string
+  entity_uri?: string
+  task_id?: string
+  relation_id?: string
+  predicate?: string
+  summary?: string
+}
+
+export type ContextItem = {
+  entity_uri: string
+  source: string
+  provenance: string[]
+  score: number | null
+  title: string | null
+  snippet: string | null
+  rank?: number
+  reason?: string
+  evidence?: ContextEvidence[]
+}
+
+export type ContextPolicy = {
+  depth: number
+  lexical_limit: number
+  graph_limit: number
+  vector_limit: number
+  max_items: number
+  budget?: number
+}
+
+export type ContextDiagnostic = {
+  source: string
+  code: string
+  message: string
+}
+
+export type ContextProviderStatus = {
+  provider: string
+  capability: string
+  available: boolean
+  degraded: boolean
+  reason?: string
+}
+
+export type ContextPack = {
+  subject: string
+  policy: ContextPolicy
+  items: ContextItem[]
+  degraded: string[]
+  diagnostics?: ContextDiagnostic[]
+  providers?: ContextProviderStatus[]
+  truncated?: boolean
+  truncation_reason?: string
+}

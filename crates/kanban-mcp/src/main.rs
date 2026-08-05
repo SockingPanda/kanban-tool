@@ -15,6 +15,7 @@ impl KanbanMcp {
         Self::board_tools()
             + Self::task_tools()
             + Self::comment_tools()
+            + Self::context_tools()
             + Self::attachment_tools()
             + Self::dependency_tools()
             + Self::event_tools()
@@ -63,6 +64,7 @@ mod tests {
                 "board_task_map",
                 "comment_create",
                 "comment_list",
+                "context_build",
                 "dependency_create",
                 "dependency_list",
                 "dependency_remove",

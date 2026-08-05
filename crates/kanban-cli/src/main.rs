@@ -80,6 +80,11 @@ enum Command {
         #[command(subcommand)]
         command: commands::comment::CommentCommand,
     },
+    /// 构建 task/reference/query 的只读混合上下文包。
+    Context {
+        #[command(subcommand)]
+        command: commands::context::ContextCommand,
+    },
     /// Manage file-backed task attachments through the canonical localhost host.
     Attachment {
         #[command(subcommand)]
@@ -211,6 +216,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Serve(args) => server::run(&ctx, args).await,
         Command::Board { command } => commands::board::run(&ctx, command),
         Command::Comment { command } => commands::comment::run(&ctx, command),
+        Command::Context { command } => commands::context::run(&ctx, command),
         Command::Attachment { command } => commands::attachment::run(&ctx, command),
         Command::Dependency { command } => commands::dependency::run(&ctx, command),
         Command::Entity { command } => commands::entities::run(&ctx, command),

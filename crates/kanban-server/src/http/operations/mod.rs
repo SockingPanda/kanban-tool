@@ -1,6 +1,7 @@
 mod attachments;
 mod boards;
 pub(crate) mod comments;
+mod context;
 mod dependencies;
 mod entities;
 mod events;
@@ -31,6 +32,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(tasks::router())
         .merge(labels::router())
         .merge(comments::router())
+        .merge(context::router())
         .merge(dependencies::router())
         .merge(entities::router())
         .merge(graph::router())

@@ -1,13 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use sha2::{Digest, Sha256};
+use turso::transaction::TransactionBehavior;
 use turso::{Connection, Value};
 
 use crate::{
     db::TursoStore,
     domain::{
-        BoardTaskMapRecord, GraphQueryBindingRecord, GraphQueryRowRecord, GraphStatusRecord,
-        ProjectionStateRecord, RelationRecord, TaskGraphEdgeRecord, TaskGraphMetaRecord,
-        TaskGraphNodeRecord, TaskNeighborhoodRecord, TaskRecord,
+        BoardTaskMapRecord, GraphMaintenanceRecord, GraphQueryBindingRecord, GraphQueryRowRecord,
+        GraphStatusRecord, ProjectionStateRecord, RelationRecord, TaskGraphEdgeRecord,
+        TaskGraphMetaRecord, TaskGraphNodeRecord, TaskNeighborhoodRecord, TaskRecord,
     },
     error::StoreError,
     operations::relations::{RelationListOptions, relation_from_row},
@@ -145,6 +147,145 @@ impl TursoStore {
                 projection.pending_jobs + projection.running_jobs + projection.failed_jobs,
             ),
             projection,
+        })
+    }
+
+    /// Rebuild the graph maintenance state from canonical tasks, entities and
+    /// relations.  The task/board entity rows and `belongs_to_board` facts are
+    /// deterministic derived facts; the projection state is the only mutable
+    /// maintenance marker published by this operation.
+    pub async fn graph_rebuild(&self, board: &str) -> Result<GraphMaintenanceRecord, StoreError> {
+        self.graph_maintenance(board, "rebuild").await
+    }
+
+    /// Validate canonical graph facts and consume pending relation jobs.  This
+    /// path does not fabricate a projection update: it reports the validated
+    /// counts and the generation/fingerprint that were actually published.
+    pub async fn graph_sync(&self, board: &str) -> Result<GraphMaintenanceRecord, StoreError> {
+        self.graph_maintenance(board, "sync").await
+    }
+
+    async fn graph_maintenance(
+        &self,
+        board: &str,
+        mode: &str,
+    ) -> Result<GraphMaintenanceRecord, StoreError> {
+        let board = board.trim();
+        if board.is_empty() {
+            return Err(StoreError::InvalidInput("board is required".to_owned()));
+        }
+        if !matches!(mode, "rebuild" | "sync") {
+            return Err(StoreError::InvalidInput(format!(
+                "unsupported graph maintenance mode: {mode}"
+            )));
+        }
+
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+        let board_id = resolve_board_id_tx(&transaction, board).await?;
+        let now = now_ms();
+
+        if mode == "rebuild" {
+            ensure_task_graph_entities(&transaction, &board_id, now).await?;
+        }
+
+        validate_graph_facts(&transaction, &board_id).await?;
+        let validated_tasks = scalar_count_tx(
+            &transaction,
+            "SELECT COUNT(*) FROM tasks WHERE board_id = :board_id",
+            vec![(":board_id".to_owned(), Value::Text(board_id.clone()))],
+            "tasks.count",
+        )
+        .await?;
+        let validated_entities = scalar_count_tx(
+            &transaction,
+            "SELECT COUNT(*) FROM entities WHERE board_id = :board_id",
+            vec![(":board_id".to_owned(), Value::Text(board_id.clone()))],
+            "entities.count",
+        )
+        .await?;
+        let validated_relations = scalar_count_tx(
+            &transaction,
+            "SELECT COUNT(*) FROM entity_relations WHERE board_id = :board_id",
+            vec![(":board_id".to_owned(), Value::Text(board_id.clone()))],
+            "entity_relations.count",
+        )
+        .await?;
+        let fingerprint = graph_fingerprint(&transaction, &board_id).await?;
+        let active_generation = projection_generation(&transaction).await?;
+        let mut generation = format!("graph-{mode}-{now}-{fingerprint}");
+        if active_generation.as_deref() == Some(generation.as_str()) {
+            generation.push_str("-next");
+        }
+
+        let consumed_jobs = transaction
+            .execute(
+                "UPDATE projection_jobs SET status = 'done', lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, last_error = NULL, updated_at = :updated_at WHERE board_id = :board_id AND target IN ('relations', 'all') AND status = 'pending'",
+                vec![
+                    (":board_id".to_owned(), Value::Text(board_id.clone())),
+                    (":updated_at".to_owned(), Value::Integer(now)),
+                ],
+            )
+            .await? as i64;
+        let remaining_pending = scalar_count_tx(
+            &transaction,
+            "SELECT COUNT(*) FROM projection_jobs WHERE board_id = :board_id AND target IN ('relations', 'all') AND status IN ('pending', 'running')",
+            vec![(":board_id".to_owned(), Value::Text(board_id.clone()))],
+            "projection_jobs.remaining",
+        )
+        .await?;
+        let failed_jobs = scalar_count_tx(
+            &transaction,
+            "SELECT COUNT(*) FROM projection_jobs WHERE board_id = :board_id AND target IN ('relations', 'all') AND status = 'failed'",
+            vec![(":board_id".to_owned(), Value::Text(board_id.clone()))],
+            "projection_jobs.failed",
+        )
+        .await?;
+        let dirty = remaining_pending > 0 || failed_jobs > 0;
+        let lifecycle = if failed_jobs > 0 {
+            "degraded"
+        } else if dirty {
+            "rebuilding"
+        } else {
+            "ready"
+        };
+        let state_updated = transaction
+            .execute(
+                "UPDATE projection_state SET previous_generation = active_generation, previous_fingerprint = active_fingerprint, active_generation = :generation, active_fingerprint = :fingerprint, building_generation = NULL, building_fingerprint = NULL, lifecycle_status = :lifecycle_status, dirty = :dirty, last_success_at = :last_success_at, last_error = NULL, updated_at = :updated_at WHERE projection = 'relations'",
+                vec![
+                    (":generation".to_owned(), Value::Text(generation.clone())),
+                    (":fingerprint".to_owned(), Value::Text(fingerprint.clone())),
+                    (":lifecycle_status".to_owned(), Value::Text(lifecycle.to_owned())),
+                    (":dirty".to_owned(), Value::Integer(if dirty { 1 } else { 0 })),
+                    (":last_success_at".to_owned(), Value::Integer(now)),
+                    (":updated_at".to_owned(), Value::Integer(now)),
+                ],
+            )
+            .await?;
+        if state_updated == 0 {
+            return Err(StoreError::InvalidStoredValue {
+                field: "projection_state.relations",
+            });
+        }
+        transaction.commit().await?;
+
+        let message = format!(
+            "graph {mode} validated tasks={validated_tasks}, entities={validated_entities}, relations={validated_relations}; consumed_jobs={consumed_jobs}, pending_jobs={remaining_pending}, generation={generation}, fingerprint={fingerprint}"
+        );
+        Ok(GraphMaintenanceRecord {
+            mode: mode.to_owned(),
+            board_id,
+            generation,
+            fingerprint,
+            validated_tasks,
+            validated_entities,
+            validated_relations,
+            pending_jobs: remaining_pending,
+            consumed_jobs,
+            updated_at: now,
+            message,
         })
     }
 
@@ -465,6 +606,279 @@ impl TursoStore {
         let connection = self.connection().await?;
         resolve_board_id(&connection, selector).await
     }
+}
+
+async fn ensure_task_graph_entities(
+    transaction: &turso::transaction::Transaction<'_>,
+    board_id: &str,
+    now: i64,
+) -> Result<(), StoreError> {
+    let board_uri = format!("kb://board/{board_id}");
+    ensure_entity(
+        transaction,
+        &board_uri,
+        "board",
+        "boards",
+        board_id,
+        Some(board_id),
+        None,
+        None,
+        None,
+        None,
+        now,
+    )
+    .await?;
+
+    let mut rows = transaction
+        .query(
+            "SELECT id, title, description, archived_at FROM tasks WHERE board_id = :board_id ORDER BY id ASC",
+            [(":board_id", board_id)],
+        )
+        .await?;
+    while let Some(row) = rows.next().await? {
+        let task_id = text_value(row.get_value(0)?, "tasks.id")?;
+        let title = text_value(row.get_value(1)?, "tasks.title")?;
+        let summary = optional_text_value(row.get_value(2)?, "tasks.description")?;
+        let archived_at = optional_integer_value(row.get_value(3)?, "tasks.archived_at")?;
+        let uri = format!("kb://task/{task_id}");
+        ensure_entity(
+            transaction,
+            &uri,
+            "task",
+            "tasks",
+            &task_id,
+            Some(board_id),
+            Some(&task_id),
+            Some(&title),
+            summary.as_deref(),
+            archived_at,
+            now,
+        )
+        .await?;
+        transaction
+            .execute(
+                "INSERT INTO entity_relations(subject_uri, predicate, object_uri, graph_uri, board_id, authoritative_store, source_table, source_id, metadata_json, created_at, updated_at) VALUES (:subject_uri, 'belongs_to_board', :object_uri, :graph_uri, :board_id, 'turso', 'tasks', :source_id, '{}', :created_at, :updated_at) ON CONFLICT(subject_uri, predicate, object_uri, graph_uri) DO UPDATE SET board_id = excluded.board_id, authoritative_store = excluded.authoritative_store, source_table = excluded.source_table, source_id = excluded.source_id, metadata_json = excluded.metadata_json, updated_at = excluded.updated_at",
+                vec![
+                    (":subject_uri".to_owned(), Value::Text(uri)),
+                    (":object_uri".to_owned(), Value::Text(board_uri.clone())),
+                    (":graph_uri".to_owned(), Value::Text(format!("kb://graph/{board_id}"))),
+                    (":board_id".to_owned(), Value::Text(board_id.to_owned())),
+                    (":source_id".to_owned(), Value::Text(task_id)),
+                    (":created_at".to_owned(), Value::Integer(now)),
+                    (":updated_at".to_owned(), Value::Integer(now)),
+                ],
+            )
+            .await
+            .map_err(|error| match error {
+                turso::Error::Constraint(_) => {
+                    StoreError::RelationConflict(error.to_string())
+                }
+                other => StoreError::Turso(other),
+            })?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn ensure_entity(
+    transaction: &turso::transaction::Transaction<'_>,
+    uri: &str,
+    kind: &str,
+    source_table: &str,
+    source_id: &str,
+    board_id: Option<&str>,
+    task_id: Option<&str>,
+    title: Option<&str>,
+    summary: Option<&str>,
+    archived_at: Option<i64>,
+    now: i64,
+) -> Result<(), StoreError> {
+    let existing = first_row(
+        transaction
+            .query(
+                "SELECT uri FROM entities WHERE source_table = :source_table AND source_id = :source_id LIMIT 1",
+                [
+                    (":source_table", source_table),
+                    (":source_id", source_id),
+                ],
+            )
+            .await?,
+    )
+    .await;
+    if let Ok(row) = existing {
+        let existing_uri = text_value(row.get_value(0)?, "entities.uri")?;
+        if existing_uri != uri {
+            return Err(StoreError::EntityConflict(format!(
+                "source {source_table}/{source_id} is already mapped to {existing_uri}"
+            )));
+        }
+    }
+    transaction
+        .execute(
+            "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, summary, created_at, updated_at, archived_at) VALUES (:uri, :kind, :source_table, :source_id, :board_id, :task_id, :title, :summary, :created_at, :updated_at, :archived_at) ON CONFLICT(uri) DO UPDATE SET kind = excluded.kind, source_table = excluded.source_table, source_id = excluded.source_id, board_id = excluded.board_id, task_id = excluded.task_id, title = excluded.title, summary = excluded.summary, updated_at = excluded.updated_at, archived_at = excluded.archived_at",
+            vec![
+                (":uri".to_owned(), Value::Text(uri.to_owned())),
+                (":kind".to_owned(), Value::Text(kind.to_owned())),
+                (":source_table".to_owned(), Value::Text(source_table.to_owned())),
+                (":source_id".to_owned(), Value::Text(source_id.to_owned())),
+                (":board_id".to_owned(), board_id.map_or(Value::Null, |v| Value::Text(v.to_owned()))),
+                (":task_id".to_owned(), task_id.map_or(Value::Null, |v| Value::Text(v.to_owned()))),
+                (":title".to_owned(), title.map_or(Value::Null, |v| Value::Text(v.to_owned()))),
+                (":summary".to_owned(), summary.map_or(Value::Null, |v| Value::Text(v.to_owned()))),
+                (":created_at".to_owned(), Value::Integer(now)),
+                (":updated_at".to_owned(), Value::Integer(now)),
+                (":archived_at".to_owned(), archived_at.map_or(Value::Null, Value::Integer)),
+            ],
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::Constraint(_) => StoreError::EntityConflict(error.to_string()),
+            other => StoreError::Turso(other),
+        })?;
+    Ok(())
+}
+
+async fn validate_graph_facts(
+    transaction: &turso::transaction::Transaction<'_>,
+    board_id: &str,
+) -> Result<(), StoreError> {
+    let invalid_entities = scalar_count_tx(
+        transaction,
+        "SELECT COUNT(*) FROM entities e LEFT JOIN tasks t ON t.id = e.task_id AND t.board_id = e.board_id WHERE e.board_id = :board_id AND e.task_id IS NOT NULL AND t.id IS NULL",
+        vec![(":board_id".to_owned(), Value::Text(board_id.to_owned()))],
+        "entities.invalid_task_links",
+    )
+    .await?;
+    if invalid_entities > 0 {
+        return Err(StoreError::InvalidStoredValue {
+            field: "entities.task_id.board_id",
+        });
+    }
+    let invalid_relations = scalar_count_tx(
+        transaction,
+        "SELECT COUNT(*) FROM entity_relations r LEFT JOIN entities s ON s.uri = r.subject_uri AND s.board_id = r.board_id LEFT JOIN entities o ON o.uri = r.object_uri AND o.board_id = r.board_id WHERE r.board_id = :board_id AND (s.uri IS NULL OR o.uri IS NULL)",
+        vec![(":board_id".to_owned(), Value::Text(board_id.to_owned()))],
+        "entity_relations.invalid_endpoints",
+    )
+    .await?;
+    if invalid_relations > 0 {
+        return Err(StoreError::InvalidStoredValue {
+            field: "entity_relations.endpoint_board",
+        });
+    }
+    Ok(())
+}
+
+async fn graph_fingerprint(
+    transaction: &turso::transaction::Transaction<'_>,
+    board_id: &str,
+) -> Result<String, StoreError> {
+    let mut digest = Sha256::new();
+    let mut tasks = transaction
+        .query(
+            "SELECT id, status, title, archived_at FROM tasks WHERE board_id = :board_id ORDER BY id ASC",
+            [(":board_id", board_id)],
+        )
+        .await?;
+    while let Some(row) = tasks.next().await? {
+        digest.update(format!(
+            "task|{}|{}|{}|{:?}\n",
+            text_value(row.get_value(0)?, "tasks.id")?,
+            text_value(row.get_value(1)?, "tasks.status")?,
+            text_value(row.get_value(2)?, "tasks.title")?,
+            optional_integer_value(row.get_value(3)?, "tasks.archived_at")?,
+        ));
+    }
+    let mut entities = transaction
+        .query(
+            "SELECT uri, kind, source_table, source_id, task_id, title, summary, archived_at FROM entities WHERE board_id = :board_id ORDER BY uri ASC",
+            [(":board_id", board_id)],
+        )
+        .await?;
+    while let Some(row) = entities.next().await? {
+        digest.update(format!(
+            "entity|{}|{}|{}|{}|{:?}|{:?}|{:?}|{:?}\n",
+            text_value(row.get_value(0)?, "entities.uri")?,
+            text_value(row.get_value(1)?, "entities.kind")?,
+            text_value(row.get_value(2)?, "entities.source_table")?,
+            text_value(row.get_value(3)?, "entities.source_id")?,
+            optional_text_value(row.get_value(4)?, "entities.task_id")?,
+            optional_text_value(row.get_value(5)?, "entities.title")?,
+            optional_text_value(row.get_value(6)?, "entities.summary")?,
+            optional_integer_value(row.get_value(7)?, "entities.archived_at")?,
+        ));
+    }
+    let mut relations = transaction
+        .query(
+            "SELECT subject_uri, predicate, object_uri, graph_uri, authoritative_store, source_table, source_id, metadata_json FROM entity_relations WHERE board_id = :board_id ORDER BY id ASC",
+            [(":board_id", board_id)],
+        )
+        .await?;
+    while let Some(row) = relations.next().await? {
+        digest.update(format!(
+            "relation|{}|{}|{}|{}|{}|{:?}|{:?}|{}\n",
+            text_value(row.get_value(0)?, "entity_relations.subject_uri")?,
+            text_value(row.get_value(1)?, "entity_relations.predicate")?,
+            text_value(row.get_value(2)?, "entity_relations.object_uri")?,
+            text_value(row.get_value(3)?, "entity_relations.graph_uri")?,
+            text_value(row.get_value(4)?, "entity_relations.authoritative_store")?,
+            optional_text_value(row.get_value(5)?, "entity_relations.source_table")?,
+            optional_text_value(row.get_value(6)?, "entity_relations.source_id")?,
+            text_value(row.get_value(7)?, "entity_relations.metadata_json")?,
+        ));
+    }
+    Ok(format!("{:x}", digest.finalize()))
+}
+
+async fn projection_generation(
+    transaction: &turso::transaction::Transaction<'_>,
+) -> Result<Option<String>, StoreError> {
+    let row = first_row(
+        transaction
+            .query(
+                "SELECT active_generation FROM projection_state WHERE projection = 'relations' LIMIT 1",
+                (),
+            )
+            .await?,
+    )
+    .await
+    .map_err(|error| match error {
+        turso::Error::QueryReturnedNoRows => StoreError::InvalidStoredValue {
+            field: "projection_state.relations",
+        },
+        other => StoreError::Turso(other),
+    })?;
+    optional_text_value(row.get_value(0)?, "projection_state.active_generation")
+}
+
+async fn resolve_board_id_tx(
+    transaction: &turso::transaction::Transaction<'_>,
+    selector: &str,
+) -> Result<String, StoreError> {
+    let row = first_row(
+        transaction
+            .query(
+                "SELECT id FROM boards WHERE id = :selector OR slug = :selector LIMIT 1",
+                [(":selector", selector)],
+            )
+            .await?,
+    )
+    .await
+    .map_err(|error| match error {
+        turso::Error::QueryReturnedNoRows => StoreError::BoardNotFound(selector.to_owned()),
+        other => StoreError::Turso(other),
+    })?;
+    text_value(row.get_value(0)?, "boards.id")
+}
+
+async fn scalar_count_tx(
+    transaction: &turso::transaction::Transaction<'_>,
+    sql: &str,
+    params: Vec<(String, Value)>,
+    field: &'static str,
+) -> Result<i64, StoreError> {
+    let row = first_row(transaction.query(sql, params).await?).await?;
+    integer_value(row.get_value(0)?, field)
 }
 
 fn validate_uri(uri: &str) -> Result<(), StoreError> {

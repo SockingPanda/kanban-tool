@@ -643,6 +643,26 @@ pub struct GraphStatusRecord {
     pub projection: ProjectionStateRecord,
 }
 
+/// Evidence returned by a host-admin graph maintenance operation.
+///
+/// The task/entity/relation tables remain canonical.  A maintenance call only
+/// rebuilds or validates the derived graph state and publishes the resulting
+/// generation/fingerprint in `projection_state`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GraphMaintenanceRecord {
+    pub mode: String,
+    pub board_id: String,
+    pub generation: String,
+    pub fingerprint: String,
+    pub validated_tasks: i64,
+    pub validated_entities: i64,
+    pub validated_relations: i64,
+    pub pending_jobs: i64,
+    pub consumed_jobs: i64,
+    pub updated_at: i64,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GraphQueryBindingRecord {
     pub name: String,

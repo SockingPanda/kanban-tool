@@ -257,12 +257,12 @@ fn validate_input(input: &EntityUpsertInput) -> Result<(), StoreError> {
             )));
         }
     }
-    if let Some(task_id) = input.task_id.as_deref() {
-        if !task_id.starts_with("t_") || task_id.len() <= 2 {
-            return Err(StoreError::InvalidInput(
-                "entity task_id must start with t_".to_owned(),
-            ));
-        }
+    if let Some(task_id) = input.task_id.as_deref()
+        && (!task_id.starts_with("t_") || task_id.len() <= 2)
+    {
+        return Err(StoreError::InvalidInput(
+            "entity task_id must start with t_".to_owned(),
+        ));
     }
     Ok(())
 }

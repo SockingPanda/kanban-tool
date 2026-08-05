@@ -160,3 +160,50 @@ async fn graph_neighbors_enforces_board_isolation() {
         matches!(error, crate::StoreError::EntityNotFound(uri) if uri == "kb://task/t_graph_other")
     );
 }
+
+#[tokio::test]
+async fn graph_rebuild_materializes_task_entities_and_sync_consumes_jobs() {
+    let (_directory, store, _path) = store("graph-maintenance").await;
+    store.initialize().await.expect("initialize");
+    store
+        .create_task(
+            "default",
+            create_input("t_graph_maintenance", None, "Maintenance"),
+        )
+        .await
+        .expect("create task");
+
+    let rebuilt = store.graph_rebuild("default").await.expect("rebuild graph");
+    assert_eq!(rebuilt.mode, "rebuild");
+    assert_eq!(rebuilt.validated_tasks, 1);
+    assert!(rebuilt.validated_entities >= 2);
+    assert!(rebuilt.validated_relations >= 1);
+    assert!(!rebuilt.generation.is_empty());
+    assert!(!rebuilt.fingerprint.is_empty());
+
+    let synced_before_jobs = store.graph_sync("default").await.expect("sync graph");
+    assert_eq!(synced_before_jobs.validated_tasks, rebuilt.validated_tasks);
+    assert_eq!(
+        synced_before_jobs.validated_entities,
+        rebuilt.validated_entities
+    );
+    assert_eq!(
+        synced_before_jobs.validated_relations,
+        rebuilt.validated_relations
+    );
+    assert_eq!(synced_before_jobs.fingerprint, rebuilt.fingerprint);
+
+    let connection = store.connection().await.expect("connection");
+    connection
+        .execute(
+            "INSERT INTO projection_jobs(board_id, target, entity_uri, operation, payload_json, created_at, updated_at) VALUES ('b_default', 'relations', 'kb://task/t_graph_maintenance', 'upsert', '{}', 1, 1)",
+            (),
+        )
+        .await
+        .expect("pending graph job");
+    let synced = store.graph_sync("default").await.expect("sync graph");
+    assert_eq!(synced.mode, "sync");
+    assert_eq!(synced.consumed_jobs, 1);
+    assert_eq!(synced.pending_jobs, 0);
+    assert_eq!(synced.validated_tasks, 1);
+}

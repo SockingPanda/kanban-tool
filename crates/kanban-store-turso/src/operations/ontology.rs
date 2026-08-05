@@ -87,6 +87,7 @@ pub struct LabelProposalInput {
     #[serde(default)]
     pub negative_examples: Vec<String>,
     pub actor: String,
+    #[serde(default)]
     pub source_signal_ids: Vec<String>,
 }
 

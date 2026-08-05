@@ -418,7 +418,7 @@ pub(crate) async fn import_into_store(
                 &target_root,
                 &staging_root,
                 &staged,
-                false,
+                true,
             )
             .await?;
         }
@@ -1066,6 +1066,7 @@ async fn write_transaction(
         .await?;
     if clear_bootstrap {
         tx.execute("DELETE FROM boards WHERE id='b_default' AND slug='default' AND name='Default' AND description IS NULL AND archived_at IS NULL", ()).await?;
+        tx.execute("DELETE FROM relation_predicates", ()).await?;
     }
     let now = now_ms();
     let manifest = json!({"schema_fingerprint": snapshot.schema_fingerprint, "source_fingerprint": snapshot.source_fingerprint, "table_counts": snapshot.counts, "attachment_count": attachments.len()}).to_string();
@@ -1333,9 +1334,10 @@ async fn logical_empty(
     if counts.get("boards") != Some(&1)
         || counts.get("board_columns") != Some(&9)
         || CANONICAL_TABLES.iter().any(|t| {
-            !matches!(*t, "boards" | "board_columns")
+            !matches!(*t, "boards" | "board_columns" | "relation_predicates")
                 && counts.get(*t).copied().unwrap_or_default() != 0
         })
+        || !matches!(counts.get("relation_predicates"), Some(0) | Some(3))
     {
         return Ok(false);
     }
@@ -1376,7 +1378,39 @@ async fn logical_empty(
             return Ok(false);
         }
     }
-    Ok(columns.next().await?.is_none())
+    if columns.next().await?.is_some() {
+        return Ok(false);
+    }
+    if counts.get("relation_predicates") == Some(&3) {
+        let mut predicates = connection
+            .query(
+                "SELECT name,domain_kind,range_kind,cardinality,authoritative_store,description FROM relation_predicates ORDER BY name",
+                (),
+            )
+            .await?;
+        for (name, domain, range) in [
+            ("belongs_to_board", "task", "board"),
+            ("depends_on", "task", "task"),
+            ("mentions", "task", "task"),
+        ] {
+            let Some(row) = predicates.next().await? else {
+                return Ok(false);
+            };
+            if !matches!(row.get_value(0)?, Value::Text(v) if v == name)
+                || !matches!(row.get_value(1)?, Value::Text(v) if v == domain)
+                || !matches!(row.get_value(2)?, Value::Text(v) if v == range)
+                || !matches!(row.get_value(3)?, Value::Text(v) if v == "many")
+                || !matches!(row.get_value(4)?, Value::Text(v) if v == "turso")
+                || !matches!(row.get_value(5)?, Value::Null)
+            {
+                return Ok(false);
+            }
+        }
+        if predicates.next().await?.is_some() {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn counts_match(expected: &BTreeMap<String, u64>, actual: &BTreeMap<String, u64>) -> bool {

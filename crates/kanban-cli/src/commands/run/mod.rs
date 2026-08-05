@@ -11,6 +11,9 @@ use crate::{context::CliContext, error::CliFailure};
 pub(crate) enum RunCommand {
     /// Show one execution run.
     Show(show::ShowArgs),
+    /// Read the bounded log snapshot for one execution run.
+    #[command(visible_alias = "log")]
+    Logs(log::LogArgs),
 }
 
 pub(crate) fn list(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
@@ -22,5 +25,6 @@ pub(crate) fn run(ctx: &CliContext, command: &RunCommand) -> Result<(), CliFailu
     let client = ctx.client()?;
     match command {
         RunCommand::Show(args) => show::run(ctx, &client, args),
+        RunCommand::Logs(args) => log::run(ctx, &client, args),
     }
 }

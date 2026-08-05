@@ -146,4 +146,22 @@ mod tests {
         };
         assert_eq!(args.run_id, "r_example");
     }
+
+    #[test]
+    fn parses_run_logs_without_tail_options() {
+        let cli = Cli::try_parse_from(["kanban", "run", "logs", "r_example"])
+            .expect("run logs command should parse");
+        let Command::Run {
+            command: crate::commands::run::RunCommand::Logs(args),
+        } = cli.command
+        else {
+            panic!("expected run logs command");
+        };
+        assert_eq!(args.run_id, "r_example");
+
+        assert!(
+            Cli::try_parse_from(["kanban", "run", "logs", "r_example", "--tail-bytes", "1024"])
+                .is_err()
+        );
+    }
 }

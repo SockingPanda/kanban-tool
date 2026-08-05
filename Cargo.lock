@@ -2838,7 +2838,6 @@ dependencies = [
  "kanban-core",
  "kanban-protocol",
  "kanban-service",
- "kanban-store-turso",
  "serde",
  "serde_json",
  "tempfile",
@@ -2854,9 +2853,14 @@ name = "kanban-service"
 version = "2.1.3"
 dependencies = [
  "kanban-core",
+ "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
+ "tempfile",
  "tokio",
+ "turso",
+ "ulid",
 ]
 
 [[package]]

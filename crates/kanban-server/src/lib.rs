@@ -1,4 +1,3 @@
-mod adapter;
 mod dispatcher;
 mod error;
 mod http;

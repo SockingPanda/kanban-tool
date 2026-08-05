@@ -5,13 +5,26 @@ version.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[features]
+default = []
+legacy-sqlite-import = ["dep:rusqlite"]
+
 [dependencies]
 kanban-core.workspace = true
+sha2.workspace = true
+rusqlite = { workspace = true, optional = true, features = ["bundled"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+ulid.workspace = true
+turso = { workspace = true, default-features = false, features = ["fts"] }
 tokio = { workspace = true, features = [
+    "fs",
+    "io-util",
     "macros",
     "rt-multi-thread",
     "sync",
     "time",
 ] }
+
+[dev-dependencies]
+tempfile.workspace = true

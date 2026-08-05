@@ -205,7 +205,10 @@ pub(crate) async fn run_dispatcher(
         }
 
         if let Err(error) =
-            crate::vector::worker_tick(state.vector_store().clone(), "vector-worker").await
+            state
+                .vector_store()
+                .vector_worker_tick("vector-worker")
+                .await
         {
             warn!(error = %error, "vector projection worker tick failed; canonical task queue continues");
         }

@@ -1,12 +1,7 @@
-//! Host-owned Ollama provider、vector worker 和 Turso vector HTTP endpoints。
+//! Host-owned vector HTTP endpoints。
 //!
-//! provider 调用在 host 内完成；CLI、MCP 和 Desktop 只能通过 localhost API 读取结果。
-
-use std::{
-    io::{Read, Write},
-    net::{TcpStream, ToSocketAddrs},
-    time::Duration,
-};
+//! provider 调用和 projection worker 由 `kanban-service` 持有；CLI、MCP 和 Desktop
+//! 只能通过 localhost API 读取结果。
 
 use axum::{
     Json, Router,
@@ -23,17 +18,9 @@ use kanban_protocol::{
     VectorQueryChunksResponse, VectorQueryLabelAtomsResponse, VectorStatus, VectorStatusQuery,
     VectorStatusResponse,
 };
-use kanban_store_turso::{
-    ProjectionJobRecord, StoreError, TursoStore, VectorConfig, VectorEmbeddingInput,
-    VectorStatusRecord, stable_id,
-};
-use serde::Deserialize;
+use kanban_service::{StoreError, TursoApplicationStore, VectorConfig, VectorStatusRecord};
 
 use crate::{error::ApiError, state::AppState};
-
-const OLLAMA_READ_TIMEOUT: Duration = Duration::from_secs(30);
-const OLLAMA_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const OLLAMA_MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
@@ -202,7 +189,7 @@ async fn query_label_atoms(
 }
 
 async fn enqueue_board_tasks(
-    store: &TursoStore,
+    store: &TursoApplicationStore,
     board: &str,
     rebuild: bool,
 ) -> Result<String, ApiError> {
@@ -258,326 +245,11 @@ fn validate_query(query: &VectorQuery) -> Result<(), ApiError> {
     Ok(())
 }
 
-pub(crate) async fn embed_query(
-    store: &TursoStore,
+async fn embed_query(
+    store: &TursoApplicationStore,
     text: &str,
 ) -> Result<(VectorConfig, Vec<f32>), ApiError> {
-    let config = store
-        .vector_config()
-        .await
-        .map_err(store_error)?
-        .ok_or_else(|| invalid("vector provider 未配置，当前查询为 degraded"))?;
-    let config_for_task = config.clone();
-    let text = text.to_owned();
-    let embedding = tokio::task::spawn_blocking(move || {
-        OllamaEmbeddingProvider::new(config_for_task).embed_batch(&[text])
-    })
-    .await
-    .map_err(|error| {
-        ApiError(KanbanError::Storage(format!(
-            "vector provider worker failed: {error}"
-        )))
-    })?
-    .map_err(|error| {
-        ApiError(KanbanError::Storage(format!(
-            "vector degraded: {}",
-            error.message
-        )))
-    })?
-    .into_iter()
-    .next()
-    .ok_or_else(|| invalid("vector provider 返回空 embedding"))?;
-    Ok((config, embedding))
-}
-
-/// Host 内 projection worker 的一个 tick。canonical mutation 失败不会回滚，job 会保留 failed 状态。
-pub(crate) async fn worker_tick(store: TursoStore, owner: &str) -> Result<usize, StoreError> {
-    let Some(config) = store.vector_config().await? else {
-        return Ok(0);
-    };
-    let jobs = store.claim_vector_jobs(owner, 8, now_ms()).await?;
-    let mut completed = 0;
-    for job in jobs {
-        match process_job(&store, &config, &job).await {
-            Ok(()) => {
-                if store.complete_vector_job(&job).await? {
-                    completed += 1;
-                    let status = store.vector_status(None).await?;
-                    if status.pending_jobs == 0
-                        && status.running_jobs == 0
-                        && status.failed_jobs == 0
-                    {
-                        let generation = now_ms().to_string();
-                        store
-                            .publish_vector_generation(&generation, &config.fingerprint())
-                            .await?;
-                    }
-                }
-            }
-            Err(error) => {
-                let retryable = error.retryable;
-                store
-                    .fail_vector_job(&job, &error.message, retryable)
-                    .await?;
-            }
-        }
-    }
-    Ok(completed)
-}
-
-async fn process_job(
-    store: &TursoStore,
-    config: &VectorConfig,
-    job: &ProjectionJobRecord,
-) -> Result<(), ProviderFailure> {
-    if job.operation == "delete" {
-        return Ok(());
-    }
-    let Some(entity_uri) = job.entity_uri.as_deref() else {
-        return Ok(());
-    };
-    let document = if job.target == "vector_tasks" {
-        let Some(task_id) = entity_uri.strip_prefix("kb://task/") else {
-            return Ok(());
-        };
-        store
-            .vector_task_document(task_id)
-            .await
-            .map_err(store_failure)?
-    } else if job.target == "vector_label_atoms" {
-        let Some(atom_id) = entity_uri.strip_prefix("kb://label-atom/") else {
-            return Ok(());
-        };
-        store
-            .vector_label_atom_document(atom_id)
-            .await
-            .map_err(store_failure)?
-    } else {
-        return Ok(());
-    };
-    let Some(document) = document else {
-        return Ok(());
-    };
-    if store
-        .vector_embedding_is_current(&document.id, &config.model, &document.content_hash)
-        .await
-        .map_err(store_failure)?
-    {
-        return Ok(());
-    }
-    let text = document.content.clone();
-    let config_for_task = config.clone();
-    let vectors = tokio::task::spawn_blocking(move || {
-        OllamaEmbeddingProvider::new(config_for_task).embed_batch(&[text])
-    })
-    .await
-    .map_err(|error| ProviderFailure::retryable(error.to_string()))?
-    .map_err(|error| ProviderFailure {
-        message: error.message,
-        retryable: error.retryable,
-    })?;
-    let embedding = vectors
-        .into_iter()
-        .next()
-        .ok_or_else(|| ProviderFailure::retryable("Ollama 返回空 embedding"))?;
-    let vector = VectorEmbeddingInput {
-        id: stable_id("vec", &[&document.id, &config.model]),
-        board_id: document.board_id.clone(),
-        entity_uri: document.entity_uri.clone(),
-        document_id: document.id.clone(),
-        dimensions: config.dimensions,
-        embedding,
-        embedding_model: config.model.clone(),
-        content_hash: document.content_hash.clone(),
-        created_at: document.created_at,
-        updated_at: document.updated_at,
-    };
-    store
-        .upsert_vector_document(&document)
-        .await
-        .map_err(store_failure)?;
-    store
-        .upsert_vector_embedding(&vector)
-        .await
-        .map_err(store_failure)?;
-    Ok(())
-}
-
-fn store_failure(error: StoreError) -> ProviderFailure {
-    ProviderFailure {
-        message: error.to_string(),
-        retryable: false,
-    }
-}
-
-#[derive(Debug)]
-struct ProviderFailure {
-    message: String,
-    retryable: bool,
-}
-impl ProviderFailure {
-    fn retryable(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-            retryable: true,
-        }
-    }
-}
-
-impl std::fmt::Display for ProviderFailure {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.message)
-    }
-}
-
-#[derive(Debug, Clone)]
-struct OllamaEmbeddingProvider {
-    config: VectorConfig,
-}
-
-impl OllamaEmbeddingProvider {
-    fn new(config: VectorConfig) -> Self {
-        Self { config }
-    }
-
-    fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, ProviderFailure> {
-        let body = serde_json::json!({ "model": self.config.model, "input": texts, "dimensions": self.config.dimensions }).to_string();
-        let (status, response) = http_post_json(&self.config.endpoint, "/api/embed", &body)?;
-        if status >= 400 {
-            return Err(ProviderFailure {
-                message: format!("Ollama HTTP {status}"),
-                retryable: status == 429 || status >= 500,
-            });
-        }
-        let parsed: OllamaEmbedResponse = serde_json::from_slice(&response).map_err(|error| {
-            ProviderFailure::retryable(format!("Ollama 响应 JSON 无效: {error}"))
-        })?;
-        if parsed.embeddings.len() != texts.len() {
-            return Err(ProviderFailure::retryable(format!(
-                "Ollama embedding 数量不匹配：期望 {}, 实际 {}",
-                texts.len(),
-                parsed.embeddings.len()
-            )));
-        }
-        for vector in &parsed.embeddings {
-            if vector.len() != self.config.dimensions {
-                return Err(ProviderFailure {
-                    message: format!(
-                        "embedding 维度不匹配：期望 {}, 实际 {}",
-                        self.config.dimensions,
-                        vector.len()
-                    ),
-                    retryable: false,
-                });
-            }
-            if vector.iter().any(|value| !value.is_finite()) {
-                return Err(ProviderFailure {
-                    message: "embedding 含非有限数".to_owned(),
-                    retryable: false,
-                });
-            }
-        }
-        Ok(parsed.embeddings)
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct OllamaEmbedResponse {
-    embeddings: Vec<Vec<f32>>,
-}
-
-fn http_post_json(
-    endpoint: &str,
-    path: &str,
-    body: &str,
-) -> Result<(u16, Vec<u8>), ProviderFailure> {
-    let endpoint = endpoint
-        .strip_prefix("http://")
-        .ok_or_else(|| ProviderFailure {
-            message: "Ollama endpoint 仅支持 http://".to_owned(),
-            retryable: false,
-        })?;
-    let authority = endpoint.split('/').next().unwrap_or(endpoint);
-    let (host, port) = parse_authority(authority)?;
-    let address = format!("{host}:{port}")
-        .to_socket_addrs()
-        .map_err(|error| ProviderFailure::retryable(format!("解析 Ollama endpoint 失败: {error}")))?
-        .next()
-        .ok_or_else(|| ProviderFailure::retryable("Ollama endpoint 无可用地址"))?;
-    let mut stream = TcpStream::connect_timeout(&address, OLLAMA_CONNECT_TIMEOUT)
-        .map_err(|error| ProviderFailure::retryable(format!("连接 Ollama 失败: {error}")))?;
-    stream.set_read_timeout(Some(OLLAMA_READ_TIMEOUT)).ok();
-    stream.set_write_timeout(Some(OLLAMA_CONNECT_TIMEOUT)).ok();
-    let request = format!(
-        "POST {path} HTTP/1.1\r\nHost: {authority}\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
-        body.len()
-    );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|error| ProviderFailure::retryable(format!("发送 Ollama 请求失败: {error}")))?;
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|error| ProviderFailure::retryable(format!("读取 Ollama 响应失败: {error}")))?;
-    if response.len() > OLLAMA_MAX_RESPONSE_BYTES {
-        return Err(ProviderFailure {
-            message: "Ollama 响应体超过上限".to_owned(),
-            retryable: false,
-        });
-    }
-    let split = response
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")
-        .ok_or_else(|| ProviderFailure::retryable("Ollama 响应缺少 headers"))?;
-    let header = String::from_utf8_lossy(&response[..split]);
-    let status = header
-        .split_whitespace()
-        .nth(1)
-        .and_then(|value| value.parse::<u16>().ok())
-        .ok_or_else(|| ProviderFailure::retryable("Ollama 响应状态码无效"))?;
-    Ok((status, response[split + 4..].to_vec()))
-}
-
-fn parse_authority(authority: &str) -> Result<(&str, u16), ProviderFailure> {
-    if authority.is_empty() || authority.contains('@') {
-        return Err(ProviderFailure {
-            message: "Ollama endpoint authority 无效".to_owned(),
-            retryable: false,
-        });
-    }
-    if let Some(host) = authority.strip_prefix('[') {
-        let Some(close) = host.find(']') else {
-            return Err(ProviderFailure {
-                message: "Ollama endpoint IPv6 authority 无效".to_owned(),
-                retryable: false,
-            });
-        };
-        let host_end = &host[..close];
-        let suffix = &host[close + 1..];
-        let port = if let Some(port) = suffix.strip_prefix(':') {
-            port.parse::<u16>().map_err(|_| ProviderFailure {
-                message: "Ollama endpoint 端口无效".to_owned(),
-                retryable: false,
-            })?
-        } else if suffix.is_empty() {
-            80
-        } else {
-            return Err(ProviderFailure {
-                message: "Ollama endpoint IPv6 authority 无效".to_owned(),
-                retryable: false,
-            });
-        };
-        return Ok((host_end, port));
-    }
-    if let Some((host, port)) = authority.rsplit_once(':') {
-        let port = port.parse::<u16>().map_err(|_| ProviderFailure {
-            message: "Ollama endpoint 端口无效".to_owned(),
-            retryable: false,
-        })?;
-        Ok((host, port))
-    } else {
-        Ok((authority, 80))
-    }
+    store.embed_query(text).await.map_err(store_error)
 }
 
 fn vector_status(value: VectorStatusRecord) -> VectorStatus {
@@ -603,23 +275,8 @@ fn invalid(message: impl Into<String>) -> ApiError {
     ApiError(KanbanError::InvalidInput(message.into()))
 }
 
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .try_into()
-        .unwrap_or(i64::MAX)
-}
-
 #[cfg(test)]
 mod tests {
-    use std::{
-        io::{Read, Write},
-        net::TcpListener,
-        thread,
-    };
-
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -633,7 +290,7 @@ mod tests {
     use serde::{Serialize, de::DeserializeOwned};
     use tower::ServiceExt;
 
-    use super::{OllamaEmbeddingProvider, ProviderFailure, VectorConfig};
+    use super::VectorConfig;
     use crate::http::operations::test_support::build_router;
 
     fn fixture(path: &str) -> serde_json::Value {
@@ -758,54 +415,6 @@ mod tests {
             .await
             .expect("fixture response")
             .status()
-    }
-
-    fn mock_provider(status: u16, body: &str) -> Result<Vec<Vec<f32>>, ProviderFailure> {
-        let listener = TcpListener::bind(("127.0.0.1", 0))
-            .map_err(|error| ProviderFailure::retryable(error.to_string()))?;
-        let port = listener
-            .local_addr()
-            .map_err(|error| ProviderFailure::retryable(error.to_string()))?
-            .port();
-        let body = body.to_owned();
-        let server = thread::spawn(move || {
-            let Ok((mut stream, _)) = listener.accept() else {
-                return;
-            };
-            let mut request = [0_u8; 4096];
-            let _ = stream.read(&mut request);
-            let reason = if status < 400 { "OK" } else { "Error" };
-            let response = format!(
-                "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
-                body.len()
-            );
-            let _ = stream.write_all(response.as_bytes());
-        });
-        let provider = OllamaEmbeddingProvider::new(VectorConfig {
-            provider: "ollama".to_owned(),
-            endpoint: format!("http://127.0.0.1:{port}"),
-            model: "test-model".to_owned(),
-            dimensions: 2,
-        });
-        let result = provider.embed_batch(&["hello".to_owned()]);
-        server
-            .join()
-            .map_err(|_| ProviderFailure::retryable("mock server panicked"))?;
-        result
-    }
-
-    #[test]
-    fn ollama_provider_accepts_mock_embedding_response() {
-        let vectors = mock_provider(200, r#"{"embeddings":[[0.25,-0.5]]}"#)
-            .expect("mock embedding should parse");
-        assert_eq!(vectors, vec![vec![0.25, -0.5]]);
-    }
-
-    #[test]
-    fn ollama_server_error_is_reported_as_retryable() {
-        let error = mock_provider(503, r#"{"error":"busy"}"#).expect_err("503 must fail");
-        assert!(error.retryable);
-        assert_eq!(error.message, "Ollama HTTP 503");
     }
 
     #[tokio::test]

@@ -1089,6 +1089,10 @@ WHEN (NEW.target != 'fts' AND NEW.source_event_id IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM task_events WHERE id = NEW.source_event_id AND board_id IS NEW.board_id
 )) OR (NEW.target != 'fts' AND NEW.entity_uri IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM entities WHERE uri = NEW.entity_uri AND board_id IS NEW.board_id
+) AND NOT EXISTS (
+  SELECT 1 FROM tasks WHERE NEW.entity_uri = 'kb://task/' || id AND board_id IS NEW.board_id
+) AND NOT EXISTS (
+  SELECT 1 FROM label_atoms WHERE NEW.entity_uri = 'kb://label-atom/' || id AND board_id IS NEW.board_id
 ))
 BEGIN
   SELECT RAISE(ABORT, 'projection_jobs reference board mismatch');
@@ -1099,6 +1103,10 @@ WHEN (NEW.target != 'fts' AND NEW.source_event_id IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM task_events WHERE id = NEW.source_event_id AND board_id IS NEW.board_id
 )) OR (NEW.target != 'fts' AND NEW.entity_uri IS NOT NULL AND NOT EXISTS (
   SELECT 1 FROM entities WHERE uri = NEW.entity_uri AND board_id IS NEW.board_id
+) AND NOT EXISTS (
+  SELECT 1 FROM tasks WHERE NEW.entity_uri = 'kb://task/' || id AND board_id IS NEW.board_id
+) AND NOT EXISTS (
+  SELECT 1 FROM label_atoms WHERE NEW.entity_uri = 'kb://label-atom/' || id AND board_id IS NEW.board_id
 ))
 BEGIN
   SELECT RAISE(ABORT, 'projection_jobs reference board mismatch');

@@ -517,7 +517,7 @@ function ProjectionStoreList({ stores }: { stores: ProjectionStoreStatus[] }) {
   return (
     <div className="space-y-2">
       {stores.map((store) => {
-        const degraded = store.dirty || Boolean(store.last_error) || /degraded|error|failed/i.test(store.lifecycle_status)
+        const degraded = store.degraded || store.dirty || Boolean(store.last_error) || /degraded|error|failed/i.test(store.lifecycle_status)
         return (
           <Card key={store.store_name} className="p-2">
             <div className="flex items-center justify-between gap-2">
@@ -534,8 +534,10 @@ function ProjectionStoreList({ stores }: { stores: ProjectionStoreStatus[] }) {
               <span>{t("pending")}: {store.pending}</span>
               <span>{t("running")}: {store.running}</span>
               <span>{t("failed")}: {store.failed}</span>
+              <span>{t("phase")}: {store.phase}</span>
               <span>{t("updated")}: {store.updated_at}</span>
               <span className="col-span-2 truncate">{t("last error")}: {store.last_error ?? "-"}</span>
+              <span className="col-span-2 truncate">{t("errors")}: {store.errors.length > 0 ? store.errors.join("; ") : "-"}</span>
             </div>
           </Card>
         )
@@ -594,6 +596,9 @@ function MaintenanceRunResultView({ report }: { report: MaintenanceRunReport }) 
     [t("owner"), report.owner],
     [t("mode"), report.mode],
     [t("processed"), String(report.processed)],
+    [t("phase"), report.phase],
+    [t("degraded"), String(report.degraded)],
+    [t("errors"), report.errors.length > 0 ? report.errors.join("; ") : "-"],
   ]} />
 }
 

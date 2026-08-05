@@ -22,6 +22,9 @@ const store = {
   running: 0,
   failed: 0,
   last_error: null,
+  phase: "ready",
+  degraded: false,
+  errors: [],
   updated_at: 1700000000,
 }
 
@@ -36,7 +39,7 @@ describe("Desktop host maintenance API", () => {
       { data: { journal_id: "journal-2", phase: "completed", source_path: "/tmp/legacy.sqlite", source_fingerprint: "source", schema_fingerprint: "schema", resumed: false, attachment_count: 1, table_counts: [{ table: "tasks", source_rows: 3, target_rows: 3 }] } },
       { data: { ok: true, before_bytes: 100, after_bytes: 80, source_fingerprint: "source" } },
       { data: { database_instance_id: "db-1", protocol_version: 2, owner: { owner: "desktop-test", mode: "continuous", lease_expires_at: 1700000020, fence_epoch: 7, build_identity: "build-1", last_heartbeat_at: 1700000000, active: true }, stores: [store] } },
-      { data: { database_instance_id: "db-1", protocol_version: 2, owner: "desktop-test", mode: "oneshot", action: "rebuild", processed: 1, stores: [store] } },
+      { data: { database_instance_id: "db-1", protocol_version: 2, owner: "desktop-test", mode: "oneshot", action: "rebuild", processed: 1, phase: "degraded", degraded: true, errors: ["vector provider unavailable"], stores: [store] } },
     ]
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(responses.shift()), { status: 200, headers: { "content-type": "application/json" } }))
     vi.stubGlobal("fetch", fetchMock)

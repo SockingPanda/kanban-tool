@@ -565,6 +565,9 @@ export type ProjectionStoreStatus = {
   running: number
   failed: number
   last_error: string | null
+  phase: string
+  degraded: boolean
+  errors: string[]
   updated_at: number
 }
 
@@ -582,6 +585,9 @@ export type MaintenanceRunReport = {
   mode: string
   action: string
   processed: number
+  phase: string
+  degraded: boolean
+  errors: string[]
   stores: ProjectionStoreStatus[]
 }
 

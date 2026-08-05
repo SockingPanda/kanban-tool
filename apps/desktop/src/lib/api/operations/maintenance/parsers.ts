@@ -38,10 +38,13 @@ const PROJECTION_STORE_KEYS = [
   "running",
   "failed",
   "last_error",
+  "phase",
+  "degraded",
+  "errors",
   "updated_at",
 ] as const
 const MAINTENANCE_STATUS_KEYS = ["database_instance_id", "protocol_version", "owner", "stores"] as const
-const MAINTENANCE_RUN_KEYS = ["database_instance_id", "protocol_version", "owner", "mode", "action", "processed", "stores"] as const
+const MAINTENANCE_RUN_KEYS = ["database_instance_id", "protocol_version", "owner", "mode", "action", "processed", "phase", "degraded", "errors", "stores"] as const
 const LEGACY_IMPORT_TABLE_KEYS = ["table", "source_rows", "target_rows"] as const
 const LEGACY_IMPORT_KEYS = [
   "journal_id",
@@ -167,6 +170,9 @@ export function parseProjectionStoreStatus(value: unknown, label: string): Proje
   }
   expectString(record.lifecycle_status, `${label}.lifecycle_status`)
   expectBoolean(record.dirty, `${label}.dirty`)
+  expectString(record.phase, `${label}.phase`)
+  expectBoolean(record.degraded, `${label}.degraded`)
+  expectArray<unknown>(record.errors, `${label}.errors`).forEach((entry, index) => expectString(entry, `${label}.errors[${index}]`))
   return record as ProjectionStoreStatus
 }
 
@@ -193,6 +199,10 @@ export function parseMaintenanceRunReport(value: unknown): MaintenanceRunReport 
   const mode = expectString(record.mode, "maintenance run response data.mode")
   const action = expectString(record.action, "maintenance run response data.action")
   const processed = expectSafeInteger(record.processed, "maintenance run response data.processed", true)
+  const phase = expectString(record.phase, "maintenance run response data.phase")
+  const degraded = expectBoolean(record.degraded, "maintenance run response data.degraded")
+  const errors = expectArray<unknown>(record.errors, "maintenance run response data.errors")
+    .map((entry, index) => expectString(entry, `maintenance run response data.errors[${index}]`))
   const stores = expectArray<unknown>(record.stores, "maintenance run response data.stores")
   return {
     database_instance_id: databaseInstanceId,
@@ -201,6 +211,9 @@ export function parseMaintenanceRunReport(value: unknown): MaintenanceRunReport 
     mode,
     action,
     processed,
+    phase,
+    degraded,
+    errors,
     stores: stores.map((entry, index) => parseProjectionStoreStatus(entry, `maintenance run response data.stores[${index}]`)),
   }
 }

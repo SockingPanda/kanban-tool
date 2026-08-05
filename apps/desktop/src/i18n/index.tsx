@@ -204,6 +204,7 @@ const zhMessages: Messages = {
   "pending": "待处理",
   "failed": "失败",
   "last error": "最近错误",
+  "errors": "错误",
   "degraded": "降级",
   "Backup output path": "备份输出路径",
   "Export output path": "导出输出路径",

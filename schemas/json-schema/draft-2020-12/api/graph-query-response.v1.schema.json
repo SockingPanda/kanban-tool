@@ -1,6 +1,6 @@
 {
   "$defs": {
-    "GraphHelperQueryBinding": {
+    "CliGraphQueryBinding": {
       "additionalProperties": false,
       "properties": {
         "name": {
@@ -16,12 +16,12 @@
       ],
       "type": "object"
     },
-    "GraphHelperQueryRow": {
+    "CliGraphQueryRow": {
       "additionalProperties": false,
       "properties": {
         "bindings": {
           "items": {
-            "$ref": "#/$defs/GraphHelperQueryBinding"
+            "$ref": "#/$defs/CliGraphQueryBinding"
           },
           "type": "array"
         }
@@ -32,11 +32,20 @@
       "type": "object"
     }
   },
-  "$id": "urn:kanban-tool:schema:helper:graph-query-response:v1",
+  "$id": "urn:kanban-tool:schema:api:graph-query-response:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "items": {
-    "$ref": "#/$defs/GraphHelperQueryRow"
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/$defs/CliGraphQueryRow"
+      },
+      "type": "array"
+    }
   },
-  "title": "Graph Helper Query Response v1",
-  "type": "array"
+  "required": [
+    "data"
+  ],
+  "title": "Kanban graph query response v1",
+  "type": "object"
 }

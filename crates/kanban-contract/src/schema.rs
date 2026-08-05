@@ -65,14 +65,14 @@ use crate::{
     BackupResponse, ExportResponse, ImportResponse, LegacyImportRequest, LegacyImportResponse,
     MaintenanceImportRequest, MaintenancePathRequest, MaintenanceRunRequest,
     MaintenanceRunResponse, MaintenanceStatusResponse, VacuumResponse,
-};
-use crate::{
     BoardQuery, BuildContextPath, BuildContextQuery, BuildContextResponse, GraphNeighborsQuery,
-    GraphNeighborsResponse, GraphStatusResponse, ListEventsQuery, SearchStatusResponse,
+    GraphNeighborsResponse, GraphQueryQuery, GraphStatusResponse, ListEventsQuery,
     SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse, StatsResponse,
     VectorConfigureRequest, VectorConfigureResponse, VectorProjectionRequest,
     VectorProjectionResponse, VectorQuery, VectorQueryChunksResponse,
     VectorQueryLabelAtomsResponse, VectorStatusQuery, VectorStatusResponse,
+    SearchStatusResponse, EntityListQuery, EntityListResponse, EntityPath, EntityResponse,
+    EntityUpsertRequest, GraphMaintenanceResponse,
 };
 
 pub const DRAFT_2020_12: &str = "https://json-schema.org/draft/2020-12/schema";
@@ -1082,6 +1082,24 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/api/graph-status-query.v1.invalid.json",
         BoardQuery
     ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:graph-rebuild-query:v1",
+        "api/graph-rebuild-query.v1.schema.json",
+        "Kanban graph rebuild query v1",
+        "api.graph-rebuild.query",
+        "schemas/fixtures/api/graph-rebuild-query.v1.valid.json",
+        "schemas/fixtures/api/graph-rebuild-query.v1.invalid.json",
+        BoardQuery
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:graph-sync-query:v1",
+        "api/graph-sync-query.v1.schema.json",
+        "Kanban graph sync query v1",
+        "api.graph-sync.query",
+        "schemas/fixtures/api/graph-sync-query.v1.valid.json",
+        "schemas/fixtures/api/graph-sync-query.v1.invalid.json",
+        BoardQuery
+    ),
     response_schema_root!(
         "urn:kanban-tool:schema:api:graph-status-response:v1",
         "api/graph-status-response.v1.schema.json",
@@ -1108,6 +1126,96 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/api/graph-neighbors-response.v1.valid.json",
         "schemas/fixtures/api/graph-neighbors-response.v1.invalid.json",
         GraphNeighborsResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:graph-query-query:v1",
+        "api/graph-query-query.v1.schema.json",
+        "Kanban graph query query v1",
+        "api.graph-query.query",
+        "schemas/fixtures/api/graph-query-query.v1.valid.json",
+        "schemas/fixtures/api/graph-query-query.v1.invalid.json",
+        GraphQueryQuery
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:graph-query-response:v1",
+        "api/graph-query-response.v1.schema.json",
+        "Kanban graph query response v1",
+        "api.graph-query.response",
+        "schemas/fixtures/api/graph-query-response.v1.valid.json",
+        "schemas/fixtures/api/graph-query-response.v1.invalid.json",
+        CliGraphQueryOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:graph-rebuild-response:v1",
+        "api/graph-rebuild-response.v1.schema.json",
+        "Kanban graph rebuild response v1",
+        "api.graph-rebuild.response",
+        "schemas/fixtures/api/graph-rebuild-response.v1.valid.json",
+        "schemas/fixtures/api/graph-rebuild-response.v1.invalid.json",
+        GraphMaintenanceResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:graph-sync-response:v1",
+        "api/graph-sync-response.v1.schema.json",
+        "Kanban graph sync response v1",
+        "api.graph-sync.response",
+        "schemas/fixtures/api/graph-sync-response.v1.valid.json",
+        "schemas/fixtures/api/graph-sync-response.v1.invalid.json",
+        GraphMaintenanceResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:entity-list-query:v1",
+        "api/entity-list-query.v1.schema.json",
+        "Kanban entity list query v1",
+        "api.entity-list.query",
+        "schemas/fixtures/api/entity-list-query.v1.valid.json",
+        "schemas/fixtures/api/entity-list-query.v1.invalid.json",
+        EntityListQuery
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:entity-path:v1",
+        "api/entity-path.v1.schema.json",
+        "Kanban entity path v1",
+        "api.entity.path",
+        "schemas/fixtures/api/entity-path.v1.valid.json",
+        "schemas/fixtures/api/entity-path.v1.invalid.json",
+        EntityPath
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:entity-upsert-request:v1",
+        "api/entity-upsert-request.v1.schema.json",
+        "Kanban entity upsert request v1",
+        "api.entity-upsert.request",
+        "schemas/fixtures/api/entity-upsert-request.v1.valid.json",
+        "schemas/fixtures/api/entity-upsert-request.v1.invalid.json",
+        EntityUpsertRequest
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:entity-list-response:v1",
+        "api/entity-list-response.v1.schema.json",
+        "Kanban entity list response v1",
+        "api.entity-list.response",
+        "schemas/fixtures/api/entity-list-response.v1.valid.json",
+        "schemas/fixtures/api/entity-list-response.v1.invalid.json",
+        EntityListResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:entity-response:v1",
+        "api/entity-response.v1.schema.json",
+        "Kanban entity response v1",
+        "api.entity.response",
+        "schemas/fixtures/api/entity-response.v1.valid.json",
+        "schemas/fixtures/api/entity-response.v1.invalid.json",
+        EntityResponse
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:entity-upsert-response:v1",
+        "api/entity-upsert-response.v1.schema.json",
+        "Kanban entity upsert response v1",
+        "api.entity-upsert.response",
+        "schemas/fixtures/api/entity-upsert-response.v1.valid.json",
+        "schemas/fixtures/api/entity-upsert-response.v1.invalid.json",
+        EntityResponse
     ),
     request_schema_root!(
         "urn:kanban-tool:schema:api:vector-status-query:v1",
@@ -3514,69 +3622,6 @@ fn protocol_schema_roots() -> Vec<SchemaRoot> {
             "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json",
             "schemas/fixtures/config/selected-worker-profile-input.v1.invalid.json",
             crate::WorkerProfileInput
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:graph-handshake-response:v1",
-            "helper/graph-handshake-response.v1.schema.json",
-            "Graph Helper Handshake Response v1",
-            "helper.graph.handshake.response",
-            "schemas/fixtures/helper/graph-handshake-response.v1.valid.json",
-            "schemas/fixtures/helper/graph-handshake-response.v1.invalid.json",
-            crate::GraphHelperHandshakeResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:graph-error-response:v1",
-            "helper/graph-error-response.v1.schema.json",
-            "Graph Helper Error Response v1",
-            "helper.graph.error.response",
-            "schemas/fixtures/helper/graph-error-response.v1.valid.json",
-            "schemas/fixtures/helper/graph-error-response.v1.invalid.json",
-            crate::GraphHelperErrorResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:graph-status-response:v1",
-            "helper/graph-status-response.v1.schema.json",
-            "Graph Helper Status Response v1",
-            "helper.graph.status.response",
-            "schemas/fixtures/helper/graph-status-response.v1.valid.json",
-            "schemas/fixtures/helper/graph-status-response.v1.invalid.json",
-            crate::GraphHelperStatusResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:graph-rebuild-response:v1",
-            "helper/graph-rebuild-response.v1.schema.json",
-            "Graph Helper Rebuild Response v1",
-            "helper.graph.rebuild.response",
-            "schemas/fixtures/helper/graph-rebuild-response.v1.valid.json",
-            "schemas/fixtures/helper/graph-rebuild-response.v1.invalid.json",
-            crate::GraphHelperRebuildResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:graph-sync-response:v1",
-            "helper/graph-sync-response.v1.schema.json",
-            "Graph Helper Sync Response v1",
-            "helper.graph.sync.response",
-            "schemas/fixtures/helper/graph-sync-response.v1.valid.json",
-            "schemas/fixtures/helper/graph-sync-response.v1.invalid.json",
-            crate::GraphHelperSyncResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:graph-neighbors-response:v1",
-            "helper/graph-neighbors-response.v1.schema.json",
-            "Graph Helper Neighbors Response v1",
-            "helper.graph.neighbors.response",
-            "schemas/fixtures/helper/graph-neighbors-response.v1.valid.json",
-            "schemas/fixtures/helper/graph-neighbors-response.v1.invalid.json",
-            crate::GraphHelperNeighborsResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:graph-query-response:v1",
-            "helper/graph-query-response.v1.schema.json",
-            "Graph Helper Query Response v1",
-            "helper.graph.query.response",
-            "schemas/fixtures/helper/graph-query-response.v1.valid.json",
-            "schemas/fixtures/helper/graph-query-response.v1.invalid.json",
-            crate::GraphHelperQueryResponse
         ),
         response_schema_root!(
             "urn:kanban-tool:schema:helper:vector-handshake-response:v1",

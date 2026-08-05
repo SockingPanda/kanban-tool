@@ -1,21 +1,59 @@
 {
   "$defs": {
-    "CliGraphStatus": {
+    "CliGraphMaintenance": {
       "additionalProperties": false,
       "properties": {
-        "backend": {
+        "board_id": {
           "type": "string"
         },
-        "enabled": {
-          "type": "boolean"
+        "consumed_jobs": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "string"
         },
         "message": {
           "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "pending_jobs": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "validated_entities": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "validated_relations": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "validated_tasks": {
+          "format": "int64",
+          "type": "integer"
         }
       },
       "required": [
-        "backend",
-        "enabled",
+        "mode",
+        "board_id",
+        "generation",
+        "fingerprint",
+        "validated_tasks",
+        "validated_entities",
+        "validated_relations",
+        "pending_jobs",
+        "consumed_jobs",
+        "updated_at",
         "message"
       ],
       "type": "object"
@@ -26,7 +64,7 @@
   "additionalProperties": false,
   "properties": {
     "data": {
-      "$ref": "#/$defs/CliGraphStatus"
+      "$ref": "#/$defs/CliGraphMaintenance"
     }
   },
   "required": [

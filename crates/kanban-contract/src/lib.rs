@@ -107,11 +107,13 @@ pub use dependencies::{
 pub use derived::{
     ApiRelation, ApiRelationProvenance, BlockedReasonCount, BoardQuery, BuildContextPath,
     BuildContextQuery, BuildContextResponse, ContextDiagnostic, ContextItem, ContextPack,
-    ContextPolicy, GraphNeighborsQuery, GraphNeighborsResponse, GraphStatus, GraphStatusResponse,
-    ListEventsQuery, QueueStats, SearchMeta, SearchPageMeta, SearchStatus, SearchStatusResponse,
-    SearchTaskHit, SearchTaskStatusWindow, SearchTaskStatusWindows, SearchTasksByStatusResponse,
-    SearchTasksData, SearchTasksQuery, SearchTasksResponse, StaleClaim, StatsResponse, StatusCount,
-    VectorStatus, VectorStatusResponse,
+    ContextPolicy, EntityListQuery, EntityListResponse, EntityPath, EntityResponse,
+    EntityUpsertRequest, GraphMaintenance, GraphMaintenanceResponse, GraphNeighborsQuery,
+    GraphNeighborsResponse, GraphQueryQuery, GraphStatus, GraphStatusResponse, ListEventsQuery,
+    QueueStats, SearchMeta, SearchPageMeta, SearchStatus, SearchStatusResponse, SearchTaskHit,
+    SearchTaskStatusWindow, SearchTaskStatusWindows, SearchTasksByStatusResponse, SearchTasksData,
+    SearchTasksQuery, SearchTasksResponse, StaleClaim, StatsResponse, StatusCount, VectorStatus,
+    VectorStatusResponse,
 };
 pub use endpoint::{
     EndpointDescriptor, EndpointObligation, EndpointObligationKind, EndpointObligations,

@@ -1,6 +1,6 @@
 {
   "$defs": {
-    "CliGraphMaintenance": {
+    "GraphMaintenance": {
       "additionalProperties": false,
       "properties": {
         "board_id": {
@@ -59,17 +59,17 @@
       "type": "object"
     }
   },
-  "$id": "urn:kanban-tool:schema:cli:graph-sync-output:v1",
+  "$id": "urn:kanban-tool:schema:api:graph-rebuild-response:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
     "data": {
-      "$ref": "#/$defs/CliGraphMaintenance"
+      "$ref": "#/$defs/GraphMaintenance"
     }
   },
   "required": [
     "data"
   ],
-  "title": "Kanban CLI graph sync output v1",
+  "title": "Kanban graph rebuild response v1",
   "type": "object"
 }

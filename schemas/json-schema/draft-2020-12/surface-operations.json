@@ -982,6 +982,72 @@
   },
   {
     "contracts": [
+      "api.graph-query.query",
+      "api.graph-query.headers",
+      "api.graph-query.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/graph/query",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.graph-rebuild.query",
+      "api.graph-rebuild.headers",
+      "api.graph-rebuild.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/graph/rebuild",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.graph-sync.query",
+      "api.graph-sync.headers",
+      "api.graph-sync.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/graph/sync",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.entity-list.query",
+      "api.entity-list.headers",
+      "api.entity-list.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/entities",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.upsert-entity.headers",
+      "api.entity-upsert.request",
+      "api.entity-upsert.response"
+    ],
+    "exclusion": null,
+    "key": "PUT /api/v1/entities",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.entity.path",
+      "api.entity.headers",
+      "api.entity.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/entities/:uri",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
       "api.vector-status.query",
       "api.vector-status.headers",
       "api.vector-status.response"
@@ -2327,66 +2393,52 @@
     "surface": "config"
   },
   {
-    "contracts": [
-      "helper.graph.handshake.response"
-    ],
-    "exclusion": null,
+    "contracts": [],
+    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
     "key": "graph helper handshake response",
-    "migration": "adopted",
+    "migration": "excluded",
     "surface": "helper"
   },
   {
-    "contracts": [
-      "helper.graph.error.response"
-    ],
-    "exclusion": null,
+    "contracts": [],
+    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
     "key": "graph helper error response",
-    "migration": "adopted",
+    "migration": "excluded",
     "surface": "helper"
   },
   {
-    "contracts": [
-      "helper.graph.status.response"
-    ],
-    "exclusion": null,
+    "contracts": [],
+    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
     "key": "graph helper status response",
-    "migration": "adopted",
+    "migration": "excluded",
     "surface": "helper"
   },
   {
-    "contracts": [
-      "helper.graph.rebuild.response"
-    ],
-    "exclusion": null,
+    "contracts": [],
+    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
     "key": "graph helper rebuild response",
-    "migration": "adopted",
+    "migration": "excluded",
     "surface": "helper"
   },
   {
-    "contracts": [
-      "helper.graph.sync.response"
-    ],
-    "exclusion": null,
+    "contracts": [],
+    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
     "key": "graph helper sync response",
-    "migration": "adopted",
+    "migration": "excluded",
     "surface": "helper"
   },
   {
-    "contracts": [
-      "helper.graph.neighbors.response"
-    ],
-    "exclusion": null,
+    "contracts": [],
+    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
     "key": "graph helper neighbors response",
-    "migration": "adopted",
+    "migration": "excluded",
     "surface": "helper"
   },
   {
-    "contracts": [
-      "helper.graph.query.response"
-    ],
-    "exclusion": null,
+    "contracts": [],
+    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
     "key": "graph helper query response",
-    "migration": "adopted",
+    "migration": "excluded",
     "surface": "helper"
   },
   {

@@ -17,8 +17,26 @@ pub struct CliGraphStatus {
 }
 
 pub type CliGraphStatusOutput = DataEnvelope<CliGraphStatus>;
-pub type CliGraphRebuildOutput = DataEnvelope<CliGraphStatus>;
-pub type CliGraphSyncOutput = DataEnvelope<CliGraphStatus>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct CliGraphMaintenance {
+    pub mode: String,
+    pub board_id: String,
+    pub generation: String,
+    pub fingerprint: String,
+    pub validated_tasks: i64,
+    pub validated_entities: i64,
+    pub validated_relations: i64,
+    pub pending_jobs: i64,
+    pub consumed_jobs: i64,
+    pub updated_at: i64,
+    pub message: String,
+}
+
+pub type CliGraphRebuildOutput = DataEnvelope<CliGraphMaintenance>;
+pub type CliGraphSyncOutput = DataEnvelope<CliGraphMaintenance>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

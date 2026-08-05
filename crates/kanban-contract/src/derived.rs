@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{ApiTask, ApiTaskStatus, DataEnvelope, MetadataEnvelope, OffsetPaginationMeta};
+use crate::{
+    ApiTask, ApiTaskStatus, CliEntityListOutput, CliEntityShowOutput, DataEnvelope,
+    MetadataEnvelope, OffsetPaginationMeta,
+};
 use serde::de::{self, Visitor};
 
 fn deserialize_required_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
@@ -538,6 +541,90 @@ pub struct GraphStatus {
     pub message: String,
 }
 pub type GraphStatusResponse = DataEnvelope<GraphStatus>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default, deny_unknown_fields)]
+pub struct GraphQueryQuery {
+    pub board: String,
+    pub query: String,
+    pub limit: usize,
+}
+
+impl Default for GraphQueryQuery {
+    fn default() -> Self {
+        Self {
+            board: default_board(),
+            query: "SELECT ?subject ?predicate ?object WHERE { ?subject ?predicate ?object }"
+                .to_owned(),
+            limit: 100,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct GraphMaintenance {
+    pub mode: String,
+    pub board_id: String,
+    pub generation: String,
+    pub fingerprint: String,
+    pub validated_tasks: i64,
+    pub validated_entities: i64,
+    pub validated_relations: i64,
+    pub pending_jobs: i64,
+    pub consumed_jobs: i64,
+    pub updated_at: i64,
+    pub message: String,
+}
+
+pub type GraphMaintenanceResponse = DataEnvelope<GraphMaintenance>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(default, deny_unknown_fields)]
+pub struct EntityListQuery {
+    pub board: Option<String>,
+    pub kind: Option<String>,
+    pub limit: usize,
+}
+
+impl Default for EntityListQuery {
+    fn default() -> Self {
+        Self {
+            board: None,
+            kind: None,
+            limit: 100,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct EntityPath {
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct EntityUpsertRequest {
+    pub uri: String,
+    pub kind: String,
+    pub source_table: String,
+    pub source_id: String,
+    pub board: Option<String>,
+    pub task_id: Option<String>,
+    pub title: Option<String>,
+    pub summary: Option<String>,
+    pub content_hash: Option<String>,
+    pub archived_at: Option<i64>,
+}
+
+pub type EntityListResponse = CliEntityListOutput;
+pub type EntityResponse = CliEntityShowOutput;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

@@ -299,13 +299,19 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
         .iter()
         .filter(|endpoint| endpoint.operation_id != "sse.stream-events")
         .collect::<Vec<_>>();
-    assert_eq!(endpoints.len(), 98);
+    // 当前基线已有 98 个 JSON endpoint，本提交相对 graph 基线新增 6 个。
+    assert_eq!(endpoints.len(), 104);
 
     for endpoint in endpoints {
-        let expected_id = format!("{}.headers", endpoint.operation_id);
+        let EndpointObligation::Contract(expected_id) = endpoint.obligations.headers else {
+            panic!(
+                "{} must declare an exact header contract",
+                endpoint.operation_id
+            );
+        };
         assert_eq!(
             endpoint.obligations.headers,
-            EndpointObligation::Contract(Box::leak(expected_id.clone().into_boxed_str())),
+            EndpointObligation::Contract(expected_id),
             "{}",
             endpoint.operation_id
         );
@@ -678,7 +684,7 @@ fn foundation_registry_contains_generated_roots() {
         .filter(|id| id.contains(":api:") && id.ends_with("-headers:v1"))
         .copied()
         .collect::<BTreeSet<_>>();
-    assert_eq!(header_roots.len(), 98);
+    assert_eq!(header_roots.len(), 104);
     actual.retain(|id| !header_roots.contains(id));
     let mut expected = BTreeSet::from([
         "urn:kanban-tool:schema:api:accept-label-proposal-body:v1",
@@ -925,10 +931,22 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:build-context-path:v1",
         "urn:kanban-tool:schema:api:build-context-query:v1",
         "urn:kanban-tool:schema:api:build-context-response:v1",
+        "urn:kanban-tool:schema:api:entity-list-query:v1",
+        "urn:kanban-tool:schema:api:entity-list-response:v1",
+        "urn:kanban-tool:schema:api:entity-path:v1",
+        "urn:kanban-tool:schema:api:entity-response:v1",
+        "urn:kanban-tool:schema:api:entity-upsert-request:v1",
+        "urn:kanban-tool:schema:api:entity-upsert-response:v1",
         "urn:kanban-tool:schema:api:graph-status-query:v1",
         "urn:kanban-tool:schema:api:graph-status-response:v1",
         "urn:kanban-tool:schema:api:graph-neighbors-query:v1",
         "urn:kanban-tool:schema:api:graph-neighbors-response:v1",
+        "urn:kanban-tool:schema:api:graph-query-query:v1",
+        "urn:kanban-tool:schema:api:graph-query-response:v1",
+        "urn:kanban-tool:schema:api:graph-rebuild-query:v1",
+        "urn:kanban-tool:schema:api:graph-rebuild-response:v1",
+        "urn:kanban-tool:schema:api:graph-sync-query:v1",
+        "urn:kanban-tool:schema:api:graph-sync-response:v1",
         "urn:kanban-tool:schema:api:vector-status-query:v1",
         "urn:kanban-tool:schema:api:vector-status-response:v1",
         "urn:kanban-tool:schema:api:list-events-query:v1",
@@ -1031,8 +1049,8 @@ fn endpoint_descriptor_catalog_is_complete_and_explicit() {
     let endpoints = endpoint_catalog();
     assert_eq!(
         endpoints.len(),
-        99,
-        "98 JSON API + 1 SSE 必须全部有 descriptor"
+        105,
+        "104 JSON API + 1 SSE 必须全部有 descriptor"
     );
     assert_eq!(
         endpoints
@@ -1802,7 +1820,7 @@ fn current_train_freeze_requires_closed_authority() {
             EndpointObligation::Excluded { .. } => excluded += 1,
         }
     }
-    assert_eq!((contract, todo, not_applicable, excluded), (345, 0, 248, 1));
+    assert_eq!((contract, todo, not_applicable, excluded), (363, 0, 266, 1));
     let unfinished_contracts = operation_inventory()
         .iter()
         .filter(|contract| {
@@ -1846,13 +1864,6 @@ fn config_and_helper_protocols_have_exact_roots_surfaces_and_witnesses() {
     let expected = [
         "config.project.input",
         "config.selected-worker-profile.input",
-        "helper.graph.handshake.response",
-        "helper.graph.error.response",
-        "helper.graph.status.response",
-        "helper.graph.rebuild.response",
-        "helper.graph.sync.response",
-        "helper.graph.neighbors.response",
-        "helper.graph.query.response",
         "helper.vector.handshake.response",
         "helper.vector.error.response",
         "helper.vector.check-provider.response",

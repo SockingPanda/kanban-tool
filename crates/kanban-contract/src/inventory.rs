@@ -744,6 +744,38 @@ const GRAPH_NEIGHBORS_QUERY_PARAMETERS: &[WireParameter] = &[
         cardinality: Some(WireParameterCardinality::OptionalOne),
     },
 ];
+const GRAPH_QUERY_QUERY_PARAMETERS: &[WireParameter] = &[
+    WireParameter {
+        name: "board",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "query",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "limit",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+];
+const ENTITY_LIST_QUERY_PARAMETERS: &[WireParameter] = &[
+    WireParameter {
+        name: "board",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "kind",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "limit",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+];
+const ENTITY_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
+    name: "uri",
+    cardinality: Some(WireParameterCardinality::RequiredOne),
+}];
 const SEARCH_QUERY_PARAMETERS: &[WireParameter] = &[
     WireParameter {
         name: "board",
@@ -1884,6 +1916,124 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/graph-neighbors-response.v1.valid.json",
         "suite::derived_adoption::graph_neighbors_response_fixture_is_produced_by_real_router",
         "suite::derived_adoption::graph_neighbors_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_parameter_contract!(
+        "api.graph-query.query",
+        "GET /api/v1/graph/query query",
+        "GET /api/v1/graph/query",
+        "urn:kanban-tool:schema:api:graph-query-query:v1",
+        "schemas/fixtures/api/graph-query-query.v1.valid.json",
+        "suite::graph_adoption::graph_query_query_dto_serializes_to_committed_fixture",
+        "suite::graph_adoption::graph_query_query_fixture_is_consumed_by_real_router",
+        HttpTransportLocation::Query,
+        GRAPH_QUERY_QUERY_PARAMETERS
+    ),
+    adopted_api_response_contract!(
+        "api.graph-query.response",
+        "GET /api/v1/graph/query response",
+        "GET /api/v1/graph/query",
+        "urn:kanban-tool:schema:api:graph-query-response:v1",
+        "schemas/fixtures/api/graph-query-response.v1.valid.json",
+        "suite::graph_adoption::graph_query_response_fixture_is_produced_by_real_router",
+        "suite::graph_adoption::graph_query_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_parameter_contract!(
+        "api.graph-rebuild.query",
+        "POST /api/v1/graph/rebuild query",
+        "POST /api/v1/graph/rebuild",
+        "urn:kanban-tool:schema:api:graph-rebuild-query:v1",
+        "schemas/fixtures/api/graph-rebuild-query.v1.valid.json",
+        "suite::graph_adoption::graph_rebuild_query_dto_serializes_to_committed_fixture",
+        "suite::graph_adoption::graph_rebuild_query_fixture_is_consumed_by_real_router",
+        HttpTransportLocation::Query,
+        BOARD_QUERY_PARAMETERS
+    ),
+    adopted_api_response_contract!(
+        "api.graph-rebuild.response",
+        "POST /api/v1/graph/rebuild response",
+        "POST /api/v1/graph/rebuild",
+        "urn:kanban-tool:schema:api:graph-rebuild-response:v1",
+        "schemas/fixtures/api/graph-rebuild-response.v1.valid.json",
+        "suite::graph_adoption::graph_rebuild_response_fixture_is_produced_by_real_router",
+        "suite::graph_adoption::graph_rebuild_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_parameter_contract!(
+        "api.graph-sync.query",
+        "POST /api/v1/graph/sync query",
+        "POST /api/v1/graph/sync",
+        "urn:kanban-tool:schema:api:graph-sync-query:v1",
+        "schemas/fixtures/api/graph-sync-query.v1.valid.json",
+        "suite::graph_adoption::graph_sync_query_dto_serializes_to_committed_fixture",
+        "suite::graph_adoption::graph_sync_query_fixture_is_consumed_by_real_router",
+        HttpTransportLocation::Query,
+        BOARD_QUERY_PARAMETERS
+    ),
+    adopted_api_response_contract!(
+        "api.graph-sync.response",
+        "POST /api/v1/graph/sync response",
+        "POST /api/v1/graph/sync",
+        "urn:kanban-tool:schema:api:graph-sync-response:v1",
+        "schemas/fixtures/api/graph-sync-response.v1.valid.json",
+        "suite::graph_adoption::graph_sync_response_fixture_is_produced_by_real_router",
+        "suite::graph_adoption::graph_sync_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_parameter_contract!(
+        "api.entity-list.query",
+        "GET /api/v1/entities query",
+        "GET /api/v1/entities",
+        "urn:kanban-tool:schema:api:entity-list-query:v1",
+        "schemas/fixtures/api/entity-list-query.v1.valid.json",
+        "suite::entity_adoption::entity_list_query_dto_serializes_to_committed_fixture",
+        "suite::entity_adoption::entity_list_query_fixture_is_consumed_by_real_router",
+        HttpTransportLocation::Query,
+        ENTITY_LIST_QUERY_PARAMETERS
+    ),
+    adopted_api_response_contract!(
+        "api.entity-list.response",
+        "GET /api/v1/entities response",
+        "GET /api/v1/entities",
+        "urn:kanban-tool:schema:api:entity-list-response:v1",
+        "schemas/fixtures/api/entity-list-response.v1.valid.json",
+        "suite::entity_adoption::entity_list_response_fixture_is_produced_by_real_router",
+        "suite::entity_adoption::entity_list_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_parameter_contract!(
+        "api.entity.path",
+        "GET /api/v1/entities/:uri path",
+        "GET /api/v1/entities/:uri",
+        "urn:kanban-tool:schema:api:entity-path:v1",
+        "schemas/fixtures/api/entity-path.v1.valid.json",
+        "suite::entity_adoption::entity_path_dto_serializes_to_committed_fixture",
+        "suite::entity_adoption::entity_path_fixture_is_consumed_by_real_router",
+        HttpTransportLocation::Path,
+        ENTITY_PATH_PARAMETERS
+    ),
+    adopted_api_response_contract!(
+        "api.entity.response",
+        "GET /api/v1/entities/:uri response",
+        "GET /api/v1/entities/:uri",
+        "urn:kanban-tool:schema:api:entity-response:v1",
+        "schemas/fixtures/api/entity-response.v1.valid.json",
+        "suite::entity_adoption::entity_response_fixture_is_produced_by_real_router",
+        "suite::entity_adoption::entity_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_request!(
+        "api.entity-upsert.request",
+        "PUT /api/v1/entities body",
+        "PUT /api/v1/entities",
+        "urn:kanban-tool:schema:api:entity-upsert-request:v1",
+        "schemas/fixtures/api/entity-upsert-request.v1.valid.json",
+        "suite::entity_adoption::entity_upsert_request_dto_serializes_to_committed_fixture",
+        "suite::entity_adoption::entity_upsert_request_fixture_is_consumed_by_real_router"
+    ),
+    adopted_api_response_contract!(
+        "api.entity-upsert.response",
+        "PUT /api/v1/entities response",
+        "PUT /api/v1/entities",
+        "urn:kanban-tool:schema:api:entity-upsert-response:v1",
+        "schemas/fixtures/api/entity-upsert-response.v1.valid.json",
+        "suite::entity_adoption::entity_upsert_response_fixture_is_produced_by_real_router",
+        "suite::entity_adoption::entity_upsert_response_fixture_is_consumed_by_contract_root"
     ),
     adopted_api_parameter_contract!(
         "api.vector-status.query",
@@ -4821,118 +4971,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         binding: ContractBinding::ExactSurface,
     },
     OperationContract {
-        id: "helper.graph.handshake.response",
-        path: "kanban-graph-oxigraph handshake stdout",
-        surface: ContractSurface::Helper,
-        operation: "graph helper handshake response",
-        direction: ContractDirection::Serialize,
-        granularity: ContractGranularity::Exact,
-        strictness: ContractStrictness::DenyUnknownFields,
-        schema_id: None,
-        fixture: None,
-        adoption: None,
-        exclusion: None,
-        migration: MigrationState::Planned,
-        transport: ContractTransport::NoTransport,
-        binding: ContractBinding::ExactSurface,
-    },
-    OperationContract {
-        id: "helper.graph.error.response",
-        path: "kanban-graph-oxigraph error stdout",
-        surface: ContractSurface::Helper,
-        operation: "graph helper error response",
-        direction: ContractDirection::Serialize,
-        granularity: ContractGranularity::Exact,
-        strictness: ContractStrictness::DenyUnknownFields,
-        schema_id: None,
-        fixture: None,
-        adoption: None,
-        exclusion: None,
-        migration: MigrationState::Planned,
-        transport: ContractTransport::NoTransport,
-        binding: ContractBinding::ExactSurface,
-    },
-    OperationContract {
-        id: "helper.graph.status.response",
-        path: "kanban-graph-oxigraph status stdout",
-        surface: ContractSurface::Helper,
-        operation: "graph helper status response",
-        direction: ContractDirection::Serialize,
-        granularity: ContractGranularity::Exact,
-        strictness: ContractStrictness::DenyUnknownFields,
-        schema_id: None,
-        fixture: None,
-        adoption: None,
-        exclusion: None,
-        migration: MigrationState::Planned,
-        transport: ContractTransport::NoTransport,
-        binding: ContractBinding::ExactSurface,
-    },
-    OperationContract {
-        id: "helper.graph.rebuild.response",
-        path: "kanban-graph-oxigraph rebuild stdout",
-        surface: ContractSurface::Helper,
-        operation: "graph helper rebuild response",
-        direction: ContractDirection::Serialize,
-        granularity: ContractGranularity::Exact,
-        strictness: ContractStrictness::DenyUnknownFields,
-        schema_id: None,
-        fixture: None,
-        adoption: None,
-        exclusion: None,
-        migration: MigrationState::Planned,
-        transport: ContractTransport::NoTransport,
-        binding: ContractBinding::ExactSurface,
-    },
-    OperationContract {
-        id: "helper.graph.sync.response",
-        path: "kanban-graph-oxigraph sync stdout",
-        surface: ContractSurface::Helper,
-        operation: "graph helper sync response",
-        direction: ContractDirection::Serialize,
-        granularity: ContractGranularity::Exact,
-        strictness: ContractStrictness::DenyUnknownFields,
-        schema_id: None,
-        fixture: None,
-        adoption: None,
-        exclusion: None,
-        migration: MigrationState::Planned,
-        transport: ContractTransport::NoTransport,
-        binding: ContractBinding::ExactSurface,
-    },
-    OperationContract {
-        id: "helper.graph.neighbors.response",
-        path: "kanban-graph-oxigraph neighbors stdout",
-        surface: ContractSurface::Helper,
-        operation: "graph helper neighbors response",
-        direction: ContractDirection::Serialize,
-        granularity: ContractGranularity::Exact,
-        strictness: ContractStrictness::DenyUnknownFields,
-        schema_id: None,
-        fixture: None,
-        adoption: None,
-        exclusion: None,
-        migration: MigrationState::Planned,
-        transport: ContractTransport::NoTransport,
-        binding: ContractBinding::ExactSurface,
-    },
-    OperationContract {
-        id: "helper.graph.query.response",
-        path: "kanban-graph-oxigraph query stdout",
-        surface: ContractSurface::Helper,
-        operation: "graph helper query response",
-        direction: ContractDirection::Serialize,
-        granularity: ContractGranularity::Exact,
-        strictness: ContractStrictness::DenyUnknownFields,
-        schema_id: None,
-        fixture: None,
-        adoption: None,
-        exclusion: None,
-        migration: MigrationState::Planned,
-        transport: ContractTransport::NoTransport,
-        binding: ContractBinding::ExactSurface,
-    },
-    OperationContract {
         id: "helper.vector.handshake.response",
         path: "kanban-vector-lancedb handshake stdout",
         surface: ContractSurface::Helper,
@@ -6281,41 +6319,6 @@ fn protocol_adoption_spec(id: &str) -> Option<ProtocolAdoptionSpec> {
             "tests::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto",
             "tests::selected_worker_profile_input_fixture_is_consumed_by_real_toml_decoder",
         ),
-        "helper.graph.handshake.response" => graph_protocol_spec(
-            "graph-handshake-response",
-            "graph_helper_handshake_response_fixture_is_produced_by_real_helper_adapter",
-            "graph_helper_handshake_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        ),
-        "helper.graph.error.response" => graph_protocol_spec(
-            "graph-error-response",
-            "graph_helper_error_response_fixture_is_produced_by_real_helper_adapter",
-            "graph_helper_error_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        ),
-        "helper.graph.status.response" => graph_protocol_spec(
-            "graph-status-response",
-            "graph_helper_status_response_fixture_is_produced_by_real_helper_adapter",
-            "graph_helper_status_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        ),
-        "helper.graph.rebuild.response" => graph_protocol_spec(
-            "graph-rebuild-response",
-            "graph_helper_rebuild_response_fixture_is_produced_by_real_helper_adapter",
-            "graph_helper_rebuild_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        ),
-        "helper.graph.sync.response" => graph_protocol_spec(
-            "graph-sync-response",
-            "graph_helper_sync_response_fixture_is_produced_by_real_helper_adapter",
-            "graph_helper_sync_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        ),
-        "helper.graph.neighbors.response" => graph_protocol_spec(
-            "graph-neighbors-response",
-            "graph_helper_neighbors_response_fixture_is_produced_by_real_helper_adapter",
-            "graph_helper_neighbors_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        ),
-        "helper.graph.query.response" => graph_protocol_spec(
-            "graph-query-response",
-            "graph_helper_query_response_fixture_is_produced_by_real_helper_adapter",
-            "graph_helper_query_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        ),
         "helper.vector.handshake.response" => vector_protocol_spec(
             "vector-handshake-response",
             "vector_helper_handshake_response_fixture_is_produced_by_real_helper_adapter",
@@ -6381,14 +6384,6 @@ fn protocol_adoption_spec(id: &str) -> Option<ProtocolAdoptionSpec> {
     Some(spec)
 }
 
-fn graph_protocol_spec(
-    slug: &'static str,
-    producer: &'static str,
-    consumer: &'static str,
-) -> ProtocolAdoptionSpec {
-    helper_protocol_spec(slug, "kanban-graph-oxigraph", producer, consumer)
-}
-
 fn vector_protocol_spec(
     slug: &'static str,
     producer: &'static str,
@@ -6404,34 +6399,6 @@ fn helper_protocol_spec(
     consumer: &'static str,
 ) -> ProtocolAdoptionSpec {
     let (schema_id, fixture) = match slug {
-        "graph-handshake-response" => (
-            "urn:kanban-tool:schema:helper:graph-handshake-response:v1",
-            "schemas/fixtures/helper/graph-handshake-response.v1.valid.json",
-        ),
-        "graph-error-response" => (
-            "urn:kanban-tool:schema:helper:graph-error-response:v1",
-            "schemas/fixtures/helper/graph-error-response.v1.valid.json",
-        ),
-        "graph-status-response" => (
-            "urn:kanban-tool:schema:helper:graph-status-response:v1",
-            "schemas/fixtures/helper/graph-status-response.v1.valid.json",
-        ),
-        "graph-rebuild-response" => (
-            "urn:kanban-tool:schema:helper:graph-rebuild-response:v1",
-            "schemas/fixtures/helper/graph-rebuild-response.v1.valid.json",
-        ),
-        "graph-sync-response" => (
-            "urn:kanban-tool:schema:helper:graph-sync-response:v1",
-            "schemas/fixtures/helper/graph-sync-response.v1.valid.json",
-        ),
-        "graph-neighbors-response" => (
-            "urn:kanban-tool:schema:helper:graph-neighbors-response:v1",
-            "schemas/fixtures/helper/graph-neighbors-response.v1.valid.json",
-        ),
-        "graph-query-response" => (
-            "urn:kanban-tool:schema:helper:graph-query-response:v1",
-            "schemas/fixtures/helper/graph-query-response.v1.valid.json",
-        ),
         "vector-handshake-response" => (
             "urn:kanban-tool:schema:helper:vector-handshake-response:v1",
             "schemas/fixtures/helper/vector-handshake-response.v1.valid.json",

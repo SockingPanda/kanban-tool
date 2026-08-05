@@ -5377,6 +5377,539 @@
   {
     "adoption": {
       "consumer": {
+        "contract_id": "api.graph-query.query",
+        "direction": "deserialize",
+        "exact_test": "suite::graph_adoption::graph_query_query_fixture_is_consumed_by_real_router",
+        "operation": "GET /api/v1/graph/query",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.graph-query.query",
+        "direction": "deserialize",
+        "exact_test": "suite::graph_adoption::graph_query_query_dto_serializes_to_committed_fixture",
+        "operation": "GET /api/v1/graph/query",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/graph-query-query.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/graph-query-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.graph-query.query",
+    "migration": "adopted",
+    "operation": "GET /api/v1/graph/query",
+    "path": "GET /api/v1/graph/query query",
+    "schema_id": "urn:kanban-tool:schema:api:graph-query-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "GET /api/v1/graph/query",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "query"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "limit"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.graph-query.response",
+        "direction": "serialize",
+        "exact_test": "suite::graph_adoption::graph_query_response_fixture_is_consumed_by_contract_root",
+        "operation": "GET /api/v1/graph/query",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.graph-query.response",
+        "direction": "serialize",
+        "exact_test": "suite::graph_adoption::graph_query_response_fixture_is_produced_by_real_router",
+        "operation": "GET /api/v1/graph/query",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/graph-query-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/graph-query-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.graph-query.response",
+    "migration": "adopted",
+    "operation": "GET /api/v1/graph/query",
+    "path": "GET /api/v1/graph/query response",
+    "schema_id": "urn:kanban-tool:schema:api:graph-query-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/graph/query",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.graph-rebuild.query",
+        "direction": "deserialize",
+        "exact_test": "suite::graph_adoption::graph_rebuild_query_fixture_is_consumed_by_real_router",
+        "operation": "POST /api/v1/graph/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.graph-rebuild.query",
+        "direction": "deserialize",
+        "exact_test": "suite::graph_adoption::graph_rebuild_query_dto_serializes_to_committed_fixture",
+        "operation": "POST /api/v1/graph/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/graph-rebuild-query.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/graph-rebuild-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.graph-rebuild.query",
+    "migration": "adopted",
+    "operation": "POST /api/v1/graph/rebuild",
+    "path": "POST /api/v1/graph/rebuild query",
+    "schema_id": "urn:kanban-tool:schema:api:graph-rebuild-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "POST /api/v1/graph/rebuild",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "board"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.graph-rebuild.response",
+        "direction": "serialize",
+        "exact_test": "suite::graph_adoption::graph_rebuild_response_fixture_is_consumed_by_contract_root",
+        "operation": "POST /api/v1/graph/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.graph-rebuild.response",
+        "direction": "serialize",
+        "exact_test": "suite::graph_adoption::graph_rebuild_response_fixture_is_produced_by_real_router",
+        "operation": "POST /api/v1/graph/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/graph-rebuild-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/graph-rebuild-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.graph-rebuild.response",
+    "migration": "adopted",
+    "operation": "POST /api/v1/graph/rebuild",
+    "path": "POST /api/v1/graph/rebuild response",
+    "schema_id": "urn:kanban-tool:schema:api:graph-rebuild-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/graph/rebuild",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.graph-sync.query",
+        "direction": "deserialize",
+        "exact_test": "suite::graph_adoption::graph_sync_query_fixture_is_consumed_by_real_router",
+        "operation": "POST /api/v1/graph/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.graph-sync.query",
+        "direction": "deserialize",
+        "exact_test": "suite::graph_adoption::graph_sync_query_dto_serializes_to_committed_fixture",
+        "operation": "POST /api/v1/graph/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/graph-sync-query.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/graph-sync-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.graph-sync.query",
+    "migration": "adopted",
+    "operation": "POST /api/v1/graph/sync",
+    "path": "POST /api/v1/graph/sync query",
+    "schema_id": "urn:kanban-tool:schema:api:graph-sync-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "POST /api/v1/graph/sync",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "board"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.graph-sync.response",
+        "direction": "serialize",
+        "exact_test": "suite::graph_adoption::graph_sync_response_fixture_is_consumed_by_contract_root",
+        "operation": "POST /api/v1/graph/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.graph-sync.response",
+        "direction": "serialize",
+        "exact_test": "suite::graph_adoption::graph_sync_response_fixture_is_produced_by_real_router",
+        "operation": "POST /api/v1/graph/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/graph-sync-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/graph-sync-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.graph-sync.response",
+    "migration": "adopted",
+    "operation": "POST /api/v1/graph/sync",
+    "path": "POST /api/v1/graph/sync response",
+    "schema_id": "urn:kanban-tool:schema:api:graph-sync-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/graph/sync",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.entity-list.query",
+        "direction": "deserialize",
+        "exact_test": "suite::entity_adoption::entity_list_query_fixture_is_consumed_by_real_router",
+        "operation": "GET /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.entity-list.query",
+        "direction": "deserialize",
+        "exact_test": "suite::entity_adoption::entity_list_query_dto_serializes_to_committed_fixture",
+        "operation": "GET /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/entity-list-query.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/entity-list-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.entity-list.query",
+    "migration": "adopted",
+    "operation": "GET /api/v1/entities",
+    "path": "GET /api/v1/entities query",
+    "schema_id": "urn:kanban-tool:schema:api:entity-list-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "GET /api/v1/entities",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "kind"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "limit"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.entity-list.response",
+        "direction": "serialize",
+        "exact_test": "suite::entity_adoption::entity_list_response_fixture_is_consumed_by_contract_root",
+        "operation": "GET /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.entity-list.response",
+        "direction": "serialize",
+        "exact_test": "suite::entity_adoption::entity_list_response_fixture_is_produced_by_real_router",
+        "operation": "GET /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/entity-list-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/entity-list-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.entity-list.response",
+    "migration": "adopted",
+    "operation": "GET /api/v1/entities",
+    "path": "GET /api/v1/entities response",
+    "schema_id": "urn:kanban-tool:schema:api:entity-list-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/entities",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.entity.path",
+        "direction": "deserialize",
+        "exact_test": "suite::entity_adoption::entity_path_fixture_is_consumed_by_real_router",
+        "operation": "GET /api/v1/entities/:uri",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.entity.path",
+        "direction": "deserialize",
+        "exact_test": "suite::entity_adoption::entity_path_dto_serializes_to_committed_fixture",
+        "operation": "GET /api/v1/entities/:uri",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/entity-path.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/entity-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.entity.path",
+    "migration": "adopted",
+    "operation": "GET /api/v1/entities/:uri",
+    "path": "GET /api/v1/entities/:uri path",
+    "schema_id": "urn:kanban-tool:schema:api:entity-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/entities/:uri",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "uri"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.entity.response",
+        "direction": "serialize",
+        "exact_test": "suite::entity_adoption::entity_response_fixture_is_consumed_by_contract_root",
+        "operation": "GET /api/v1/entities/:uri",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.entity.response",
+        "direction": "serialize",
+        "exact_test": "suite::entity_adoption::entity_response_fixture_is_produced_by_real_router",
+        "operation": "GET /api/v1/entities/:uri",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/entity-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/entity-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.entity.response",
+    "migration": "adopted",
+    "operation": "GET /api/v1/entities/:uri",
+    "path": "GET /api/v1/entities/:uri response",
+    "schema_id": "urn:kanban-tool:schema:api:entity-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/entities/:uri",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.entity-upsert.request",
+        "direction": "deserialize",
+        "exact_test": "suite::entity_adoption::entity_upsert_request_fixture_is_consumed_by_real_router",
+        "operation": "PUT /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.entity-upsert.request",
+        "direction": "deserialize",
+        "exact_test": "suite::entity_adoption::entity_upsert_request_dto_serializes_to_committed_fixture",
+        "operation": "PUT /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/entity-upsert-request.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/entity-upsert-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.entity-upsert.request",
+    "migration": "adopted",
+    "operation": "PUT /api/v1/entities",
+    "path": "PUT /api/v1/entities body",
+    "schema_id": "urn:kanban-tool:schema:api:entity-upsert-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "PUT /api/v1/entities",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.entity-upsert.response",
+        "direction": "serialize",
+        "exact_test": "suite::entity_adoption::entity_upsert_response_fixture_is_consumed_by_contract_root",
+        "operation": "PUT /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.entity-upsert.response",
+        "direction": "serialize",
+        "exact_test": "suite::entity_adoption::entity_upsert_response_fixture_is_produced_by_real_router",
+        "operation": "PUT /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/entity-upsert-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/entity-upsert-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.entity-upsert.response",
+    "migration": "adopted",
+    "operation": "PUT /api/v1/entities",
+    "path": "PUT /api/v1/entities response",
+    "schema_id": "urn:kanban-tool:schema:api:entity-upsert-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "PUT /api/v1/entities",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
         "contract_id": "api.vector-status.query",
         "direction": "deserialize",
         "exact_test": "suite::derived_adoption::vector_status_query_fixture_is_consumed_by_real_router",
@@ -14431,272 +14964,6 @@
   {
     "adoption": {
       "consumer": {
-        "contract_id": "helper.graph.handshake.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_handshake_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        "operation": "graph helper handshake response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer": {
-        "contract_id": "helper.graph.handshake.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_handshake_response_fixture_is_produced_by_real_helper_adapter",
-        "operation": "graph helper handshake response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/helper/graph-handshake-response.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/helper/graph-handshake-response.v1.valid.json",
-    "granularity": "exact",
-    "id": "helper.graph.handshake.response",
-    "migration": "adopted",
-    "operation": "graph helper handshake response",
-    "path": "kanban-graph-oxigraph handshake stdout",
-    "schema_id": "urn:kanban-tool:schema:helper:graph-handshake-response:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "helper",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "helper.graph.error.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_error_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        "operation": "graph helper error response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer": {
-        "contract_id": "helper.graph.error.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_error_response_fixture_is_produced_by_real_helper_adapter",
-        "operation": "graph helper error response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/helper/graph-error-response.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/helper/graph-error-response.v1.valid.json",
-    "granularity": "exact",
-    "id": "helper.graph.error.response",
-    "migration": "adopted",
-    "operation": "graph helper error response",
-    "path": "kanban-graph-oxigraph error stdout",
-    "schema_id": "urn:kanban-tool:schema:helper:graph-error-response:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "helper",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "helper.graph.status.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_status_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        "operation": "graph helper status response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer": {
-        "contract_id": "helper.graph.status.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_status_response_fixture_is_produced_by_real_helper_adapter",
-        "operation": "graph helper status response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/helper/graph-status-response.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/helper/graph-status-response.v1.valid.json",
-    "granularity": "exact",
-    "id": "helper.graph.status.response",
-    "migration": "adopted",
-    "operation": "graph helper status response",
-    "path": "kanban-graph-oxigraph status stdout",
-    "schema_id": "urn:kanban-tool:schema:helper:graph-status-response:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "helper",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "helper.graph.rebuild.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_rebuild_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        "operation": "graph helper rebuild response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer": {
-        "contract_id": "helper.graph.rebuild.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_rebuild_response_fixture_is_produced_by_real_helper_adapter",
-        "operation": "graph helper rebuild response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/helper/graph-rebuild-response.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/helper/graph-rebuild-response.v1.valid.json",
-    "granularity": "exact",
-    "id": "helper.graph.rebuild.response",
-    "migration": "adopted",
-    "operation": "graph helper rebuild response",
-    "path": "kanban-graph-oxigraph rebuild stdout",
-    "schema_id": "urn:kanban-tool:schema:helper:graph-rebuild-response:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "helper",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "helper.graph.sync.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_sync_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        "operation": "graph helper sync response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer": {
-        "contract_id": "helper.graph.sync.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_sync_response_fixture_is_produced_by_real_helper_adapter",
-        "operation": "graph helper sync response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/helper/graph-sync-response.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/helper/graph-sync-response.v1.valid.json",
-    "granularity": "exact",
-    "id": "helper.graph.sync.response",
-    "migration": "adopted",
-    "operation": "graph helper sync response",
-    "path": "kanban-graph-oxigraph sync stdout",
-    "schema_id": "urn:kanban-tool:schema:helper:graph-sync-response:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "helper",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "helper.graph.neighbors.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_neighbors_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        "operation": "graph helper neighbors response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer": {
-        "contract_id": "helper.graph.neighbors.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_neighbors_response_fixture_is_produced_by_real_helper_adapter",
-        "operation": "graph helper neighbors response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/helper/graph-neighbors-response.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/helper/graph-neighbors-response.v1.valid.json",
-    "granularity": "exact",
-    "id": "helper.graph.neighbors.response",
-    "migration": "adopted",
-    "operation": "graph helper neighbors response",
-    "path": "kanban-graph-oxigraph neighbors stdout",
-    "schema_id": "urn:kanban-tool:schema:helper:graph-neighbors-response:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "helper",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "helper.graph.query.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_query_response_fixture_is_consumed_by_runtime_protocol_decoder",
-        "operation": "graph helper query response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer": {
-        "contract_id": "helper.graph.query.response",
-        "direction": "serialize",
-        "exact_test": "graph_helper_query_response_fixture_is_produced_by_real_helper_adapter",
-        "operation": "graph helper query response",
-        "package": "kanban-graph-oxigraph",
-        "surface": "helper",
-        "test_target": "helper_protocol_contract_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/helper/graph-query-response.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/helper/graph-query-response.v1.valid.json",
-    "granularity": "exact",
-    "id": "helper.graph.query.response",
-    "migration": "adopted",
-    "operation": "graph helper query response",
-    "path": "kanban-graph-oxigraph query stdout",
-    "schema_id": "urn:kanban-tool:schema:helper:graph-query-response:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "helper",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
         "contract_id": "helper.vector.handshake.response",
         "direction": "serialize",
         "exact_test": "vector_helper_handshake_response_fixture_is_consumed_by_runtime_protocol_decoder",
@@ -21525,6 +21792,286 @@
       "kind": "http",
       "location": "headers",
       "operation_key": "GET /api/v1/graph/neighbors",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.graph-query.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "GET /api/v1/graph/query",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.graph-query.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "GET /api/v1/graph/query",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.graph-query.headers",
+    "migration": "adopted",
+    "operation": "GET /api/v1/graph/query",
+    "path": "GET /api/v1/graph/query headers",
+    "schema_id": "urn:kanban-tool:schema:api:graph-query-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/graph/query",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.graph-rebuild.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "POST /api/v1/graph/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.graph-rebuild.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "POST /api/v1/graph/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.graph-rebuild.headers",
+    "migration": "adopted",
+    "operation": "POST /api/v1/graph/rebuild",
+    "path": "POST /api/v1/graph/rebuild headers",
+    "schema_id": "urn:kanban-tool:schema:api:graph-rebuild-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/graph/rebuild",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.graph-sync.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "POST /api/v1/graph/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.graph-sync.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "POST /api/v1/graph/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.graph-sync.headers",
+    "migration": "adopted",
+    "operation": "POST /api/v1/graph/sync",
+    "path": "POST /api/v1/graph/sync headers",
+    "schema_id": "urn:kanban-tool:schema:api:graph-sync-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/graph/sync",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.entity-list.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "GET /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.entity-list.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "GET /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.entity-list.headers",
+    "migration": "adopted",
+    "operation": "GET /api/v1/entities",
+    "path": "GET /api/v1/entities headers",
+    "schema_id": "urn:kanban-tool:schema:api:list-entities-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/entities",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.upsert-entity.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "PUT /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.upsert-entity.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "PUT /api/v1/entities",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.upsert-entity.headers",
+    "migration": "adopted",
+    "operation": "PUT /api/v1/entities",
+    "path": "PUT /api/v1/entities headers",
+    "schema_id": "urn:kanban-tool:schema:api:upsert-entity-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "PUT /api/v1/entities",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.entity.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "GET /api/v1/entities/:uri",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.entity.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "GET /api/v1/entities/:uri",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.entity.headers",
+    "migration": "adopted",
+    "operation": "GET /api/v1/entities/:uri",
+    "path": "GET /api/v1/entities/:uri headers",
+    "schema_id": "urn:kanban-tool:schema:api:get-entity-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/entities/:uri",
       "parameters": [
         {
           "cardinality": "optional_one",

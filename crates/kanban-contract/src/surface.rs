@@ -344,40 +344,40 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "selected dispatcher worker profile after TOML decoding",
             "config.selected-worker-profile.input"
         ),
-        adopted!(
+        excluded!(
             Helper,
             "graph helper handshake response",
-            "helper.graph.handshake.response"
+            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
         ),
-        adopted!(
+        excluded!(
             Helper,
             "graph helper error response",
-            "helper.graph.error.response"
+            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
         ),
-        adopted!(
+        excluded!(
             Helper,
             "graph helper status response",
-            "helper.graph.status.response"
+            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
         ),
-        adopted!(
+        excluded!(
             Helper,
             "graph helper rebuild response",
-            "helper.graph.rebuild.response"
+            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
         ),
-        adopted!(
+        excluded!(
             Helper,
             "graph helper sync response",
-            "helper.graph.sync.response"
+            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
         ),
-        adopted!(
+        excluded!(
             Helper,
             "graph helper neighbors response",
-            "helper.graph.neighbors.response"
+            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
         ),
-        adopted!(
+        excluded!(
             Helper,
             "graph helper query response",
-            "helper.graph.query.response"
+            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
         ),
         adopted!(
             Helper,

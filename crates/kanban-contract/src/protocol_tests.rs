@@ -1,16 +1,14 @@
 //! Schema and fixture tests for config/helper protocol contracts.
 
 use crate::{
-    GraphHelperErrorResponse, GraphHelperHandshakeResponse, GraphHelperNeighborsResponse,
-    GraphHelperQueryResponse, GraphHelperRebuildResponse, GraphHelperStatusResponse,
-    GraphHelperSyncResponse, ProjectConfigInput, ProjectionArtifactManifest,
-    ProjectionBatchReceipt, ProjectionDelivery, ProjectionDeliveryAction, ProjectionPublishReceipt,
-    VectorHelperCheckProviderResponse, VectorHelperEmbedQueryResponse, VectorHelperErrorResponse,
-    VectorHelperHandshakeResponse, VectorHelperLabelAtomsStatusResponse,
-    VectorHelperQueryChunksResponse, VectorHelperQueryLabelAtomsResponse,
-    VectorHelperRebuildLabelAtomsResponse, VectorHelperRebuildResponse, VectorHelperStatusResponse,
-    VectorHelperSyncLabelAtomsResponse, VectorHelperSyncResponse, VectorProjectionHelperRequest,
-    VectorProjectionHelperResponse, WorkerProfileInput,
+    ProjectConfigInput, ProjectionArtifactManifest, ProjectionBatchReceipt, ProjectionDelivery,
+    ProjectionDeliveryAction, ProjectionPublishReceipt, VectorHelperCheckProviderResponse,
+    VectorHelperEmbedQueryResponse, VectorHelperErrorResponse, VectorHelperHandshakeResponse,
+    VectorHelperLabelAtomsStatusResponse, VectorHelperQueryChunksResponse,
+    VectorHelperQueryLabelAtomsResponse, VectorHelperRebuildLabelAtomsResponse,
+    VectorHelperRebuildResponse, VectorHelperStatusResponse, VectorHelperSyncLabelAtomsResponse,
+    VectorHelperSyncResponse, VectorProjectionHelperRequest, VectorProjectionHelperResponse,
+    WorkerProfileInput,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -49,17 +47,6 @@ fn assert_exact<T: DeserializeOwned>(relative: &str) {
 fn config_protocol_fixtures_are_exact() {
     assert_exact::<ProjectConfigInput>("config/project-input.v1.valid.json");
     assert_exact::<WorkerProfileInput>("config/selected-worker-profile-input.v1.valid.json");
-}
-
-#[test]
-fn graph_helper_protocol_fixtures_are_exact() {
-    assert_exact::<GraphHelperHandshakeResponse>("helper/graph-handshake-response.v1.valid.json");
-    assert_exact::<GraphHelperErrorResponse>("helper/graph-error-response.v1.valid.json");
-    assert_exact::<GraphHelperStatusResponse>("helper/graph-status-response.v1.valid.json");
-    assert_exact::<GraphHelperRebuildResponse>("helper/graph-rebuild-response.v1.valid.json");
-    assert_exact::<GraphHelperSyncResponse>("helper/graph-sync-response.v1.valid.json");
-    assert_exact::<GraphHelperNeighborsResponse>("helper/graph-neighbors-response.v1.valid.json");
-    assert_exact::<GraphHelperQueryResponse>("helper/graph-query-response.v1.valid.json");
 }
 
 #[test]

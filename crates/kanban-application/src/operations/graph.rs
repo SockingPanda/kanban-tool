@@ -3,8 +3,9 @@ use std::future::Future;
 use kanban_core::{Clock, KanbanError, Result};
 
 use crate::{
-    ApplicationService, ApplicationStore, BoardTaskMapRecord, GraphQueryRowRecord,
-    GraphStatusRecord, ProjectionStateRecord, RelationRecord, TaskNeighborhoodRecord,
+    ApplicationService, ApplicationStore, BoardTaskMapRecord, GraphMaintenanceRecord,
+    GraphQueryRowRecord, GraphStatusRecord, ProjectionStateRecord, RelationRecord,
+    TaskNeighborhoodRecord,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +52,14 @@ pub trait GraphQuery: ApplicationStore {
         options: GraphNeighborsOptions,
     ) -> impl Future<Output = Result<Vec<RelationRecord>>> + Send;
     fn graph_status(&self, board: &str) -> impl Future<Output = Result<GraphStatusRecord>> + Send;
+    fn graph_rebuild(
+        &self,
+        board: &str,
+    ) -> impl Future<Output = Result<GraphMaintenanceRecord>> + Send;
+    fn graph_sync(
+        &self,
+        board: &str,
+    ) -> impl Future<Output = Result<GraphMaintenanceRecord>> + Send;
     fn projection_status(
         &self,
         options: ProjectionStatusOptions,
@@ -98,6 +107,20 @@ where
             return Err(KanbanError::InvalidInput("board is required".to_owned()));
         }
         self.store.graph_status(board.trim()).await
+    }
+
+    pub async fn graph_rebuild(&self, board: &str) -> Result<GraphMaintenanceRecord> {
+        if board.trim().is_empty() {
+            return Err(KanbanError::InvalidInput("board is required".to_owned()));
+        }
+        self.store.graph_rebuild(board.trim()).await
+    }
+
+    pub async fn graph_sync(&self, board: &str) -> Result<GraphMaintenanceRecord> {
+        if board.trim().is_empty() {
+            return Err(KanbanError::InvalidInput("board is required".to_owned()));
+        }
+        self.store.graph_sync(board.trim()).await
     }
 
     pub async fn projection_status(

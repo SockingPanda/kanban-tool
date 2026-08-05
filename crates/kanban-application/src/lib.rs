@@ -10,7 +10,7 @@ pub mod ports;
 pub mod service;
 
 // Entity/relation/graph ports are re-exported below so every host adapter uses
-// the same canonical application boundary.
+// the same canonical application boundary, including host-admin maintenance.
 
 pub use dto::*;
 pub use operations::LabelOntologyOperations;

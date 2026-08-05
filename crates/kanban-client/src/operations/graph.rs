@@ -1,8 +1,8 @@
-use kanban_contract::cli_helpers::{CliGraphQueryOutput, CliGraphStatus};
+use kanban_contract::cli_helpers::{CliGraphMaintenance, CliGraphQueryOutput};
 use kanban_contract::{
-    BoardTaskMap, BoardTaskMapQuery, BoardTaskMapResponse, GraphNeighborsQuery,
-    GraphNeighborsResponse, GraphStatus, GraphStatusResponse, TaskNeighborhood,
-    TaskNeighborhoodQuery, TaskNeighborhoodResponse,
+    BoardTaskMap, BoardTaskMapQuery, BoardTaskMapResponse, GraphMaintenanceResponse,
+    GraphNeighborsQuery, GraphNeighborsResponse, GraphStatus, GraphStatusResponse,
+    TaskNeighborhood, TaskNeighborhoodQuery, TaskNeighborhoodResponse,
 };
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
@@ -14,28 +14,20 @@ impl KanbanClient {
         Ok(response.data)
     }
 
-    pub fn graph_rebuild(&self, board: &str) -> Result<CliGraphStatus, ClientError> {
-        let status = self.graph_status(board)?;
-        Ok(CliGraphStatus {
-            backend: status.backend,
-            enabled: status.enabled,
-            message: format!(
-                "canonical relation facts are authoritative; rebuild is a no-op: {}",
-                status.message
-            ),
-        })
+    pub fn graph_rebuild(&self, board: &str) -> Result<CliGraphMaintenance, ClientError> {
+        let response: GraphMaintenanceResponse = self.post(
+            &format!("/api/v1/graph/rebuild?board={}", encode_path_segment(board)),
+            &serde_json::json!({}),
+        )?;
+        Ok(cli_graph_maintenance(response.data))
     }
 
-    pub fn graph_sync(&self, board: &str) -> Result<CliGraphStatus, ClientError> {
-        let status = self.graph_status(board)?;
-        Ok(CliGraphStatus {
-            backend: status.backend,
-            enabled: status.enabled,
-            message: format!(
-                "canonical relation facts are authoritative; sync is a no-op: {}",
-                status.message
-            ),
-        })
+    pub fn graph_sync(&self, board: &str) -> Result<CliGraphMaintenance, ClientError> {
+        let response: GraphMaintenanceResponse = self.post(
+            &format!("/api/v1/graph/sync?board={}", encode_path_segment(board)),
+            &serde_json::json!({}),
+        )?;
+        Ok(cli_graph_maintenance(response.data))
     }
 
     pub fn graph_neighbors(
@@ -103,5 +95,21 @@ impl KanbanClient {
         );
         let response: BoardTaskMapResponse = self.get(&path)?;
         Ok(response.data)
+    }
+}
+
+fn cli_graph_maintenance(maintenance: kanban_contract::GraphMaintenance) -> CliGraphMaintenance {
+    CliGraphMaintenance {
+        mode: maintenance.mode,
+        board_id: maintenance.board_id,
+        generation: maintenance.generation,
+        fingerprint: maintenance.fingerprint,
+        validated_tasks: maintenance.validated_tasks,
+        validated_entities: maintenance.validated_entities,
+        validated_relations: maintenance.validated_relations,
+        pending_jobs: maintenance.pending_jobs,
+        consumed_jobs: maintenance.consumed_jobs,
+        updated_at: maintenance.updated_at,
+        message: maintenance.message,
     }
 }

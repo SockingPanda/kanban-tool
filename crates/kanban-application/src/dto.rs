@@ -307,6 +307,21 @@ pub struct GraphStatusRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphMaintenanceRecord {
+    pub mode: String,
+    pub board_id: String,
+    pub generation: String,
+    pub fingerprint: String,
+    pub validated_tasks: i64,
+    pub validated_entities: i64,
+    pub validated_relations: i64,
+    pub pending_jobs: i64,
+    pub consumed_jobs: i64,
+    pub updated_at: i64,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphQueryBindingRecord {
     pub name: String,
     pub value: String,

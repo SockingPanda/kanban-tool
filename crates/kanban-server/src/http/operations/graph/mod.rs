@@ -6,7 +6,7 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{Path, Query, State, rejection::QueryRejection},
-    routing::get,
+    routing::{get, post},
 };
 use kanban_application::dto::{
     BoardTaskMapRecord, RelationRecord, TaskGraphEdgeRecord, TaskGraphMetaRecord,
@@ -18,13 +18,13 @@ use kanban_application::operations::{
 use kanban_contract::cli_helpers::{CliGraphQueryBinding, CliGraphQueryOutput, CliGraphQueryRow};
 use kanban_contract::{
     ApiRelation, ApiRelationProvenance, BoardQuery, BoardTaskMap, BoardTaskMapPath,
-    BoardTaskMapQuery, BoardTaskMapResponse, DataEnvelope, GraphNeighborsQuery,
-    GraphNeighborsResponse, GraphStatus, GraphStatusResponse, LimitMeta, MetadataEnvelope,
-    TaskGraphEdge, TaskGraphMeta, TaskGraphNode, TaskNeighborhood, TaskNeighborhoodPath,
-    TaskNeighborhoodQuery, TaskNeighborhoodResponse,
+    BoardTaskMapQuery, BoardTaskMapResponse, DataEnvelope, GraphMaintenance,
+    GraphMaintenanceResponse, GraphNeighborsQuery, GraphNeighborsResponse, GraphQueryQuery,
+    GraphStatus, GraphStatusResponse, LimitMeta, MetadataEnvelope, TaskGraphEdge, TaskGraphMeta,
+    TaskGraphNode, TaskNeighborhood, TaskNeighborhoodPath, TaskNeighborhoodQuery,
+    TaskNeighborhoodResponse,
 };
 use kanban_core::KanbanError;
-use serde::Deserialize;
 
 pub(crate) async fn graph_status(
     State(state): State<AppState>,
@@ -64,7 +64,7 @@ pub(crate) async fn graph_neighbors(
 
 pub(crate) async fn graph_query(
     State(state): State<AppState>,
-    query: Result<Query<GraphQueryHttpQuery>, QueryRejection>,
+    query: Result<Query<GraphQueryQuery>, QueryRejection>,
 ) -> Result<Json<CliGraphQueryOutput>, ApiError> {
     let Query(query) =
         query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
@@ -89,6 +89,26 @@ pub(crate) async fn graph_query(
         })
         .collect();
     Ok(Json(DataEnvelope::new(rows)))
+}
+
+pub(crate) async fn graph_rebuild(
+    State(state): State<AppState>,
+    query: Result<Query<BoardQuery>, QueryRejection>,
+) -> Result<Json<GraphMaintenanceResponse>, ApiError> {
+    let Query(query) =
+        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+    let maintenance = state.application().graph_rebuild(&query.board).await?;
+    Ok(Json(DataEnvelope::new(api_graph_maintenance(maintenance))))
+}
+
+pub(crate) async fn graph_sync(
+    State(state): State<AppState>,
+    query: Result<Query<BoardQuery>, QueryRejection>,
+) -> Result<Json<GraphMaintenanceResponse>, ApiError> {
+    let Query(query) =
+        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+    let maintenance = state.application().graph_sync(&query.board).await?;
+    Ok(Json(DataEnvelope::new(api_graph_maintenance(maintenance))))
 }
 
 pub(crate) async fn task_neighborhood(
@@ -136,25 +156,6 @@ pub(crate) async fn board_task_map(
     Ok(Json(DataEnvelope::new(api_board_task_map(graph)?)))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub(crate) struct GraphQueryHttpQuery {
-    pub board: String,
-    pub query: String,
-    pub limit: usize,
-}
-
-impl Default for GraphQueryHttpQuery {
-    fn default() -> Self {
-        Self {
-            board: "default".to_owned(),
-            query: "SELECT ?subject ?predicate ?object WHERE { ?subject ?predicate ?object }"
-                .to_owned(),
-            limit: 100,
-        }
-    }
-}
-
 fn api_relation(relation: RelationRecord) -> Result<ApiRelation, ApiError> {
     let metadata = serde_json::from_str(&relation.metadata_json).map_err(|error| {
         KanbanError::Storage(format!("stored relation metadata is invalid JSON: {error}"))
@@ -174,6 +175,24 @@ fn api_relation(relation: RelationRecord) -> Result<ApiRelation, ApiError> {
         created_at: relation.created_at,
         updated_at: relation.updated_at,
     })
+}
+
+fn api_graph_maintenance(
+    maintenance: kanban_application::dto::GraphMaintenanceRecord,
+) -> GraphMaintenance {
+    GraphMaintenance {
+        mode: maintenance.mode,
+        board_id: maintenance.board_id,
+        generation: maintenance.generation,
+        fingerprint: maintenance.fingerprint,
+        validated_tasks: maintenance.validated_tasks,
+        validated_entities: maintenance.validated_entities,
+        validated_relations: maintenance.validated_relations,
+        pending_jobs: maintenance.pending_jobs,
+        consumed_jobs: maintenance.consumed_jobs,
+        updated_at: maintenance.updated_at,
+        message: maintenance.message,
+    }
 }
 
 fn api_task_neighborhood(graph: TaskNeighborhoodRecord) -> Result<TaskNeighborhood, ApiError> {
@@ -283,6 +302,8 @@ pub(super) fn router() -> Router<AppState> {
         .route("/api/v1/graph/status", get(graph_status))
         .route("/api/v1/graph/neighbors", get(graph_neighbors))
         .route("/api/v1/graph/query", get(graph_query))
+        .route("/api/v1/graph/rebuild", post(graph_rebuild))
+        .route("/api/v1/graph/sync", post(graph_sync))
         .route(
             "/api/v1/tasks/:task_id/neighborhood",
             get(task_neighborhood),
@@ -293,7 +314,8 @@ pub(super) fn router() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use crate::http::operations::test_support::*;
-    use kanban_contract::{BoardTaskMapResponse, GraphStatusResponse};
+    use kanban_contract::cli_helpers::CliGraphMaintenance;
+    use kanban_contract::{BoardTaskMapResponse, DataEnvelope, GraphStatusResponse};
 
     #[tokio::test]
     async fn graph_status_and_task_map_routes_are_adopted() {
@@ -350,5 +372,48 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn graph_maintenance_routes_publish_generation_and_counts() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let router = build_router(state);
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/graph/rebuild?board=default")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let rebuild: DataEnvelope<CliGraphMaintenance> = serde_json::from_slice(&body).unwrap();
+        assert_eq!(rebuild.data.mode, "rebuild");
+        assert!(!rebuild.data.generation.is_empty());
+        assert!(!rebuild.data.fingerprint.is_empty());
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/graph/sync?board=default")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let sync: DataEnvelope<CliGraphMaintenance> = serde_json::from_slice(&body).unwrap();
+        assert_eq!(sync.data.mode, "sync");
+        assert_eq!(sync.data.pending_jobs, 0);
     }
 }

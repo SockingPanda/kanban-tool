@@ -1,7 +1,7 @@
 use kanban_application::dto::{
-    BoardTaskMapRecord, GraphQueryRowRecord, GraphStatusRecord, ProjectionStateRecord,
-    RelationRecord, TaskGraphEdgeKind, TaskGraphEdgeRecord, TaskGraphMetaRecord,
-    TaskGraphNodeRecord, TaskGraphNodeRole, TaskNeighborhoodRecord,
+    BoardTaskMapRecord, GraphMaintenanceRecord, GraphQueryRowRecord, GraphStatusRecord,
+    ProjectionStateRecord, RelationRecord, TaskGraphEdgeKind, TaskGraphEdgeRecord,
+    TaskGraphMetaRecord, TaskGraphNodeRecord, TaskGraphNodeRole, TaskNeighborhoodRecord,
 };
 use kanban_application::operations::{
     BoardTaskMapOptions, GraphNeighborsOptions, GraphQuery, GraphQueryOptions,
@@ -44,6 +44,22 @@ impl GraphQuery for TursoApplicationStore {
             .await
             .map_err(store_error)
             .and_then(application_graph_status)
+    }
+
+    async fn graph_rebuild(&self, board: &str) -> Result<GraphMaintenanceRecord> {
+        self.store
+            .graph_rebuild(board)
+            .await
+            .map_err(store_error)
+            .map(application_graph_maintenance)
+    }
+
+    async fn graph_sync(&self, board: &str) -> Result<GraphMaintenanceRecord> {
+        self.store
+            .graph_sync(board)
+            .await
+            .map_err(store_error)
+            .map(application_graph_maintenance)
     }
 
     async fn projection_status(
@@ -155,6 +171,24 @@ fn application_graph_status(
         message: status.message,
         projection: application_projection_state(status.projection),
     })
+}
+
+fn application_graph_maintenance(
+    maintenance: kanban_store_turso::GraphMaintenanceRecord,
+) -> GraphMaintenanceRecord {
+    GraphMaintenanceRecord {
+        mode: maintenance.mode,
+        board_id: maintenance.board_id,
+        generation: maintenance.generation,
+        fingerprint: maintenance.fingerprint,
+        validated_tasks: maintenance.validated_tasks,
+        validated_entities: maintenance.validated_entities,
+        validated_relations: maintenance.validated_relations,
+        pending_jobs: maintenance.pending_jobs,
+        consumed_jobs: maintenance.consumed_jobs,
+        updated_at: maintenance.updated_at,
+        message: maintenance.message,
+    }
 }
 
 fn application_task_neighborhood(

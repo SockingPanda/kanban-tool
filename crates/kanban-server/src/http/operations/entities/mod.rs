@@ -6,42 +6,11 @@ use axum::{
 };
 use kanban_application::dto::EntityRecord;
 use kanban_application::operations::{EntityListOptions, EntityUpsertCommand};
-use kanban_contract::{CliEntity, CliEntityListOutput, CliEntityShowOutput, DataEnvelope};
+use kanban_contract::{
+    CliEntity, CliEntityListOutput, CliEntityShowOutput, DataEnvelope, EntityListQuery, EntityPath,
+    EntityUpsertRequest,
+};
 use kanban_core::KanbanError;
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub(crate) struct EntityListQuery {
-    board: Option<String>,
-    kind: Option<String>,
-    limit: usize,
-}
-
-impl Default for EntityListQuery {
-    fn default() -> Self {
-        Self {
-            board: None,
-            kind: None,
-            limit: 100,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct EntityUpsertRequest {
-    uri: String,
-    kind: String,
-    source_table: String,
-    source_id: String,
-    board: Option<String>,
-    task_id: Option<String>,
-    title: Option<String>,
-    summary: Option<String>,
-    content_hash: Option<String>,
-    archived_at: Option<i64>,
-}
 
 pub(crate) async fn list_entities(
     State(state): State<AppState>,
@@ -65,7 +34,7 @@ pub(crate) async fn list_entities(
 
 pub(crate) async fn get_entity(
     State(state): State<AppState>,
-    Path(uri): Path<String>,
+    Path(EntityPath { uri }): Path<EntityPath>,
 ) -> Result<Json<CliEntityShowOutput>, ApiError> {
     let entity = state.application().get_entity(&uri).await?;
     Ok(Json(DataEnvelope::new(api_entity(entity))))

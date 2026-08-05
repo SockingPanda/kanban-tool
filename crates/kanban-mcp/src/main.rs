@@ -10,7 +10,7 @@ use kanban_contract::{
     ListStepsResponse, ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
     ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
-    TaskReadPlanFilter, TaskReadSort,
+    TaskReadPlanFilter, TaskReadSort, UpdateStepRequest, UpdateStepResponse,
 };
 use rmcp::{
     ErrorData as McpError, ServiceExt,
@@ -240,6 +240,25 @@ struct StepListArgs {
     board: Option<String>,
     /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
     task_ref: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct StepUpdateArgs {
+    /// Board used when task_ref or linked_task_ref is board-local. Defaults to KB_BOARD/default.
+    board: Option<String>,
+    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    task_ref: String,
+    /// Global step_... id or deterministic S<n> list selector.
+    step_ref: String,
+    title: Option<String>,
+    /// A non-null body replaces the body; null/omitted leaves it unchanged.
+    body: Option<String>,
+    linked_task_ref: Option<String>,
+    #[serde(default)]
+    unlink_task: bool,
+    position: Option<i64>,
+    required: Option<bool>,
 }
 
 const fn default_step_required() -> bool {
@@ -519,6 +538,36 @@ impl KanbanMcp {
                 .map_err(|error| McpError::internal_error(error.to_string(), None))?
                 .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
         Ok(Json(ListStepsResponse { data: steps }))
+    }
+
+    #[tool(
+        name = "step_update",
+        description = "Update editable execution-plan fields without changing step status"
+    )]
+    async fn step_update(
+        &self,
+        Parameters(args): Parameters<StepUpdateArgs>,
+    ) -> Result<Json<UpdateStepResponse>, McpError> {
+        let board = args.board.unwrap_or_else(|| self.default_board.to_string());
+        let task_ref = args.task_ref;
+        let step_ref = args.step_ref;
+        let client = self.client.clone();
+        let request = UpdateStepRequest {
+            title: args.title,
+            body: args.body,
+            linked_task_ref: args.linked_task_ref,
+            unlink_task: args.unlink_task,
+            position: args.position,
+            required: args.required,
+            actor: None,
+        };
+        let steps = tokio::task::spawn_blocking(move || {
+            client.update_step_by_selector(&board, &task_ref, &step_ref, &request)
+        })
+        .await
+        .map_err(|error| McpError::internal_error(error.to_string(), None))?
+        .map_err(|error| McpError::invalid_params(error.to_string(), None))?;
+        Ok(Json(UpdateStepResponse { data: steps }))
     }
 
     #[tool(

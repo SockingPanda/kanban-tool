@@ -15,7 +15,7 @@ use kanban_application::{
     HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand,
     ReleaseTaskCommand, RunRecord, RunStatus, SubmitReviewTaskCommand,
     TaskListOptions as ApplicationTaskListOptions, TaskListSort as ApplicationTaskListSort,
-    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord,
+    TaskPlanFilter as ApplicationTaskPlanFilter, TaskRecord, UpdateStepCommand,
 };
 use kanban_contract::{
     ApiBoard, ApiBoardColumn, ApiClaim, ApiComment, ApiCreateTaskStatus, ApiExecutionPlan,
@@ -35,7 +35,7 @@ use kanban_contract::{
     MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
     ReleaseTaskPath, ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskPath,
     SubmitReviewTaskRequest, SubmitReviewTaskResponse, TaskReadLabel, TaskReadPlanFilter,
-    TaskReadSort, TotalPaginationMeta,
+    TaskReadSort, TotalPaginationMeta, UpdateStepPath, UpdateStepRequest, UpdateStepResponse,
 };
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
 
@@ -333,6 +333,34 @@ pub(crate) async fn create_step(
             data: api_task_steps(steps)?,
         }),
     ))
+}
+
+pub(crate) async fn update_step(
+    State(state): State<AppState>,
+    Path(UpdateStepPath { task_id, step_id }): Path<UpdateStepPath>,
+    headers: HeaderMap,
+    body: Result<Json<UpdateStepRequest>, JsonRejection>,
+) -> Result<Json<UpdateStepResponse>, ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let steps = state
+        .application()
+        .update_step(UpdateStepCommand {
+            task_id,
+            step_id,
+            title: body.title,
+            body: body.body,
+            linked_task_id: body.linked_task_ref,
+            unlink_task: body.unlink_task,
+            position: body.position,
+            required: body.required,
+            actor,
+        })
+        .await?;
+    Ok(Json(UpdateStepResponse {
+        data: api_task_steps(steps)?,
+    }))
 }
 
 pub(crate) async fn mark_execution_plan_not_required(

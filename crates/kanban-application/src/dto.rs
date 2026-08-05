@@ -373,6 +373,33 @@ pub struct CreateStepRecord {
     pub target_status: TaskStatus,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct UpdateStepCommand {
+    pub task_id: String,
+    pub step_id: String,
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub linked_task_id: Option<String>,
+    pub unlink_task: bool,
+    pub position: Option<i64>,
+    pub required: Option<bool>,
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateStepRecord {
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub linked_task_id: Option<String>,
+    pub unlink_task: bool,
+    pub position: Option<i64>,
+    pub required: Option<bool>,
+    pub updated_by: String,
+    pub event_id: String,
+    pub updated_at: i64,
+    pub expected_lock_version: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StepRecord {
     pub id: String,

@@ -15,6 +15,7 @@ use kanban_contract::{
     ListTasksQuery, ListTasksResponse, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
     ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
+    UpdateStepRequest, UpdateStepResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -258,6 +259,54 @@ impl KanbanClient {
         self.create_step(&task_id, &request)
     }
 
+    pub fn update_step(
+        &self,
+        task_id: &str,
+        step_id: &str,
+        request: &UpdateStepRequest,
+    ) -> Result<ApiTaskSteps, ClientError> {
+        let task_id = task_id.trim();
+        let step_id = step_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(ClientError::InvalidInput(
+                "task selector must resolve to a global t_... id".to_owned(),
+            ));
+        }
+        if !step_id.starts_with("step_") || step_id.len() <= 5 {
+            return Err(ClientError::InvalidInput(
+                "step selector must resolve to a global step_... id".to_owned(),
+            ));
+        }
+        let mut request = request.clone();
+        request.actor = Some(self.actor.clone());
+        let response: UpdateStepResponse = self.patch(
+            &format!(
+                "/api/v1/tasks/{}/steps/{}",
+                encode_path_segment(task_id),
+                encode_path_segment(step_id)
+            ),
+            &request,
+        )?;
+        Ok(response.data)
+    }
+
+    pub fn update_step_by_selector(
+        &self,
+        board: &str,
+        task_selector: &str,
+        step_selector: &str,
+        request: &UpdateStepRequest,
+    ) -> Result<ApiTaskSteps, ClientError> {
+        let task_id = self.resolve_task_id(board, task_selector)?;
+        let step_id = self.resolve_step_id(&task_id, step_selector)?;
+        let mut request = request.clone();
+        if let Some(linked_task_ref) = request.linked_task_ref.as_deref() {
+            let linked_task_id = self.resolve_task_id(board, linked_task_ref)?;
+            request.linked_task_ref = Some(linked_task_id);
+        }
+        self.update_step(&task_id, &step_id, &request)
+    }
+
     pub fn resolve_task_id(&self, board: &str, selector: &str) -> Result<String, ClientError> {
         let selector = selector.trim();
         if selector.starts_with("t_") && selector.len() > 2 {
@@ -289,6 +338,33 @@ impl KanbanClient {
                 "task selector is ambiguous: {selector}"
             ))),
         }
+    }
+
+    fn resolve_step_id(&self, task_id: &str, selector: &str) -> Result<String, ClientError> {
+        let selector = selector.trim();
+        if selector.starts_with("step_") && selector.len() > 5 {
+            return Ok(selector.to_owned());
+        }
+        let index = selector
+            .strip_prefix('S')
+            .or_else(|| selector.strip_prefix('s'))
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|index| *index > 0)
+            .ok_or_else(|| {
+                ClientError::InvalidInput(
+                    "step selector must be a global step_... id or S<n>".to_owned(),
+                )
+            })?;
+        let steps = self.list_steps(task_id)?;
+        steps
+            .steps
+            .get(index - 1)
+            .map(|step| step.id.clone())
+            .ok_or_else(|| ClientError::Api {
+                status: 404,
+                code: ApiErrorCode::NotFound,
+                message: format!("step not found: {selector}"),
+            })
     }
 
     pub fn get_task_by_selector(
@@ -522,6 +598,21 @@ impl KanbanClient {
         let request = self
             .agent
             .post(&format!("{}{path}", self.base_url))
+            .set("Accept", "application/json")
+            .set("X-KB-Actor", &self.actor);
+        decode_response(request.send_json(body))
+    }
+
+    fn patch<B, T>(&self, path: &str, body: &B) -> Result<T, ClientError>
+    where
+        B: Serialize,
+        T: DeserializeOwned,
+    {
+        let body = serde_json::to_value(body)
+            .map_err(|error| ClientError::InvalidResponse(error.to_string()))?;
+        let request = self
+            .agent
+            .request("PATCH", &format!("{}{path}", self.base_url))
             .set("Accept", "application/json")
             .set("X-KB-Actor", &self.actor);
         decode_response(request.send_json(body))

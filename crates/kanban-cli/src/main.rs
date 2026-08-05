@@ -18,7 +18,7 @@ use kanban_contract::{
     HeartbeatTaskResponse, ListStepsResponse, ListTasksQuery, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskRequest, PromoteTaskResponse,
     ReleaseTaskRequest, ReleaseTaskResponse, SubmitReviewTaskRequest, SubmitReviewTaskResponse,
-    TaskReadPlanFilter, TaskReadSort,
+    TaskReadPlanFilter, TaskReadSort, UpdateStepRequest, UpdateStepResponse,
 };
 use serde::Serialize;
 
@@ -254,6 +254,8 @@ enum TaskStepCommand {
     Add(TaskStepAddArgs),
     /// List the task execution plan steps.
     List(TaskStepListArgs),
+    /// Update editable execution-plan fields without changing step status.
+    Update(TaskStepUpdateArgs),
     /// Mark this task as not requiring structured execution steps.
     NotRequired(TaskPlanNotRequiredArgs),
 }
@@ -279,6 +281,26 @@ struct TaskStepAddArgs {
 #[derive(Debug, Args)]
 struct TaskStepListArgs {
     task_ref: String,
+}
+
+#[derive(Debug, Args)]
+struct TaskStepUpdateArgs {
+    task_ref: String,
+    step_ref: String,
+    #[arg(long)]
+    title: Option<String>,
+    #[arg(long)]
+    body: Option<String>,
+    #[arg(long = "link-task", conflicts_with = "unlink_task")]
+    linked_task_ref: Option<String>,
+    #[arg(long, conflicts_with = "linked_task_ref")]
+    unlink_task: bool,
+    #[arg(long)]
+    position: Option<i64>,
+    #[arg(long, conflicts_with = "optional")]
+    required: bool,
+    #[arg(long, conflicts_with = "required")]
+    optional: bool,
 }
 
 #[derive(Debug, Args)]
@@ -654,6 +676,39 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
                                 "{}",
                                 serde_json::to_string(&ListStepsResponse { data: steps })
                                     .expect("step list response is serializable")
+                            );
+                        } else {
+                            for (index, step) in steps.steps.iter().enumerate() {
+                                println!("S{} {} {}", index + 1, step.status.as_str(), step.title);
+                            }
+                        }
+                    }
+                    TaskStepCommand::Update(args) => {
+                        let steps = client.update_step_by_selector(
+                            &cli.board,
+                            &args.task_ref,
+                            &args.step_ref,
+                            &UpdateStepRequest {
+                                title: args.title.clone(),
+                                body: args.body.clone(),
+                                linked_task_ref: args.linked_task_ref.clone(),
+                                unlink_task: args.unlink_task,
+                                position: args.position,
+                                required: if args.required {
+                                    Some(true)
+                                } else if args.optional {
+                                    Some(false)
+                                } else {
+                                    None
+                                },
+                                actor: None,
+                            },
+                        )?;
+                        if cli.json {
+                            println!(
+                                "{}",
+                                serde_json::to_string(&UpdateStepResponse { data: steps })
+                                    .expect("step update response is serializable")
                             );
                         } else {
                             for (index, step) in steps.steps.iter().enumerate() {
@@ -1197,6 +1252,38 @@ mod tests {
         };
         assert_eq!(args.task_ref, "default#1");
         assert_eq!(args.reason, "small task");
+    }
+
+    #[test]
+    fn parses_task_step_update_command() {
+        let cli = Cli::try_parse_from([
+            "kanban",
+            "task",
+            "step",
+            "update",
+            "default#1",
+            "S2",
+            "--title",
+            "Updated",
+            "--position",
+            "2048",
+            "--optional",
+        ])
+        .expect("step update args");
+        let Command::Task {
+            command:
+                TaskCommand::Step {
+                    command: TaskStepCommand::Update(args),
+                },
+        } = cli.command
+        else {
+            panic!("expected task step update");
+        };
+        assert_eq!(args.task_ref, "default#1");
+        assert_eq!(args.step_ref, "S2");
+        assert_eq!(args.title.as_deref(), Some("Updated"));
+        assert_eq!(args.position, Some(2048));
+        assert!(args.optional);
     }
 
     #[test]

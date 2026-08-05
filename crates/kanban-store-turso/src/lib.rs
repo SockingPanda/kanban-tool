@@ -164,6 +164,20 @@ pub struct CreateStepInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpdateStepInput {
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub linked_task_id: Option<String>,
+    pub unlink_task: bool,
+    pub position: Option<i64>,
+    pub required: Option<bool>,
+    pub updated_by: String,
+    pub event_id: String,
+    pub updated_at: i64,
+    pub expected_lock_version: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskStepRecord {
     pub id: String,
     pub board_id: String,
@@ -381,6 +395,7 @@ pub enum StoreError {
     },
     BoardNotFound(String),
     TaskNotFound(String),
+    StepNotFound(String),
     IdempotencyConflict {
         board_id: String,
         key: String,
@@ -405,6 +420,7 @@ impl Display for StoreError {
             }
             Self::BoardNotFound(selector) => write!(formatter, "board not found: {selector}"),
             Self::TaskNotFound(task_id) => write!(formatter, "task not found: {task_id}"),
+            Self::StepNotFound(step_id) => write!(formatter, "step not found: {step_id}"),
             Self::IdempotencyConflict {
                 board_id,
                 key,
@@ -1228,6 +1244,205 @@ impl TursoStore {
         .await?;
         transaction.commit().await?;
         Ok(step)
+    }
+
+    /// Update editable execution-plan fields without changing the step status
+    /// or parent task status. Parent lock-version CAS and the step/event write
+    /// share one immediate transaction so stale callers cannot overwrite a
+    /// concurrent plan mutation and an event conflict rolls everything back.
+    pub async fn update_step(
+        &self,
+        task_id: &str,
+        step_id: &str,
+        input: UpdateStepInput,
+    ) -> Result<TaskStepRecord, StoreError> {
+        validate_update_step_input(task_id, step_id, &input)?;
+        let title = input.title.as_deref().map(str::trim).map(str::to_owned);
+        let body = input.body.as_deref().map(str::trim).map(str::to_owned);
+        let updated_by = input.updated_by.trim().to_owned();
+        let linked_task_id = input
+            .linked_task_id
+            .as_deref()
+            .map(str::trim)
+            .map(str::to_owned);
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+
+        let parent_row = first_row(
+            transaction
+                .query(
+                    &format!("{TASK_SELECT} WHERE t.id = :task_id LIMIT 1"),
+                    [(":task_id", task_id)],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::TaskNotFound(task_id.to_owned()),
+            other => StoreError::Turso(other),
+        })?;
+        let parent = task_from_row(parent_row)?;
+        if parent.archived_at.is_some() || parent.status == "archived" {
+            return Err(StoreError::InvalidTransition(
+                "archived parent task cannot receive step updates".to_owned(),
+            ));
+        }
+        let board_row = first_row(
+            transaction
+                .query(
+                    "SELECT archived_at FROM boards WHERE id = :board_id LIMIT 1",
+                    [(":board_id", parent.board_id.as_str())],
+                )
+                .await?,
+        )
+        .await?;
+        if optional_integer_value(board_row.get_value(0)?, "boards.archived_at")?.is_some() {
+            return Err(StoreError::InvalidTransition(
+                "archived board cannot receive step updates".to_owned(),
+            ));
+        }
+
+        let existing_row = first_row(
+            transaction
+                .query(
+                    "SELECT id, board_id, parent_task_id, position, title, body, linked_task_id, required, status, resolution_note, resolved_by, resolved_at, created_by, created_at, updated_by, updated_at FROM task_steps WHERE board_id = :board_id AND parent_task_id = :parent_task_id AND id = :step_id LIMIT 1",
+                    [
+                        (":board_id", parent.board_id.as_str()),
+                        (":parent_task_id", parent.id.as_str()),
+                        (":step_id", step_id),
+                    ],
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => StoreError::StepNotFound(step_id.to_owned()),
+            other => StoreError::Turso(other),
+        })?;
+        let existing = step_from_row(&transaction, existing_row).await?;
+        let existing_linked_task_id = existing.linked_task.as_ref().map(|task| task.id.clone());
+        let next_linked_task_id = if input.unlink_task {
+            None
+        } else {
+            linked_task_id.or(existing_linked_task_id)
+        };
+        if let Some(linked_task_id) = next_linked_task_id.as_deref() {
+            let linked_row = first_row(
+                transaction
+                    .query(
+                        &format!("{TASK_SELECT} WHERE t.id = :task_id LIMIT 1"),
+                        [(":task_id", linked_task_id)],
+                    )
+                    .await?,
+            )
+            .await
+            .map_err(|error| match error {
+                turso::Error::QueryReturnedNoRows => {
+                    StoreError::TaskNotFound(linked_task_id.to_owned())
+                }
+                other => StoreError::Turso(other),
+            })?;
+            let linked = task_from_row(linked_row)?;
+            if linked.board_id != parent.board_id {
+                return Err(StoreError::InvalidInput(
+                    "linked task must belong to the parent board".to_owned(),
+                ));
+            }
+            if linked.id == parent.id {
+                return Err(StoreError::InvalidInput(
+                    "step cannot link to its parent task".to_owned(),
+                ));
+            }
+            if linked.archived_at.is_some() || linked.status == "archived" {
+                return Err(StoreError::InvalidInput(
+                    "archived linked task is not allowed".to_owned(),
+                ));
+            }
+        }
+
+        if parent.lock_version != input.expected_lock_version {
+            return Err(StoreError::InvalidTransition(
+                "step update requires matching fresh parent task".to_owned(),
+            ));
+        }
+        let changed_parent = transaction
+            .execute(
+                "UPDATE tasks SET lock_version = lock_version + 1, updated_at = :updated_at WHERE id = :task_id AND board_id = :board_id AND archived_at IS NULL AND status != 'archived' AND lock_version = :lock_version",
+                (
+                    (":updated_at", input.updated_at),
+                    (":task_id", parent.id.as_str()),
+                    (":board_id", parent.board_id.as_str()),
+                    (":lock_version", input.expected_lock_version),
+                ),
+            )
+            .await?;
+        if changed_parent != 1 {
+            return Err(StoreError::InvalidTransition(
+                "step update requires matching fresh parent task".to_owned(),
+            ));
+        }
+
+        let next_title = title.as_deref().unwrap_or(existing.title.as_str());
+        let next_body = body.as_deref().or(existing.body.as_deref());
+        let next_position = input.position.unwrap_or(existing.position);
+        let next_required = input.required.unwrap_or(existing.required);
+        transaction
+            .execute(
+                "UPDATE task_steps SET title = :title, body = :body, linked_task_id = :linked_task_id, position = :position, required = :required, updated_by = :updated_by, updated_at = :updated_at WHERE board_id = :board_id AND parent_task_id = :parent_task_id AND id = :step_id",
+                (
+                    (":title", next_title),
+                    (":body", next_body),
+                    (":linked_task_id", next_linked_task_id.as_deref()),
+                    (":position", next_position),
+                    (":required", if next_required { 1_i64 } else { 0_i64 }),
+                    (":updated_by", updated_by.as_str()),
+                    (":updated_at", input.updated_at),
+                    (":board_id", parent.board_id.as_str()),
+                    (":parent_task_id", parent.id.as_str()),
+                    (":step_id", step_id),
+                ),
+            )
+            .await?;
+
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, NULL, 'task.step.updated', :actor, json_object('step_id', :step_id, 'linked_task_id', :linked_task_id, 'position', :position, 'required', json(CASE WHEN :required = 1 THEN 'true' ELSE 'false' END), 'status', :status), :created_at)",
+                (
+                    (":event_id", input.event_id.as_str()),
+                    (":board_id", parent.board_id.as_str()),
+                    (":task_id", parent.id.as_str()),
+                    (":actor", updated_by.as_str()),
+                    (":step_id", step_id),
+                    (":linked_task_id", next_linked_task_id.as_deref()),
+                    (":position", next_position),
+                    (":required", if next_required { 1_i64 } else { 0_i64 }),
+                    (":status", existing.status.as_str()),
+                    (":created_at", input.updated_at),
+                ),
+            )
+            .await?;
+
+        let updated = step_from_row(
+            &transaction,
+            first_row(
+                transaction
+                    .query(
+                        "SELECT id, board_id, parent_task_id, position, title, body, linked_task_id, required, status, resolution_note, resolved_by, resolved_at, created_by, created_at, updated_by, updated_at FROM task_steps WHERE board_id = :board_id AND parent_task_id = :parent_task_id AND id = :step_id LIMIT 1",
+                        [
+                            (":board_id", parent.board_id.as_str()),
+                            (":parent_task_id", parent.id.as_str()),
+                            (":step_id", step_id),
+                        ],
+                    )
+                    .await?,
+            )
+            .await?,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(updated)
     }
 
     pub async fn list_steps(&self, task_id: &str) -> Result<TaskStepsRecord, StoreError> {
@@ -3733,6 +3948,70 @@ fn validate_create_step_input(task_id: &str, input: &CreateStepInput) -> Result<
     if input.created_at < 0 {
         return Err(StoreError::InvalidInput(
             "created_at must be non-negative".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_update_step_input(
+    task_id: &str,
+    step_id: &str,
+    input: &UpdateStepInput,
+) -> Result<(), StoreError> {
+    validate_task_id(task_id)?;
+    if !step_id.trim().starts_with("step_") || step_id.trim().len() <= 5 {
+        return Err(StoreError::InvalidInput(
+            "step id must start with step_".to_owned(),
+        ));
+    }
+    if input
+        .title
+        .as_deref()
+        .is_some_and(|title| title.trim().is_empty())
+    {
+        return Err(StoreError::InvalidInput(
+            "step title is required when provided".to_owned(),
+        ));
+    }
+    if input.position.is_some_and(|position| position < 0) {
+        return Err(StoreError::InvalidInput(
+            "step position must be non-negative".to_owned(),
+        ));
+    }
+    if input.linked_task_id.is_some() && input.unlink_task {
+        return Err(StoreError::InvalidInput(
+            "linked_task_ref and unlink_task cannot be used together".to_owned(),
+        ));
+    }
+    if input.title.is_none()
+        && input.body.is_none()
+        && input.linked_task_id.is_none()
+        && !input.unlink_task
+        && input.position.is_none()
+        && input.required.is_none()
+    {
+        return Err(StoreError::InvalidInput(
+            "step update requires at least one field".to_owned(),
+        ));
+    }
+    if input.updated_by.trim().is_empty() {
+        return Err(StoreError::InvalidInput(
+            "updated_by is required".to_owned(),
+        ));
+    }
+    if !input.event_id.trim().starts_with("e_") || input.event_id.trim().len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "event_id must start with e_".to_owned(),
+        ));
+    }
+    if input.updated_at < 0 {
+        return Err(StoreError::InvalidInput(
+            "updated_at must be non-negative".to_owned(),
+        ));
+    }
+    if input.expected_lock_version < 0 {
+        return Err(StoreError::InvalidInput(
+            "expected_lock_version must be non-negative".to_owned(),
         ));
     }
     Ok(())
@@ -13688,6 +13967,218 @@ mod tests {
             integer_value(leftovers.get_value(0).expect("leftover count"), "events")
                 .expect("leftover event integer"),
             0
+        );
+    }
+
+    #[tokio::test]
+    async fn update_step_is_atomic_preserves_null_body_and_emits_strict_payload() {
+        let (_directory, store, _path) = store("step-update").await;
+        store.initialize().await.expect("initialize");
+        let parent = store
+            .create_task(
+                "default",
+                create_input("t_step_update_parent", None, "Step update parent"),
+            )
+            .await
+            .expect("create parent");
+        let created = store
+            .create_step(
+                &parent.id,
+                step_input(
+                    "step_update",
+                    None,
+                    "Original title",
+                    Some(1024),
+                    "planner",
+                    parent.lock_version,
+                    "unplanned",
+                    "ready",
+                    "e_step_update_create",
+                    "e_step_update_plan",
+                    "e_step_update_recompute",
+                    500,
+                ),
+            )
+            .await
+            .expect("create step");
+        assert_eq!(created.body.as_deref(), Some("body"));
+        let updated = store
+            .update_step(
+                &parent.id,
+                &created.id,
+                UpdateStepInput {
+                    title: Some(" Updated title ".into()),
+                    body: None,
+                    linked_task_id: None,
+                    unlink_task: false,
+                    position: Some(2048),
+                    required: Some(false),
+                    updated_by: " reviewer ".into(),
+                    event_id: "e_step_update_success".into(),
+                    updated_at: 600,
+                    expected_lock_version: 1,
+                },
+            )
+            .await
+            .expect("update step");
+        assert_eq!(updated.title, "Updated title");
+        assert_eq!(updated.body.as_deref(), Some("body"));
+        assert_eq!(updated.position, 2048);
+        assert!(!updated.required);
+        assert_eq!(updated.status, "todo");
+        assert_eq!(updated.updated_by, "reviewer");
+
+        let parent_after = store
+            .get_task_global(&parent.id)
+            .await
+            .expect("parent after update");
+        assert_eq!(parent_after.status, "ready");
+        assert_eq!(parent_after.lock_version, 2);
+        let connection = store.connection().await.expect("connection");
+        let event = first_row(
+            connection
+                .query(
+                    "SELECT kind, actor, payload_json FROM task_events WHERE event_id = ?1",
+                    ["e_step_update_success"],
+                )
+                .await
+                .expect("event query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(event.get_value(0).expect("event kind"), "event.kind")
+                .expect("event kind text"),
+            "task.step.updated"
+        );
+        assert_eq!(
+            text_value(event.get_value(1).expect("event actor"), "event.actor")
+                .expect("event actor text"),
+            "reviewer"
+        );
+        assert_eq!(
+            text_value(event.get_value(2).expect("event payload"), "event.payload")
+                .expect("event payload text"),
+            r#"{"step_id":"step_update","linked_task_id":null,"position":2048,"required":false,"status":"todo"}"#
+        );
+
+        connection
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES ('e_step_update_conflict', 'b_default', ?1, NULL, 'test.event', 'tester', '{}', 700)",
+                [parent.id.as_str()],
+            )
+            .await
+            .expect("insert conflicting event");
+        let conflict = store
+            .update_step(
+                &parent.id,
+                &created.id,
+                UpdateStepInput {
+                    title: Some("Should roll back".into()),
+                    body: Some("changed".into()),
+                    linked_task_id: None,
+                    unlink_task: false,
+                    position: None,
+                    required: None,
+                    updated_by: "reviewer".into(),
+                    event_id: "e_step_update_conflict".into(),
+                    updated_at: 800,
+                    expected_lock_version: 2,
+                },
+            )
+            .await
+            .expect_err("event conflict must roll back update");
+        assert!(matches!(conflict, StoreError::Turso(_)));
+        let unchanged = store
+            .list_steps(&parent.id)
+            .await
+            .expect("list after rollback");
+        assert_eq!(unchanged.steps[0].title, "Updated title");
+        assert_eq!(unchanged.steps[0].body.as_deref(), Some("body"));
+        assert_eq!(
+            store
+                .get_task_global(&parent.id)
+                .await
+                .expect("parent after rollback")
+                .lock_version,
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn update_step_rejects_invalid_links_and_empty_patches() {
+        let (_directory, store, _path) = store("step-update-guards").await;
+        store.initialize().await.expect("initialize");
+        let parent = store
+            .create_task(
+                "default",
+                create_input("t_step_update_guard", None, "Step update guard"),
+            )
+            .await
+            .expect("create parent");
+        let created = store
+            .create_step(
+                &parent.id,
+                step_input(
+                    "step_update_guard",
+                    None,
+                    "Guard",
+                    Some(1024),
+                    "planner",
+                    parent.lock_version,
+                    "unplanned",
+                    "ready",
+                    "e_step_update_guard_create",
+                    "e_step_update_guard_plan",
+                    "e_step_update_guard_recompute",
+                    500,
+                ),
+            )
+            .await
+            .expect("create step");
+        let self_link = store
+            .update_step(
+                &parent.id,
+                &created.id,
+                UpdateStepInput {
+                    title: None,
+                    body: None,
+                    linked_task_id: Some(parent.id.clone()),
+                    unlink_task: false,
+                    position: None,
+                    required: None,
+                    updated_by: "planner".into(),
+                    event_id: "e_step_update_guard_self".into(),
+                    updated_at: 600,
+                    expected_lock_version: 1,
+                },
+            )
+            .await
+            .expect_err("self link must fail");
+        assert!(
+            matches!(self_link, StoreError::InvalidInput(message) if message.contains("parent"))
+        );
+        let empty = store
+            .update_step(
+                &parent.id,
+                &created.id,
+                UpdateStepInput {
+                    title: None,
+                    body: None,
+                    linked_task_id: None,
+                    unlink_task: false,
+                    position: None,
+                    required: None,
+                    updated_by: "planner".into(),
+                    event_id: "e_step_update_guard_empty".into(),
+                    updated_at: 600,
+                    expected_lock_version: 1,
+                },
+            )
+            .await
+            .expect_err("empty patch must fail");
+        assert!(
+            matches!(empty, StoreError::InvalidInput(message) if message.contains("at least one"))
         );
     }
 

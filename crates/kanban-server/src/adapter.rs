@@ -16,6 +16,7 @@ use kanban_application::{
     TaskListOptions as ApplicationTaskListOptions, TaskListPage as ApplicationTaskListPage,
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
     TaskRecord as ApplicationTask, TaskStepsRecord as ApplicationTaskSteps,
+    UpdateStepRecord as ApplicationUpdateStep,
 };
 use kanban_core::{Board, KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
@@ -29,7 +30,7 @@ use kanban_store_turso::{
     SubmitReviewTaskInput as StoreSubmitReviewTask, TaskExecutionPlanRecord as StoreExecutionPlan,
     TaskListOptions as StoreTaskListOptions, TaskListSort as StoreTaskListSort,
     TaskPlanFilter as StoreTaskPlanFilter, TaskRecord as StoreTask, TaskRunRecord as StoreRun,
-    TursoStore,
+    TursoStore, UpdateStepInput as StoreUpdateStep,
 };
 
 #[derive(Clone)]
@@ -198,6 +199,34 @@ impl ApplicationStore for TursoApplicationStore {
                 .collect::<Result<Vec<_>>>()?,
             execution_plan: application_execution_plan(steps.execution_plan)?,
         })
+    }
+
+    async fn update_step(
+        &self,
+        task_id: &str,
+        step_id: &str,
+        input: ApplicationUpdateStep,
+    ) -> Result<ApplicationStep> {
+        self.store
+            .update_step(
+                task_id,
+                step_id,
+                StoreUpdateStep {
+                    title: input.title,
+                    body: input.body,
+                    linked_task_id: input.linked_task_id,
+                    unlink_task: input.unlink_task,
+                    position: input.position,
+                    required: input.required,
+                    updated_by: input.updated_by,
+                    event_id: input.event_id,
+                    updated_at: input.updated_at,
+                    expected_lock_version: input.expected_lock_version,
+                },
+            )
+            .await
+            .map_err(store_error)
+            .and_then(application_step)
     }
 
     async fn list_tasks(
@@ -468,6 +497,7 @@ fn store_error(error: StoreError) -> KanbanError {
     match error {
         StoreError::BoardNotFound(selector) => KanbanError::NotFound(format!("board {selector}")),
         StoreError::TaskNotFound(task_id) => KanbanError::NotFound(format!("task {task_id}")),
+        StoreError::StepNotFound(step_id) => KanbanError::NotFound(format!("step {step_id}")),
         StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),
         StoreError::InvalidTransition(message) => KanbanError::InvalidTransition(message),
         StoreError::ClaimConflict(message) => {

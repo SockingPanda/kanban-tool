@@ -8,6 +8,7 @@ use crate::{
     ExecutionPlanRecord, HeartbeatTaskRecord, MarkExecutionPlanNotRequiredRecord,
     PromoteTaskRecord, ReclaimExpiredTaskRecord, ReleaseTaskRecord, StepRecord,
     SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskRecord, TaskStepsRecord,
+    UpdateStepRecord,
 };
 
 /// Persistence port used only by the shared application service.
@@ -117,4 +118,11 @@ pub trait ApplicationStore: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Result<StepRecord>> + Send;
 
     fn list_steps(&self, task_id: &str) -> impl Future<Output = Result<TaskStepsRecord>> + Send;
+
+    fn update_step(
+        &self,
+        task_id: &str,
+        step_id: &str,
+        input: UpdateStepRecord,
+    ) -> impl Future<Output = Result<StepRecord>> + Send;
 }

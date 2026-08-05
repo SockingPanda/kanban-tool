@@ -20,7 +20,7 @@ use crate::{
         block_task, claim_task, complete_task, create_comment, create_step, create_task, get_task,
         health, heartbeat_task, list_board_columns, list_boards, list_comments, list_steps,
         list_tasks, mark_execution_plan_not_required, promote_task, release_task,
-        submit_review_task,
+        submit_review_task, update_step,
     },
     state::AppState,
 };
@@ -42,6 +42,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/tasks/:task_id/steps",
             get(list_steps).post(create_step),
+        )
+        .route(
+            "/api/v1/tasks/:task_id/steps/:step_id",
+            axum::routing::patch(update_step),
         )
         .route(
             "/api/v1/tasks/:task_id/execution-plan/not-required",
@@ -212,10 +216,10 @@ mod tests {
     };
     use http_body_util::BodyExt;
     use kanban_contract::{
-        ApiErrorCode, ApiExecutionPlanState, ApiRunStatus, ApiTaskStatus, BlockTaskResponse,
-        ClaimTaskResponse, CompleteTaskResponse, CreateStepResponse, CreateTaskResponse,
-        ErrorEnvelope, GetTaskResponse, HeartbeatTaskResponse, ListBoardColumnsResponse,
-        ListBoardsResponse, ListStepsResponse, ListTasksResponse,
+        ApiErrorCode, ApiExecutionPlanState, ApiRunStatus, ApiStepStatus, ApiTaskStatus,
+        BlockTaskResponse, ClaimTaskResponse, CompleteTaskResponse, CreateStepResponse,
+        CreateTaskResponse, ErrorEnvelope, GetTaskResponse, HeartbeatTaskResponse,
+        ListBoardColumnsResponse, ListBoardsResponse, ListStepsResponse, ListTasksResponse,
         MarkExecutionPlanNotRequiredResponse, PromoteTaskResponse, ReleaseTaskResponse,
         SubmitReviewTaskResponse,
     };
@@ -479,6 +483,44 @@ mod tests {
         let listed_body = listed.into_body().collect().await.unwrap().to_bytes();
         let listed: ListStepsResponse = serde_json::from_slice(&listed_body).unwrap();
         assert_eq!(listed.data.steps, first.data.steps);
+
+        let updated = router
+            .clone()
+            .oneshot(patch_json_request(
+                &format!("/api/v1/tasks/t_http_step/steps/{}", first.data.steps[0].id),
+                serde_json::json!({
+                    "title": "updated step",
+                    "body": null,
+                    "position": 2048,
+                    "required": false,
+                    "actor": "reviewer"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(updated.status(), StatusCode::OK);
+        let updated_body = updated.into_body().collect().await.unwrap().to_bytes();
+        let updated: kanban_contract::UpdateStepResponse =
+            serde_json::from_slice(&updated_body).unwrap();
+        assert_eq!(updated.data.steps[0].title, "updated step");
+        assert_eq!(updated.data.steps[0].body.as_deref(), Some("step body"));
+        assert_eq!(updated.data.steps[0].position, 2048);
+        assert!(!updated.data.steps[0].required);
+        assert_eq!(updated.data.steps[0].status, ApiStepStatus::Todo);
+
+        let invalid = router
+            .clone()
+            .oneshot(patch_json_request(
+                &format!("/api/v1/tasks/t_http_step/steps/{}", first.data.steps[0].id),
+                serde_json::json!({
+                    "linked_task_ref": "t_http_step",
+                    "unlink_task": true,
+                    "actor": "reviewer"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
 
         let conflict = router
             .clone()
@@ -1427,6 +1469,15 @@ mod tests {
     fn json_request(uri: &str, value: serde_json::Value) -> Request<Body> {
         Request::builder()
             .method("POST")
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::to_vec(&value).unwrap()))
+            .unwrap()
+    }
+
+    fn patch_json_request(uri: &str, value: serde_json::Value) -> Request<Body> {
+        Request::builder()
+            .method("PATCH")
             .uri(uri)
             .header("content-type", "application/json")
             .body(Body::from(serde_json::to_vec(&value).unwrap()))

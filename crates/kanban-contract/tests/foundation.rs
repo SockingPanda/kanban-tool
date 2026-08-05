@@ -299,8 +299,8 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
         .iter()
         .filter(|endpoint| endpoint.operation_id != "sse.stream-events")
         .collect::<Vec<_>>();
-    // 当前基线已有 98 个 JSON endpoint，本提交相对 graph 基线新增 6 个。
-    assert_eq!(endpoints.len(), 104);
+    // 当前 catalog 同时包含完整领域、维护、graph 与 vector 的 JSON endpoint。
+    assert_eq!(endpoints.len(), 113);
 
     for endpoint in endpoints {
         let EndpointObligation::Contract(expected_id) = endpoint.obligations.headers else {
@@ -367,10 +367,12 @@ fn b7_header_profiles_fail_closed_over_actor_and_body_cardinality() {
         "api.claim-task",
         "api.complete-step",
         "api.complete-task",
+        "api.create-attachment",
         "api.create-board",
         "api.create-comment",
         "api.create-step",
         "api.create-task",
+        "api.delete-attachment",
         "api.delete-label-semantics",
         "api.heartbeat-task",
         "api.mark-execution-plan-not-required",
@@ -684,7 +686,7 @@ fn foundation_registry_contains_generated_roots() {
         .filter(|id| id.contains(":api:") && id.ends_with("-headers:v1"))
         .copied()
         .collect::<BTreeSet<_>>();
-    assert_eq!(header_roots.len(), 104);
+    assert_eq!(header_roots.len(), 113);
     actual.retain(|id| !header_roots.contains(id));
     let mut expected = BTreeSet::from([
         "urn:kanban-tool:schema:api:accept-label-proposal-body:v1",
@@ -741,6 +743,9 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:complete-task-path:v1",
         "urn:kanban-tool:schema:api:complete-task-request:v1",
         "urn:kanban-tool:schema:api:complete-task-response:v1",
+        "urn:kanban-tool:schema:api:create-attachment-path:v1",
+        "urn:kanban-tool:schema:api:create-attachment-request:v1",
+        "urn:kanban-tool:schema:api:create-attachment-response:v1",
         "urn:kanban-tool:schema:api:create-board-label-path:v1",
         "urn:kanban-tool:schema:api:create-board-label-request:v1",
         "urn:kanban-tool:schema:api:create-board-label-response:v1",
@@ -756,6 +761,10 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:create-step-request:v1",
         "urn:kanban-tool:schema:api:create-step-response:v1",
         "urn:kanban-tool:schema:api:create-task-path:v1",
+        "urn:kanban-tool:schema:api:delete-attachment-path:v1",
+        "urn:kanban-tool:schema:api:delete-attachment-response:v1",
+        "urn:kanban-tool:schema:api:download-attachment-path:v1",
+        "urn:kanban-tool:schema:api:download-attachment-response:v1",
         "urn:kanban-tool:schema:api:create-task-request:v1",
         "urn:kanban-tool:schema:api:create-task-response:v1",
         "urn:kanban-tool:schema:api:delete-label-semantics-path:v1",
@@ -822,6 +831,8 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:list-events-response:v1",
         "urn:kanban-tool:schema:api:list-label-atoms-path:v1",
         "urn:kanban-tool:schema:api:list-label-atoms-response:v1",
+        "urn:kanban-tool:schema:api:list-attachments-path:v1",
+        "urn:kanban-tool:schema:api:list-attachments-response:v1",
         "urn:kanban-tool:schema:api:list-label-ontology-signals-path:v1",
         "urn:kanban-tool:schema:api:list-label-ontology-signals-response:v1",
         "urn:kanban-tool:schema:api:list-label-semantics-path:v1",
@@ -949,6 +960,16 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:graph-sync-response:v1",
         "urn:kanban-tool:schema:api:vector-status-query:v1",
         "urn:kanban-tool:schema:api:vector-status-response:v1",
+        "urn:kanban-tool:schema:api:vector-configure-request:v1",
+        "urn:kanban-tool:schema:api:vector-configure-response:v1",
+        "urn:kanban-tool:schema:api:vector-query-chunks-query:v1",
+        "urn:kanban-tool:schema:api:vector-query-chunks-response:v1",
+        "urn:kanban-tool:schema:api:vector-query-label-atoms-query:v1",
+        "urn:kanban-tool:schema:api:vector-query-label-atoms-response:v1",
+        "urn:kanban-tool:schema:api:vector-rebuild-request:v1",
+        "urn:kanban-tool:schema:api:vector-rebuild-response:v1",
+        "urn:kanban-tool:schema:api:vector-sync-request:v1",
+        "urn:kanban-tool:schema:api:vector-sync-response:v1",
         "urn:kanban-tool:schema:api:list-events-query:v1",
         "urn:kanban-tool:schema:sse:stream-events-query:v1",
     ]);
@@ -969,9 +990,11 @@ fn foundation_registry_contains_generated_roots() {
             .map(|contract| contract.schema_id.expect("adopted protocol schema id")),
     );
 
-    assert_eq!(
-        actual, expected,
-        "foundation root 必须来自 schema generation DTO registry"
+    let unexpected = actual.difference(&expected).copied().collect::<Vec<_>>();
+    let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
+    assert!(
+        unexpected.is_empty() && missing.is_empty(),
+        "foundation root 必须来自 schema generation DTO registry；unexpected={unexpected:?}；missing={missing:?}"
     );
 }
 
@@ -1049,8 +1072,8 @@ fn endpoint_descriptor_catalog_is_complete_and_explicit() {
     let endpoints = endpoint_catalog();
     assert_eq!(
         endpoints.len(),
-        105,
-        "104 JSON API + 1 SSE 必须全部有 descriptor"
+        114,
+        "113 JSON API + 1 SSE 必须全部有 descriptor"
     );
     assert_eq!(
         endpoints
@@ -1820,7 +1843,7 @@ fn current_train_freeze_requires_closed_authority() {
             EndpointObligation::Excluded { .. } => excluded += 1,
         }
     }
-    assert_eq!((contract, todo, not_applicable, excluded), (363, 0, 266, 1));
+    assert_eq!((contract, todo, not_applicable, excluded), (391, 0, 292, 1));
     let unfinished_contracts = operation_inventory()
         .iter()
         .filter(|contract| {

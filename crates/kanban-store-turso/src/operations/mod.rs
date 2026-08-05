@@ -3,8 +3,8 @@ mod boards;
 mod comments;
 mod dependencies;
 mod events;
-mod lifecycle;
 mod labels;
+mod lifecycle;
 mod ontology;
 #[cfg(test)]
 mod ontology_tests;
@@ -24,14 +24,12 @@ pub use comments::CreateCommentInput;
 pub use dependencies::{
     AddDependencyInput, AddDependencyRecord, RemoveDependencyInput, RemoveDependencyRecord,
 };
+pub use labels::{AddTaskLabelsInput, AddTaskLabelsRecord, CreateLabelInput, RemoveTaskLabelInput};
 pub use lifecycle::{
     ArchiveTaskInput, BlockTaskInput, ClaimTaskInput, ClaimTaskRecord, CompleteTaskInput,
     HeartbeatTaskInput, MarkExecutionPlanNotRequiredInput, PromoteTaskInput,
     ReclaimExpiredTaskInput, ReclaimTaskInput, ReleaseTaskInput, ReopenTaskInput, SpecifyTaskInput,
     SubmitReviewTaskInput, UnblockTaskInput,
-};
-pub use labels::{
-    AddTaskLabelsInput, AddTaskLabelsRecord, CreateLabelInput, RemoveTaskLabelInput,
 };
 pub use ontology::*;
 pub use signals::{CreateSignalInput, ReviewSignalsInput, SignalLifecycleInput, SignalListOptions};

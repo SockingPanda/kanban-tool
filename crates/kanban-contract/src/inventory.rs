@@ -3214,7 +3214,7 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "suite::ontology_signals::list_label_ontology_signals_response_fixture_is_produced_by_real_router",
         "suite::ontology_signals::list_label_ontology_signals_response_fixture_is_consumed_by_contract_root"
     ),
-    generated_api_contract!(
+    adopted_comment_contract!(
         "api.list-board-labels.path",
         "GET /api/v1/boards/:board/labels path",
         "GET /api/v1/boards/:board/labels",
@@ -3222,12 +3222,11 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "urn:kanban-tool:schema:api:list-board-labels-path:v1",
         "schemas/fixtures/api/list-board-labels-path.v1.valid.json",
         HttpTransportLocation::Path,
-        &[WireParameter {
-            name: "board",
-            cardinality: Some(WireParameterCardinality::RequiredOne)
-        }]
+        BOARD_PATH_PARAMETERS,
+        "suite::labels_adoption::list_board_labels_path_dto_serializes_to_committed_fixture",
+        "suite::labels_adoption::list_board_labels_path_fixture_is_consumed_by_real_router"
     ),
-    generated_api_contract!(
+    adopted_comment_contract!(
         "api.list-board-labels.response",
         "GET /api/v1/boards/:board/labels success",
         "GET /api/v1/boards/:board/labels",
@@ -3235,9 +3234,11 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "urn:kanban-tool:schema:api:list-board-labels-response:v1",
         "schemas/fixtures/api/list-board-labels-response.v1.valid.json",
         HttpTransportLocation::Success,
-        &[]
+        &[],
+        "suite::labels_adoption::list_board_labels_response_fixture_is_produced_by_real_router",
+        "suite::labels_adoption::list_board_labels_response_fixture_is_consumed_by_contract_root"
     ),
-    generated_api_contract!(
+    adopted_comment_contract!(
         "api.create-board-label.path",
         "POST /api/v1/boards/:board/labels path",
         "POST /api/v1/boards/:board/labels",
@@ -3245,12 +3246,11 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "urn:kanban-tool:schema:api:create-board-label-path:v1",
         "schemas/fixtures/api/create-board-label-path.v1.valid.json",
         HttpTransportLocation::Path,
-        &[WireParameter {
-            name: "board",
-            cardinality: Some(WireParameterCardinality::RequiredOne)
-        }]
+        BOARD_PATH_PARAMETERS,
+        "suite::labels_adoption::create_board_label_path_dto_serializes_to_committed_fixture",
+        "suite::labels_adoption::create_board_label_path_fixture_is_consumed_by_real_router"
     ),
-    generated_api_contract!(
+    adopted_comment_contract!(
         "api.create-board-label.request",
         "POST /api/v1/boards/:board/labels body",
         "POST /api/v1/boards/:board/labels",
@@ -3258,9 +3258,11 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "urn:kanban-tool:schema:api:create-board-label-request:v1",
         "schemas/fixtures/api/create-board-label-request.v1.valid.json",
         HttpTransportLocation::Body,
-        &[]
+        &[],
+        "suite::labels_adoption::create_board_label_request_dto_serializes_to_committed_fixture",
+        "suite::labels_adoption::create_board_label_request_fixture_is_consumed_by_real_router"
     ),
-    generated_api_contract!(
+    adopted_comment_contract!(
         "api.create-board-label.response",
         "POST /api/v1/boards/:board/labels success",
         "POST /api/v1/boards/:board/labels",
@@ -3268,7 +3270,9 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "urn:kanban-tool:schema:api:create-board-label-response:v1",
         "schemas/fixtures/api/create-board-label-response.v1.valid.json",
         HttpTransportLocation::Success,
-        &[]
+        &[],
+        "suite::labels_adoption::create_board_label_response_fixture_is_produced_by_real_router",
+        "suite::labels_adoption::create_board_label_response_fixture_is_consumed_by_contract_root"
     ),
     generated_api_contract!(
         "api.list-label-semantics.path",
@@ -5570,19 +5574,7 @@ macro_rules! phase5_api_request_contract {
     };
 }
 
-const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 58] = [
-    phase5_api_request_contract!(
-        "api.list-board-labels.path",
-        list_board_labels_request_fixture_reaches_handler
-    ),
-    phase5_api_request_contract!(
-        "api.create-board-label.path",
-        create_board_label_request_fixtures_reach_handler
-    ),
-    phase5_api_request_contract!(
-        "api.create-board-label.request",
-        create_board_label_request_fixtures_reach_handler
-    ),
+const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 55] = [
     phase5_api_request_contract!(
         "api.list-label-semantics.path",
         list_label_semantics_request_fixture_reaches_handler
@@ -5805,15 +5797,7 @@ const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 58] = [
     ),
 ];
 
-const PHASE5_API_RESPONSE_CONTRACTS: [(&str, &str); 32] = [
-    (
-        "api.list-board-labels.response",
-        "suite::api_generated_adoption::generated_empty_collection_responses_are_produced_by_real_router",
-    ),
-    (
-        "api.create-board-label.response",
-        "suite::api_generated_adoption::generated_label_responses_are_produced_by_real_router",
-    ),
+const PHASE5_API_RESPONSE_CONTRACTS: [(&str, &str); 30] = [
     (
         "api.list-label-semantics.response",
         "suite::api_generated_adoption::generated_empty_collection_responses_are_produced_by_real_router",

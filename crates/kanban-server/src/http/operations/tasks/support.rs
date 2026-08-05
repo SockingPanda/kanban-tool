@@ -1,5 +1,5 @@
 use crate::error::ApiError;
-use kanban_application::{ExecutionPlanRecord, ExecutionPlanState, TaskRecord};
+use kanban_application::{ExecutionPlanRecord, ExecutionPlanState, LabelRecord, TaskRecord};
 use kanban_contract::{
     ApiExecutionPlan, ApiExecutionPlanState, ApiStepStatus, ApiTask, ApiTaskPriority,
     ApiTaskStatus, ApiTaskStep,
@@ -92,8 +92,19 @@ pub(crate) fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
         required_step_count: task.required_step_count,
         completed_required_step_count: task.completed_required_step_count,
         optional_step_count: task.optional_step_count,
-        labels: Vec::new(),
+        labels: task.labels.into_iter().map(api_label).collect(),
     })
+}
+
+pub(crate) fn api_label(label: LabelRecord) -> kanban_contract::ApiLabel {
+    kanban_contract::ApiLabel {
+        id: label.id,
+        board_id: label.board_id,
+        name: label.name,
+        color: label.color,
+        created_at: label.created_at,
+        updated_at: label.updated_at,
+    }
 }
 
 pub(crate) fn api_execution_plan(plan: ExecutionPlanRecord) -> ApiExecutionPlan {

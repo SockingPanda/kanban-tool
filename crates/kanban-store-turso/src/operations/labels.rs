@@ -1,5 +1,5 @@
-use turso::{Connection, Row, transaction::Transaction};
 use turso::transaction::TransactionBehavior;
+use turso::{Connection, Row, transaction::Transaction};
 
 use crate::{db::TursoStore, domain::*, error::StoreError, shared::*};
 
@@ -94,7 +94,8 @@ impl TursoStore {
     ) -> Result<AddTaskLabelsRecord, StoreError> {
         validate_task_id(task_id)?;
         validate_add_task_labels_input(&input)?;
-        if input.names.len() != input.label_ids.len() || input.names.len() != input.event_ids.len() {
+        if input.names.len() != input.label_ids.len() || input.names.len() != input.event_ids.len()
+        {
             return Err(StoreError::InvalidInput(
                 "label input vectors must have equal lengths".to_owned(),
             ));
@@ -236,7 +237,9 @@ fn validate_create_label_input(input: &CreateLabelInput) -> Result<(), StoreErro
         ));
     }
     if input.name.trim().is_empty() {
-        return Err(StoreError::InvalidInput("label name is required".to_owned()));
+        return Err(StoreError::InvalidInput(
+            "label name is required".to_owned(),
+        ));
     }
     Ok(())
 }
@@ -251,7 +254,9 @@ fn validate_add_task_labels_input(input: &AddTaskLabelsInput) -> Result<(), Stor
         ));
     }
     if input.names.iter().any(|name| name.trim().is_empty()) {
-        return Err(StoreError::InvalidInput("label name is required".to_owned()));
+        return Err(StoreError::InvalidInput(
+            "label name is required".to_owned(),
+        ));
     }
     Ok(())
 }
@@ -492,4 +497,187 @@ fn label_from_row(row: Row) -> Result<LabelRecord, StoreError> {
         created_at: integer_value(row.get_value(4)?, "labels.created_at")?,
         updated_at: integer_value(row.get_value(5)?, "labels.updated_at")?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{create_input, store};
+
+    fn create_label_input(id: &str, name: &str) -> CreateLabelInput {
+        CreateLabelInput {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            color: Some("#4477aa".to_owned()),
+            created_at: 100,
+        }
+    }
+
+    fn add_input(
+        name: &str,
+        label_id: &str,
+        event_id: &str,
+        create_missing: bool,
+    ) -> AddTaskLabelsInput {
+        AddTaskLabelsInput {
+            names: vec![name.to_owned()],
+            label_ids: vec![label_id.to_owned()],
+            event_ids: vec![event_id.to_owned()],
+            create_missing,
+            actor: "label-test".to_owned(),
+            now: 100,
+        }
+    }
+
+    #[tokio::test]
+    async fn board_labels_trim_names_and_keep_duplicate_create_idempotent() {
+        let (_directory, store, _path) = store("labels-create").await;
+        store.initialize().await.expect("initialize");
+
+        let first = store
+            .create_board_label("default", create_label_input("l_first", "  urgent  "))
+            .await
+            .expect("create label");
+        assert_eq!(first.name, "urgent");
+        assert_eq!(first.color.as_deref(), Some("#4477aa"));
+
+        let duplicate = store
+            .create_board_label("default", create_label_input("l_duplicate", "urgent"))
+            .await
+            .expect("duplicate create returns existing label");
+        assert_eq!(duplicate.id, first.id);
+
+        let labels = store
+            .list_board_labels("default")
+            .await
+            .expect("list labels");
+        assert_eq!(labels, vec![first]);
+    }
+
+    #[tokio::test]
+    async fn task_label_attach_is_idempotent_and_emits_one_event() {
+        let (_directory, store, _path) = store("labels-attach").await;
+        store.initialize().await.expect("initialize");
+        store
+            .create_task(
+                "default",
+                create_input("t_labels_attach", Some("labels-1"), "Labels"),
+            )
+            .await
+            .expect("create task");
+        store
+            .create_board_label("default", create_label_input("l_attach", "urgent"))
+            .await
+            .expect("create label");
+
+        let added = store
+            .add_task_labels(
+                "t_labels_attach",
+                add_input("urgent", "l_generated", "evt-label-add-1", false),
+            )
+            .await
+            .expect("attach label");
+        assert_eq!(added.task.labels.len(), 1);
+        assert!(added.created_labels.is_empty());
+
+        let duplicate = store
+            .add_task_labels(
+                "t_labels_attach",
+                add_input("urgent", "l_generated-duplicate", "evt-label-add-2", false),
+            )
+            .await
+            .expect("duplicate attach");
+        assert_eq!(duplicate.task.labels, added.task.labels);
+
+        let connection = store.connection().await.expect("connection");
+        let row = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = 't_labels_attach' AND kind = 'task.label.added'",
+                    (),
+                )
+                .await
+                .expect("event count query"),
+        )
+        .await
+        .expect("event count row");
+        assert_eq!(
+            integer_value(row.get_value(0).unwrap(), "event count").unwrap(),
+            1
+        );
+
+        let removed = store
+            .remove_task_label(
+                "t_labels_attach",
+                RemoveTaskLabelInput {
+                    label_ref: "l_attach".to_owned(),
+                    event_id: "evt-label-remove-1".to_owned(),
+                    actor: "label-test".to_owned(),
+                    now: 101,
+                },
+            )
+            .await
+            .expect("remove label");
+        assert!(removed.labels.is_empty());
+    }
+
+    #[tokio::test]
+    async fn task_labels_are_board_isolated_and_active_guarded() {
+        let (_directory, store, _path) = store("labels-isolation").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO boards(id, slug, name, created_at, updated_at) VALUES ('b_other', 'other', 'Other', 1, 1)",
+                (),
+            )
+            .await
+            .expect("insert second board");
+        store
+            .create_board_label("other", create_label_input("l_other", "shared"))
+            .await
+            .expect("create label on other board");
+        store
+            .create_task(
+                "default",
+                create_input("t_labels_isolation", Some("labels-2"), "Labels"),
+            )
+            .await
+            .expect("create task");
+
+        let missing = store
+            .add_task_labels(
+                "t_labels_isolation",
+                add_input("shared", "l_default", "evt-label-missing", false),
+            )
+            .await
+            .expect_err("other-board label must not cross the board boundary");
+        assert!(matches!(missing, StoreError::LabelNotFound(name) if name == "shared"));
+
+        let created = store
+            .add_task_labels(
+                "t_labels_isolation",
+                add_input("shared", "l_default", "evt-label-created", true),
+            )
+            .await
+            .expect("create default-board label");
+        assert_eq!(created.created_labels.len(), 1);
+        assert_eq!(created.task.labels.len(), 1);
+        assert_eq!(created.task.labels[0].board_id, "b_default");
+
+        connection
+            .execute(
+                "UPDATE tasks SET status = 'archived', archived_at = 200 WHERE id = 't_labels_isolation'",
+                (),
+            )
+            .await
+            .expect("archive task");
+        let archived = store
+            .list_task_labels("t_labels_isolation")
+            .await
+            .expect_err("archived task must be guarded");
+        assert!(
+            matches!(archived, StoreError::TaskNotFound(task_id) if task_id == "t_labels_isolation")
+        );
+    }
 }

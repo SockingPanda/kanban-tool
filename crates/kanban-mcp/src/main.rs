@@ -18,6 +18,7 @@ impl KanbanMcp {
             + Self::attachment_tools()
             + Self::dependency_tools()
             + Self::event_tools()
+            + Self::label_tools()
             + Self::run_tools()
             + Self::search_tools()
             + Self::signal_tools()
@@ -87,6 +88,8 @@ mod tests {
                 "label_semantics_show",
                 "label_semantics_upsert",
                 "label_suggest",
+                "label_create",
+                "label_list",
                 "run_list",
                 "run_log",
                 "run_show",
@@ -113,6 +116,9 @@ mod tests {
                 "task_create",
                 "task_done",
                 "task_heartbeat",
+                "task_label_add",
+                "task_label_list",
+                "task_label_remove",
                 "task_list",
                 "task_plan_not_required",
                 "task_promote",

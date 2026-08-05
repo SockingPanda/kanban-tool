@@ -4,6 +4,7 @@ pub(crate) mod comments;
 mod dependencies;
 mod events;
 mod health;
+mod labels;
 mod maintenance;
 mod ontology;
 mod runs;
@@ -26,6 +27,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(boards::router())
         .merge(attachments::router())
         .merge(tasks::router())
+        .merge(labels::router())
         .merge(comments::router())
         .merge(dependencies::router())
         .merge(steps::router())

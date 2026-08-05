@@ -10,6 +10,10 @@ autotests = false
 name = "kanban"
 path = "src/main.rs"
 
+[[test]]
+name = "cli_label_contract_adoption"
+path = "tests/label_contract_adoption.rs"
+
 [dependencies]
 clap = { workspace = true, features = ["derive", "env"] }
 clap_complete.workspace = true

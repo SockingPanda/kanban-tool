@@ -5,6 +5,9 @@ mod http;
 mod router;
 mod state;
 
+#[cfg(test)]
+mod suite;
+
 pub use dispatcher::{DispatcherConfig, ShutdownSignal};
 pub use router::{build_router, serve, serve_with_dispatcher_shutdown, serve_with_shutdown};
 pub use state::AppState;

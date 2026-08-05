@@ -69,11 +69,11 @@ enum Command {
         #[command(subcommand)]
         command: commands::task::TaskCommand,
     },
-    /// Manage label semantics and ontology ledger through the canonical host.
-    #[command(name = "label", visible_alias = "ontology", visible_alias = "labels")]
+    /// Manage board labels and task label bindings through the canonical host.
+    #[command(visible_alias = "labels", visible_alias = "ontology")]
     Label {
         #[command(subcommand)]
-        command: commands::ontology::OntologyCommand,
+        command: commands::label::LabelCommand,
     },
     /// Manage task comments through the canonical localhost host.
     Comment {
@@ -211,7 +211,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Vacuum => commands::maintenance::vacuum(&ctx),
         Command::Maintenance(args) => commands::maintenance::maintenance(&ctx, args),
         Command::Task { command } => commands::task::run(&ctx, command),
-        Command::Label { command } => commands::ontology::run(&ctx, command),
+        Command::Label { command } => commands::label::run(&ctx, command),
         Command::Search(args) => commands::search::run(&ctx, args),
         Command::Index { command } => commands::index::run(&ctx, command),
         Command::Config { .. }
@@ -291,5 +291,54 @@ mod tests {
         assert_eq!(args.task_ref.as_deref(), Some("default#1"));
         assert_eq!(args.after, 10);
         assert_eq!(args.limit, 25);
+    }
+
+    #[test]
+    fn parses_label_add_command() {
+        let cli = Cli::try_parse_from([
+            "kanban",
+            "label",
+            "add",
+            "default#1",
+            "backend",
+            "api",
+            "--create-missing",
+        ])
+        .expect("label add command should parse");
+        let Command::Label {
+            command: crate::commands::label::LabelCommand::Add(args),
+        } = cli.command
+        else {
+            panic!("expected label add command");
+        };
+        assert_eq!(args.task_ref, "default#1");
+        assert_eq!(args.labels, ["backend", "api"]);
+        assert!(args.create_missing);
+    }
+
+    #[test]
+    fn parses_label_ontology_and_legacy_alias_roots() {
+        let cli = Cli::try_parse_from(["kanban", "labels", "ontology", "apply", "atom"])
+            .expect("label ontology alias should parse");
+        let Command::Label {
+            command:
+                crate::commands::label::LabelCommand::Ontology {
+                    command: crate::commands::label::ontology::LedgerCommand::Apply { .. },
+                },
+        } = cli.command
+        else {
+            panic!("expected label ontology apply atom command");
+        };
+
+        let cli = Cli::try_parse_from(["kanban", "label", "ontology", "list"])
+            .expect("label ontology list should parse");
+        assert!(matches!(
+            cli.command,
+            Command::Label {
+                command: crate::commands::label::LabelCommand::Ontology {
+                    command: crate::commands::label::ontology::LedgerCommand::Signals(_),
+                },
+            }
+        ));
     }
 }

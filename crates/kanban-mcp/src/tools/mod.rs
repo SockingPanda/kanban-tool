@@ -3,6 +3,7 @@ mod boards;
 mod comments;
 mod dependencies;
 mod events;
+mod labels;
 mod lifecycle;
 mod ontology;
 mod runs;

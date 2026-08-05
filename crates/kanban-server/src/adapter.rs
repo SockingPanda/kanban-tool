@@ -4,11 +4,12 @@ use std::{
 };
 
 use kanban_application::{
-    ApplicationStore, CommentAuthorType as ApplicationCommentAuthorType,
-    CommentKind as ApplicationCommentKind, CommentRecord as ApplicationComment,
-    DependencyEdgeRecord as ApplicationDependencyEdge,
+    AddTaskLabelsRecord as ApplicationAddTaskLabelsRecord, ApplicationStore,
+    CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
+    CommentRecord as ApplicationComment, DependencyEdgeRecord as ApplicationDependencyEdge,
     DependencySnapshotRecord as ApplicationDependencySnapshot,
     ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
+    LabelRecord as ApplicationLabel,
     RunRecord as ApplicationRun, RunStatus as ApplicationRunStatus,
     SignalObservationRecord as ApplicationSignalObservation, SignalRecord as ApplicationSignal,
     SignalRecordResult as ApplicationSignalResult, SignalStatus as ApplicationSignalStatus,
@@ -16,6 +17,7 @@ use kanban_application::{
 };
 use kanban_core::{KanbanError, Result, TaskStatus};
 use kanban_store_turso::{
+    AddTaskLabelsRecord as StoreAddTaskLabelsRecord,
     DependencySnapshotRecord as StoreDependencySnapshot, StoreError,
     TaskExecutionPlanRecord as StoreExecutionPlan, TaskRecord as StoreTask,
     TaskRunRecord as StoreRun, TursoStore,
@@ -74,6 +76,7 @@ fn store_error(error: StoreError) -> KanbanError {
     match error {
         StoreError::BoardNotFound(selector) => KanbanError::NotFound(format!("看板 {selector}")),
         StoreError::TaskNotFound(task_id) => KanbanError::NotFound(format!("task {task_id}")),
+        StoreError::LabelNotFound(label) => KanbanError::NotFound(format!("label {label}")),
         StoreError::RunNotFound(run_id) => KanbanError::NotFound(format!("run {run_id}")),
         StoreError::StepNotFound(step_id) => KanbanError::NotFound(format!("step {step_id}")),
         StoreError::AttachmentNotFound(attachment_id) => {
@@ -205,6 +208,31 @@ fn application_task(task: StoreTask) -> Result<ApplicationTask> {
         required_step_count: task.required_step_count,
         completed_required_step_count: task.completed_required_step_count,
         optional_step_count: task.optional_step_count,
+        labels: task.labels.into_iter().map(application_label).collect(),
+    })
+}
+
+fn application_label(label: kanban_store_turso::LabelRecord) -> ApplicationLabel {
+    ApplicationLabel {
+        id: label.id,
+        board_id: label.board_id,
+        name: label.name,
+        color: label.color,
+        created_at: label.created_at,
+        updated_at: label.updated_at,
+    }
+}
+
+pub(crate) fn application_add_task_labels(
+    record: StoreAddTaskLabelsRecord,
+) -> Result<ApplicationAddTaskLabelsRecord> {
+    Ok(ApplicationAddTaskLabelsRecord {
+        task: application_task(record.task)?,
+        created_labels: record
+            .created_labels
+            .into_iter()
+            .map(application_label)
+            .collect(),
     })
 }
 

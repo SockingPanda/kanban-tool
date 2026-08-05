@@ -2,9 +2,7 @@ use std::{collections::HashSet, future::Future};
 
 use kanban_core::{Clock, KanbanError, Result, new_event_id, new_typed_id};
 
-use crate::{
-    ApplicationService, ApplicationStore, LabelRecord, TaskRecord,
-};
+use crate::{ApplicationService, ApplicationStore, LabelRecord, TaskRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateBoardLabelCommand {
@@ -187,10 +185,7 @@ where
     S: TaskLabelRemove,
     C: Clock,
 {
-    pub async fn remove_task_label(
-        &self,
-        command: RemoveTaskLabelCommand,
-    ) -> Result<TaskRecord> {
+    pub async fn remove_task_label(&self, command: RemoveTaskLabelCommand) -> Result<TaskRecord> {
         let task_id = global_task_id(&command.task_id)?;
         let label_ref = required_trimmed(&command.label_ref, "label id is required")?;
         let actor = required_trimmed(&command.actor, "actor is required")?;

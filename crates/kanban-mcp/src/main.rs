@@ -45,7 +45,10 @@ mod tests {
         assert_eq!(
             names,
             vec![
+                "board_archive",
+                "board_create",
                 "board_list",
+                "board_show",
                 "comment_create",
                 "comment_list",
                 "dependency_create",

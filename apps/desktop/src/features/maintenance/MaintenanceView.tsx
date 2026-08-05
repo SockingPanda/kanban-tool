@@ -24,6 +24,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useI18n } from "@/i18n"
 import type { BoardStats, CheckpointReport, DoctorDerivedStore, DoctorReport, KanbanApi, SearchIndexStatus, StaleClaim } from "@/lib/api"
+import { presentApiError } from "@/lib/api/error-presentation"
 import { queryKeys } from "@/lib/query-keys"
 
 export function MaintenanceView({ api }: { api: KanbanApi | null }) {
@@ -295,9 +296,10 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 function ErrorText({ error }: { error: unknown }) {
+  const { t } = useI18n()
   return (
     <Alert className="mt-3 border-destructive/50">
-      <AlertDescription className="text-destructive">{error instanceof Error ? error.message : String(error)}</AlertDescription>
+      <AlertDescription className="text-destructive">{presentApiError(error, t)}</AlertDescription>
     </Alert>
   )
 }

@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useI18n } from "@/i18n"
 import type { HealthStatus, KanbanApi, RuntimeConfig } from "@/lib/api"
+import { presentApiError } from "@/lib/api/error-presentation"
 
 type MetricTone = "ready" | "blocked" | "secondary"
 
@@ -83,7 +84,7 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
         )}
         {healthQuery.error ? (
           <Alert className="mt-3 border-destructive/50">
-            <AlertDescription className="text-destructive">{healthQuery.error.message}</AlertDescription>
+            <AlertDescription className="text-destructive">{presentApiError(healthQuery.error, t)}</AlertDescription>
           </Alert>
         ) : null}
       </SectionCard>

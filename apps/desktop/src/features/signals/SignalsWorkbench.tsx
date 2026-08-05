@@ -3,12 +3,14 @@ import { useQuery } from "@tanstack/react-query"
 import { Braces, CircleDashed, RefreshCcw, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useI18n } from "@/i18n"
 import type { KanbanApi, SignalRecord, SignalStatus } from "@/lib/api"
+import { presentApiError } from "@/lib/api/error-presentation"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
 
@@ -72,6 +74,7 @@ export function SignalsWorkbench({ api }: { api: KanbanApi | null }) {
       return api.getSignal(selectedSignalId, { signal })
     },
   })
+  const queryError = signalsQuery.error ?? detailQuery.error
 
   function refresh() {
     void signalsQuery.refetch()
@@ -92,6 +95,12 @@ export function SignalsWorkbench({ api }: { api: KanbanApi | null }) {
           {t("Refresh")}
         </Button>
       </div>
+
+      {queryError ? (
+        <Alert className="border-destructive/50">
+          <AlertDescription className="text-destructive">{presentApiError(queryError, t)}</AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-2">
         <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>

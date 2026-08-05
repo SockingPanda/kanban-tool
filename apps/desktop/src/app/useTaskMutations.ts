@@ -10,6 +10,7 @@ import {
 } from "@/features/task-detail/task-draft"
 import type { ClaimResponse, KanbanApi, RuntimeConfig, Task } from "@/lib/api"
 import { reconcileClaimTokenForTask } from "@/lib/claim-tokens"
+import { presentApiError } from "@/lib/api/error-presentation"
 import { queryKeys } from "@/lib/query-keys"
 
 import { invalidateTaskMutationScope, type TaskMutationInvalidationScope } from "./task-mutation-invalidation"
@@ -105,7 +106,7 @@ export function useTaskMutations({
         await invalidateTaskData(fallbackTaskId ?? null, invalidateScope)
         return result
       } catch (err) {
-        setError(errorMessage(err))
+        setError(presentApiError(err))
       } finally {
         setPendingAction(null)
       }
@@ -231,9 +232,4 @@ function isClaimResponse(value: unknown): value is ClaimResponse {
 
 function isTask(value: unknown): value is Task {
   return Boolean(value && typeof value === "object" && "id" in value && "status" in value)
-}
-
-function errorMessage(err: unknown) {
-  if (err instanceof Error) return err.message
-  return String(err)
 }

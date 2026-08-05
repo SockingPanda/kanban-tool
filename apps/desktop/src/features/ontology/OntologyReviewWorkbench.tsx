@@ -25,6 +25,7 @@ import type {
   LabelOntologySignalRecord,
   LabelOntologySignalStatus,
 } from "@/lib/api"
+import { presentApiError } from "@/lib/api/error-presentation"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
 
@@ -144,20 +145,20 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
   }, [selectedSignalId, signals])
 
   useEffect(() => {
-    if (signalsQuery.error) setLocalError(errorText(signalsQuery.error))
-  }, [signalsQuery.error])
+    if (signalsQuery.error) setLocalError(presentApiError(signalsQuery.error, t))
+  }, [signalsQuery.error, t])
 
   useEffect(() => {
-    if (reviewQuery.error) setLocalError(errorText(reviewQuery.error))
-  }, [reviewQuery.error])
+    if (reviewQuery.error) setLocalError(presentApiError(reviewQuery.error, t))
+  }, [reviewQuery.error, t])
 
   useEffect(() => {
-    if (signalDetailQuery.error) setLocalError(errorText(signalDetailQuery.error))
-  }, [signalDetailQuery.error])
+    if (signalDetailQuery.error) setLocalError(presentApiError(signalDetailQuery.error, t))
+  }, [signalDetailQuery.error, t])
 
   useEffect(() => {
-    if (atomExplainQuery.error) setLocalError(errorText(atomExplainQuery.error))
-  }, [atomExplainQuery.error])
+    if (atomExplainQuery.error) setLocalError(presentApiError(atomExplainQuery.error, t))
+  }, [atomExplainQuery.error, t])
 
   async function refreshAll() {
     setLocalError(null)
@@ -191,7 +192,7 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
         reason: actionReason.trim(),
       })
     } catch (err) {
-      setLocalError(errorText(err))
+      setLocalError(presentApiError(err, t))
     }
   }
 
@@ -668,9 +669,4 @@ function formatScore(value: number) {
 function shortId(value: string | null | undefined) {
   if (!value) return "-"
   return value.length > 12 ? `${value.slice(0, 10)}...` : value
-}
-
-function errorText(err: unknown) {
-  if (err instanceof Error) return err.message
-  return String(err)
 }

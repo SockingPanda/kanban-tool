@@ -9,7 +9,8 @@ import {
   type ThemeMode,
 } from "@/app/theme"
 import { parseSidebarOpen, serializeSidebarOpen, SIDEBAR_OPEN_STORAGE_KEY } from "@/app/sidebar-state"
-import { ApiError, KanbanApi, RuntimeConfig, loadRuntimeConfig } from "@/lib/api"
+import { KanbanApi, RuntimeConfig, loadRuntimeConfig } from "@/lib/api"
+import { errorMessage as presentErrorMessage } from "@/lib/api/error-presentation"
 import type { DesktopLocale } from "@/i18n"
 
 export function useRuntimeConfigState(locale: DesktopLocale) {
@@ -25,7 +26,7 @@ export function useRuntimeConfigState(locale: DesktopLocale) {
   useEffect(() => {
     loadRuntimeConfig()
       .then(setConfig)
-      .catch((err: unknown) => setError(errorMessage(err)))
+      .catch((err: unknown) => setError(errorMessage(err, locale)))
   }, [])
 
   useEffect(() => {
@@ -63,8 +64,6 @@ export function useRuntimeConfigState(locale: DesktopLocale) {
   )
 }
 
-export function errorMessage(err: unknown) {
-  if (err instanceof ApiError) return `${err.code}: ${err.message}`
-  if (err instanceof Error) return err.message
-  return String(err)
+export function errorMessage(err: unknown, locale: DesktopLocale = "zh-CN") {
+  return presentErrorMessage(err, locale)
 }

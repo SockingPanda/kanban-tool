@@ -8,7 +8,7 @@ fn kanban() -> Command {
     Command::new(env!("CARGO_BIN_EXE_kanban"))
 }
 
-fn isolated(command: &mut Command, temp: &tempfile::TempDir) -> &mut Command {
+fn isolated<'a>(command: &'a mut Command, temp: &tempfile::TempDir) -> &'a mut Command {
     command
         .current_dir(temp.path())
         .env_remove("KANBAN_DB")

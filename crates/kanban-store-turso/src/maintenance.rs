@@ -4,8 +4,9 @@
 //! 只包含 canonical facts；projection、FTS、vector 和 graph 表属于可重建派生物。
 
 use std::{
+    collections::BTreeMap,
     fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, BufWriter, Write},
+    io::{BufWriter, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -14,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use turso::{Connection, Value, params_from_iter, transaction::TransactionBehavior};
 
-use crate::{TursoStore, error::StoreError, shared::now_ms};
+use crate::{TursoStore, error::StoreError, migration, schema, shared::now_ms};
 
 /// 外部快照中的 canonical facts。派生 projection 不得被导出为事实。
 pub(crate) const PORTABLE_TABLES: &[&str] = &[
@@ -149,6 +150,14 @@ pub struct StoreImportReport {
     pub skipped_records: u64,
     pub rebuild_jobs_enqueued: u64,
     pub journal_id: String,
+    /// `completed` 表示 canonical 已提交；`validated` 表示 replace staging 已校验，
+    /// 仍需停止 host 后由 lifecycle owner 发布。
+    pub phase: String,
+    pub restart_required: bool,
+    pub staged_database_path: Option<String>,
+    pub target_fingerprint_before: Option<String>,
+    pub staged_fingerprint: Option<String>,
+    pub publish_preconditions: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -211,8 +220,19 @@ pub struct StoreMaintenanceRun {
 struct PortableHeader {
     format: String,
     version: u32,
+    schema_family: String,
+    schema_lineage: String,
+    schema_version: i64,
+    schema_fingerprint: String,
     source_fingerprint: String,
     canonical_tables: Vec<String>,
+    table_counts: BTreeMap<String, u64>,
+    record_count: u64,
+    payload_checksum_sha256: String,
+    manifest_checksum_sha256: String,
+    /// 当前 JSONL 只携带 `task_attachments` metadata；二进制文件需独立 attachment
+    /// staging/publish 协议，不能在导入时静默声称已迁移。
+    attachments_mode: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -220,6 +240,14 @@ struct PortableLine {
     #[serde(rename = "type")]
     table: String,
     data: serde_json::Map<String, serde_json::Value>,
+}
+
+/// 已完成预检的 portable 快照。解析和校验在任何 canonical 写入之前完成。
+struct PortableSnapshot {
+    header: PortableHeader,
+    records: Vec<PortableLine>,
+    payload_checksum_sha256: String,
+    table_counts: BTreeMap<String, u64>,
 }
 
 impl TursoStore {
@@ -291,41 +319,33 @@ impl TursoStore {
         let source_fingerprint = self.database_fingerprint().await?;
         let temp = temporary_sibling(&out_path, "export")?;
         let mut writer = BufWriter::new(File::create(&temp).map_err(io_error)?);
-        let header = PortableHeader {
+        let connection = self.connection().await?;
+        let (schema_family, schema_lineage, schema_version, schema_fingerprint) =
+            portable_schema_identity(&connection).await?;
+        let records = collect_portable_records(&connection).await?;
+        let (payload, table_counts) = serialize_portable_records(&records)?;
+        let mut header = PortableHeader {
             format: "kanban.portable.jsonl".to_owned(),
-            version: 1,
+            version: 2,
+            schema_family,
+            schema_lineage,
+            schema_version,
+            schema_fingerprint,
             source_fingerprint: source_fingerprint.clone(),
             canonical_tables: PORTABLE_TABLES
                 .iter()
                 .map(|table| (*table).to_owned())
                 .collect(),
+            record_count: records.len() as u64,
+            payload_checksum_sha256: digest_bytes(&payload),
+            table_counts,
+            manifest_checksum_sha256: String::new(),
+            attachments_mode: "metadata_only".to_owned(),
         };
+        header.manifest_checksum_sha256 = manifest_checksum(&header)?;
         serde_json::to_writer(&mut writer, &header).map_err(json_error)?;
         writer.write_all(b"\n").map_err(io_error)?;
-        let connection = self.connection().await?;
-        let mut record_count = 0;
-        for table in PORTABLE_TABLES {
-            let mut rows = connection
-                .query(format!("SELECT * FROM {table}"), ())
-                .await?;
-            let columns = rows.column_names();
-            while let Some(row) = rows.next().await? {
-                let mut data = serde_json::Map::new();
-                for (index, column) in columns.iter().enumerate() {
-                    data.insert(column.clone(), value_to_json(row.get_value(index)?));
-                }
-                serde_json::to_writer(
-                    &mut writer,
-                    &PortableLine {
-                        table: (*table).to_owned(),
-                        data,
-                    },
-                )
-                .map_err(json_error)?;
-                writer.write_all(b"\n").map_err(io_error)?;
-                record_count += 1;
-            }
-        }
+        writer.write_all(&payload).map_err(io_error)?;
         writer.flush().map_err(io_error)?;
         writer
             .into_inner()
@@ -338,7 +358,7 @@ impl TursoStore {
             out_path: out_path.display().to_string(),
             checksum_sha256,
             bytes,
-            record_count,
+            record_count: records.len() as u64,
             source_fingerprint,
         };
         self.release_maintenance_lease(&lease).await?;
@@ -365,75 +385,290 @@ impl TursoStore {
         let lease = self
             .acquire_maintenance_lease("import", "host-admin")
             .await?;
-        let (header, records) = match read_portable(in_path) {
-            Ok(value) => value,
-            Err(error) => {
-                let _ = self.release_maintenance_lease(&lease).await;
-                return Err(error);
-            }
-        };
-        if header.format != "kanban.portable.jsonl" || header.version != 1 {
-            let _ = self.release_maintenance_lease(&lease).await;
-            return Err(StoreError::InvalidInput(
-                "不支持的 portable export 格式".to_owned(),
-            ));
+        let result = self
+            .import_with_lease(in_path, replace, &lease, false)
+            .await;
+        let release = self.release_maintenance_lease(&lease).await;
+        match (result, release) {
+            (Ok(report), Ok(())) => Ok(report),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
         }
-        let mut connection = self.connection().await?;
-        let existing = canonical_record_count(&connection).await?;
-        if existing > 1 || (existing > 0 && !replace) {
-            let _ = self.release_maintenance_lease(&lease).await;
-            return Err(StoreError::InvalidInput(
-                "import target 非空；replace 只能在已验证备份和停 host 后执行".to_owned(),
-            ));
+    }
+
+    /// 仅执行 replace 的 prepare/verify 阶段并返回 typed 状态。
+    ///
+    /// 当前 Turso `Database` handle 没有 close/rebind seam；真正 publish 必须由 host
+    /// lifecycle 在停服后执行。普通 HTTP/CLI `import --replace` 仍返回 conflict，避免把
+    /// 已校验 staging 误报成 canonical 已替换。
+    pub async fn prepare_import(
+        &self,
+        in_path: impl AsRef<Path>,
+    ) -> Result<StoreImportReport, StoreError> {
+        let in_path = in_path.as_ref();
+        if !fs::symlink_metadata(in_path)
+            .map(|metadata| metadata.file_type().is_file())
+            .unwrap_or(false)
+        {
+            return Err(StoreError::InvalidInput(format!(
+                "portable import source 不是普通文件: {}",
+                in_path.display()
+            )));
         }
-        let journal_id = format!("ij_{}", unique_suffix());
-        let manifest = serde_json::to_string(&header).map_err(json_error)?;
-        connection.execute("INSERT INTO import_journal(id, source_kind, source_path, snapshot_fingerprint, phase, manifest_json, created_at, updated_at) VALUES (?1, 'jsonl', ?2, ?3, 'prepared', ?4, ?5, ?5)", (journal_id.as_str(), in_path.to_string_lossy().as_ref(), header.source_fingerprint.as_str(), manifest.as_str(), now_ms())).await?;
-        let transaction = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+        let lease = self
+            .acquire_maintenance_lease("import", "host-admin")
             .await?;
-        let mut imported_records = 0;
-        let mut skipped_records = 0;
-        for record in records {
-            if !PORTABLE_TABLES.contains(&record.table.as_str()) {
-                skipped_records += 1;
-                continue;
-            }
-            if let Err(error) = insert_portable_record(&transaction, &record).await {
-                drop(transaction);
-                let _ = connection.execute("UPDATE import_journal SET phase='failed', error=?1, updated_at=?2 WHERE id=?3", (error.to_string().as_str(), now_ms(), journal_id.as_str())).await;
-                let _ = self.release_maintenance_lease(&lease).await;
-                return Err(error);
-            }
-            imported_records += 1;
+        let result = self.import_with_lease(in_path, true, &lease, true).await;
+        let release = self.release_maintenance_lease(&lease).await;
+        match (result, release) {
+            (Ok(report), Ok(())) => Ok(report),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
         }
-        if let Err(error) = transaction.commit().await {
-            let error: StoreError = error.into();
-            let _ = connection
-                .execute(
-                    "UPDATE import_journal SET phase='failed', error=?1, updated_at=?2 WHERE id=?3",
-                    (error.to_string().as_str(), now_ms(), journal_id.as_str()),
+    }
+
+    async fn import_with_lease(
+        &self,
+        in_path: &Path,
+        replace: bool,
+        _lease: &MaintenanceLease,
+        return_prepared: bool,
+    ) -> Result<StoreImportReport, StoreError> {
+        let snapshot = read_portable(in_path)?;
+        validate_portable_snapshot(&snapshot.header, &snapshot)?;
+        let manifest = serde_json::to_string(&snapshot.header).map_err(json_error)?;
+        let snapshot_fingerprint = portable_snapshot_fingerprint(&snapshot.header);
+        let mut connection = self.connection().await?;
+        validate_portable_columns(&connection, &snapshot).await?;
+        let target_fingerprint_before = self.database_fingerprint().await?;
+
+        if let Some(journal) = find_portable_journal(&connection, &snapshot_fingerprint).await? {
+            match journal.phase.as_str() {
+                "completed" => {
+                    verify_imported_target(&connection, &snapshot.header).await?;
+                    let jobs = count_rebuild_jobs(&connection, &snapshot_fingerprint).await?;
+                    return Ok(import_report(
+                        in_path,
+                        &snapshot.header,
+                        journal.id,
+                        snapshot.header.record_count,
+                        jobs,
+                        "completed",
+                        false,
+                        None,
+                        target_fingerprint_before,
+                        None,
+                        Vec::new(),
+                    ));
+                }
+                "validated" if replace => {
+                    let staged_path = journal.staged_database_path.ok_or_else(|| {
+                        StoreError::InvalidInput(
+                            "portable replace journal 缺少 staged database path".to_owned(),
+                        )
+                    })?;
+                    let (staged_fingerprint, jobs) =
+                        verify_staged_database(&staged_path, &snapshot.header).await?;
+                    let report = prepared_import_report(
+                        in_path,
+                        &snapshot.header,
+                        journal.id.clone(),
+                        staged_path.clone(),
+                        target_fingerprint_before.clone(),
+                        staged_fingerprint,
+                        jobs,
+                    );
+                    return if return_prepared {
+                        Ok(report)
+                    } else {
+                        Err(restart_required_error(
+                            &journal.id,
+                            &staged_path,
+                            target_fingerprint_before.as_str(),
+                            report.staged_fingerprint.as_deref().unwrap_or_default(),
+                        ))
+                    };
+                }
+                "failed" => {}
+                phase => {
+                    return Err(StoreError::MaintenanceBusy(format!(
+                        "portable import journal {} 处于不可恢复阶段 {phase}，请先完成 recovery",
+                        journal.id
+                    )));
+                }
+            }
+        }
+
+        let existing = canonical_record_count(&connection).await?;
+        if replace && (existing > 0 || return_prepared) {
+            let journal_id = format!(
+                "ij_{}",
+                &snapshot_fingerprint[..snapshot_fingerprint.len().min(32)]
+            );
+            let staged_path = temporary_sibling(self.database_path(), "portable-replace")?;
+            insert_import_journal(
+                &connection,
+                &journal_id,
+                in_path,
+                &snapshot_fingerprint,
+                "prepared",
+                &manifest,
+                None,
+                Some(&target_fingerprint_before),
+            )
+            .await?;
+            let prepared = self
+                .prepare_replacement(
+                    &snapshot,
+                    in_path,
+                    &journal_id,
+                    &snapshot_fingerprint,
+                    &manifest,
+                    &staged_path,
+                    &target_fingerprint_before,
                 )
                 .await;
-            let _ = self.release_maintenance_lease(&lease).await;
-            return Err(error);
+            match prepared {
+                Ok((staged_fingerprint, jobs)) => {
+                    if let Err(error) = update_import_journal_validated(
+                        &connection,
+                        &journal_id,
+                        &staged_path,
+                        &target_fingerprint_before,
+                        &staged_fingerprint,
+                    )
+                    .await
+                    {
+                        let _ = mark_import_journal_failed(
+                            &connection,
+                            &journal_id,
+                            error.to_string().as_str(),
+                        )
+                        .await;
+                        cleanup_staged_database(&staged_path);
+                        return Err(error);
+                    }
+                    let report = prepared_import_report(
+                        in_path,
+                        &snapshot.header,
+                        journal_id.clone(),
+                        staged_path.clone(),
+                        target_fingerprint_before.clone(),
+                        staged_fingerprint,
+                        jobs,
+                    );
+                    return if return_prepared {
+                        Ok(report)
+                    } else {
+                        Err(restart_required_error(
+                            &journal_id,
+                            &staged_path,
+                            target_fingerprint_before.as_str(),
+                            report.staged_fingerprint.as_deref().unwrap_or_default(),
+                        ))
+                    };
+                }
+                Err(error) => {
+                    let _ = mark_import_journal_failed(
+                        &connection,
+                        &journal_id,
+                        error.to_string().as_str(),
+                    )
+                    .await;
+                    cleanup_staged_database(&staged_path);
+                    return Err(error);
+                }
+            }
         }
+
+        if existing > 0 {
+            return Err(StoreError::InvalidInput(
+                "import target 非空；replace=true 需要停 host 后发布已校验 staging".to_owned(),
+            ));
+        }
+        let journal_id = format!(
+            "ij_{}",
+            &snapshot_fingerprint[..snapshot_fingerprint.len().min(32)]
+        );
+        insert_import_journal(
+            &connection,
+            &journal_id,
+            in_path,
+            &snapshot_fingerprint,
+            "prepared",
+            &manifest,
+            None,
+            Some(&target_fingerprint_before),
+        )
+        .await?;
+        let imported_records =
+            match import_records_into_connection(&mut connection, &snapshot).await {
+                Ok(count) => count,
+                Err(error) => {
+                    let _ = mark_import_journal_failed(
+                        &connection,
+                        &journal_id,
+                        error.to_string().as_str(),
+                    )
+                    .await;
+                    return Err(error);
+                }
+            };
+        let jobs = enqueue_rebuild_jobs(&connection, &snapshot_fingerprint).await?;
+        verify_imported_target(&connection, &snapshot.header).await?;
         connection
             .execute(
                 "UPDATE import_journal SET phase='completed', updated_at=?1 WHERE id=?2",
                 (now_ms(), journal_id.as_str()),
             )
             .await?;
-        let report = StoreImportReport {
-            in_path: in_path.display().to_string(),
-            source_fingerprint: header.source_fingerprint,
-            imported_records,
-            skipped_records,
-            rebuild_jobs_enqueued: 0,
+        Ok(import_report(
+            in_path,
+            &snapshot.header,
             journal_id,
-        };
-        self.release_maintenance_lease(&lease).await?;
-        Ok(report)
+            imported_records,
+            jobs,
+            "completed",
+            false,
+            None,
+            target_fingerprint_before,
+            None,
+            Vec::new(),
+        ))
+    }
+
+    async fn prepare_replacement(
+        &self,
+        snapshot: &PortableSnapshot,
+        in_path: &Path,
+        journal_id: &str,
+        snapshot_fingerprint: &str,
+        manifest: &str,
+        staged_path: &Path,
+        target_fingerprint_before: &str,
+    ) -> Result<(String, u64), StoreError> {
+        let staged = TursoStore::open(staged_path).await?;
+        staged.initialize().await?;
+        let mut staged_connection = staged.connection().await?;
+        insert_import_journal(
+            &staged_connection,
+            journal_id,
+            in_path,
+            snapshot_fingerprint,
+            "staged",
+            manifest,
+            Some(staged_path),
+            Some(target_fingerprint_before),
+        )
+        .await?;
+        import_records_into_connection(&mut staged_connection, snapshot).await?;
+        let jobs = enqueue_rebuild_jobs(&staged_connection, snapshot_fingerprint).await?;
+        verify_imported_target(&staged_connection, &snapshot.header).await?;
+        drop(staged_connection);
+        drop(staged);
+        verify_database_file(staged_path).await?;
+        let staged_fingerprint = database_file_fingerprint(staged_path)?;
+        Ok((staged_fingerprint, jobs))
     }
 
     pub async fn vacuum(&self) -> Result<StoreVacuumReport, StoreError> {
@@ -795,12 +1030,71 @@ async fn projection_state_reports(
     Ok(values)
 }
 
+#[derive(Debug, Clone)]
+struct DeferredPortableValue {
+    table: &'static str,
+    column: &'static str,
+    id: String,
+    value: Value,
+}
+
+async fn import_records_into_connection(
+    connection: &mut Connection,
+    snapshot: &PortableSnapshot,
+) -> Result<u64, StoreError> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .await?;
+    // 初始化会创建 bootstrap board/columns；它们不是导入事实。先在同一事务删除，
+    // 再使用严格 INSERT，避免主键冲突被静默吞掉。
+    transaction
+        .execute(
+            "DELETE FROM boards WHERE id='b_default' AND slug='default'",
+            (),
+        )
+        .await?;
+    transaction
+        .execute("DELETE FROM relation_predicates", ())
+        .await?;
+    let mut deferred = Vec::new();
+    for record in &snapshot.records {
+        insert_portable_record(&transaction, record, &mut deferred).await?;
+    }
+    for value in deferred {
+        let sql = format!(
+            "UPDATE {} SET \"{}\"=?1 WHERE id=?2",
+            value.table, value.column
+        );
+        let changed = transaction
+            .execute(sql, (value.value, value.id.as_str()))
+            .await?;
+        if changed != 1 {
+            return Err(StoreError::InvalidInput(format!(
+                "portable deferred reference {}.{}={} 未能恢复",
+                value.table, value.column, value.id
+            )));
+        }
+    }
+    transaction.commit().await?;
+    Ok(snapshot.records.len() as u64)
+}
+
 async fn insert_portable_record(
     transaction: &turso::transaction::Transaction<'_>,
     record: &PortableLine,
+    deferred: &mut Vec<DeferredPortableValue>,
 ) -> Result<(), StoreError> {
     if record.data.is_empty() {
-        return Ok(());
+        return Err(StoreError::InvalidInput(format!(
+            "portable {} record 不能为空",
+            record.table
+        )));
+    }
+    if !PORTABLE_TABLES.contains(&record.table.as_str()) {
+        return Err(StoreError::InvalidInput(format!(
+            "portable record type 不受支持: {}",
+            record.table
+        )));
     }
     let columns = record.data.keys().cloned().collect::<Vec<_>>();
     let quoted = columns
@@ -816,29 +1110,677 @@ async fn insert_portable_record(
         "INSERT OR IGNORE INTO {} ({quoted}) VALUES ({placeholders})",
         record.table
     );
-    let params = columns
-        .iter()
-        .map(|column| json_to_value(record.data.get(column).expect("portable column")))
-        .collect::<Vec<_>>();
-    transaction.execute(sql, params_from_iter(params)).await?;
+    let id = record
+        .data
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned);
+    let mut params = Vec::with_capacity(columns.len());
+    for column in &columns {
+        let value = record.data.get(column).expect("portable column");
+        if let Some((table, deferred_column)) = deferred_column(&record.table, column)
+            && !value.is_null()
+        {
+            let id = id.clone().ok_or_else(|| {
+                StoreError::InvalidInput(format!("portable {} record 缺少 id", record.table))
+            })?;
+            deferred.push(DeferredPortableValue {
+                table,
+                column: deferred_column,
+                id,
+                value: json_to_value(value),
+            });
+            params.push(Value::Null);
+        } else {
+            params.push(json_to_value(value));
+        }
+    }
+    let changed = transaction.execute(sql, params_from_iter(params)).await?;
+    if changed != 1 {
+        return Err(StoreError::InvalidInput(format!(
+            "portable {} record 未能插入",
+            record.table
+        )));
+    }
     Ok(())
 }
 
-fn read_portable(path: &Path) -> Result<(PortableHeader, Vec<PortableLine>), StoreError> {
-    let mut lines = BufReader::new(File::open(path).map_err(io_error)?).lines();
-    let header_line = lines
+fn deferred_column(table: &str, column: &str) -> Option<(&'static str, &'static str)> {
+    match (table, column) {
+        ("label_ontology_actions", "parent_action_id") => {
+            Some(("label_ontology_actions", "parent_action_id"))
+        }
+        ("label_ontology_signals", "superseded_by_signal_id") => {
+            Some(("label_ontology_signals", "superseded_by_signal_id"))
+        }
+        ("signals", "superseded_by_signal_id") => Some(("signals", "superseded_by_signal_id")),
+        _ => None,
+    }
+}
+
+fn read_portable(path: &Path) -> Result<PortableSnapshot, StoreError> {
+    let bytes = fs::read(path).map_err(io_error)?;
+    let mut lines = bytes.split_inclusive(|byte| *byte == b'\n');
+    let header_bytes = lines
         .next()
-        .ok_or_else(|| StoreError::InvalidInput("portable export 为空".to_owned()))?
-        .map_err(io_error)?;
-    let header = serde_json::from_str::<PortableHeader>(&header_line).map_err(json_error)?;
+        .ok_or_else(|| StoreError::InvalidInput("portable export 为空".to_owned()))?;
+    let header_line = std::str::from_utf8(header_bytes)
+        .map_err(|error| StoreError::InvalidInput(format!("portable header 不是 UTF-8: {error}")))?
+        .trim();
+    let header = serde_json::from_str::<PortableHeader>(header_line).map_err(json_error)?;
     let mut records = Vec::new();
-    for line in lines {
-        let line = line.map_err(io_error)?;
-        if !line.trim().is_empty() {
-            records.push(serde_json::from_str::<PortableLine>(&line).map_err(json_error)?);
+    let mut payload = Vec::new();
+    let mut table_counts = BTreeMap::new();
+    for line_bytes in lines {
+        let line = std::str::from_utf8(line_bytes).map_err(|error| {
+            StoreError::InvalidInput(format!("portable record 不是 UTF-8: {error}"))
+        })?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        payload.extend_from_slice(line_bytes);
+        let line = line.trim_end_matches(['\n', '\r']);
+        if line.trim().is_empty() {
+            continue;
+        }
+        let record = serde_json::from_str::<PortableLine>(line).map_err(json_error)?;
+        *table_counts.entry(record.table.clone()).or_insert(0) += 1;
+        records.push(record);
+    }
+    Ok(PortableSnapshot {
+        header,
+        records,
+        payload_checksum_sha256: digest_bytes(&payload),
+        table_counts,
+    })
+}
+
+async fn portable_schema_identity(
+    connection: &Connection,
+) -> Result<(String, String, i64, String), StoreError> {
+    let mut rows = connection
+        .query(
+            "SELECT family, lineage, version, fingerprint FROM schema_identity WHERE singleton=1",
+            (),
+        )
+        .await?;
+    let row = rows
+        .next()
+        .await?
+        .ok_or_else(|| StoreError::SchemaMismatch("缺少 schema_identity singleton".to_owned()))?;
+    let family = text_value(row.get_value(0)?, "schema_identity.family")?;
+    let lineage = text_value(row.get_value(1)?, "schema_identity.lineage")?;
+    let version = integer_value(row.get_value(2)?, "schema_identity.version")?;
+    let fingerprint = text_value(row.get_value(3)?, "schema_identity.fingerprint")?;
+    Ok((family, lineage, version, fingerprint))
+}
+
+async fn validate_portable_columns(
+    connection: &Connection,
+    snapshot: &PortableSnapshot,
+) -> Result<(), StoreError> {
+    let mut expected_columns = BTreeMap::<String, Vec<String>>::new();
+    for table in PORTABLE_TABLES {
+        let mut rows = connection
+            .query(&format!("PRAGMA table_info('{table}')"), ())
+            .await?;
+        let mut columns = Vec::new();
+        while let Some(row) = rows.next().await? {
+            columns.push(text_value(row.get_value(1)?, "portable.table_info.name")?);
+        }
+        expected_columns.insert((*table).to_owned(), columns);
+    }
+    for record in &snapshot.records {
+        let expected = expected_columns.get(&record.table).ok_or_else(|| {
+            StoreError::InvalidInput(format!("未知 portable 表 {}", record.table))
+        })?;
+        let mut actual = record.data.keys().cloned().collect::<Vec<_>>();
+        actual.sort();
+        let mut expected = expected.clone();
+        expected.sort();
+        if actual != expected {
+            return Err(StoreError::InvalidInput(format!(
+                "portable 表 {} 的列清单不匹配: expected={expected:?}, actual={actual:?}",
+                record.table
+            )));
         }
     }
-    Ok((header, records))
+    Ok(())
+}
+
+async fn collect_portable_records(
+    connection: &Connection,
+) -> Result<Vec<PortableLine>, StoreError> {
+    let mut records = Vec::new();
+    for table in PORTABLE_TABLES {
+        let mut rows = connection
+            .query(format!("SELECT * FROM {table}"), ())
+            .await?;
+        let columns = rows.column_names();
+        while let Some(row) = rows.next().await? {
+            let mut data = serde_json::Map::new();
+            for (index, column) in columns.iter().enumerate() {
+                data.insert(column.clone(), value_to_json(row.get_value(index)?));
+            }
+            scrub_portable_record(table, &mut data, now_ms());
+            records.push(PortableLine {
+                table: (*table).to_owned(),
+                data,
+            });
+        }
+    }
+    Ok(records)
+}
+
+/// live claim 和绝对 run-log 路径不属于可移植事实。导出时将其转换为可重放的终态，
+/// 与旧 SQLite portable exporter 的语义保持一致，并保留 task/run 主键和历史时间。
+fn scrub_portable_record(
+    table: &str,
+    data: &mut serde_json::Map<String, serde_json::Value>,
+    export_now: i64,
+) {
+    if table == "tasks"
+        && data
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|status| status == "running")
+    {
+        data.insert(
+            "status".to_owned(),
+            serde_json::Value::String("ready".to_owned()),
+        );
+        for column in [
+            "claim_token",
+            "claim_owner",
+            "claim_expires_at",
+            "last_heartbeat_at",
+            "current_run_id",
+            "started_at",
+        ] {
+            data.insert(column.to_owned(), serde_json::Value::Null);
+        }
+    }
+    if table == "task_runs" {
+        data.insert("log_path".to_owned(), serde_json::Value::Null);
+        if data
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|status| status == "running")
+        {
+            data.insert(
+                "status".to_owned(),
+                serde_json::Value::String("canceled".to_owned()),
+            );
+            data.insert(
+                "finished_at".to_owned(),
+                serde_json::Value::Number(export_now.into()),
+            );
+            data.insert(
+                "error".to_owned(),
+                serde_json::Value::String(
+                    "canceled by portable export; claim is not portable".to_owned(),
+                ),
+            );
+        }
+    }
+}
+
+fn serialize_portable_records(
+    records: &[PortableLine],
+) -> Result<(Vec<u8>, BTreeMap<String, u64>), StoreError> {
+    let mut payload = Vec::new();
+    let mut table_counts = BTreeMap::new();
+    for record in records {
+        serde_json::to_writer(&mut payload, record).map_err(json_error)?;
+        payload.push(b'\n');
+        *table_counts.entry(record.table.clone()).or_insert(0) += 1;
+    }
+    Ok((payload, table_counts))
+}
+
+fn validate_portable_snapshot(
+    header: &PortableHeader,
+    snapshot: &PortableSnapshot,
+) -> Result<(), StoreError> {
+    if header.format != "kanban.portable.jsonl" || header.version != 2 {
+        return Err(StoreError::InvalidInput(
+            "不支持的 portable export 格式或版本（需要 kanban.portable.jsonl v2）".to_owned(),
+        ));
+    }
+    if header.schema_family != schema::SCHEMA_FAMILY
+        || header.schema_lineage != schema::SCHEMA_LINEAGE
+        || header.schema_version != schema::FULL_SCHEMA_VERSION
+        || header.schema_fingerprint != migration::full_schema_fingerprint()
+    {
+        return Err(StoreError::SchemaMismatch(format!(
+            "portable schema lineage 不匹配: family={}, lineage={}, version={}, fingerprint={}",
+            header.schema_family,
+            header.schema_lineage,
+            header.schema_version,
+            header.schema_fingerprint
+        )));
+    }
+    if header.attachments_mode != "metadata_only" {
+        return Err(StoreError::InvalidInput(format!(
+            "不支持的 portable attachments_mode: {}",
+            header.attachments_mode
+        )));
+    }
+    let expected_tables = PORTABLE_TABLES
+        .iter()
+        .map(|table| (*table).to_owned())
+        .collect::<Vec<_>>();
+    if header.canonical_tables != expected_tables {
+        return Err(StoreError::InvalidInput(
+            "portable canonical_tables 与当前 Turso schema 不一致".to_owned(),
+        ));
+    }
+    if header.record_count != snapshot.records.len() as u64 {
+        return Err(StoreError::InvalidInput(format!(
+            "portable record_count 不匹配: manifest={}, observed={}",
+            header.record_count,
+            snapshot.records.len()
+        )));
+    }
+    if header.table_counts != snapshot.table_counts {
+        return Err(StoreError::InvalidInput(
+            "portable table_counts 与实际 JSONL 不一致".to_owned(),
+        ));
+    }
+    if header.payload_checksum_sha256 != snapshot.payload_checksum_sha256 {
+        return Err(StoreError::InvalidInput(format!(
+            "portable payload checksum 不匹配: manifest={}, observed={}",
+            header.payload_checksum_sha256, snapshot.payload_checksum_sha256
+        )));
+    }
+    if header.manifest_checksum_sha256 != manifest_checksum(header)? {
+        return Err(StoreError::InvalidInput(
+            "portable manifest checksum 不匹配".to_owned(),
+        ));
+    }
+    for record in &snapshot.records {
+        if !PORTABLE_TABLES.contains(&record.table.as_str()) {
+            return Err(StoreError::InvalidInput(format!(
+                "portable record type 不受支持: {}",
+                record.table
+            )));
+        }
+    }
+    if snapshot
+        .table_counts
+        .get("boards")
+        .copied()
+        .unwrap_or_default()
+        == 0
+    {
+        return Err(StoreError::InvalidInput(
+            "portable snapshot 至少需要一个 board".to_owned(),
+        ));
+    }
+    let board_ids = snapshot
+        .records
+        .iter()
+        .filter(|record| record.table == "boards")
+        .filter_map(|record| record.data.get("id").and_then(serde_json::Value::as_str))
+        .collect::<std::collections::BTreeSet<_>>();
+    let column_board_ids = snapshot
+        .records
+        .iter()
+        .filter(|record| record.table == "board_columns")
+        .filter_map(|record| {
+            record
+                .data
+                .get("board_id")
+                .and_then(serde_json::Value::as_str)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    if board_ids
+        .iter()
+        .any(|board| !column_board_ids.contains(board))
+    {
+        return Err(StoreError::InvalidInput(
+            "portable snapshot 存在没有 board_columns 的 board".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+async fn verify_imported_target(
+    connection: &Connection,
+    header: &PortableHeader,
+) -> Result<(), StoreError> {
+    let integrity = scalar_text(connection, "PRAGMA integrity_check", "integrity_check").await?;
+    if !integrity.eq_ignore_ascii_case("ok") {
+        return Err(StoreError::InvalidInput(format!(
+            "portable import integrity_check 未通过: {integrity}"
+        )));
+    }
+    let mut foreign_keys = connection.query("PRAGMA foreign_key_check", ()).await?;
+    if foreign_keys.next().await?.is_some() {
+        return Err(StoreError::InvalidInput(
+            "portable import foreign_key_check 未通过".to_owned(),
+        ));
+    }
+    let (family, lineage, version, fingerprint) = portable_schema_identity(connection).await?;
+    if family != header.schema_family
+        || lineage != header.schema_lineage
+        || version != header.schema_version
+        || fingerprint != header.schema_fingerprint
+    {
+        return Err(StoreError::SchemaMismatch(
+            "portable import target schema lineage 不匹配".to_owned(),
+        ));
+    }
+    for table in PORTABLE_TABLES {
+        let expected = header.table_counts.get(*table).copied().unwrap_or_default();
+        let actual = scalar_integer(
+            connection,
+            &format!("SELECT COUNT(*) FROM {table}"),
+            "portable.import.table_count",
+        )
+        .await? as u64;
+        if actual != expected {
+            return Err(StoreError::InvalidInput(format!(
+                "portable import 表 {table} 行数不一致: expected={expected}, actual={actual}"
+            )));
+        }
+    }
+    let boards_without_columns = scalar_integer(
+        connection,
+        "SELECT COUNT(*) FROM boards b WHERE NOT EXISTS (SELECT 1 FROM board_columns c WHERE c.board_id=b.id)",
+        "portable.import.boards_without_columns",
+    )
+    .await?;
+    if boards_without_columns != 0 {
+        return Err(StoreError::InvalidInput(
+            "portable import 存在没有 board_columns 的 board".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+async fn verify_staged_database(
+    path: &Path,
+    header: &PortableHeader,
+) -> Result<(String, u64), StoreError> {
+    if !fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_type().is_file())
+        .unwrap_or(false)
+    {
+        return Err(StoreError::InvalidInput(format!(
+            "portable replace staged database 不存在: {}",
+            path.display()
+        )));
+    }
+    let database = turso::Builder::new_local(path.to_str().ok_or(StoreError::InvalidPath)?)
+        .experimental_index_method(true)
+        .experimental_vacuum(true)
+        .build()
+        .await?;
+    let connection = database.connect()?;
+    connection.execute("PRAGMA foreign_keys = ON", ()).await?;
+    verify_imported_target(&connection, header).await?;
+    let jobs = count_rebuild_jobs(&connection, &portable_snapshot_fingerprint(header)).await?;
+    drop(connection);
+    drop(database);
+    Ok((database_file_fingerprint(path)?, jobs))
+}
+
+async fn enqueue_rebuild_jobs(
+    connection: &Connection,
+    snapshot_fingerprint: &str,
+) -> Result<u64, StoreError> {
+    let now = now_ms();
+    let mut boards = connection
+        .query("SELECT id FROM boards ORDER BY id", ())
+        .await?;
+    let mut board_ids = Vec::new();
+    while let Some(row) = boards.next().await? {
+        board_ids.push(text_value(row.get_value(0)?, "boards.id")?);
+    }
+    let mut enqueued = 0;
+    for board_id in board_ids {
+        for target in ["fts", "vector_tasks", "vector_label_atoms", "relations"] {
+            let dedupe = format!("portable-rebuild:{snapshot_fingerprint}:{target}:{board_id}");
+            let changed = connection
+                .execute(
+                    "INSERT OR IGNORE INTO projection_jobs(board_id, source_event_id, target, entity_uri, dedupe_key, operation, payload_json, status, attempts, max_attempts, next_attempt_at, created_at, updated_at) VALUES (?1, NULL, ?2, NULL, ?3, 'rebuild', '{}', 'pending', 0, 10, ?4, ?4, ?4)",
+                    (board_id.as_str(), target, dedupe.as_str(), now),
+                )
+                .await?;
+            enqueued += changed;
+        }
+    }
+    connection
+        .execute(
+            "UPDATE projection_state SET dirty=1, lifecycle_status='bootstrap_required', last_error=NULL, updated_at=?1",
+            [now],
+        )
+        .await?;
+    Ok(enqueued)
+}
+
+async fn count_rebuild_jobs(
+    connection: &Connection,
+    snapshot_fingerprint: &str,
+) -> Result<u64, StoreError> {
+    let count = scalar_integer_params(
+        connection,
+        "SELECT COUNT(*) FROM projection_jobs WHERE operation='rebuild' AND dedupe_key LIKE ?1",
+        [format!("portable-rebuild:{snapshot_fingerprint}:%")],
+        "portable.import.rebuild_jobs",
+    )
+    .await?;
+    Ok(count.max(0) as u64)
+}
+
+fn portable_snapshot_fingerprint(header: &PortableHeader) -> String {
+    format!(
+        "{}:{}",
+        header.source_fingerprint, header.payload_checksum_sha256
+    )
+}
+
+fn digest_bytes(bytes: &[u8]) -> String {
+    format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+fn manifest_checksum(header: &PortableHeader) -> Result<String, StoreError> {
+    let mut unsigned = header.clone();
+    unsigned.manifest_checksum_sha256.clear();
+    let bytes = serde_json::to_vec(&unsigned).map_err(json_error)?;
+    Ok(digest_bytes(&bytes))
+}
+
+fn database_file_fingerprint(path: &Path) -> Result<String, StoreError> {
+    let (checksum, bytes) = file_digest(path)?;
+    Ok(format!("{checksum}:{bytes}"))
+}
+
+#[derive(Debug)]
+struct PortableJournal {
+    id: String,
+    phase: String,
+    staged_database_path: Option<PathBuf>,
+}
+
+async fn find_portable_journal(
+    connection: &Connection,
+    snapshot_fingerprint: &str,
+) -> Result<Option<PortableJournal>, StoreError> {
+    let mut rows = connection
+        .query(
+            "SELECT id, phase, staged_database_path FROM import_journal WHERE source_kind='jsonl' AND snapshot_fingerprint=?1 ORDER BY updated_at DESC LIMIT 1",
+            [snapshot_fingerprint],
+        )
+        .await?;
+    let Some(row) = rows.next().await? else {
+        return Ok(None);
+    };
+    let id = text_value(row.get_value(0)?, "import_journal.id")?;
+    let phase = text_value(row.get_value(1)?, "import_journal.phase")?;
+    let staged_database_path = match row.get_value(2)? {
+        Value::Null => None,
+        Value::Text(value) => Some(PathBuf::from(value)),
+        _ => {
+            return Err(StoreError::InvalidStoredValue {
+                field: "import_journal.staged_database_path",
+            });
+        }
+    };
+    Ok(Some(PortableJournal {
+        id,
+        phase,
+        staged_database_path,
+    }))
+}
+
+async fn insert_import_journal(
+    connection: &Connection,
+    journal_id: &str,
+    in_path: &Path,
+    snapshot_fingerprint: &str,
+    phase: &str,
+    manifest: &str,
+    staged_database_path: Option<&Path>,
+    target_fingerprint_before: Option<&str>,
+) -> Result<(), StoreError> {
+    let previous_identity = target_fingerprint_before
+        .map(|fingerprint| format!(r#"{{"target_fingerprint":"{fingerprint}"}}"#));
+    connection
+        .execute(
+            "INSERT INTO import_journal(id, source_kind, source_path, snapshot_fingerprint, phase, staged_database_path, manifest_json, previous_identity_json, created_at, updated_at) VALUES (?1, 'jsonl', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
+            (
+                journal_id,
+                in_path.to_string_lossy().as_ref(),
+                snapshot_fingerprint,
+                phase,
+                staged_database_path.map(|path| path.to_string_lossy().into_owned()),
+                manifest,
+                previous_identity,
+                now_ms(),
+            ),
+        )
+        .await?;
+    Ok(())
+}
+
+async fn update_import_journal_validated(
+    connection: &Connection,
+    journal_id: &str,
+    staged_path: &Path,
+    target_fingerprint_before: &str,
+    staged_fingerprint: &str,
+) -> Result<(), StoreError> {
+    let previous = format!(
+        r#"{{"target_fingerprint":"{}","staged_fingerprint":"{}"}}"#,
+        target_fingerprint_before, staged_fingerprint
+    );
+    connection
+        .execute(
+            "UPDATE import_journal SET phase='validated', staged_database_path=?1, previous_identity_json=?2, updated_at=?3 WHERE id=?4",
+            (
+                staged_path.to_string_lossy().as_ref(),
+                previous.as_str(),
+                now_ms(),
+                journal_id,
+            ),
+        )
+        .await?;
+    Ok(())
+}
+
+async fn mark_import_journal_failed(
+    connection: &Connection,
+    journal_id: &str,
+    error: &str,
+) -> Result<(), StoreError> {
+    connection
+        .execute(
+            "UPDATE import_journal SET phase='failed', error=?1, updated_at=?2 WHERE id=?3",
+            (error, now_ms(), journal_id),
+        )
+        .await?;
+    Ok(())
+}
+
+fn import_report(
+    in_path: &Path,
+    header: &PortableHeader,
+    journal_id: String,
+    imported_records: u64,
+    rebuild_jobs_enqueued: u64,
+    phase: &str,
+    restart_required: bool,
+    staged_database_path: Option<PathBuf>,
+    target_fingerprint_before: String,
+    staged_fingerprint: Option<String>,
+    publish_preconditions: Vec<String>,
+) -> StoreImportReport {
+    StoreImportReport {
+        in_path: in_path.display().to_string(),
+        source_fingerprint: header.source_fingerprint.clone(),
+        imported_records,
+        skipped_records: 0,
+        rebuild_jobs_enqueued,
+        journal_id,
+        phase: phase.to_owned(),
+        restart_required,
+        staged_database_path: staged_database_path.map(|path| path.display().to_string()),
+        target_fingerprint_before: Some(target_fingerprint_before),
+        staged_fingerprint,
+        publish_preconditions,
+    }
+}
+
+fn prepared_import_report(
+    in_path: &Path,
+    header: &PortableHeader,
+    journal_id: String,
+    staged_database_path: PathBuf,
+    target_fingerprint_before: String,
+    staged_fingerprint: String,
+    rebuild_jobs_enqueued: u64,
+) -> StoreImportReport {
+    import_report(
+        in_path,
+        header,
+        journal_id,
+        header.record_count,
+        rebuild_jobs_enqueued,
+        "validated",
+        true,
+        Some(staged_database_path),
+        target_fingerprint_before,
+        Some(staged_fingerprint),
+        vec![
+            "停止 kanban serve/dispatcher，获得 host lifecycle 独占".to_owned(),
+            "校验 canonical path 与 target_fingerprint_before 一致".to_owned(),
+            "同文件系统原子发布 staged_database_path 到 canonical path".to_owned(),
+            "重新打开 TursoStore，校验 integrity/schema/counts 并将 journal 标为 completed"
+                .to_owned(),
+            "attachments_mode=metadata_only：二进制附件需独立 staging/publish，不在本 JSONL 中静默迁移"
+                .to_owned(),
+        ],
+    )
+}
+
+fn restart_required_error(
+    journal_id: &str,
+    staged_path: &Path,
+    target_fingerprint_before: &str,
+    staged_fingerprint: &str,
+) -> StoreError {
+    StoreError::MaintenanceBusy(format!(
+        "portable replace 已完成 prepare/verify，但当前 Turso handle 不能安全发布 inode；restart_required=true phase=validated journal_id={journal_id} staged_database_path={} target_fingerprint_before={target_fingerprint_before} staged_fingerprint={staged_fingerprint}；请停止 kanban serve 后由 host lifecycle 执行原子 publish，再重开并完成 journal",
+        staged_path.display()
+    ))
+}
+
+fn cleanup_staged_database(path: &Path) {
+    let _ = fs::remove_file(path);
+    let _ = fs::remove_file(PathBuf::from(format!("{}-wal", path.display())));
+    let _ = fs::remove_file(PathBuf::from(format!("{}-shm", path.display())));
 }
 
 async fn canonical_record_count(connection: &Connection) -> Result<i64, StoreError> {
@@ -1107,6 +2049,9 @@ fn json_error(error: serde_json::Error) -> StoreError {
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, path::Path};
+
+    use super::{integer_value, text_value};
     use crate::test_support::{create_input, store};
 
     #[tokio::test]
@@ -1168,6 +2113,9 @@ mod tests {
             .await
             .expect("portable import");
         assert!(import.imported_records > 0);
+        assert_eq!(import.phase, "completed");
+        assert!(!import.restart_required);
+        assert!(import.rebuild_jobs_enqueued > 0);
         assert!(
             !target
                 .maintenance_status()
@@ -1181,5 +2129,223 @@ mod tests {
             .await
             .expect("imported tasks");
         assert!(tasks.tasks.iter().any(|task| task.id == "t_maintenance"));
+
+        let repeated = target
+            .import(&export_path, false)
+            .await
+            .expect("repeated portable import is idempotent");
+        assert_eq!(repeated.journal_id, import.journal_id);
+        assert_eq!(repeated.phase, "completed");
+        assert_eq!(
+            target
+                .list_tasks("default", crate::TaskListOptions::default())
+                .await
+                .expect("repeated tasks")
+                .tasks
+                .len(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn portable_checksum_failure_leaves_empty_target_bootstrap_intact() {
+        let (source_directory, source, _source_path) = store("maintenance-checksum-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task(
+                "default",
+                create_input("t_checksum", None, "Checksum fixture"),
+            )
+            .await
+            .expect("fixture task");
+        let export_path = source_directory.path().join("portable.jsonl");
+        source.export(&export_path).await.expect("portable export");
+        let tampered_path = source_directory.path().join("tampered.jsonl");
+        let tampered = fs::read_to_string(&export_path)
+            .expect("export text")
+            .replace("Checksum fixture", "Tampered fixture");
+        fs::write(&tampered_path, tampered).expect("tampered export");
+
+        let (_target_directory, target, _target_path) = store("maintenance-checksum-target").await;
+        target.initialize().await.expect("initialize target");
+        let error = target
+            .import(&tampered_path, false)
+            .await
+            .expect_err("tampered payload must be rejected");
+        assert!(error.to_string().contains("checksum"));
+        let tasks = target
+            .list_tasks("default", crate::TaskListOptions::default())
+            .await
+            .expect("target tasks");
+        assert!(tasks.tasks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn portable_import_preserves_explicit_ids_times_and_relations() {
+        let (source_directory, source, _source_path) = store("maintenance-facts-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task("default", create_input("t_parent", None, "Parent fixture"))
+            .await
+            .expect("parent task");
+        source
+            .create_task("default", create_input("t_child", None, "Child fixture"))
+            .await
+            .expect("child task");
+        let source_connection = source.connection().await.expect("source connection");
+        source_connection
+            .execute(
+                "INSERT INTO task_dependencies(board_id, parent_task_id, child_task_id, created_at) VALUES ('b_default', 't_parent', 't_child', 424242)",
+                (),
+            )
+            .await
+            .expect("dependency");
+        let export_path = source_directory.path().join("facts.jsonl");
+        source.export(&export_path).await.expect("portable export");
+
+        let (_target_directory, target, _target_path) = store("maintenance-facts-target").await;
+        target.initialize().await.expect("initialize target");
+        target
+            .import(&export_path, false)
+            .await
+            .expect("portable import");
+        let target_connection = target.connection().await.expect("target connection");
+        let mut rows = target_connection
+            .query(
+                "SELECT parent_task_id, child_task_id, created_at FROM task_dependencies",
+                (),
+            )
+            .await
+            .expect("dependency query");
+        let row = rows
+            .next()
+            .await
+            .expect("dependency row result")
+            .expect("dependency row");
+        assert_eq!(
+            text_value(row.get_value(0).expect("parent"), "parent").expect("parent text"),
+            "t_parent"
+        );
+        assert_eq!(
+            text_value(row.get_value(1).expect("child"), "child").expect("child text"),
+            "t_child"
+        );
+        assert_eq!(
+            integer_value(row.get_value(2).expect("created_at"), "created_at")
+                .expect("created_at integer"),
+            424242
+        );
+    }
+
+    #[tokio::test]
+    async fn replace_prepares_verified_staging_without_mutating_canonical_target() {
+        let (source_directory, source, _source_path) = store("maintenance-replace-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task(
+                "default",
+                create_input("t_incoming", None, "Incoming fixture"),
+            )
+            .await
+            .expect("incoming task");
+        let export_path = source_directory.path().join("portable.jsonl");
+        source.export(&export_path).await.expect("portable export");
+
+        let (_target_directory, target, target_path) = store("maintenance-replace-target").await;
+        target.initialize().await.expect("initialize target");
+        target
+            .create_task(
+                "default",
+                create_input("t_existing", None, "Existing fixture"),
+            )
+            .await
+            .expect("existing task");
+        let error = target
+            .import(&export_path, true)
+            .await
+            .expect_err("replace requires host lifecycle publish");
+        let message = error.to_string();
+        assert!(message.contains("restart_required=true"), "{message}");
+        assert!(message.contains("phase=validated"), "{message}");
+        let tasks = target
+            .list_tasks("default", crate::TaskListOptions::default())
+            .await
+            .expect("target tasks");
+        assert!(tasks.tasks.iter().any(|task| task.id == "t_existing"));
+        assert!(!tasks.tasks.iter().any(|task| task.id == "t_incoming"));
+
+        let connection = target.connection().await.expect("journal connection");
+        let mut rows = connection
+            .query(
+                "SELECT id, phase, staged_database_path FROM import_journal ORDER BY updated_at DESC LIMIT 1",
+                (),
+            )
+            .await
+            .expect("journal query");
+        let row = rows
+            .next()
+            .await
+            .expect("journal row result")
+            .expect("journal row");
+        let journal_id =
+            text_value(row.get_value(0).expect("journal id value"), "id").expect("journal id");
+        assert_eq!(
+            text_value(row.get_value(1).expect("phase value"), "phase").expect("phase"),
+            "validated"
+        );
+        let staged = text_value(
+            row.get_value(2).expect("staged path value"),
+            "staged_database_path",
+        )
+        .expect("staged path");
+        assert!(Path::new(&staged).is_file(), "staged path {staged}");
+        assert!(target_path.is_file());
+
+        let resumed = target
+            .prepare_import(&export_path)
+            .await
+            .expect("validated portable replace is resumable");
+        assert_eq!(resumed.phase, "validated");
+        assert!(resumed.restart_required);
+        assert_eq!(resumed.journal_id, journal_id);
+        assert_eq!(
+            resumed.staged_database_path.as_deref(),
+            Some(staged.as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn replace_on_logically_empty_target_imports_without_inode_publish() {
+        let (source_directory, source, _source_path) =
+            store("maintenance-replace-empty-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task(
+                "default",
+                create_input("t_replace_empty", None, "Replace empty fixture"),
+            )
+            .await
+            .expect("fixture task");
+        let export_path = source_directory.path().join("portable.jsonl");
+        source.export(&export_path).await.expect("portable export");
+
+        let (_target_directory, target, _target_path) =
+            store("maintenance-replace-empty-target").await;
+        target.initialize().await.expect("initialize target");
+        let report = target
+            .import(&export_path, true)
+            .await
+            .expect("empty target replace");
+        assert_eq!(report.phase, "completed");
+        assert!(!report.restart_required);
+        assert!(
+            target
+                .list_tasks("default", crate::TaskListOptions::default())
+                .await
+                .expect("imported tasks")
+                .tasks
+                .iter()
+                .any(|task| task.id == "t_replace_empty")
+        );
     }
 }

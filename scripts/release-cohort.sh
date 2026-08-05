@@ -684,7 +684,7 @@ just affected-self-test
 just schema-contract
 just audit
 just rust-full
-just check-windows-p kanban-local
+just check-windows-p kanban-server
 just projection-release-cohort
 just bench-check
 just target-tools

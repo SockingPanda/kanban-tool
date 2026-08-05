@@ -5,7 +5,7 @@
 //! `Adopted` 与 `Excluded`：生成 schema 和手写 fixture 只证明离线契约可校验，不代表
 //! 真实 producer/consumer 已迁移；只有绑定双方测试证据的 `Adopted` 才表示运行时采用。
 //! schema model 生成由显式 `schema` feature 启用；离线校验、artifact 管理和 CLI
-//! 位于独立的 `kanban-schema-tool` leaf crate。正常 runtime 依赖图只包含 Serde wire 类型。
+//! 位于独立的 `xtask` leaf crate。正常 runtime 依赖图只包含 Serde wire 类型。
 
 mod api_components;
 mod boards;

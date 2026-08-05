@@ -285,12 +285,12 @@ class WitnessGateNegativeTests(unittest.TestCase):
 
     def test_schema_tool_owner_cannot_impersonate_runtime_adopter(self) -> None:
         metadata = metadata_with_dependency(None)
-        metadata["packages"][1]["name"] = "kanban-schema-tool"
+        metadata["packages"][1]["name"] = "xtask"
 
         with self.assertRaisesRegex(
             witness_gate.WitnessGateError, "schema tooling owner"
         ):
-            witness_gate.require_runtime_dependency(metadata, "kanban-schema-tool")
+            witness_gate.require_runtime_dependency(metadata, "xtask")
 
     def test_witness_plan_is_loaded_from_leaf_tool_binary(self) -> None:
         with mock.patch.object(
@@ -299,9 +299,9 @@ class WitnessGateNegativeTests(unittest.TestCase):
             self.assertEqual(witness_gate.load_witness_plan(WORKSPACE_ROOT), [])
 
         command = run.call_args.args[0]
-        self.assertEqual(command[command.index("-p") + 1], "kanban-schema-tool")
+        self.assertEqual(command[command.index("-p") + 1], "xtask")
         self.assertNotIn("--features", command)
-        self.assertEqual(command[command.index("--bin") + 1], "kanban-schema")
+        self.assertEqual(command[command.index("--bin") + 1], "xtask")
         self.assertIn("--locked", command)
 
     def test_metadata_load_keeps_full_locked_resolve_graph(self) -> None:
@@ -349,7 +349,7 @@ class WitnessGateNegativeTests(unittest.TestCase):
             witness_gate.require_runtime_tree(tree, "runtime-adopter")
 
     def test_leaf_schema_tool_in_runtime_tree_is_rejected(self) -> None:
-        tree = "runtime-adopter\n└── kanban-schema-tool v2.1.3\n"
+        tree = "runtime-adopter\n└── xtask v2.1.3\n"
 
         with self.assertRaisesRegex(
             witness_gate.WitnessGateError, "schema tooling"

@@ -6,18 +6,16 @@ use serde_json::Value;
 fn committed_schema_tree_and_fixtures_match_registry() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .and_then(Path::parent)
-        .expect("schema tool crate must live below workspace root");
+        .expect("xtask crate must live below workspace root");
 
-    kanban_schema_tool::check_contract(repo_root, false)
+    xtask::check_contract(repo_root, false)
         .expect("committed schema contract should match fresh generation");
 }
 
 #[test]
 fn generated_artifact_set_is_byte_deterministic() {
-    let first = kanban_schema_tool::expected_artifacts().expect("first generation should succeed");
-    let second =
-        kanban_schema_tool::expected_artifacts().expect("second generation should succeed");
+    let first = xtask::expected_artifacts().expect("first generation should succeed");
+    let second = xtask::expected_artifacts().expect("second generation should succeed");
 
     assert_eq!(first, second);
     assert!(first.contains_key("manifest.json"));
@@ -29,8 +27,7 @@ fn generated_artifact_set_is_byte_deterministic() {
 fn every_root_is_self_contained_and_has_a_complete_fixture_pair() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .and_then(Path::parent)
-        .expect("schema tool crate must live below workspace root");
+        .expect("xtask crate must live below workspace root");
 
     for root in kanban_contract::schema::schema_registry() {
         assert!(root.valid_fixture.starts_with("schemas/fixtures/"));
@@ -48,7 +45,7 @@ fn every_root_is_self_contained_and_has_a_complete_fixture_pair() {
         );
 
         let artifact_path = repo_root
-            .join(kanban_schema_tool::ARTIFACT_DIRECTORY)
+            .join(xtask::ARTIFACT_DIRECTORY)
             .join(root.artifact_path);
         let schema: Value =
             serde_json::from_slice(&std::fs::read(&artifact_path).unwrap_or_else(|error| {
@@ -93,7 +90,7 @@ fn assert_local_references(value: &Value, root_id: &str) {
 
 #[test]
 fn binary_help_preserves_public_cli_contract() {
-    let output = Command::new(env!("CARGO_BIN_EXE_kanban-schema"))
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
         .arg("--help")
         .output()
         .expect("schema tool binary should execute");
@@ -102,14 +99,14 @@ fn binary_help_preserves_public_cli_contract() {
     assert!(output.stderr.is_empty());
     assert_eq!(
         String::from_utf8(output.stdout).expect("help output must be UTF-8"),
-        "Usage: kanban-schema <generate|check|contract|audit|witnesses> [--root PATH] [--require-closed]\n"
+        "Usage: xtask <schema generate|check|audit|witnesses|deps check|agents check> [--root PATH] [--require-closed]\n"
     );
 }
 
 #[test]
 fn witnesses_json_matches_canonical_inventory_order_and_format() {
-    let output = Command::new(env!("CARGO_BIN_EXE_kanban-schema"))
-        .arg("witnesses")
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args(["schema", "witnesses"])
         .output()
         .expect("schema tool binary should execute");
     assert!(output.status.success());
@@ -128,8 +125,8 @@ fn witnesses_json_matches_canonical_inventory_order_and_format() {
 
 #[test]
 fn closure_audit_accepts_closed_inventory() {
-    kanban_schema_tool::audit_inventory(true).expect("contract train must be closed");
-    assert_eq!(kanban_schema_tool::unfinished_contract_count(), 0);
+    xtask::audit_inventory(true).expect("contract train must be closed");
+    assert_eq!(xtask::unfinished_contract_count(), 0);
 }
 
 #[test]

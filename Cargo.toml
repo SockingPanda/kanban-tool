@@ -3,7 +3,7 @@ members = [
   "crates/kanban-core",
   "crates/kanban-application",
   "crates/kanban-contract",
-  "crates/kanban-schema-tool",
+  "xtask",
   "crates/kanban-store-turso",
   "crates/kanban-client",
   "crates/kanban-cli",

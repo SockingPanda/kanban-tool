@@ -22,27 +22,21 @@ REAL_JUST = shutil.which("just")
 EXPECTED_JUST_VERSION = "just 1.57.0"
 CORE_PACKAGES = (
     "kanban-core",
+    "kanban-application",
     "kanban-contract",
-    "kanban-entity",
-    "kanban-indexer",
-    "kanban-search",
-    "kanban-graph",
-    "kanban-vector",
-    "kanban-derived-io",
-    "kanban-helper-protocol",
-    "kanban-labels",
-    "kanban-context",
-    "kanban-sqlite",
-    "kanban-local",
+    "kanban-store-turso",
+    "kanban-client",
     "kanban-server",
     "kanban-cli",
+    "kanban-mcp",
 )
-HELPER_PACKAGES = ("kanban-vector-lancedb", "kanban-graph-oxigraph")
-TOOL_PACKAGE = "kanban-schema-tool"
+FULL_PACKAGES = (*CORE_PACKAGES, "kanban-desktop", "xtask")
+HELPER_PACKAGES: tuple[str, ...] = ()
+TOOL_PACKAGE = "xtask"
 CONTRACT_PACKAGE = "kanban-contract"
 PROJECTION_RELEASE_FEATURES = "tantivy-backend,oxigraph-backend"
 RELEASE_WRAPPER_SHA256 = (
-    "e24b318632716cdc107fbc350bbbb61e826a6af2d83a9b9e46b35a7a4e0d06e9"
+    "58e05c7436165c0c2de000f08553352f7b32d690b0d663a89a058290be83e2e3"
 )
 Event = dict[str, object]
 ExpectedBuilder = Callable[[Path, bool], list[Event]]
@@ -346,7 +340,7 @@ def _fmt(root: Path, _: bool) -> list[Event]:
 
 
 def _fmt_full(root: Path, _: bool) -> list[Event]:
-    return _fmt_events(root, (*CORE_PACKAGES, *HELPER_PACKAGES))
+    return _fmt_events(root, FULL_PACKAGES)
 
 
 def _schema_fmt(root: Path, _: bool) -> list[Event]:
@@ -377,10 +371,7 @@ def _check_helpers(root: Path, _: bool) -> list[Event]:
 
 
 def _check_full(root: Path, nextest: bool) -> list[Event]:
-    return [
-        *_nested(root, "check-core", _check_core(root, nextest)),
-        *_nested(root, "check-helpers", _check_helpers(root, nextest)),
-    ]
+    return _nested(root, "check-core", _check_core(root, nextest))
 
 
 def _test_core(root: Path, nextest: bool) -> list[Event]:
@@ -433,10 +424,7 @@ def _clippy_helpers(root: Path, _: bool) -> list[Event]:
 
 
 def _clippy_full(root: Path, nextest: bool) -> list[Event]:
-    return [
-        *_nested(root, "clippy-core", _clippy_core(root, nextest)),
-        *_nested(root, "clippy-helpers", _clippy_helpers(root, nextest)),
-    ]
+    return _nested(root, "clippy-core", _clippy_core(root, nextest))
 
 
 def _rust_fast(root: Path, nextest: bool) -> list[Event]:
@@ -454,36 +442,6 @@ def _rust_full(root: Path, nextest: bool) -> list[Event]:
         *_nested(root, "check-full", _check_full(root, nextest)),
         *_nested(root, "test-full", _test_full(root, nextest)),
         *_nested(root, "clippy-full", _clippy_full(root, nextest)),
-    ]
-
-
-def _schema_tool(root: Path, nextest: bool) -> list[Event]:
-    check = _locked(root, "check", "--locked", "-p", TOOL_PACKAGE, "--tests")
-    probe = _cargo(root, "nextest", "--version")
-    if nextest:
-        tests = [
-            *probe,
-            *_locked(
-                root, "nextest", "run", "--locked", "-p", TOOL_PACKAGE, "--no-fail-fast"
-            ),
-        ]
-    else:
-        tests = [*probe, *_locked(root, "test", "--locked", "-p", TOOL_PACKAGE)]
-    clippy = _locked(
-        root,
-        "clippy",
-        "--locked",
-        "-p",
-        TOOL_PACKAGE,
-        "--all-targets",
-        "--",
-        "-D",
-        "warnings",
-    )
-    return [
-        *check,
-        *tests,
-        *clippy,
     ]
 
 
@@ -552,7 +510,7 @@ def _projection_release_cohort(root: Path, nextest: bool) -> list[Event]:
     return events
 
 
-def _schema_check(root: Path, _: bool) -> list[Event]:
+def _xtask(root: Path, *args: str) -> list[Event]:
     return _locked(
         root,
         "run",
@@ -560,49 +518,58 @@ def _schema_check(root: Path, _: bool) -> list[Event]:
         "-p",
         TOOL_PACKAGE,
         "--bin",
-        "kanban-schema",
+        "xtask",
         "--",
-        "check",
-        "--root",
-        ".",
+        *args,
     )
 
 
 def _schema_generate(root: Path, _: bool) -> list[Event]:
-    return _locked(
+    return _xtask(root, "schema", "generate")
+
+
+def _schema_check(root: Path, _: bool) -> list[Event]:
+    return _xtask(root, "schema", "check")
+
+
+def _schema_audit(root: Path, _: bool) -> list[Event]:
+    return _xtask(root, "schema", "audit")
+
+
+def _schema_witnesses(root: Path, _: bool) -> list[Event]:
+    return _xtask(root, "schema", "witnesses")
+
+
+def _deps_check(root: Path, _: bool) -> list[Event]:
+    return _xtask(root, "deps", "check")
+
+
+def _agents_check(root: Path, _: bool) -> list[Event]:
+    return _xtask(root, "agents", "check")
+
+
+def _schema_tool(root: Path, nextest: bool) -> list[Event]:
+    check = _locked(root, "check", "--locked", "-p", TOOL_PACKAGE, "--tests")
+    probe = _cargo(root, "nextest", "--version")
+    if nextest:
+        tests = [
+            *probe,
+            *_locked(root, "nextest", "run", "--locked", "-p", TOOL_PACKAGE, "--no-fail-fast"),
+        ]
+    else:
+        tests = [*probe, *_locked(root, "test", "--locked", "-p", TOOL_PACKAGE)]
+    clippy = _locked(
         root,
-        "run",
+        "clippy",
         "--locked",
         "-p",
         TOOL_PACKAGE,
-        "--bin",
-        "kanban-schema",
+        "--all-targets",
         "--",
-        "generate",
-        "--root",
-        ".",
+        "-D",
+        "warnings",
     )
-
-
-def _spec_bundle_generate(root: Path, _: bool) -> list[Event]:
-    return [
-        _event(
-            root,
-            "python3",
-            ["-B", "scripts/spec_bundle.py", "--root", ".", "--write"],
-        )
-    ]
-
-
-def _spec_bundle_check(root: Path, _: bool) -> list[Event]:
-    return [
-        _event(root, "python3", ["-B", "scripts/test_spec_bundle.py"]),
-        _event(
-            root,
-            "python3",
-            ["-B", "scripts/spec_bundle.py", "--root", ".", "--check"],
-        ),
-    ]
+    return [*check, *tests, *clippy]
 
 
 def _schema_docs(root: Path, _: bool) -> list[Event]:
@@ -629,16 +596,8 @@ def _schema_contract(root: Path, _: bool) -> list[Event]:
 
 def _schema_dependency_self_test(root: Path, _: bool) -> list[Event]:
     return [
-        _event(
-            root,
-            "python3",
-            ["-B", "scripts/test_schema_dependency_isolation.py"],
-        ),
-        _event(
-            root,
-            "python3",
-            ["-B", "scripts/test_schema_recipe_witness.py"],
-        ),
+        _event(root, "python3", ["-B", "scripts/test_schema_dependency_isolation.py"]),
+        _event(root, "python3", ["-B", "scripts/test_schema_recipe_witness.py"]),
     ]
 
 
@@ -652,70 +611,53 @@ def _schema_dependency(root: Path, _: bool) -> list[Event]:
 
 def _schema_surface(root: Path, nextest: bool) -> list[Event]:
     events: list[Event] = []
-    cases = (
+    for package, test_filter in (
         ("kanban-server", "api_route_catalog_matches_exact_contract_catalog"),
         ("kanban-cli", "clap_leaf_commands_match_exact_contract_catalog"),
-        ("kanban-sqlite", "jsonl_export_discriminators_match_exact_contract_catalog"),
-    )
-    for package, test_filter in cases:
+    ):
         events.extend(_cargo(root, "nextest", "--version"))
         if nextest:
-            events.extend(
-                _locked(
-                    root,
-                    "nextest",
-                    "run",
-                    "--locked",
-                    "-p",
-                    package,
-                    test_filter,
-                    "--no-fail-fast",
-                )
-            )
+            events.extend(_locked(root, "nextest", "run", "--locked", "-p", package, test_filter, "--no-fail-fast"))
         else:
-            events.extend(
-                _locked(root, "test", "--locked", "-p", package, test_filter)
-            )
+            events.extend(_locked(root, "test", "--locked", "-p", package, test_filter))
     return events
 
 
 def _schema_adoption_self_test(root: Path, _: bool) -> list[Event]:
-    return [
-        _event(
-            root,
-            "python3",
-            ["-B", "scripts/test_schema_adoption_witnesses.py"],
-        )
-    ]
+    return [_event(root, "python3", ["-B", "scripts/test_schema_adoption_witnesses.py"])]
 
 
 def _schema_adoption(root: Path, _: bool) -> list[Event]:
     return [
         _event(root, "just", ["schema-adoption-witness-self-test"]),
-        _event(
-            root,
-            "python3",
-            ["-B", "scripts/schema_adoption_witnesses.py", "--root", "."],
-        ),
+        _event(root, "python3", ["-B", "scripts/schema_adoption_witnesses.py", "--root", "."]),
     ]
 
 
 def _schema_audit_closed(root: Path, _: bool) -> list[Event]:
     return [
         _event(root, "just", ["schema-adoption-witness"]),
-        *_locked(
+        *_xtask(root, "schema", "audit", "--require-closed"),
+    ]
+
+
+def _spec_bundle_generate(root: Path, _: bool) -> list[Event]:
+    return [
+        _event(
             root,
-            "run",
-            "--locked",
-            "-p",
-            TOOL_PACKAGE,
-            "--bin",
-            "kanban-schema",
-            "--",
-            "audit",
-            "--root",
-            ".",
-            "--require-closed",
+            "python3",
+            ["-B", "scripts/spec_bundle.py", "--root", ".", "--write"],
+        )
+    ]
+
+
+def _spec_bundle_check(root: Path, _: bool) -> list[Event]:
+    return [
+        _event(root, "python3", ["-B", "scripts/test_spec_bundle.py"]),
+        _event(
+            root,
+            "python3",
+            ["-B", "scripts/spec_bundle.py", "--root", ".", "--check"],
         ),
     ]
 
@@ -737,7 +679,6 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
     ("fmt-full", (), _fmt_full, True),
     ("check", (), _check_core, True),
     ("check-core", (), _check_core, True),
-    ("check-helpers", (), _check_helpers, True),
     ("check-full", (), _check_full, True),
     (
         "test",
@@ -748,7 +689,6 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
         True,
     ),
     ("test-core", (), _test_core, True),
-    ("test-helpers", (), _test_helpers, True),
     ("test-full", (), _test_full, True),
     (
         "clippy",
@@ -759,7 +699,6 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
         True,
     ),
     ("clippy-core", (), _clippy_core, True),
-    ("clippy-helpers", (), _clippy_helpers, True),
     ("clippy-full", (), _clippy_full, True),
     ("rust-fast", (), _rust_fast, True),
     ("rust-full", (), _rust_full, True),
@@ -770,6 +709,12 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
         True,
     ),
     ("feature-p", (CONTRACT_PACKAGE, "schema"), _feature_contract, True),
+    ("schema", ("generate",), _schema_generate, True),
+    ("schema", ("check",), _schema_check, True),
+    ("schema", ("audit",), _schema_audit, True),
+    ("schema", ("witnesses",), _schema_witnesses, True),
+    ("deps", ("check",), _deps_check, True),
+    ("agents", ("check",), _agents_check, True),
     ("schema-generate", (), _schema_generate, True),
     ("schema-check", (), _schema_check, True),
     ("spec-bundle-generate", (), _spec_bundle_generate, False),
@@ -777,20 +722,10 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
     ("schema-docs", (), _schema_docs, False),
     ("schema-fmt", (), _schema_fmt, True),
     ("schema-tool", (), _schema_tool, True),
-    (
-        "schema-dependency-isolation-self-test",
-        (),
-        _schema_dependency_self_test,
-        False,
-    ),
+    ("schema-dependency-isolation-self-test", (), _schema_dependency_self_test, False),
     ("schema-dependency-isolation", (), _schema_dependency, False),
     ("schema-surface-audit", (), _schema_surface, False),
-    (
-        "schema-adoption-witness-self-test",
-        (),
-        _schema_adoption_self_test,
-        False,
-    ),
+    ("schema-adoption-witness-self-test", (), _schema_adoption_self_test, False),
     ("schema-adoption-witness", (), _schema_adoption, False),
     ("schema-contract", (), _schema_contract, False),
     ("schema-audit-closed", (), _schema_audit_closed, False),
@@ -807,41 +742,41 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
 # 更新执行语义必须显式更新对应 hash，运行采样无法触达的 env/dead branch 仍然
 # fail closed。
 PROTECTED_RECIPE_AST_SHA256 = {
-    "fmt": "775adb8877d364be2c9c5c5d8665ff9efdf27189584aea2241dcda504d372206",
+    "fmt": "6cab417789f5b4a1da3c6f43baddcf5611641de5605e227ddd11c1b81f6cea89",
     "fmt-check": "b2fdd96430312d9ee37d369ce26ff44dab2f6a10dfcbb29bb6380fa0c371d611",
-    "fmt-full": "b30159e7d1235629c9a877ca31a1df661eaa4bc3670b0ae047350de6c06ae509",
+    "fmt-full": "23712b900768978c836bb34ab8239903d7a51e9268a98e96c0e102afd3f22e84",
     "check": "cddd49fe5e50b59502f0a2a54cfd4e2acb4bb9b891f4de0c056e78f52e0783a7",
-    "check-core": "3412493908e5e51fc636899322a3da85cb88f95a11846e0043b2ac062ce0cbdf",
-    "check-helpers": "72b99d6827202bff3079e478349fc476a6476885a84e68c1db5e2d54456440eb",
-    "check-full": "a60a7ed88645351cc32236a5bca2c4edafa1d0631e63d2179d4bda6b17184208",
+    "check-core": "e00113ac5c727915a2e1dbf88231198e94807ffb9323e177881ed43583b7a155",
+    "check-full": "d9c6422d7e92bb1ffa11bc2337072444304948070cf35c79e4ffc5340e32bd92",
     "test": "d136c26efda43f4482000099f4917c98ba3407f2072d58ee7a6ffefebba798db",
     "test-p": "16d14ffcf302b2f745a4b4a0724a96e5a38b600870d58f36c344e185595a6b00",
     "check-p": "afb9f318d2aa509feed7efd372318cbd4c2993742a26f078c6f740349400e33e",
     "rust-fast": "9a013d3f1005dc4c21c44e1fc21e8d05dc36c9de73e79470021e4f62ac2801c9",
-    "test-core": "d4dc0f1b0c16f285476fba46b1fb9761e6f30c9bd8ca081c10897febb82e5aa9",
-    "test-helpers": "100355d58273d5bb201b81a27ac00b4f88bdec31c5e48e4f0aa8fe9cfe82e5f1",
-    "test-full": "253dcab5f836d56a22b0616e9ee56905aed9468afd7c6f773509f16862b6e366",
+    "test-core": "a54af8a77eaf60da89b50637c8c13d54a50d9a5a3464df0016d4e9e64c9a6349",
+    "test-full": "85fb187f2cafa975a8ec17ff2df582475331b7669301e6693936b6420d10f219",
     "clippy": "e487d817f0f09efb21d91eaa4e9793f05cb2883723cc59758c2eaa4314384010",
-    "clippy-core": "bd35e34699dbb23c0d8ca688f26859f6fd1c993c1191bc69e49c53778ec3f4cd",
-    "clippy-helpers": "09b9641653aadc6a4074e939800832daa1dba050001ce052e6f55f2129e4924d",
-    "clippy-full": "64cf5ae07fe363d605275ab8997272d6d7c48e120e9cfcf1c24ecbb105d77da8",
+    "clippy-core": "1ce984e76b22d12fd9a28efe6ffa8f53b3d1698b493438d5739526b11785abfd",
+    "clippy-full": "bbed85a04f195152be482141830dc9309e369ee7c4a12de75798a448b1917ef9",
     "rust-full": "05bd1a7769cf8d0ebde0582f37444132adfafd19ae8ff0682b1a8c45307b5288",
     "projection-release-cohort": "fa986fe568697b3f4fa7e62e65280b461f2d0b7f34d18a351d0cae6c330641f4",
     "feature-p": "90a48cdda4600c6cffd88614a139b22584936690af300aaec2a2e60bdc3fec09",
-    "schema-generate": "49f543ca2ee8cd0dcc5d8a36427176e0f49bbdb42036c8a1460778fb80aa9f83",
-    "schema-check": "353207a2d392277a1cd7f768c6b61f1485d866bc3280d35bd4142ff3cafbffb6",
     "spec-bundle-generate": "4ad6e58b6600690d8a85c9d5472efe999b8c356f2eeafc86978edd4ccbe24fa9",
     "spec-bundle-check": "deb622cf88b3dff62e5abbeaa87996cd5cc05cf83a9175c51376110f3f337bcb",
+    "schema": "0cff732b7615a43b4298c1c301be4cdaeb78db50cf10e85ca2ea1cd8bcb4d1fa",
+    "deps": "838be60d806471013e820358bd9be0c208a3819821f7b9a503aae3dcfc93e784",
+    "agents": "71c4c7a0101b1ce7a81f19ee62c74813e55c6ad2298c0592c1dcc18dc09c6327",
+    "schema-generate": "ddf296b4364a0f1d38d5204e7476414c5b86daeda1be7aee6a159e027b3b48fb",
+    "schema-check": "1c9f2d84eb3f4d17714ecdcc9d693281b8c76aa305656ca86892434d30b50052",
     "schema-docs": "8f54ff9bd7e05e820243e82418b68c46316c11380fcadcbf816ab9a1cdfe40ac",
-    "schema-fmt": "ff27c09a697acc1fc1b7ea52c02d41035840492cb6b2ceb97162a828d1d62c28",
-    "schema-tool": "eb1a84d4fd75ab1264dcff25d69c18790c2efa9a5683161fe4807a7563707c59",
+    "schema-fmt": "fa2c32acb96075a365219141b025372bf6ce793538453a734b8be3c181308d39",
+    "schema-tool": "5d75c9c43db9ef001fe8e39ec39d50a30b40239daa9cd4d163067bf4daccc230",
     "schema-dependency-isolation-self-test": "1f791d177b30a450e938734f8b48480f3c1d3fe5e77d1e4588771c405383f934",
     "schema-dependency-isolation": "70f9346e1e8d1be4d169bf6568fc743c93c445739e98fc5599c244ad8ff789bb",
     "schema-adoption-witness-self-test": "221fd748cf1b93cb7a11f90b70b398bd08b9122df154f61012a4b92661e81fc4",
     "schema-adoption-witness": "1c55f076cb1632e69be3f6c1b98da5ddfb292a91f238324a5f51fc584e860e1d",
-    "schema-surface-audit": "bf65e600ecefe5b05dddcf9ae165be6e5b00b54148f1d7abd0a7996041e786b0",
+    "schema-surface-audit": "afcc19fd50897a51ae12c3ea048840aa5624a2f4fe60d40ea61762b013255c5c",
     "schema-contract": "5d0d2d21d1bc9a4543a9f938f8211a3387ec34812948c91cff6d7dee6e5521c7",
-    "schema-audit-closed": "7f2f8074b1bf51095c5119ea342ad412fb50f667b59f970f68ef9239bda54f45",
+    "schema-audit-closed": "fd7d65dbe4d9d19c2c92c26107ca33083fd61eb03ddca39e2c80a5ccbe2b87e5",
     "release": "1dae2a83fb1776567c134c61e610556f3fc39cc21d9642beeaa3ee7b226d8a4d",
 }
 AST_ONLY_RECIPE_NAMES = {"check-p", "test-p"}
@@ -1906,7 +1841,7 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
 
     def test_test_full_fallback_package_cannot_drift(self) -> None:
         self.assert_mutation_rejected(
-            "else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude kanban-schema-tool",
+            "else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude xtask",
             "else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude kanban-contract",
             "test-full",
             _test_full,
@@ -1950,7 +1885,7 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
         )
 
     def test_fmt_full_must_cover_only_core_and_helpers(self) -> None:
-        packages = (*CORE_PACKAGES, *HELPER_PACKAGES)
+        packages = FULL_PACKAGES
         canonical = "cargo fmt " + " ".join(_package_args(packages))
         canonical += " -- --check"
         self.assert_mutation_rejected(
@@ -1958,18 +1893,6 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
             "fmt-full:\n    cargo fmt -- --check\n",
             "fmt-full",
             _fmt_full,
-        )
-
-    def test_schema_fmt_must_cover_only_contract_and_leaf(self) -> None:
-        canonical = "cargo fmt " + " ".join(
-            _package_args((CONTRACT_PACKAGE, TOOL_PACKAGE))
-        )
-        canonical += " -- --check"
-        self.assert_mutation_rejected(
-            f"schema-fmt:\n    {canonical}\n",
-            "schema-fmt:\n    cargo fmt -p kanban-contract -- --check\n",
-            "schema-fmt",
-            _schema_fmt,
         )
 
     def test_rust_full_must_use_fmt_full(self) -> None:
@@ -1980,58 +1903,64 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
             _rust_full,
         )
 
-    def test_schema_tool_cannot_omit_check_or_clippy_gate(self) -> None:
+    def test_xtask_schema_entrypoint_requires_locked_cargo_run(self) -> None:
         self.assert_mutation_rejected(
-            "scripts/cargo-build-lock.sh -- cargo check --locked -p kanban-schema-tool --tests",
-            "schema-tool:\n    echo check omitted\n",
+            '    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema "$@"\n',
+            '    cargo run -p xtask --bin xtask -- schema "$@"\n',
+            "schema",
+            _schema_check,
+            args=("check",),
+        )
+
+    def test_xtask_deps_and_agents_entrypoints_cannot_recurse(self) -> None:
+        self.assert_mutation_rejected(
+            '    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- deps "$@"\n',
+            '    just deps "$@"\n',
+            "deps",
+            _deps_check,
+            args=("check",),
+            delegate=False,
+        )
+
+    def test_schema_compatibility_contract_keeps_all_subgates(self) -> None:
+        self.assert_mutation_rejected(
+            "    just schema-adoption-witness\n",
+            "    echo adoption gate omitted\n",
+            "schema-contract",
+            _schema_contract,
+            delegate=False,
+        )
+
+    def test_schema_tool_keeps_xtask_check_and_clippy(self) -> None:
+        self.assert_mutation_rejected(
+            "scripts/cargo-build-lock.sh -- cargo check --locked -p xtask --tests",
+            "echo xtask check omitted",
             "schema-tool",
             _schema_tool,
+            delegate=False,
         )
         self.assert_mutation_rejected(
-            "    scripts/cargo-build-lock.sh -- cargo clippy --locked -p kanban-schema-tool --all-targets -- -D warnings\n",
-            "    echo clippy omitted\n",
+            "    scripts/cargo-build-lock.sh -- cargo clippy --locked -p xtask --all-targets -- -D warnings\n",
+            "    echo xtask clippy omitted\n",
             "schema-tool",
             _schema_tool,
-        )
-
-    def test_schema_contract_cannot_omit_or_reorder_dependency_preflight(self) -> None:
-        self.assert_mutation_rejected(
-            "schema-contract:\n    just schema-dependency-isolation\n",
-            "schema-contract:\n    echo dependency gate omitted\n",
-            "schema-contract",
-            _schema_contract,
-            delegate=False,
-        )
-        self.assert_mutation_rejected(
-            "    just schema-dependency-isolation\n    just schema-fmt\n",
-            "    just schema-fmt\n    just schema-dependency-isolation\n",
-            "schema-contract",
-            _schema_contract,
             delegate=False,
         )
 
-    def test_schema_contract_cannot_omit_schema_fmt(self) -> None:
+    def test_schema_audit_closed_keeps_locked_xtask_audit(self) -> None:
         self.assert_mutation_rejected(
-            "    just schema-fmt\n",
-            "    echo schema fmt omitted\n",
-            "schema-contract",
-            _schema_contract,
-            delegate=False,
-        )
-
-    def test_schema_audit_closed_protects_witness_and_locked_audit(self) -> None:
-        self.assert_mutation_rejected(
-            "schema-audit-closed:\n    just schema-adoption-witness\n",
-            "schema-audit-closed:\n    echo adoption witness omitted\n",
+            "    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema audit --require-closed\n",
+            "    cargo run -p xtask --bin xtask -- schema audit --require-closed\n",
             "schema-audit-closed",
             _schema_audit_closed,
             delegate=False,
         )
         self.assert_mutation_rejected(
-            "    scripts/cargo-build-lock.sh -- cargo run --locked -p kanban-schema-tool --bin kanban-schema -- audit --root . --require-closed\n",
-            "    cargo run -p kanban-schema-tool --bin kanban-schema -- audit --root . --require-closed\n",
-            "schema-audit-closed",
-            _schema_audit_closed,
+            '    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- agents "$@"\n',
+            '    just agents "$@"\n',
+            "agents",
+            _agents_check,
+            args=("check",),
             delegate=False,
         )
 
@@ -2056,7 +1985,7 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
         _verify_release_wrapper_semantics(wrapper)
         self.assertIn("just schema-contract", wrapper)
         self.assertLess(
-            wrapper.index("just check-windows-p kanban-local"),
+            wrapper.index("just check-windows-p kanban-server"),
             wrapper.index("just projection-release-cohort"),
         )
         self.assertLess(
@@ -2157,9 +2086,8 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
             with self.subTest(sealed_original=original):
                 mutation = wrapper.replace(original, replacement, 1)
                 self.assertNotEqual(mutation, wrapper)
-                # Deliberately bypass the whole-file hash here so these cases
-                # prove that the sealed-tooling semantic witness also fails
-                # closed after an otherwise-approved hash refresh.
+                # 此处刻意绕过整文件哈希，证明即使哈希更新已获批准，
+                # sealed-tooling 的语义 witness 仍会对这些变异保持 fail closed。
                 with self.assertRaises(RecipeWitnessError):
                     _verify_sealed_release_tooling(mutation)
 
@@ -2228,8 +2156,8 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
 
     def test_test_core_branch_package_mismatch_is_rejected(self) -> None:
         self.assert_mutation_rejected(
-            "-p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-search \\\n",
-            "-p kanban-core -p kanban-contract -p kanban-entity -p kanban-indexer -p kanban-cli \\\n",
+            "-p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso \\\n",
+            "-p kanban-core -p kanban-application -p kanban-contract -p kanban-cli \\\n",
             "test-core",
             _test_core,
             nextest=False,

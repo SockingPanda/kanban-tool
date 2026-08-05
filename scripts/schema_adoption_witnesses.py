@@ -16,7 +16,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN_SCHEMA_FEATURES = {"schema", "schema-tool"}
 CONTRACT_PACKAGE = "kanban-contract"
-SCHEMA_TOOL_PACKAGE = "kanban-schema-tool"
+SCHEMA_TOOL_PACKAGE = "xtask"
 CONTRACT_MANIFEST = Path("crates/kanban-contract/Cargo.toml")
 
 
@@ -190,7 +190,7 @@ def require_runtime_tree(
     tree_output: str, package: str, contract_path: Path | None = None
 ) -> None:
     forbidden = re.search(
-        r'kanban-schema-tool v|kanban-contract feature "schema(?:-tool)?"|schemars v1\.|jsonschema v',
+        r'xtask v|kanban-contract feature "schema(?:-tool)?"|schemars v1\.|jsonschema v',
         tree_output,
     )
     if forbidden is not None:
@@ -312,10 +312,11 @@ def load_witness_plan(repo_root: Path) -> list[dict[str, Any]]:
             "--locked",
             "--quiet",
             "-p",
-            "kanban-schema-tool",
+            "xtask",
             "--bin",
-            "kanban-schema",
+            "xtask",
             "--",
+            "schema",
             "witnesses",
             "--root",
             str(repo_root),

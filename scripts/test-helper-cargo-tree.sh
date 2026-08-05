@@ -64,7 +64,7 @@ assert_release_backend_cohort() {
 # intentional cohort is verified separately below.
 assert_tree_excludes_heavy_helpers kanban-cli
 assert_tree_excludes_heavy_helpers kanban-server
-assert_tree_excludes_heavy_helpers kanban-sqlite
+assert_tree_excludes_heavy_helpers kanban-store-turso
 
 assert_release_backend_cohort kanban-cli
 assert_release_backend_cohort kanban-server
@@ -116,7 +116,7 @@ expected_wrapper_steps = [
     "just schema-contract",
     "just audit",
     "just rust-full",
-    "just check-windows-p kanban-local",
+    "just check-windows-p kanban-server",
     "just projection-release-cohort",
     "just bench-check",
     "just target-tools",

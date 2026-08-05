@@ -64,20 +64,13 @@ def is_desktop(path: str) -> bool:
 
 CORE_CRATES = {
     "kanban-core",
+    "kanban-application",
     "kanban-contract",
-    "kanban-entity",
-    "kanban-indexer",
-    "kanban-helper-protocol",
-    "kanban-search",
-    "kanban-graph",
-    "kanban-vector",
-    "kanban-derived-io",
-    "kanban-labels",
-    "kanban-context",
-    "kanban-sqlite",
-    "kanban-local",
+    "kanban-store-turso",
+    "kanban-client",
     "kanban-server",
     "kanban-cli",
+    "kanban-mcp",
 }
 
 
@@ -102,9 +95,19 @@ def is_core(path: str) -> bool:
 
 
 def is_workspace_member_manifest(path: str) -> bool:
-    parts = _parts(path)
     return (
-        len(parts) == 3 and parts[0] == "crates" and parts[2] == "Cargo.toml"
+        path
+        in {
+            "crates/kanban-core/Cargo.toml",
+            "crates/kanban-application/Cargo.toml",
+            "crates/kanban-contract/Cargo.toml",
+            "crates/kanban-store-turso/Cargo.toml",
+            "crates/kanban-client/Cargo.toml",
+            "crates/kanban-cli/Cargo.toml",
+            "crates/kanban-mcp/Cargo.toml",
+            "crates/kanban-server/Cargo.toml",
+            "xtask/Cargo.toml",
+        }
     ) or path == "apps/desktop/src-tauri/Cargo.toml"
 
 
@@ -123,7 +126,7 @@ def is_schema_contract(path: str) -> bool:
         }
         or is_workspace_member_manifest(path)
         or path.startswith("crates/kanban-contract/")
-        or path.startswith("crates/kanban-schema-tool/")
+        or path.startswith("xtask/")
         or path.startswith("schemas/")
         or path in {
             "scripts/schema_adoption_witnesses.py",
@@ -149,24 +152,6 @@ def is_schema_docs(path: str) -> bool:
     )
 
 
-def is_vector_helper(path: str) -> bool:
-    return path.startswith((
-        "crates/kanban-vector/",
-        "crates/kanban-vector-lancedb/",
-        "crates/kanban-derived-io/",
-        "crates/kanban-helper-protocol/",
-    ))
-
-
-def is_graph_helper(path: str) -> bool:
-    return path.startswith((
-        "crates/kanban-graph/",
-        "crates/kanban-graph-oxigraph/",
-        "crates/kanban-derived-io/",
-        "crates/kanban-helper-protocol/",
-    ))
-
-
 def is_cli(path: str) -> bool:
     return path.startswith("crates/kanban-cli/") or path == "docs/CLI_SPEC.md"
 
@@ -178,19 +163,9 @@ def is_server_api(path: str) -> bool:
 def is_sqlite_core_state_machine(path: str) -> bool:
     return (
         path.startswith("crates/kanban-core/")
-        or path.startswith("crates/kanban-sqlite/")
         or path.startswith("migrations/")
         or path == "docs/STATE_MACHINE.md"
         or path == "docs/DATA_MODEL.md"
-    )
-
-
-def is_search_graph_vector_context(path: str) -> bool:
-    needles = {"search", "graph", "vector", "context", "indexer", "entity"}
-    parts = set(_parts(path))
-    return any(part in needles for part in parts) or any(
-        path.startswith(f"crates/kanban-{name}/")
-        for name in ("search", "graph", "vector", "context", "indexer", "entity")
     )
 
 
@@ -223,12 +198,9 @@ CLASSIFIERS = {
     "core": is_core,
     "schema-contract": is_schema_contract,
     "schema-docs": is_schema_docs,
-    "vector-helper": is_vector_helper,
-    "graph-helper": is_graph_helper,
     "cli": is_cli,
     "server/api": is_server_api,
     "sqlite/core/state-machine": is_sqlite_core_state_machine,
-    "search/graph/vector/context": is_search_graph_vector_context,
     "scripts/packaging/release-sensitive": is_scripts_packaging_release_sensitive,
 }
 
@@ -238,8 +210,6 @@ RULES = (
     Rule("core", (["just", "check-core"],)),
     Rule("schema-contract", (["just", "schema-contract"],)),
     Rule("schema-docs", (["just", "schema-docs"],)),
-    Rule("vector-helper", (["just", "check-p", "kanban-vector-lancedb"],)),
-    Rule("graph-helper", (["just", "check-p", "kanban-graph-oxigraph"],)),
     Rule(
         "cli",
         (
@@ -254,40 +224,6 @@ RULES = (
             ["just", "check-p", "kanban-server"],
             ["just", "test-p", "kanban-server"],
             ["just", "clippy-p", "kanban-server"],
-        ),
-    ),
-    Rule(
-        "sqlite/core/state-machine",
-        (
-            ["just", "check-p", "kanban-core"],
-            ["just", "test-p", "kanban-core"],
-            ["just", "clippy-p", "kanban-core"],
-            ["just", "check-p", "kanban-sqlite"],
-            ["just", "test-p", "kanban-sqlite"],
-            ["just", "clippy-p", "kanban-sqlite"],
-        ),
-    ),
-    Rule(
-        "search/graph/vector/context",
-        (
-            ["just", "check-p", "kanban-search"],
-            ["just", "test-p", "kanban-search"],
-            ["just", "clippy-p", "kanban-search"],
-            ["just", "check-p", "kanban-graph"],
-            ["just", "test-p", "kanban-graph"],
-            ["just", "clippy-p", "kanban-graph"],
-            ["just", "check-p", "kanban-vector"],
-            ["just", "test-p", "kanban-vector"],
-            ["just", "clippy-p", "kanban-vector"],
-            ["just", "check-p", "kanban-context"],
-            ["just", "test-p", "kanban-context"],
-            ["just", "clippy-p", "kanban-context"],
-            ["just", "check-p", "kanban-indexer"],
-            ["just", "test-p", "kanban-indexer"],
-            ["just", "clippy-p", "kanban-indexer"],
-            ["just", "check-p", "kanban-entity"],
-            ["just", "test-p", "kanban-entity"],
-            ["just", "clippy-p", "kanban-entity"],
         ),
     ),
     Rule(
@@ -473,11 +409,7 @@ def execute(plan: Plan) -> int:
     return 0
 
 
-ALLOW_EMPTY_TEST_PACKAGES = {
-    "kanban-search",
-    "kanban-graph",
-    "kanban-entity",
-}
+ALLOW_EMPTY_TEST_PACKAGES: set[str] = set()
 
 
 def is_allowed_empty_test_result(command: Command, returncode: int) -> bool:
@@ -492,8 +424,8 @@ def is_allowed_empty_test_result(command: Command, returncode: int) -> bool:
 def self_test() -> None:
     cases = [
         (
-            "docs only",
-            ["docs/SPEC.md", "README.md"],
+            "spec bundle docs",
+            ["docs/SPEC.md"],
             {"docs-only", "schema-docs"},
             [["just", "schema-docs"], ["just", "diff-check"]],
             False,
@@ -527,101 +459,10 @@ def self_test() -> None:
             False,
         ),
         (
-            "sqlite state",
-            ["crates/kanban-sqlite/src/service/transitions.rs", "migrations/004_priority_levels.sql"],
+            "state machine",
+            ["crates/kanban-core/src/state.rs", "migrations/004_priority_levels.sql"],
             {"core", "sqlite/core/state-machine"},
-            [["just", "check-core"], ["just", "check-p", "kanban-core"], ["just", "check-p", "kanban-sqlite"]],
-            False,
-        ),
-        (
-            "search graph vector context",
-            [
-                "crates/kanban-vector/src/lib.rs",
-                "crates/kanban-context/src/lib.rs",
-                "crates/kanban-indexer/src/lib.rs",
-                "crates/kanban-entity/src/lib.rs",
-            ],
-            {"core", "search/graph/vector/context"},
-            [
-                ["just", "check-core"],
-                ["just", "check-p", "kanban-vector"],
-                ["just", "check-p", "kanban-context"],
-                ["just", "check-p", "kanban-indexer"],
-                ["just", "check-p", "kanban-entity"],
-            ],
-            False,
-        ),
-        (
-            "vector base crate propagates to helper",
-            ["crates/kanban-vector/src/lib.rs"],
-            {"core", "search/graph/vector/context", "vector-helper"},
-            [
-                ["just", "check-core"],
-                ["just", "check-p", "kanban-vector"],
-                ["just", "check-p", "kanban-vector-lancedb"],
-                ["just", "diff-check"],
-            ],
-            False,
-        ),
-        (
-            "graph base crate propagates to helper",
-            ["crates/kanban-graph/src/lib.rs"],
-            {"core", "search/graph/vector/context", "graph-helper"},
-            [
-                ["just", "check-core"],
-                ["just", "check-p", "kanban-graph"],
-                ["just", "check-p", "kanban-graph-oxigraph"],
-                ["just", "diff-check"],
-            ],
-            False,
-        ),
-        (
-            "derived io propagates to both helpers",
-            ["crates/kanban-derived-io/src/lib.rs"],
-            {"core", "vector-helper", "graph-helper"},
-            [
-                ["just", "check-core"],
-                ["just", "check-p", "kanban-vector-lancedb"],
-                ["just", "check-p", "kanban-graph-oxigraph"],
-                ["just", "diff-check"],
-            ],
-            False,
-        ),
-        (
-            "helper protocol propagates to core and both helpers",
-            ["crates/kanban-helper-protocol/src/lib.rs"],
-            {"core", "vector-helper", "graph-helper"},
-            [
-                ["just", "check-core"],
-                ["just", "check-p", "kanban-vector-lancedb"],
-                ["just", "check-p", "kanban-graph-oxigraph"],
-                ["just", "diff-check"],
-            ],
-            False,
-        ),
-        (
-            "vector helper",
-            ["crates/kanban-vector-lancedb/src/lib.rs"],
-            {"vector-helper"},
-            [["just", "check-p", "kanban-vector-lancedb"], ["just", "diff-check"]],
-            False,
-        ),
-        (
-            "graph helper",
-            ["crates/kanban-graph-oxigraph/src/lib.rs"],
-            {"graph-helper"},
-            [["just", "check-p", "kanban-graph-oxigraph"], ["just", "diff-check"]],
-            False,
-        ),
-        (
-            "both helpers",
-            ["crates/kanban-vector-lancedb/src/lib.rs", "crates/kanban-graph-oxigraph/src/lib.rs"],
-            {"vector-helper", "graph-helper"},
-            [
-                ["just", "check-p", "kanban-vector-lancedb"],
-                ["just", "check-p", "kanban-graph-oxigraph"],
-                ["just", "diff-check"],
-            ],
+            [["just", "check-core"], ["just", "diff-check"]],
             False,
         ),
         (
@@ -639,15 +480,15 @@ def self_test() -> None:
             False,
         ),
         (
-            "schema tool source",
-            ["crates/kanban-schema-tool/src/lib.rs"],
+            "xtask source",
+            ["xtask/src/lib.rs"],
             {"schema-contract"},
             [["just", "schema-contract"], ["just", "diff-check"]],
             False,
         ),
         (
-            "schema tool manifest",
-            ["crates/kanban-schema-tool/Cargo.toml"],
+            "xtask manifest",
+            ["xtask/Cargo.toml"],
             {"schema-contract"},
             [["just", "schema-contract"], ["just", "diff-check"]],
             True,
@@ -779,25 +620,7 @@ def self_test() -> None:
                 f"got {plan['full_gate_recommended']}"
             )
 
-    testless_plan = build_plan(
-        "main",
-        [
-            "crates/kanban-search/src/lib.rs",
-            "crates/kanban-graph/src/lib.rs",
-            "crates/kanban-entity/src/lib.rs",
-        ],
-    )
-    for package in ("kanban-search", "kanban-graph", "kanban-entity"):
-        command = ["just", "test-p", package]
-        if command not in testless_plan["commands"]:
-            raise AssertionError(
-                f"testless package {package} must retain test command {command}"
-            )
-        if not is_allowed_empty_test_result(command, 4):
-            raise AssertionError(f"testless package {package} must accept nextest exit 4")
-        if is_allowed_empty_test_result(command, 1):
-            raise AssertionError(f"test failure for {package} must remain fatal")
-    if is_allowed_empty_test_result(["just", "test-p", "kanban-vector"], 4):
+    if is_allowed_empty_test_result(["just", "test-p", "kanban-client"], 4):
         raise AssertionError("packages outside the explicit allowlist must reject exit 4")
 
     root = Path(__file__).resolve().parents[1]

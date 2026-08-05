@@ -16,8 +16,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PACKAGE = "kanban-contract"
-TOOL_PACKAGE = "kanban-schema-tool"
-TOOL_MEMBER_PATH = "crates/kanban-schema-tool"
+TOOL_PACKAGE = "xtask"
+TOOL_MEMBER_PATH = "xtask"
 CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
 APPROVED_REGISTRY_CLOSURE_PATH = (
     "policy/schema-tool-registry-closure.json"
@@ -69,26 +69,15 @@ WORKSPACE_CANONICAL_DEPENDENCIES = {
 }
 CORE_PACKAGES = (
     "kanban-core",
+    "kanban-application",
     "kanban-contract",
-    "kanban-entity",
-    "kanban-indexer",
-    "kanban-search",
-    "kanban-graph",
-    "kanban-vector",
-    "kanban-derived-io",
-    "kanban-helper-protocol",
-    "kanban-labels",
-    "kanban-context",
-    "kanban-sqlite",
-    "kanban-local",
-    "kanban-server",
+    "kanban-store-turso",
+    "kanban-client",
     "kanban-cli",
+    "kanban-mcp",
+    "kanban-server",
 )
-HELPER_PACKAGES = ("kanban-vector-lancedb", "kanban-graph-oxigraph")
-DEFAULT_MEMBER_PATHS = tuple(
-    "crates/" + package
-    for package in (*CORE_PACKAGES[:-2], "kanban-cli", "kanban-server")
-)
+DEFAULT_MEMBER_PATHS = tuple("crates/" + package for package in CORE_PACKAGES)
 AUTO_TARGET_FLAGS = {
     "autobins": False,
     "autoexamples": False,
@@ -97,10 +86,8 @@ AUTO_TARGET_FLAGS = {
     "autolib": False,
     "build": False,
 }
-TOOL_MANIFEST_LIB = {"name": "kanban_schema_tool", "path": "src/lib.rs"}
-TOOL_MANIFEST_BINS = [
-    {"name": "kanban-schema", "path": "src/bin/kanban-schema.rs"}
-]
+TOOL_MANIFEST_LIB = {"name": "xtask", "path": "src/lib.rs"}
+TOOL_MANIFEST_BINS = [{"name": "xtask", "path": "src/main.rs"}]
 TOOL_MANIFEST_TESTS = [{"name": "tooling", "path": "tests/tooling.rs"}]
 CONTRACT_MANIFEST_LIB = {"name": "kanban_contract", "path": "src/lib.rs"}
 CONTRACT_MANIFEST_TESTS = [
@@ -114,11 +101,9 @@ APPROVED_ROOT_PATCH = {
     }
 }
 TOOL_TARGETS = {
-    ("kanban_schema_tool", ("lib",)): "crates/kanban-schema-tool/src/lib.rs",
-    ("kanban-schema", ("bin",)): (
-        "crates/kanban-schema-tool/src/bin/kanban-schema.rs"
-    ),
-    ("tooling", ("test",)): "crates/kanban-schema-tool/tests/tooling.rs",
+    ("xtask", ("lib",)): "xtask/src/lib.rs",
+    ("xtask", ("bin",)): "xtask/src/main.rs",
+    ("tooling", ("test",)): "xtask/tests/tooling.rs",
 }
 CONTRACT_TARGETS = {
     ("kanban_contract", ("lib",)): "crates/kanban-contract/src/lib.rs",
@@ -126,7 +111,7 @@ CONTRACT_TARGETS = {
     ("g0_metadata", ("test",)): "crates/kanban-contract/tests/g0_metadata.rs",
 }
 TOOL_TARGET_DISCOVERY_FILES = {
-    "src/bin/kanban-schema.rs",
+    "src/main.rs",
     "tests/tooling.rs",
 }
 CONTRACT_TARGET_DISCOVERY_FILES = {
@@ -483,7 +468,7 @@ def _audit_tool_metadata(tool: dict[str, Any], repo_root: Path = ROOT) -> None:
     if topology_changed:
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-schema-tool direct normal dependencies 必须是精确五条唯一边: "
+                "xtask direct normal dependencies 必须是精确五条唯一边: "
                 f"missing={missing}, unexpected={unexpected}, duplicates={duplicates}, "
                 f"actual_count={len(dependencies)}"
             )
@@ -497,7 +482,7 @@ def _audit_tool_metadata(tool: dict[str, Any], repo_root: Path = ROOT) -> None:
         if actual != expected:
             raise DependencyPolicyError(
                 _phase_two_message(
-                    f"kanban-schema-tool dependency {name} signature 偏离 Phase 1: "
+                    f"xtask dependency {name} signature 偏离 Phase 1: "
                     f"expected={expected}, actual={actual}"
                 )
             )
@@ -752,7 +737,7 @@ def audit_metadata(metadata: dict[str, Any], repo_root: Path = ROOT) -> set[str]
 
     resolve, node_by_id = _resolve_nodes_by_id(metadata)
     tool_id = _canonical_workspace_record(
-        tool, TOOL_PACKAGE, repo_root / "crates/kanban-schema-tool/Cargo.toml"
+        tool, TOOL_PACKAGE, repo_root / "xtask/Cargo.toml"
     )
     contract_id = _canonical_workspace_record(
         contract, CONTRACT_PACKAGE, repo_root / "crates/kanban-contract/Cargo.toml"
@@ -783,7 +768,7 @@ def audit_metadata(metadata: dict[str, Any], repo_root: Path = ROOT) -> set[str]
     if jsonschema.get("version") != "0.47.0":
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-schema-tool 必须 resolve jsonschema 0.47.0: "
+                "xtask 必须 resolve jsonschema 0.47.0: "
                 f"{jsonschema.get('version')}"
             )
         )
@@ -815,7 +800,9 @@ def audit_metadata(metadata: dict[str, Any], repo_root: Path = ROOT) -> set[str]
     if schemars_node is None:
         raise DependencyPolicyError("cargo metadata 缺少 schemars 1.2.1 resolve node")
     _audit_resolved_feature_set(
-        schemars_node, "schemars 1.2.1", ("derive", "schemars_derive", "std")
+        schemars_node,
+        "schemars 1.2.1",
+        ("chrono04", "default", "derive", "schemars_derive", "std"),
     )
 
     return _audit_tool_resolve_closure(
@@ -1071,7 +1058,7 @@ def audit_manifest_data(
     defaults = workspace.get("default-members")
     if not isinstance(members, list) or members.count(TOOL_MEMBER_PATH) != 1:
         raise DependencyPolicyError(
-            "workspace.members 必须精确包含一个 kanban-schema-tool leaf"
+            "workspace.members 必须精确包含一个 private xtask leaf"
         )
     if defaults != list(DEFAULT_MEMBER_PATHS):
         raise DependencyPolicyError(
@@ -1097,36 +1084,36 @@ def audit_manifest_data(
 
     package = tool_manifest.get("package")
     if not isinstance(package, dict):
-        raise DependencyPolicyError("kanban-schema-tool Cargo.toml 缺少 [package]")
+        raise DependencyPolicyError("xtask Cargo.toml 缺少 [package]")
     if package.get("name") != TOOL_PACKAGE or package.get("publish") is not False:
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-schema-tool package identity 必须固定且 publish = false"
+                "xtask package identity 必须固定且 publish = false"
             )
         )
     actual_flags = {name: package.get(name) for name in AUTO_TARGET_FLAGS}
     if actual_flags != AUTO_TARGET_FLAGS:
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-schema-tool 必须关闭全部 Cargo auto target discovery: "
+                "xtask 必须关闭全部 Cargo auto target discovery: "
                 f"expected={AUTO_TARGET_FLAGS}, actual={actual_flags}"
             )
         )
     if tool_manifest.get("lib") != TOOL_MANIFEST_LIB:
         raise DependencyPolicyError(
-            _phase_two_message("kanban-schema-tool 必须只声明 canonical lib target")
+            _phase_two_message("xtask 必须只声明 canonical lib target")
         )
     if tool_manifest.get("bin") != TOOL_MANIFEST_BINS:
         raise DependencyPolicyError(
-            _phase_two_message("kanban-schema-tool 必须只拥有 canonical kanban-schema binary")
+            _phase_two_message("xtask 必须只拥有 canonical xtask binary")
         )
     if tool_manifest.get("test") != TOOL_MANIFEST_TESTS:
         raise DependencyPolicyError(
-            _phase_two_message("kanban-schema-tool 必须只声明 canonical tooling test target")
+            _phase_two_message("xtask 必须只声明 canonical tooling test target")
         )
     if "features" in tool_manifest:
         raise DependencyPolicyError(
-            _phase_two_message("kanban-schema-tool 禁止声明 feature surface")
+            _phase_two_message("xtask 禁止声明 feature surface")
         )
     for forbidden_section in (
         "dev-dependencies",
@@ -1138,7 +1125,7 @@ def audit_manifest_data(
         if forbidden_section in tool_manifest:
             raise DependencyPolicyError(
                 _phase_two_message(
-                    f"kanban-schema-tool 禁止声明 [{forbidden_section}] 依赖入口"
+                    f"xtask 禁止声明 [{forbidden_section}] 依赖入口"
                 )
             )
 
@@ -1146,7 +1133,7 @@ def audit_manifest_data(
     if actual_dependencies != TOOL_MANIFEST_DEPENDENCIES:
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-schema-tool [dependencies] 必须精确使用五条 workspace canonical 声明: "
+                "xtask [dependencies] 必须精确使用五条 workspace canonical 声明: "
                 f"expected={TOOL_MANIFEST_DEPENDENCIES}, actual={actual_dependencies}"
             )
         )
@@ -1271,7 +1258,7 @@ def audit_target_files(repo_root: Path = ROOT) -> None:
     surfaces = (
         (
             TOOL_PACKAGE,
-            repo_root / "crates/kanban-schema-tool",
+            repo_root / "xtask",
             TOOL_TARGET_DISCOVERY_FILES,
         ),
         (
@@ -1302,7 +1289,7 @@ def audit_manifests(repo_root: Path = ROOT) -> None:
             workspace_manifest = tomllib.load(handle)
         with (repo_root / "crates/kanban-contract/Cargo.toml").open("rb") as handle:
             contract_manifest = tomllib.load(handle)
-        with (repo_root / "crates/kanban-schema-tool/Cargo.toml").open("rb") as handle:
+        with (repo_root / "xtask/Cargo.toml").open("rb") as handle:
             tool_manifest = tomllib.load(handle)
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise DependencyPolicyError(f"读取 schema dependency policy inputs 失败: {error}") from error
@@ -1372,7 +1359,7 @@ def load_metadata(repo_root: Path = ROOT) -> dict[str, Any]:
         "1",
         "--locked",
         "--manifest-path",
-        "crates/kanban-schema-tool/Cargo.toml",
+        "xtask/Cargo.toml",
     ]
     completed = subprocess.run(
         command,

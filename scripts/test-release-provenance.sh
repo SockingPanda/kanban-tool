@@ -925,7 +925,7 @@ expected = [
     "schema-contract",
     "audit",
     "rust-full",
-    "check-windows-p kanban-local",
+    "check-windows-p kanban-server",
     "projection-release-cohort",
     "bench-check",
     "target-tools",

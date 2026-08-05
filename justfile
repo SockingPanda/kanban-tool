@@ -18,7 +18,7 @@ fmt:
 fmt-check: fmt
 
 fmt-full:
-    cargo fmt -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -p kanban-desktop -p kanban-schema-tool -- --check
+    cargo fmt -p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp -p kanban-desktop -p xtask -- --check
 
 fix *args:
     scripts/cargo-build-lock.sh -- cargo clippy --fix --tests --allow-dirty "$@"
@@ -78,7 +78,7 @@ test-core *args:
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@"; fi
 
 test-full *args:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --exclude kanban-schema-tool --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude kanban-schema-tool "$@"; fi
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --exclude xtask --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude xtask "$@"; fi
 
 clippy-core *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
@@ -169,12 +169,6 @@ feature-p package features:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p {{package}} --features "{{features}}" --no-fail-fast --no-tests pass; else scripts/cargo-build-lock.sh -- cargo test --locked -p {{package}} --features "{{features}}"; fi
     scripts/cargo-build-lock.sh -- cargo clippy --locked -p {{package}} --all-targets --features "{{features}}" -- -D warnings
 
-schema-generate:
-    scripts/cargo-build-lock.sh -- cargo run --locked -p kanban-schema-tool --bin kanban-schema -- generate --root .
-
-schema-check:
-    scripts/cargo-build-lock.sh -- cargo run --locked -p kanban-schema-tool --bin kanban-schema -- check --root .
-
 spec-bundle-generate:
     python3 -B scripts/spec_bundle.py --root . --write
 
@@ -182,18 +176,24 @@ spec-bundle-check:
     python3 -B scripts/test_spec_bundle.py
     python3 -B scripts/spec_bundle.py --root . --check
 
+schema-generate:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema generate
+
+schema-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema check
+
 schema-docs:
     just spec-bundle-check
     python3 -B scripts/test_schema_docs_markers.py
     python3 -B scripts/schema_docs_markers.py --root .
 
 schema-fmt:
-    cargo fmt -p kanban-contract -p kanban-schema-tool -- --check
+    cargo fmt -p kanban-contract -p xtask -- --check
 
 schema-tool:
-    scripts/cargo-build-lock.sh -- cargo check --locked -p kanban-schema-tool --tests
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-schema-tool --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-schema-tool; fi
-    scripts/cargo-build-lock.sh -- cargo clippy --locked -p kanban-schema-tool --all-targets -- -D warnings
+    scripts/cargo-build-lock.sh -- cargo check --locked -p xtask --tests
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p xtask --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p xtask; fi
+    scripts/cargo-build-lock.sh -- cargo clippy --locked -p xtask --all-targets -- -D warnings
 
 schema-dependency-isolation-self-test:
     python3 -B scripts/test_schema_dependency_isolation.py
@@ -227,7 +227,20 @@ schema-contract:
 
 schema-audit-closed:
     just schema-adoption-witness
-    scripts/cargo-build-lock.sh -- cargo run --locked -p kanban-schema-tool --bin kanban-schema -- audit --root . --require-closed
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema audit --require-closed
+
+projection-release-cohort:
+    just feature-p kanban-cli "tantivy-backend,oxigraph-backend"
+    just feature-p kanban-server "tantivy-backend,oxigraph-backend"
+
+schema *args:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema "$@"
+
+deps *args:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- deps "$@"
+
+agents *args:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- agents "$@"
 
 release:
     scripts/release-cohort.sh

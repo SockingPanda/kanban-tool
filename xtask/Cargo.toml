@@ -1,5 +1,5 @@
 [package]
-name = "kanban-schema-tool"
+name = "xtask"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
@@ -13,7 +13,7 @@ autolib = false
 build = false
 
 [lib]
-name = "kanban_schema_tool"
+name = "xtask"
 path = "src/lib.rs"
 
 [dependencies]
@@ -24,8 +24,8 @@ serde_json.workspace = true
 sha2.workspace = true
 
 [[bin]]
-name = "kanban-schema"
-path = "src/bin/kanban-schema.rs"
+name = "xtask"
+path = "src/main.rs"
 
 [[test]]
 name = "tooling"

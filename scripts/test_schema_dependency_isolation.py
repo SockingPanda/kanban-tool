@@ -23,16 +23,18 @@ import schema_dependency_policy as dependency_policy
 ROOT = Path(__file__).resolve().parents[1]
 GATE = ROOT / "scripts/test-schema-cargo-tree.sh"
 PRODUCTS = (
+    "kanban-core",
+    "kanban-application",
+    "kanban-store-turso",
+    "kanban-client",
     "kanban-cli",
+    "kanban-mcp",
     "kanban-server",
-    "kanban-sqlite",
     "kanban-desktop",
-    "kanban-vector-lancedb",
-    "kanban-graph-oxigraph",
 )
-TOOL_PACKAGE = "kanban-schema-tool"
+TOOL_PACKAGE = "xtask"
 CONTRACT_PACKAGE = "kanban-contract"
-TOOL_MEMBER = "crates/kanban-schema-tool"
+TOOL_MEMBER = "xtask"
 
 
 CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
@@ -220,14 +222,14 @@ def canonical_targets(name: str) -> list[dict[str, object]]:
     if name == TOOL_PACKAGE:
         return [
             cargo_target(
-                "kanban_schema_tool",
+                "xtask",
                 "lib",
                 str(ROOT / TOOL_MEMBER / "src/lib.rs"),
             ),
             cargo_target(
-                "kanban-schema",
+                "xtask",
                 "bin",
-                str(ROOT / TOOL_MEMBER / "src/bin/kanban-schema.rs"),
+                str(ROOT / TOOL_MEMBER / "src/main.rs"),
             ),
             cargo_target(
                 "tooling",
@@ -336,7 +338,7 @@ def valid_phase_one_metadata() -> dict[str, object]:
     resolved_node_by_id = {record["id"]: record for record in nodes}
     resolved_node_by_id[registry_id("jsonschema")]["features"] = []
     resolved_node_by_id[registry_id("schemars")]["features"] = [
-        "derive", "schemars_derive", "std"
+        "chrono04", "default", "derive", "schemars_derive", "std"
     ]
     return {
         "workspace_members": [record["id"] for record in workspace],
@@ -545,12 +547,19 @@ class DependencyIsolationGateTests(unittest.TestCase):
                     leak = os.environ.get("FAKE_CARGO_LEAK")
                     tool_leak_package = os.environ.get("FAKE_CARGO_TOOL_LEAK_PACKAGE")
                     if package == tool_leak_package:
-                        print(f"{package}\\n└── kanban-schema-tool v2.1.3")
-                    elif leak and package not in ("kanban-contract", "kanban-schema-tool"):
+                        print(f"{package}\\n└── xtask v2.1.3")
+                    elif leak and package not in ("kanban-contract", "xtask"):
                         print(f"{package}\\n└── kanban-contract feature \\\"{leak}\\\"")
-                    elif package == "kanban-schema-tool":
+                    elif package == "kanban-mcp":
                         print(
-                            "kanban-schema-tool v2.1.3 (/workspace/crates/kanban-schema-tool)\\n"
+                            "kanban-mcp v2.1.3 (/workspace/crates/kanban-mcp)\\n"
+                            "├── kanban-contract feature \\\"schema\\\"\\n"
+                            "├── rmcp v3.1.0\\n"
+                            "└── schemars v1.2.1"
+                        )
+                    elif package == "xtask":
+                        print(
+                            "xtask v2.1.3 (/workspace/xtask)\\n"
                             "├── kanban-contract feature \\\"schema\\\"\\n"
                             "├── schemars v1.2.1\\n"
                             "├── jsonschema v0.47.0\\n"
@@ -585,9 +594,8 @@ class DependencyIsolationGateTests(unittest.TestCase):
                 except (OSError, OverflowError, ValueError):
                     pass
                 else:
-                    # The gate re-enters cargo-build-lock.sh. Keep only its
-                    # already-proven lock descriptor so the fake cargo command
-                    # is reached under the release cohort's inherited lock.
+                    # gate 会重新进入 cargo-build-lock.sh；这里只传递已经验证的
+                    # lock descriptor，让 fake cargo command 继承 release cohort 的锁。
                     pass_fds = (lock_fd,)
             completed = subprocess.run(
                 ["bash", str(GATE)],
@@ -954,18 +962,18 @@ class DependencyIsolationGateTests(unittest.TestCase):
 
     def test_target_discovery_files_reject_extra_or_symlink_target(self) -> None:
         extras = (
-            ("crates/kanban-schema-tool/src/bin/extra.rs", False),
+            ("xtask/src/bin/extra.rs", False),
             ("crates/kanban-contract/build.rs", False),
-            ("crates/kanban-schema-tool/tests/tooling.rs", True),
+            ("xtask/tests/tooling.rs", True),
         )
         for extra, symlink in extras:
             with self.subTest(extra=extra, symlink=symlink):
                 with tempfile.TemporaryDirectory() as temp_dir:
                     root = Path(temp_dir)
                     approved = (
-                        "crates/kanban-schema-tool/src/lib.rs",
-                        "crates/kanban-schema-tool/src/bin/kanban-schema.rs",
-                        "crates/kanban-schema-tool/tests/tooling.rs",
+                        "xtask/src/lib.rs",
+                        "xtask/src/main.rs",
+                        "xtask/tests/tooling.rs",
                         "crates/kanban-contract/src/lib.rs",
                         "crates/kanban-contract/tests/foundation.rs",
                         "crates/kanban-contract/tests/g0_metadata.rs",
@@ -978,7 +986,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
                     escaped = root / extra
                     if symlink:
                         escaped.unlink()
-                        escaped.symlink_to(root / "crates/kanban-schema-tool/src/lib.rs")
+                        escaped.symlink_to(root / "xtask/src/lib.rs")
                     else:
                         escaped.parent.mkdir(parents=True, exist_ok=True)
                         escaped.touch()
@@ -990,9 +998,9 @@ class DependencyIsolationGateTests(unittest.TestCase):
             root = Path(temp_dir) / "repo"
             outside = Path(temp_dir) / "outside"
             approved = (
-                "crates/kanban-schema-tool/src/lib.rs",
-                "crates/kanban-schema-tool/src/bin/kanban-schema.rs",
-                "crates/kanban-schema-tool/tests/tooling.rs",
+                "xtask/src/lib.rs",
+                "xtask/src/main.rs",
+                "xtask/tests/tooling.rs",
                 "crates/kanban-contract/src/lib.rs",
                 "crates/kanban-contract/tests/foundation.rs",
                 "crates/kanban-contract/tests/g0_metadata.rs",
@@ -1003,7 +1011,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
                 target.touch()
             dependency_policy.audit_target_files(root)
 
-            source_dir = root / "crates/kanban-schema-tool/src"
+            source_dir = root / "xtask/src"
             outside_source = outside / "src"
             outside_source.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source_dir), str(outside_source))
@@ -1253,7 +1261,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
             cargo_target(
                 "extra",
                 "bin",
-                str(ROOT / TOOL_MEMBER / "src/bin/extra.rs"),
+                str(ROOT / TOOL_MEMBER / "src/extra.rs"),
             )
         )
         mutations.append(extra)
@@ -1430,7 +1438,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
 
     def test_product_renamed_contract_dependency_is_allowed(self) -> None:
         metadata = valid_phase_one_metadata()
-        workspace_package(metadata, "kanban-sqlite")["dependencies"].append(
+        workspace_package(metadata, "kanban-store-turso")["dependencies"].append(
             dependency("kanban-contract", rename="wire-contract")
         )
 
@@ -1812,7 +1820,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
         self.assertNotIn("--no-deps", command)
         self.assertEqual(
             command[command.index("--manifest-path") + 1],
-            "crates/kanban-schema-tool/Cargo.toml",
+            "xtask/Cargo.toml",
         )
 
     def test_metadata_loader_preserves_valid_inherited_lock_descriptor(self) -> None:
@@ -1918,7 +1926,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
                     audit(root, contract, ROOT)
 
     def test_product_tool_tree_is_rejected(self) -> None:
-        completed, _ = self.run_gate(tool_leak_package="kanban-vector-lancedb")
+        completed, _ = self.run_gate(tool_leak_package="kanban-cli")
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("schema tooling", completed.stderr)
 

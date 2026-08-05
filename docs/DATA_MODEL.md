@@ -55,9 +55,12 @@ canonical 表保存业务事实或不可由索引重建的迁移事实；derived
 
 portable JSONL 导入目标可以是只含 host bootstrap board/columns 的新 Turso 数据库，且不
 把 projection/FTS/vector/graph 派生表当作业务事实；事务阶段写入 `import_journal`，失败
-会记录 `failed`。旧 SQLite v30 的 schema/attachment preflight、staging 和原子文件发布
-仍需专门 importer 逻辑（默认 feature 不启用）；typed host-admin 入口可以在启用
-`legacy-sqlite-import` 后调用它，不能因为表已经存在就声称 SQLite 导入已完成。
+会记录 `failed`。`replace=true` 在 host-owned Turso handle 内先完成 verified backup，随后
+按 FK 顺序清空并严格插入 canonical facts，在同一事务内做逐表计数、引用、integrity/doctor
+校验后提交；提交后入队可重建 projection jobs，事务错误 rollback，旧数据库保持可启动，
+重复 source fingerprint 幂等返回 `completed`。旧 SQLite v30 的 schema/attachment preflight、
+staging 和原子文件发布仍需专门 importer 逻辑（默认 feature 不启用）；typed host-admin
+入口可以在启用 `legacy-sqlite-import` 后调用它，不能因为表已经存在就声称 SQLite 导入已完成。
 
 ## 3. ID、时间和 JSON
 
@@ -204,7 +207,8 @@ task、label、ontology、signal 或 entity 数据。
 
 `import_journal` 支持 `jsonl|sqlite_v30` source fingerprint 和
 `prepared|staged|validated|published|completed|failed` 阶段，保存源路径、staged database/
-attachment root、canonical root、manifest、previous identity 和错误。`attachment_staging`
+attachment root、canonical root、manifest、previous identity（包括 replace verified backup
+binding）和错误。`attachment_staging`
 按 journal/attachment 保存源路径、staged 路径、期望/观测 size 与 SHA-256，以及
 `planned|copied|verified|published|failed` 阶段。
 

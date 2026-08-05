@@ -128,7 +128,7 @@ backup/export 先写同目录临时文件、校验后原子 rename，并拒绝�
 | POST | `/api/v1/maintenance/checkpoint` | `{}` | `CheckpointResponse` |
 | POST | `/api/v1/maintenance/backup` | `MaintenancePathRequest { path }` | `201 BackupResponse`，含 SHA-256 和字节数 |
 | POST | `/api/v1/maintenance/export` | `MaintenancePathRequest { path }` | `201 ExportResponse`，portable canonical JSONL |
-| POST | `/api/v1/maintenance/import` | `MaintenanceImportRequest { path, replace }` | `ImportResponse`，写入 `import_journal`；派生 projection 需随后 rebuild |
+| POST | `/api/v1/maintenance/import` | `MaintenanceImportRequest { path, replace }` | `ImportResponse`；`replace=true` 在 host-owned Turso handle 内完成 verified backup、单事务事实替换和校验后返回 `phase=completed`，随后入队派生 projection rebuild |
 | POST | `/api/v1/maintenance/import-v30` | `LegacyImportRequest { path, canonical_attachment_root? }` | `LegacyImportResponse`；仅在 host 的 `legacy-sqlite-import` feature 启用时执行，否则返回 `feature_not_available` |
 | POST | `/api/v1/maintenance/vacuum` | `{}` | `VacuumResponse`，host-owned compaction |
 | GET | `/api/v1/maintenance/status` | 无 | `MaintenanceStatusResponse`，owner lease、fence/generation、dirty/error 和 job 计数 |
@@ -138,8 +138,11 @@ backup/export 先写同目录临时文件、校验后原子 rename，并拒绝�
 
 每个写入 maintenance operation 在 `projection_maintenance_owner` 上使用 immediate lease，
 成功后释放；并发持有有效 lease 时返回 `409 conflict`。portable export 只包含 canonical
-表，不把 FTS/vector/graph/projection 表当作业务事实；`replace=true` 仍要求 host 管理方
-已完成备份并在独占窗口内执行，当前运行中的 host 不替换数据库 inode。
+表，不把 FTS/vector/graph/projection 表当作业务事实。`replace=true` 由 host 在独占窗口内
+先保存并校验 verified backup，再以 `BEGIN IMMEDIATE` 按外键顺序清空和严格插入 canonical
+facts；任何事务错误都 rollback，旧数据库保持可启动。提交后入队 search/vector/graph
+rebuild，重复 source fingerprint 返回已完成结果；prepare staging 的异常恢复仍可返回
+`phase=validated`/`restart_required`，但不代表正常 replace 成功路径。
 
 ## 3. Task 读取与创建
 

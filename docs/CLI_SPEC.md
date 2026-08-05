@@ -99,8 +99,12 @@ kanban maintenance cleanup [--owner <OWNER>]
 ```
 
 成功默认输出人类可读摘要，`--json` 输出 `{ "data": ... }`。backup/export 目标不得已存在
-（包括 symlink）；导入通过 `import_journal` 记录阶段，`--replace` 只在已验证 backup 和
-host 独占窗口内使用。maintenance owner lease 忙时返回 `conflict`，MCP 不提供这些命令。
+（包括 symlink）；导入通过 `import_journal` 记录阶段。`--replace` 在 host 独占窗口内先做
+verified backup，再以单个 Turso immediate transaction 原子替换 canonical facts，校验通过后
+同步返回 `phase=completed` 并入队 search/vector/graph rebuild；事务失败会 rollback，重复
+source fingerprint 幂等。prepare staging 的恢复异常可能返回 `phase=validated` 与
+`restart_required`，这不是正常成功结果。maintenance owner lease 忙时返回 `conflict`，MCP
+不提供这些命令。
 `import-v30` 是 legacy SQLite v30 的 host-admin 入口，仅在构建时启用
 `legacy-sqlite-import` feature 后可用；未启用时保持 typed client 路由并返回
 `feature_not_available`，不会由 CLI 直接打开 SQLite。

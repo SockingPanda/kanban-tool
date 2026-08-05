@@ -11,9 +11,9 @@ use crate::{
     AddTaskLabelRequest, AddTaskLabelResponse, ArchiveBoardPath, ArchiveBoardRequest,
     ArchiveBoardResponse, ArchiveTaskPath, ArchiveTaskRequest, ArchiveTaskResponse, BlockTaskPath,
     BlockTaskRequest, BlockTaskResponse, BoardTaskMapPath, BoardTaskMapQuery, BoardTaskMapResponse,
-    CheckpointResponse, ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CliActiveBoardOutput,
-    CliBackupOutput, CliCheckpointOutput, CliCommentAddOutput, CliCommentListOutput,
-    CliConfigShowOutput, CliDependencyAddOutput, CliDependencyListOutput,
+    CheckpointResponse, ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CliBackupOutput,
+    CliBoardCurrentOutput, CliBoardUseOutput, CliCheckpointOutput, CliCommentAddOutput,
+    CliCommentListOutput, CliConfigShowOutput, CliDependencyAddOutput, CliDependencyListOutput,
     CliDependencyRemoveOutput, CliDerivedStatusOutput, CliDoctorOutput, CliEntityListOutput,
     CliEntityShowOutput, CliEventsOutput, CliIndexDoctorOutput, CliIndexStatusOutput,
     CliInitOutput, CliMaintenanceLegacyCleanupApplyOutput,
@@ -347,7 +347,7 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "cli.board-use.output",
         "schemas/fixtures/cli/board-use-output.v1.valid.json",
         "schemas/fixtures/cli/board-use-output.v1.invalid.json",
-        CliActiveBoardOutput
+        CliBoardUseOutput
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:board-current-output:v1",
@@ -356,7 +356,7 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "cli.board-current.output",
         "schemas/fixtures/cli/board-current-output.v1.valid.json",
         "schemas/fixtures/cli/board-current-output.v1.invalid.json",
-        CliActiveBoardOutput
+        CliBoardCurrentOutput
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:board-archive-output:v1",

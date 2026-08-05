@@ -9,6 +9,20 @@
         "board_slug": {
           "type": "string"
         },
+        "config_path": {
+          "description": "Project config path created or reused by `kanban init`; database ownership remains with `serve`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created": {
+          "description": "Whether this invocation changed the project config file.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "db_path": {
           "type": "string"
         }

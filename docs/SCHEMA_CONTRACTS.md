@@ -104,6 +104,11 @@ CLI 的当前读取面是 `events`、`runs`、`run show`、`run logs`，其 outp
 不能静默丢字段。run/event 是只读 adapter surface；run 的创建和更新仍由 task claim、
 heartbeat、release、review、done、block 的共享 ApplicationService mutation path 完成。
 
+`cli.board-use.output` 与 `cli.board-current.output` 是本地配置 shell contract：它们返回
+board selector、项目 `.kb/config.toml` 路径、配置来源及 `created`/`updated` 标记，不返回
+`ApiBoard` domain record。两个命令不访问 host；若需要校验或创建 canonical board，必须
+通过 localhost HTTP operation 完成。
+
 ## 4. Wire 规则
 
 - 方言固定为 JSON Schema Draft 2020-12；request/input 使用

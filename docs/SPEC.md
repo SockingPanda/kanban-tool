@@ -26,7 +26,11 @@ ApplicationService + state machine
 4. 不存在“server 运行时走 RPC、server 停止时直开数据库”的 fallback。
 5. 本轮不引入自定义 IPC、runtime protocol、capability catalog、通用 receipt 或第二 backend。
 
-Host 默认监听 `http://127.0.0.1:8721`，默认数据库为 `~/.local/share/kb/kanban.db`。`--db`/`KANBAN_DB` 只对 `kanban serve` 生效；其他命令只接受 `--server-url`/`KANBAN_SERVER_URL`。
+Host 默认监听 `http://127.0.0.1:8721`，默认数据库为 `~/.local/share/kb/kanban.db`。只有
+`kanban serve` 会打开、初始化或迁移该数据库；`config show`、`init`、`board use/current`、
+completion 和 Codex hook 是不触库的本地 shell 命令。它们可以解析 `--db`/`KANBAN_DB`，但
+不会因为解析路径而创建数据库；其他 domain 命令只接受 `--server-url`/`KANBAN_SERVER_URL`
+并通过 localhost HTTP 访问 host。
 
 ## 2. 产品目标与非目标
 
@@ -132,11 +136,13 @@ canonical 数据重建，不能成为 mutation path。
 
 ### 6.1 CLI
 
-`kanban serve [--db <path>] [--dispatcher-profile <path>]` 是唯一 DB owner。其他命令通过
-`kanban-client` 访问默认 `http://127.0.0.1:8721`，支持 `--json`、`--board`、`--actor` 和
-board-local/global task selector。`kanban search` 与 `kanban index status|doctor|rebuild|sync`
-复用同一 search service；`kanban init` 与未迁移命令在触库前返回 `feature_not_available`，
-host 不可用返回 `server_unavailable`。
+`kanban serve [--db <path>] [--dispatcher-profile <path>]` 是唯一 DB owner。其他 domain 命令
+通过 `kanban-client` 访问默认 `http://127.0.0.1:8721`，支持 `--json`、`--board`、`--actor`
+和 board-local/global task selector。`kanban search` 与 `kanban index
+status|doctor|rebuild|sync` 复用同一 search service。`kanban config show`、`kanban init`、`kanban board
+use/current`、`kanban completions`、隐藏 `__complete` 以及 `kanban hook codex ...` 只处理
+本地配置、completion 或 hook 文件，不打开数据库；host 不可用时，domain 命令返回
+`server_unavailable`。
 
 ### 6.2 MCP
 
@@ -168,7 +174,12 @@ loop 停止新 polling 后等待当前 worker 正常结束；第二次中断才�
 ## 8. 配置、错误与重启
 
 - server 只监听 loopback；不提供远程访问和登录。
-- `KANBAN_DB`、`--db` 只配置 host 的数据库；`KANBAN_SERVER_URL`、`--server-url` 只配置 client。
+- DB 解析优先级固定为 `--db` > `KANBAN_DB` > `KB_DB` > 最近项目 `.kb/config.toml` 的
+  `db` > XDG 配置目录下 `kanban/config.toml` 的 `db` > XDG data-local 默认路径；项目或
+  全局配置中的相对路径以各自 `config.toml` 所在目录为基准。该解析器供 `serve`、`config
+  show` 和 `init` 共享，但只有 `serve` 会打开或初始化 Turso。
+- board 解析优先级为 `--board` > `KB_BOARD` > 最近项目配置的 `board` > `default`；
+  `KANBAN_SERVER_URL`、`--server-url` 只配置 client。
 - host 每个 operation 在同一进程中按需获取 Turso connection；不启用 `multiprocess_wal`。
 - `error.code`、DTO 和 HTTP status 映射由 `kanban-contract`/server/client 共同维护；adapter 不重新解释 domain error。
 - 关闭并重启 host 后，boards、tasks、plans、comments、steps、dependencies、runs 和 events 从 canonical DB 继续可读；不会由 adapter 创建第二个数据库。

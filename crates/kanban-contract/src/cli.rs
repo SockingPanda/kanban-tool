@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ApiBoard, ApiClaim, ApiComment, ApiExecutionPlan, ApiRun, ApiTask, ApiTaskStatus, ApiTaskStep,
+    ApiClaim, ApiComment, ApiExecutionPlan, ApiRun, ApiTask, ApiTaskStatus, ApiTaskStep,
     ApiTaskSteps, CheckpointReport, ContractSurface, DataEnvelope, DoctorReport, GetTaskResponse,
     MigrationState, ProjectionCorpusMetadata, QueueStats, SearchStatus, surface_operation_catalog,
 };
@@ -34,6 +34,12 @@ pub struct CliInitResult {
     pub db_path: String,
     pub board_id: String,
     pub board_slug: String,
+    /// Project config path created or reused by `kanban init`; database ownership remains with `serve`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_path: Option<String>,
+    /// Whether this invocation changed the project config file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created: Option<bool>,
 }
 
 pub type CliInitOutput = DataEnvelope<CliInitResult>;
@@ -790,19 +796,24 @@ pub struct CliEvent {
 
 pub type CliEventsOutput = DataEnvelope<Vec<CliEvent>>;
 
+/// 本地项目配置中的 active board 选择。
+///
+/// 该 DTO 不包含 canonical board record；`board use/current` 只读写 `.kb/config.toml`，
+/// 因此不能伪装成需要 host/数据库查询的 `ApiBoard`。`created` 和 `updated` 记录本次
+/// 配置侧调用是否创建了文件、是否实际改变了 `board` 选择。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
-pub struct CliActiveBoard {
-    pub board: ApiBoard,
+pub struct CliBoardConfigSelection {
+    pub board: String,
+    pub config_path: String,
+    pub source: CliConfigSource,
+    pub created: bool,
+    pub updated: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
-pub struct CliActiveBoardOutput {
-    pub data: CliActiveBoard,
-}
+pub type CliBoardUseOutput = DataEnvelope<CliBoardConfigSelection>;
+pub type CliBoardCurrentOutput = DataEnvelope<CliBoardConfigSelection>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]

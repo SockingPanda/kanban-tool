@@ -32,7 +32,17 @@ cargo install --path crates/kanban-cli --bin kanban
 kanban serve
 ```
 
-默认数据库是 `~/.local/share/kb/kanban.db`，可以只在 host 上通过 `--db <path>` 或 `KANBAN_DB` 覆盖。默认 HTTP 地址为 `http://127.0.0.1:8721`；客户端命令可以用 `--server-url` 或 `KANBAN_SERVER_URL` 指定地址。
+默认数据库是 `$XDG_DATA_HOME/kb/kanban.db`（未设置时通常为 `~/.local/share/kb/kanban.db`），可以只在 host 上通过 `--db <path>`、`KANBAN_DB` 或兼容变量 `KB_DB` 覆盖。默认 HTTP 地址为 `http://127.0.0.1:8721`；客户端命令可以用 `--server-url` 或 `KANBAN_SERVER_URL` 指定地址。
+
+项目 shell 配置不需要启动 host：
+
+```bash
+kanban init                    # 幂等创建/复用 .kb/config.toml，不创建数据库
+kanban config show             # 查看 db、board、locale 及来源
+kanban board use agent-work    # 只更新项目 active board 选择
+kanban board current
+kanban completions bash > ~/.local/share/bash-completion/completions/kanban
+```
 
 在另一个终端完成第一条 walking-skeleton 链路：
 
@@ -49,7 +59,7 @@ kanban task show default#1
 
 ## 三个入口
 
-- **CLI**：通过 `kanban-client` 使用 localhost HTTP。`kanban init` 以及尚未迁移的旧命令会稳定返回 `feature_not_available`。
+- **CLI**：domain 命令通过 `kanban-client` 使用 localhost HTTP；`config`、`init`、board selection、completion 和 Codex hook 是不触碰 canonical DB 的本地 shell。
 - **MCP**：`kanban-mcp` 是最小 stdio server，只提供 tools；它不会拉起 `kanban serve`，所有 `tools/call` 都调用同一个 typed client。
 - **Desktop**：Tauri 应用是外部 host 的薄前端。`RuntimeConfig` 只包含 `apiBaseUrl`、`actor` 和 `board`，不包含 `dbPath`，也不内嵌 SQLite 或 Axum server。可通过 `KANBAN_SERVER_URL` 指向 host。
 

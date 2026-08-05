@@ -11,7 +11,7 @@
       "invalid_fixture": "schemas/fixtures/cli/init-output.v1.invalid.json",
       "path": "cli/init-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/init-output.v1.valid.json",
-      "sha256": "sha256:28af8e4e894371cd0bdeaae872ba56d078fe928ab2f8747fa271f468019bb8e3",
+      "sha256": "sha256:f2adcc3089fe60536826ebda67da1fda7264dfd9ecc289552ff98138b84281c2",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -241,7 +241,7 @@
       "invalid_fixture": "schemas/fixtures/cli/board-use-output.v1.invalid.json",
       "path": "cli/board-use-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/board-use-output.v1.valid.json",
-      "sha256": "sha256:7b71f32d2e485f0398211c25af2249e5ae451f624f9ccceb34cfecc9536465ca",
+      "sha256": "sha256:acb23f5fa7a05141559f3977323f233ab0ae385243cea11ffa95af01c65037ea",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -251,7 +251,7 @@
       "invalid_fixture": "schemas/fixtures/cli/board-current-output.v1.invalid.json",
       "path": "cli/board-current-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/board-current-output.v1.valid.json",
-      "sha256": "sha256:b09408d8744da64d6c06013083116d6c3ee862bb31af409319b7f2a42aa83fc8",
+      "sha256": "sha256:fe9b03c75b4efd349864d5af8f411b5e4a0de5304f4698d666572fe87d94b6d3",
       "strictness": "deny_unknown_fields"
     },
     {

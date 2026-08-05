@@ -1,13 +1,13 @@
 # `kanban` CLI 规范
 
-`kanban` 是 canonical localhost application host 的薄适配器。除 `kanban serve` 外，
-所有命令都只创建 `kanban-client` 并调用 `http://127.0.0.1:8721`；CLI 不打开、初始化或
-fallback 到任何数据库。
+`kanban` 是 canonical localhost application host 的薄适配器。除配置、completion、
+Codex hook 和 `kanban serve` 这些本地 shell 命令外，所有命令都只创建 `kanban-client` 并
+调用 `http://127.0.0.1:8721`；CLI 不打开、初始化或 fallback 到任何数据库。
 
-当前实现覆盖 board、task、comment、dependency、run、event、search 和 index；这不是最终
-功能边界。labels、signals、ontology、graph、vector、context、projection、maintenance、
-init/import 等能力必须按 parity ledger 恢复为 localhost client 命令。旧的直接数据库执行
-路径不会恢复。
+当前实现覆盖 board、task、comment、dependency、run、event、search、index，以及本节列出的
+本地 shell 命令；这不是最终功能边界。labels、signals、ontology、graph、vector、context、
+projection、maintenance、import 等 domain 能力必须按 parity ledger 恢复为 localhost client
+命令。旧的直接数据库执行路径不会恢复。
 
 ## 1. 全局选项
 
@@ -18,12 +18,16 @@ kanban [OPTIONS] <COMMAND>
 | 选项 | 环境变量 | 默认值 | 作用 |
 |---|---|---|---|
 | `--server-url <URL>` | `KANBAN_SERVER_URL` | `http://127.0.0.1:8721` | client 访问的 loopback host；仅允许 `http://` loopback URL |
-| `--board <SLUG-OR-ID>` | `KB_BOARD` | `default` | board-scoped selector 的上下文 |
+| `--board <SLUG-OR-ID>` | `KB_BOARD` | `default` | board-scoped selector 的上下文；本地 shell 命令只作选择值 |
+| `--db <PATH>` | `KANBAN_DB` → `KB_DB` | XDG data-local `kb/kanban.db` | `serve` 的 canonical Turso 路径；配置查看会解析但不打开 |
+| `--locale <auto|zh-CN|en>` | `KANBAN_LOCALE` | 系统 locale（默认 `zh-CN`） | 人类输出语言；JSON 字段稳定 |
 | `--actor <NAME>` | `KANBAN_ACTOR` | `USER` → `USERNAME` → `local` | CLI 解析后作为 `X-KB-Actor` 发送并用于审计 |
 | `--json` | — | 关闭 | 输出稳定 JSON envelope |
 
-`--db` 不是全局选项，只能由 `serve` 使用。相同参数可放在命令前，clap 将其作为 global
-option 解析。
+配置优先级为 `--db` > `KANBAN_DB` > `KB_DB` > 最近项目 `.kb/config.toml` 的 `db` >
+XDG 配置目录下 `kanban/config.toml` 的 `db` > XDG data-local 默认路径。`--board` 的优先级
+为 `--board` > `KB_BOARD` > 最近项目配置的 `board` > `default`。项目配置中的相对 `db`
+路径以该 `config.toml` 所在目录为基准。
 
 ### JSON 成功与错误
 
@@ -63,8 +67,9 @@ kanban serve [--db <PATH>] [--dispatcher-profile <PATH>]
              [--host <LOOPBACK-IP>] [--port <PORT>]
 ```
 
-- `--db <PATH>` 或 `KANBAN_DB` 只配置 host 使用的 canonical Turso 文件。
-- 未指定时，Linux 默认路径为 `~/.local/share/kb/kanban.db`（通过平台 data-local 目录解析）。
+- `--db <PATH>`、`KANBAN_DB` 或 `KB_DB` 只配置 host 使用的 canonical Turso 文件。
+- 未指定时，默认路径为 `$XDG_DATA_HOME/kb/kanban.db`；未设置 `XDG_DATA_HOME` 时使用平台
+  data-local 目录（Linux 通常为 `~/.local/share`）。
 - `--host` 默认 `127.0.0.1`，非 loopback 地址直接返回 `invalid_input`。
 - `--port` 默认 `8721`。
 - 没有 `--dispatcher-profile` 时不自动消费 queue；传入 profile 才启用同进程单 worker dispatcher。
@@ -73,7 +78,48 @@ kanban serve [--db <PATH>] [--dispatcher-profile <PATH>]
 启动后 host 负责初始化 schema、打开/关闭 Turso 和提供全部 HTTP route。其他 CLI 命令在 host
 未启动时只返回 `server_unavailable`，不会创建数据库文件。
 
-## 3. Board
+## 3. 本地配置与项目 shell
+
+### 3.1 `config show`
+
+```text
+kanban config show
+kanban --json config show
+```
+
+该命令只解析 `db`、`board`、`locale` 及其来源，不打开、初始化、迁移或创建 Turso
+数据库，也不创建 `.kb` 或 XDG 配置文件。JSON 使用 `CliConfigShowOutput`：每个值包含
+`value` 和 `source`；`source.kind` 为 `flag`、`env`、`project_config`、`global_config`
+或 `default`。TOML 解析失败返回 runtime JSON `invalid_input`（exit `2`），stderr 保持空。
+
+### 3.2 `init`
+
+```text
+kanban init [--force]
+kanban --json init
+```
+
+`init` 是幂等的项目 shell 初始化：在当前目录（或最近已有项目配置）创建/复用
+`.kb/config.toml`，仅在缺省时写入 `board = "default"`。它不打开、初始化或创建
+canonical 数据库；数据库由 `kanban serve` 首次启动负责。`--force` 是兼容 no-op，不会重置
+既有 `db`、`board`、`vector` 或未知扩展字段。JSON 使用 `CliInitOutput`，包含 `db_path`、
+`board_slug`、`config_path` 和 `created`；`board_id` 在未连接 host 的配置侧结果中为
+`not_initialized`。
+
+### 3.3 Board selection（不访问 host）
+
+```text
+kanban board use <BOARD>
+kanban board current
+```
+
+`board use` 只更新项目 `.kb/config.toml` 的 `board`，保留 `db`、`vector` 和未知 TOML
+字段；`board current` 只解析当前选择。两者都不校验 Turso 中是否存在该 board，也不访问
+host。JSON 分别使用 `CliBoardUseOutput` 与 `CliBoardCurrentOutput`，返回 board selector、
+`config_path`、`source` 以及 `created`/`updated` 标记。若需要校验或创建 domain board，
+必须使用 localhost HTTP client 命令。
+
+## 4. Board
 
 ```text
 kanban board list [--include-archived]
@@ -81,11 +127,46 @@ kanban board columns [BOARD]
 ```
 
 两者都是只读 client query：`board list` 返回 `ListBoardsResponse`，`board columns` 返回
-`ListBoardColumnsResponse`。当前 CLI 没有 board create/use/archive/config 命令。
+`ListBoardColumnsResponse`。`board use/current` 属于上一节的本地配置 shell，不是 domain
+board query。
 
-## 4. Task
+## 5. Completions
 
-### 4.1 创建、列表、详情
+```text
+kanban completions bash|zsh|fish|powershell|elvish
+kanban __complete task-ref|dependency-task-ref|board|status|comment-kind [PREFIX]
+```
+
+静态 completion 由 clap 生成。Bash/Zsh 脚本可调用隐藏的 `__complete` helper；该 helper
+不会打开数据库。task/dependency ref 在 host 不可用时安静返回空；board 候选只来自本地
+配置解析；status 与 comment kind 使用固定枚举。其它 shell 只生成静态脚本。
+
+## 6. Codex hooks
+
+```text
+kanban hook codex install [--handler-command <PREFIX>] [--timeout <SECONDS>]
+    [--record-signals]
+kanban hook codex status
+kanban hook codex uninstall
+kanban hook codex handle failure [--record-signals]
+kanban hook codex handle task-create
+```
+
+`install`、`status`、`uninstall` 只读写 `CODEX_HOME/hooks.json`（未设置时为
+`$HOME/.codex/hooks.json`）和 XDG 配置目录下的 `kanban/codex-hooks.json`；不会打开
+canonical 数据库。安装项带 `kanbanManaged` marker 和 command fingerprint；重复安装先
+移除并重建自身条目，保留用户 hooks。卸载只移除 `type=command`、marker 和 fingerprint
+都匹配的条目，篡改或缺少 fingerprint 的条目保持不动。文件写入使用同目录临时文件、
+`fsync` 和原子 rename；prompt 配置只在不存在时创建。
+
+`handle` 从 stdin 解析 Codex `PostToolUse`/`Bash` payload：失败 kanban 命令输出
+`systemMessage`，成功 `task create` 输出任务 ref 建议；无效、非 Bash 或非 kanban payload
+安静退出。即使传入 `--record-signals`，当前 handler 也不直接写库；需要记录 signal 时
+应由后续 localhost client operation 完成。
+
+## 7. Task
+
+### 7.1 创建、列表、详情
 
 ```text
 kanban task create <TITLE>
@@ -118,7 +199,7 @@ priority|-priority|assignee|-assignee|scheduled_at|-scheduled_at|due_at|-due_at|
 created_at|-created_at|updated_at|-updated_at`，默认值为 `position`。负号开头的值需要写成
 `--sort=-updated_at`，避免被 clap 解释为另一个 option。
 
-### 4.2 Search 与 index
+### 7.2 Search 与 index
 
 ```text
 kanban search <TEXT>
@@ -138,7 +219,7 @@ snippet。`index status`/`doctor` 是只读状态查询；`rebuild` 从 canonica
 Turso `task_search_fts`，`sync` 处理 pending projection job 或 event lag。四个 index 命令
 均只调用 localhost host，不打开数据库。
 
-### 4.3 Execution plan
+### 7.3 Execution plan
 
 ```text
 kanban task step not-required <TASK_SELECTOR> --reason <TEXT>
@@ -147,7 +228,7 @@ kanban task step not-required <TASK_SELECTOR> --reason <TEXT>
 这会调用 `POST /api/v1/tasks/{task_id}/execution-plan/not-required`，返回
 `MarkExecutionPlanNotRequiredResponse`。它是 promote 前的显式 plan gate。
 
-### 4.4 State machine transitions
+### 7.4 State machine transitions
 
 ```text
 kanban task promote <TASK_SELECTOR>
@@ -169,7 +250,7 @@ owner 的 token，成功后任务回到 ready；错误 token 返回 `claim_token
 每个命令的人类输出只显示精简 task 状态；`--json` 输出对应 contract response。CLI 不自行
 解释状态机或直接修改 run。
 
-### 4.5 Steps
+### 7.5 Steps
 
 ```text
 kanban task step add <TASK_SELECTOR> <TITLE>
@@ -184,7 +265,7 @@ kanban task step update <TASK_SELECTOR> <STEP_SELECTOR>
 `STEP_SELECTOR` 可为全局 `step_...` 或该 task 下的 `S<n>`。add/list/update 返回同一
 `ApiTaskSteps` shape；add 的 idempotency key 仅在实体 task 内生效。
 
-## 5. Comment
+## 8. Comment
 
 ```text
 kanban comment add <TASK_SELECTOR> <BODY>
@@ -197,7 +278,7 @@ kanban comment list <TASK_SELECTOR>
 add 是 mutation，list 是 query。add 的 key 属于 task；相同 key 与相同 payload 可安全重放，
 不同 payload 返回 `idempotency_conflict`。未指定 author 时由 host actor 规则填充。
 
-## 6. Dependency
+## 9. Dependency
 
 顶层命令名为 `dep`，`dependency` 是 visible alias：
 
@@ -210,7 +291,7 @@ kanban dep remove <CHILD_TASK_SELECTOR> <PARENT_TASK_SELECTOR>
 add/remove 是 mutation，list 是 query。client 先解析两个 selector；server 负责同 board、FK、
 唯一约束和 cycle 检查。dependency create 没有额外 receipt/idempotency flag。
 
-## 7. Runs 与 events（只读）
+## 10. Runs 与 events（只读）
 
 ```text
 kanban runs <TASK_SELECTOR>
@@ -227,14 +308,13 @@ kanban events [TASK_SELECTOR] [--after <ID>] [--limit <N>]
 - `events` 可按当前 board 和 task selector 过滤，JSON 输出包含事件 `data`，但当前 CLI
   output 不保留 HTTP `meta.next_after`；事件 payload 对未知 kind 保持原 JSON。
 
-## 8. 未迁移命令与停止行为
+## 11. 未迁移命令与停止行为
 
 ```text
-kanban init
 kanban <未列出的旧命令>
 ```
 
-`init` 和未知的顶层 clap external subcommand 稳定返回：
+未知的顶层 clap external subcommand 稳定返回：
 
 <!-- schema-doc-ignore: 迁移期间 feature_not_available 的说明性错误示例 -->
 ```json

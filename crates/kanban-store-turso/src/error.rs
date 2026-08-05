@@ -17,6 +17,7 @@ pub enum StoreError {
     },
     BoardNotFound(String),
     TaskNotFound(String),
+    RunNotFound(String),
     StepNotFound(String),
     DependencyCycle(String),
     IdempotencyConflict {
@@ -43,6 +44,7 @@ impl Display for StoreError {
             }
             Self::BoardNotFound(selector) => write!(formatter, "board not found: {selector}"),
             Self::TaskNotFound(task_id) => write!(formatter, "task not found: {task_id}"),
+            Self::RunNotFound(run_id) => write!(formatter, "run not found: {run_id}"),
             Self::StepNotFound(step_id) => write!(formatter, "step not found: {step_id}"),
             Self::DependencyCycle(message) => write!(formatter, "dependency cycle: {message}"),
             Self::IdempotencyConflict {

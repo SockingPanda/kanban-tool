@@ -31,6 +31,7 @@ fn store_error(error: StoreError) -> KanbanError {
     match error {
         StoreError::BoardNotFound(selector) => KanbanError::NotFound(format!("board {selector}")),
         StoreError::TaskNotFound(task_id) => KanbanError::NotFound(format!("task {task_id}")),
+        StoreError::RunNotFound(run_id) => KanbanError::NotFound(format!("run {run_id}")),
         StoreError::StepNotFound(step_id) => KanbanError::NotFound(format!("step {step_id}")),
         StoreError::DependencyCycle(message) => KanbanError::Conflict(message),
         StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),

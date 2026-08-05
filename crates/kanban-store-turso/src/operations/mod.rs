@@ -1,7 +1,9 @@
 mod boards;
 mod comments;
 mod dependencies;
+mod events;
 mod lifecycle;
+mod runs;
 pub(crate) mod shared;
 mod steps;
 mod tasks;

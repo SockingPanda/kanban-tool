@@ -144,7 +144,7 @@ pub(crate) struct SignalListArgs {
 }
 #[derive(Debug, Args)]
 pub(crate) struct ReviewArgs {
-    #[arg(long, default_value = "target_label")]
+    #[arg(long, default_value = "label")]
     pub(crate) group_by: String,
     #[arg(long, default_value_t = false)]
     pub(crate) include_all: bool,

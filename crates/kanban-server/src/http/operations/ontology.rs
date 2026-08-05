@@ -201,6 +201,18 @@ fn contractize(value: Value) -> Value {
                     output.insert(target.to_owned(), value);
                 }
             }
+            if let Some(status) = output
+                .get("validation_status")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+            {
+                output
+                    .entry("validation_effective_outcome".to_owned())
+                    .or_insert_with(|| Value::String(status.clone()));
+                output
+                    .entry("validation_latest_attempt_id".to_owned())
+                    .or_insert(Value::Null);
+            }
             Value::Object(output)
         }
         other => other,
@@ -434,7 +446,11 @@ pub(crate) async fn review_signals(
     let group_by = query
         .get("group_by")
         .cloned()
-        .unwrap_or_else(|| "target_label".to_owned());
+        .unwrap_or_else(|| "label".to_owned());
+    let group_by = match group_by.as_str() {
+        "candidate_atom" | "proposed_label" | "cluster" | "label" => group_by,
+        _ => "label".to_owned(),
+    };
     let include_all = query.get("include_all").is_some_and(|v| v == "true");
     let limit = query
         .get("limit")

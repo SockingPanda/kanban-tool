@@ -266,7 +266,7 @@ impl KanbanClient {
         let group_by = query
             .get("group_by")
             .and_then(Value::as_str)
-            .unwrap_or("target_label");
+            .unwrap_or("label");
         self.get(&format!(
             "/api/v1/boards/{}/label-ontology/review?group_by={}",
             encode_path_segment(board),

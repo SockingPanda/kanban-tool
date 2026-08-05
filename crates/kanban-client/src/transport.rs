@@ -59,6 +59,19 @@ impl KanbanClient {
             .set("X-KB-Actor", &self.actor);
         decode_response(request.send_json(body))
     }
+
+    pub(crate) fn get_text(
+        &self,
+        path: &str,
+        accept: &str,
+    ) -> Result<(Option<String>, String), ClientError> {
+        let request = self
+            .agent
+            .get(&format!("{}{path}", self.base_url))
+            .set("Accept", accept)
+            .set("X-KB-Actor", &self.actor);
+        decode_text_response(request.call())
+    }
 }
 
 fn decode_response<T>(response: Result<ureq::Response, ureq::Error>) -> Result<T, ClientError>
@@ -73,6 +86,35 @@ where
             let envelope = response.into_json::<ErrorEnvelope>().map_err(|error| {
                 ClientError::InvalidResponse(format!(
                     "HTTP {status} did not contain the error envelope: {error}"
+                ))
+            })?;
+            Err(ClientError::Api {
+                status,
+                code: envelope.error.code,
+                message: envelope.error.message,
+            })
+        }
+        Err(ureq::Error::Transport(error)) => {
+            Err(ClientError::ServerUnavailable(error.to_string()))
+        }
+    }
+}
+
+fn decode_text_response(
+    response: Result<ureq::Response, ureq::Error>,
+) -> Result<(Option<String>, String), ClientError> {
+    match response {
+        Ok(response) => {
+            let content_type = response.header("Content-Type").map(str::to_owned);
+            let body = response
+                .into_string()
+                .map_err(|error| ClientError::InvalidResponse(error.to_string()))?;
+            Ok((content_type, body))
+        }
+        Err(ureq::Error::Status(status, response)) => {
+            let envelope = response.into_json::<ErrorEnvelope>().map_err(|error| {
+                ClientError::InvalidResponse(format!(
+                    "HTTP {status} 响应不包含标准错误 envelope：{error}"
                 ))
             })?;
             Err(ClientError::Api {

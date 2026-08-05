@@ -1,3 +1,4 @@
+mod attachments;
 mod boards;
 mod comments;
 mod dependencies;

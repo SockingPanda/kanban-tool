@@ -1,3 +1,4 @@
+pub(crate) mod attachment;
 pub(crate) mod board;
 pub(crate) mod comment;
 pub(crate) mod config;

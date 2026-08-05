@@ -80,6 +80,11 @@ enum Command {
         #[command(subcommand)]
         command: commands::comment::CommentCommand,
     },
+    /// Manage file-backed task attachments through the canonical localhost host.
+    Attachment {
+        #[command(subcommand)]
+        command: commands::attachment::AttachmentCommand,
+    },
     /// Manage task dependencies through the canonical localhost host.
     #[command(name = "dep", visible_alias = "dependency")]
     Dependency {
@@ -166,6 +171,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Serve(args) => server::run(&ctx, args).await,
         Command::Board { command } => commands::board::run(&ctx, command),
         Command::Comment { command } => commands::comment::run(&ctx, command),
+        Command::Attachment { command } => commands::attachment::run(&ctx, command),
         Command::Dependency { command } => commands::dependency::run(&ctx, command),
         Command::Events(args) => commands::event::run(&ctx, args),
         Command::Run { command } => commands::run::run(&ctx, command),

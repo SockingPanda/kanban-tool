@@ -4,10 +4,10 @@
 Codex hook 和 `kanban serve` 这些本地 shell 命令外，所有命令都只创建 `kanban-client` 并
 调用 `http://127.0.0.1:8721`；CLI 不打开、初始化或 fallback 到任何数据库。
 
-当前实现覆盖 board、task、comment、dependency、run、event、search、index，以及本节列出的
-本地 shell 命令；这不是最终功能边界。labels、signals、ontology、graph、vector、context、
-projection、maintenance、import 等 domain 能力必须按 parity ledger 恢复为 localhost client
-命令。旧的直接数据库执行路径不会恢复。
+当前实现覆盖 board、task、comment、attachment、dependency、run、event、search、index，以及
+本节列出的本地 shell 命令；这不是最终功能边界。labels、signals、ontology、graph、vector、
+context、projection、maintenance、import 等 domain 能力必须按 parity ledger 恢复为
+localhost client 命令。旧的直接数据库执行路径不会恢复。
 
 ## 1. 全局选项
 
@@ -265,7 +265,22 @@ kanban task step update <TASK_SELECTOR> <STEP_SELECTOR>
 `STEP_SELECTOR` 可为全局 `step_...` 或该 task 下的 `S<n>`。add/list/update 返回同一
 `ApiTaskSteps` shape；add 的 idempotency key 仅在实体 task 内生效。
 
-## 8. Comment
+## 8. Attachment
+
+```text
+kanban attachment add <TASK_SELECTOR> <FILE> [--filename <NAME>]
+  [--content-type <MIME>] [--attachment-id <A_ID>]
+kanban attachment list <TASK_SELECTOR>
+kanban attachment download <TASK_SELECTOR> <ATTACHMENT_ID> --out <PATH>
+kanban attachment remove <TASK_SELECTOR> <ATTACHMENT_ID>
+```
+
+`add`、`list`、`remove` 的 `--json` 输出分别是 `CliAttachmentAddOutput`、
+`CliAttachmentListOutput`、`CliAttachmentRemoveOutput`。`download` 将 typed client 返回的
+raw bytes 写到 `--out`，不伪装成 JSON envelope。所有命令只通过 localhost host；CLI 不读写
+attachment root，也不接受任意 host path 作为服务端路径。
+
+## 9. Comment
 
 ```text
 kanban comment add <TASK_SELECTOR> <BODY>
@@ -278,7 +293,7 @@ kanban comment list <TASK_SELECTOR>
 add 是 mutation，list 是 query。add 的 key 属于 task；相同 key 与相同 payload 可安全重放，
 不同 payload 返回 `idempotency_conflict`。未指定 author 时由 host actor 规则填充。
 
-## 9. Dependency
+## 10. Dependency
 
 顶层命令名为 `dep`，`dependency` 是 visible alias：
 
@@ -291,7 +306,7 @@ kanban dep remove <CHILD_TASK_SELECTOR> <PARENT_TASK_SELECTOR>
 add/remove 是 mutation，list 是 query。client 先解析两个 selector；server 负责同 board、FK、
 唯一约束和 cycle 检查。dependency create 没有额外 receipt/idempotency flag。
 
-## 10. Runs 与 events（只读）
+## 11. Runs 与 events（只读）
 
 ```text
 kanban runs <TASK_SELECTOR>
@@ -308,7 +323,7 @@ kanban events [TASK_SELECTOR] [--after <ID>] [--limit <N>]
 - `events` 可按当前 board 和 task selector 过滤，JSON 输出包含事件 `data`，但当前 CLI
   output 不保留 HTTP `meta.next_after`；事件 payload 对未知 kind 保持原 JSON。
 
-## 11. 未迁移命令与停止行为
+## 12. 未迁移命令与停止行为
 
 ```text
 kanban <未列出的旧命令>

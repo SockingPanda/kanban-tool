@@ -147,8 +147,11 @@ run。claim、run、event 必须同事务提交。
 
 `task_comments` 支持 `note|decision|signal`，并保留 author/agent、metadata 与本地
 idempotency key；signal comment 是 generic signal 的可追溯回链。`task_attachments` 只
-保存 metadata、相对路径、size 和可选 SHA-256；路径 trigger 拒绝绝对路径和 `..` 穿越。
-文件复制和发布由导入/附件 service 负责，数据库字段不能成为任意文件读取入口。
+保存 metadata、相对路径、size 和可选 SHA-256；路径 trigger 拒绝绝对路径和 `..` 穿越，
+runtime service 进一步要求路径位于 `{board_id}/{task_id}/` 目录。文件复制和发布由
+host-owned attachment service 负责：同文件系统 staging 写入、文件与目录 `fsync` 后原子
+发布，数据库字段不能成为任意文件读取入口。删除先移动到 attachment root 的 `.trash/`，
+数据库事务失败时恢复 canonical path；trash 是可恢复删除证据，不是 canonical 事实。
 
 `task_events` 是 append-only 审计和 SSE 游标事实，task/run 引用以 board-scoped 复合外键
 保护；事件与对应 snapshot mutation 同事务提交。事件不是另一套 event-sourcing 状态来源。
@@ -203,7 +206,8 @@ attachment root、canonical root、manifest、previous identity 和错误。`att
 按 journal/attachment 保存源路径、staged 路径、期望/观测 size 与 SHA-256，以及
 `planned|copied|verified|published|failed` 阶段。
 
-目标流程是只读打开 SQLite v30，先做 schema、计数、引用、attachment checksum 和 board
+公开 attachment API 已由 `kanban-server`/`kanban-client`、CLI、MCP 接通；Desktop task detail
+可直接复用 typed client endpoint。目标导入流程仍是只读打开 SQLite v30，先做 schema、计数、引用、attachment checksum 和 board
 isolation preflight，再将附件复制到同文件系统 staging；DB commit 后原子发布，崩溃后按
 journal resume。源文件永不修改，重复 fingerprint 返回已完成结果。当前 schema 已提供
 这些耐久结构，但 importer/service/HTTP/CLI 管理入口仍是待闭合的 parity slice。

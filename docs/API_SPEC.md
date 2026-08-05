@@ -256,7 +256,36 @@ application transaction 中完成。
 属于 task；相同 key/相同 payload 重放返回已有 comment，不同 payload 返回
 `idempotency_conflict`。
 
-## 7. Steps 与 execution plan
+## 7. Attachments
+
+### `GET /api/v1/tasks/{task_id}/attachments`（只读）
+
+返回 `ListAttachmentsResponse`（`data: ApiAttachment[]`）。数据库只保存附件 metadata；
+`rel_path` 是 host attachment root 下、按 `{board_id}/{task_id}/` 隔离的相对路径。
+
+### `POST /api/v1/tasks/{task_id}/attachments`（mutation）
+
+请求为 `CreateAttachmentRequest`：`filename` 必填，`content` 是 JSON byte array（可为空）；
+可选 `id`、`content_type`、`sha256`、`actor`。host 先在同文件系统 staging 写入并
+`fsync`，再原子发布文件，随后在同一 Turso transaction 写 metadata 与
+`task.attachment.created` event；checksum 不匹配、绝对/穿越路径和 symlink destination
+直接拒绝。重复 `id` 且 metadata/content 相同返回已有记录，不同 payload 返回 `conflict`。
+成功返回 HTTP `201` 与 `CreateAttachmentResponse`。
+
+### `GET /api/v1/tasks/{task_id}/attachments/{attachment_id}`（download）
+
+返回原始 bytes；`Content-Type` 来自 metadata（缺失时为 `application/octet-stream`），并
+附带 `X-KB-Attachment-ID` 与可选 `X-KB-Attachment-SHA256`。host 重新校验 size/SHA 后才返回；
+metadata 指向的文件缺失或校验失败返回 storage error。
+
+### `DELETE /api/v1/tasks/{task_id}/attachments/{attachment_id}`（mutation）
+
+要求 `X-KB-Actor`。active board/task 才能删除；文件先移动到 host root 的 `.trash/`，再在
+同一 Turso transaction 删除 metadata 并写 `task.attachment.deleted` event。事务失败会恢复
+canonical path；成功返回 `DeleteAttachmentResponse`。列表/下载/删除均按 task id 与 board-scoped
+metadata 查询，不能跨 task 读取文件。
+
+## 8. Steps 与 execution plan
 
 ### `GET /api/v1/tasks/{task_id}/steps`（只读）
 
@@ -274,7 +303,7 @@ application transaction 中完成。
 请求可更新 `title`、`body`、`linked_task_ref`/`unlink_task`、`position`、`required`、
 `actor`；不改变 step status。返回 `UpdateStepResponse`（同一 `ApiTaskSteps` 形状）。
 
-## 8. Dependencies
+## 9. Dependencies
 
 ### `GET /api/v1/tasks/{task_id}/dependencies`（只读）
 
@@ -291,7 +320,7 @@ cycle 拒绝。
 删除同一 board 的 parent edge，返回 `RemoveDependencyResponse`（当前 dependencies 快照）。
 目标 task 存在但 edge 已不存在时是成功 no-op，不追加 remove event。
 
-## 9. Runs 与 log（run 不是独立 mutation surface）
+## 10. Runs 与 log（run 不是独立 mutation surface）
 
 run 只能由 task claim 创建，并由 heartbeat/release/review/complete/block 同事务更新。HTTP
 没有 run create/update endpoint；以下全部是只读查询。
@@ -311,7 +340,7 @@ run 只能由 task claim 创建，并由 heartbeat/release/review/complete/block
 typed client 不发送 `tail` query，服务端也不会把未知 query 解释为可配置读取范围；没有
 任意文件路径输入或第二种 log 协议。
 
-## 10. Events
+## 11. Events
 
 ### `GET /api/v1/events`
 
@@ -322,7 +351,7 @@ known event kind 使用 typed payload；未知 kind 保留原 JSON payload，不
 
 event list 是只读；所有 mutation 通过 ApplicationService 写 canonical event。
 
-## 11. 停止路径
+## 12. 停止路径
 
 服务停止后，client 返回 `server_unavailable`，不得 fallback 到嵌入式数据库、旧 SQLite
 路径或另一个 host。迁移期间尚未接通的 labels/signals/maintenance 等命令暂时返回

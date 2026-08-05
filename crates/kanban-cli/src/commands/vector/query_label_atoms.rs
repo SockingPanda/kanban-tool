@@ -32,7 +32,7 @@ pub(crate) fn run(ctx: &CliContext, client: &KanbanClient, args: &Args) -> Resul
             let atom = CliLabelAtomHit {
                 atom_id: hit.atom_id,
                 label_id: hit.label_id,
-                label_name: String::new(),
+                label_name: hit.label_name,
                 board_id: hit.board_id,
                 polarity: hit.polarity,
                 kind: hit.kind,

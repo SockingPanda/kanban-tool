@@ -993,6 +993,61 @@
   },
   {
     "contracts": [
+      "api.vector-configure.headers",
+      "api.vector-configure.request",
+      "api.vector-configure.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/vector/configure",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.vector-rebuild.headers",
+      "api.vector-rebuild.request",
+      "api.vector-rebuild.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/vector/rebuild",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.vector-sync.headers",
+      "api.vector-sync.request",
+      "api.vector-sync.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/vector/sync",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.vector-query-chunks.query",
+      "api.vector-query-chunks.headers",
+      "api.vector-query-chunks.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/vector/query-chunks",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.vector-query-label-atoms.query",
+      "api.vector-query-label-atoms.headers",
+      "api.vector-query-label-atoms.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/vector/query-label-atoms",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
       "api.list-events.query",
       "api.list-events.headers",
       "api.list-events.response"

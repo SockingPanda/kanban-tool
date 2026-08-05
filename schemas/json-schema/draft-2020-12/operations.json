@@ -5464,6 +5464,466 @@
   {
     "adoption": {
       "consumer": {
+        "contract_id": "api.vector-configure.request",
+        "direction": "deserialize",
+        "exact_test": "vector::tests::vector_configure_request_fixture_is_consumed_by_real_router",
+        "operation": "POST /api/v1/vector/configure",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-configure.request",
+        "direction": "deserialize",
+        "exact_test": "vector::tests::vector_configure_request_fixture_is_produced",
+        "operation": "POST /api/v1/vector/configure",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/vector-configure-request.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/vector-configure-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-configure.request",
+    "migration": "adopted",
+    "operation": "POST /api/v1/vector/configure",
+    "path": "POST /api/v1/vector/configure request",
+    "schema_id": "urn:kanban-tool:schema:api:vector-configure-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/vector/configure",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-configure.response",
+        "direction": "serialize",
+        "exact_test": "vector::tests::vector_configure_response_fixture_is_consumed_by_contract_root",
+        "operation": "POST /api/v1/vector/configure",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-configure.response",
+        "direction": "serialize",
+        "exact_test": "vector::tests::vector_configure_response_fixture_is_produced",
+        "operation": "POST /api/v1/vector/configure",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/vector-configure-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/vector-configure-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-configure.response",
+    "migration": "adopted",
+    "operation": "POST /api/v1/vector/configure",
+    "path": "POST /api/v1/vector/configure response",
+    "schema_id": "urn:kanban-tool:schema:api:vector-configure-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/vector/configure",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-rebuild.request",
+        "direction": "deserialize",
+        "exact_test": "vector::tests::vector_rebuild_request_fixture_is_consumed_by_real_router",
+        "operation": "POST /api/v1/vector/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-rebuild.request",
+        "direction": "deserialize",
+        "exact_test": "vector::tests::vector_rebuild_request_fixture_is_produced",
+        "operation": "POST /api/v1/vector/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/vector-rebuild-request.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/vector-rebuild-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-rebuild.request",
+    "migration": "adopted",
+    "operation": "POST /api/v1/vector/rebuild",
+    "path": "POST /api/v1/vector/rebuild request",
+    "schema_id": "urn:kanban-tool:schema:api:vector-rebuild-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/vector/rebuild",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-rebuild.response",
+        "direction": "serialize",
+        "exact_test": "vector::tests::vector_rebuild_response_fixture_is_consumed_by_contract_root",
+        "operation": "POST /api/v1/vector/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-rebuild.response",
+        "direction": "serialize",
+        "exact_test": "vector::tests::vector_rebuild_response_fixture_is_produced",
+        "operation": "POST /api/v1/vector/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/vector-rebuild-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/vector-rebuild-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-rebuild.response",
+    "migration": "adopted",
+    "operation": "POST /api/v1/vector/rebuild",
+    "path": "POST /api/v1/vector/rebuild response",
+    "schema_id": "urn:kanban-tool:schema:api:vector-rebuild-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/vector/rebuild",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-sync.request",
+        "direction": "deserialize",
+        "exact_test": "vector::tests::vector_sync_request_fixture_is_consumed_by_real_router",
+        "operation": "POST /api/v1/vector/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-sync.request",
+        "direction": "deserialize",
+        "exact_test": "vector::tests::vector_sync_request_fixture_is_produced",
+        "operation": "POST /api/v1/vector/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/vector-sync-request.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/vector-sync-request.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-sync.request",
+    "migration": "adopted",
+    "operation": "POST /api/v1/vector/sync",
+    "path": "POST /api/v1/vector/sync request",
+    "schema_id": "urn:kanban-tool:schema:api:vector-sync-request:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "body",
+      "operation_key": "POST /api/v1/vector/sync",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-sync.response",
+        "direction": "serialize",
+        "exact_test": "vector::tests::vector_sync_response_fixture_is_consumed_by_contract_root",
+        "operation": "POST /api/v1/vector/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-sync.response",
+        "direction": "serialize",
+        "exact_test": "vector::tests::vector_sync_response_fixture_is_produced",
+        "operation": "POST /api/v1/vector/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/vector-sync-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/vector-sync-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-sync.response",
+    "migration": "adopted",
+    "operation": "POST /api/v1/vector/sync",
+    "path": "POST /api/v1/vector/sync response",
+    "schema_id": "urn:kanban-tool:schema:api:vector-sync-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/vector/sync",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-query-chunks.query",
+        "direction": "deserialize",
+        "exact_test": "vector::tests::vector_query_chunks_query_fixture_is_consumed_by_real_router",
+        "operation": "GET /api/v1/vector/query-chunks",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-query-chunks.query",
+        "direction": "deserialize",
+        "exact_test": "vector::tests::vector_query_chunks_query_fixture_is_produced",
+        "operation": "GET /api/v1/vector/query-chunks",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/vector-query-chunks-query.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/vector-query-chunks-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-query-chunks.query",
+    "migration": "adopted",
+    "operation": "GET /api/v1/vector/query-chunks",
+    "path": "GET /api/v1/vector/query-chunks query",
+    "schema_id": "urn:kanban-tool:schema:api:vector-query-chunks-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "GET /api/v1/vector/query-chunks",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "q"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "limit"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "embedding_model"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "polarity"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "include_vector"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-query-chunks.response",
+        "direction": "serialize",
+        "exact_test": "vector::tests::vector_query_chunks_response_fixture_is_consumed_by_contract_root",
+        "operation": "GET /api/v1/vector/query-chunks",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-query-chunks.response",
+        "direction": "serialize",
+        "exact_test": "vector::tests::vector_query_chunks_response_fixture_is_produced",
+        "operation": "GET /api/v1/vector/query-chunks",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/vector-query-chunks-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/vector-query-chunks-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-query-chunks.response",
+    "migration": "adopted",
+    "operation": "GET /api/v1/vector/query-chunks",
+    "path": "GET /api/v1/vector/query-chunks response",
+    "schema_id": "urn:kanban-tool:schema:api:vector-query-chunks-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/vector/query-chunks",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-query-label-atoms.query",
+        "direction": "deserialize",
+        "exact_test": "vector::tests::vector_query_label_atoms_query_fixture_is_consumed_by_real_router",
+        "operation": "GET /api/v1/vector/query-label-atoms",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-query-label-atoms.query",
+        "direction": "deserialize",
+        "exact_test": "vector::tests::vector_query_label_atoms_query_fixture_is_produced",
+        "operation": "GET /api/v1/vector/query-label-atoms",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/vector-query-label-atoms-query.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/vector-query-label-atoms-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-query-label-atoms.query",
+    "migration": "adopted",
+    "operation": "GET /api/v1/vector/query-label-atoms",
+    "path": "GET /api/v1/vector/query-label-atoms query",
+    "schema_id": "urn:kanban-tool:schema:api:vector-query-label-atoms-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "GET /api/v1/vector/query-label-atoms",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "board"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "q"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "limit"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "embedding_model"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "polarity"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "include_vector"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-query-label-atoms.response",
+        "direction": "serialize",
+        "exact_test": "vector::tests::vector_query_label_atoms_response_fixture_is_consumed_by_contract_root",
+        "operation": "GET /api/v1/vector/query-label-atoms",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-query-label-atoms.response",
+        "direction": "serialize",
+        "exact_test": "vector::tests::vector_query_label_atoms_response_fixture_is_produced",
+        "operation": "GET /api/v1/vector/query-label-atoms",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/vector-query-label-atoms-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/vector-query-label-atoms-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-query-label-atoms.response",
+    "migration": "adopted",
+    "operation": "GET /api/v1/vector/query-label-atoms",
+    "path": "GET /api/v1/vector/query-label-atoms response",
+    "schema_id": "urn:kanban-tool:schema:api:vector-query-label-atoms-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/vector/query-label-atoms",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
         "contract_id": "api.list-events.query",
         "direction": "deserialize",
         "exact_test": "suite::derived_adoption::list_events_query_fixture_is_consumed_by_real_router",
@@ -21111,6 +21571,248 @@
       "kind": "http",
       "location": "headers",
       "operation_key": "GET /api/v1/vector/status",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-configure.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "POST /api/v1/vector/configure",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-configure.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "POST /api/v1/vector/configure",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-configure.headers",
+    "migration": "adopted",
+    "operation": "POST /api/v1/vector/configure",
+    "path": "POST /api/v1/vector/configure headers",
+    "schema_id": "urn:kanban-tool:schema:api:vector-configure-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/vector/configure",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-rebuild.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "POST /api/v1/vector/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-rebuild.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "POST /api/v1/vector/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-rebuild.headers",
+    "migration": "adopted",
+    "operation": "POST /api/v1/vector/rebuild",
+    "path": "POST /api/v1/vector/rebuild headers",
+    "schema_id": "urn:kanban-tool:schema:api:vector-rebuild-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/vector/rebuild",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-sync.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "POST /api/v1/vector/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-sync.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "POST /api/v1/vector/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-sync.headers",
+    "migration": "adopted",
+    "operation": "POST /api/v1/vector/sync",
+    "path": "POST /api/v1/vector/sync headers",
+    "schema_id": "urn:kanban-tool:schema:api:vector-sync-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/vector/sync",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "required_one",
+          "name": "Content-Type"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-query-chunks.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "GET /api/v1/vector/query-chunks",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-query-chunks.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "GET /api/v1/vector/query-chunks",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-query-chunks.headers",
+    "migration": "adopted",
+    "operation": "GET /api/v1/vector/query-chunks",
+    "path": "GET /api/v1/vector/query-chunks headers",
+    "schema_id": "urn:kanban-tool:schema:api:vector-query-chunks-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/vector/query-chunks",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.vector-query-label-atoms.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
+        "operation": "GET /api/v1/vector/query-label-atoms",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer": {
+        "contract_id": "api.vector-query-label-atoms.headers",
+        "direction": "deserialize",
+        "exact_test": "suite::header_adoption::exact_header_profile_fixtures_are_produced",
+        "operation": "GET /api/v1/vector/query-label-atoms",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "all"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.vector-query-label-atoms.headers",
+    "migration": "adopted",
+    "operation": "GET /api/v1/vector/query-label-atoms",
+    "path": "GET /api/v1/vector/query-label-atoms headers",
+    "schema_id": "urn:kanban-tool:schema:api:vector-query-label-atoms-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/vector/query-label-atoms",
       "parameters": [
         {
           "cardinality": "optional_one",

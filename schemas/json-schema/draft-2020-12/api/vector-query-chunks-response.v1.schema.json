@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "VectorChunkResult": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "distance": {
+          "format": "float",
+          "type": "number"
+        },
+        "embedding_model": {
+          "type": "string"
+        },
+        "entity_uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "score": {
+          "format": "float",
+          "type": "number"
+        },
+        "source_kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "entity_uri",
+        "source_kind",
+        "content",
+        "content_hash",
+        "embedding_model",
+        "distance",
+        "score"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:vector-query-chunks-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/$defs/VectorChunkResult"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban vector query chunks response v1",
+  "type": "object"
+}

@@ -1,14 +1,13 @@
 {
-  "$id": "urn:kanban-tool:schema:api:vector-status-query:v1",
+  "$id": "urn:kanban-tool:schema:api:vector-sync-request:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Canonical host vector status query。",
   "properties": {
     "board": {
       "default": "default",
       "type": "string"
     }
   },
-  "title": "Kanban vector status query v1",
+  "title": "Kanban vector sync request v1",
   "type": "object"
 }

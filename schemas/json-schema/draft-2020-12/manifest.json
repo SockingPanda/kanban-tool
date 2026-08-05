@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:15e73cc180b6a93254e335b950a10492d4d5d7fa080ef0ac674141344ce6c88a"
+    "sha256": "sha256:e9278e07beb83fc7a048120f826711fe2fb96a52288cbb818c8517d8b30e238a"
   },
   "roots": [
     {
@@ -1381,7 +1381,7 @@
       "invalid_fixture": "schemas/fixtures/api/vector-status-query.v1.invalid.json",
       "path": "api/vector-status-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/vector-status-query.v1.valid.json",
-      "sha256": "sha256:2b2e257a69fed7e4eda3a0677c65352a1748c3b065e59be97552bf164e380788",
+      "sha256": "sha256:bb65bff5ec6db258ea8b6523cab80d18d7f79f52b58b70cc4d5eb42f000b1534",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1392,6 +1392,106 @@
       "path": "api/vector-status-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/vector-status-response.v1.valid.json",
       "sha256": "sha256:06abdae952c2a202a556fa3db94ff975ba29603be8e24145698c2d266b3ba415",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-configure.request",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:vector-configure-request:v1",
+      "invalid_fixture": "schemas/fixtures/api/vector-configure-request.v1.invalid.json",
+      "path": "api/vector-configure-request.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/vector-configure-request.v1.valid.json",
+      "sha256": "sha256:3146c952286061561e571e12b6ba4d76bded906e3703913bbe1d1e5645210e5d",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-configure.response",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:api:vector-configure-response:v1",
+      "invalid_fixture": "schemas/fixtures/api/vector-configure-response.v1.invalid.json",
+      "path": "api/vector-configure-response.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/vector-configure-response.v1.valid.json",
+      "sha256": "sha256:73bcd7789c3216c15c49b214a31a6e39ebb549cc57ae0e438641c39434107d3f",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-rebuild.request",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:vector-rebuild-request:v1",
+      "invalid_fixture": "schemas/fixtures/api/vector-rebuild-request.v1.invalid.json",
+      "path": "api/vector-rebuild-request.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/vector-rebuild-request.v1.valid.json",
+      "sha256": "sha256:e643439d88560d694f362f2c1267d761449f5010686b8bdbdfe39c9cab2b467a",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-rebuild.response",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:api:vector-rebuild-response:v1",
+      "invalid_fixture": "schemas/fixtures/api/vector-rebuild-response.v1.invalid.json",
+      "path": "api/vector-rebuild-response.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/vector-rebuild-response.v1.valid.json",
+      "sha256": "sha256:e8b14a89067865de0158d258ff245450ae96edd2447bea3d3dfcda767ea95620",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-sync.request",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:vector-sync-request:v1",
+      "invalid_fixture": "schemas/fixtures/api/vector-sync-request.v1.invalid.json",
+      "path": "api/vector-sync-request.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/vector-sync-request.v1.valid.json",
+      "sha256": "sha256:a48b24e7c460891b649f88023472618b65b38fa3ea24ea398fab9aea78b3d561",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-sync.response",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:api:vector-sync-response:v1",
+      "invalid_fixture": "schemas/fixtures/api/vector-sync-response.v1.invalid.json",
+      "path": "api/vector-sync-response.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/vector-sync-response.v1.valid.json",
+      "sha256": "sha256:2a30131d3fae3d51e72b2dc96edfbc471ba23ad5d2b3d668460ff42ddde31abc",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-query-chunks.query",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:vector-query-chunks-query:v1",
+      "invalid_fixture": "schemas/fixtures/api/vector-query-chunks-query.v1.invalid.json",
+      "path": "api/vector-query-chunks-query.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/vector-query-chunks-query.v1.valid.json",
+      "sha256": "sha256:82d5f02b2e447d0a7edfd8be4e7043707ce15276b441ba622b00c64f617e39e1",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-query-chunks.response",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:api:vector-query-chunks-response:v1",
+      "invalid_fixture": "schemas/fixtures/api/vector-query-chunks-response.v1.invalid.json",
+      "path": "api/vector-query-chunks-response.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/vector-query-chunks-response.v1.valid.json",
+      "sha256": "sha256:81a7e5f442775d1f4a08a6f5c7f65acdee04387ddbb6d8ff70208cc60cc25d7c",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-query-label-atoms.query",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:vector-query-label-atoms-query:v1",
+      "invalid_fixture": "schemas/fixtures/api/vector-query-label-atoms-query.v1.invalid.json",
+      "path": "api/vector-query-label-atoms-query.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/vector-query-label-atoms-query.v1.valid.json",
+      "sha256": "sha256:5a87ea5467fc76a3392e01ff59d66ee8e5865627d20aa6cfeb9dc2d630aff21e",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-query-label-atoms.response",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:api:vector-query-label-atoms-response:v1",
+      "invalid_fixture": "schemas/fixtures/api/vector-query-label-atoms-response.v1.invalid.json",
+      "path": "api/vector-query-label-atoms-response.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/vector-query-label-atoms-response.v1.valid.json",
+      "sha256": "sha256:21d17da43d9797ad8fe3b6921dd7f8e269dd8dc8ab2c0e53f88424adc2718e39",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -5075,6 +5175,56 @@
       "strictness": "deny_unknown_fields"
     },
     {
+      "contract_id": "api.vector-configure.headers",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:vector-configure-headers:v1",
+      "invalid_fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.invalid.json",
+      "path": "api/vector-configure-headers.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json",
+      "sha256": "sha256:97d9250f08c60af93b620a752a875a500d8611436d01f1d7533f582c8b95c005",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-rebuild.headers",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:vector-rebuild-headers:v1",
+      "invalid_fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.invalid.json",
+      "path": "api/vector-rebuild-headers.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json",
+      "sha256": "sha256:af98d5ef4ceabb54039c1a8d602b952483a2675ef71b5770da0388299d4a6ab2",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-sync.headers",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:vector-sync-headers:v1",
+      "invalid_fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.invalid.json",
+      "path": "api/vector-sync-headers.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/headers/locale-json-headers.v1.valid.json",
+      "sha256": "sha256:e6769ee0bd71030a20c2ef03e7a48bd6aec9674fe10264cc1d8a20d78b957503",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-query-chunks.headers",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:vector-query-chunks-headers:v1",
+      "invalid_fixture": "schemas/fixtures/api/headers/locale-headers.v1.invalid.json",
+      "path": "api/vector-query-chunks-headers.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+      "sha256": "sha256:b988da7b97e0ee78556fda5e72d99403b2d86ed01380233cf0ae2486583f550f",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.vector-query-label-atoms.headers",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:vector-query-label-atoms-headers:v1",
+      "invalid_fixture": "schemas/fixtures/api/headers/locale-headers.v1.invalid.json",
+      "path": "api/vector-query-label-atoms-headers.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+      "sha256": "sha256:f5bdc0e247f6911a5e825af004529a3b7cc123a7a7be09d83aba78726c947a5b",
+      "strictness": "deny_unknown_fields"
+    },
+    {
       "contract_id": "api.list-events.headers",
       "direction": "deserialize",
       "id": "urn:kanban-tool:schema:api:list-events-headers:v1",
@@ -5108,6 +5258,6 @@
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "surface_catalog": {
     "path": "surface-operations.json",
-    "sha256": "sha256:9afabe178c64503a646e6e64e7fe585b1138b46602db88dd4f6ecb300780df25"
+    "sha256": "sha256:f045ff5114b517503271e03bae9f610284458e3180496bbbc479f84265395cdc"
   }
 }

@@ -167,6 +167,7 @@ pub struct VectorChunkHitRecord {
 pub struct VectorLabelAtomHitRecord {
     pub atom_id: String,
     pub label_id: String,
+    pub label_name: String,
     pub board_id: String,
     pub polarity: String,
     pub kind: String,
@@ -766,13 +767,13 @@ impl TursoStore {
         let limit = limit.min(MAX_VECTOR_BATCH);
         let connection = self.connection().await?;
         let mut rows = connection.query(
-            &format!("SELECT a.id, a.label_id, a.board_id, a.polarity, a.kind, a.text, a.ordinal, a.content_hash, v.embedding_model, vector_distance_cos(v.embedding, vector32(?1)), CASE WHEN ?4 = 1 THEN vector_extract(v.embedding) ELSE NULL END FROM label_atoms a JOIN retrieval_vectors v ON v.board_id=a.board_id AND v.content_hash=a.content_hash JOIN retrieval_documents d ON d.id=v.document_id WHERE (?2 IS NULL OR a.board_id=?2) AND v.embedding_model=?3 AND (?5 IS NULL OR a.polarity=?5) ORDER BY vector_distance_cos(v.embedding, vector32(?1)) ASC LIMIT {limit}"),
+            &format!("SELECT a.id, a.label_id, l.name, a.board_id, a.polarity, a.kind, a.text, a.ordinal, a.content_hash, v.embedding_model, vector_distance_cos(v.embedding, vector32(?1)), CASE WHEN ?4 = 1 THEN vector_extract(v.embedding) ELSE NULL END FROM label_atoms a JOIN labels l ON l.id=a.label_id AND l.board_id=a.board_id JOIN retrieval_vectors v ON v.board_id=a.board_id AND v.content_hash=a.content_hash JOIN retrieval_documents d ON d.id=v.document_id WHERE (?2 IS NULL OR a.board_id=?2) AND v.embedding_model=?3 AND (?5 IS NULL OR a.polarity=?5) ORDER BY vector_distance_cos(v.embedding, vector32(?1)) ASC LIMIT {limit}"),
             (literal.as_str(), board_id, model, i64::from(include_vector), polarity),
         ).await?;
         let mut hits = Vec::new();
         while let Some(row) = rows.next().await? {
-            let distance = real_value(row.get_value(9)?, "retrieval_vectors.distance")? as f32;
-            let vector = match row.get_value(10)? {
+            let distance = real_value(row.get_value(10)?, "retrieval_vectors.distance")? as f32;
+            let vector = match row.get_value(11)? {
                 Value::Text(value) if include_vector => {
                     serde_json::from_str::<Vec<f32>>(&value).ok()
                 }
@@ -781,14 +782,15 @@ impl TursoStore {
             hits.push(VectorLabelAtomHitRecord {
                 atom_id: text_value(row.get_value(0)?, "label_atoms.id")?,
                 label_id: text_value(row.get_value(1)?, "label_atoms.label_id")?,
-                board_id: text_value(row.get_value(2)?, "label_atoms.board_id")?,
-                polarity: text_value(row.get_value(3)?, "label_atoms.polarity")?,
-                kind: text_value(row.get_value(4)?, "label_atoms.kind")?,
-                text: text_value(row.get_value(5)?, "label_atoms.text")?,
-                ordinal: integer_value(row.get_value(6)?, "label_atoms.ordinal")?,
-                content_hash: text_value(row.get_value(7)?, "label_atoms.content_hash")?,
+                label_name: text_value(row.get_value(2)?, "labels.name")?,
+                board_id: text_value(row.get_value(3)?, "label_atoms.board_id")?,
+                polarity: text_value(row.get_value(4)?, "label_atoms.polarity")?,
+                kind: text_value(row.get_value(5)?, "label_atoms.kind")?,
+                text: text_value(row.get_value(6)?, "label_atoms.text")?,
+                ordinal: integer_value(row.get_value(7)?, "label_atoms.ordinal")?,
+                content_hash: text_value(row.get_value(8)?, "label_atoms.content_hash")?,
                 embedding_model: text_value(
-                    row.get_value(8)?,
+                    row.get_value(9)?,
                     "retrieval_vectors.embedding_model",
                 )?,
                 distance,

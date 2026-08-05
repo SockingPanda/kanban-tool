@@ -70,7 +70,9 @@ use crate::{
     BoardQuery, BuildContextPath, BuildContextQuery, BuildContextResponse, GraphNeighborsQuery,
     GraphNeighborsResponse, GraphStatusResponse, ListEventsQuery, SearchStatusResponse,
     SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse, StatsResponse,
-    VectorStatusResponse,
+    VectorConfigureRequest, VectorConfigureResponse, VectorProjectionRequest,
+    VectorProjectionResponse, VectorQuery, VectorQueryChunksResponse,
+    VectorQueryLabelAtomsResponse, VectorStatusQuery, VectorStatusResponse,
 };
 
 pub const DRAFT_2020_12: &str = "https://json-schema.org/draft/2020-12/schema";
@@ -1114,7 +1116,7 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "api.vector-status.query",
         "schemas/fixtures/api/vector-status-query.v1.valid.json",
         "schemas/fixtures/api/vector-status-query.v1.invalid.json",
-        BoardQuery
+        VectorStatusQuery
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:api:vector-status-response:v1",
@@ -1124,6 +1126,96 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/api/vector-status-response.v1.valid.json",
         "schemas/fixtures/api/vector-status-response.v1.invalid.json",
         VectorStatusResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:vector-configure-request:v1",
+        "api/vector-configure-request.v1.schema.json",
+        "Kanban vector configure request v1",
+        "api.vector-configure.request",
+        "schemas/fixtures/api/vector-configure-request.v1.valid.json",
+        "schemas/fixtures/api/vector-configure-request.v1.invalid.json",
+        VectorConfigureRequest
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:vector-configure-response:v1",
+        "api/vector-configure-response.v1.schema.json",
+        "Kanban vector configure response v1",
+        "api.vector-configure.response",
+        "schemas/fixtures/api/vector-configure-response.v1.valid.json",
+        "schemas/fixtures/api/vector-configure-response.v1.invalid.json",
+        VectorConfigureResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:vector-rebuild-request:v1",
+        "api/vector-rebuild-request.v1.schema.json",
+        "Kanban vector rebuild request v1",
+        "api.vector-rebuild.request",
+        "schemas/fixtures/api/vector-rebuild-request.v1.valid.json",
+        "schemas/fixtures/api/vector-rebuild-request.v1.invalid.json",
+        VectorProjectionRequest
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:vector-rebuild-response:v1",
+        "api/vector-rebuild-response.v1.schema.json",
+        "Kanban vector rebuild response v1",
+        "api.vector-rebuild.response",
+        "schemas/fixtures/api/vector-rebuild-response.v1.valid.json",
+        "schemas/fixtures/api/vector-rebuild-response.v1.invalid.json",
+        VectorProjectionResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:vector-sync-request:v1",
+        "api/vector-sync-request.v1.schema.json",
+        "Kanban vector sync request v1",
+        "api.vector-sync.request",
+        "schemas/fixtures/api/vector-sync-request.v1.valid.json",
+        "schemas/fixtures/api/vector-sync-request.v1.invalid.json",
+        VectorProjectionRequest
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:vector-sync-response:v1",
+        "api/vector-sync-response.v1.schema.json",
+        "Kanban vector sync response v1",
+        "api.vector-sync.response",
+        "schemas/fixtures/api/vector-sync-response.v1.valid.json",
+        "schemas/fixtures/api/vector-sync-response.v1.invalid.json",
+        VectorProjectionResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:vector-query-chunks-query:v1",
+        "api/vector-query-chunks-query.v1.schema.json",
+        "Kanban vector query chunks query v1",
+        "api.vector-query-chunks.query",
+        "schemas/fixtures/api/vector-query-chunks-query.v1.valid.json",
+        "schemas/fixtures/api/vector-query-chunks-query.v1.invalid.json",
+        VectorQuery
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:vector-query-chunks-response:v1",
+        "api/vector-query-chunks-response.v1.schema.json",
+        "Kanban vector query chunks response v1",
+        "api.vector-query-chunks.response",
+        "schemas/fixtures/api/vector-query-chunks-response.v1.valid.json",
+        "schemas/fixtures/api/vector-query-chunks-response.v1.invalid.json",
+        VectorQueryChunksResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:vector-query-label-atoms-query:v1",
+        "api/vector-query-label-atoms-query.v1.schema.json",
+        "Kanban vector query label atoms query v1",
+        "api.vector-query-label-atoms.query",
+        "schemas/fixtures/api/vector-query-label-atoms-query.v1.valid.json",
+        "schemas/fixtures/api/vector-query-label-atoms-query.v1.invalid.json",
+        VectorQuery
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:vector-query-label-atoms-response:v1",
+        "api/vector-query-label-atoms-response.v1.schema.json",
+        "Kanban vector query label atoms response v1",
+        "api.vector-query-label-atoms.response",
+        "schemas/fixtures/api/vector-query-label-atoms-response.v1.valid.json",
+        "schemas/fixtures/api/vector-query-label-atoms-response.v1.invalid.json",
+        VectorQueryLabelAtomsResponse
     ),
     request_schema_root!(
         "urn:kanban-tool:schema:api:list-events-query:v1",

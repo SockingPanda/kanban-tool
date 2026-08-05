@@ -640,6 +640,32 @@ const BOARD_QUERY_PARAMETERS: &[WireParameter] = &[WireParameter {
     name: "board",
     cardinality: Some(WireParameterCardinality::OptionalOne),
 }];
+const VECTOR_QUERY_PARAMETERS: &[WireParameter] = &[
+    WireParameter {
+        name: "board",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "q",
+        cardinality: Some(WireParameterCardinality::RequiredOne),
+    },
+    WireParameter {
+        name: "limit",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "embedding_model",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "polarity",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "include_vector",
+        cardinality: Some(WireParameterCardinality::OptionalOne),
+    },
+];
 const GRAPH_NEIGHBORS_QUERY_PARAMETERS: &[WireParameter] = &[
     WireParameter {
         name: "board",
@@ -1818,6 +1844,100 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/vector-status-response.v1.valid.json",
         "suite::derived_adoption::vector_status_response_fixture_is_produced_by_real_router",
         "suite::derived_adoption::vector_status_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_request!(
+        "api.vector-configure.request",
+        "POST /api/v1/vector/configure request",
+        "POST /api/v1/vector/configure",
+        "urn:kanban-tool:schema:api:vector-configure-request:v1",
+        "schemas/fixtures/api/vector-configure-request.v1.valid.json",
+        "vector::tests::vector_configure_request_fixture_is_produced",
+        "vector::tests::vector_configure_request_fixture_is_consumed_by_real_router"
+    ),
+    adopted_api_response_contract!(
+        "api.vector-configure.response",
+        "POST /api/v1/vector/configure response",
+        "POST /api/v1/vector/configure",
+        "urn:kanban-tool:schema:api:vector-configure-response:v1",
+        "schemas/fixtures/api/vector-configure-response.v1.valid.json",
+        "vector::tests::vector_configure_response_fixture_is_produced",
+        "vector::tests::vector_configure_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_request!(
+        "api.vector-rebuild.request",
+        "POST /api/v1/vector/rebuild request",
+        "POST /api/v1/vector/rebuild",
+        "urn:kanban-tool:schema:api:vector-rebuild-request:v1",
+        "schemas/fixtures/api/vector-rebuild-request.v1.valid.json",
+        "vector::tests::vector_rebuild_request_fixture_is_produced",
+        "vector::tests::vector_rebuild_request_fixture_is_consumed_by_real_router"
+    ),
+    adopted_api_response_contract!(
+        "api.vector-rebuild.response",
+        "POST /api/v1/vector/rebuild response",
+        "POST /api/v1/vector/rebuild",
+        "urn:kanban-tool:schema:api:vector-rebuild-response:v1",
+        "schemas/fixtures/api/vector-rebuild-response.v1.valid.json",
+        "vector::tests::vector_rebuild_response_fixture_is_produced",
+        "vector::tests::vector_rebuild_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_request!(
+        "api.vector-sync.request",
+        "POST /api/v1/vector/sync request",
+        "POST /api/v1/vector/sync",
+        "urn:kanban-tool:schema:api:vector-sync-request:v1",
+        "schemas/fixtures/api/vector-sync-request.v1.valid.json",
+        "vector::tests::vector_sync_request_fixture_is_produced",
+        "vector::tests::vector_sync_request_fixture_is_consumed_by_real_router"
+    ),
+    adopted_api_response_contract!(
+        "api.vector-sync.response",
+        "POST /api/v1/vector/sync response",
+        "POST /api/v1/vector/sync",
+        "urn:kanban-tool:schema:api:vector-sync-response:v1",
+        "schemas/fixtures/api/vector-sync-response.v1.valid.json",
+        "vector::tests::vector_sync_response_fixture_is_produced",
+        "vector::tests::vector_sync_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_parameter_contract!(
+        "api.vector-query-chunks.query",
+        "GET /api/v1/vector/query-chunks query",
+        "GET /api/v1/vector/query-chunks",
+        "urn:kanban-tool:schema:api:vector-query-chunks-query:v1",
+        "schemas/fixtures/api/vector-query-chunks-query.v1.valid.json",
+        "vector::tests::vector_query_chunks_query_fixture_is_produced",
+        "vector::tests::vector_query_chunks_query_fixture_is_consumed_by_real_router",
+        HttpTransportLocation::Query,
+        VECTOR_QUERY_PARAMETERS
+    ),
+    adopted_api_response_contract!(
+        "api.vector-query-chunks.response",
+        "GET /api/v1/vector/query-chunks response",
+        "GET /api/v1/vector/query-chunks",
+        "urn:kanban-tool:schema:api:vector-query-chunks-response:v1",
+        "schemas/fixtures/api/vector-query-chunks-response.v1.valid.json",
+        "vector::tests::vector_query_chunks_response_fixture_is_produced",
+        "vector::tests::vector_query_chunks_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_parameter_contract!(
+        "api.vector-query-label-atoms.query",
+        "GET /api/v1/vector/query-label-atoms query",
+        "GET /api/v1/vector/query-label-atoms",
+        "urn:kanban-tool:schema:api:vector-query-label-atoms-query:v1",
+        "schemas/fixtures/api/vector-query-label-atoms-query.v1.valid.json",
+        "vector::tests::vector_query_label_atoms_query_fixture_is_produced",
+        "vector::tests::vector_query_label_atoms_query_fixture_is_consumed_by_real_router",
+        HttpTransportLocation::Query,
+        VECTOR_QUERY_PARAMETERS
+    ),
+    adopted_api_response_contract!(
+        "api.vector-query-label-atoms.response",
+        "GET /api/v1/vector/query-label-atoms response",
+        "GET /api/v1/vector/query-label-atoms",
+        "urn:kanban-tool:schema:api:vector-query-label-atoms-response:v1",
+        "schemas/fixtures/api/vector-query-label-atoms-response.v1.valid.json",
+        "vector::tests::vector_query_label_atoms_response_fixture_is_produced",
+        "vector::tests::vector_query_label_atoms_response_fixture_is_consumed_by_contract_root"
     ),
     adopted_api_parameter_contract!(
         "api.list-events.query",

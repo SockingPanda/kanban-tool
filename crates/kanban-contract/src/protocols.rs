@@ -352,6 +352,7 @@ pub type VectorQueryChunksResponse = crate::DataEnvelope<Vec<VectorChunkResult>>
 pub struct VectorLabelAtomResult {
     pub atom_id: String,
     pub label_id: String,
+    pub label_name: String,
     pub board_id: String,
     pub polarity: String,
     pub kind: String,

@@ -186,6 +186,7 @@ async fn query_label_atoms(
             .map(|hit| VectorLabelAtomResult {
                 atom_id: hit.atom_id,
                 label_id: hit.label_id,
+                label_name: hit.label_name,
                 board_id: hit.board_id,
                 polarity: hit.polarity,
                 kind: hit.kind,
@@ -612,7 +613,15 @@ fn now_ms() -> i64 {
 mod tests {
     use std::{io::Write, net::TcpListener, thread};
 
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
     use super::{OllamaEmbeddingProvider, ProviderFailure, VectorConfig};
+    use crate::http::operations::test_support::build_router;
 
     fn mock_provider(status: u16, body: &str) -> Result<Vec<Vec<f32>>, ProviderFailure> {
         let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -658,5 +667,59 @@ mod tests {
         let error = mock_provider(503, r#"{"error":"busy"}"#).expect_err("503 must fail");
         assert!(error.retryable);
         assert_eq!(error.message, "Ollama HTTP 503");
+    }
+
+    #[tokio::test]
+    async fn vector_routes_use_typed_envelopes_and_degraded_query_error() {
+        let directory = tempfile::tempdir().expect("temporary database directory");
+        let state = crate::state::AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .expect("open state");
+        let router = build_router(state);
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/vector/status?board=default")
+                    .body(Body::empty())
+                    .expect("status request"),
+            )
+            .await
+            .expect("status response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("status body")
+            .to_bytes();
+        let status: kanban_contract::VectorStatusResponse =
+            serde_json::from_slice(&body).expect("status envelope");
+        assert_eq!(status.data.backend, "turso-vector32");
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/vector/query-chunks?board=default&q=lease%20retry&limit=5")
+                    .body(Body::empty())
+                    .expect("query request"),
+            )
+            .await
+            .expect("query response");
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .expect("query body")
+            .to_bytes();
+        let error: kanban_contract::ErrorEnvelope =
+            serde_json::from_slice(&body).expect("error envelope");
+        assert_eq!(
+            error.error.code,
+            kanban_contract::ApiErrorCode::InvalidInput
+        );
+        assert!(error.error.message.contains("degraded"));
     }
 }

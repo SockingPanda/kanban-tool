@@ -57,6 +57,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn vector_label_query_returns_canonical_label_name() {
+        let (_directory, store, _path) = store("vector-label-name").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO labels(id, board_id, name, created_at, updated_at) VALUES ('l_vector', 'b_default', 'Vector label', 1, 1)",
+                (),
+            )
+            .await
+            .expect("label insert");
+        connection
+            .execute(
+                "INSERT INTO label_atoms(id, label_id, board_id, polarity, kind, text, ordinal, content_hash, created_at, updated_at) VALUES ('la_vector', 'l_vector', 'b_default', 'positive', 'description', 'vector semantics', 0, 'hash-vector', 1, 1)",
+                (),
+            )
+            .await
+            .expect("label atom insert");
+        connection
+            .execute(
+                "INSERT INTO retrieval_documents(id, board_id, source_kind, content, content_hash, created_at, updated_at) VALUES ('doc_vector', 'b_default', 'label_atom', 'vector semantics', 'hash-vector', 1, 1)",
+                (),
+            )
+            .await
+            .expect("retrieval document insert");
+        connection
+            .execute(
+                "INSERT INTO retrieval_vectors(id, board_id, document_id, embedding, dimensions, embedding_model, content_hash, created_at, updated_at) VALUES ('vec_vector', 'b_default', 'doc_vector', vector32('[1.0, 0.0]'), 2, 'test-model', 'hash-vector', 1, 1)",
+                (),
+            )
+            .await
+            .expect("retrieval vector insert");
+        let hits = store
+            .query_vector_label_atoms(Some("b_default"), &[1.0, 0.0], "test-model", None, 5, false)
+            .await
+            .expect("label atom vector query");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].label_name, "Vector label");
+    }
+
+    #[tokio::test]
     async fn fts_capability_exercises_insert_update_delete_score_and_highlight() {
         let (_directory, store, _path) = store("fts-capability").await;
         store.initialize().await.expect("initialize");

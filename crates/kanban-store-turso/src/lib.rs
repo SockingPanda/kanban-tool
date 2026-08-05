@@ -1,8 +1,8 @@
 mod db;
 mod domain;
 mod error;
-mod migration;
 mod maintenance;
+mod migration;
 mod operations;
 mod schema;
 mod shared;
@@ -11,13 +11,13 @@ mod shared;
 pub mod legacy_import;
 
 pub use db::{CapabilityRecord, TursoStore, UpgradeBackupHook, UpgradeBackupRequest};
+pub use domain::*;
+pub use error::StoreError;
 pub use maintenance::{
     StoreBackupReport, StoreCheckpointReport, StoreDoctorDerivedStore, StoreDoctorIssue,
     StoreDoctorReport, StoreExportReport, StoreImportReport, StoreMaintenanceOwner,
     StoreMaintenanceRun, StoreMaintenanceStatus, StoreProjectionStatus, StoreVacuumReport,
 };
-pub use domain::*;
-pub use error::StoreError;
 
 #[cfg(feature = "legacy-sqlite-import")]
 pub use legacy_import::{

@@ -26,6 +26,10 @@ impl TursoStore {
         input: CreateTaskInput,
     ) -> Result<TaskRecord, StoreError> {
         validate_create_task_input(&input)?;
+        let board_selector = board_selector.trim();
+        if board_selector.is_empty() {
+            return Err(StoreError::InvalidInput("board is required".to_owned()));
+        }
         let title = input.title.trim().to_owned();
         let mut connection = self.connection().await?;
         let transaction = connection
@@ -35,7 +39,7 @@ impl TursoStore {
         let board = first_row(
             transaction
                 .query(
-                    "SELECT id, slug FROM boards WHERE id = ?1 OR slug = ?1 LIMIT 1",
+                    "SELECT id, slug, archived_at FROM boards WHERE id = ?1 OR slug = ?1 LIMIT 1",
                     [board_selector],
                 )
                 .await?,
@@ -49,6 +53,11 @@ impl TursoStore {
         })?;
         let board_id = text_value(board.get_value(0)?, "boards.id")?;
         let board_slug = text_value(board.get_value(1)?, "boards.slug")?;
+        if optional_integer_value(board.get_value(2)?, "boards.archived_at")?.is_some() {
+            return Err(StoreError::InvalidTransition(
+                "archived board cannot receive tasks".to_owned(),
+            ));
+        }
 
         if let Some(idempotency_key) = input.idempotency_key.as_deref() {
             let existing = first_row(

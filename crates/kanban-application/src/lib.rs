@@ -11,11 +11,13 @@ pub mod service;
 
 pub use dto::*;
 pub use operations::{
-    BoardColumns, BoardList, CommentCreate, CommentList, DependencyCreate, DependencyList,
-    DependencyRemove, EventList, EventListOptions, EventListPage, EventRecord, RUN_LOG_TAIL_BYTES,
-    RunList, RunLog, RunLogRecord, RunShow, StepComplete, StepCreate, StepList, StepRemove,
-    StepReopen, StepSkip, StepUpdate, TaskBlock, TaskClaim, TaskCreate, TaskDone, TaskHeartbeat,
-    TaskList, TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskRelease, TaskReview, TaskShow,
+    ArchiveBoardCommand, ArchiveBoardRecord, BoardArchive, BoardColumns, BoardCreate, BoardGet,
+    BoardList, CommentCreate, CommentList, CreateBoardCommand, CreateBoardRecord, DependencyCreate,
+    DependencyList, DependencyRemove, EventList, EventListOptions, EventListPage, EventRecord,
+    RUN_LOG_TAIL_BYTES, RunList, RunLog, RunLogRecord, RunShow, StepComplete, StepCreate, StepList,
+    StepRemove, StepReopen, StepSkip, StepUpdate, TaskBlock, TaskClaim, TaskCreate, TaskDone,
+    TaskHeartbeat, TaskList, TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskRelease, TaskReview,
+    TaskShow,
 };
 pub use ports::ApplicationStore;
 pub use service::ApplicationService;

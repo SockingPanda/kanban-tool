@@ -10,12 +10,12 @@ pub use db::{CapabilityRecord, TursoStore, UpgradeBackupHook, UpgradeBackupReque
 pub use domain::*;
 pub use error::StoreError;
 pub use operations::{
-    AddDependencyInput, AddDependencyRecord, BlockTaskInput, ClaimTaskInput, ClaimTaskRecord,
-    CompleteStepInput, CompleteTaskInput, CreateCommentInput, CreateStepInput, CreateTaskInput,
-    HeartbeatTaskInput, MarkExecutionPlanNotRequiredInput, PromoteTaskInput,
-    ReclaimExpiredTaskInput, ReleaseTaskInput, RemoveDependencyInput, RemoveDependencyRecord,
-    RemoveStepInput, ReopenStepInput, SkipStepInput, SubmitReviewTaskInput, TaskListOptions,
-    TaskListSort, TaskPlanFilter, UpdateStepInput,
+    AddDependencyInput, AddDependencyRecord, ArchiveBoardInput, BlockTaskInput, ClaimTaskInput,
+    ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput, CreateCommentInput,
+    CreateStepInput, CreateTaskInput, HeartbeatTaskInput, MarkExecutionPlanNotRequiredInput,
+    PromoteTaskInput, ReclaimExpiredTaskInput, ReleaseTaskInput, RemoveDependencyInput,
+    RemoveDependencyRecord, RemoveStepInput, ReopenStepInput, SkipStepInput, SubmitReviewTaskInput,
+    TaskListOptions, TaskListSort, TaskPlanFilter, UpdateStepInput,
 };
 
 #[cfg(test)]

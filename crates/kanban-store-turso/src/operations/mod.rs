@@ -9,6 +9,7 @@ mod stats;
 mod steps;
 mod tasks;
 
+pub use boards::{ArchiveBoardInput, CreateBoardInput};
 pub use comments::CreateCommentInput;
 pub use dependencies::{
     AddDependencyInput, AddDependencyRecord, RemoveDependencyInput, RemoveDependencyRecord,

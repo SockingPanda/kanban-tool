@@ -1,0 +1,75 @@
+use std::future::Future;
+
+use kanban_core::{Clock, KanbanError, Result, new_board_id, new_event_id};
+
+use crate::{ApplicationService, ApplicationStore, BoardRecord};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateBoardCommand {
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateBoardRecord {
+    pub id: String,
+    pub slug: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub actor: String,
+    pub event_id: String,
+    pub created_at: i64,
+}
+
+pub trait BoardCreate: ApplicationStore {
+    fn create_board(
+        &self,
+        input: CreateBoardRecord,
+    ) -> impl Future<Output = Result<BoardRecord>> + Send;
+}
+
+impl<S, C> ApplicationService<S, C>
+where
+    S: BoardCreate,
+    C: Clock,
+{
+    pub async fn create_board(&self, command: CreateBoardCommand) -> Result<BoardRecord> {
+        let slug = command.slug.trim().to_owned();
+        let name = command.name.trim().to_owned();
+        let description = command
+            .description
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        let actor = command.actor.trim().to_owned();
+        if slug.is_empty() {
+            return Err(KanbanError::InvalidInput(
+                "board slug is required".to_owned(),
+            ));
+        }
+        if name.is_empty() {
+            return Err(KanbanError::InvalidInput(
+                "board name is required".to_owned(),
+            ));
+        }
+        if actor.is_empty() {
+            return Err(KanbanError::InvalidInput("actor is required".to_owned()));
+        }
+
+        let _mutation = self.mutation_gate.lock().await;
+        self.store
+            .create_board(CreateBoardRecord {
+                id: new_board_id(),
+                slug,
+                name,
+                description,
+                actor,
+                event_id: new_event_id(),
+                created_at: self.clock.now_ms(),
+            })
+            .await
+    }
+}

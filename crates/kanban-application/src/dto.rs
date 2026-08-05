@@ -209,9 +209,10 @@ pub struct TaskRecord {
 // Compatibility facade for callers that historically imported all DTOs from
 // `kanban_application::dto`. Definitions now live next to their operation.
 pub use crate::operations::{
-    AddDependencyCommand, AddDependencyRecord, AddDependencyResult, BlockTaskCommand,
-    BlockTaskRecord, BlockedReasonCountRecord, ClaimTaskCommand, ClaimTaskRecord,
-    CompleteStepCommand, CompleteStepRecord, CompleteTaskCommand, CompleteTaskRecord,
+    AddDependencyCommand, AddDependencyRecord, AddDependencyResult, ArchiveBoardCommand,
+    ArchiveBoardRecord, BlockTaskCommand, BlockTaskRecord, BlockedReasonCountRecord,
+    ClaimTaskCommand, ClaimTaskRecord, CompleteStepCommand, CompleteStepRecord,
+    CompleteTaskCommand, CompleteTaskRecord, CreateBoardCommand, CreateBoardRecord,
     CreateCommentCommand, CreateCommentRecord, CreateStepCommand, CreateStepRecord,
     CreateTaskCommand, CreateTaskRecord, HeartbeatTaskCommand, HeartbeatTaskRecord,
     MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord, PromoteTaskCommand,

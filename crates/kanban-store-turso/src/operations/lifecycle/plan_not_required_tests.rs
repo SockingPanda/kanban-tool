@@ -338,7 +338,7 @@ mod tests {
         let connection = store.connection().await.expect("connection");
         connection
             .execute(
-                "INSERT INTO boards(id, slug, name, created_at, updated_at, archived_at) VALUES ('b_archived', 'archived-board', 'Archived board', 1, 1, 350)",
+                "INSERT INTO boards(id, slug, name, created_at, updated_at) VALUES ('b_archived', 'archived-board', 'Archived board', 1, 1)",
                 (),
             )
             .await
@@ -354,6 +354,13 @@ mod tests {
             )
             .await
             .expect("create task on archived board");
+        connection
+            .execute(
+                "UPDATE boards SET archived_at = 350 WHERE id = 'b_archived'",
+                (),
+            )
+            .await
+            .expect("archive board fixture");
 
         let error = store
             .mark_execution_plan_not_required(

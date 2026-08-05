@@ -12,7 +12,10 @@ mod stats;
 mod step;
 mod task;
 
-pub use board::{BoardColumns, BoardList};
+pub use board::{
+    ArchiveBoardCommand, ArchiveBoardRecord, BoardArchive, BoardColumns, BoardCreate, BoardGet,
+    BoardList, CreateBoardCommand, CreateBoardRecord,
+};
 pub use comment::{CommentCreate, CommentList};
 pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
 pub use event::*;

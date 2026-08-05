@@ -337,7 +337,7 @@ mod tests {
 
         connection
             .execute(
-                "INSERT INTO boards(id, slug, name, created_at, updated_at, archived_at) VALUES ('b_promote_archived', 'promote-archived', 'Archived promote board', 1, 1, 350)",
+                "INSERT INTO boards(id, slug, name, created_at, updated_at) VALUES ('b_promote_archived', 'promote-archived', 'Archived promote board', 1, 1)",
                 (),
             )
             .await
@@ -353,6 +353,13 @@ mod tests {
             )
             .await
             .expect("create task on archived board");
+        connection
+            .execute(
+                "UPDATE boards SET archived_at = 350 WHERE id = 'b_promote_archived'",
+                (),
+            )
+            .await
+            .expect("archive promote board fixture");
 
         let stale = store
             .create_task(

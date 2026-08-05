@@ -1155,7 +1155,21 @@ RUSTSEC-2026-0194/RUSTSEC-2026-0195 影响的 `quick-xml < 0.41`；仓库当前�
 
 ### 状态
 
-已接受（当前架构）
+已接受（single-host ownership 仍为当前架构；初始功能收敛条款已由完整功能迁移计划接续）
+
+### 后续决策
+
+本 ADR 继续约束唯一 host、typed localhost client、共享 mutation path、Turso ownership 和
+dispatcher 边界。第 6 条以及“非目标”中的 labels、signals、search、graph、vector、projection
+和 importer，是当时为先完成 host 收敛而设的阶段性后置项，不是删除用户能力或永久不支持的
+产品决定。当前锁定的完整功能 Turso 重构计划要求逐项恢复这些能力、旧数据迁移和 Desktop
+历史 surface；具体 owner、入口、迁移规则和验收测试以
+[`docs/migration/turso-full-feature-parity.md`](migration/turso-full-feature-parity.md)、
+[`ARCHITECTURE.md`](ARCHITECTURE.md) 和 [`DATA_MODEL.md`](DATA_MODEL.md) 为准。
+
+在过渡期，`kanban-application` + `kanban-store-turso` 仍然是当前实现；目标是合并为
+`kanban-service`，并将 `kanban-contract` 收敛为 `kanban-protocol`。这些名称变化不会改变
+single-host ownership，也不能用“暂不支持”替代 parity ledger 的闭合。
 
 ### 背景
 
@@ -1180,6 +1194,9 @@ fallback 会把数据库 ownership 问题扩展成另一套产品协议。
    generalized mutation receipt、projection control plane 或旧 API 兼容层。未迁移的 labels、
    signals、search、graph、vector、projection 和 importer 留给独立后续工作。
 
+> 历史范围说明：这里的“未迁移”描述 ADR-0022 作出时的阶段，不代表完整功能重构可以删去
+> 这些能力；后续迁移仍必须复用本 ADR 定义的 single-host application path。
+
 ### 影响
 
 优点：
@@ -1198,4 +1215,7 @@ fallback 会把数据库 ownership 问题扩展成另一套产品协议。
 
 本决策不定义 SQLite importer、自动 server supervision、跨机器 worker、备份/恢复产品、
 projection rebuild 或未来 backend。它只收敛当前 canonical application path；任何新增能力
-必须先证明不会引入第二条 mutation path。
+必须先证明不会引入第二条 mutation path。完整功能迁移计划已经将 SQLite v30 import、
+projection rebuild、FTS/vector/graph/search、labels/ontology/signals、backup/maintenance
+和 Desktop 历史 surface 纳入后续实现；这些能力的完成状态由 parity ledger 和对应验收测试
+判断，而不是由本 ADR 的历史“非目标”段落推断。

@@ -1,17 +1,64 @@
 # Canonical 数据模型
 
-本文件只描述当前 Turso 单 Host 的 canonical schema。权威来源是
-`crates/kanban-store-turso/src/schema.rs`；应用服务负责领域校验，数据库负责
-外键、唯一性、`CHECK` 和事务约束。SQLite 旧表、导入导出格式、标签/信号、全文、
-图、向量和 projection 不属于当前数据模型。
+本文件描述 `kanban-store-turso` 当前提交所建立的 Turso schema，以及完整功能
+迁移时必须保留的 canonical/derived 边界。权威实现是
+`crates/kanban-store-turso/src/schema.rs` 与 `migration.rs`；应用服务负责领域规则，
+数据库负责外键、唯一性、`CHECK`、board isolation 和事务约束。
 
-当前 baseline 包含 `schema_migrations` 和 9 张业务表：`boards`、`board_columns`、
-`tasks`、`task_execution_plans`、`task_steps`、`task_dependencies`、`task_runs`、
-`task_comments`、`task_events`。
+这里的“schema 已就绪”不等于所有 service、HTTP、CLI、MCP、Desktop 或 SQLite
+importer 已经完成。公开 surface 仍以对应 contract 和 parity ledger 为准；本文件不把
+尚未接通的入口写成已实现能力。
 
-## 1. ID、时间和 JSON
+## 1. Schema family、lineage 和精确指纹
 
-实体 ID 由 ULID 组成并带固定前缀：
+数据库必须属于 `kanban.turso` family。数字 migration version 与 lineage 分开记录，
+因此一个恰好写着 `version = 1` 的其他数据库不会被自动采用。
+
+| lineage | migration | 作用 | 精确指纹 |
+|---|---|---|---|
+| `v1` | `001_canonical_baseline` | 旧的窄 Turso baseline，也是原地升级的唯一 v1 输入 | 10 张表、114 个列名；`columns-sha256:c235e96f250e780f62241b55a9721b14b5ebe9244172e01a5655e16af6d18d00` |
+| `v2` | `002_turso_full_feature_baseline` | 完整功能 schema；fresh install 和 v1 upgrade 都落到这里 | 38 张表、443 个列名、45 个普通 index、22 个 trigger；SQL `sql-sha256:6367687a26d9658f1f3e5454f45f784a2e9806c818eb8c2fa9c7506c2f620bfb` |
+
+`FULL_EXACT_COLUMNS` 是 v2 的精确 table/column manifest。启动时会比较完整的表集合
+和每张表的列集合，缺列、多列、未知表都会失败关闭。普通 index 的 required manifest
+由 `FULL_REQUIRED_INDEXES` 固定；另外包含一个 Turso FTS index
+`idx_retrieval_documents_fts`，因此启用 FTS 后实际 index 对象为 46 个。trigger
+由 `FULL_REQUIRED_TRIGGERS` 固定为 22 个。
+
+约束指纹由 `FULL_REQUIRED_SQL_FRAGMENTS` 的 20 个 SQL 片段、`PRAGMA foreign_key_check`、
+board-isolation preflight 和上述 trigger manifest 共同组成。它覆盖关键 `CHECK`、复合
+外键、lease/CAS 形状、自依赖拒绝、JSON 合法性和附件路径边界；不接受只看表名的“近似
+schema”。
+
+`schema_migrations` 保存每个版本的 `name`、`checksum`、`applied_at` 和
+`schema_family`；`schema_identity` 保存当前 family、lineage、version、schema
+fingerprint 与 migration checksum；`schema_capabilities` 保存运行时探测到的 `fts` 和
+`vector32` 能力。v2 的 `schema_identity.migration_checksum` 与 version 2 ledger 的
+checksum 都是上述 SQL SHA-256，而不是可变的运行时状态。
+
+## 2. Canonical 与 derived 分类
+
+canonical 表保存业务事实或不可由索引重建的迁移事实；derived 表、索引和 worker 状态
+都必须可以删除后从 canonical 事实重建。`projection_jobs` 虽然是 durable work queue，
+也不是业务事实来源。
+
+| 分类 | canonical 表 | derived/运行时表或索引 |
+|---|---|---|
+| 看板、任务和历史 | `boards`、`board_columns`、`tasks`、`task_execution_plans`、`task_steps`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、`task_attachments`、`app_settings` | 无；事件是追加审计事实，不是第二套状态机 |
+| labels、ontology、signals | `labels`、`task_labels`、`label_semantics`、`label_atoms`、`label_semantic_proposals`、`label_ontology_observations`、`label_ontology_signals`、`label_ontology_actions`、`label_ontology_action_signals`、`label_ontology_action_atom_effects`、`signal_observations`、`signals` | `label_atom_index_boards` 是 label atom 相似度索引的可重建状态 |
+| entities、relations | `entities`、`relation_predicates`、`entity_relations` | 图邻居、neighborhood、task map 和 BFS 结果均由这些事实重新计算 |
+| projection | 无业务事实表 | `projection_jobs`、`projection_state`、`projection_maintenance_owner` 是 host worker 的 job、generation、fingerprint、lease 和维护状态 |
+| 检索 | 无业务事实表 | `retrieval_documents`、`retrieval_vectors` 以及 Turso FTS index；内容、embedding、model/dimension/fingerprint 都可重建 |
+| 导入耐久性 | `import_journal` 记录 source fingerprint、阶段和 resume 所需的事务事实 | `attachment_staging` 记录 staging 文件的 checksum/size/发布阶段；staging 文件本身不是 canonical attachment |
+| schema 元数据 | `schema_migrations`、`schema_identity`、`schema_capabilities` | capability probe 结果可刷新，不改变业务事实 |
+
+旧 SQLite v30 的导入目标必须是空的 canonical Turso 数据库。v2 已提供 journal 和
+attachment staging 的持久化结构，但 importer、管理 API 和文件发布流程仍需在 service
+纵向切片中接通；不能因为表已经存在就声称导入已完成。
+
+## 3. ID、时间和 JSON
+
+实体 ID 使用带固定前缀的 ULID 字符串：
 
 | 实体 | 前缀 |
 |---|---|
@@ -22,158 +69,159 @@
 | comment | `c_` |
 | event | `e_` |
 | column | `col_` |
+| attachment | `a_` |
+| label | `l_` |
+| label atom | `la_` |
+| semantic proposal | `lp_` |
+| ontology observation/signal/action | `lor_` / `los_` / `loa_` |
+| generic observation/signal | `obs_` / `sig_` |
+| entity/document/vector | `kb://` / `doc_` / `vec_` |
+| import journal/staging row | `ij_` / `as_` |
 
-`task_events.id` 是 `INTEGER PRIMARY KEY AUTOINCREMENT` 自增游标；`event_id` 是公开的 `e_...`
-身份。领取 token 是临时凭证，不是实体 ID，通常为 `claim_...`。
+`task_events.id` 是 `INTEGER PRIMARY KEY AUTOINCREMENT` 游标，`event_id` 是公开的
+`e_...` 身份。时间列是 UTC Unix epoch milliseconds，Rust 边界使用 `i64`。JSON 存为
+`TEXT`，由 `CHECK(json_valid(...))` 保护；对象和数组字段还会检查 `json_type`。未知
+事件载荷必须保留合法原始 JSON。
 
-时间列统一为 `INTEGER`，含义是 UTC Unix epoch milliseconds（Rust 边界使用
-`i64`）。`created_at`、`updated_at`、`scheduled_at`、`due_at`、`started_at`、
-`completed_at`、`archived_at`、`claim_expires_at`、`last_heartbeat_at`、
-`finished_at`、`resolved_at` 都遵循此格式。
+## 4. Schema migration、备份和回滚
 
-JSON 存为 `TEXT`，相关列由 `CHECK(json_valid(...))` 保护：
+### 4.1 fresh install 与 v1 upgrade
 
-- `tasks.metadata_json`、`task_runs.metadata_json` 默认 `{}`；
-- `tasks.result_json` 可空，但非空时必须是合法 JSON；
-- `task_comments.metadata_json` 默认 `{}` 且必须是 JSON object；
-- `task_events.payload_json` 默认 `{}`，允许任意合法 JSON（未知事件载荷保持无损）。
+`kanban serve` 的数据库 owner 在 immediate transaction 中执行 embedded schema，写入
+ledger、identity、projection seed 和默认 board/columns。重复启动必须幂等：不重建业务
+表、不改变已有事实、不生成第二份升级备份。
 
-## 2. Schema migration 和看板
+识别为 `kanban.turso`/`v1` 后，升级顺序是：
 
-### `schema_migrations`
+1. 比较 v1 的精确表集合、列集合、ledger name/checksum/family。
+2. 在任何 schema 写入前，通过 Turso `VACUUM INTO` 在同一文件系统的数据库旁生成
+   `<database>.pre-v2-<timestamp>[-n].turso-backup`。
+3. 重新打开备份，检查 lineage、`PRAGMA integrity_check`，并逐表比较 v1 表行数。
+4. 通过可选 host backup hook 后，才开始 v2 migration transaction。
+5. migration 失败时由事务回滚；旧 v1 schema/data 和已验证 sibling backup 保持可再次
+   启动的状态。
 
-`version INTEGER PRIMARY KEY`、`name TEXT NOT NULL`、`checksum TEXT NOT NULL DEFAULT ''`、
-`applied_at INTEGER NOT NULL`。启动时在 immediate transaction 中执行 embedded
-canonical SQL，并以 `INSERT OR IGNORE` 写入当前版本，因此初始化可重复执行。
+未知 family、未知 table、列 drift、constraint/trigger drift、foreign key 或 board
+   isolation preflight 失败时，启动 fail closed。导入源文件不会由 migration 修改。
 
-### `boards`
+### 4.2 capabilities
 
-字段为 `id`、`slug`、`name`、`description`、`created_at`、`updated_at`、`archived_at`。
-`id` 必须匹配 `b_%`，`slug` 唯一且非空，`name` 非空。默认 seed 是
-`(id=b_default, slug=default, name=Default)`。
+初始化完成后 host 探测：
 
-### `board_columns`
+- `vector32` 与 `vector_distance_cos`：向量保存为 Turso vector32 BLOB，service 另行校验
+  model、dimension、content fingerprint；维度不匹配必须失败。
+- `fts`：在 `retrieval_documents(content)` 上建立 Turso-native FTS index，并使用
+  `fts_match`、`fts_score`、`fts_highlight`。FTS 只服务检索，不能成为事实来源。
 
-字段为 `id`、`board_id`、`status`、`title`、`position`、`hidden`、`wip_limit`、
-`created_at`、`updated_at`。`board_id` 外键指向 `boards`；`status` 只能是
-`triage|todo|scheduled|ready|running|blocked|review|done|archived`；`hidden` 只能为
-`0/1`，`wip_limit` 为空或非负。`UNIQUE(board_id,status)` 和
-`UNIQUE(board_id,position)` 保证一个看板内列唯一。
+能力不可用会写入 `schema_capabilities.available = 0` 和可诊断的 detail；不能静默回退到
+外部 Tantivy、LanceDB 或第二个数据库。
 
-首次初始化固定 seed 九列，位置为 10 到 90（步长 10）：
+## 5. 看板、任务和历史
 
-```text
-triage / todo / scheduled / ready / running / blocked / review / done / archived
-```
+### `boards` 与 `board_columns`
 
-`archived` 列默认 `hidden=1`，其余列可见。seed column ID 为
-`col_<board-id 去掉 b_ 前缀>_<status>`，例如 `col_default_ready`。
-
-## 3. 任务和执行计划
+`boards` 保存 `id`、`slug`、`name`、`description`、创建/更新时间和归档时间；`id`
+匹配 `b_%`，slug/name 非空且 slug 唯一。`board_columns` 保存 status 展示映射、排序、
+hidden 和 WIP 限制；status 只能是
+`triage|todo|scheduled|ready|running|blocked|review|done|archived`。默认 seed 为九列，
+`archived` 默认隐藏。列不是第二套状态机。
 
 ### `tasks`
 
-字段按职责分组如下：
+`tasks.status` 是唯一 canonical 状态真相。字段分为身份（`id`、`board_id`、`seq`、
+`idempotency_key`）、内容（title/description/result/metadata）、排序（priority、
+position、scheduled/due）、操作者（created_by、assignee）、claim/lease、生命周期、
+重试和并发版本。`running` 必须同时有 claim token、owner 和 expiry；`(board_id,seq)`、
+实体身份和局部 idempotency key 提供唯一性。
 
-- 身份：`id`、`board_id`、`seq`、`idempotency_key`；
-- 内容：`title`、`description`、`status_reason`、`result_summary`、`result_json`、
-  `metadata_json`；
-- 看板排序：`priority`、`position`、`scheduled_at`、`due_at`；
-- 操作者：`created_by`、`assignee`；
-- 领取和运行：`claim_token`、`claim_owner`、`claim_expires_at`、
-  `last_heartbeat_at`、`current_run_id`；
-- 生命周期：`created_at`、`updated_at`、`started_at`、`completed_at`、`archived_at`；
-- 重试和并发：`retry_count`、`max_retries`、`lock_version`。
+### plans、steps、dependencies、runs
 
-约束：
+`task_execution_plans` 记录 `unplanned|planned|not_required`；`task_steps` 保存父任务内
+的位置、required、resolution 和可选同板 linked task；`task_dependencies` 以复合外键
+连接同板任务，应用 service 负责可达路径检查和依赖环拒绝。`task_runs` 保存 claim、worker、
+heartbeat、完成状态、摘要、错误和可信相对 log path；每个任务最多一个 active running
+run。claim、run、event 必须同事务提交。
 
-- `id` 匹配 `t_%`，`title` 非空；`board_id` 外键级联删除；
-- `status` 只能是九个 canonical 状态；`priority` 为 0 到 3，`retry_count` 和
-  `max_retries`（非空时）非负，`lock_version` 非负；
-- `UNIQUE(board_id,id)`、`UNIQUE(id,board_id)` 和 `UNIQUE(board_id,seq)`；
-- `running` 任务必须同时有 `claim_token`、`claim_owner`、`claim_expires_at`；
-- `(board_id,idempotency_key)` 有局部唯一索引（key 非空时），用于 task.create 的
-  幂等。相同 key 且 canonical payload 相同返回原任务，不同 payload 返回冲突；
-- `seq` 是看板内的递增引用序号，创建在同一 immediate transaction 中分配。
+### comments、attachments、events
 
-任务状态是唯一 canonical 状态真相，列只负责展示映射。`task_ref`（例如
-`default#12`）由 `board.slug` 和 `seq` 组合，不写入数据库。
+`task_comments` 支持 `note|decision|signal`，并保留 author/agent、metadata 与本地
+idempotency key；signal comment 是 generic signal 的可追溯回链。`task_attachments` 只
+保存 metadata、相对路径、size 和可选 SHA-256；路径 trigger 拒绝绝对路径和 `..` 穿越。
+文件复制和发布由导入/附件 service 负责，数据库字段不能成为任意文件读取入口。
 
-### `task_execution_plans`
+`task_events` 是 append-only 审计和 SSE 游标事实，task/run 引用以 board-scoped 复合外键
+保护；事件与对应 snapshot mutation 同事务提交。事件不是另一套 event-sourcing 状态来源。
 
-字段为 `board_id`、`task_id`、`state`、`reason`、`updated_by`、`updated_at`。
-`state` 只能是 `unplanned|planned|not_required`；`task_id` 是主键并以复合外键
-`(task_id,board_id)` 指向同一看板的任务。创建任务同时写入 `unplanned` 行；创建
-第一个 step 会变为 `planned`，显式 `task.plan.not_required` 会写入
-`not_required` 和原因。
+## 6. Labels、ontology 和 signals
 
-### `task_steps`
+`labels`/`task_labels` 保存 board 范围的标签绑定；`label_semantics` 保存 description、
+applies/excludes 条件和正负例；`label_atoms` 保存带 polarity/kind/ordinal/content hash
+的原子语义。`label_semantic_proposals` 保留 coverage、residual、top-1 label、diagnostics、
+decision reason 和更新时间，支持提议、采纳或拒绝。
 
-字段为 `id`、`board_id`、`parent_task_id`、`idempotency_key`、`position`、`title`、
-`body`、`linked_task_id`、`required`、`status`、`resolution_note`、`resolved_by`、
-`resolved_at`、`created_by`、`created_at`、`updated_by`、`updated_at`。
+ontology ledger 由 observation、signal、action 及其 signal/atom effect 关系组成。表中
+保留 task snapshot、agent candidates、suggestion/final decision、CAS hash、review/close
+时间、status reason、validation JSON、actor type 和 atom 内容快照，以支持
+review/confirm/reject/resolve/supersede、apply/adopt、validate/revert/undo 的完整审计。
+generic `signal_observations`/`signals` 记录非 label 产品信号，signal 生命周期和
+comment backlink 不依赖 ontology。
 
-- `id` 匹配 `step_%`，`title` 非空，`required` 为 `0/1`，`status` 为
-  `todo|done|skipped`；
-- `(parent_task_id,board_id)` 为复合外键并级联删除；`linked_task_id`（可空）也以
-  `(linked_task_id,board_id)` 约束同看板，且不得等于父任务；
-- `(parent_task_id,idempotency_key)` 有局部唯一索引；相同 key 和相同 payload 返回
-  已有 step，不同 payload 返回 `idempotency_conflict`；
-- `position` 是父任务内排序键。必需 step 只有在 `done` 或 `skipped` 时才不阻塞
-  `task.done`。
+所有 ontology/signal 外键、supersede 引用和 target label 都必须保持同 board；应用层
+负责 CAS/hash guard 和状态转换，数据库 trigger 负责拒绝跨 board 引用。
 
-## 4. 依赖、运行和协作记录
+## 7. Entities、relations、graph 和 task map
 
-### `task_dependencies`
+`entities` 以 `kb://...` URI 保存实体 kind、source table/id、board/task 归属、标题摘要和
+content hash；`relation_predicates` 定义谓词域、范围、cardinality 和说明；`entity_relations`
+保存 subject/predicate/object、graph URI、source event、metadata 和更新时间。subject/object
+使用复合 board 外键，不能跨 board。
 
-字段为 `board_id`、`parent_task_id`、`child_task_id`、`created_at`。
-`PRIMARY KEY(parent_task_id,child_task_id)` 提供自然幂等；禁止自依赖。父、子均以
-带 `board_id` 的复合外键指向 `tasks(id,board_id)`，因此不能跨看板。创建依赖时应用
-服务在同一事务前检查可达路径，拒绝形成环；数据库唯一性只负责重复边。
+图数据库不是事实来源。service 从 canonical relations 执行带深度上限、环检测和 board
+isolation 的批量 BFS，生成 neighborhood/task map/context graph；任何 graph projection
+删除后都能重建。
 
-### `task_runs`
+## 8. Projection、FTS 和 vector retrieval
 
-字段为 `id`、`board_id`、`task_id`、`status`、`worker_profile`、`worker_pid`、
-`claim_token`、`claim_owner`、`claim_expires_at`、`started_at`、`last_heartbeat_at`、
-`finished_at`、`exit_code`、`summary`、`error`、`log_path`、`metadata_json`。
+`projection_jobs` 是 host 内部 worker 的 durable queue：`target` 可为 `fts`、`vector_tasks`、
+`vector_label_atoms`、`relations` 或 `all`；job 保存 operation、dedupe key、attempt、lease、
+fence epoch、generation 和错误。`projection_state` 保存每个 projection 的 lifecycle、active/
+building generation、fingerprint、provider/model/dimension、corpus fingerprint、last event、
+lease 和失败状态。`projection_maintenance_owner` 串行化 rebuild/compact/import/backup 管理
+操作。它们是派生控制记录，不能取代业务事实。
 
-`status` 只能是 `running|succeeded|failed|canceled|expired`；`task_id` 通过
-`(task_id,board_id)` 复合外键关联任务。`idx_task_runs_one_active` 是
-`UNIQUE(task_id) WHERE status='running'`，保证每个任务最多一个 active run；另有
-`(task_id,started_at DESC)` 查询索引。run 由 claim 同事务创建，adapter 只能读取，
-不能独立创建或修改 run。
+`retrieval_documents` 是可重建的文本语料，`retrieval_vectors` 保存对应的 embedding、
+dimension、model 和 content hash。Ollama provider 的批处理、重试、降级和 fingerprint 由
+service/host worker 实现；provider outage 只能使 projection degraded，不能丢失 canonical
+task、label、ontology、signal 或 entity 数据。
 
-`log_path` 只是相对/绝对路径文本。dispatcher 生成 `<log_root>/<run_id>.log`，
-HTTP run.log 只接受配置的 canonical log root 下、精确 run 文件名的 regular file，
-单次最多读取 256 KiB；数据库字段不能成为任意文件读取入口。
+## 9. Import journal 与 attachment staging
 
-### `task_comments`
+`import_journal` 支持 `jsonl|sqlite_v30` source fingerprint 和
+`prepared|staged|validated|published|completed|failed` 阶段，保存源路径、staged database/
+attachment root、canonical root、manifest、previous identity 和错误。`attachment_staging`
+按 journal/attachment 保存源路径、staged 路径、期望/观测 size 与 SHA-256，以及
+`planned|copied|verified|published|failed` 阶段。
 
-字段为 `id`、`board_id`、`task_id`、`idempotency_key`、`author`、`author_type`、
-`agent_type`、`body`、`kind`、`metadata_json`、`created_at`。
-`author_type` 只能是 `user|agent`，`agent_type` 仅在 agent 时允许；`kind` 为
-`note|decision`；`body` 和 `author` 非空。`(task_id,board_id)` 复合外键保证看板
-隔离；`(task_id,idempotency_key)` 局部唯一索引提供 comment.create 幂等，冲突规则
-与 task.create 相同。创建评论与 `task.comment.created` 事件在同一事务完成。
+目标流程是只读打开 SQLite v30，先做 schema、计数、引用、attachment checksum 和 board
+isolation preflight，再将附件复制到同文件系统 staging；DB commit 后原子发布，崩溃后按
+journal resume。源文件永不修改，重复 fingerprint 返回已完成结果。当前 schema 已提供
+这些耐久结构，但 importer/service/HTTP/CLI 管理入口仍是待闭合的 parity slice。
 
-### `task_events`
+## 10. 事务、约束和当前 ownership
 
-字段为自增 `id`、唯一 `event_id`、`board_id`、可空 `task_id`、可空 `run_id`、
-`kind`、可空 `actor`、`payload_json`、`created_at`。`event_id` 匹配 `e_%`，`kind`
-非空，`payload_json` 必须是合法 JSON；task/run 引用存在时以复合外键保证同看板。
-事件只追加，按 `id` 升序分页，`after` 是排他游标；`board_id,id` 和
-`task_id,id` 有查询索引。已知事件由 API 做精确 payload 校验，未知 kind 保留原始
-合法 JSON。
+1. `kanban serve` 是唯一 canonical DB owner，开启 `PRAGMA foreign_keys = ON`；CLI、MCP、
+   Desktop 不直接打开数据库。
+2. 所有 mutation 使用 immediate transaction；task snapshot、run、event、labels/ontology/
+   signals 和 projection job enqueue 必须整批提交或整批回滚。
+3. claim、heartbeat、release、review、complete、block、ontology CAS 和导入阶段都使用
+   owner/token、lock version 或 fingerprint guard。
+4. board-scoped 外键、唯一约束、idempotency、attachment path guard、foreign-key check 和
+   schema shape validator 共同构成数据库边界。
+5. FTS/vector/graph/context/缓存及其他索引始终可删除和重建；它们不能反向写 canonical
+   事实，也不能成为导入计数或业务状态的依据。
 
-## 5. 一致性边界
-
-1. server 为唯一数据库 owner；每个连接打开 `PRAGMA foreign_keys = ON`。所有
-   child row 的 `board_id` 先指向 `boards`，涉及 task/run 的关系再由复合外键保证
-   board isolation。
-2. mutation 使用 immediate transaction；task transition、claim、run、event 以及
-   plan/step/dependency/comment 的相关写入必须整批提交或整批回滚。
-3. claim 使用 task 的状态、空 claim 字段和 `lock_version` 做 compare-and-set；失败
-   不得创建 run 或 event。heartbeat、release、review、done、block 同样用 owner/token
-   和 lock version 保护。
-4. canonical 数据只有本文件列出的表。搜索、图、向量、缓存或其他派生数据不能反向
-   写入或替代这些事实。
+当前这些 schema/migration 能力仍位于 `kanban-store-turso`；application、server、client
+和各 adapter 尚未完成全功能 wiring。目标结构是把 application 与 Turso repository 合并
+为 `kanban-service`，再由 `kanban-protocol`、`kanban-client`、`kanban-server`、CLI、MCP 和
+Desktop 共享同一 service path。迁移删除旧 backend 前，必须由 parity ledger 和逐项测试证明
+全部业务语义及旧数据已经有 owner。

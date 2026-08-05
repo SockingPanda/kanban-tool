@@ -4,23 +4,24 @@
 
 - feature baseline：`6ea277583e51ea010aa6739a53091337676b4cff`（下文简称
   baseline）；
-- implementation starting point：`62c9adf`（下文简称 `HEAD`）。
+- implementation starting point：`62c9adf`（下文简称起点）；
+- 当前实施状态：以本文件所在工作树为准，schema 层已包含提交 `3b61aa5`。
 
-`current` 表示 HEAD 有真实公开入口并走 Turso single-host `kanban-service` path；`partial`
+`current` 表示当前实现有真实公开入口并走 Turso single-host `kanban-service` path；`partial`
 表示只剩内部实现、孤立 adapter/contract 或仅保留了一个子能力；`missing` 表示没有
-当前公开入口。`new` 表示 baseline 没有而 HEAD 新增的公开能力。
+当前公开入口。`new` 表示 baseline 没有而当前实现新增的公开能力。
 
 ## 计数口径与证据
 
-| 面 | baseline | HEAD | 计数口径 |
+| 面 | baseline | 当前实现 | 计数口径 |
 |---|---:|---:|---|
-| canonical 表 | 35 | 10 | baseline 按 `migrations/001..030` replay 后的最终表名，忽略 `_new` 瞬态表；HEAD 按 `crates/kanban-store-turso/src/schema.rs` 的 `CREATE TABLE`。 |
-| index | 61 | 7 | 同上，按最终 `CREATE/DROP INDEX` 状态解析。HEAD 的 7 个 index 名称均不是 baseline 的最终名称。 |
-| trigger | 13 | 0 | 按最终 `CREATE/DROP TRIGGER` 状态解析；HEAD 改用表内 FK/CHECK，没有 trigger。 |
-| HTTP operation | 84 | 27 | baseline 取 `crates/kanban-contract/src/endpoint.rs` 的 `EndpointDescriptor`；HEAD 取 `crates/kanban-server/src/http/operations/**` 的真实 `route(method,path)`。HEAD `kanban-contract` 仍有 85 个旧 catalog descriptor，不能当作已注册 route。 |
-| CLI leaf | 126 | 27（其中 26 可用） | 递归展开 baseline `crates/kanban-cli/src/args.rs` 和 HEAD clap enum；声明的 alias/variant 按命令名计，HEAD `Init` 计入但实际返回 `feature_not_available`，`FeatureNotAvailable` 外部 catch-all 不计 leaf。 |
-| MCP tool | 0 | 24 | baseline 没有 `crates/kanban-mcp`；HEAD 按 `#[tool(name = ...)]` 及 `main.rs` 稳定 inventory 测试。 |
-| Desktop view | 10 | 6 可导航 | baseline `OperatorView` 全部 10 项；HEAD 以 `NavigableOperatorView`/`sidebarViews` 为公开导航，4 项被排除。 |
+| Turso 表 | 35 | 38 | baseline 按 `migrations/001..030` replay 后的最终表名，忽略 `_new` 瞬态表；当前实现按 `crates/kanban-store-turso/src/schema.rs` 的最终 schema 统计。38 张表还包含 schema identity、capability、import journal 等单主机治理表，因此不能用数量相等代替逐表语义验收。 |
+| 普通 index | 61 | 45 | baseline 按最终 `CREATE/DROP INDEX` 状态解析；当前实现另有 1 个 Turso FTS index。名称与形状按目标查询契约重新设计，不要求复刻旧 index 名。 |
+| trigger | 13 | 22 | 当前 trigger 负责 nullable 关联的 board isolation、附件路径和跨表防护；其余不变量由 FK、CHECK、唯一约束与 service transaction 共同承担。 |
+| HTTP operation | 84 | 27 | baseline 取 `crates/kanban-contract/src/endpoint.rs` 的 `EndpointDescriptor`；当前实现取 `crates/kanban-server/src/http/operations/**` 的真实 `route(method,path)`。catalog descriptor 不能当作已注册 route。 |
+| CLI leaf | 126 | 27（其中 26 可用） | 递归展开 baseline `crates/kanban-cli/src/args.rs` 和当前 clap enum；声明的 alias/variant 按命令名计，`Init` 计入但实际返回 `feature_not_available`，`FeatureNotAvailable` 外部 catch-all 不计 leaf。 |
+| MCP tool | 0 | 24 | baseline 没有 `crates/kanban-mcp`；当前实现按 `#[tool(name = ...)]` 及 `main.rs` 稳定 inventory 测试。 |
+| Desktop view | 10 | 6 可导航 | baseline `OperatorView` 全部 10 项；当前实现以 `NavigableOperatorView`/`sidebarViews` 为公开导航，4 项仍被排除。 |
 
 可靠提取命令（均只读）：
 
@@ -43,25 +44,25 @@ nl -ba apps/desktop/src/features/navigation/view-types.ts
 |---|---|---|---|---|
 | `schema_migrations`, `boards`, `board_columns`, `tasks`, `task_execution_plans`, `task_steps`, `task_dependencies`, `task_runs`, `task_comments`, `task_events` | `crates/kanban-store-turso/src/schema.rs:2-200`; `TursoStore::initialize` in `crates/kanban-store-turso/src/db.rs` | 目标 owner：`kanban-service` schema/operation；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop。沿 Turso lineage v1→full migration 逐版推进；baseline 旧 v30 由 `kanban-service` legacy SQLite importer（经 host-admin HTTP/CLI，不在 `xtask`）作为 logical export/import 输入回填事实，不把旧 SQLite 版本当 Turso runtime migration chain。保留表名不等于保留全部列、约束或行为。 | `TursoStore::initialize` 成功创建 10 张表、9 个默认 column；service/server/CLI/MCP/Desktop 的 retained rows 能读写并通过单 host。 | current |
 
-### 1.2 baseline final tables 被移除（25/35，全部 `missing`）
+### 1.2 baseline 扩展表的 schema 已恢复，公开能力仍待闭合（`partial`）
 
 | legacy feature（逐项） | legacy evidence | target owner / public entry | migration rule | acceptance | status |
 |---|---|---|---|---|---|
-| `app_settings`, `task_attachments`, `task_subtasks` | `migrations/001_initial.sql`, `022_task_subtasks_execution_plans.sql`, baseline `docs/DATA_MODEL.md` | 目标 owner：`kanban-service` configuration/attachment/step facts；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop detail | 在 Turso schema migration 中加入明确表与 DTO；用 versioned export/import 回填 `app_settings`、附件元数据和 subtasks，并为文件内容定义 host-admin 存储根。 | 新表、FK、DTO、各 adapter operation 和 round-trip import/export 测试齐全；当前缺失入口保持 `feature_not_available`。 | missing |
-| `labels`, `task_labels` | `migrations/001_initial.sql`；baseline `crates/kanban-sqlite/src/service/tasks.rs` | 目标 owner：`kanban-service` label facts/transactions；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop task detail（对应 `/api/v1/boards/:board/labels` 与 task label routes） | 先在 Turso schema 加 label identity/binding 与 board composite FK，再实现 service transaction、`kanban-protocol` DTO 和各 adapter adoption。 | label create/list/add/remove 的真实 route、命令、tool、UI mutation 与跨 board/幂等测试齐全。 | missing |
-| `label_semantics`, `label_atoms`, `label_atom_index_boards`, `label_semantic_proposals` | `migrations/004..011`; baseline `service/label_semantics.rs`, `label_proposals.rs` | 目标 owner：`kanban-service` ontology facts + Turso vector projection；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop ontology | 通过 schema migration 恢复 semantics/atom/proposal 事实表；atom index 作为可重建派生层，迁移时先导入事实再重建 index。 | 语义 CAS、proposal lifecycle、atom explain/index rebuild/query 均有 service path、`kanban-protocol` fixture/adoption tests。 | missing |
-| `label_ontology_observations`, `label_ontology_signals`, `label_ontology_actions`, `label_ontology_action_signals`, `label_ontology_action_atom_effects` | `migrations/012..021`, baseline `service/label_ontology.rs` | 目标 owner：`kanban-service` ontology ledger；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop ontology workbench | 按 action/validation/source-signal 依赖顺序迁移表；导入时验证 hash、parent action、signal links，再开放 mutation adapter。 | action/validation/revert/retarget 与 ledger back-link 事务测试、schema fixture 和 Desktop review acceptance 齐全。 | missing |
-| `entities`, `relation_predicates`, `entity_relations`, `index_outbox`, `derived_store_state` | `migrations/002_knowledge_substrate.sql`, `024..025`, baseline `service/entities.rs`, `projections.rs` | 目标 owner：`kanban-service` entity/relation facts、Turso BFS/vector/FTS 与 host projection worker；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop map/context | 先恢复 canonical entity/relation/outbox 表，再由 task/event 事实重放生成 projection；projection 永不成为事实写入口。 | outbox replay、Turso BFS/vector/FTS rebuild、derived status 与 context fallback 在完整 single-host/host-admin acceptance 中闭合。 | missing |
-| `signal_observations`, `signals` | `migrations/024_signal_ledger.sql`, `025_generic_signal_ledger.sql`; baseline `service/signals.rs` | 目标 owner：`kanban-service` signal ledger；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop Signals workbench | 迁移 observation/signal 表及 comment backlink 一起回填；为 status/action/source 提供单一事务 service。 | signal record/list/review/confirm/reject/resolve/supersede 与 backlink round-trip 测试齐全。 | missing |
-| `projection_database`, `projection_store_state`, `projection_deliveries`, `projection_maintenance_owner` | `migrations/026..030_projection_*.sql`; baseline `service/projection_v2.rs`, `maintenance_runtime.rs` | 目标 owner：`kanban-service` projection facts/worker + `host-admin` maintenance；public entry：`kanban-server`/`kanban-client`、CLI、Desktop Maintenance view | 以 versioned Turso migration 恢复 lease/generation/delivery/owner 表；导入后先 quiesce writer、校验 generation，再启用 rebuild/resume。 | owner lease、generation publish/recovery、cleanup/doctor 与 projection capability acceptance 全部通过。 | missing |
+| `app_settings`, `task_attachments`, `task_subtasks` | `migrations/001_initial.sql`, `022_task_subtasks_execution_plans.sql`, baseline `docs/DATA_MODEL.md` | 目标 owner：`kanban-service` configuration/attachment/step facts；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop detail | Turso v2 已建立三张表、FK/路径 guard 与 attachment staging/import journal；旧 v30 逻辑导入和公开 use case 尚未闭合。 | 新表、FK、DTO、各 adapter operation 和 round-trip import/export 测试齐全；当前缺失入口保持 `feature_not_available`。 | partial |
+| `labels`, `task_labels` | `migrations/001_initial.sql`；baseline `crates/kanban-sqlite/src/service/tasks.rs` | 目标 owner：`kanban-service` label facts/transactions；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop task detail（对应 `/api/v1/boards/:board/labels` 与 task label routes） | Turso v2 已恢复 identity/binding、board composite FK 和查询 index；下一步实现 service transaction、`kanban-protocol` DTO adoption 与各 adapter。 | label create/list/add/remove 的真实 route、命令、tool、UI mutation 与跨 board/幂等测试齐全。 | partial |
+| `label_semantics`, `label_atoms`, `label_atom_index_boards`, `label_semantic_proposals` | `migrations/004..011`; baseline `service/label_semantics.rs`, `label_proposals.rs` | 目标 owner：`kanban-service` ontology facts + Turso vector projection；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop ontology | Turso v2 已恢复 semantics/atom/proposal 事实表；atom index 仍是可重建派生层，导入时先导入事实再重建 index。 | 语义 CAS、proposal lifecycle、atom explain/index rebuild/query 均有 service path、`kanban-protocol` fixture/adoption tests。 | partial |
+| `label_ontology_observations`, `label_ontology_signals`, `label_ontology_actions`, `label_ontology_action_signals`, `label_ontology_action_atom_effects` | `migrations/012..021`, baseline `service/label_ontology.rs` | 目标 owner：`kanban-service` ontology ledger；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop ontology workbench | Turso v2 已按 action/validation/source-signal 依赖恢复事实表、约束、index 与 board guard；v30 importer 和 mutation adapter 尚未闭合。 | action/validation/revert/retarget 与 ledger back-link 事务测试、schema fixture 和 Desktop review acceptance 齐全。 | partial |
+| `entities`, `relation_predicates`, `entity_relations`, `index_outbox`, `derived_store_state` | `migrations/002_knowledge_substrate.sql`, `024..025`, baseline `service/entities.rs`, `projections.rs` | 目标 owner：`kanban-service` entity/relation facts、Turso BFS/vector/FTS 与 host projection worker；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop map/context | Turso v2 已恢复 entity/relation 事实；旧 `index_outbox`/`derived_store_state` 不复制为第二套协议，改由 `projection_jobs`/`projection_state` 承担单主机 worker 状态。 | projection replay、Turso BFS/vector/FTS rebuild、derived status 与 context fallback 在完整 single-host/host-admin acceptance 中闭合。 | partial |
+| `signal_observations`, `signals` | `migrations/024_signal_ledger.sql`, `025_generic_signal_ledger.sql`; baseline `service/signals.rs` | 目标 owner：`kanban-service` signal ledger；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop Signals workbench | Turso v2 已恢复 observation/signal 事实、comment backlink、状态约束和 board guard；v30 importer 与 ledger operation 尚未闭合。 | signal record/list/review/confirm/reject/resolve/supersede 与 backlink round-trip 测试齐全。 | partial |
+| `projection_database`, `projection_store_state`, `projection_deliveries`, `projection_maintenance_owner` | `migrations/026..030_projection_*.sql`; baseline `service/projection_v2.rs`, `maintenance_runtime.rs` | 目标 owner：`kanban-service` projection worker + `host-admin` maintenance；public entry：`kanban-server`/`kanban-client`、CLI、Desktop Maintenance view | 不迁移 helper subprocess 的 database/delivery 协议；Turso v2 以 `projection_jobs`、`projection_state`、`projection_maintenance_owner` 建立唯一 host 内部 worker 模型。旧派生状态由 canonical facts 重建。 | owner lease、generation publish/recovery、cleanup/doctor 与 projection capability acceptance 全部通过。 | partial |
 
 ### 1.3 objects、约束与形状变化（`partial` 或 `missing`）
 
 | legacy feature | legacy evidence | target owner / public entry | migration rule | acceptance | status |
 |---|---|---|---|---|---|
-| 61 baseline indexes → 7 HEAD indexes | baseline migration replay；HEAD `schema.rs:77-199` | owner：`kanban-service` schema/query layer；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop retained queries and restored feature indexes | 以 schema migration 记录每个 query/index contract；先建立新 index，再以 doctor/benchmark witness 验证后移除旧名。 | HEAD 7 个 index 与 retained query plan、idempotency、run/event list 测试一致；每个恢复 feature index 有独立 acceptance。 | partial |
-| 13 baseline triggers → 0 HEAD triggers | baseline `migrations/020..030`; HEAD schema 无 `CREATE TRIGGER` | owner：`kanban-service` schema + transaction guards；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop retained mutation and restored relation/projection operations | 将 board isolation、active run、JSON/状态保护逐项转成 FK/CHECK/唯一约束或同一事务 guard，并为每项建立 negative test。 | schema smoke 能证明跨 board、第二 active run、running 无 claim 等保护；缺失保护在迁移 gate 中阻断。 | partial |
-| label/signal/projection 派生对象（baseline 61 indexes 中的其余 index、13 trigger） | baseline migration object list | owner：`kanban-service` label/signal/projection facts + host projection worker；public entry：`kanban-server`/`kanban-client`、CLI、Desktop surface | 由各 feature schema migration 恢复对象，先完成事实表、replay/backfill、derived rebuild，再注册公开入口；不创建空壳兼容面。 | 每个 object 有 source migration、rebuild/repair acceptance 和 adapter witness；当前仍标记 missing。 | missing |
+| 61 baseline indexes → 45 Turso 普通 index + 1 FTS index | baseline migration replay；当前 `schema.rs` v2 schema | owner：`kanban-service` schema/query layer；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop retained queries and restored feature indexes | index 按目标查询契约重新设计；FTS 使用 Turso `USING fts`，其余索引服务 canonical/worker 查询，不复刻外部 Tantivy/LanceDB/Oxigraph 的内部对象。 | capability tests 已证明 FTS 写入、更新、删除、排序与 highlight；每个恢复 feature 仍需独立查询与 adapter acceptance。 | partial |
+| 13 baseline triggers → 22 Turso trigger | baseline `migrations/020..030`; 当前 `schema.rs` v2 schema | owner：`kanban-service` schema + transaction guards；public entry：`kanban-server`/`kanban-client`、CLI、MCP、Desktop retained mutation and restored relation/projection operations | nullable 跨表引用和附件路径使用 trigger fail closed；其余保护由 FK/CHECK/唯一约束和同一事务 guard 承担，不追求 trigger 数量相同。 | schema tests 已证明关键跨 board、附件路径、第二 active run 与 running claim 约束；公开 mutation 仍需逐项负向测试。 | partial |
+| label/signal/projection 派生对象 | baseline migration object list | owner：`kanban-service` label/signal/projection facts + host projection worker；public entry：`kanban-server`/`kanban-client`、CLI、Desktop surface | Turso v2 已建立事实约束与 worker 队列表；下一步完成 replay/backfill、derived rebuild 和公开入口，不创建 helper-protocol 兼容空壳。 | 每个对象有 source lineage、rebuild/repair acceptance 和 adapter witness；在公开切片闭合前保持 partial。 | partial |
 
 ## 2. 状态机与生命周期
 

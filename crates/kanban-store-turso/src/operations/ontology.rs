@@ -1789,7 +1789,7 @@ impl TursoStore {
     ) -> Result<LabelOntologyQualityRecord, StoreError> {
         let board_id = self.ontology_board_id(board).await?;
         let connection = self.connection().await?;
-        let row=first_row(connection.query("SELECT COUNT(*),COUNT(DISTINCT task_id),SUM(CASE WHEN suggest_degraded=0 THEN 1 ELSE 0 END),MIN(created_at),MAX(created_at) FROM label_ontology_observations WHERE board_id=:board",[(":board",board_id.as_str())]).await?).await?;
+        let row=first_row(connection.query("SELECT COUNT(*),COUNT(DISTINCT task_id),COALESCE(SUM(CASE WHEN suggest_degraded=0 THEN 1 ELSE 0 END),0),MIN(created_at),MAX(created_at) FROM label_ontology_observations WHERE board_id=:board",[(":board",board_id.as_str())]).await?).await?;
         let observation_count = integer_value(row.get_value(0)?, "observations.count")?;
         let task_count = integer_value(row.get_value(1)?, "observations.tasks")?;
         let degraded = integer_value(row.get_value(2)?, "observations.agreement")?;

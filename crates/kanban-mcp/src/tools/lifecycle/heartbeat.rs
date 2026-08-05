@@ -1,4 +1,4 @@
-use kanban_contract::{HeartbeatTaskRequest, HeartbeatTaskResponse};
+use kanban_protocol::{HeartbeatTaskRequest, HeartbeatTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

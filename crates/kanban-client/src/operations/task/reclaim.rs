@@ -1,5 +1,5 @@
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
-use kanban_contract::{ApiTask, ReclaimTaskRequest, ReclaimTaskResponse};
+use kanban_protocol::{ApiTask, ReclaimTaskRequest, ReclaimTaskResponse};
 
 impl KanbanClient {
     pub fn reclaim_task(

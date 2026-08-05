@@ -4,11 +4,11 @@ use axum::{
     extract::{Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_contract::{
+use kanban_core::{KanbanError, TaskStatus};
+use kanban_protocol::{
     ApiTaskStatus, BlockedReasonCount, BoardQuery, DataEnvelope, QueueStats, StaleClaim,
     StatsResponse, StatusCount,
 };
-use kanban_core::{KanbanError, TaskStatus};
 
 pub(crate) async fn stats(
     State(state): State<AppState>,

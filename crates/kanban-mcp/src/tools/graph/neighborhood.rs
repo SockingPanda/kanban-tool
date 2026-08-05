@@ -1,4 +1,4 @@
-use kanban_contract::{
+use kanban_protocol::{
     DataEnvelope, TaskNeighborhood, TaskNeighborhoodQuery, TaskNeighborhoodResponse,
 };
 use rmcp::{

@@ -1,7 +1,7 @@
-use kanban_contract::{ApiDependencies, ApiDependencyEdge, ApiDependencyTask, ApiTask};
+use kanban_protocol::{ApiDependencies, ApiDependencyEdge, ApiDependencyTask, ApiTask};
 
-pub(super) fn cli_dependency_task(task: &ApiTask) -> kanban_contract::CliDependencyTask {
-    kanban_contract::CliDependencyTask {
+pub(super) fn cli_dependency_task(task: &ApiTask) -> kanban_protocol::CliDependencyTask {
+    kanban_protocol::CliDependencyTask {
         id: task.id.clone(),
         board_id: task.board_id.clone(),
         board_slug: task.board_slug.clone(),
@@ -24,8 +24,8 @@ pub(super) fn api_dependency_task(task: &ApiTask) -> ApiDependencyTask {
 
 pub(super) fn cli_dependency_task_compact(
     task: &ApiDependencyTask,
-) -> kanban_contract::CliDependencyTask {
-    kanban_contract::CliDependencyTask {
+) -> kanban_protocol::CliDependencyTask {
+    kanban_protocol::CliDependencyTask {
         id: task.id.clone(),
         board_id: task.board_id.clone(),
         board_slug: task.board_slug.clone(),
@@ -35,8 +35,8 @@ pub(super) fn cli_dependency_task_compact(
     }
 }
 
-pub(super) fn cli_dependency_edge(edge: &ApiDependencyEdge) -> kanban_contract::CliDependencyEdge {
-    kanban_contract::CliDependencyEdge {
+pub(super) fn cli_dependency_edge(edge: &ApiDependencyEdge) -> kanban_protocol::CliDependencyEdge {
+    kanban_protocol::CliDependencyEdge {
         parent: cli_dependency_task_compact(&edge.parent),
         child: cli_dependency_task_compact(&edge.child),
     }
@@ -44,8 +44,8 @@ pub(super) fn cli_dependency_edge(edge: &ApiDependencyEdge) -> kanban_contract::
 
 pub(super) fn cli_dependency_snapshot(
     dependencies: &ApiDependencies,
-) -> kanban_contract::CliDependencySnapshot {
-    kanban_contract::CliDependencySnapshot {
+) -> kanban_protocol::CliDependencySnapshot {
+    kanban_protocol::CliDependencySnapshot {
         task: cli_dependency_task_compact(&dependencies.task),
         parents: dependencies
             .parents

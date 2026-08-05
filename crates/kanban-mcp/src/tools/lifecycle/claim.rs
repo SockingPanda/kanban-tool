@@ -1,4 +1,4 @@
-use kanban_contract::{ClaimTaskRequest, ClaimTaskResponse};
+use kanban_protocol::{ClaimTaskRequest, ClaimTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

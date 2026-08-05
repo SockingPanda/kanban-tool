@@ -8,8 +8,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::ReopenTaskCommand;
-use kanban_contract::{ReopenTaskPath, ReopenTaskRequest, ReopenTaskResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{ReopenTaskPath, ReopenTaskRequest, ReopenTaskResponse};
 
 pub(crate) async fn reopen_task(
     State(state): State<AppState>,

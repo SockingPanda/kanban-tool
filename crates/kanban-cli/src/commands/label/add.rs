@@ -1,5 +1,5 @@
 use clap::Args;
-use kanban_contract::{AddTaskLabelRequest, cli_labels::CliLabelAddResult};
+use kanban_protocol::{AddTaskLabelRequest, cli_labels::CliLabelAddResult};
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -27,14 +27,14 @@ pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
     if ctx.json {
         let data = match response.meta {
             Some(meta) => CliLabelAddResult::WithCreated(
-                kanban_contract::cli_labels::CliLabelAddWithCreated {
+                kanban_protocol::cli_labels::CliLabelAddWithCreated {
                     task: response.data,
                     created_labels: meta.created_labels,
                 },
             ),
             None => CliLabelAddResult::Task(response.data),
         };
-        output::print_json(&kanban_contract::cli_labels::CliLabelAddOutput { data });
+        output::print_json(&kanban_protocol::cli_labels::CliLabelAddOutput { data });
     } else {
         println!(
             "{} labels={}",

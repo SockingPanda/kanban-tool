@@ -1,7 +1,7 @@
 use crate::{context::CliContext, error::CliFailure, output};
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{SpecifyTaskRequest, SpecifyTaskResponse};
+use kanban_protocol::{SpecifyTaskRequest, SpecifyTaskResponse};
 
 #[derive(Debug, Args)]
 pub(crate) struct SpecifyArgs {

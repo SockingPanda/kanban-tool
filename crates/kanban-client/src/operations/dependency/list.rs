@@ -1,4 +1,4 @@
-use kanban_contract::{ApiDependencies, ListDependenciesResponse};
+use kanban_protocol::{ApiDependencies, ListDependenciesResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

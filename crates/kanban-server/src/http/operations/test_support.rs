@@ -4,7 +4,7 @@ pub(crate) use axum::{
     http::{Request, StatusCode},
 };
 pub(crate) use http_body_util::BodyExt;
-pub(crate) use kanban_contract::*;
+pub(crate) use kanban_protocol::*;
 pub(crate) use tower::ServiceExt;
 
 pub(crate) fn json_request(uri: &str, value: serde_json::Value) -> Request<Body> {

@@ -1,5 +1,5 @@
 use clap::Args;
-use kanban_contract::CliAttachmentListOutput;
+use kanban_protocol::CliAttachmentListOutput;
 
 use crate::{context::CliContext, error::CliFailure, output};
 

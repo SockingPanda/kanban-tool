@@ -1,4 +1,4 @@
-use kanban_contract::{ListTasksQuery, ListTasksResponse};
+use kanban_protocol::{ListTasksQuery, ListTasksResponse};
 
 use crate::{KanbanClient, error::ClientError, shared::list_tasks_path};
 

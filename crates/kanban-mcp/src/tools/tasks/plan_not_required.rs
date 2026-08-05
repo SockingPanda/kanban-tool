@@ -1,4 +1,4 @@
-use kanban_contract::{MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse};
+use kanban_protocol::{MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

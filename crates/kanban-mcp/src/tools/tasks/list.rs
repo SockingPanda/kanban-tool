@@ -1,4 +1,4 @@
-use kanban_contract::{
+use kanban_protocol::{
     ApiTaskPriority, ApiTaskStatus, ListTasksQuery, ListTasksResponse, TaskReadLabel,
     TaskReadPlanFilter, TaskReadSort,
 };

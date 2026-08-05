@@ -1,4 +1,4 @@
-use kanban_contract::ApiErrorCode;
+use kanban_protocol::ApiErrorCode;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

@@ -9,7 +9,7 @@ pub(crate) fn run(ctx: &CliContext, _args: &ListArgs) -> Result<(), CliFailure> 
     let client = ctx.client()?;
     let labels = client.list_board_labels(&ctx.board)?;
     if ctx.json {
-        output::print_json(&kanban_contract::cli_labels::CliLabelListOutput { data: labels });
+        output::print_json(&kanban_protocol::cli_labels::CliLabelListOutput { data: labels });
     } else {
         for label in labels {
             println!(

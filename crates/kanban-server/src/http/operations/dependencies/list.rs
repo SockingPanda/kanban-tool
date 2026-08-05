@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{ListDependenciesPath, ListDependenciesResponse};
+use kanban_protocol::{ListDependenciesPath, ListDependenciesResponse};
 
 pub(crate) async fn list_dependencies(
     State(state): State<AppState>,

@@ -1,5 +1,5 @@
 use crate::shared::{KanbanMcp, call_client_internal};
-use kanban_contract::VectorStatusResponse;
+use kanban_protocol::VectorStatusResponse;
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

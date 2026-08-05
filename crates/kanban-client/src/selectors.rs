@@ -1,4 +1,4 @@
-use kanban_contract::{ApiErrorCode, ListTasksQuery};
+use kanban_protocol::{ApiErrorCode, ListTasksQuery};
 
 use crate::{KanbanClient, error::ClientError};
 

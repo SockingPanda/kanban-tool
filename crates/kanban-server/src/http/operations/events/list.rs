@@ -5,11 +5,11 @@ use axum::{
     routing::get,
 };
 use kanban_application::{EventListOptions as ApplicationEventListOptions, EventRecord};
-use kanban_contract::{
+use kanban_core::KanbanError;
+use kanban_protocol::{
     ListEventsQuery, ListEventsResponse, NextAfterMeta, StreamEventData,
     event_payload::EventPayload,
 };
-use kanban_core::KanbanError;
 use serde_json::Value;
 
 pub(crate) async fn list_events(
@@ -77,7 +77,7 @@ pub(super) fn router() -> Router<AppState> {
 mod tests {
     use super::*;
     use crate::http::operations::test_support::*;
-    use kanban_contract::{ApiErrorCode, ErrorEnvelope, event_payload::TaskStatus};
+    use kanban_protocol::{ApiErrorCode, ErrorEnvelope, event_payload::TaskStatus};
 
     #[tokio::test]
     async fn list_events_returns_typed_task_event_and_cursor() {

@@ -1,8 +1,3 @@
-use kanban_contract::{
-    GraphHelperErrorResponse, GraphHelperHandshakeResponse, GraphHelperNeighborsResponse,
-    GraphHelperQueryResponse, GraphHelperRebuildResponse, GraphHelperStatusResponse,
-    GraphHelperSyncResponse,
-};
 use kanban_entity::{EntityUri, Predicate, Provenance, Relation};
 use kanban_graph::{GraphQueryBinding, GraphQueryRow, GraphStoreStatus};
 use kanban_graph_oxigraph::{
@@ -10,6 +5,11 @@ use kanban_graph_oxigraph::{
     graph_helper_query_response, graph_helper_status_response,
 };
 use kanban_helper_protocol::HelperEnvelope;
+use kanban_protocol::{
+    GraphHelperErrorResponse, GraphHelperHandshakeResponse, GraphHelperNeighborsResponse,
+    GraphHelperQueryResponse, GraphHelperRebuildResponse, GraphHelperStatusResponse,
+    GraphHelperSyncResponse,
+};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::path::Path;

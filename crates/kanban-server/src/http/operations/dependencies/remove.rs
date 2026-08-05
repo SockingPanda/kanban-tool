@@ -8,7 +8,7 @@ use axum::{
     routing::delete,
 };
 use kanban_application::RemoveDependencyCommand;
-use kanban_contract::{RemoveDependencyPath, RemoveDependencyResponse};
+use kanban_protocol::{RemoveDependencyPath, RemoveDependencyResponse};
 
 pub(crate) async fn remove_dependency(
     State(state): State<AppState>,

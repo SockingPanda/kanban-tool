@@ -2,7 +2,7 @@ use std::{fs, io::Read};
 
 use clap::{Args, Subcommand};
 use kanban_client::KanbanClient;
-use kanban_contract::{
+use kanban_protocol::{
     RecordSignalRequest, ReviewSignalsRequest, SignalQuery, SignalWire,
     cli_operator::{
         CliSignal, CliSignalConfirmOutput, CliSignalListOutput, CliSignalObservation,

@@ -12,8 +12,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use kanban_contract::ProjectConfigInput;
 use kanban_core::Locale;
+use kanban_protocol::ProjectConfigInput;
 use serde::{Deserialize, Serialize};
 
 pub(crate) const USER_CONFIG_DIR_NAME: &str = "kanban";

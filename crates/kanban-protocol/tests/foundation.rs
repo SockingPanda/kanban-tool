@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use kanban_contract::{
+use kanban_protocol::{
     ApiHeaderProfile, CliMachineOutput, ContractBinding, ContractDirection, ContractGranularity,
     ContractStrictness, ContractSurface, ContractTransport, EndpointDescriptor, EndpointObligation,
     EndpointObligations, HttpMethod, HttpTransportLocation, MigrationState, OperationContract,
@@ -16,7 +16,7 @@ use kanban_contract::{
 #[test]
 fn exact_request_dtos_reject_legacy_wire_aliases() {
     assert!(
-        serde_json::from_value::<kanban_contract::SignalQuery>(serde_json::json!({
+        serde_json::from_value::<kanban_protocol::SignalQuery>(serde_json::json!({
             "task": "default#1"
         }))
         .is_err()
@@ -27,11 +27,11 @@ fn exact_request_dtos_reject_legacy_wire_aliases() {
         serde_json::json!({"proposed_label": "database"}),
     ] {
         assert!(
-            serde_json::from_value::<kanban_contract::LabelOntologySignalQuery>(alias).is_err()
+            serde_json::from_value::<kanban_protocol::LabelOntologySignalQuery>(alias).is_err()
         );
     }
     assert!(
-        serde_json::from_value::<kanban_contract::LabelOntologyReviewGroupByWire>(
+        serde_json::from_value::<kanban_protocol::LabelOntologyReviewGroupByWire>(
             serde_json::json!("candidate-atom")
         )
         .is_err()
@@ -40,7 +40,7 @@ fn exact_request_dtos_reject_legacy_wire_aliases() {
 
 #[test]
 fn portable_contract_catalog_freezes_all_jsonl_discriminators() {
-    use kanban_contract::{PortableContractLane, portable_contract_catalog, schema_registry};
+    use kanban_protocol::{PortableContractLane, portable_contract_catalog, schema_registry};
 
     let catalog = portable_contract_catalog();
     let discriminators = catalog
@@ -490,7 +490,7 @@ fn b4_c2_label_operations_exactly_own_all_non_header_dimensions() {
 
 #[test]
 fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses() {
-    use kanban_contract::schema_registry;
+    use kanban_protocol::schema_registry;
 
     let cases = [
         (
@@ -974,7 +974,7 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:sse:stream-events-query:v1",
     ]);
     expected.extend(
-        kanban_contract::portable_contract_catalog()
+        kanban_protocol::portable_contract_catalog()
             .iter()
             .flat_map(|descriptor| [descriptor.input.schema_id, descriptor.output.schema_id]),
     );
@@ -1024,7 +1024,7 @@ fn decision_wire_type_preserves_existing_extension_fields() {
         "ticket": "default#123"
     });
 
-    let contract: kanban_contract::DecisionMetadata =
+    let contract: kanban_protocol::DecisionMetadata =
         serde_json::from_value(value.clone()).expect("decision contract should deserialize");
 
     assert_eq!(
@@ -1044,7 +1044,7 @@ fn decision_optional_strings_accept_missing_but_reject_explicit_null() {
         "selected": "typed-open",
         "reason": "missing optional values remain valid"
     });
-    serde_json::from_value::<kanban_contract::DecisionMetadata>(missing)
+    serde_json::from_value::<kanban_protocol::DecisionMetadata>(missing)
         .expect("missing risk/verification must remain valid");
 
     for field in ["risk", "verification"] {
@@ -1062,7 +1062,7 @@ fn decision_optional_strings_accept_missing_but_reject_explicit_null() {
             .expect("fixture is an object")
             .insert(field.to_owned(), serde_json::Value::Null);
 
-        serde_json::from_value::<kanban_contract::DecisionMetadata>(explicit_null)
+        serde_json::from_value::<kanban_protocol::DecisionMetadata>(explicit_null)
             .expect_err("explicit null must be rejected by the real Serde DTO");
     }
 }
@@ -1131,7 +1131,7 @@ fn endpoint_descriptor_validator_rejects_duplicate_operation_and_method_path() {
 
 #[test]
 fn endpoint_closure_rejects_residual_todo_and_adopted_todo() {
-    assert!(kanban_contract::validate_endpoint_catalog(endpoint_catalog(), true).is_ok());
+    assert!(kanban_protocol::validate_endpoint_catalog(endpoint_catalog(), true).is_ok());
     let baseline = endpoint_catalog()[0];
     let adopted_with_todo = [EndpointDescriptor {
         migration: MigrationState::Adopted,
@@ -1145,7 +1145,7 @@ fn endpoint_closure_rejects_residual_todo_and_adopted_todo() {
         },
         ..baseline
     }];
-    assert!(kanban_contract::validate_endpoint_catalog(&adopted_with_todo, false).is_err());
+    assert!(kanban_protocol::validate_endpoint_catalog(&adopted_with_todo, false).is_err());
 }
 
 #[test]
@@ -1588,16 +1588,16 @@ fn claim_path_mapping_error(parameters: &'static [WireParameter]) -> String {
 
 #[test]
 fn b1_c1_task_read_schema_and_runtime_budgets_are_exact() {
-    assert_eq!(kanban_contract::MAX_TASK_READ_QUERY_BYTES, 8_192);
-    assert_eq!(kanban_contract::MAX_TASK_READ_QUERY_PAIRS, 54);
-    assert_eq!(kanban_contract::MAX_TASK_READ_STATUSES, 9);
-    assert_eq!(kanban_contract::MAX_TASK_READ_PRIORITIES, 4);
-    assert_eq!(kanban_contract::MAX_TASK_READ_PLAN_FILTERS, 3);
-    assert_eq!(kanban_contract::MAX_TASK_READ_LABELS, 32);
-    assert_eq!(kanban_contract::MAX_TASK_READ_Q_CHARS, 1_024);
-    assert_eq!(kanban_contract::MAX_TASK_READ_ASSIGNEE_CHARS, 128);
-    assert_eq!(kanban_contract::MAX_TASK_READ_LABEL_CHARS, 128);
-    assert_eq!(kanban_contract::MAX_TASK_READ_LIMIT, 1_000);
+    assert_eq!(kanban_protocol::MAX_TASK_READ_QUERY_BYTES, 8_192);
+    assert_eq!(kanban_protocol::MAX_TASK_READ_QUERY_PAIRS, 54);
+    assert_eq!(kanban_protocol::MAX_TASK_READ_STATUSES, 9);
+    assert_eq!(kanban_protocol::MAX_TASK_READ_PRIORITIES, 4);
+    assert_eq!(kanban_protocol::MAX_TASK_READ_PLAN_FILTERS, 3);
+    assert_eq!(kanban_protocol::MAX_TASK_READ_LABELS, 32);
+    assert_eq!(kanban_protocol::MAX_TASK_READ_Q_CHARS, 1_024);
+    assert_eq!(kanban_protocol::MAX_TASK_READ_ASSIGNEE_CHARS, 128);
+    assert_eq!(kanban_protocol::MAX_TASK_READ_LABEL_CHARS, 128);
+    assert_eq!(kanban_protocol::MAX_TASK_READ_LIMIT, 1_000);
 
     let artifacts = generated_artifacts();
     for artifact in [
@@ -1634,7 +1634,7 @@ fn b1_c1_task_read_schema_and_runtime_budgets_are_exact() {
 
 #[test]
 fn b1_c1_task_read_label_normalizes_edges_and_rejects_unicode_whitespace() {
-    let normalized = kanban_contract::TaskReadLabel::new("\u{3000}后端 API\u{2003}")
+    let normalized = kanban_protocol::TaskReadLabel::new("\u{3000}后端 API\u{2003}")
         .expect("含非空白字符的 label 应可规范化");
     assert_eq!(normalized.as_str(), "后端 API");
 
@@ -1642,39 +1642,39 @@ fn b1_c1_task_read_label_normalizes_edges_and_rejects_unicode_whitespace() {
     let raw_at_limit = format!("\u{3000}{body_at_raw_limit}\u{2003}");
     assert_eq!(
         raw_at_limit.chars().count(),
-        kanban_contract::MAX_TASK_READ_LABEL_CHARS
+        kanban_protocol::MAX_TASK_READ_LABEL_CHARS
     );
-    let constructed = kanban_contract::TaskReadLabel::new(raw_at_limit.clone())
+    let constructed = kanban_protocol::TaskReadLabel::new(raw_at_limit.clone())
         .expect("raw 128 字符必须接受并移除 Unicode 边缘空白");
     assert_eq!(constructed.as_str(), body_at_raw_limit.as_str());
     let encoded = serde_json::to_string(&raw_at_limit).expect("encode raw-limit label");
-    let deserialized = serde_json::from_str::<kanban_contract::TaskReadLabel>(&encoded)
+    let deserialized = serde_json::from_str::<kanban_protocol::TaskReadLabel>(&encoded)
         .expect("Serde 必须接受 raw 128 字符并规范化");
     assert_eq!(deserialized.as_str(), body_at_raw_limit.as_str());
 
     let raw_over_limit = format!("\u{3000}{}\u{2003}", "界".repeat(127));
     assert_eq!(
         raw_over_limit.chars().count(),
-        kanban_contract::MAX_TASK_READ_LABEL_CHARS + 1
+        kanban_protocol::MAX_TASK_READ_LABEL_CHARS + 1
     );
     assert!(
-        kanban_contract::TaskReadLabel::new(raw_over_limit.clone()).is_none(),
+        kanban_protocol::TaskReadLabel::new(raw_over_limit.clone()).is_none(),
         "随后会被 trim 的 Unicode 边缘空白也必须计入 raw 字符预算"
     );
     let encoded = serde_json::to_string(&raw_over_limit).expect("encode over-limit label");
     assert!(
-        serde_json::from_str::<kanban_contract::TaskReadLabel>(&encoded).is_err(),
+        serde_json::from_str::<kanban_protocol::TaskReadLabel>(&encoded).is_err(),
         "Serde 必须拒绝 raw 129 字符，即使 trim 后正文未超限"
     );
 
     for whitespace in [" ", "\t", "\n", "\u{00a0}", "\u{2003}", "\u{3000}"] {
         assert!(
-            kanban_contract::TaskReadLabel::new(whitespace).is_none(),
+            kanban_protocol::TaskReadLabel::new(whitespace).is_none(),
             "纯 Unicode 空白 label 必须被构造器拒绝: {whitespace:?}"
         );
         let encoded = serde_json::to_string(whitespace).expect("encode whitespace fixture");
         assert!(
-            serde_json::from_str::<kanban_contract::TaskReadLabel>(&encoded).is_err(),
+            serde_json::from_str::<kanban_protocol::TaskReadLabel>(&encoded).is_err(),
             "纯 Unicode 空白 label 必须被 deserialize 拒绝: {whitespace:?}"
         );
     }
@@ -1800,7 +1800,7 @@ fn b1_c1_task_read_contracts_are_endpoint_specific_and_exact() {
         assert_eq!(response_contract.binding, ContractBinding::ExactSurface);
         assert_eq!(
             response_contract.strictness,
-            kanban_contract::ContractStrictness::DenyUnknownFields
+            kanban_protocol::ContractStrictness::DenyUnknownFields
         );
         assert!(response_contract.schema_id.is_some());
         assert!(response_contract.fixture.is_some());
@@ -1901,7 +1901,7 @@ fn config_and_helper_protocols_have_exact_roots_surfaces_and_witnesses() {
         "helper.vector.embed-query.response",
     ];
     let inventory = operation_inventory();
-    let roots = kanban_contract::schema_registry();
+    let roots = kanban_protocol::schema_registry();
     let surfaces = surface_operation_catalog();
 
     for contract_id in expected {
@@ -1944,7 +1944,7 @@ fn vector_projection_protocol_has_two_exact_roots_and_four_runtime_witnesses() {
         "helper.vector-projection.response",
     ];
     let inventory = operation_inventory();
-    let roots = kanban_contract::schema_registry();
+    let roots = kanban_protocol::schema_registry();
     let surfaces = surface_operation_catalog();
 
     for contract_id in contract_ids {
@@ -2017,7 +2017,7 @@ fn selected_worker_profile_contract_matches_runtime_selection_boundary() {
         "tests::selected_worker_profile_input_fixture_is_consumed_by_real_toml_decoder"
     );
 
-    let root = kanban_contract::schema_registry()
+    let root = kanban_protocol::schema_registry()
         .iter()
         .find(|root| root.contract_id == contract.id)
         .expect("selected worker profile schema root");
@@ -2593,7 +2593,7 @@ fn api_task_fixture() -> serde_json::Value {
 #[test]
 fn api_task_and_label_wire_components_preserve_all_public_keys_and_nulls() {
     let fixture = api_task_fixture();
-    let task: kanban_contract::ApiTask =
+    let task: kanban_protocol::ApiTask =
         serde_json::from_value(fixture.clone()).expect("完整公开 task wire 应可反序列化");
     assert_eq!(
         serde_json::to_value(task).expect("ApiTask 应可序列化"),
@@ -2607,7 +2607,7 @@ fn api_task_and_label_wire_components_reject_ambiguous_or_invalid_shapes() {
     for field in REQUIRED_NULLABLE_TASK_FIELDS {
         let mut value = api_task_fixture();
         value.as_object_mut().expect("task object").remove(*field);
-        serde_json::from_value::<kanban_contract::ApiTask>(value)
+        serde_json::from_value::<kanban_protocol::ApiTask>(value)
             .expect_err("缺失 nullable key 必须失败");
     }
 
@@ -2617,7 +2617,7 @@ fn api_task_and_label_wire_components_reject_ambiguous_or_invalid_shapes() {
             .as_object_mut()
             .expect("task object")
             .insert("claim_token".to_owned(), claim_token);
-        serde_json::from_value::<kanban_contract::ApiTask>(value)
+        serde_json::from_value::<kanban_protocol::ApiTask>(value)
             .expect_err("任意 claim_token 都必须作为未知字段拒绝");
     }
 
@@ -2633,7 +2633,7 @@ fn api_task_and_label_wire_components_reject_ambiguous_or_invalid_shapes() {
             .as_object_mut()
             .expect("task object")
             .insert(field.to_owned(), invalid);
-        serde_json::from_value::<kanban_contract::ApiTask>(value)
+        serde_json::from_value::<kanban_protocol::ApiTask>(value)
             .expect_err("非法 enum/priority/labels:null 必须失败");
     }
 
@@ -2642,7 +2642,7 @@ fn api_task_and_label_wire_components_reject_ambiguous_or_invalid_shapes() {
         .as_object_mut()
         .expect("label object")
         .remove("color");
-    serde_json::from_value::<kanban_contract::ApiTask>(missing_color)
+    serde_json::from_value::<kanban_protocol::ApiTask>(missing_color)
         .expect_err("label.color 即使 nullable 也必须存在");
 
     let mut unknown_label_field = api_task_fixture();
@@ -2650,22 +2650,22 @@ fn api_task_and_label_wire_components_reject_ambiguous_or_invalid_shapes() {
         .as_object_mut()
         .expect("label object")
         .insert("claim_token".to_owned(), serde_json::json!("secret"));
-    serde_json::from_value::<kanban_contract::ApiTask>(unknown_label_field)
+    serde_json::from_value::<kanban_protocol::ApiTask>(unknown_label_field)
         .expect_err("label 未知字段必须失败");
 }
 
 #[test]
 fn api_status_priority_and_execution_plan_vocabulary_is_closed_and_checked() {
     let statuses = [
-        (kanban_contract::ApiTaskStatus::Triage, "triage"),
-        (kanban_contract::ApiTaskStatus::Todo, "todo"),
-        (kanban_contract::ApiTaskStatus::Scheduled, "scheduled"),
-        (kanban_contract::ApiTaskStatus::Ready, "ready"),
-        (kanban_contract::ApiTaskStatus::Running, "running"),
-        (kanban_contract::ApiTaskStatus::Blocked, "blocked"),
-        (kanban_contract::ApiTaskStatus::Review, "review"),
-        (kanban_contract::ApiTaskStatus::Done, "done"),
-        (kanban_contract::ApiTaskStatus::Archived, "archived"),
+        (kanban_protocol::ApiTaskStatus::Triage, "triage"),
+        (kanban_protocol::ApiTaskStatus::Todo, "todo"),
+        (kanban_protocol::ApiTaskStatus::Scheduled, "scheduled"),
+        (kanban_protocol::ApiTaskStatus::Ready, "ready"),
+        (kanban_protocol::ApiTaskStatus::Running, "running"),
+        (kanban_protocol::ApiTaskStatus::Blocked, "blocked"),
+        (kanban_protocol::ApiTaskStatus::Review, "review"),
+        (kanban_protocol::ApiTaskStatus::Done, "done"),
+        (kanban_protocol::ApiTaskStatus::Archived, "archived"),
     ];
     for (status, wire) in statuses {
         assert_eq!(status.as_str(), wire);
@@ -2677,12 +2677,12 @@ fn api_status_priority_and_execution_plan_vocabulary_is_closed_and_checked() {
 
     let plans = [
         (
-            kanban_contract::ApiExecutionPlanState::Unplanned,
+            kanban_protocol::ApiExecutionPlanState::Unplanned,
             "unplanned",
         ),
-        (kanban_contract::ApiExecutionPlanState::Planned, "planned"),
+        (kanban_protocol::ApiExecutionPlanState::Planned, "planned"),
         (
-            kanban_contract::ApiExecutionPlanState::NotRequired,
+            kanban_protocol::ApiExecutionPlanState::NotRequired,
             "not_required",
         ),
     ];
@@ -2695,17 +2695,17 @@ fn api_status_priority_and_execution_plan_vocabulary_is_closed_and_checked() {
     }
 
     for value in 0..=3 {
-        let priority = kanban_contract::ApiTaskPriority::try_from(value).expect("0..=3");
+        let priority = kanban_protocol::ApiTaskPriority::try_from(value).expect("0..=3");
         assert_eq!(i64::from(priority.get()), value);
     }
     for value in [-1, 4, i64::MAX] {
-        assert!(kanban_contract::ApiTaskPriority::try_from(value).is_err());
+        assert!(kanban_protocol::ApiTaskPriority::try_from(value).is_err());
         assert!(
-            serde_json::from_value::<kanban_contract::ApiTaskPriority>(serde_json::json!(value))
+            serde_json::from_value::<kanban_protocol::ApiTaskPriority>(serde_json::json!(value))
                 .is_err()
         );
     }
-    assert_eq!(kanban_contract::ApiTaskPriority::default().get(), 3);
+    assert_eq!(kanban_protocol::ApiTaskPriority::default().get(), 3);
 }
 
 fn collect_schema_types(schema: &serde_json::Value, output: &mut BTreeSet<String>) {
@@ -2747,7 +2747,7 @@ fn assert_required_nullable_schema(schema: &serde_json::Value, field: &str) {
 
 #[test]
 fn api_task_schema_requires_nullable_keys_and_bounds_priority() {
-    let task_schema = serde_json::to_value(schemars::schema_for!(kanban_contract::ApiTask))
+    let task_schema = serde_json::to_value(schemars::schema_for!(kanban_protocol::ApiTask))
         .expect("serialize ApiTask schema");
     assert_eq!(
         task_schema["additionalProperties"],
@@ -2831,7 +2831,7 @@ fn api_task_schema_requires_nullable_keys_and_bounds_priority() {
     );
     assert_required_nullable_schema(&nested_label_properties["color"], "ApiLabel.color");
 
-    let label_schema = serde_json::to_value(schemars::schema_for!(kanban_contract::ApiLabel))
+    let label_schema = serde_json::to_value(schemars::schema_for!(kanban_protocol::ApiLabel))
         .expect("serialize ApiLabel schema");
     assert_eq!(
         label_schema["additionalProperties"],
@@ -2839,7 +2839,7 @@ fn api_task_schema_requires_nullable_keys_and_bounds_priority() {
     );
     assert_required_nullable_schema(&label_schema["properties"]["color"], "ApiLabel.color root");
 
-    let status_schema = serde_json::to_value(schemars::schema_for!(kanban_contract::ApiTaskStatus))
+    let status_schema = serde_json::to_value(schemars::schema_for!(kanban_protocol::ApiTaskStatus))
         .expect("serialize status schema");
     assert_eq!(
         status_schema["enum"],
@@ -2856,7 +2856,7 @@ fn api_task_schema_requires_nullable_keys_and_bounds_priority() {
         ])
     );
     let plan_schema = serde_json::to_value(schemars::schema_for!(
-        kanban_contract::ApiExecutionPlanState
+        kanban_protocol::ApiExecutionPlanState
     ))
     .expect("serialize execution plan schema");
     assert_eq!(
@@ -2865,7 +2865,7 @@ fn api_task_schema_requires_nullable_keys_and_bounds_priority() {
     );
 
     let priority_schema =
-        serde_json::to_value(schemars::schema_for!(kanban_contract::ApiTaskPriority))
+        serde_json::to_value(schemars::schema_for!(kanban_protocol::ApiTaskPriority))
             .expect("serialize priority schema");
     assert_eq!(priority_schema["minimum"], serde_json::json!(0));
     assert_eq!(priority_schema["maximum"], serde_json::json!(3));

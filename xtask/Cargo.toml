@@ -18,7 +18,7 @@ path = "src/lib.rs"
 
 [dependencies]
 jsonschema = { workspace = true, default-features = false }
-kanban-contract = { workspace = true, default-features = false, features = ["schema"] }
+kanban-protocol = { workspace = true, default-features = false, features = ["schema"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2.workspace = true

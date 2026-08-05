@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::net::{IpAddr, SocketAddr};
 
-use kanban_contract::ErrorEnvelope;
+use kanban_protocol::ErrorEnvelope;
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{KanbanClient, error::ClientError};

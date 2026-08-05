@@ -15,8 +15,9 @@ use kanban_application::dto::{
 use kanban_application::operations::{
     BoardTaskMapOptions, GraphNeighborsOptions, GraphQueryOptions, TaskNeighborhoodOptions,
 };
-use kanban_contract::cli_helpers::{CliGraphQueryBinding, CliGraphQueryOutput, CliGraphQueryRow};
-use kanban_contract::{
+use kanban_core::KanbanError;
+use kanban_protocol::cli_helpers::{CliGraphQueryBinding, CliGraphQueryOutput, CliGraphQueryRow};
+use kanban_protocol::{
     ApiRelation, ApiRelationProvenance, BoardQuery, BoardTaskMap, BoardTaskMapPath,
     BoardTaskMapQuery, BoardTaskMapResponse, DataEnvelope, GraphMaintenance,
     GraphMaintenanceResponse, GraphNeighborsQuery, GraphNeighborsResponse, GraphQueryQuery,
@@ -24,7 +25,6 @@ use kanban_contract::{
     TaskGraphNode, TaskNeighborhood, TaskNeighborhoodPath, TaskNeighborhoodQuery,
     TaskNeighborhoodResponse,
 };
-use kanban_core::KanbanError;
 
 pub(crate) async fn graph_status(
     State(state): State<AppState>,
@@ -233,25 +233,25 @@ fn api_graph_node(node: TaskGraphNodeRecord) -> Result<TaskGraphNode, ApiError> 
         task: api_task(node.task)?,
         role: match node.role {
             kanban_application::dto::TaskGraphNodeRole::Center => {
-                kanban_contract::ApiTaskGraphNodeRole::Center
+                kanban_protocol::ApiTaskGraphNodeRole::Center
             }
             kanban_application::dto::TaskGraphNodeRole::DependencyParent => {
-                kanban_contract::ApiTaskGraphNodeRole::DependencyParent
+                kanban_protocol::ApiTaskGraphNodeRole::DependencyParent
             }
             kanban_application::dto::TaskGraphNodeRole::DependencyChild => {
-                kanban_contract::ApiTaskGraphNodeRole::DependencyChild
+                kanban_protocol::ApiTaskGraphNodeRole::DependencyChild
             }
             kanban_application::dto::TaskGraphNodeRole::StepParent => {
-                kanban_contract::ApiTaskGraphNodeRole::StepParent
+                kanban_protocol::ApiTaskGraphNodeRole::StepParent
             }
             kanban_application::dto::TaskGraphNodeRole::StepChild => {
-                kanban_contract::ApiTaskGraphNodeRole::StepChild
+                kanban_protocol::ApiTaskGraphNodeRole::StepChild
             }
             kanban_application::dto::TaskGraphNodeRole::Active => {
-                kanban_contract::ApiTaskGraphNodeRole::Active
+                kanban_protocol::ApiTaskGraphNodeRole::Active
             }
             kanban_application::dto::TaskGraphNodeRole::Context => {
-                kanban_contract::ApiTaskGraphNodeRole::Context
+                kanban_protocol::ApiTaskGraphNodeRole::Context
             }
         },
         context_only: node.context_only,
@@ -265,10 +265,10 @@ fn api_graph_edge(edge: TaskGraphEdgeRecord) -> Result<TaskGraphEdge, ApiError> 
         target_task_id: edge.target_task_id,
         kind: match edge.kind {
             kanban_application::dto::TaskGraphEdgeKind::Dependency => {
-                kanban_contract::ApiTaskGraphEdgeKind::Dependency
+                kanban_protocol::ApiTaskGraphEdgeKind::Dependency
             }
             kanban_application::dto::TaskGraphEdgeKind::Step => {
-                kanban_contract::ApiTaskGraphEdgeKind::Step
+                kanban_protocol::ApiTaskGraphEdgeKind::Step
             }
         },
         required: edge.required,
@@ -314,8 +314,8 @@ pub(super) fn router() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use crate::http::operations::test_support::*;
-    use kanban_contract::cli_helpers::CliGraphMaintenance;
-    use kanban_contract::{BoardTaskMapResponse, DataEnvelope, GraphStatusResponse};
+    use kanban_protocol::cli_helpers::CliGraphMaintenance;
+    use kanban_protocol::{BoardTaskMapResponse, DataEnvelope, GraphStatusResponse};
 
     #[tokio::test]
     async fn graph_status_and_task_map_routes_are_adopted() {

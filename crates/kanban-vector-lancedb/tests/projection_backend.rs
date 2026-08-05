@@ -4,7 +4,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::time::Duration;
 
-use kanban_contract::{
+use kanban_indexer::{LANCEDB_CHUNKS_STORE, LANCEDB_LABEL_ATOMS_STORE};
+use kanban_local::{DatabaseLifecycleExclusiveGuard, DerivedStoreWriteGuard};
+use kanban_protocol::{
     ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch, ProjectionDelivery,
     ProjectionDeliveryAction, ProjectionSnapshot, ProjectionSnapshotRecord,
     VECTOR_PROJECTION_PROTOCOL_VERSION, VectorProjectionApplyBatchRequest,
@@ -20,8 +22,6 @@ use kanban_contract::{
     VectorProjectionRepairPublicationRequest, VectorProjectionValidateActiveRequest,
     VectorProjectionValidateGenerationRequest,
 };
-use kanban_indexer::{LANCEDB_CHUNKS_STORE, LANCEDB_LABEL_ATOMS_STORE};
-use kanban_local::{DatabaseLifecycleExclusiveGuard, DerivedStoreWriteGuard};
 use kanban_vector::{
     ChunkVectorStore, EmbeddingProvider, LABEL_ATOMS_CORPUS_SCHEMA, LabelAtomQuery,
     LabelAtomVectorStore, TASK_CHUNKS_CORPUS_SCHEMA, VectorError, VectorQuery,
@@ -2593,7 +2593,7 @@ fn queued_quarantine_cannot_cross_a_sqlite_lease_rebind() {
     let evidence = prepare(&backend, &db, LANCEDB_CHUNKS_STORE, "gen_queued_rebind", 1);
     let _ = publish(&backend, &db, None, &evidence);
     let request = VectorProjectionHelperRequest::Quarantine(
-        kanban_contract::VectorProjectionGenerationMutationRequest {
+        kanban_protocol::VectorProjectionGenerationMutationRequest {
             context: context(&evidence, "req_queued_rebind"),
             authority: destructive_authority(
                 &evidence,
@@ -4936,7 +4936,7 @@ fn publish(
     db: &Path,
     expected_active: Option<&ProjectionArtifactEvidence>,
     prepared: &ProjectionArtifactEvidence,
-) -> kanban_contract::ProjectionPublishReceipt {
+) -> kanban_protocol::ProjectionPublishReceipt {
     let request = VectorProjectionPublishRequest {
         context: context(prepared, "req_publish"),
         authority: destructive_authority(
@@ -4960,7 +4960,7 @@ fn publish(
 fn inventory(
     backend: &VectorProjectionBackend,
     store_name: &str,
-) -> Vec<kanban_contract::VectorProjectionGenerationInventoryEntry> {
+) -> Vec<kanban_protocol::VectorProjectionGenerationInventoryEntry> {
     match backend.execute(&VectorProjectionHelperRequest::Inventory(
         VectorProjectionInventoryRequest {
             request_id: "req_inventory".to_owned(),
@@ -4980,7 +4980,7 @@ fn cleanup(
     building_phase: Option<VectorProjectionBuildingPhase>,
     dry_run: bool,
     protection: VectorProjectionCleanupProtection,
-) -> kanban_contract::VectorProjectionCleanupResponse {
+) -> kanban_protocol::VectorProjectionCleanupResponse {
     match backend.execute(&VectorProjectionHelperRequest::Cleanup(
         VectorProjectionCleanupRequest {
             context: context(context_evidence, "req_cleanup"),

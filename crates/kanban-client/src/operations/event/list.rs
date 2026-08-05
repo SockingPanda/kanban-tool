@@ -1,4 +1,4 @@
-use kanban_contract::{ListEventsQuery, ListEventsResponse};
+use kanban_protocol::{ListEventsQuery, ListEventsResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 
@@ -37,7 +37,7 @@ fn list_events_path(board: &str, task_id: Option<&str>, after: i64, limit: usize
 
 #[cfg(test)]
 mod tests {
-    use kanban_contract::ListEventsQuery;
+    use kanban_protocol::ListEventsQuery;
 
     use super::*;
 

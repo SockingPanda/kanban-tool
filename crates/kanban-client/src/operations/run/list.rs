@@ -1,4 +1,4 @@
-use kanban_contract::{ApiRun, ListRunsResponse};
+use kanban_protocol::{ApiRun, ListRunsResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

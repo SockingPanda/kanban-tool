@@ -1,4 +1,4 @@
-use kanban_contract::{BuildContextQuery, BuildContextResponse};
+use kanban_protocol::{BuildContextQuery, BuildContextResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

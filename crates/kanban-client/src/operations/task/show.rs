@@ -1,4 +1,4 @@
-use kanban_contract::{ApiTask, GetTaskDetailsResponse, GetTaskResponse, TaskDetailAggregate};
+use kanban_protocol::{ApiTask, GetTaskDetailsResponse, GetTaskResponse, TaskDetailAggregate};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

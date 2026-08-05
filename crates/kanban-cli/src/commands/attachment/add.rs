@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Args;
-use kanban_contract::{CliAttachmentAddOutput, CreateAttachmentRequest};
+use kanban_protocol::{CliAttachmentAddOutput, CreateAttachmentRequest};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

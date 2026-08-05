@@ -6,7 +6,7 @@ use axum::{
     routing::{get, post},
 };
 use kanban_application::LegacyImportOptionsRecord;
-use kanban_contract::{
+use kanban_protocol::{
     BackupReport, BackupResponse, CheckpointResponse, DataEnvelope, DoctorReport, DoctorResponse,
     ExportReport, ExportResponse, ImportReport, ImportResponse, LegacyImportReport,
     LegacyImportRequest, LegacyImportResponse, MaintenanceImportRequest, MaintenanceOwnerStatus,
@@ -45,7 +45,7 @@ pub(crate) async fn doctor(
         derived_stores: report
             .derived_stores
             .into_iter()
-            .map(|store| kanban_contract::DoctorDerivedStore {
+            .map(|store| kanban_protocol::DoctorDerivedStore {
                 store_name: store.store_name,
                 schema_version: store.schema_version,
                 last_event_id: store.last_event_id,
@@ -61,7 +61,7 @@ pub(crate) async fn doctor(
         consistency_issues: report
             .consistency_issues
             .into_iter()
-            .map(|issue| kanban_contract::DoctorIssue {
+            .map(|issue| kanban_protocol::DoctorIssue {
                 severity: issue.severity,
                 code: issue.code,
                 message: issue.message,
@@ -73,7 +73,7 @@ pub(crate) async fn doctor(
         ontology_ledger_issues: report
             .ontology_ledger_issues
             .into_iter()
-            .map(|issue| kanban_contract::DoctorIssue {
+            .map(|issue| kanban_protocol::DoctorIssue {
                 severity: issue.severity,
                 code: issue.code,
                 message: issue.message,
@@ -87,7 +87,7 @@ pub(crate) async fn checkpoint(
     State(state): State<AppState>,
 ) -> Result<Json<CheckpointResponse>, ApiError> {
     let report = state.application().checkpoint().await?;
-    Ok(Json(DataEnvelope::new(kanban_contract::CheckpointReport {
+    Ok(Json(DataEnvelope::new(kanban_protocol::CheckpointReport {
         busy: report.busy,
         log_frames: report.log_frames,
         checkpointed_frames: report.checkpointed_frames,
@@ -178,7 +178,7 @@ pub(crate) async fn import_legacy_sqlite_v30(
             table_counts: report
                 .table_counts
                 .into_iter()
-                .map(|count| kanban_contract::LegacyImportTableCount {
+                .map(|count| kanban_protocol::LegacyImportTableCount {
                     table: count.table,
                     source_rows: count.source_rows,
                     target_rows: count.target_rows,

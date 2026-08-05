@@ -1,5 +1,5 @@
 [package]
-name = "kanban-contract"
+name = "kanban-protocol"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ autolib = false
 build = false
 
 [lib]
-name = "kanban_contract"
+name = "kanban_protocol"
 path = "src/lib.rs"
 
 [[test]]

@@ -8,8 +8,8 @@ use axum::{
     routing::patch,
 };
 use kanban_application::UpdateStepCommand;
-use kanban_contract::{UpdateStepPath, UpdateStepRequest, UpdateStepResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{UpdateStepPath, UpdateStepRequest, UpdateStepResponse};
 
 pub(crate) async fn update_step(
     State(state): State<AppState>,

@@ -1,4 +1,4 @@
-use kanban_contract::ListCommentsResponse;
+use kanban_protocol::ListCommentsResponse;
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

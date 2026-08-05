@@ -1,4 +1,4 @@
-use kanban_contract::{BuildContextPath, BuildContextQuery, BuildContextResponse};
+use kanban_protocol::{BuildContextPath, BuildContextQuery, BuildContextResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

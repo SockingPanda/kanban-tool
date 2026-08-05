@@ -8,8 +8,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::CreateTaskCommand;
-use kanban_contract::{ApiCreateTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse};
 use kanban_core::{KanbanError, TaskStatus, new_task_id};
+use kanban_protocol::{ApiCreateTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse};
 
 fn create_status(status: ApiCreateTaskStatus) -> TaskStatus {
     match status {
@@ -481,7 +481,7 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
-        let details: kanban_contract::GetTaskDetailsResponse =
+        let details: kanban_protocol::GetTaskDetailsResponse =
             serde_json::from_slice(&bytes).unwrap();
         assert_eq!(details.data.task.id, "t_http_create");
         assert!(details.data.ontology.degraded);

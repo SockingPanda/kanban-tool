@@ -1,4 +1,4 @@
-use kanban_contract::cli_labels::{
+use kanban_protocol::cli_labels::{
     CliLabelAddOutput, CliLabelAtomIndexQueryOutput, CliLabelAtomIndexRebuildOutput,
     CliLabelAtomIndexStatusOutput, CliLabelAtomsExplainOutput, CliLabelAtomsListOutput,
     CliLabelBootstrapOutput, CliLabelCreateOutput, CliLabelDeleteOutput, CliLabelListOutput,

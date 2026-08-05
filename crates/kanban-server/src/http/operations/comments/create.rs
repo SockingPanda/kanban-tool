@@ -11,8 +11,8 @@ use kanban_application::{
     CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
     CreateCommentCommand,
 };
-use kanban_contract::{CreateCommentPath, CreateCommentRequest, CreateCommentResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{CreateCommentPath, CreateCommentRequest, CreateCommentResponse};
 
 pub(crate) async fn create_comment(
     State(state): State<AppState>,
@@ -38,8 +38,8 @@ pub(crate) async fn create_comment(
             author_type: body
                 .author_type
                 .map(|value| match value {
-                    kanban_contract::CommentAuthorType::User => ApplicationCommentAuthorType::User,
-                    kanban_contract::CommentAuthorType::Agent => {
+                    kanban_protocol::CommentAuthorType::User => ApplicationCommentAuthorType::User,
+                    kanban_protocol::CommentAuthorType::Agent => {
                         ApplicationCommentAuthorType::Agent
                     }
                 })
@@ -49,9 +49,9 @@ pub(crate) async fn create_comment(
             kind: body
                 .kind
                 .map(|value| match value {
-                    kanban_contract::CommentKind::Note => ApplicationCommentKind::Note,
-                    kanban_contract::CommentKind::Decision => ApplicationCommentKind::Decision,
-                    kanban_contract::CommentKind::Signal => ApplicationCommentKind::Signal,
+                    kanban_protocol::CommentKind::Note => ApplicationCommentKind::Note,
+                    kanban_protocol::CommentKind::Decision => ApplicationCommentKind::Decision,
+                    kanban_protocol::CommentKind::Signal => ApplicationCommentKind::Signal,
                 })
                 .unwrap_or(ApplicationCommentKind::Note),
             metadata: metadata.into_iter().collect(),
@@ -117,7 +117,7 @@ mod tests {
             .unwrap();
         assert_eq!(first.status(), StatusCode::CREATED);
         let first_body = first.into_body().collect().await.unwrap().to_bytes();
-        let first: kanban_contract::CreateCommentResponse =
+        let first: kanban_protocol::CreateCommentResponse =
             serde_json::from_slice(&first_body).unwrap();
 
         let replay = router
@@ -130,7 +130,7 @@ mod tests {
             .unwrap();
         assert_eq!(replay.status(), StatusCode::CREATED);
         let replay_body = replay.into_body().collect().await.unwrap().to_bytes();
-        let replay: kanban_contract::CreateCommentResponse =
+        let replay: kanban_protocol::CreateCommentResponse =
             serde_json::from_slice(&replay_body).unwrap();
         assert_eq!(replay.data.id, first.data.id);
 
@@ -147,7 +147,7 @@ mod tests {
             .unwrap();
         assert_eq!(listed.status(), StatusCode::OK);
         let listed_body = listed.into_body().collect().await.unwrap().to_bytes();
-        let listed: kanban_contract::ListCommentsResponse =
+        let listed: kanban_protocol::ListCommentsResponse =
             serde_json::from_slice(&listed_body).unwrap();
         assert_eq!(listed.data.len(), 1);
         assert_eq!(listed.data[0].id, first.data.id);
@@ -182,10 +182,10 @@ mod tests {
             .unwrap();
         assert_eq!(conflict.status(), StatusCode::CONFLICT);
         let conflict_body = conflict.into_body().collect().await.unwrap().to_bytes();
-        let error: kanban_contract::ErrorEnvelope = serde_json::from_slice(&conflict_body).unwrap();
+        let error: kanban_protocol::ErrorEnvelope = serde_json::from_slice(&conflict_body).unwrap();
         assert_eq!(
             error.error.code,
-            kanban_contract::ApiErrorCode::IdempotencyConflict
+            kanban_protocol::ApiErrorCode::IdempotencyConflict
         );
 
         let signal = router
@@ -203,10 +203,10 @@ mod tests {
             .unwrap();
         assert_eq!(signal.status(), StatusCode::NOT_IMPLEMENTED);
         let signal_body = signal.into_body().collect().await.unwrap().to_bytes();
-        let error: kanban_contract::ErrorEnvelope = serde_json::from_slice(&signal_body).unwrap();
+        let error: kanban_protocol::ErrorEnvelope = serde_json::from_slice(&signal_body).unwrap();
         assert_eq!(
             error.error.code,
-            kanban_contract::ApiErrorCode::FeatureNotAvailable
+            kanban_protocol::ApiErrorCode::FeatureNotAvailable
         );
     }
 }

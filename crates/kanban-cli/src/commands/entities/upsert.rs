@@ -36,7 +36,7 @@ pub(crate) fn run(ctx: &CliContext, args: &UpsertArgs) -> Result<(), CliFailure>
         archived_at: None,
     })?;
     if ctx.json {
-        output::print_json(&kanban_contract::CliEntityShowOutput { data: entity });
+        output::print_json(&kanban_protocol::CliEntityShowOutput { data: entity });
     } else {
         println!("{} {} {}", entity.uri, entity.kind, entity.source_id);
     }

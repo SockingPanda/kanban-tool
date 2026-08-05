@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{ListRunsPath, ListRunsResponse};
+use kanban_protocol::{ListRunsPath, ListRunsResponse};
 
 pub(crate) async fn list_runs(
     State(state): State<AppState>,

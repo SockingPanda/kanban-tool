@@ -1,4 +1,4 @@
-use kanban_contract::{ApiTaskStatus, SearchStatusResponse, SearchTasksQuery, SearchTasksResponse};
+use kanban_protocol::{ApiTaskStatus, SearchStatusResponse, SearchTasksQuery, SearchTasksResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{SubmitReviewTaskRequest, SubmitReviewTaskResponse};
+use kanban_protocol::{SubmitReviewTaskRequest, SubmitReviewTaskResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

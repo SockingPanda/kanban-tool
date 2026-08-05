@@ -1,4 +1,4 @@
-use kanban_contract::{ApiTask, CreateTaskRequest, CreateTaskResponse};
+use kanban_protocol::{ApiTask, CreateTaskRequest, CreateTaskResponse};
 
 use crate::{
     KanbanClient, error::ClientError, shared::prepare_create_request,

@@ -35,7 +35,7 @@ impl KanbanClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kanban_contract::{
+    use kanban_protocol::{
         ApiTask, ArchiveTaskRequest, ReclaimTaskRequest, ReopenTaskRequest, SpecifyTaskRequest,
         UnblockTaskRequest, UpdateTaskRequest,
     };

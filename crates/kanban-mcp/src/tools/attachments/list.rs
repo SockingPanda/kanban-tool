@@ -1,4 +1,4 @@
-use kanban_contract::ListAttachmentsResponse;
+use kanban_protocol::ListAttachmentsResponse;
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

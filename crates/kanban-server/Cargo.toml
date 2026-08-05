@@ -13,7 +13,7 @@ legacy-sqlite-import = ["kanban-store-turso/legacy-sqlite-import"]
 [dependencies]
 axum.workspace = true
 kanban-application.workspace = true
-kanban-contract = { workspace = true, default-features = false }
+kanban-protocol = { workspace = true, default-features = false }
 kanban-core.workspace = true
 kanban-store-turso.workspace = true
 serde = { workspace = true, features = ["derive"] }

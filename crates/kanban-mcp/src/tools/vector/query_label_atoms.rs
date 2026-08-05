@@ -1,5 +1,5 @@
 use crate::shared::{KanbanMcp, call_client_internal};
-use kanban_contract::{DataEnvelope, VectorQuery, VectorQueryLabelAtomsResponse};
+use kanban_protocol::{DataEnvelope, VectorQuery, VectorQueryLabelAtomsResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

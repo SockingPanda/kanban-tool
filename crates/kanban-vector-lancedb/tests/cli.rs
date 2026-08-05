@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use kanban_contract::VectorHelperStatusResponse;
 use kanban_helper_protocol::HelperEnvelope;
+use kanban_protocol::VectorHelperStatusResponse;
 use rusqlite::{Connection, params};
 use serde_json::Value;
 

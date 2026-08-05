@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{ReleaseTaskRequest, ReleaseTaskResponse};
+use kanban_protocol::{ReleaseTaskRequest, ReleaseTaskResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

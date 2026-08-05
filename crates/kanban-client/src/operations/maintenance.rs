@@ -1,4 +1,4 @@
-use kanban_contract::{
+use kanban_protocol::{
     BackupReport, BackupResponse, CheckpointReport, CheckpointResponse, DoctorReport,
     DoctorResponse, ExportReport, ExportResponse, ImportReport, ImportResponse, LegacyImportReport,
     LegacyImportRequest, LegacyImportResponse, MaintenanceImportRequest, MaintenanceOwnerStatus,

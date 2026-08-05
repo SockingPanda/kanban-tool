@@ -1,5 +1,5 @@
 use clap::Args;
-use kanban_contract::{ArchiveBoardRequest, ArchiveBoardResponse};
+use kanban_protocol::{ArchiveBoardRequest, ArchiveBoardResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

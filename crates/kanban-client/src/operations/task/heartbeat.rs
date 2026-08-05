@@ -1,4 +1,4 @@
-use kanban_contract::{ApiTask, HeartbeatTaskRequest, HeartbeatTaskResponse};
+use kanban_protocol::{ApiTask, HeartbeatTaskRequest, HeartbeatTaskResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

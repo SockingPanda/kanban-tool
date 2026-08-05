@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use kanban_contract::{
+use kanban_protocol::{
     CommentAuthorType, CommentKind, CreateCommentRequest, CreateCommentResponse,
 };
 use rmcp::{

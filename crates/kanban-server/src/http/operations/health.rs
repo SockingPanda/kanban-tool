@@ -1,6 +1,6 @@
 use crate::{error::ApiError, state::AppState};
 use axum::{Json, Router, extract::State, routing::get};
-use kanban_contract::{HealthReport, HealthResponse};
+use kanban_protocol::{HealthReport, HealthResponse};
 use std::time::UNIX_EPOCH;
 
 pub(crate) async fn health(

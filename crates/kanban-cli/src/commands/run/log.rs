@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{CliRunLog, CliRunLogsOutput};
+use kanban_protocol::{CliRunLog, CliRunLogsOutput};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

@@ -1,7 +1,7 @@
 use crate::error::ApiError;
 use kanban_application::{SignalRecord, SignalStatus};
-use kanban_contract::{SignalObservationWire, SignalWire};
 use kanban_core::KanbanError;
+use kanban_protocol::{SignalObservationWire, SignalWire};
 
 pub(crate) fn api_signal(signal: SignalRecord) -> Result<SignalWire, ApiError> {
     let evidence: serde_json::Value = serde_json::from_str(&signal.observation.evidence_json)
@@ -43,7 +43,7 @@ pub(crate) fn api_signal(signal: SignalRecord) -> Result<SignalWire, ApiError> {
             actor: signal.observation.actor,
             agent_type: signal.observation.agent_type,
             source: signal.observation.source,
-            evidence: kanban_contract::structured_metadata::JsonObject(
+            evidence: kanban_protocol::structured_metadata::JsonObject(
                 evidence.into_iter().collect(),
             ),
             created_at: signal.observation.created_at,

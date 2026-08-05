@@ -5,7 +5,7 @@ use axum::{
     extract::{Query, State},
     routing::get,
 };
-use kanban_contract::{ListBoardsQuery, ListBoardsResponse};
+use kanban_protocol::{ListBoardsQuery, ListBoardsResponse};
 
 pub(crate) async fn list_boards(
     State(state): State<AppState>,

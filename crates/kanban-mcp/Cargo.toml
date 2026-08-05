@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 kanban-client.workspace = true
-kanban-contract = { workspace = true, default-features = false, features = ["schema"] }
+kanban-protocol = { workspace = true, default-features = false, features = ["schema"] }
 rmcp = { workspace = true, default-features = false, features = ["server", "transport-io", "macros"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

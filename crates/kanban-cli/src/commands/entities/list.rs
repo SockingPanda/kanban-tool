@@ -15,7 +15,7 @@ pub(crate) fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
         ctx.client()?
             .list_entities(Some(&ctx.board), args.kind.as_deref(), args.limit)?;
     if ctx.json {
-        output::print_json(&kanban_contract::CliEntityListOutput { data: entities });
+        output::print_json(&kanban_protocol::CliEntityListOutput { data: entities });
     } else {
         for entity in entities {
             println!("{} {} {}", entity.uri, entity.kind, entity.source_id);

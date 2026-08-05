@@ -1,4 +1,4 @@
-use kanban_contract::{CliInitOutput, CliInitResult};
+use kanban_protocol::{CliInitOutput, CliInitResult};
 
 use crate::{config, error::CliFailure, output};
 

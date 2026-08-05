@@ -6,14 +6,14 @@ use axum::{
     routing::get,
 };
 use kanban_application::SignalListOptions as ApplicationSignalListOptions;
-use kanban_contract::{BoardLabelPath, MetadataEnvelope, SignalFilterMeta, SignalQuery};
 use kanban_core::KanbanError;
+use kanban_protocol::{BoardLabelPath, MetadataEnvelope, SignalFilterMeta, SignalQuery};
 
 pub(crate) async fn list_signals(
     State(state): State<AppState>,
     Path(BoardLabelPath { board }): Path<BoardLabelPath>,
     query: Result<Query<SignalQuery>, QueryRejection>,
-) -> Result<Json<kanban_contract::ListSignalsResponse>, ApiError> {
+) -> Result<Json<kanban_protocol::ListSignalsResponse>, ApiError> {
     let Query(query) = query
         .map_err(|error| KanbanError::InvalidInput(format!("invalid signal query: {error}")))?;
     let signals = state
@@ -36,7 +36,7 @@ pub(crate) async fn review_signals(
     State(state): State<AppState>,
     Path(BoardLabelPath { board }): Path<BoardLabelPath>,
     query: Result<Query<SignalQuery>, QueryRejection>,
-) -> Result<Json<kanban_contract::ReviewSignalsResponse>, ApiError> {
+) -> Result<Json<kanban_protocol::ReviewSignalsResponse>, ApiError> {
     let Query(mut query) = query
         .map_err(|error| KanbanError::InvalidInput(format!("invalid signal query: {error}")))?;
     query.include_all = false;

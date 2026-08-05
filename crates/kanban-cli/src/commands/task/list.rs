@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use clap::{Args, ValueEnum};
 use kanban_client::KanbanClient;
-use kanban_contract::{
+use kanban_protocol::{
     ApiTaskPriority, ApiTaskStatus, ListTasksQuery, TaskReadLabel, TaskReadPlanFilter, TaskReadSort,
 };
 
@@ -53,7 +53,7 @@ pub(crate) fn run(
     let query = list_tasks_query(args)?;
     let response = client.list_tasks(&ctx.board, &query)?;
     if ctx.json {
-        output::print_json(&kanban_contract::CliTaskListOutput::new(response.data));
+        output::print_json(&kanban_protocol::CliTaskListOutput::new(response.data));
     } else {
         for task in response.data {
             println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);

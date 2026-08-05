@@ -1,4 +1,4 @@
-use kanban_contract::{GraphNeighborsQuery, GraphNeighborsResponse};
+use kanban_protocol::{GraphNeighborsQuery, GraphNeighborsResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

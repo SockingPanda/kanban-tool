@@ -5,7 +5,7 @@ pub(super) mod list;
 pub(super) mod show;
 
 use clap::Subcommand;
-use kanban_contract::{
+use kanban_protocol::{
     CliBoardConfigSelection, CliBoardCurrentOutput, CliBoardUseOutput, CliConfigSource,
 };
 

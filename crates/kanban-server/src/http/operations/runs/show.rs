@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{GetRunPath, GetRunResponse};
+use kanban_protocol::{GetRunPath, GetRunResponse};
 
 pub(crate) async fn get_run(
     State(state): State<AppState>,

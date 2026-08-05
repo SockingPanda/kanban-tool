@@ -1,4 +1,4 @@
-use kanban_contract::{ApiComment, ListCommentsResponse};
+use kanban_protocol::{ApiComment, ListCommentsResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

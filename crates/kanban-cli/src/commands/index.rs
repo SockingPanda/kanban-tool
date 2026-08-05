@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use kanban_contract::{CliIndexDoctorOutput, CliIndexStatusOutput};
+use kanban_protocol::{CliIndexDoctorOutput, CliIndexStatusOutput};
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -28,7 +28,7 @@ pub(crate) fn run(ctx: &CliContext, command: &IndexCommand) -> Result<(), CliFai
 
 fn show_status(
     ctx: &CliContext,
-    response: kanban_contract::SearchStatusResponse,
+    response: kanban_protocol::SearchStatusResponse,
     doctor: bool,
 ) -> Result<(), CliFailure> {
     if ctx.json {

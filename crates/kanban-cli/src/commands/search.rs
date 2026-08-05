@@ -1,6 +1,6 @@
 use clap::{Args, ValueEnum};
-use kanban_contract::cli_helpers::{CliSearchData, CliSearchOutput};
-use kanban_contract::{ApiTaskStatus, SearchTasksQuery};
+use kanban_protocol::cli_helpers::{CliSearchData, CliSearchOutput};
+use kanban_protocol::{ApiTaskStatus, SearchTasksQuery};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

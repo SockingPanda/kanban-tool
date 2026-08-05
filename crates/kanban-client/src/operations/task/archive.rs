@@ -1,5 +1,5 @@
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
-use kanban_contract::{ApiTask, ArchiveTaskRequest, ArchiveTaskResponse};
+use kanban_protocol::{ApiTask, ArchiveTaskRequest, ArchiveTaskResponse};
 
 impl KanbanClient {
     pub fn archive_task(

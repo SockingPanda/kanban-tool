@@ -1,4 +1,4 @@
-use kanban_contract::{StreamEventData, StreamEventsQuery};
+use kanban_protocol::{StreamEventData, StreamEventsQuery};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

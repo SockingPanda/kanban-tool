@@ -19,7 +19,7 @@ clap = { workspace = true, features = ["derive", "env"] }
 clap_complete.workspace = true
 dirs-next.workspace = true
 kanban-client.workspace = true
-kanban-contract = { workspace = true, default-features = false }
+kanban-protocol = { workspace = true, default-features = false }
 kanban-core.workspace = true
 kanban-server.workspace = true
 serde = { workspace = true, features = ["derive"] }

@@ -1,4 +1,4 @@
-use kanban_contract::{HealthReport, HealthResponse};
+use kanban_protocol::{HealthReport, HealthResponse};
 
 use crate::{KanbanClient, error::ClientError};
 

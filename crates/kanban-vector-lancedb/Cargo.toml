@@ -7,7 +7,7 @@ authors.workspace = true
 
 [dependencies]
 kanban-local.workspace = true
-kanban-contract.workspace = true
+kanban-protocol.workspace = true
 kanban-indexer.workspace = true
 clap.workspace = true
 anyhow.workspace = true

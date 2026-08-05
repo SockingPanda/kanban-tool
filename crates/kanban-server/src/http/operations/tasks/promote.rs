@@ -8,8 +8,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::PromoteTaskCommand;
-use kanban_contract::{PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse};
 
 pub(crate) async fn promote_task(
     State(state): State<AppState>,

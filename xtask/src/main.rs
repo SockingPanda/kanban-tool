@@ -74,7 +74,7 @@ fn run_schema(command: &str, root: &Path, require_closed: bool) -> xtask::ToolRe
             xtask::check_contract(root, require_closed)?;
             println!(
                 "已生成并验证 {} 个 schema roots（未闭合项: {}）",
-                kanban_contract::schema_registry().len(),
+                kanban_protocol::schema_registry().len(),
                 xtask::unfinished_contract_count()
             );
             Ok(())
@@ -83,7 +83,7 @@ fn run_schema(command: &str, root: &Path, require_closed: bool) -> xtask::ToolRe
             xtask::check_contract(root, require_closed)?;
             println!(
                 "schema contract 已通过：{} roots，{} 未闭合项",
-                kanban_contract::schema_registry().len(),
+                kanban_protocol::schema_registry().len(),
                 xtask::unfinished_contract_count()
             );
             Ok(())
@@ -92,8 +92,8 @@ fn run_schema(command: &str, root: &Path, require_closed: bool) -> xtask::ToolRe
             xtask::audit_inventory(require_closed)?;
             println!(
                 "contract/surface catalog 已通过：{} contract entries，{} surface entries，{} 未闭合项",
-                kanban_contract::operation_inventory().len(),
-                kanban_contract::surface_operation_catalog().len(),
+                kanban_protocol::operation_inventory().len(),
+                kanban_protocol::surface_operation_catalog().len(),
                 xtask::unfinished_contract_count()
             );
             Ok(())
@@ -108,9 +108,9 @@ fn run_schema(command: &str, root: &Path, require_closed: bool) -> xtask::ToolRe
 }
 
 fn print_adopted_inventory() {
-    let adopted = kanban_contract::operation_inventory()
+    let adopted = kanban_protocol::operation_inventory()
         .iter()
-        .filter(|operation| operation.migration == kanban_contract::MigrationState::Adopted)
+        .filter(|operation| operation.migration == kanban_protocol::MigrationState::Adopted)
         .collect::<Vec<_>>();
     println!(
         "{}",

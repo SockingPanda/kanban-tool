@@ -10,7 +10,7 @@ pub(crate) fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let comments = client.list_comments_by_selector(&ctx.board, &args.task_ref)?;
     if ctx.json {
-        output::print_json(&kanban_contract::CliCommentListOutput::new(comments));
+        output::print_json(&kanban_protocol::CliCommentListOutput::new(comments));
     } else {
         for comment in comments {
             println!(

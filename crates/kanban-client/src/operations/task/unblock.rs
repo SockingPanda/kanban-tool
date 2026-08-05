@@ -1,5 +1,5 @@
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
-use kanban_contract::{ApiTask, UnblockTaskRequest, UnblockTaskResponse};
+use kanban_protocol::{ApiTask, UnblockTaskRequest, UnblockTaskResponse};
 
 impl KanbanClient {
     pub fn unblock_task(

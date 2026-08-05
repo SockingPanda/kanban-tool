@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{GetTaskDetailsResponse, GetTaskResponse};
+use kanban_protocol::{GetTaskDetailsResponse, GetTaskResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

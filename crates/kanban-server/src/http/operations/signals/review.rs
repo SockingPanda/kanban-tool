@@ -7,8 +7,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::{SignalLifecycle, SignalReviewCommand};
-use kanban_contract::{BoardLabelPath, DataEnvelope, ReviewSignalsRequest, SignalWire};
 use kanban_core::KanbanError;
+use kanban_protocol::{BoardLabelPath, DataEnvelope, ReviewSignalsRequest, SignalWire};
 
 use super::super::support::request_actor;
 

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use kanban_contract::{
+use kanban_protocol::{
     ConfirmSignalsResponse, GetSignalResponse, ListSignalsResponse, RecordSignalRequest,
     RecordSignalResponse, RejectSignalsResponse, ResolveSignalsResponse, ReviewSignalsRequest,
     ReviewSignalsResponse, SignalCommentRequest, SignalQuery, SupersedeSignalsResponse,
@@ -115,7 +115,7 @@ impl KanbanMcp {
             source: args.source,
             evidence: args
                 .evidence
-                .map(kanban_contract::structured_metadata::JsonObject),
+                .map(kanban_protocol::structured_metadata::JsonObject),
             comment: args
                 .comment_body
                 .map(|body| SignalCommentRequest { body: Some(body) }),

@@ -1,4 +1,4 @@
-use kanban_contract::{ApiTask, SubmitReviewTaskRequest, SubmitReviewTaskResponse};
+use kanban_protocol::{ApiTask, SubmitReviewTaskRequest, SubmitReviewTaskResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

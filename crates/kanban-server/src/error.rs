@@ -3,8 +3,8 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use kanban_contract::{ApiErrorCode, ErrorBody, ErrorEnvelope};
 use kanban_core::KanbanError;
+use kanban_protocol::{ApiErrorCode, ErrorBody, ErrorEnvelope};
 
 #[derive(Debug)]
 pub(crate) struct ApiError(pub(crate) KanbanError);

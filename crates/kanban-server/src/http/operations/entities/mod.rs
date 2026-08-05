@@ -6,11 +6,11 @@ use axum::{
 };
 use kanban_application::dto::EntityRecord;
 use kanban_application::operations::{EntityListOptions, EntityUpsertCommand};
-use kanban_contract::{
+use kanban_core::KanbanError;
+use kanban_protocol::{
     CliEntity, CliEntityListOutput, CliEntityShowOutput, DataEnvelope, EntityListQuery, EntityPath,
     EntityUpsertRequest,
 };
-use kanban_core::KanbanError;
 
 pub(crate) async fn list_entities(
     State(state): State<AppState>,
@@ -88,7 +88,7 @@ pub(super) fn router() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use crate::http::operations::test_support::*;
-    use kanban_contract::{ApiErrorCode, ErrorEnvelope};
+    use kanban_protocol::{ApiErrorCode, ErrorEnvelope};
 
     #[tokio::test]
     async fn entity_upsert_list_and_show_are_available_on_host() {

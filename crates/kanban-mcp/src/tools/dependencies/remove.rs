@@ -1,4 +1,4 @@
-use kanban_contract::RemoveDependencyResponse;
+use kanban_protocol::RemoveDependencyResponse;
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

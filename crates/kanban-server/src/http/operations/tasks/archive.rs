@@ -8,8 +8,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::ArchiveTaskCommand;
-use kanban_contract::{ArchiveTaskPath, ArchiveTaskRequest, ArchiveTaskResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{ArchiveTaskPath, ArchiveTaskRequest, ArchiveTaskResponse};
 
 pub(crate) async fn archive_task(
     State(state): State<AppState>,

@@ -1,6 +1,6 @@
 use crate::error::ApiError;
 use crate::http::operations::tasks::support::{api_execution_plan, api_task_step};
-use kanban_contract::ApiTaskSteps;
+use kanban_protocol::ApiTaskSteps;
 
 pub(super) fn api_task_steps(
     steps: kanban_application::TaskStepsRecord,

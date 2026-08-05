@@ -13,7 +13,7 @@ use std::{
 };
 
 use clap::{Args, Subcommand};
-use kanban_contract::cli_operator::{
+use kanban_protocol::cli_operator::{
     CliHookCodexInstallOutput, CliHookCodexInstallResult, CliHookCodexStatusOutput,
     CliHookCodexStatusResult, CliHookCodexUninstallOutput, CliHookCodexUninstallResult,
     CliHookPromptBindings, CliHookPromptConfigStatus,

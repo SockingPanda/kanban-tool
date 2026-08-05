@@ -8,11 +8,11 @@ use axum::{
     routing::post,
 };
 use kanban_application::MarkExecutionPlanNotRequiredCommand;
-use kanban_contract::{
+use kanban_core::KanbanError;
+use kanban_protocol::{
     MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse,
 };
-use kanban_core::KanbanError;
 
 pub(crate) async fn mark_execution_plan_not_required(
     State(state): State<AppState>,

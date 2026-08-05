@@ -4,7 +4,21 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use kanban_contract::{
+use kanban_derived_io::{
+    board_id, current_last_event_id, derived_status_by_name, has_pending_vector_outbox_for_board,
+    label_atom_index_status_from_base,
+};
+use kanban_indexer::{
+    DERIVED_STORE_SCHEMA_VERSION, LANCEDB_CHUNKS_STORE, LANCEDB_LABEL_ATOMS_STORE,
+};
+use kanban_local::{
+    DerivedStoreReadGuard, DerivedStoreWriteGuard, DirectoryIdentityGuard,
+    checked_projection_store_generations_path, durable_create_dir_all, durable_create_new_file,
+    durable_quarantine_entry, durable_remove_directory, durable_replace_file_contents,
+    durable_sync_directory_tree, ensure_projection_store_generations_path,
+    projection_generation_path,
+};
+use kanban_protocol::{
     ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
     ProjectionCorpusMetadata, ProjectionDelivery, ProjectionDeliveryAction,
     ProjectionPublishReceipt, ProjectionSnapshot, ProjectionStoreDescriptor,
@@ -25,20 +39,6 @@ use kanban_contract::{
     VectorProjectionPublishResponse, VectorProjectionRepairPublicationRequest,
     VectorProjectionSkippedGeneration, VectorProjectionValidateActiveRequest,
     VectorProjectionValidateGenerationRequest, VectorProjectionValidationResponse,
-};
-use kanban_derived_io::{
-    board_id, current_last_event_id, derived_status_by_name, has_pending_vector_outbox_for_board,
-    label_atom_index_status_from_base,
-};
-use kanban_indexer::{
-    DERIVED_STORE_SCHEMA_VERSION, LANCEDB_CHUNKS_STORE, LANCEDB_LABEL_ATOMS_STORE,
-};
-use kanban_local::{
-    DerivedStoreReadGuard, DerivedStoreWriteGuard, DirectoryIdentityGuard,
-    checked_projection_store_generations_path, durable_create_dir_all, durable_create_new_file,
-    durable_quarantine_entry, durable_remove_directory, durable_replace_file_contents,
-    durable_sync_directory_tree, ensure_projection_store_generations_path,
-    projection_generation_path,
 };
 use kanban_sqlite::db::{DatabaseConnection, connect_existing_read_only};
 use kanban_vector::{

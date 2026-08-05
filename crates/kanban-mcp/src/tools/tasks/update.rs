@@ -1,5 +1,5 @@
 use crate::shared::{KanbanMcp, call_client};
-use kanban_contract::{UpdateTaskRequest, UpdateTaskResponse};
+use kanban_protocol::{UpdateTaskRequest, UpdateTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

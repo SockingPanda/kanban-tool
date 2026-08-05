@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use kanban_contract::VectorProjectionHelperResponse;
+use kanban_protocol::VectorProjectionHelperResponse;
 use kanban_vector_lancedb::{vector_helper_build_identity, vector_projection_descriptor_response};
 
 fn expected_build_identity() -> &'static str {

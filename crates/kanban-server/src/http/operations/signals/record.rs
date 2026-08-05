@@ -8,10 +8,10 @@ use axum::{
     routing::post,
 };
 use kanban_application::SignalRecordCommand;
-use kanban_contract::{
+use kanban_core::KanbanError;
+use kanban_protocol::{
     BoardLabelPath, DataEnvelope, RecordSignalRequest, RecordSignalResponse, SignalRecordResult,
 };
-use kanban_core::KanbanError;
 
 pub(crate) async fn record_signal(
     State(state): State<AppState>,

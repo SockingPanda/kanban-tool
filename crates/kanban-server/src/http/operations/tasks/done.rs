@@ -8,8 +8,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::CompleteTaskCommand;
-use kanban_contract::{CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse};
 
 pub(crate) async fn complete_task(
     State(state): State<AppState>,

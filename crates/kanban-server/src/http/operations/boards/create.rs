@@ -8,8 +8,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::CreateBoardCommand;
-use kanban_contract::{CreateBoardRequest, CreateBoardResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{CreateBoardRequest, CreateBoardResponse};
 
 pub(crate) async fn create_board(
     State(state): State<AppState>,

@@ -1,4 +1,6 @@
-use kanban_contract::{
+use kanban_entity::{ChunkRef, EntityUri};
+use kanban_helper_protocol::HelperEnvelope;
+use kanban_protocol::{
     ProjectionArtifactManifest, ProjectionCorpusMetadata, ProjectionStoreDescriptor,
     VectorHelperEmbedQueryResponse, VectorHelperErrorResponse, VectorHelperLabelAtomHit,
     VectorHelperQueryChunksResponse, VectorHelperQueryLabelAtomsItem,
@@ -9,8 +11,6 @@ use kanban_contract::{
     VectorProjectionHelperErrorKind, VectorProjectionHelperRequest, VectorProjectionHelperResponse,
     VectorProjectionMutationAck, VectorProjectionMutationContext, VectorProjectionProtectionReason,
 };
-use kanban_entity::{ChunkRef, EntityUri};
-use kanban_helper_protocol::HelperEnvelope;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -1187,7 +1187,7 @@ fn valid_projection_generation_binding(binding: &VectorProjectionGenerationBindi
 fn valid_projection_manifest(manifest: &ProjectionArtifactManifest) -> bool {
     !manifest.store_name.trim().is_empty()
         && manifest.database_instance_id.starts_with("db_")
-        && manifest.protocol_version == kanban_contract::VECTOR_PROJECTION_PROTOCOL_VERSION
+        && manifest.protocol_version == kanban_protocol::VECTOR_PROJECTION_PROTOCOL_VERSION
         && manifest.schema_version > 0
         && !manifest.generation.trim().is_empty()
         && manifest.fence_epoch >= 0
@@ -1230,7 +1230,7 @@ fn projection_manifest_matches_generation_binding(
 }
 
 fn valid_cleanup_protection(
-    protection: &kanban_contract::VectorProjectionCleanupProtection,
+    protection: &kanban_protocol::VectorProjectionCleanupProtection,
 ) -> bool {
     let mut generations = BTreeSet::new();
     [
@@ -1341,12 +1341,12 @@ pub fn validate_projection_request_against_descriptor(
 }
 
 fn valid_projection_descriptor(descriptor: &VectorProjectionHelperDescriptor) -> bool {
-    if descriptor.protocol_version != kanban_contract::VECTOR_PROJECTION_PROTOCOL_VERSION
+    if descriptor.protocol_version != kanban_protocol::VECTOR_PROJECTION_PROTOCOL_VERSION
         || descriptor.build_identity.trim().is_empty()
         || descriptor.supported_operations.is_empty()
         || !descriptor
             .supported_operations
-            .contains(&kanban_contract::VectorProjectionHelperOperation::Descriptor)
+            .contains(&kanban_protocol::VectorProjectionHelperOperation::Descriptor)
         || !strictly_increasing(&descriptor.supported_operations)
         || !descriptor
             .supported_stores
@@ -1356,7 +1356,7 @@ fn valid_projection_descriptor(descriptor: &VectorProjectionHelperDescriptor) ->
         return false;
     }
     let has_store_operation = descriptor.supported_operations.iter().any(|operation| {
-        *operation != kanban_contract::VectorProjectionHelperOperation::Descriptor
+        *operation != kanban_protocol::VectorProjectionHelperOperation::Descriptor
     });
     if has_store_operation && descriptor.supported_stores.is_empty() {
         return false;
@@ -1466,7 +1466,7 @@ fn store_only_binding(store_name: &str) -> ProjectionRequestStoreBinding<'_> {
 
 fn context_matches_manifest(
     context: &VectorProjectionMutationContext,
-    manifest: &kanban_contract::ProjectionArtifactManifest,
+    manifest: &kanban_protocol::ProjectionArtifactManifest,
 ) -> bool {
     context.projection_store == manifest.store_name
         && context.generation_id == manifest.generation
@@ -1653,8 +1653,8 @@ fn validate_projection_response(
 }
 
 fn cleanup_response_matches(
-    request: &kanban_contract::VectorProjectionCleanupRequest,
-    response: &kanban_contract::VectorProjectionCleanupResponse,
+    request: &kanban_protocol::VectorProjectionCleanupRequest,
+    response: &kanban_protocol::VectorProjectionCleanupResponse,
 ) -> bool {
     if response.dry_run != request.dry_run
         || (request.dry_run && !response.removed_generations.is_empty())
@@ -1701,7 +1701,7 @@ fn cleanup_response_matches(
 }
 
 fn cleanup_protected_generations(
-    protection: &kanban_contract::VectorProjectionCleanupProtection,
+    protection: &kanban_protocol::VectorProjectionCleanupProtection,
 ) -> Option<BTreeMap<&str, VectorProjectionProtectionReason>> {
     let mut protected = BTreeMap::new();
     for (generation, reason) in [
@@ -2007,7 +2007,7 @@ fn vector_store_status(status: VectorHelperStatusResponse) -> VectorStoreStatus 
     }
 }
 
-fn vector_hit(hit: kanban_contract::VectorHelperChunkHit) -> Result<VectorHit, VectorError> {
+fn vector_hit(hit: kanban_protocol::VectorHelperChunkHit) -> Result<VectorHit, VectorError> {
     Ok(VectorHit {
         chunk: ChunkRef {
             uri: EntityUri::new(hit.chunk.uri)
@@ -2203,7 +2203,7 @@ mod tests {
         VectorStoreBackend, corpus_provider_fingerprint, embedding_provider_fingerprint,
         ensure_dimensions, label_atoms_corpus_metadata,
     };
-    use kanban_contract::{
+    use kanban_protocol::{
         ProjectionArtifactEvidence, ProjectionArtifactManifest, ProjectionBatch,
         ProjectionCorpusMetadata, ProjectionDelivery, ProjectionDeliveryAction, ProjectionSnapshot,
         ProjectionStoreDescriptor, VectorProjectionApplyBatchRequest,

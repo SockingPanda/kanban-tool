@@ -1,5 +1,5 @@
 use clap::Args;
-use kanban_contract::CreateBoardLabelRequest;
+use kanban_protocol::CreateBoardLabelRequest;
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -20,7 +20,7 @@ pub(crate) fn run(ctx: &CliContext, args: &CreateArgs) -> Result<(), CliFailure>
         },
     )?;
     if ctx.json {
-        output::print_json(&kanban_contract::cli_labels::CliLabelCreateOutput { data: label });
+        output::print_json(&kanban_protocol::cli_labels::CliLabelCreateOutput { data: label });
     } else {
         println!("{} {}", label.id, label.name);
     }

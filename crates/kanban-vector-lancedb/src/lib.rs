@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
-use kanban_contract::{
+use kanban_protocol::{
     VECTOR_PROJECTION_PROTOCOL_VERSION, VectorHelperCheckProviderResponse, VectorHelperChunkHit,
     VectorHelperChunkRef, VectorHelperEmbedQueryResponse, VectorHelperErrorResponse,
     VectorHelperHandshakeResponse, VectorHelperLabelAtomHit, VectorHelperLabelAtomVectorHit,

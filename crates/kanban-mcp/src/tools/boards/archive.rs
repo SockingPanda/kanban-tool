@@ -1,4 +1,4 @@
-use kanban_contract::{ArchiveBoardRequest, ArchiveBoardResponse};
+use kanban_protocol::{ArchiveBoardRequest, ArchiveBoardResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

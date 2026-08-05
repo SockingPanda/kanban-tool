@@ -4,11 +4,11 @@ use axum::{
     routing::get,
 };
 use kanban_application::{ContextBuildOptions, ContextPack as ApplicationContextPack};
-use kanban_contract::{
+use kanban_core::KanbanError;
+use kanban_protocol::{
     BuildContextPath, BuildContextQuery, BuildContextResponse, ContextDiagnostic, ContextEvidence,
     ContextItem, ContextPack, ContextPolicy, ContextProviderStatus, DataEnvelope,
 };
-use kanban_core::KanbanError;
 
 use crate::{error::ApiError, state::AppState};
 

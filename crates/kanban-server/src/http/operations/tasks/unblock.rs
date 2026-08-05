@@ -8,8 +8,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::UnblockTaskCommand;
-use kanban_contract::{UnblockTaskPath, UnblockTaskRequest, UnblockTaskResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{UnblockTaskPath, UnblockTaskRequest, UnblockTaskResponse};
 
 pub(crate) async fn unblock_task(
     State(state): State<AppState>,

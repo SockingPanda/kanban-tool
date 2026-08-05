@@ -1,7 +1,7 @@
 use crate::{context::CliContext, error::CliFailure, output};
 use clap::Args as ClapArgs;
 use kanban_client::KanbanClient;
-use kanban_contract::{
+use kanban_protocol::{
     VectorConfigureRequest,
     cli_helpers::{CliVectorConfig, CliVectorConfigureOutput},
 };

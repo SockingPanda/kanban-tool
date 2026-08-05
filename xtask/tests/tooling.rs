@@ -29,7 +29,7 @@ fn every_root_is_self_contained_and_has_a_complete_fixture_pair() {
         .parent()
         .expect("xtask crate must live below workspace root");
 
-    for root in kanban_contract::schema::schema_registry() {
+    for root in kanban_protocol::schema::schema_registry() {
         assert!(root.valid_fixture.starts_with("schemas/fixtures/"));
         assert!(root.invalid_fixture.starts_with("schemas/fixtures/"));
         assert_ne!(root.valid_fixture, root.invalid_fixture);
@@ -56,7 +56,7 @@ fn every_root_is_self_contained_and_has_a_complete_fixture_pair() {
         assert_eq!(
             schema.get("$schema"),
             Some(&Value::String(
-                kanban_contract::schema::DRAFT_2020_12.to_owned()
+                kanban_protocol::schema::DRAFT_2020_12.to_owned()
             ))
         );
         assert_local_references(&schema, root.id);
@@ -112,9 +112,9 @@ fn witnesses_json_matches_canonical_inventory_order_and_format() {
     assert!(output.status.success());
     assert!(output.stderr.is_empty());
 
-    let adopted = kanban_contract::operation_inventory()
+    let adopted = kanban_protocol::operation_inventory()
         .iter()
-        .filter(|operation| operation.migration == kanban_contract::MigrationState::Adopted)
+        .filter(|operation| operation.migration == kanban_protocol::MigrationState::Adopted)
         .collect::<Vec<_>>();
     let expected = format!("{}\n", serde_json::to_string_pretty(&adopted).unwrap());
     assert_eq!(
@@ -131,13 +131,13 @@ fn closure_audit_accepts_closed_inventory() {
 
 #[test]
 fn decision_schema_accepts_missing_but_rejects_explicit_null() {
-    let root = kanban_contract::schema_registry()
+    let root = kanban_protocol::schema_registry()
         .iter()
         .find(|root| root.contract_id == "metadata.decision.input")
         .expect("decision root must exist");
     let validator = jsonschema::options()
         .with_draft(jsonschema::Draft::Draft202012)
-        .build(&kanban_contract::schema::schema_document(root))
+        .build(&kanban_protocol::schema::schema_document(root))
         .expect("decision schema must compile");
     let missing = serde_json::json!({
         "options": [{
@@ -167,7 +167,7 @@ fn decision_schema_accepts_missing_but_rejects_explicit_null() {
 fn data_envelope_meta_rejects_untyped_value() {
     let payload = serde_json::json!({"data": {"ok": true}, "meta": {"arbitrary": true}});
     assert!(
-        serde_json::from_value::<kanban_contract::DataEnvelope<serde_json::Value>>(payload)
+        serde_json::from_value::<kanban_protocol::DataEnvelope<serde_json::Value>>(payload)
             .is_err()
     );
 }

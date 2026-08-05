@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{ListCommentsPath, ListCommentsResponse};
+use kanban_protocol::{ListCommentsPath, ListCommentsResponse};
 
 pub(crate) async fn list_comments(
     State(state): State<AppState>,

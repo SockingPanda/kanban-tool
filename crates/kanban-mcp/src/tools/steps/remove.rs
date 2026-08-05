@@ -1,4 +1,4 @@
-use kanban_contract::RemoveStepResponse;
+use kanban_protocol::RemoveStepResponse;
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

@@ -1,4 +1,4 @@
-use kanban_contract::{
+use kanban_protocol::{
     VectorChunkResult, VectorConfigureRequest, VectorConfigureResponse, VectorLabelAtomResult,
     VectorProjectionRequest, VectorProjectionResponse, VectorQuery, VectorQueryChunksResponse,
     VectorQueryLabelAtomsResponse, VectorStatus, VectorStatusResponse,
@@ -103,7 +103,7 @@ fn vector_label_atoms_path(query: &VectorQuery) -> String {
 mod tests {
     use serde::{Serialize, de::DeserializeOwned};
 
-    use kanban_contract::{
+    use kanban_protocol::{
         DataEnvelope, VectorChunkResult, VectorConfigureRequest, VectorConfigureResponse,
         VectorLabelAtomResult, VectorProjectionRequest, VectorProjectionResponse, VectorQuery,
         VectorQueryChunksResponse, VectorQueryLabelAtomsResponse, VectorStatus,

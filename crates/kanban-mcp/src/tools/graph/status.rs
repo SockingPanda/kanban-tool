@@ -1,4 +1,4 @@
-use kanban_contract::{DataEnvelope, GraphStatus, GraphStatusResponse};
+use kanban_protocol::{DataEnvelope, GraphStatus, GraphStatusResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

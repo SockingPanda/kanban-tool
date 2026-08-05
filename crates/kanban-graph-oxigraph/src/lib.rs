@@ -1,12 +1,12 @@
 mod oxigraph_backend;
 
-use kanban_contract::{
+use kanban_entity::Relation;
+use kanban_graph::{GraphQueryRow, GraphStoreStatus};
+use kanban_protocol::{
     GraphHelperErrorResponse, GraphHelperHandshakeResponse, GraphHelperNeighborsResponse,
     GraphHelperQueryBinding, GraphHelperQueryResponse, GraphHelperQueryRow, GraphHelperRelation,
     GraphHelperRelationProvenance, GraphHelperStatusResponse,
 };
-use kanban_entity::Relation;
-use kanban_graph::{GraphQueryRow, GraphStoreStatus};
 
 pub use oxigraph_backend::OxigraphStore;
 

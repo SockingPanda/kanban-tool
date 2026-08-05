@@ -1,6 +1,6 @@
 use clap::Args;
 
-use kanban_contract::{GraphNeighborsQuery, LimitMeta};
+use kanban_protocol::{GraphNeighborsQuery, LimitMeta};
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -23,12 +23,12 @@ pub(crate) fn run(ctx: &CliContext, args: &NeighborsArgs) -> Result<(), CliFailu
     let relations = response
         .data
         .into_iter()
-        .map(|relation| kanban_contract::cli_helpers::CliGraphRelation {
+        .map(|relation| kanban_protocol::cli_helpers::CliGraphRelation {
             subject_uri: relation.subject_uri,
             predicate: relation.predicate,
             object_uri: relation.object_uri,
             graph_uri: relation.graph_uri,
-            provenance: kanban_contract::cli_helpers::CliGraphRelationProvenance {
+            provenance: kanban_protocol::cli_helpers::CliGraphRelationProvenance {
                 source_table: relation.provenance.source_table,
                 source_id: relation.provenance.source_id,
                 source_event_id: relation.provenance.source_event_id,
@@ -40,7 +40,7 @@ pub(crate) fn run(ctx: &CliContext, args: &NeighborsArgs) -> Result<(), CliFailu
         })
         .collect::<Vec<_>>();
     if ctx.json {
-        output::print_json(&kanban_contract::cli_helpers::CliGraphNeighborsOutput {
+        output::print_json(&kanban_protocol::cli_helpers::CliGraphNeighborsOutput {
             data: relations,
         });
     } else {

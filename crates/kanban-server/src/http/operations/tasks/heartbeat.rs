@@ -8,8 +8,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::HeartbeatTaskCommand;
-use kanban_contract::{HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse};
 
 pub(crate) async fn heartbeat_task(
     State(state): State<AppState>,

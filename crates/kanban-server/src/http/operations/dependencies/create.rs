@@ -8,8 +8,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::AddDependencyCommand;
-use kanban_contract::{AddDependencyPath, AddDependencyRequest, AddDependencyResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{AddDependencyPath, AddDependencyRequest, AddDependencyResponse};
 
 pub(crate) async fn add_dependency(
     State(state): State<AppState>,
@@ -187,7 +187,7 @@ mod tests {
             .unwrap();
         assert_eq!(removed.status(), StatusCode::OK);
         let removed_body = removed.into_body().collect().await.unwrap().to_bytes();
-        let removed: kanban_contract::RemoveDependencyResponse =
+        let removed: kanban_protocol::RemoveDependencyResponse =
             serde_json::from_slice(&removed_body).unwrap();
         assert!(removed.data.parents.is_empty());
         assert!(removed.data.edges.is_empty());

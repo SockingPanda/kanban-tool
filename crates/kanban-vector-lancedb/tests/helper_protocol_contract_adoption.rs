@@ -1,12 +1,12 @@
-use kanban_contract::{
+use kanban_entity::{ChunkRef, EntityUri};
+use kanban_helper_protocol::HelperEnvelope;
+use kanban_protocol::{
     VectorHelperCheckProviderResponse, VectorHelperEmbedQueryResponse, VectorHelperErrorResponse,
     VectorHelperHandshakeResponse, VectorHelperLabelAtomsStatusResponse,
     VectorHelperQueryChunksResponse, VectorHelperQueryLabelAtomsResponse,
     VectorHelperRebuildLabelAtomsResponse, VectorHelperRebuildResponse, VectorHelperStatusResponse,
     VectorHelperSyncLabelAtomsResponse, VectorHelperSyncResponse,
 };
-use kanban_entity::{ChunkRef, EntityUri};
-use kanban_helper_protocol::HelperEnvelope;
 use kanban_vector::{LabelAtomHit, LabelAtomVectorHit, VectorHit, VectorStoreStatus};
 use kanban_vector_lancedb::{
     vector_helper_check_provider_response, vector_helper_embed_query_response,

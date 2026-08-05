@@ -1,4 +1,4 @@
-use kanban_contract::{ApiTask, PromoteTaskRequest, PromoteTaskResponse};
+use kanban_protocol::{ApiTask, PromoteTaskRequest, PromoteTaskResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

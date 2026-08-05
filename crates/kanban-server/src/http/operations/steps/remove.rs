@@ -8,7 +8,7 @@ use axum::{
     routing::delete,
 };
 use kanban_application::operations::RemoveStepCommand;
-use kanban_contract::{RemoveStepPath, RemoveStepResponse};
+use kanban_protocol::{RemoveStepPath, RemoveStepResponse};
 
 pub(crate) async fn remove_step(
     State(state): State<AppState>,

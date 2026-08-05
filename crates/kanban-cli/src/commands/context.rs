@@ -1,5 +1,5 @@
 use clap::{Args, Subcommand};
-use kanban_contract::{BuildContextQuery, CliContextBuildOutput};
+use kanban_protocol::{BuildContextQuery, CliContextBuildOutput};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

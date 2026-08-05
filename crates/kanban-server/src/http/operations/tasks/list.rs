@@ -7,7 +7,7 @@ use axum::{
     routing::get,
 };
 use kanban_application::TaskListOptions as ApplicationTaskListOptions;
-use kanban_contract::{ListTasksPath, ListTasksResponse, TotalPaginationMeta};
+use kanban_protocol::{ListTasksPath, ListTasksResponse, TotalPaginationMeta};
 
 pub(crate) async fn list_tasks(
     State(state): State<AppState>,

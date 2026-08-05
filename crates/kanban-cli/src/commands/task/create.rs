@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use clap::{Args, ValueEnum};
 use kanban_client::KanbanClient;
-use kanban_contract::{ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse};
+use kanban_protocol::{ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

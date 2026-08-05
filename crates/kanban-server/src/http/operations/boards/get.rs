@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{GetBoardPath, GetBoardResponse};
+use kanban_protocol::{GetBoardPath, GetBoardResponse};
 
 pub(crate) async fn get_board(
     State(state): State<AppState>,

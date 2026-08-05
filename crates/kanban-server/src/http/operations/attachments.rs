@@ -9,12 +9,12 @@ use axum::{
     routing::get,
 };
 use kanban_application::{CreateAttachmentCommand, DeleteAttachmentCommand};
-use kanban_contract::{
+use kanban_core::KanbanError;
+use kanban_protocol::{
     ApiAttachment, CreateAttachmentPath, CreateAttachmentRequest, CreateAttachmentResponse,
     DeleteAttachmentPath, DeleteAttachmentResponse, GetAttachmentPath, ListAttachmentsPath,
     ListAttachmentsResponse,
 };
-use kanban_core::KanbanError;
 
 pub(crate) async fn list_attachments(
     State(state): State<AppState>,
@@ -114,7 +114,7 @@ pub(crate) async fn delete_attachment(
         })
         .await?;
     Ok(Json(DeleteAttachmentResponse {
-        data: kanban_contract::DeleteResult { deleted },
+        data: kanban_protocol::DeleteResult { deleted },
     }))
 }
 

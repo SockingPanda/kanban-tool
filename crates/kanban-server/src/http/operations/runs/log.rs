@@ -4,7 +4,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{ApiRunLog, GetRunLogPath, GetRunLogResponse};
+use kanban_protocol::{ApiRunLog, GetRunLogPath, GetRunLogResponse};
 
 pub(super) fn router() -> Router<AppState> {
     Router::new().route("/api/v1/runs/:run_id/log", get(get_run_log))
@@ -33,8 +33,8 @@ mod tests {
         ClaimTaskCommand, CreateTaskCommand, MarkExecutionPlanNotRequiredCommand,
         PromoteTaskCommand,
     };
-    use kanban_contract::{ApiErrorCode, ErrorEnvelope, GetRunLogResponse};
     use kanban_core::TaskStatus;
+    use kanban_protocol::{ApiErrorCode, ErrorEnvelope, GetRunLogResponse};
 
     #[tokio::test]
     async fn run_log_route_uses_the_application_and_returns_contract_shape() {

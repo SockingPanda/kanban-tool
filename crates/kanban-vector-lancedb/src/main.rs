@@ -297,7 +297,7 @@ fn run_projection(args: ProjectionArgs) -> Result<()> {
             Ok(request) => match configured_projection_backend(&args)? {
                 Some(backend) => backend.execute(&request),
                 None => match request {
-                    kanban_contract::VectorProjectionHelperRequest::Descriptor(request) => {
+                    kanban_protocol::VectorProjectionHelperRequest::Descriptor(request) => {
                         vector_projection_descriptor_response(request.request_id)
                     }
                     request => vector_projection_unavailable_response(&request),

@@ -1,5 +1,5 @@
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
-use kanban_contract::{ApiTask, UpdateTaskRequest, UpdateTaskResponse};
+use kanban_protocol::{ApiTask, UpdateTaskRequest, UpdateTaskResponse};
 
 impl KanbanClient {
     pub fn update_task(

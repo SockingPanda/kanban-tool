@@ -1,4 +1,4 @@
-use kanban_contract::{ApiBoard, CreateBoardRequest, CreateBoardResponse};
+use kanban_protocol::{ApiBoard, CreateBoardRequest, CreateBoardResponse};
 
 use crate::{KanbanClient, error::ClientError};
 

@@ -1,4 +1,4 @@
-use kanban_contract::{GetTaskDetailsResponse, GetTaskResponse};
+use kanban_protocol::{GetTaskDetailsResponse, GetTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

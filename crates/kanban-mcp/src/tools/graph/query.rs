@@ -1,4 +1,4 @@
-use kanban_contract::cli_helpers::CliGraphQueryOutput;
+use kanban_protocol::cli_helpers::CliGraphQueryOutput;
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

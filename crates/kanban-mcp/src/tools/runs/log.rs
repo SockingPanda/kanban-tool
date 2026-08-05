@@ -1,4 +1,4 @@
-use kanban_contract::GetRunLogResponse;
+use kanban_protocol::GetRunLogResponse;
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

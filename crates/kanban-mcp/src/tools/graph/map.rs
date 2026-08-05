@@ -1,4 +1,4 @@
-use kanban_contract::{BoardTaskMap, BoardTaskMapQuery, BoardTaskMapResponse, DataEnvelope};
+use kanban_protocol::{BoardTaskMap, BoardTaskMapQuery, BoardTaskMapResponse, DataEnvelope};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

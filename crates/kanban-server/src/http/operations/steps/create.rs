@@ -8,8 +8,8 @@ use axum::{
     routing::post,
 };
 use kanban_application::CreateStepCommand;
-use kanban_contract::{CreateStepPath, CreateStepRequest, CreateStepResponse};
 use kanban_core::KanbanError;
+use kanban_protocol::{CreateStepPath, CreateStepRequest, CreateStepResponse};
 
 pub(crate) async fn create_step(
     State(state): State<AppState>,
@@ -145,7 +145,7 @@ mod tests {
             .unwrap();
         assert_eq!(updated.status(), StatusCode::OK);
         let updated_body = updated.into_body().collect().await.unwrap().to_bytes();
-        let updated: kanban_contract::UpdateStepResponse =
+        let updated: kanban_protocol::UpdateStepResponse =
             serde_json::from_slice(&updated_body).unwrap();
         assert_eq!(updated.data.steps[0].title, "updated step");
         assert_eq!(updated.data.steps[0].body.as_deref(), Some("step body"));

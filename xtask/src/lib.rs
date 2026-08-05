@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use kanban_contract::{
+use kanban_protocol::{
     AdoptionWitness, ContractDirection, ContractGranularity, MigrationState, OperationContract,
     SurfaceOperation, endpoint_catalog, endpoint_obligation_todo_count, generated_artifacts,
     generated_schema_ids, operation_inventory,
@@ -41,8 +41,8 @@ struct RootManifest<'a> {
     id: &'a str,
     path: &'a str,
     contract_id: &'a str,
-    direction: kanban_contract::ContractDirection,
-    strictness: kanban_contract::ContractStrictness,
+    direction: kanban_protocol::ContractDirection,
+    strictness: kanban_protocol::ContractStrictness,
     schema_fixture: &'a str,
     invalid_fixture: &'a str,
     sha256: String,
@@ -286,8 +286,8 @@ fn audit_surface_entries(
                 )));
             }
             match contract.binding {
-                kanban_contract::ContractBinding::ExactSurface => exact_contracts.push(*contract),
-                kanban_contract::ContractBinding::SharedComponent => {
+                kanban_protocol::ContractBinding::ExactSurface => exact_contracts.push(*contract),
+                kanban_protocol::ContractBinding::SharedComponent => {
                     shared_contracts.push(*contract)
                 }
             }
@@ -356,7 +356,7 @@ fn audit_surface_entries(
         .values()
         .filter(|contract| {
             contract.migration == MigrationState::Adopted
-                && contract.binding == kanban_contract::ContractBinding::ExactSurface
+                && contract.binding == kanban_protocol::ContractBinding::ExactSurface
         })
         .map(|contract| contract.id)
         .collect::<BTreeSet<_>>();
@@ -385,7 +385,7 @@ fn audit_exact_surface_binding<'a>(
     exact_bindings: &mut BTreeMap<&'a str, String>,
     adopted_contracts: &mut BTreeSet<&'a str>,
 ) -> ToolResult<()> {
-    if contract.binding != kanban_contract::ContractBinding::ExactSurface {
+    if contract.binding != kanban_protocol::ContractBinding::ExactSurface {
         return Err(failure(format!(
             "exact surface binding 收到 shared component contract: {}",
             contract.id
@@ -408,7 +408,7 @@ fn audit_exact_surface_binding<'a>(
     }
 
     match contract.transport {
-        kanban_contract::ContractTransport::Http { operation_key, .. } => {
+        kanban_protocol::ContractTransport::Http { operation_key, .. } => {
             if operation_key != Some(entry.key.as_str()) {
                 return Err(failure(format!(
                     "exact contract operation 与 surface operation 漂移: {} -> {}",
@@ -416,7 +416,7 @@ fn audit_exact_surface_binding<'a>(
                 )));
             }
         }
-        kanban_contract::ContractTransport::NoTransport => {
+        kanban_protocol::ContractTransport::NoTransport => {
             if contract.operation != entry.key {
                 return Err(failure(format!(
                     "exact contract operation 与 surface operation 漂移: {} -> {}",
@@ -466,7 +466,7 @@ fn audit_shared_component_witnesses(
         .flat_map(|entry| {
             entry.contracts.iter().filter_map(|contract_id| {
                 operations.get(contract_id).and_then(|contract| {
-                    (contract.binding == kanban_contract::ContractBinding::SharedComponent
+                    (contract.binding == kanban_protocol::ContractBinding::SharedComponent
                         && contract.surface == entry.surface)
                         .then_some(contract.id)
                 })
@@ -478,7 +478,7 @@ fn audit_shared_component_witnesses(
         matches!(
             contract.migration,
             MigrationState::Generated | MigrationState::Adopted
-        ) && contract.binding == kanban_contract::ContractBinding::SharedComponent
+        ) && contract.binding == kanban_protocol::ContractBinding::SharedComponent
     }) {
         // orphan policy 是 OR：显式 linkage 已充分；否则 Adopted component 的两项
         // witness 都必须指向自身 surface 的真实 operation。
@@ -513,10 +513,10 @@ fn audit_shared_component_witnesses(
     Ok(())
 }
 
-fn contract_binding_name(binding: kanban_contract::ContractBinding) -> &'static str {
+fn contract_binding_name(binding: kanban_protocol::ContractBinding) -> &'static str {
     match binding {
-        kanban_contract::ContractBinding::ExactSurface => "exact_surface",
-        kanban_contract::ContractBinding::SharedComponent => "shared_component",
+        kanban_protocol::ContractBinding::ExactSurface => "exact_surface",
+        kanban_protocol::ContractBinding::SharedComponent => "shared_component",
     }
 }
 
@@ -931,7 +931,7 @@ fn failure(message: impl Into<String>) -> Box<dyn Error + Send + Sync> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kanban_contract::{
+    use kanban_protocol::{
         AdoptionEvidence, AdoptionWitness, ContractStrictness, ContractSurface, ContractTransport,
         HttpTransportLocation, MigrationState,
     };
@@ -955,7 +955,7 @@ mod tests {
                 location: HttpTransportLocation::Success,
                 parameters: &[],
             },
-            binding: kanban_contract::ContractBinding::ExactSurface,
+            binding: kanban_protocol::ContractBinding::ExactSurface,
         }
     }
 
@@ -1146,7 +1146,7 @@ mod tests {
         let mut c = exact_operation();
         c.id = "test.shared.output";
         c.operation = "shared output";
-        c.binding = kanban_contract::ContractBinding::SharedComponent;
+        c.binding = kanban_protocol::ContractBinding::SharedComponent;
         c.transport = ContractTransport::Http {
             operation_key: None,
             location: HttpTransportLocation::Error,
@@ -1364,7 +1364,7 @@ mod tests {
                 location: HttpTransportLocation::Body,
                 parameters: &[],
             },
-            binding: kanban_contract::ContractBinding::ExactSurface,
+            binding: kanban_protocol::ContractBinding::ExactSurface,
         }
     }
 
@@ -1418,7 +1418,7 @@ mod tests {
                 location: HttpTransportLocation::Success,
                 parameters: &[],
             },
-            binding: kanban_contract::ContractBinding::ExactSurface,
+            binding: kanban_protocol::ContractBinding::ExactSurface,
         };
         let orphan_operations = BTreeMap::from([(generated.id, &generated), (orphan.id, &orphan)]);
         let missing_reference = SurfaceOperation {
@@ -1457,12 +1457,12 @@ mod tests {
 
     #[test]
     fn adopted_endpoint_body_contract_mutations_fail_closed() {
-        let baseline = *kanban_contract::endpoint_descriptor("api.claim-task")
+        let baseline = *kanban_protocol::endpoint_descriptor("api.claim-task")
             .expect("claim endpoint descriptor");
         assert_eq!(baseline.migration, MigrationState::Adopted);
         assert!(matches!(
             baseline.obligations.body,
-            kanban_contract::EndpointObligation::Contract("api.claim-task.request")
+            kanban_protocol::EndpointObligation::Contract("api.claim-task.request")
         ));
 
         for (mutation, contract_id, expected) in [
@@ -1471,7 +1471,7 @@ mod tests {
             ("surface", "metadata.decision.input", "wrong surface"),
         ] {
             let mut endpoint = baseline;
-            endpoint.obligations.body = kanban_contract::EndpointObligation::Contract(contract_id);
+            endpoint.obligations.body = kanban_protocol::EndpointObligation::Contract(contract_id);
             let error = validate_endpoint_catalog(&[endpoint], false)
                 .expect_err("adopted endpoint body contract 漂移必须失败");
             assert!(error.contains(expected), "{mutation}: {error}");
@@ -1480,13 +1480,13 @@ mod tests {
 
     #[test]
     fn partial_generated_endpoint_cannot_pass_closed_audit_with_todo_obligations() {
-        let mut endpoint = *kanban_contract::endpoint_descriptor("api.claim-task")
+        let mut endpoint = *kanban_protocol::endpoint_descriptor("api.claim-task")
             .expect("claim endpoint descriptor");
         assert!(matches!(
             endpoint.obligations.body,
-            kanban_contract::EndpointObligation::Contract("api.claim-task.request")
+            kanban_protocol::EndpointObligation::Contract("api.claim-task.request")
         ));
-        endpoint.obligations.headers = kanban_contract::EndpointObligation::Todo;
+        endpoint.obligations.headers = kanban_protocol::EndpointObligation::Todo;
 
         let error = validate_endpoint_catalog(&[endpoint], true)
             .expect_err("adopted body 不能掩盖其它 Todo obligation");

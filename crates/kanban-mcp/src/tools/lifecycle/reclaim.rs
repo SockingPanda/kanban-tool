@@ -1,5 +1,5 @@
 use crate::shared::{KanbanMcp, call_client};
-use kanban_contract::{ReclaimTargetStatus, ReclaimTaskRequest, ReclaimTaskResponse};
+use kanban_protocol::{ReclaimTargetStatus, ReclaimTaskRequest, ReclaimTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

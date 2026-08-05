@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{HeartbeatTaskRequest, HeartbeatTaskResponse};
+use kanban_protocol::{HeartbeatTaskRequest, HeartbeatTaskResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

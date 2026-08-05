@@ -1,5 +1,5 @@
 use clap::Args;
-use kanban_contract::CliAttachmentRemoveOutput;
+use kanban_protocol::CliAttachmentRemoveOutput;
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -15,7 +15,7 @@ pub(crate) fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure>
     let deleted = client.delete_attachment(&task_id, &args.attachment_id)?;
     if ctx.json {
         output::print_json(&CliAttachmentRemoveOutput {
-            data: kanban_contract::DeleteResult { deleted },
+            data: kanban_protocol::DeleteResult { deleted },
         });
     } else {
         println!("{}", if deleted { "removed" } else { "not found" });

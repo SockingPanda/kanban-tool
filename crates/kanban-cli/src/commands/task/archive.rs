@@ -1,7 +1,7 @@
 use crate::{context::CliContext, error::CliFailure, output};
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{ArchiveTaskRequest, ArchiveTaskResponse};
+use kanban_protocol::{ArchiveTaskRequest, ArchiveTaskResponse};
 
 #[derive(Debug, Args)]
 pub(crate) struct ArchiveArgs {

@@ -1,4 +1,4 @@
-use kanban_contract::{DeleteAttachmentResponse, DeleteResult};
+use kanban_protocol::{DeleteAttachmentResponse, DeleteResult};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

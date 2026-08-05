@@ -1,5 +1,5 @@
 use clap::Args;
-use kanban_contract::{TaskNeighborhoodQuery, TaskNeighborhoodResponse};
+use kanban_protocol::{TaskNeighborhoodQuery, TaskNeighborhoodResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

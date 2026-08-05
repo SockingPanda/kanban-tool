@@ -1,4 +1,4 @@
-use kanban_contract::{ApiTask, BlockTaskRequest, BlockTaskResponse};
+use kanban_protocol::{ApiTask, BlockTaskRequest, BlockTaskResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

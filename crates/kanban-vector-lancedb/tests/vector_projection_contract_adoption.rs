@@ -2,7 +2,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use kanban_contract::{
+use kanban_protocol::{
     VectorProjectionDescriptorRequest, VectorProjectionHelperErrorKind,
     VectorProjectionHelperRequest, VectorProjectionHelperResponse,
 };

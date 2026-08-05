@@ -1,5 +1,5 @@
-use kanban_contract::cli_helpers::{CliGraphMaintenance, CliGraphQueryOutput};
-use kanban_contract::{
+use kanban_protocol::cli_helpers::{CliGraphMaintenance, CliGraphQueryOutput};
+use kanban_protocol::{
     BoardTaskMap, BoardTaskMapQuery, BoardTaskMapResponse, GraphMaintenanceResponse,
     GraphNeighborsQuery, GraphNeighborsResponse, GraphStatus, GraphStatusResponse,
     TaskNeighborhood, TaskNeighborhoodQuery, TaskNeighborhoodResponse,
@@ -98,7 +98,7 @@ impl KanbanClient {
     }
 }
 
-fn cli_graph_maintenance(maintenance: kanban_contract::GraphMaintenance) -> CliGraphMaintenance {
+fn cli_graph_maintenance(maintenance: kanban_protocol::GraphMaintenance) -> CliGraphMaintenance {
     CliGraphMaintenance {
         mode: maintenance.mode,
         board_id: maintenance.board_id,

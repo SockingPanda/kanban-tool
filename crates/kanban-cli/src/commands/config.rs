@@ -1,5 +1,5 @@
 use clap::Subcommand;
-use kanban_contract::{
+use kanban_protocol::{
     CliConfigShow, CliConfigShowOutput, CliConfigSource, CliResolvedConfigValue,
     CliResolvedLocaleValue,
 };

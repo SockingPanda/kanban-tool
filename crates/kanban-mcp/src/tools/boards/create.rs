@@ -1,4 +1,4 @@
-use kanban_contract::{CreateBoardRequest, CreateBoardResponse};
+use kanban_protocol::{CreateBoardRequest, CreateBoardResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

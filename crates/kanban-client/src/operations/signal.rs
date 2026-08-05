@@ -1,4 +1,4 @@
-use kanban_contract::{
+use kanban_protocol::{
     ConfirmSignalsResponse, GetSignalResponse, ListSignalsResponse, RecordSignalRequest,
     RecordSignalResponse, RejectSignalsResponse, ResolveSignalsResponse, ReviewSignalsRequest,
     ReviewSignalsResponse, SignalQuery, SignalWire, SupersedeSignalsResponse,
@@ -85,7 +85,7 @@ impl KanbanClient {
         board: &str,
         action: &str,
         request: &ReviewSignalsRequest,
-    ) -> Result<kanban_contract::DataEnvelope<Vec<SignalWire>>, ClientError> {
+    ) -> Result<kanban_protocol::DataEnvelope<Vec<SignalWire>>, ClientError> {
         let board = required_board(board)?;
         let mut request = request.clone();
         request.actor = Some(self.actor.clone());

@@ -1,5 +1,5 @@
 mod labels_adoption {
-    use kanban_contract::{
+    use kanban_protocol::{
         AddTaskLabelPath, AddTaskLabelRequest, AddTaskLabelResponse, BoardLabelPath,
         CreateBoardLabelRequest, CreateBoardLabelResponse, ListBoardLabelsResponse,
         ListTaskLabelsPath, ListTaskLabelsResponse, RemoveTaskLabelPath, RemoveTaskLabelResponse,

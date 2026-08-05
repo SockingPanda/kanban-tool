@@ -1,5 +1,5 @@
 use clap::Args;
-use kanban_contract::ApiDependencyEdge;
+use kanban_protocol::ApiDependencyEdge;
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -27,8 +27,8 @@ pub(crate) fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure>
                 parent: api_dependency_task(&parent),
                 child: api_dependency_task(&child),
             });
-        output::print_json(&kanban_contract::CliDependencyRemoveOutput {
-            data: kanban_contract::CliDependencyMutation {
+        output::print_json(&kanban_protocol::CliDependencyRemoveOutput {
+            data: kanban_protocol::CliDependencyMutation {
                 edge: cli_dependency_edge(&edge),
                 dependencies: cli_dependency_snapshot(&dependencies),
             },

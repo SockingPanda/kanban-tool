@@ -1,4 +1,4 @@
-use kanban_contract::{
+use kanban_protocol::{
     AddTaskLabelRequest, AddTaskLabelResponse, CreateBoardLabelRequest, CreateBoardLabelResponse,
     ListBoardLabelsResponse, ListTaskLabelsResponse, RemoveTaskLabelResponse,
 };

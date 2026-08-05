@@ -1,4 +1,4 @@
-use kanban_contract::{BlockTaskRequest, BlockTaskResponse};
+use kanban_protocol::{BlockTaskRequest, BlockTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

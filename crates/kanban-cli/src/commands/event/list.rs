@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{CliEvent, CliEventsOutput, ListEventsQuery};
+use kanban_protocol::{CliEvent, CliEventsOutput, ListEventsQuery};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

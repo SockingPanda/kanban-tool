@@ -1,7 +1,7 @@
 use crate::{context::CliContext, error::CliFailure, output};
 use clap::{Args, ValueEnum};
 use kanban_client::KanbanClient;
-use kanban_contract::{ReclaimTargetStatus, ReclaimTaskRequest, ReclaimTaskResponse};
+use kanban_protocol::{ReclaimTargetStatus, ReclaimTaskRequest, ReclaimTaskResponse};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub(crate) enum ReclaimStatus {

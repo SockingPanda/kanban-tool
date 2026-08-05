@@ -2,7 +2,7 @@ use std::{io::Read, path::PathBuf};
 
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{BlockTaskRequest, BlockTaskResponse};
+use kanban_protocol::{BlockTaskRequest, BlockTaskResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -116,7 +116,7 @@ mod tests {
     use super::{MAX_TEXT_INPUT_BYTES, block_reason, read_limited_text};
     use crate::{Cli, Command};
     use clap::Parser;
-    use kanban_contract::BlockTaskResponse;
+    use kanban_protocol::BlockTaskResponse;
 
     #[test]
     fn parses_task_block_command() {
@@ -163,7 +163,7 @@ mod tests {
     fn task_block_output_contract() {
         let fixture =
             include_str!("../../../../../schemas/fixtures/cli/task-block-output.v1.valid.json");
-        let output: kanban_contract::CliTaskBlockOutput = serde_json::from_str(fixture).unwrap();
+        let output: kanban_protocol::CliTaskBlockOutput = serde_json::from_str(fixture).unwrap();
         assert_eq!(output.data.status.as_str(), "blocked");
         assert_eq!(
             serde_json::to_value(BlockTaskResponse::new(output.data.clone())).unwrap(),

@@ -1,5 +1,5 @@
 use clap::Args;
-use kanban_contract::{BoardTaskMapQuery, BoardTaskMapResponse};
+use kanban_protocol::{BoardTaskMapQuery, BoardTaskMapResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

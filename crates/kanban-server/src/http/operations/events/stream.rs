@@ -7,8 +7,8 @@ use axum::{
     routing::get,
 };
 use kanban_application::EventListOptions as ApplicationEventListOptions;
-use kanban_contract::{StreamEventData, StreamEventsQuery};
 use kanban_core::KanbanError;
+use kanban_protocol::{StreamEventData, StreamEventsQuery};
 
 use super::list::api_event;
 use crate::{error::ApiError, state::AppState};
@@ -73,7 +73,7 @@ pub(super) fn router() -> Router<AppState> {
 mod tests {
     use super::*;
     use crate::http::operations::test_support::*;
-    use kanban_contract::{
+    use kanban_protocol::{
         ApiErrorCode, ErrorEnvelope, StreamEventData, event_payload::EventPayload,
     };
 

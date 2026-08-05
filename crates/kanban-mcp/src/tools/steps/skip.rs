@@ -1,4 +1,4 @@
-use kanban_contract::{SkipStepRequest, SkipStepResponse};
+use kanban_protocol::{SkipStepRequest, SkipStepResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

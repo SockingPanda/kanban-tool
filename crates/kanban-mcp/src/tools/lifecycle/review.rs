@@ -1,4 +1,4 @@
-use kanban_contract::{SubmitReviewTaskRequest, SubmitReviewTaskResponse};
+use kanban_protocol::{SubmitReviewTaskRequest, SubmitReviewTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

@@ -1,4 +1,4 @@
-use kanban_contract::{
+use kanban_protocol::{
     ApiErrorCode, CreatedLabelsMeta, DataEnvelope, LabelOntologyReviewMeta, LimitMeta,
     MetadataEnvelope, NextAfterMeta, OffsetPaginationMeta, OptionalMetadataEnvelope,
     SignalFilterMeta, TaskOntologyDetails, TaskOntologyDetailsMeta, TotalPaginationMeta,

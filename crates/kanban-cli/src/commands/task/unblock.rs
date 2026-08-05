@@ -1,7 +1,7 @@
 use crate::{context::CliContext, error::CliFailure, output};
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{UnblockTaskRequest, UnblockTaskResponse};
+use kanban_protocol::{UnblockTaskRequest, UnblockTaskResponse};
 
 #[derive(Debug, Args)]
 pub(crate) struct UnblockArgs {

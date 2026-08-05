@@ -1,4 +1,4 @@
-use kanban_contract::{CliEntity, CliEntityListOutput, CliEntityShowOutput};
+use kanban_protocol::{CliEntity, CliEntityListOutput, CliEntityShowOutput};
 use serde::Serialize;
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};

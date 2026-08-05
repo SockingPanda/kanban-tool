@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use kanban_contract::{
+use kanban_protocol::{
     CliBoardCurrentOutput, CliBoardUseOutput, CliConfigShowOutput, CliConfigSource, CliInitOutput,
 };
 

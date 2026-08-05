@@ -1,4 +1,4 @@
-use kanban_contract::{ApiClaim, ClaimTaskRequest, ClaimTaskResponse};
+use kanban_protocol::{ApiClaim, ClaimTaskRequest, ClaimTaskResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

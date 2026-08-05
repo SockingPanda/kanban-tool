@@ -1,4 +1,4 @@
-use kanban_contract::{ApiBoardColumn, ListBoardColumnsResponse};
+use kanban_protocol::{ApiBoardColumn, ListBoardColumnsResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

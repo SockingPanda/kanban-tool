@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{CliTaskStepSkipOutput, SkipStepRequest};
+use kanban_protocol::{CliTaskStepSkipOutput, SkipStepRequest};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

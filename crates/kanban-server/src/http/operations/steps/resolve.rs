@@ -8,11 +8,11 @@ use axum::{
     routing::post,
 };
 use kanban_application::operations::{CompleteStepCommand, ReopenStepCommand, SkipStepCommand};
-use kanban_contract::{
+use kanban_core::KanbanError;
+use kanban_protocol::{
     CompleteStepPath, CompleteStepRequest, CompleteStepResponse, ReopenStepPath, ReopenStepRequest,
     ReopenStepResponse, SkipStepPath, SkipStepRequest, SkipStepResponse,
 };
-use kanban_core::KanbanError;
 
 pub(crate) async fn complete_step(
     State(state): State<AppState>,

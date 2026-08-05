@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{CliTaskStepRemoveOutput, CliTaskStepRemoveResult};
+use kanban_protocol::{CliTaskStepRemoveOutput, CliTaskStepRemoveResult};
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -40,7 +40,7 @@ pub(crate) fn run(
 }
 
 fn resolve_step_id(
-    steps: &kanban_contract::ApiTaskSteps,
+    steps: &kanban_protocol::ApiTaskSteps,
     selector: &str,
 ) -> Result<String, CliFailure> {
     let selector = selector.trim();

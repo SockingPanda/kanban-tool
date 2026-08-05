@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{DataEnvelope, GetSignalResponse, SignalPath};
+use kanban_protocol::{DataEnvelope, GetSignalResponse, SignalPath};
 
 pub(crate) async fn get_signal(
     State(state): State<AppState>,

@@ -1,5 +1,5 @@
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
-use kanban_contract::{ApiTask, ReopenTaskRequest, ReopenTaskResponse};
+use kanban_protocol::{ApiTask, ReopenTaskRequest, ReopenTaskResponse};
 
 impl KanbanClient {
     pub fn reopen_task(

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use kanban_contract::{ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse};
+use kanban_protocol::{ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

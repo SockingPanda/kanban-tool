@@ -16,13 +16,13 @@ use axum::{
     },
     routing::{get, post},
 };
-use kanban_contract::{
+use kanban_core::KanbanError;
+use kanban_protocol::{
     DataEnvelope, VectorChunkResult, VectorConfigureRequest, VectorConfigureResponse,
     VectorLabelAtomResult, VectorProjectionRequest, VectorProjectionResponse, VectorQuery,
     VectorQueryChunksResponse, VectorQueryLabelAtomsResponse, VectorStatus, VectorStatusQuery,
     VectorStatusResponse,
 };
-use kanban_core::KanbanError;
 use kanban_store_turso::{
     ProjectionJobRecord, StoreError, TursoStore, VectorConfig, VectorEmbeddingInput,
     VectorStatusRecord, stable_id,
@@ -625,7 +625,7 @@ mod tests {
         http::{Request, StatusCode},
     };
     use http_body_util::BodyExt;
-    use kanban_contract::{
+    use kanban_protocol::{
         DataEnvelope, VectorChunkResult, VectorConfigureRequest, VectorConfigureResponse,
         VectorLabelAtomResult, VectorProjectionResponse, VectorQuery, VectorQueryChunksResponse,
         VectorQueryLabelAtomsResponse, VectorStatus,
@@ -833,7 +833,7 @@ mod tests {
             .await
             .expect("status body")
             .to_bytes();
-        let status: kanban_contract::VectorStatusResponse =
+        let status: kanban_protocol::VectorStatusResponse =
             serde_json::from_slice(&body).expect("status envelope");
         assert_eq!(status.data.backend, "turso-vector32");
 
@@ -853,11 +853,11 @@ mod tests {
             .await
             .expect("query body")
             .to_bytes();
-        let error: kanban_contract::ErrorEnvelope =
+        let error: kanban_protocol::ErrorEnvelope =
             serde_json::from_slice(&body).expect("error envelope");
         assert_eq!(
             error.error.code,
-            kanban_contract::ApiErrorCode::InvalidInput
+            kanban_protocol::ApiErrorCode::InvalidInput
         );
         assert!(error.error.message.contains("degraded"));
     }

@@ -12,7 +12,7 @@ pub(crate) fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure>
     let client = ctx.client()?;
     let task = client.remove_task_label_by_selector(&ctx.board, &args.task_ref, &args.label)?;
     if ctx.json {
-        output::print_json(&kanban_contract::cli_labels::CliLabelRemoveOutput { data: task });
+        output::print_json(&kanban_protocol::cli_labels::CliLabelRemoveOutput { data: task });
     } else {
         println!(
             "{} labels={}",

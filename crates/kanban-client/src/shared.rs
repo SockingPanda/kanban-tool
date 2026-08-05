@@ -1,4 +1,4 @@
-use kanban_contract::{
+use kanban_protocol::{
     CreateCommentRequest, CreateStepRequest, CreateTaskRequest, ListTasksQuery, SearchTasksQuery,
 };
 
@@ -95,7 +95,7 @@ pub(crate) fn search_tasks_path(query: &SearchTasksQuery, by_status: bool) -> St
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kanban_contract::{ApiTaskPriority, ApiTaskStatus, TaskReadSort};
+    use kanban_protocol::{ApiTaskPriority, ApiTaskStatus, TaskReadSort};
 
     #[test]
     fn create_request_gets_stable_entity_local_identifiers() {
@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn comment_request_gets_unique_entity_local_idempotency_keys() {
-        let request = kanban_contract::CreateCommentRequest {
+        let request = kanban_protocol::CreateCommentRequest {
             idempotency_key: None,
             author: None,
             body: " handoff ".into(),
@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn comment_request_preserves_explicit_entity_local_idempotency_key() {
         let request = prepare_create_comment_request(
-            kanban_contract::CreateCommentRequest {
+            kanban_protocol::CreateCommentRequest {
                 idempotency_key: Some("comment.retry:fixed".into()),
                 author: None,
                 body: "handoff".into(),

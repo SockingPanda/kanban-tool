@@ -1,5 +1,5 @@
 use clap::{Args, Subcommand};
-use kanban_contract::{
+use kanban_protocol::{
     BackupReport, CheckpointReport, DoctorReport, ExportReport, ImportReport, MaintenanceRunReport,
     MaintenanceStatusReport, QueueStats, VacuumReport,
 };

@@ -1,5 +1,5 @@
 use clap::Args;
-use kanban_contract::GetBoardResponse;
+use kanban_protocol::GetBoardResponse;
 
 use crate::{context::CliContext, error::CliFailure, output};
 

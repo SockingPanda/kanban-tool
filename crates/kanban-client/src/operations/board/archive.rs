@@ -1,4 +1,4 @@
-use kanban_contract::{ApiBoard, ArchiveBoardRequest, ArchiveBoardResponse};
+use kanban_protocol::{ApiBoard, ArchiveBoardRequest, ArchiveBoardResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

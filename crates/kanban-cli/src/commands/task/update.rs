@@ -1,7 +1,7 @@
 use crate::{context::CliContext, error::CliFailure, output};
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{UpdateTaskRequest, UpdateTaskResponse};
+use kanban_protocol::{UpdateTaskRequest, UpdateTaskResponse};
 
 #[derive(Debug, Args)]
 pub(crate) struct UpdateArgs {

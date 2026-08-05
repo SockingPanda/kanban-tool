@@ -1,7 +1,7 @@
 use crate::{context::CliContext, error::CliFailure, output};
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{ReopenTaskRequest, ReopenTaskResponse};
+use kanban_protocol::{ReopenTaskRequest, ReopenTaskResponse};
 
 #[derive(Debug, Args)]
 pub(crate) struct ReopenArgs {

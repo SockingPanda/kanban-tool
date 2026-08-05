@@ -1,4 +1,4 @@
-use kanban_contract::AddDependencyResponse;
+use kanban_protocol::AddDependencyResponse;
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},

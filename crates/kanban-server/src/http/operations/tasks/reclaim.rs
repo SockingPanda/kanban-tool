@@ -8,10 +8,10 @@ use axum::{
     routing::post,
 };
 use kanban_application::ReclaimTaskCommand;
-use kanban_contract::{
+use kanban_core::{KanbanError, TaskStatus};
+use kanban_protocol::{
     ReclaimTargetStatus, ReclaimTaskPath, ReclaimTaskRequest, ReclaimTaskResponse,
 };
-use kanban_core::{KanbanError, TaskStatus};
 
 pub(crate) async fn reclaim_task(
     State(state): State<AppState>,

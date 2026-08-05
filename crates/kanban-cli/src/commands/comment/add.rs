@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use clap::{Args, ValueEnum};
-use kanban_contract::{CommentAuthorType, CommentKind, CreateCommentRequest};
+use kanban_protocol::{CommentAuthorType, CommentKind, CreateCommentRequest};
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -55,7 +55,7 @@ pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
         },
     )?;
     if ctx.json {
-        output::print_json(&kanban_contract::CliCommentAddOutput::new(comment));
+        output::print_json(&kanban_protocol::CliCommentAddOutput::new(comment));
     } else {
         println!(
             "{} task={} created_at={} [{}] {} ({}): {}",

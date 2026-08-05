@@ -1,4 +1,4 @@
-use kanban_contract::{ApiTaskSteps, ListStepsResponse};
+use kanban_protocol::{ApiTaskSteps, ListStepsResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 

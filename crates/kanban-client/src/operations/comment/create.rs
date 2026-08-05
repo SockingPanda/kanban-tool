@@ -1,4 +1,4 @@
-use kanban_contract::{ApiComment, CreateCommentRequest, CreateCommentResponse};
+use kanban_protocol::{ApiComment, CreateCommentRequest, CreateCommentResponse};
 
 use crate::{
     KanbanClient, error::ClientError, shared::prepare_create_comment_request,

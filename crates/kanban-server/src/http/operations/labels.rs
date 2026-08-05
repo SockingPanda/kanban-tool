@@ -11,12 +11,12 @@ use axum::{
     routing::{delete, get},
 };
 use kanban_application::{AddTaskLabelsCommand, CreateBoardLabelCommand, RemoveTaskLabelCommand};
-use kanban_contract::{
+use kanban_core::KanbanError;
+use kanban_protocol::{
     AddTaskLabelPath, AddTaskLabelRequest, AddTaskLabelResponse, BoardLabelPath,
     CreateBoardLabelRequest, CreateBoardLabelResponse, DataEnvelope, ListBoardLabelsResponse,
     ListTaskLabelsPath, ListTaskLabelsResponse, RemoveTaskLabelPath, RemoveTaskLabelResponse,
 };
-use kanban_core::KanbanError;
 
 pub(crate) async fn list_board_labels(
     State(state): State<AppState>,
@@ -82,7 +82,7 @@ pub(crate) async fn add_task_labels(
             actor,
         })
         .await?;
-    let meta = (!record.created_labels.is_empty()).then(|| kanban_contract::CreatedLabelsMeta {
+    let meta = (!record.created_labels.is_empty()).then(|| kanban_protocol::CreatedLabelsMeta {
         created_labels: record.created_labels.into_iter().map(api_label).collect(),
     });
     Ok((

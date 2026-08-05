@@ -12,7 +12,7 @@ pub(crate) fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
     let client = ctx.client()?;
     let dependencies = client.list_dependencies_by_selector(&ctx.board, &args.task_ref)?;
     if ctx.json {
-        output::print_json(&kanban_contract::CliDependencyListOutput {
+        output::print_json(&kanban_protocol::CliDependencyListOutput {
             data: cli_dependency_snapshot(&dependencies),
         });
     } else {

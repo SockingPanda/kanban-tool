@@ -103,6 +103,26 @@ pub struct TaskRunRecord {
     pub log_path: Option<String>,
     pub metadata_json: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskEventRecord {
+    pub id: i64,
+    pub event_id: String,
+    pub board_id: String,
+    pub task_id: Option<String>,
+    pub run_id: Option<String>,
+    pub kind: String,
+    pub actor: Option<String>,
+    pub payload_json: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskEventListPage {
+    pub events: Vec<TaskEventRecord>,
+    pub next_after: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskRecord {
     pub id: String,

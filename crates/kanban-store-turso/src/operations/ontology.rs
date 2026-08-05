@@ -32,18 +32,24 @@ const MAX_LIST_LIMIT: i64 = 1000;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct UpsertLabelSemanticsInput {
     pub expected_semantics_hash: Option<String>,
+    #[serde(default)]
     pub replace: bool,
     pub description: Option<String>,
     pub applies_when: Option<Vec<String>>,
     pub excludes_when: Option<Vec<String>>,
     pub positive_examples: Option<Vec<String>>,
     pub negative_examples: Option<Vec<String>>,
+    #[serde(default)]
     pub remove_applies_when: Vec<String>,
+    #[serde(default)]
     pub remove_excludes_when: Vec<String>,
+    #[serde(default)]
     pub remove_positive_examples: Vec<String>,
+    #[serde(default)]
     pub remove_negative_examples: Vec<String>,
     pub actor: String,
     pub reason: Option<String>,
+    #[serde(default)]
     pub source_signal_ids: Vec<String>,
 }
 
@@ -72,9 +78,13 @@ impl Default for LabelSuggestionOptions {
 pub struct LabelProposalInput {
     pub name: Option<String>,
     pub description: Option<String>,
+    #[serde(default)]
     pub applies_when: Vec<String>,
+    #[serde(default)]
     pub excludes_when: Vec<String>,
+    #[serde(default)]
     pub positive_examples: Vec<String>,
+    #[serde(default)]
     pub negative_examples: Vec<String>,
     pub actor: String,
     pub source_signal_ids: Vec<String>,
@@ -86,6 +96,7 @@ pub struct LabelProposalDecisionInput {
     pub accept: bool,
     pub reason: Option<String>,
     pub actor: String,
+    #[serde(default)]
     pub source_signal_ids: Vec<String>,
 }
 
@@ -100,17 +111,21 @@ pub struct OntologyActorInput {
 pub struct OntologySignalInput {
     pub kind: String,
     pub target_label_ref: Option<String>,
+    #[serde(default)]
     pub related_labels_json: String,
     pub proposed_action: String,
     pub candidate_atom_polarity: Option<String>,
     pub candidate_atom_kind: Option<String>,
     pub candidate_text: Option<String>,
     pub proposed_label_name: Option<String>,
+    #[serde(default)]
     pub proposal_json: String,
+    #[serde(default)]
     pub agent_selected: bool,
     pub suggest_state: Option<String>,
     pub suggest_score: Option<f64>,
     pub suggest_rank: Option<i64>,
+    #[serde(default)]
     pub final_selected: bool,
     pub rationale: String,
     pub confidence: Option<f64>,
@@ -121,14 +136,20 @@ pub struct OntologySignalInput {
 pub struct OntologyObservationInput {
     pub actor: OntologyActorInput,
     pub task_ref: String,
+    #[serde(default)]
     pub agent_candidates_json: String,
+    #[serde(default)]
     pub suggestion_snapshot_json: String,
+    #[serde(default)]
     pub final_decision_json: String,
     pub suggest_coverage: Option<f64>,
     pub suggest_coverage_cosine: Option<f64>,
     pub suggest_residual_norm: Option<f64>,
+    #[serde(default)]
     pub suggest_needs_new_label: bool,
+    #[serde(default)]
     pub suggest_degraded: bool,
+    #[serde(default)]
     pub diagnostics_json: String,
     pub capture_fingerprint: Option<String>,
     pub signals: Vec<OntologySignalInput>,
@@ -138,6 +159,7 @@ pub struct OntologyObservationInput {
 pub struct OntologyActionInput {
     pub actor: OntologyActorInput,
     pub action_type: String,
+    #[serde(default)]
     pub signal_ids: Vec<String>,
     pub reason: String,
     pub superseded_by_signal_id: Option<String>,
@@ -149,14 +171,17 @@ pub struct OntologyActionInput {
     pub result_proposal_id: Option<String>,
     pub canonical_before_hash: Option<String>,
     pub canonical_after_hash: Option<String>,
+    #[serde(default)]
     pub change_json: String,
     pub validation_status: Option<String>,
+    #[serde(default)]
     pub validation_json: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct OntologyApplyAtomInput {
     pub actor: OntologyActorInput,
+    #[serde(default)]
     pub signal_ids: Vec<String>,
     pub label_ref: String,
     pub polarity: String,
@@ -177,9 +202,11 @@ pub struct OntologyRevertInput {
 pub struct OntologyValidateInput {
     pub actor: OntologyActorInput,
     pub parent_action_id: String,
+    #[serde(default)]
     pub signal_ids: Vec<String>,
     pub reason: String,
     pub validation_status: String,
+    #[serde(default)]
     pub validation_json: String,
 }
 

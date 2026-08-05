@@ -56,6 +56,13 @@ fn normalize_proposal_body(value: &mut Value) {
     if value.get("actor").and_then(Value::as_str).is_some() {
         let actor = value.get("actor").and_then(Value::as_str).unwrap_or("user");
         value["actor"] = Value::String(actor.to_owned());
+    } else if let Some(actor) = value.get("actor").and_then(Value::as_object) {
+        let name = actor
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("user")
+            .to_owned();
+        value["actor"] = Value::String(name);
     }
 }
 
@@ -247,6 +254,9 @@ pub(crate) async fn upsert_semantics(
     Json(mut body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     body["label_ref"] = Value::String(label_id);
+    if body.get("actor").is_none() {
+        body["actor"] = Value::String("http".to_owned());
+    }
     let Json(value) = run(State(state), "upsert_semantics", &board, body).await?;
     Ok(Json(json!({"data": value})))
 }
@@ -476,6 +486,15 @@ pub(crate) async fn decide_proposal(
     Json(mut body): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     actor_object(&mut body);
+    if let Some(actor) = body.get("actor").and_then(Value::as_object) {
+        body["actor"] = Value::String(
+            actor
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("user")
+                .to_owned(),
+        );
+    }
     body["proposal_id"] = Value::String(proposal_id);
     body["accept"] = Value::Bool(decision == "accept");
     if body.get("actor").is_none() {

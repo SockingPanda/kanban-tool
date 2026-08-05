@@ -12,12 +12,12 @@ use turso::{Connection, Row, transaction::TransactionBehavior};
 use crate::{
     db::TursoStore,
     domain::{
-        LabelAtomExplainActionRecord, LabelAtomExplainRecord, LabelAtomIndexStatusRecord,
-        LabelAtomRecord, LabelOntologyActionRecord, LabelOntologyObservationRecord,
-        LabelOntologyQualityRecord, LabelOntologyReviewGroupRecord,
-        LabelOntologySignalDetailRecord, LabelOntologySignalRecord, LabelProposalAttemptRecord,
-        LabelSemanticProposalRecord, LabelSemanticsRecord, LabelSuggestionCandidateRecord,
-        LabelSuggestionEvidenceRecord, LabelSuggestionResultRecord,
+        LabelAtomExplainActionRecord, LabelAtomExplainRecord, LabelAtomExplainSignalRecord,
+        LabelAtomExplainValidationRecord, LabelAtomIndexStatusRecord, LabelAtomRecord,
+        LabelOntologyActionRecord, LabelOntologyObservationRecord, LabelOntologyQualityRecord,
+        LabelOntologyReviewGroupRecord, LabelOntologySignalDetailRecord, LabelOntologySignalRecord,
+        LabelProposalAttemptRecord, LabelSemanticProposalRecord, LabelSemanticsRecord,
+        LabelSuggestionCandidateRecord, LabelSuggestionEvidenceRecord, LabelSuggestionResultRecord,
     },
     error::StoreError,
     shared::{
@@ -644,6 +644,12 @@ impl TursoStore {
                 turso::named_params! { ":board": board_id.as_str(), ":label": current.label_id.as_str() },
             )
             .await?;
+        transaction
+            .execute(
+                "DELETE FROM label_atoms WHERE board_id=:board AND label_id=:label",
+                turso::named_params! { ":board": board_id.as_str(), ":label": current.label_id.as_str() },
+            )
+            .await?;
         mark_index_dirty(&transaction, &board_id, now).await?;
         let action_id = insert_action(
             &transaction,
@@ -658,7 +664,7 @@ impl TursoStore {
             None,
             None,
             Some(&current.semantics_hash),
-            Some("") ,
+            None,
             &json!({"before": semantics_snapshot_json(Some(&current), &current.label_id, &current.label_name, &current.semantics_hash), "after": null}),
             "not_required",
             "{}",
@@ -740,7 +746,7 @@ impl TursoStore {
             .unwrap_or(atom_ref.trim());
         let mut action_rows = connection
             .query(
-                "SELECT id,board_id,parent_action_id,action_type,reason,target_label_id,result_label_id,result_atom_id,result_atom_content_hash,result_proposal_id,canonical_before_hash,canonical_after_hash,change_json,validation_requirement,validation_status,validation_json,created_by,created_by_type,agent_type,created_at FROM label_ontology_actions WHERE board_id=:board AND (result_atom_id=:ref OR result_atom_content_hash=:hash) ORDER BY created_at ASC,id ASC",
+                "SELECT DISTINCT a.id,a.board_id,a.parent_action_id,a.action_type,a.reason,a.target_label_id,a.result_label_id,a.result_atom_id,a.result_atom_content_hash,a.result_proposal_id,a.canonical_before_hash,a.canonical_after_hash,a.change_json,a.validation_requirement,a.validation_status,a.validation_json,a.created_by,a.created_by_type,a.agent_type,a.created_at FROM label_ontology_actions a LEFT JOIN label_ontology_action_atom_effects e ON e.action_id=a.id AND e.board_id=a.board_id WHERE a.board_id=:board AND (a.result_atom_id=:ref OR a.result_atom_content_hash=:hash OR e.atom_id_snapshot=:ref OR e.atom_content_hash=:hash) ORDER BY a.created_at ASC,a.id ASC",
                 [(":board", board_id.as_str()), (":ref", atom_ref.trim()), (":hash", content_hash)],
             )
             .await?;
@@ -755,20 +761,83 @@ impl TursoStore {
                 },
             });
         }
+        let mut supporting_signals = Vec::new();
+        let mut signal_rows = connection
+            .query(
+                "SELECT id FROM label_ontology_signals WHERE board_id=:board AND candidate_content_hash=:hash ORDER BY created_at ASC,id ASC",
+                [(":board", board_id.as_str()), (":hash", content_hash)],
+            )
+            .await?;
+        while let Some(row) = signal_rows.next().await? {
+            let signal_id = text_value(row.get_value(0)?, "signals.id")?;
+            let detail = self.get_label_ontology_signal(&signal_id).await?;
+            let warnings =
+                serde_json::from_str(&detail.observation.diagnostics_json).unwrap_or_default();
+            supporting_signals.push(LabelAtomExplainSignalRecord {
+                task_id: detail.observation.task_id.clone(),
+                task_ref_snapshot: detail.observation.task_ref_snapshot.clone(),
+                suggest_input_stale: false,
+                suggest_degraded: detail.observation.suggest_degraded,
+                warnings,
+                signal: detail.signal,
+                observation: detail.observation,
+            });
+        }
+        let mut validation_history = Vec::new();
+        for action in &actions {
+            let mut validation_rows = connection
+                .query(
+                    "SELECT id,board_id,parent_action_id,action_type,reason,target_label_id,result_label_id,result_atom_id,result_atom_content_hash,result_proposal_id,canonical_before_hash,canonical_after_hash,change_json,validation_requirement,validation_status,validation_json,created_by,created_by_type,agent_type,created_at FROM label_ontology_actions WHERE board_id=:board AND action_type='validate' AND parent_action_id=:parent ORDER BY created_at ASC,id ASC",
+                    [(":board", board_id.as_str()), (":parent", action.action.id.as_str())],
+                )
+                .await?;
+            while let Some(row) = validation_rows.next().await? {
+                let validation = self.action_from_row(&connection, row).await?;
+                let validation_json =
+                    serde_json::from_str::<JsonValue>(&validation.validation_json)
+                        .unwrap_or_else(|_| json!({}));
+                validation_history.push(LabelAtomExplainValidationRecord {
+                    parent_action_id: action.action.id.clone(),
+                    validation_status: validation.validation_status.clone(),
+                    manual_json: validation_json
+                        .get("manual")
+                        .cloned()
+                        .unwrap_or_else(|| json!({}))
+                        .to_string(),
+                    summary_json: validation_json
+                        .get("summary")
+                        .cloned()
+                        .unwrap_or_else(|| json!({}))
+                        .to_string(),
+                    cases_json: validation_json
+                        .get("cases")
+                        .cloned()
+                        .unwrap_or_else(|| json!([]))
+                        .to_string(),
+                    warnings: Vec::new(),
+                    action: validation,
+                });
+            }
+        }
         if atom.is_none() && actions.is_empty() {
             return Err(StoreError::InvalidInput(format!(
                 "label atom not found: {atom_ref}"
             )));
         }
+        let legacy_untracked = atom.is_some() && actions.is_empty();
+        let legacy_reason = atom
+            .as_ref()
+            .filter(|_| legacy_untracked)
+            .map(|_| "no ontology provenance action, atom effect, or legacy result atom reference matches this atom id or content hash".to_owned());
         Ok(LabelAtomExplainRecord {
             query: atom_ref.trim().to_owned(),
             atom,
             current_semantics,
             provenance_actions: actions,
-            supporting_signals: Vec::new(),
-            validation_history: Vec::new(),
-            legacy_untracked: false,
-            legacy_reason: None,
+            supporting_signals,
+            validation_history,
+            legacy_untracked,
+            legacy_reason,
         })
     }
 
@@ -1533,11 +1602,16 @@ impl TursoStore {
         board: &str,
         input: OntologyApplyAtomInput,
     ) -> Result<LabelOntologyActionRecord, StoreError> {
+        validate_actor(&input.actor)?;
+        if input.reason.trim().is_empty() {
+            return Err(StoreError::InvalidInput("reason is required".to_owned()));
+        }
         let board_id = self.ontology_board_id(board).await?;
         let (label_id, label_name) = self.ontology_label(&board_id, &input.label_ref).await?;
         validate_atom_kind(&input.polarity, &input.kind, &input.text)?;
         let now = now_ms();
         let current = self.get_label_semantics(board, &label_id).await.ok();
+        let before_hash = current.as_ref().map(|value| value.semantics_hash.clone());
         let mut applies = current
             .as_ref()
             .map(|v| v.applies_when.clone())
@@ -1595,29 +1669,79 @@ impl TursoStore {
             })
             .cloned()
             .ok_or_else(|| StoreError::InvalidInput("atom was not produced".to_owned()))?;
-        let mut connection = self.connection().await?;
-        let transaction = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .await?;
-        transaction.execute("INSERT INTO label_semantics(label_id,board_id,description,applies_when,excludes_when,positive_examples,negative_examples,created_at,updated_at) VALUES (:label,:board,:description,:applies,:excludes,:positive,:negative,COALESCE((SELECT created_at FROM label_semantics WHERE label_id=:label),:now),:now) ON CONFLICT(label_id) DO UPDATE SET description=excluded.description,applies_when=excluded.applies_when,excludes_when=excluded.excludes_when,positive_examples=excluded.positive_examples,negative_examples=excluded.negative_examples,updated_at=excluded.updated_at", turso::named_params! {":label":label_id.as_str(),":board":board_id.as_str(),":description":description.as_deref(),":applies":serde_json::to_string(&applies).unwrap_or_else(|_|"[]".to_owned()),":excludes":serde_json::to_string(&excludes).unwrap_or_else(|_|"[]".to_owned()),":positive":serde_json::to_string(&positive).unwrap_or_else(|_|"[]".to_owned()),":negative":serde_json::to_string(&negative).unwrap_or_else(|_|"[]".to_owned()),":now":now}).await?;
-        transaction
-            .execute(
-                "DELETE FROM label_atoms WHERE board_id=:board AND label_id=:label",
-                [(":board", board_id.as_str()), (":label", label_id.as_str())],
-            )
-            .await?;
-        for atom_value in &atoms {
-            transaction.execute("INSERT INTO label_atoms(id,label_id,board_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at) VALUES (:id,:label,:board,:polarity,:kind,:text,:ordinal,:hash,:created,:updated)", turso::named_params! {":id": atom_value.id.as_str(), ":label": atom_value.label_id.as_str(), ":board": atom_value.board_id.as_str(), ":polarity": atom_value.polarity.as_str(), ":kind": atom_value.kind.as_str(), ":text": atom_value.text.as_str(), ":ordinal": atom_value.ordinal, ":hash": atom_value.content_hash.as_str(), ":created": atom_value.created_at, ":updated": atom_value.updated_at}).await?;
-        }
-        mark_index_dirty(&transaction, &board_id, now).await?;
-        let action_id = insert_action(
-            &transaction,
-            &board_id,
+        let after_hash = semantics_hash(
+            &label_id,
+            &label_name,
+            &description,
+            &applies,
+            &excludes,
+            &positive,
+            &negative,
+        );
+        let changed = before_hash.as_deref() != Some(after_hash.as_str());
+        let before_snapshot = semantics_snapshot_json(
+            current.as_ref(),
+            &label_id,
+            &label_name,
+            before_hash.as_deref().unwrap_or(""),
+        );
+        let after_snapshot = json!({
+            "label_id": label_id,
+            "label_name": label_name,
+            "description": description,
+            "applies_when": applies,
+            "excludes_when": excludes,
+            "positive_examples": positive,
+            "negative_examples": negative,
+            "semantics_hash": after_hash,
+        });
+        let action_type = if changed {
             if input.polarity == "positive" {
                 "add_positive_atom"
             } else {
                 "add_negative_atom"
-            },
+            }
+        } else {
+            "adopt_existing_atom"
+        };
+        let validation_status = if changed { "pending" } else { "not_required" };
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+        for signal_id in &input.signal_ids {
+            let row = first_row(
+                transaction
+                    .query(
+                        "SELECT id FROM label_ontology_signals WHERE board_id=:board AND id=:id LIMIT 1",
+                        [(":board", board_id.as_str()), (":id", signal_id.as_str())],
+                    )
+                    .await?,
+            )
+            .await;
+            if row.is_err() {
+                return Err(StoreError::InvalidInput(format!(
+                    "ontology signal does not exist on board: {signal_id}"
+                )));
+            }
+        }
+        if changed {
+            transaction.execute("INSERT INTO label_semantics(label_id,board_id,description,applies_when,excludes_when,positive_examples,negative_examples,created_at,updated_at) VALUES (:label,:board,:description,:applies,:excludes,:positive,:negative,COALESCE((SELECT created_at FROM label_semantics WHERE label_id=:label),:now),:now) ON CONFLICT(label_id) DO UPDATE SET description=excluded.description,applies_when=excluded.applies_when,excludes_when=excluded.excludes_when,positive_examples=excluded.positive_examples,negative_examples=excluded.negative_examples,updated_at=excluded.updated_at", turso::named_params! {":label":label_id.as_str(),":board":board_id.as_str(),":description":description.as_deref(),":applies":serde_json::to_string(&applies).unwrap_or_else(|_|"[]".to_owned()),":excludes":serde_json::to_string(&excludes).unwrap_or_else(|_|"[]".to_owned()),":positive":serde_json::to_string(&positive).unwrap_or_else(|_|"[]".to_owned()),":negative":serde_json::to_string(&negative).unwrap_or_else(|_|"[]".to_owned()),":now":now}).await?;
+            transaction
+                .execute(
+                    "DELETE FROM label_atoms WHERE board_id=:board AND label_id=:label",
+                    [(":board", board_id.as_str()), (":label", label_id.as_str())],
+                )
+                .await?;
+            for atom_value in &atoms {
+                transaction.execute("INSERT INTO label_atoms(id,label_id,board_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at) VALUES (:id,:label,:board,:polarity,:kind,:text,:ordinal,:hash,:created,:updated)", turso::named_params! {":id": atom_value.id.as_str(), ":label": atom_value.label_id.as_str(), ":board": atom_value.board_id.as_str(), ":polarity": atom_value.polarity.as_str(), ":kind": atom_value.kind.as_str(), ":text": atom_value.text.as_str(), ":ordinal": atom_value.ordinal, ":hash": atom_value.content_hash.as_str(), ":created": atom_value.created_at, ":updated": atom_value.updated_at}).await?;
+            }
+            mark_index_dirty(&transaction, &board_id, now).await?;
+        }
+        let action_id = insert_action(
+            &transaction,
+            &board_id,
+            action_type,
             &input.reason,
             &input.actor.name,
             &input.signal_ids,
@@ -1626,17 +1750,29 @@ impl TursoStore {
             Some(&atom.id),
             Some(&atom.content_hash),
             None,
-            current.as_ref().map(|v| v.semantics_hash.as_str()),
-            None,
-            &json!({"atom":atom.text,"polarity":atom.polarity,"kind":atom.kind}),
-            "not_required",
+            before_hash.as_deref(),
+            Some(&after_hash),
+            &json!({
+                "label": {"id": label_id, "name": label_name},
+                "added_atom": {"id": atom.id, "content_hash": atom.content_hash, "polarity": atom.polarity, "kind": atom.kind, "text": atom.text},
+                "changed": changed,
+                "canonical_changed": changed,
+                "provenance_only": !changed,
+                "requested_action_type": if input.polarity == "positive" { "add_positive_atom" } else { "add_negative_atom" },
+                "before": before_snapshot,
+                "after": after_snapshot,
+                "retarget_override": null,
+            }),
+            validation_status,
             "{}",
             now,
             &input.actor.name,
             input.actor.agent_type.as_deref(),
         )
         .await?;
-        insert_atom_effect(&transaction, &board_id, &action_id, &atom, "added", now).await?;
+        if changed {
+            insert_atom_effect(&transaction, &board_id, &action_id, &atom, "added", now).await?;
+        }
         transaction.commit().await?;
         self.action_by_id(&board_id, &action_id).await
     }
@@ -1646,6 +1782,10 @@ impl TursoStore {
         board: &str,
         input: OntologyRevertInput,
     ) -> Result<LabelOntologyActionRecord, StoreError> {
+        validate_actor(&input.actor)?;
+        if input.reason.trim().is_empty() {
+            return Err(StoreError::InvalidInput("reason is required".to_owned()));
+        }
         let board_id = self.ontology_board_id(board).await?;
         let target = self
             .action_by_id(&board_id, &input.target_action_id)
@@ -1675,8 +1815,7 @@ impl TursoStore {
             .target_label_id
             .clone()
             .ok_or_else(|| StoreError::InvalidInput("target action has no label".to_owned()))?;
-        let label_ref = label_id.clone();
-        let current = self.get_label_semantics(board, &label_ref).await.ok();
+        let current = self.get_label_semantics(board, &label_id).await.ok();
         let snapshot = if before.is_object() {
             before.clone()
         } else {
@@ -1702,6 +1841,7 @@ impl TursoStore {
             .get("negative_examples")
             .and_then(|v| serde_json::from_value(v.clone()).ok())
             .unwrap_or_default();
+        let before_hash = current.as_ref().map(|value| value.semantics_hash.clone());
         if snapshot.is_null() {
             applies.clear();
             excludes.clear();
@@ -1709,36 +1849,151 @@ impl TursoStore {
             negative.clear();
         }
         let now = now_ms();
+        let label_name = current
+            .as_ref()
+            .map(|value| value.label_name.clone())
+            .unwrap_or_else(|| label_id.clone());
+        let description_ref = new_description.clone();
+        let atoms = build_atoms(
+            &label_id,
+            &board_id,
+            &label_name,
+            &description_ref,
+            &applies,
+            &excludes,
+            &positive,
+            &negative,
+            now,
+        );
+        let after_hash = if snapshot.is_null() {
+            None
+        } else {
+            Some(semantics_hash(
+                &label_id,
+                &label_name,
+                &description_ref,
+                &applies,
+                &excludes,
+                &positive,
+                &negative,
+            ))
+        };
+        let before_snapshot = semantics_snapshot_json(
+            current.as_ref(),
+            &label_id,
+            &label_name,
+            before_hash.as_deref().unwrap_or(""),
+        );
+        let after_snapshot = if snapshot.is_null() {
+            JsonValue::Null
+        } else {
+            json!({
+                "label_id": label_id,
+                "label_name": label_name,
+                "description": description_ref,
+                "applies_when": applies,
+                "excludes_when": excludes,
+                "positive_examples": positive,
+                "negative_examples": negative,
+                "semantics_hash": after_hash,
+            })
+        };
         let mut connection = self.connection().await?;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        tx.execute("INSERT INTO label_semantics(label_id,board_id,description,applies_when,excludes_when,positive_examples,negative_examples,created_at,updated_at) VALUES (:label,:board,:description,:applies,:excludes,:positive,:negative,COALESCE((SELECT created_at FROM label_semantics WHERE label_id=:label),:now),:now) ON CONFLICT(label_id) DO UPDATE SET description=excluded.description,applies_when=excluded.applies_when,excludes_when=excluded.excludes_when,positive_examples=excluded.positive_examples,negative_examples=excluded.negative_examples,updated_at=excluded.updated_at", turso::named_params! {":label": label_id.as_str(), ":board": board_id.as_str(), ":description": new_description.as_deref(), ":applies": serde_json::to_string(&applies).unwrap_or_else(|_|"[]".to_owned()), ":excludes": serde_json::to_string(&excludes).unwrap_or_else(|_|"[]".to_owned()), ":positive": serde_json::to_string(&positive).unwrap_or_else(|_|"[]".to_owned()), ":negative": serde_json::to_string(&negative).unwrap_or_else(|_|"[]".to_owned()), ":now": now}).await?;
+        if snapshot.is_null() {
+            tx.execute(
+                "DELETE FROM label_semantics WHERE board_id=:board AND label_id=:label",
+                turso::named_params! { ":board": board_id.as_str(), ":label": label_id.as_str() },
+            )
+            .await?;
+        } else {
+            tx.execute("INSERT INTO label_semantics(label_id,board_id,description,applies_when,excludes_when,positive_examples,negative_examples,created_at,updated_at) VALUES (:label,:board,:description,:applies,:excludes,:positive,:negative,COALESCE((SELECT created_at FROM label_semantics WHERE label_id=:label),:now),:now) ON CONFLICT(label_id) DO UPDATE SET description=excluded.description,applies_when=excluded.applies_when,excludes_when=excluded.excludes_when,positive_examples=excluded.positive_examples,negative_examples=excluded.negative_examples,updated_at=excluded.updated_at", turso::named_params! {":label": label_id.as_str(), ":board": board_id.as_str(), ":description": new_description.as_deref(), ":applies": serde_json::to_string(&applies).unwrap_or_else(|_|"[]".to_owned()), ":excludes": serde_json::to_string(&excludes).unwrap_or_else(|_|"[]".to_owned()), ":positive": serde_json::to_string(&positive).unwrap_or_else(|_|"[]".to_owned()), ":negative": serde_json::to_string(&negative).unwrap_or_else(|_|"[]".to_owned()), ":now": now}).await?;
+        }
+        tx.execute(
+            "DELETE FROM label_atoms WHERE board_id=:board AND label_id=:label",
+            turso::named_params! { ":board": board_id.as_str(), ":label": label_id.as_str() },
+        )
+        .await?;
+        if !snapshot.is_null() {
+            for atom in &atoms {
+                tx.execute(
+                    "INSERT INTO label_atoms(id,label_id,board_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at) VALUES (:id,:label,:board,:polarity,:kind,:text,:ordinal,:hash,:created,:updated)",
+                    turso::named_params! {
+                        ":id": atom.id.as_str(), ":label": atom.label_id.as_str(), ":board": atom.board_id.as_str(),
+                        ":polarity": atom.polarity.as_str(), ":kind": atom.kind.as_str(), ":text": atom.text.as_str(),
+                        ":ordinal": atom.ordinal, ":hash": atom.content_hash.as_str(), ":created": atom.created_at, ":updated": atom.updated_at,
+                    },
+                )
+                .await?;
+            }
+        }
         mark_index_dirty(&tx, &board_id, now).await?;
+        let old_atoms = current
+            .as_ref()
+            .map(|value| value.atoms.clone())
+            .unwrap_or_default();
+        let old_hashes = old_atoms
+            .iter()
+            .map(|value| value.content_hash.as_str())
+            .collect::<BTreeSet<_>>();
+        let new_hashes = atoms
+            .iter()
+            .map(|value| value.content_hash.as_str())
+            .collect::<BTreeSet<_>>();
+        let added_atoms = new_hashes.difference(&old_hashes).count();
+        let removed_atoms = old_hashes.difference(&new_hashes).count();
         let action_id = insert_action(
             &tx,
             &board_id,
             "revert_ontology_mutation",
             &input.reason,
             &input.actor.name,
-            &[],
+            &target.signal_ids,
             Some(&label_id),
             None,
             None,
             None,
             None,
-            target.canonical_after_hash.as_deref(),
-            target.canonical_before_hash.as_deref(),
-            &json!({"target_action_id":target.id,"before":after,"after":before}),
-            "not_required",
-            "{}",
+            before_hash.as_deref(),
+            after_hash.as_deref(),
+            &json!({
+                "reverted_action_id": target.id,
+                "reverted_action_type": target.action_type,
+                "label": {"id": label_id, "name": label_name},
+                "expected_current_hash": input.expected_current_hash,
+                "reverted_canonical_before_hash": target.canonical_before_hash,
+                "reverted_canonical_after_hash": target.canonical_after_hash,
+                "before_revert": before_snapshot,
+                "after_revert": after_snapshot,
+                "atom_effect_counts": {"added": added_atoms, "removed": removed_atoms},
+                "legacy_warning": JsonValue::Null,
+                "index_dirty": true,
+            }),
+            "pending",
+            &json!({
+                "state": "pending_revert_validation",
+                "reverted_action_id": target.id,
+                "reverted_action_type": target.action_type,
+            })
+            .to_string(),
             now,
             &input.actor.name,
             input.actor.agent_type.as_deref(),
         )
         .await?;
+        for atom in &old_atoms {
+            if !new_hashes.contains(atom.content_hash.as_str()) {
+                insert_atom_effect(&tx, &board_id, &action_id, atom, "removed", now).await?;
+            }
+        }
+        for atom in &atoms {
+            if !old_hashes.contains(atom.content_hash.as_str()) {
+                insert_atom_effect(&tx, &board_id, &action_id, atom, "added", now).await?;
+            }
+        }
         tx.commit().await?;
-        let _ = current;
         self.action_by_id(&board_id, &action_id).await
     }
 

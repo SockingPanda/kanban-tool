@@ -5,6 +5,8 @@ mod dependencies;
 mod events;
 mod lifecycle;
 mod ontology;
+#[cfg(test)]
+mod ontology_tests;
 mod runs;
 pub mod search;
 pub(crate) mod shared;

@@ -33,12 +33,13 @@ pub use operations::{
     ClaimTaskInput, ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput,
     CreateCommentInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
     LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
-    MarkExecutionPlanNotRequiredInput, OntologyActionInput, OntologyApplyAtomInput,
-    OntologyObservationInput, OntologyRevertInput, OntologyValidateInput, PromoteTaskInput,
-    ReclaimExpiredTaskInput, ReclaimTaskInput, ReleaseTaskInput, RemoveDependencyInput,
-    RemoveDependencyRecord, RemoveStepInput, ReopenStepInput, ReopenTaskInput, SkipStepInput,
-    SpecifyTaskInput, SubmitReviewTaskInput, TaskListOptions, TaskListSort, TaskPlanFilter,
-    UnblockTaskInput, UpdateStepInput, UpdateTaskInput, UpsertLabelSemanticsInput,
+    MarkExecutionPlanNotRequiredInput, OntologyActionInput, OntologyActorInput,
+    OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
+    PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput, ReleaseTaskInput,
+    RemoveDependencyInput, RemoveDependencyRecord, RemoveStepInput, ReopenStepInput,
+    ReopenTaskInput, SkipStepInput, SpecifyTaskInput, SubmitReviewTaskInput, TaskListOptions,
+    TaskListSort, TaskPlanFilter, UnblockTaskInput, UpdateStepInput, UpdateTaskInput,
+    UpsertLabelSemanticsInput,
 };
 
 #[cfg(test)]

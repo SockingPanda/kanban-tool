@@ -15,12 +15,13 @@ pub use dependencies::{
     AddDependencyInput, AddDependencyRecord, RemoveDependencyInput, RemoveDependencyRecord,
 };
 pub use lifecycle::{
-    BlockTaskInput, ClaimTaskInput, ClaimTaskRecord, CompleteTaskInput, HeartbeatTaskInput,
-    MarkExecutionPlanNotRequiredInput, PromoteTaskInput, ReclaimExpiredTaskInput, ReleaseTaskInput,
-    SubmitReviewTaskInput,
+    ArchiveTaskInput, BlockTaskInput, ClaimTaskInput, ClaimTaskRecord, CompleteTaskInput,
+    HeartbeatTaskInput, MarkExecutionPlanNotRequiredInput, PromoteTaskInput,
+    ReclaimExpiredTaskInput, ReclaimTaskInput, ReleaseTaskInput, ReopenTaskInput, SpecifyTaskInput,
+    SubmitReviewTaskInput, UnblockTaskInput,
 };
 pub use steps::{
     CompleteStepInput, CreateStepInput, RemoveStepInput, ReopenStepInput, SkipStepInput,
     UpdateStepInput,
 };
-pub use tasks::{CreateTaskInput, TaskListOptions, TaskListSort, TaskPlanFilter};
+pub use tasks::{CreateTaskInput, TaskListOptions, TaskListSort, TaskPlanFilter, UpdateTaskInput};

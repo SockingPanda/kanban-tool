@@ -20,11 +20,13 @@ pub use legacy_import::{
 };
 pub use operations::{
     AddDependencyInput, AddDependencyRecord, ArchiveBoardInput, BlockTaskInput, ClaimTaskInput,
-    ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput, CreateCommentInput,
-    CreateStepInput, CreateTaskInput, HeartbeatTaskInput, MarkExecutionPlanNotRequiredInput,
-    PromoteTaskInput, ReclaimExpiredTaskInput, ReleaseTaskInput, RemoveDependencyInput,
-    RemoveDependencyRecord, RemoveStepInput, ReopenStepInput, SkipStepInput, SubmitReviewTaskInput,
-    TaskListOptions, TaskListSort, TaskPlanFilter, UpdateStepInput,
+    ArchiveTaskInput, ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput,
+    CreateCommentInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
+    MarkExecutionPlanNotRequiredInput, PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput,
+    ReleaseTaskInput, RemoveDependencyInput, RemoveDependencyRecord, RemoveStepInput,
+    ReopenStepInput, ReopenTaskInput, SkipStepInput, SpecifyTaskInput, SubmitReviewTaskInput,
+    TaskListOptions, TaskListSort, TaskPlanFilter, UnblockTaskInput, UpdateStepInput,
+    UpdateTaskInput,
 };
 
 #[cfg(test)]

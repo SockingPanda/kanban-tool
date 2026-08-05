@@ -5,11 +5,12 @@ use turso::Connection;
 use crate::TaskRecord;
 pub(crate) use crate::shared::{Value, first_row, integer_value, optional_text_value, text_value};
 pub(crate) use crate::{
-    AddDependencyInput, BlockTaskInput, ClaimTaskInput, CompleteTaskInput, CreateCommentInput,
-    CreateStepInput, CreateTaskInput, HeartbeatTaskInput, MarkExecutionPlanNotRequiredInput,
-    PromoteTaskInput, ReclaimExpiredTaskInput, ReleaseTaskInput, RemoveDependencyInput, StoreError,
+    AddDependencyInput, ArchiveTaskInput, BlockTaskInput, ClaimTaskInput, CompleteTaskInput,
+    CreateCommentInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
+    MarkExecutionPlanNotRequiredInput, PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput,
+    ReleaseTaskInput, RemoveDependencyInput, ReopenTaskInput, SpecifyTaskInput, StoreError,
     SubmitReviewTaskInput, TaskExecutionPlanRecord, TaskListOptions, TaskListSort, TaskPlanFilter,
-    TursoStore, UpdateStepInput,
+    TursoStore, UnblockTaskInput, UpdateStepInput, UpdateTaskInput,
 };
 
 pub(crate) async fn store(name: &str) -> (tempfile::TempDir, TursoStore, PathBuf) {
@@ -270,6 +271,93 @@ pub(crate) fn block_input(
         reason: reason.to_owned(),
         now,
         event_id: event_id.to_owned(),
+    }
+}
+
+pub(crate) fn specify_input(
+    expected_lock_version: i64,
+    actor: &str,
+    description: Option<&str>,
+    scheduled_at: Option<i64>,
+    event_id: &str,
+    now: i64,
+) -> SpecifyTaskInput {
+    SpecifyTaskInput {
+        expected_lock_version,
+        actor: actor.to_owned(),
+        description: description.map(str::to_owned),
+        scheduled_at,
+        event_id: event_id.to_owned(),
+        now,
+    }
+}
+
+pub(crate) fn unblock_input(
+    expected_lock_version: i64,
+    actor: &str,
+    event_id: &str,
+    now: i64,
+) -> UnblockTaskInput {
+    UnblockTaskInput {
+        expected_lock_version,
+        actor: actor.to_owned(),
+        event_id: event_id.to_owned(),
+        now,
+    }
+}
+
+pub(crate) fn reopen_input(
+    expected_lock_version: i64,
+    actor: &str,
+    reason: &str,
+    event_id: &str,
+    now: i64,
+) -> ReopenTaskInput {
+    ReopenTaskInput {
+        expected_lock_version,
+        actor: actor.to_owned(),
+        reason: reason.to_owned(),
+        event_id: event_id.to_owned(),
+        now,
+    }
+}
+
+pub(crate) fn archive_input(
+    expected_lock_version: i64,
+    actor: &str,
+    force: bool,
+    event_id: &str,
+    now: i64,
+) -> ArchiveTaskInput {
+    ArchiveTaskInput {
+        expected_lock_version,
+        actor: actor.to_owned(),
+        force,
+        event_id: event_id.to_owned(),
+        now,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn explicit_reclaim_input(
+    expected_lock_version: i64,
+    actor: &str,
+    force: bool,
+    target_status: &str,
+    retry_count: i64,
+    reason: &str,
+    event_id: &str,
+    now: i64,
+) -> ReclaimTaskInput {
+    ReclaimTaskInput {
+        expected_lock_version,
+        actor: actor.to_owned(),
+        force,
+        target_status: target_status.to_owned(),
+        retry_count,
+        reason: reason.to_owned(),
+        event_id: event_id.to_owned(),
+        now,
     }
 }
 

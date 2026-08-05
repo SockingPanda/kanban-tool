@@ -108,6 +108,12 @@ pub struct ImportReport {
     pub skipped_records: u64,
     pub rebuild_jobs_enqueued: u64,
     pub journal_id: String,
+    pub phase: String,
+    pub restart_required: bool,
+    pub staged_database_path: Option<String>,
+    pub target_fingerprint_before: Option<String>,
+    pub staged_fingerprint: Option<String>,
+    pub publish_preconditions: Vec<String>,
 }
 
 pub type ImportResponse = DataEnvelope<ImportReport>;

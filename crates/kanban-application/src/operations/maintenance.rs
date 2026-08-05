@@ -84,6 +84,12 @@ pub struct ImportReportRecord {
     pub skipped_records: u64,
     pub rebuild_jobs_enqueued: u64,
     pub journal_id: String,
+    pub phase: String,
+    pub restart_required: bool,
+    pub staged_database_path: Option<String>,
+    pub target_fingerprint_before: Option<String>,
+    pub staged_fingerprint: Option<String>,
+    pub publish_preconditions: Vec<String>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VacuumReportRecord {
@@ -172,6 +178,9 @@ pub trait MaintenanceQuery: ApplicationStore {
         path: &str,
         replace: bool,
     ) -> impl Future<Output = Result<ImportReportRecord>> + Send;
+    /// 供 host lifecycle 调用的 replace prepare/verify typed seam；不直接暴露为 MCP。
+    fn prepare_import(&self, path: &str)
+    -> impl Future<Output = Result<ImportReportRecord>> + Send;
     fn vacuum(&self) -> impl Future<Output = Result<VacuumReportRecord>> + Send;
     fn maintenance_status(&self) -> impl Future<Output = Result<MaintenanceStatusRecord>> + Send;
     fn maintenance_run(
@@ -213,6 +222,10 @@ where
     pub async fn import(&self, path: &str, replace: bool) -> Result<ImportReportRecord> {
         validate_path(path)?;
         self.store.import(path, replace).await
+    }
+    pub async fn prepare_import(&self, path: &str) -> Result<ImportReportRecord> {
+        validate_path(path)?;
+        self.store.prepare_import(path).await
     }
     pub async fn vacuum(&self) -> Result<VacuumReportRecord> {
         self.store.vacuum().await

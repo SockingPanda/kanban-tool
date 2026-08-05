@@ -258,7 +258,10 @@ fn validate_query(query: &VectorQuery) -> Result<(), ApiError> {
     Ok(())
 }
 
-async fn embed_query(store: &TursoStore, text: &str) -> Result<(VectorConfig, Vec<f32>), ApiError> {
+pub(crate) async fn embed_query(
+    store: &TursoStore,
+    text: &str,
+) -> Result<(VectorConfig, Vec<f32>), ApiError> {
     let config = store
         .vector_config()
         .await

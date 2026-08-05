@@ -7,6 +7,7 @@
 mod attachment;
 mod board;
 mod comment;
+mod context;
 mod dependency;
 mod entities;
 mod event;
@@ -31,6 +32,11 @@ pub use board::{
     BoardList, CreateBoardCommand, CreateBoardRecord,
 };
 pub use comment::{CommentCreate, CommentList};
+pub use context::{
+    ContextBuild, ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence,
+    ContextItem, ContextPack, ContextPolicy, ContextProviderStatus, ContextSources,
+    MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT,
+};
 pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
 pub use entities::{EntityListOptions, EntityQuery, EntityUpsertCommand};
 pub use event::*;

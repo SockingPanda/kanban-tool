@@ -45,7 +45,7 @@ Host 默认监听 `http://127.0.0.1:8721`，默认数据库为 `~/.local/share/k
 - SQLite/Turso 双 backend、旧 SQLite importer、旧 API 完整 parity；
 - `kanban-runtime*`、framed IPC、named pipe、跨版本握手、capability negotiation、mutation receipt 和 crash matrix；
 - 自动 server supervision、系统服务注册、Windows Job Object、`multiprocess_wal`；
-- labels、signals、semantic search、graph、vector、Tantivy/LanceDB/Oxigraph projection、derived control plane；
+- labels、signals、graph、vector、Tantivy/LanceDB/Oxigraph projection、derived control plane；
 - 为未来部署方式预先建设兼容层或通用 backend abstraction。
 
 这些项目可以作为独立后续工作，但不阻塞当前三阶段链路。
@@ -59,10 +59,16 @@ Host 默认监听 `http://127.0.0.1:8721`，默认数据库为 `~/.local/share/k
 | Walking skeleton | `board.list`、`board.columns`、`task.create`、`task.list`、`task.show`、`task.plan.not_required`、`task.promote` |
 | Durable queue | `task.claim`、`task.heartbeat`、`task.release`、`task.review`、`task.done`、`task.block`；opt-in dispatcher |
 | 协作信息 | `comment.create/list`、`step.create/list/update`、`dependency.create/list/remove`、`run.list/show/log`、`event.list` |
+| 检索 projection | `search.tasks`、`search.tasks.by_status`、`search.status`、`index.rebuild`、`index.sync` |
 
-`health`、`board.columns`、`stats` 和 task selector query 是 Desktop 支撑所需的只读 query，同样通过 `ApplicationService` 提供。run 不提供独立 create/update mutation；claim 同事务创建 run，后续 lifecycle command 同事务更新 run 和 event。
+`health`、`board.columns`、`stats`、task selector query 和 task search/index status 是只读
+query，同样通过 `ApplicationService` 提供。run 不提供独立 create/update mutation；claim 同
+事务创建 run，后续 lifecycle command 同事务更新 run 和 event。task search 的 FTS projection
+只读 canonical task/comment/run/event，未 ready 时显式回退 canonical SQL。
 
-MCP 使用 `board_list`、`task_*`、Stage 2 lifecycle tools 和 Stage 3 collaboration tools。所有 MCP `tools/call` 只调用 typed localhost client；MCP 不启动 host。
+MCP 使用 `board_list`、`task_*`、`search_tasks`、`search_status`、Stage 2 lifecycle tools
+和 Stage 3 collaboration tools。所有 MCP `tools/call` 只调用 typed localhost client；MCP
+不启动 host。
 
 ## 4. 状态模型
 
@@ -119,13 +125,18 @@ canonical baseline 包含：
 - dependency 自身约束、禁止 self-dependency；
 - task snapshot 与对应 event 在同一事务提交。
 
-canonical 数据是业务事实。搜索、图、向量、缓存和 projection 如果未来恢复，只能从 canonical 数据重建，不能成为 mutation path。
+canonical 数据是业务事实。搜索的 FTS projection、图、向量、缓存和其他 projection 只能从
+canonical 数据重建，不能成为 mutation path。
 
 ## 6. Adapter 规则
 
 ### 6.1 CLI
 
-`kanban serve [--db <path>] [--dispatcher-profile <path>]` 是唯一 DB owner。其他命令通过 `kanban-client` 访问默认 `http://127.0.0.1:8721`，支持 `--json`、`--board`、`--actor` 和 board-local/global task selector。`kanban init` 与未迁移命令在触库前返回 `feature_not_available`；host 不可用返回 `server_unavailable`。
+`kanban serve [--db <path>] [--dispatcher-profile <path>]` 是唯一 DB owner。其他命令通过
+`kanban-client` 访问默认 `http://127.0.0.1:8721`，支持 `--json`、`--board`、`--actor` 和
+board-local/global task selector。`kanban search` 与 `kanban index status|doctor|rebuild|sync`
+复用同一 search service；`kanban init` 与未迁移命令在触库前返回 `feature_not_available`，
+host 不可用返回 `server_unavailable`。
 
 ### 6.2 MCP
 
@@ -133,7 +144,10 @@ MCP 是最小 Rust stdio server，使用官方 `rmcp` tools/stdio transport；�
 
 ### 6.3 Desktop
 
-Desktop 保留已有页面结构和 TS `KanbanApi`，只通过 external host HTTP 工作。`RuntimeConfig` 只有 `apiBaseUrl`、`actor`、`board`；claim token 只在当前会话内保存，不写入磁盘。labels/signals/search/neighborhood 等未迁移视图必须隐藏或禁用，不发送失败请求。
+Desktop 保留已有页面结构和 TS `KanbanApi`，只通过 external host HTTP 工作。`RuntimeConfig`
+只有 `apiBaseUrl`、`actor`、`board`；claim token 只在当前会话内保存，不写入磁盘。
+labels/signals/neighborhood 等未迁移视图必须隐藏或禁用，不发送失败请求；Desktop search
+view 仍需独立 slice 接入。
 
 ## 7. Dispatcher
 

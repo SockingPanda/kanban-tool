@@ -22,8 +22,9 @@ importer 已经完成。公开 surface 仍以对应 contract 和 parity ledger �
 `FULL_EXACT_COLUMNS` 是 v2 的精确 table/column manifest。启动时会比较完整的表集合
 和每张表的列集合，缺列、多列、未知表都会失败关闭。普通 index 的 required manifest
 由 `FULL_REQUIRED_INDEXES` 固定；另外包含一个 Turso FTS index
-`idx_retrieval_documents_fts`，因此启用 FTS 后实际 index 对象为 46 个。trigger
-由 `FULL_REQUIRED_TRIGGERS` 固定为 22 个。
+`task_search_fts`，因此启用 FTS 后实际 index 对象为 46 个。trigger
+由 `FULL_REQUIRED_TRIGGERS` 固定为 22 个；host 启动后会重建两个 projection guard，并追加
+task event/delete 的 FTS outbox trigger。后四个运行时 trigger 不改变 v2 canonical 指纹。
 
 约束指纹由 `FULL_REQUIRED_SQL_FRAGMENTS` 的 20 个 SQL 片段、`PRAGMA foreign_key_check`、
 board-isolation preflight 和上述 trigger manifest 共同组成。它覆盖关键 `CHECK`、复合

@@ -136,8 +136,11 @@ v2 SQL SHA-256 写入 migration ledger；v1 原地升级先通过 sibling `VACUU
 
 派生能力统一由 Turso/host 提供：
 
-- **FTS**：`retrieval_documents` 上的 Turso `USING fts` index；service 查询使用
-  `fts_match`、`fts_score`、`fts_highlight`，移除外部 Tantivy 作为事实/检索 owner。
+- **FTS**：`retrieval_documents` 上的 `task_search_fts` Turso `USING fts` index；canonical
+  task event/delete 在同一事务写入 `projection_jobs`，host projection service 使用
+  `fts_match`、`fts_score`、`fts_highlight`，移除外部 Tantivy 作为事实/检索 owner。查询在
+  projection 未 ready、落后或 provider 失败时回退 canonical SQL，并通过 search meta 标记
+  stale/fallback reason。
 - **Vector**：Ollama 只作为 host 内 provider；embedding 的批处理、重试、model/dimension/
   fingerprint、缓存和降级语义由 service/worker 管理；向量和 cosine 查询在 Turso
   `vector32` 中完成，移除 LanceDB。
@@ -147,9 +150,9 @@ v2 SQL SHA-256 写入 migration ledger；v1 原地升级先通过 sibling `VACUU
 - **Projection**：canonical mutation 在事务中写事实、event 和 projection job；FTS、vector、
   graph/context 都可删除后重建，不接受旧 helper subprocess/protocol 或独立 control plane。
 
-当前 schema 能力已经有 capability probe 和 fail-closed shape validation，但完整 service
-查询、worker、HTTP/CLI/MCP/停机恢复和 Desktop 视图仍按纵向 slice 实现；文档不把 schema
-存在等同于用户入口可用。
+当前 schema 能力已经有 capability probe 和 fail-closed shape validation；task search 的
+store → application → HTTP → typed client → CLI/MCP 纵向切片已接通，Desktop 视图仍按独立
+slice 实现。文档不把 schema 存在等同于其他尚未接通的用户入口可用。
 
 ## 5. 迁移与主机管理
 

@@ -86,6 +86,9 @@ impl TursoStore {
     ) -> Result<(), StoreError> {
         let mut connection = self.connection().await?;
         migration::apply(&mut connection, self.path.as_ref(), backup_hook).await?;
+        connection
+            .execute_batch(schema::PROJECTION_TRIGGER_SCHEMA)
+            .await?;
 
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -184,12 +187,20 @@ impl TursoStore {
             }
             Err(error) => (false, format!("vector32 capability 不可用: {error}")),
         };
-        let fts = match connection.execute(schema::FTS_SCHEMA, ()).await {
-            Ok(_) => (true, "Turso FTS index 可用".to_owned()),
-            Err(error) => (
-                false,
-                format!("Turso FTS 不可用；请确认启用了 turso `fts` feature: {error}"),
-            ),
+        // v2 曾使用过旧索引名；它是可重建的 derived object，启动时先清掉旧名，
+        // 再保证唯一的 task_search_fts provider index。
+        let fts = match connection
+            .execute("DROP INDEX IF EXISTS idx_retrieval_documents_fts", ())
+            .await
+        {
+            Ok(_) => match connection.execute(schema::FTS_SCHEMA, ()).await {
+                Ok(_) => (true, "Turso FTS index 可用".to_owned()),
+                Err(error) => (
+                    false,
+                    format!("Turso FTS 不可用；请确认启用了 turso `fts` feature: {error}"),
+                ),
+            },
+            Err(error) => (false, format!("Turso FTS 旧索引清理失败: {error}")),
         };
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)

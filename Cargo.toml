@@ -2,6 +2,7 @@
 members = [
   "crates/kanban-core",
   "crates/kanban-application",
+  "crates/kanban-search",
   "crates/kanban-contract",
   "xtask",
   "crates/kanban-store-turso",
@@ -20,7 +21,6 @@ exclude = [
   "crates/kanban-helper-protocol",
   "crates/kanban-indexer",
   "crates/kanban-labels",
-  "crates/kanban-search",
   "crates/kanban-vector",
   "crates/kanban-vector-lancedb",
 ]
@@ -80,6 +80,7 @@ ksni = { version = "0.3.5", default-features = false }
 
 kanban-core = { path = "crates/kanban-core" }
 kanban-application = { path = "crates/kanban-application" }
+kanban-search = { path = "crates/kanban-search" }
 kanban-contract = { path = "crates/kanban-contract", default-features = false }
 kanban-store-turso = { path = "crates/kanban-store-turso" }
 kanban-client = { path = "crates/kanban-client" }

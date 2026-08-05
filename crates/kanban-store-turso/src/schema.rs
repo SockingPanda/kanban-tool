@@ -985,7 +985,62 @@ END;
 
 /// FTS index 独立于 canonical schema checksum，但 `kanban-store-turso` 必须启用
 /// Turso 的 `fts` feature；初始化若不能创建该索引，会把 capability 记录为不可用。
-pub(crate) const FTS_SCHEMA: &str = "CREATE INDEX IF NOT EXISTS idx_retrieval_documents_fts ON retrieval_documents USING fts (content);";
+pub(crate) const FTS_SCHEMA: &str =
+    "CREATE INDEX IF NOT EXISTS task_search_fts ON retrieval_documents USING fts (content);";
+
+/// v2 已有数据库也必须补上 canonical event -> FTS outbox 的触发器。它们不改变
+/// canonical table shape，因此初始化时可幂等执行，不需要另起 migration version。
+pub(crate) const PROJECTION_TRIGGER_SCHEMA: &str = r#"
+DROP TRIGGER IF EXISTS projection_jobs_board_guard_insert;
+DROP TRIGGER IF EXISTS projection_jobs_board_guard_update;
+CREATE TRIGGER projection_jobs_board_guard_insert
+BEFORE INSERT ON projection_jobs
+WHEN (NEW.target != 'fts' AND NEW.source_event_id IS NOT NULL AND NOT EXISTS (
+  SELECT 1 FROM task_events WHERE id = NEW.source_event_id AND board_id IS NEW.board_id
+)) OR (NEW.target != 'fts' AND NEW.entity_uri IS NOT NULL AND NOT EXISTS (
+  SELECT 1 FROM entities WHERE uri = NEW.entity_uri AND board_id IS NEW.board_id
+))
+BEGIN
+  SELECT RAISE(ABORT, 'projection_jobs reference board mismatch');
+END;
+CREATE TRIGGER projection_jobs_board_guard_update
+BEFORE UPDATE OF board_id, source_event_id, entity_uri ON projection_jobs
+WHEN (NEW.target != 'fts' AND NEW.source_event_id IS NOT NULL AND NOT EXISTS (
+  SELECT 1 FROM task_events WHERE id = NEW.source_event_id AND board_id IS NEW.board_id
+)) OR (NEW.target != 'fts' AND NEW.entity_uri IS NOT NULL AND NOT EXISTS (
+  SELECT 1 FROM entities WHERE uri = NEW.entity_uri AND board_id IS NEW.board_id
+))
+BEGIN
+  SELECT RAISE(ABORT, 'projection_jobs reference board mismatch');
+END;
+CREATE TRIGGER IF NOT EXISTS task_events_projection_job_insert
+AFTER INSERT ON task_events
+WHEN NEW.task_id IS NOT NULL
+BEGIN
+  INSERT OR IGNORE INTO projection_jobs(
+    board_id, source_event_id, target, entity_uri, dedupe_key, operation,
+    payload_json, status, attempts, max_attempts, created_at, updated_at
+  ) VALUES (
+    NEW.board_id, NEW.id, 'fts', 'kb://task/' || NEW.task_id,
+    'fts:' || NEW.board_id || ':' || NEW.task_id || ':' || NEW.id,
+    'upsert', json_object('task_id', NEW.task_id), 'pending', 0, 10,
+    NEW.created_at, NEW.created_at
+  );
+END;
+CREATE TRIGGER IF NOT EXISTS tasks_projection_job_delete
+BEFORE DELETE ON tasks
+BEGIN
+  INSERT OR IGNORE INTO projection_jobs(
+    board_id, target, entity_uri, dedupe_key, operation, payload_json,
+    status, attempts, max_attempts, created_at, updated_at
+  ) VALUES (
+    OLD.board_id, 'fts', 'kb://task/' || OLD.id,
+    'fts:' || OLD.board_id || ':' || OLD.id || ':delete',
+    'delete', json_object('task_id', OLD.id), 'pending', 0, 10,
+    strftime('%s','now') * 1000, strftime('%s','now') * 1000
+  );
+END;
+"#;
 
 pub(crate) const DEFAULT_COLUMNS: [(&str, &str, i64, bool); 9] = [
     ("triage", "Triage", 10, false),

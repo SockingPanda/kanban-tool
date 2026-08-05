@@ -17,7 +17,7 @@ pub use operations::{
     CreateBoardRecord, DependencyCreate, DependencyList, DependencyRemove, EventList,
     EventListOptions, EventListPage, EventRecord, RUN_LOG_TAIL_BYTES, ReclaimTaskCommand,
     ReclaimTaskRecord, ReopenTaskCommand, ReopenTaskRecord, RunList, RunLog, RunLogRecord, RunShow,
-    SpecifyTaskCommand, SpecifyTaskRecord, StepComplete, StepCreate, StepList, StepRemove,
+    SearchTasks, SpecifyTaskCommand, SpecifyTaskRecord, StepComplete, StepCreate, StepList, StepRemove,
     StepReopen, StepSkip, StepUpdate, TaskArchive, TaskBlock, TaskClaim, TaskCreate, TaskDone,
     TaskHeartbeat, TaskList, TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskReclaimExplicit,
     TaskRelease, TaskReopen, TaskReview, TaskShow, TaskSpecify, TaskUnblock, TaskUpdate,

@@ -9,6 +9,7 @@ mod dependency;
 mod event;
 mod ontology;
 mod run;
+mod search;
 mod stats;
 mod step;
 mod task;
@@ -22,6 +23,7 @@ pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
 pub use event::*;
 pub use ontology::LabelOntologyOperations;
 pub use run::*;
+pub use search::SearchTasks;
 pub use stats::*;
 pub use step::{StepComplete, StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate};
 pub use task::{

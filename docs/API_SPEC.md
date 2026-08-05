@@ -6,10 +6,10 @@
 默认监听地址为 `http://127.0.0.1:8721`，只接受 loopback 绑定。所有产品路由的基础路径为
 `/api/v1`；健康检查是 `/health`。
 
-本文件先描述当前已接入的 single-host 路由；它不是最终功能边界。labels、signals、
-ontology、search、graph、vector、context、projection、maintenance 与 SSE 必须按 parity
-ledger 恢复到同一 localhost API，并随每个纵向切片补齐本规范。旧的直接数据库路径不会
-恢复。
+本文件先描述当前已接入的 single-host 路由；它不是最终功能边界。labels、signals、graph、
+vector、context、projection、maintenance 与 SSE 仍按 parity ledger 恢复到同一 localhost
+API，并随每个纵向切片补齐本规范。task search 已通过 Turso FTS projection 接入；旧的直接
+数据库路径不会恢复。
 
 ## 1. 通用契约
 
@@ -157,7 +157,39 @@ execution-plan、依赖与排期 guard，例如尚未满足 ready 条件时返�
 `task_id` 必须是全局 `t_...`。返回 `GetTaskResponse`：`data: ApiTask`，当前不带 ontology
 `meta`。`include=ontology` 当前尚未接通，ontology 切片完成后必须恢复。
 
-## 4. Execution plan 与 task state machine
+## 4. Task search 与 FTS projection
+
+### `GET /api/v1/search/tasks`
+
+Query：`board`（默认 `default`）、`q`、可重复的 `status` 与 `label`、`assignee`、
+`include_archived`（默认 `false`）、`limit`（默认 20，最大 1000）和 `offset`（默认 0）。
+返回 `SearchTasksResponse`：`data.hits` 为带 `task_id`、`seq`、`score`、highlight `snippet`
+和 `ApiTask` 的结果，`data.meta` 描述 backend、generation、index version、event lag 与
+fallback reason；分页 `meta` 保留 `limit`/`offset`。
+
+exact `t_...`、`board#seq`、`#seq` 或数字 seq 走 canonical selector 查询；普通文本在
+Turso FTS ready 时使用 `task_search_fts`。索引尚未 ready、落后或 provider/query 失败时
+回退 canonical SQL，并在 `data.meta.stale` 与 `fallback_reason` 中标记，不触碰第二个数据源。
+
+### `GET /api/v1/search/tasks/by-status`
+
+使用同一 query contract，按请求中每个 `status` 返回一个 `SearchTaskStatusWindow`，每个窗口
+带独立 `search_meta` 与 `page`。顺序与重复 status 保持请求顺序；任务结果仍受 board、label、
+assignee、archive、query 和分页过滤。
+
+### `GET /api/v1/search/status`
+
+Query：`board`（默认 `default`）。返回 `SearchStatusResponse`，报告 Turso FTS capability、
+projection generation、ready/degraded/stale、最后 event 与 lag。projection 不可用时
+`backend` 为 `canonical`、`derived_index` 为 `false`，但 search query 仍可用 canonical fallback。
+
+### `POST /api/v1/search/index/rebuild` 与 `POST /api/v1/search/index/sync`
+
+Query：`board`（默认 `default`），请求体为空 JSON。`rebuild` 从 canonical task、comment、run
+和 event 事实重建 `task_search_fts`；`sync` 在存在 pending projection job 或 event lag 时
+执行同一可重放 rebuild。两者返回 `SearchStatusResponse`，不会修改 canonical task 状态。
+
+## 5. Execution plan 与 task state machine
 
 所有以下 endpoint 都调用同一个 ApplicationService/state machine；不存在通用的
 `POST .../transitions/{target_status}`。
@@ -208,7 +240,7 @@ execution-plan、依赖与排期 guard，例如尚未满足 ready 条件时返�
 review、complete、block 的 claim 校验、required steps、依赖检查与 run 更新均在同一
 application transaction 中完成。
 
-## 5. Comments
+## 6. Comments
 
 ### `GET /api/v1/tasks/{task_id}/comments`（只读）
 
@@ -224,7 +256,7 @@ application transaction 中完成。
 属于 task；相同 key/相同 payload 重放返回已有 comment，不同 payload 返回
 `idempotency_conflict`。
 
-## 6. Steps 与 execution plan
+## 7. Steps 与 execution plan
 
 ### `GET /api/v1/tasks/{task_id}/steps`（只读）
 
@@ -242,7 +274,7 @@ application transaction 中完成。
 请求可更新 `title`、`body`、`linked_task_ref`/`unlink_task`、`position`、`required`、
 `actor`；不改变 step status。返回 `UpdateStepResponse`（同一 `ApiTaskSteps` 形状）。
 
-## 7. Dependencies
+## 8. Dependencies
 
 ### `GET /api/v1/tasks/{task_id}/dependencies`（只读）
 
@@ -259,7 +291,7 @@ cycle 拒绝。
 删除同一 board 的 parent edge，返回 `RemoveDependencyResponse`（当前 dependencies 快照）。
 目标 task 存在但 edge 已不存在时是成功 no-op，不追加 remove event。
 
-## 8. Runs 与 log（run 不是独立 mutation surface）
+## 9. Runs 与 log（run 不是独立 mutation surface）
 
 run 只能由 task claim 创建，并由 heartbeat/release/review/complete/block 同事务更新。HTTP
 没有 run create/update endpoint；以下全部是只读查询。
@@ -279,7 +311,7 @@ run 只能由 task claim 创建，并由 heartbeat/release/review/complete/block
 typed client 不发送 `tail` query，服务端也不会把未知 query 解释为可配置读取范围；没有
 任意文件路径输入或第二种 log 协议。
 
-## 9. Events
+## 10. Events
 
 ### `GET /api/v1/events`
 
@@ -290,9 +322,9 @@ known event kind 使用 typed payload；未知 kind 保留原 JSON payload，不
 
 event list 是只读；所有 mutation 通过 ApplicationService 写 canonical event。
 
-## 10. 停止路径
+## 11. 停止路径
 
 服务停止后，client 返回 `server_unavailable`，不得 fallback 到嵌入式数据库、旧 SQLite
-路径或另一个 host。迁移期间尚未接通的 labels/signals/search/maintenance 等命令暂时返回
+路径或另一个 host。迁移期间尚未接通的 labels/signals/maintenance 等命令暂时返回
 `feature_not_available`，不会触碰数据库；只要该临时响应仍存在，对应 parity 项就不能
 标记完成。

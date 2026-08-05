@@ -4,6 +4,7 @@ mod dependency;
 mod event;
 mod ontology;
 mod run;
+mod search;
 mod stats;
 mod step;
 mod task;

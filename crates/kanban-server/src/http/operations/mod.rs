@@ -5,6 +5,7 @@ mod events;
 mod health;
 mod ontology;
 mod runs;
+mod search;
 mod stats;
 mod steps;
 mod support;
@@ -24,6 +25,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(dependencies::router())
         .merge(steps::router())
         .merge(runs::router())
+        .merge(search::router())
         .merge(stats::router())
         .merge(ontology::router())
         .merge(events::router())

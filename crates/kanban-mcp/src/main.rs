@@ -18,6 +18,7 @@ impl KanbanMcp {
             + Self::dependency_tools()
             + Self::event_tools()
             + Self::run_tools()
+            + Self::search_tools()
             + Self::step_tools()
             + Self::lifecycle_tools()
             + Self::ontology_tools()
@@ -83,6 +84,8 @@ mod tests {
                 "run_list",
                 "run_log",
                 "run_show",
+                "search_status",
+                "search_tasks",
                 "step_create",
                 "step_done",
                 "step_list",

@@ -5,5 +5,6 @@ mod events;
 mod lifecycle;
 mod ontology;
 mod runs;
+mod search;
 mod steps;
 mod tasks;

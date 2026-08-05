@@ -12,6 +12,7 @@ kanban-application.workspace = true
 kanban-contract = { workspace = true, default-features = false }
 kanban-core.workspace = true
 kanban-store-turso.workspace = true
+kanban-search.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio = { workspace = true, features = [

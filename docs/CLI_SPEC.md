@@ -4,10 +4,10 @@
 所有命令都只创建 `kanban-client` 并调用 `http://127.0.0.1:8721`；CLI 不打开、初始化或
 fallback 到任何数据库。
 
-当前实现只覆盖 board、task、comment、dependency、run 和 event；这不是最终功能边界。
-labels、signals、ontology、search、graph、vector、context、projection、maintenance、
-init/import 等能力必须按 parity ledger 恢复为 localhost client 命令。旧的直接数据库
-执行路径不会恢复。
+当前实现覆盖 board、task、comment、dependency、run、event、search 和 index；这不是最终
+功能边界。labels、signals、ontology、graph、vector、context、projection、maintenance、
+init/import 等能力必须按 parity ledger 恢复为 localhost client 命令。旧的直接数据库执行
+路径不会恢复。
 
 ## 1. 全局选项
 
@@ -118,7 +118,27 @@ priority|-priority|assignee|-assignee|scheduled_at|-scheduled_at|due_at|-due_at|
 created_at|-created_at|updated_at|-updated_at`，默认值为 `position`。负号开头的值需要写成
 `--sort=-updated_at`，避免被 clap 解释为另一个 option。
 
-### 4.2 Execution plan
+### 4.2 Search 与 index
+
+```text
+kanban search <TEXT>
+  [--status triage|todo|scheduled|ready|running|blocked|review|done|archived]...
+  [--label <NAME>]... [--assignee <NAME>] [--include-archived]
+  [--limit <N>] [--offset <N>]
+
+kanban index status
+kanban index doctor
+kanban index rebuild
+kanban index sync
+```
+
+`search` 调用 `/api/v1/search/tasks`，返回 FTS/canonical fallback 的 task hit；`--json`
+使用 `cli.search-output`，人类输出显示 task ref、status、title、score 和 highlight
+snippet。`index status`/`doctor` 是只读状态查询；`rebuild` 从 canonical facts 重建
+Turso `task_search_fts`，`sync` 处理 pending projection job 或 event lag。四个 index 命令
+均只调用 localhost host，不打开数据库。
+
+### 4.3 Execution plan
 
 ```text
 kanban task step not-required <TASK_SELECTOR> --reason <TEXT>
@@ -127,7 +147,7 @@ kanban task step not-required <TASK_SELECTOR> --reason <TEXT>
 这会调用 `POST /api/v1/tasks/{task_id}/execution-plan/not-required`，返回
 `MarkExecutionPlanNotRequiredResponse`。它是 promote 前的显式 plan gate。
 
-### 4.3 State machine transitions
+### 4.4 State machine transitions
 
 ```text
 kanban task promote <TASK_SELECTOR>
@@ -149,7 +169,7 @@ owner 的 token，成功后任务回到 ready；错误 token 返回 `claim_token
 每个命令的人类输出只显示精简 task 状态；`--json` 输出对应 contract response。CLI 不自行
 解释状态机或直接修改 run。
 
-### 4.4 Steps
+### 4.5 Steps
 
 ```text
 kanban task step add <TASK_SELECTOR> <TITLE>
@@ -229,7 +249,7 @@ kanban <未列出的旧命令>
 
 该路径不读取配置数据库、不创建文件、不 fallback 到 SQLite。未注册的嵌套子命令（例如
 `kanban task archive`）由 clap 在发起任何 HTTP/DB 操作前以参数错误退出 `2`；它们不使用
-runtime JSON envelope。尚未完成的 labels、signals、search、maintenance、projection、
+runtime JSON envelope。尚未完成的 labels、signals、maintenance、projection、
 graph、vector 等顶层 surface 暂时返回 `feature_not_available`；只要该临时路径仍存在，
 对应 parity 项就不能标记完成。host 停止或端口不可达时，已迁移命令返回
 `server_unavailable`（exit code `9`），而不是切换到第二条执行路径。

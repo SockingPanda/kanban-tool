@@ -82,6 +82,13 @@ enum Command {
         #[command(subcommand)]
         command: commands::run::RunCommand,
     },
+    /// Search tasks through the canonical localhost host.
+    Search(commands::search::SearchArgs),
+    /// Inspect and maintain the task search projection.
+    Index {
+        #[command(subcommand)]
+        command: commands::index::IndexCommand,
+    },
     /// Removed direct-database initialization path.
     Init,
     /// Commands not yet migrated to the canonical host fail without touching storage.
@@ -110,6 +117,8 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Runs(args) => commands::run::list(&ctx, args),
         Command::Task { command } => commands::task::run(&ctx, command),
         Command::Label { command } => commands::ontology::run(&ctx, command),
+        Command::Search(args) => commands::search::run(&ctx, args),
+        Command::Index { command } => commands::index::run(&ctx, command),
         Command::Init => Err(feature_not_available(
             "`kanban init` was removed; start `kanban serve` to initialize the canonical Turso database",
         )),

@@ -3,5 +3,7 @@ pub(crate) mod comment;
 pub(crate) mod dependency;
 pub(crate) mod event;
 pub(crate) mod ontology;
+pub(crate) mod index;
 pub(crate) mod run;
+pub(crate) mod search;
 pub(crate) mod task;

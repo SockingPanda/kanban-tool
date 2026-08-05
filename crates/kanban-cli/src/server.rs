@@ -43,13 +43,19 @@ pub(crate) async fn run(ctx: &CliContext, args: &ServeArgs) -> Result<(), CliFai
             None => None,
         };
     let db_path = args.db.clone().unwrap_or_else(default_db_path);
-    let state = kanban_server::AppState::open(&db_path, ctx.actor())
-        .await
-        .map_err(|error| CliFailure {
-            code: "storage_error",
-            message: error.to_string(),
-            exit_code: 1,
-        })?;
+    let state = kanban_server::AppState::open_with_run_log_root(
+        &db_path,
+        ctx.actor(),
+        dispatcher
+            .as_ref()
+            .map(|config| config.log_dir().to_path_buf()),
+    )
+    .await
+    .map_err(|error| CliFailure {
+        code: "storage_error",
+        message: error.to_string(),
+        exit_code: 1,
+    })?;
     let addr = SocketAddr::new(args.host, args.port);
     eprintln!(
         "kanban serve listening on http://{addr}; database={}; dispatcher={}",

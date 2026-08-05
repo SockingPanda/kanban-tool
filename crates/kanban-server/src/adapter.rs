@@ -1,3 +1,8 @@
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+
 use kanban_application::{
     ApplicationStore, CommentAuthorType as ApplicationCommentAuthorType,
     CommentKind as ApplicationCommentKind, CommentRecord as ApplicationComment,
@@ -17,11 +22,30 @@ mod operations;
 #[derive(Clone)]
 pub(crate) struct TursoApplicationStore {
     store: TursoStore,
+    // Consumed by the run.log leaf slice; keep the seam warning-free until then.
+    #[allow(dead_code)]
+    run_log_root: Option<Arc<PathBuf>>,
 }
 
 impl TursoApplicationStore {
     pub(crate) fn new(store: TursoStore) -> Self {
-        Self { store }
+        Self {
+            store,
+            run_log_root: None,
+        }
+    }
+
+    pub(crate) fn with_run_log_root(store: TursoStore, run_log_root: Arc<PathBuf>) -> Self {
+        Self {
+            store,
+            run_log_root: Some(run_log_root),
+        }
+    }
+
+    // Consumed by the run.log leaf slice; keep the seam warning-free until then.
+    #[allow(dead_code)]
+    pub(crate) fn run_log_root(&self) -> Option<&Path> {
+        self.run_log_root.as_deref().map(PathBuf::as_path)
     }
 }
 
@@ -207,4 +231,31 @@ fn application_step(step: kanban_store_turso::TaskStepRecord) -> Result<Applicat
         updated_by: step.updated_by,
         updated_at: step.updated_at,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::PathBuf, sync::Arc};
+
+    use kanban_store_turso::TursoStore;
+    use tempfile::tempdir;
+
+    use super::TursoApplicationStore;
+
+    #[tokio::test]
+    async fn run_log_root_constructor_preserves_optional_root() {
+        let directory = tempdir().expect("temporary database directory");
+        let store = TursoStore::open(directory.path().join("kanban.db"))
+            .await
+            .expect("open store");
+
+        assert_eq!(
+            TursoApplicationStore::new(store.clone()).run_log_root(),
+            None
+        );
+
+        let root = Arc::new(PathBuf::from("runs"));
+        let configured = TursoApplicationStore::with_run_log_root(store, root.clone());
+        assert_eq!(configured.run_log_root(), Some(root.as_path()));
+    }
 }

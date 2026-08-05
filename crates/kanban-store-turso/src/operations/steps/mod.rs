@@ -14,4 +14,8 @@ pub use update::UpdateStepInput;
 #[cfg(test)]
 mod create_tests;
 #[cfg(test)]
+mod remove_tests;
+#[cfg(test)]
+mod resolve_tests;
+#[cfg(test)]
 mod update_tests;

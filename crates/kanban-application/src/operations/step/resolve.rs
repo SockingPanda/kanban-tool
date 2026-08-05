@@ -1,3 +1,5 @@
+//! Step 完成、跳过和重新打开的 application service 命令与端口。
+
 use std::future::Future;
 
 use kanban_core::{Clock, KanbanError, Result, TaskStatus, new_event_id};
@@ -237,4 +239,198 @@ fn ensure_parent_can_change_steps(parent: &TaskRecord) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use super::*;
+    use crate::{ExecutionPlanRecord, ExecutionPlanState};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
+
+    fn steps(task_id: &str) -> TaskStepsRecord {
+        TaskStepsRecord {
+            task_id: task_id.to_owned(),
+            steps: vec![],
+            execution_plan: ExecutionPlanRecord {
+                board_id: "b_default".to_owned(),
+                task_id: task_id.to_owned(),
+                state: ExecutionPlanState::Planned,
+                reason: None,
+                updated_by: "tester".to_owned(),
+                updated_at: 100,
+            },
+        }
+    }
+
+    fn step_record(task_id: &str, step_id: &str, status: &str, actor: &str) -> StepRecord {
+        StepRecord {
+            id: step_id.to_owned(),
+            parent_task_id: task_id.to_owned(),
+            title: "step".to_owned(),
+            body: None,
+            linked_task: None,
+            position: 1024,
+            required: true,
+            status: status.to_owned(),
+            resolution_note: None,
+            resolved_by: (status != "todo").then(|| actor.to_owned()),
+            resolved_at: (status != "todo").then_some(100),
+            created_by: "tester".to_owned(),
+            created_at: 100,
+            updated_by: actor.to_owned(),
+            updated_at: 100,
+        }
+    }
+
+    impl StepComplete for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn complete_step(
+            &self,
+            task_id: &str,
+            step_id: &str,
+            input: CompleteStepRecord,
+        ) -> Result<StepRecord> {
+            assert_eq!((task_id, step_id), ("t_step_done", "step_done"));
+            assert_eq!(input.note, "finished");
+            assert_eq!(input.actor, "operator");
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.updated_at, 100);
+            assert_eq!(input.expected_lock_version, 0);
+            Ok(step_record(task_id, step_id, "done", &input.actor))
+        }
+
+        async fn list_steps(&self, task_id: &str) -> Result<TaskStepsRecord> {
+            Ok(steps(task_id))
+        }
+    }
+
+    impl StepSkip for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn skip_step(
+            &self,
+            task_id: &str,
+            step_id: &str,
+            input: SkipStepRecord,
+        ) -> Result<StepRecord> {
+            assert_eq!((task_id, step_id), ("t_step_skip", "step_skip"));
+            assert_eq!(input.reason, "not needed");
+            assert_eq!(input.actor, "operator");
+            assert_eq!(input.expected_lock_version, 0);
+            Ok(step_record(task_id, step_id, "skipped", &input.actor))
+        }
+
+        async fn list_steps(&self, task_id: &str) -> Result<TaskStepsRecord> {
+            Ok(steps(task_id))
+        }
+    }
+
+    impl StepReopen for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn reopen_step(
+            &self,
+            task_id: &str,
+            step_id: &str,
+            input: ReopenStepRecord,
+        ) -> Result<StepRecord> {
+            assert_eq!((task_id, step_id), ("t_step_reopen", "step_reopen"));
+            assert_eq!(input.reason, "needs revision");
+            assert_eq!(input.actor, "operator");
+            assert_eq!(input.expected_lock_version, 0);
+            Ok(step_record(task_id, step_id, "todo", &input.actor))
+        }
+
+        async fn list_steps(&self, task_id: &str) -> Result<TaskStepsRecord> {
+            Ok(steps(task_id))
+        }
+    }
+
+    #[tokio::test]
+    async fn resolution_commands_trim_input_and_return_the_post_mutation_snapshot() {
+        let service = ApplicationService::with_clock(
+            StubStore {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            FixedClock(100),
+        );
+        let done = service
+            .complete_step(CompleteStepCommand {
+                task_id: " t_step_done ".to_owned(),
+                step_id: " step_done ".to_owned(),
+                note: " finished ".to_owned(),
+                actor: " operator ".to_owned(),
+            })
+            .await
+            .expect("complete step");
+        assert_eq!(done.task_id, "t_step_done");
+        assert!(done.steps.is_empty());
+
+        let skipped = service
+            .skip_step(SkipStepCommand {
+                task_id: " t_step_skip ".to_owned(),
+                step_id: " step_skip ".to_owned(),
+                reason: " not needed ".to_owned(),
+                actor: " operator ".to_owned(),
+            })
+            .await
+            .expect("skip step");
+        assert_eq!(skipped.task_id, "t_step_skip");
+
+        let reopened = service
+            .reopen_step(ReopenStepCommand {
+                task_id: " t_step_reopen ".to_owned(),
+                step_id: " step_reopen ".to_owned(),
+                reason: " needs revision ".to_owned(),
+                actor: " operator ".to_owned(),
+            })
+            .await
+            .expect("reopen step");
+        assert_eq!(reopened.task_id, "t_step_reopen");
+    }
+
+    #[tokio::test]
+    async fn resolution_commands_reject_invalid_ids_and_empty_reasons_before_store_access() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let service = ApplicationService::with_clock(
+            StubStore {
+                calls: calls.clone(),
+            },
+            FixedClock(100),
+        );
+        let invalid_id = service
+            .complete_step(CompleteStepCommand {
+                task_id: "default#1".to_owned(),
+                step_id: "step_1".to_owned(),
+                note: "finished".to_owned(),
+                actor: "operator".to_owned(),
+            })
+            .await
+            .expect_err("必须拒绝 board-local task selector");
+        assert!(matches!(invalid_id, KanbanError::InvalidInput(_)));
+
+        let empty_reason = service
+            .reopen_step(ReopenStepCommand {
+                task_id: "t_step".to_owned(),
+                step_id: "step_1".to_owned(),
+                reason: "  ".to_owned(),
+                actor: "operator".to_owned(),
+            })
+            .await
+            .expect_err("必须拒绝空 reason");
+        assert!(matches!(empty_reason, KanbanError::InvalidInput(_)));
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
 }

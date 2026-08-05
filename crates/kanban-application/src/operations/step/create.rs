@@ -1,9 +1,14 @@
+use std::future::Future;
+
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, TaskStatus, new_event_id, new_typed_id,
     recompute_ready_status,
 };
 
-use crate::{ApplicationService, ApplicationStore, ExecutionPlanState, TaskStepsRecord};
+use crate::{
+    ApplicationService, ApplicationStore, ExecutionPlanState, StepRecord, TaskRecord,
+    TaskStepsRecord,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CreateStepCommand {
@@ -40,9 +45,21 @@ pub struct CreateStepRecord {
     pub target_status: TaskStatus,
 }
 
+pub trait StepCreate: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn create_step(
+        &self,
+        task_id: &str,
+        input: CreateStepRecord,
+    ) -> impl Future<Output = Result<StepRecord>> + Send;
+
+    fn list_steps(&self, task_id: &str) -> impl Future<Output = Result<TaskStepsRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: StepCreate,
     C: Clock,
 {
     pub async fn create_step(&self, command: CreateStepCommand) -> Result<TaskStepsRecord> {
@@ -160,10 +177,61 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::KanbanError;
+    use kanban_core::{KanbanError, Result, TaskStatus};
 
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
     use crate::*;
+
+    impl StepCreate for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn create_step(&self, task_id: &str, input: CreateStepRecord) -> Result<StepRecord> {
+            assert_eq!(task_id, "t_step");
+            assert!(input.id.starts_with("step_"));
+            assert_eq!(input.idempotency_key.as_deref(), Some("step-retry"));
+            assert_eq!(input.title, "step title");
+            assert_eq!(input.body.as_deref(), Some("step body"));
+            assert_eq!(input.target_status, TaskStatus::Ready);
+            assert!(input.event_id.starts_with("e_"));
+            assert!(input.plan_event_id.starts_with("e_"));
+            assert!(input.recompute_event_id.starts_with("e_"));
+            Ok(StepRecord {
+                id: input.id,
+                parent_task_id: task_id.to_owned(),
+                title: input.title,
+                body: input.body,
+                linked_task: None,
+                position: input.position.unwrap_or(1024),
+                required: input.required,
+                status: "todo".to_owned(),
+                resolution_note: None,
+                resolved_by: None,
+                resolved_at: None,
+                created_by: input.created_by.clone(),
+                created_at: input.created_at,
+                updated_by: input.created_by,
+                updated_at: input.created_at,
+            })
+        }
+
+        async fn list_steps(&self, task_id: &str) -> Result<TaskStepsRecord> {
+            assert_eq!(task_id, "t_step");
+            Ok(TaskStepsRecord {
+                task_id: task_id.to_owned(),
+                steps: vec![],
+                execution_plan: ExecutionPlanRecord {
+                    board_id: "b_default".into(),
+                    task_id: task_id.to_owned(),
+                    state: ExecutionPlanState::Planned,
+                    reason: None,
+                    updated_by: "tester".into(),
+                    updated_at: 100,
+                },
+            })
+        }
+    }
     #[tokio::test]
     async fn create_and_list_steps_share_global_id_and_canonicalize_input() {
         let service = ApplicationService::with_clock(

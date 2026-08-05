@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, TaskStatus, can_promote_from, new_event_id,
     recompute_ready_status,
@@ -19,9 +21,19 @@ pub struct PromoteTaskRecord {
     pub updated_at: i64,
 }
 
+pub trait TaskPromote: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn promote_task(
+        &self,
+        task_id: &str,
+        input: PromoteTaskRecord,
+    ) -> impl Future<Output = Result<TaskRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskPromote,
     C: Clock,
 {
     pub async fn promote_task(&self, command: PromoteTaskCommand) -> Result<TaskRecord> {
@@ -84,10 +96,33 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::{KanbanError, TaskStatus};
+    use kanban_core::{KanbanError, Result, TaskStatus};
 
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
     use crate::*;
+
+    impl TaskPromote for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn promote_task(
+            &self,
+            task_id: &str,
+            input: PromoteTaskRecord,
+        ) -> Result<TaskRecord> {
+            assert_eq!(task_id, "t_promote");
+            assert_eq!(input.expected_lock_version, 0);
+            assert_eq!(input.actor, "promoter");
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.updated_at, 100);
+            let mut task = task_for_id(task_id);
+            task.status = TaskStatus::Ready;
+            task.lock_version += 1;
+            task.updated_at = input.updated_at;
+            Ok(task)
+        }
+    }
     #[tokio::test]
     async fn promote_task_uses_core_readiness_and_plan_guards() {
         let service = ApplicationService::with_clock(

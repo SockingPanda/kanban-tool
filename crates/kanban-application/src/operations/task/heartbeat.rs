@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result, new_event_id, running_claim_is_present};
 
 use crate::{ApplicationService, ApplicationStore, TaskRecord};
@@ -22,9 +24,19 @@ pub struct HeartbeatTaskRecord {
     pub claim_expires_at: i64,
 }
 
+pub trait TaskHeartbeat: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn heartbeat_task(
+        &self,
+        task_id: &str,
+        input: HeartbeatTaskRecord,
+    ) -> impl Future<Output = Result<TaskRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskHeartbeat,
     C: Clock,
 {
     pub async fn heartbeat_task(&self, command: HeartbeatTaskCommand) -> Result<TaskRecord> {
@@ -89,10 +101,41 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::{KanbanError, TaskStatus};
+    use kanban_core::{KanbanError, Result, TaskStatus};
 
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
     use crate::*;
+
+    impl TaskHeartbeat for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn heartbeat_task(
+            &self,
+            task_id: &str,
+            input: HeartbeatTaskRecord,
+        ) -> Result<TaskRecord> {
+            assert_eq!(task_id, "t_heartbeat");
+            assert_eq!(input.expected_lock_version, 2);
+            assert_eq!(input.actor, "worker");
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.now, 100);
+            assert_eq!(input.claim_expires_at, 400);
+            if input.claim_token != "claim_valid" {
+                return Err(KanbanError::InvalidTransition(
+                    "claim token mismatch".to_owned(),
+                ));
+            }
+            assert_eq!(input.note.as_deref(), Some(" alive "));
+            let mut task = task_for_id(task_id);
+            task.claim_expires_at = Some(input.claim_expires_at);
+            task.last_heartbeat_at = Some(input.now);
+            task.updated_at = input.now;
+            task.lock_version += 1;
+            Ok(task)
+        }
+    }
     #[tokio::test]
     async fn heartbeat_task_validates_running_claim_owner_and_lease() {
         let service = ApplicationService::with_clock(

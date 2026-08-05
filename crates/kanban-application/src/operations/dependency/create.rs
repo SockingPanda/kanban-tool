@@ -1,8 +1,10 @@
+use std::future::Future;
+
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, TaskStatus, new_event_id, recompute_ready_status,
 };
 
-use crate::{ApplicationService, ApplicationStore, DependencySnapshotRecord};
+use crate::{ApplicationService, ApplicationStore, DependencySnapshotRecord, TaskRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AddDependencyCommand {
@@ -27,9 +29,20 @@ pub struct AddDependencyResult {
     pub dependencies: DependencySnapshotRecord,
 }
 
+pub trait DependencyCreate: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn add_dependency(
+        &self,
+        child_task_id: &str,
+        parent_task_id: &str,
+        input: AddDependencyRecord,
+    ) -> impl Future<Output = Result<AddDependencyResult>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: DependencyCreate,
     C: Clock,
 {
     pub async fn add_dependency(
@@ -117,5 +130,30 @@ where
                 },
             )
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use kanban_core::{KanbanError, Result};
+
+    use crate::operations::test_support::{StubStore, task_for_id};
+    use crate::*;
+
+    impl DependencyCreate for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn add_dependency(
+            &self,
+            _child_task_id: &str,
+            _parent_task_id: &str,
+            _input: AddDependencyRecord,
+        ) -> Result<AddDependencyResult> {
+            Err(KanbanError::FeatureNotAvailable(
+                "dependency stub is not configured".to_owned(),
+            ))
+        }
     }
 }

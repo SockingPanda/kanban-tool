@@ -9,6 +9,15 @@ mod dependency;
 mod step;
 mod task;
 
+pub use board::{BoardColumns, BoardList};
+pub use comment::{CommentCreate, CommentList};
+pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
+pub use step::{StepCreate, StepList, StepUpdate};
+pub use task::{
+    TaskBlock, TaskClaim, TaskCreate, TaskDone, TaskHeartbeat, TaskList, TaskPlanNotRequired,
+    TaskPromote, TaskReclaim, TaskRelease, TaskReview, TaskShow,
+};
+
 pub use comment::{CreateCommentCommand, CreateCommentRecord};
 pub use dependency::{
     AddDependencyCommand, AddDependencyRecord, AddDependencyResult, RemoveDependencyCommand,

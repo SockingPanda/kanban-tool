@@ -1,10 +1,19 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result};
 
 use crate::{ApplicationService, ApplicationStore, DependencySnapshotRecord};
 
+pub trait DependencyList: ApplicationStore {
+    fn list_dependencies(
+        &self,
+        task_id: &str,
+    ) -> impl Future<Output = Result<DependencySnapshotRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: DependencyList,
     C: Clock,
 {
     pub async fn list_dependencies(&self, task_id: &str) -> Result<DependencySnapshotRecord> {
@@ -15,5 +24,21 @@ where
             ));
         }
         self.store.list_dependencies(task_id).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use kanban_core::{KanbanError, Result};
+
+    use crate::operations::test_support::StubStore;
+    use crate::*;
+
+    impl DependencyList for StubStore {
+        async fn list_dependencies(&self, _task_id: &str) -> Result<DependencySnapshotRecord> {
+            Err(KanbanError::FeatureNotAvailable(
+                "dependency stub is not configured".to_owned(),
+            ))
+        }
     }
 }

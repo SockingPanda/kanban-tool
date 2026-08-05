@@ -1,10 +1,19 @@
+use std::future::Future;
+
 use kanban_core::{Clock, Result};
 
 use crate::{ApplicationHealth, ApplicationService, ApplicationStore, BoardRecord};
 
+pub trait BoardList: ApplicationStore {
+    fn list_boards(
+        &self,
+        include_archived: bool,
+    ) -> impl Future<Output = Result<Vec<BoardRecord>>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: BoardList,
     C: Clock,
 {
     pub async fn health(&self) -> Result<ApplicationHealth> {
@@ -26,10 +35,27 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
     };
 
-    use kanban_core::TaskStatus;
+    use kanban_core::{Result, TaskStatus};
 
     use crate::operations::test_support::StubStore;
     use crate::*;
+
+    impl BoardList for StubStore {
+        async fn list_boards(&self, include_archived: bool) -> Result<Vec<BoardRecord>> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            assert!(include_archived);
+            Ok(vec![kanban_core::Board {
+                id: "b_default".into(),
+                slug: "default".into(),
+                name: "Default".into(),
+                description: None,
+                created_at: 1,
+                updated_at: 1,
+                archived_at: None,
+            }])
+        }
+    }
+
     #[tokio::test]
     async fn health_and_board_queries_share_the_application_store() {
         let calls = Arc::new(AtomicUsize::new(0));

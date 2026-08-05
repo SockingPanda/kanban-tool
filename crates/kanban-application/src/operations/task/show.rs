@@ -1,10 +1,16 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result};
 
 use crate::{ApplicationService, ApplicationStore, TaskRecord};
 
+pub trait TaskShow: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskShow,
     C: Clock,
 {
     pub async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
@@ -22,10 +28,16 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::KanbanError;
+    use kanban_core::{KanbanError, Result};
 
     use crate::operations::test_support::{FixedClock, StubStore};
     use crate::*;
+
+    impl TaskShow for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(crate::operations::test_support::task_for_id(task_id))
+        }
+    }
     #[tokio::test]
     async fn get_task_accepts_only_global_task_ids() {
         let service = ApplicationService::with_clock(

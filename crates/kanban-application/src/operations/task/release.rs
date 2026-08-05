@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, TaskStatus, new_event_id, recompute_ready_status,
     running_claim_is_present,
@@ -21,9 +23,19 @@ pub struct ReleaseTaskRecord {
     pub now: i64,
 }
 
+pub trait TaskRelease: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn release_task(
+        &self,
+        task_id: &str,
+        input: ReleaseTaskRecord,
+    ) -> impl Future<Output = Result<TaskRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskRelease,
     C: Clock,
 {
     pub async fn release_task(&self, command: ReleaseTaskCommand) -> Result<TaskRecord> {
@@ -100,10 +112,43 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::{KanbanError, TaskStatus};
+    use kanban_core::{KanbanError, Result, TaskStatus};
 
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
     use crate::*;
+
+    impl TaskRelease for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn release_task(
+            &self,
+            task_id: &str,
+            input: ReleaseTaskRecord,
+        ) -> Result<TaskRecord> {
+            assert_eq!(task_id, "t_release");
+            assert_eq!(input.expected_lock_version, 2);
+            assert_eq!(input.actor, "worker");
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.now, 100);
+            if input.claim_token != "claim_valid" {
+                return Err(KanbanError::InvalidTransition(
+                    "claim token mismatch".to_owned(),
+                ));
+            }
+            let mut task = task_for_id(task_id);
+            task.status = TaskStatus::Ready;
+            task.has_claim_token = false;
+            task.claim_owner = None;
+            task.claim_expires_at = None;
+            task.last_heartbeat_at = None;
+            task.current_run_id = None;
+            task.updated_at = input.now;
+            task.lock_version += 1;
+            Ok(task)
+        }
+    }
     #[tokio::test]
     async fn release_task_validates_readiness_owner_and_exact_token() {
         let service = ApplicationService::with_clock(

@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result, TaskStatus};
 
 use crate::{ApplicationService, ApplicationStore, TaskRecord};
@@ -57,9 +59,17 @@ pub struct TaskListPage {
     pub total: usize,
 }
 
+pub trait TaskList: ApplicationStore {
+    fn list_tasks(
+        &self,
+        board: &str,
+        options: TaskListOptions,
+    ) -> impl Future<Output = Result<TaskListPage>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskList,
     C: Clock,
 {
     pub async fn list_tasks(
@@ -120,10 +130,22 @@ fn trimmed_optional(value: Option<String>) -> Option<String> {
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::{KanbanError, TaskStatus};
+    use kanban_core::{KanbanError, Result, TaskStatus};
 
     use crate::operations::test_support::{FixedClock, StubStore};
     use crate::*;
+
+    impl TaskList for StubStore {
+        async fn list_tasks(&self, board: &str, options: TaskListOptions) -> Result<TaskListPage> {
+            assert_eq!(board, "default");
+            assert_eq!(options.assignee.as_deref(), Some("worker"));
+            assert_eq!(options.query.as_deref(), Some("needle"));
+            Ok(TaskListPage {
+                tasks: Vec::new(),
+                total: 0,
+            })
+        }
+    }
     #[tokio::test]
     async fn list_tasks_validates_and_normalizes_query_options() {
         let service = ApplicationService::with_clock(

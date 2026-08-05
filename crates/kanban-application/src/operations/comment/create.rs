@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result, new_event_id, new_typed_id};
 
 use crate::{ApplicationService, ApplicationStore, CommentAuthorType, CommentKind, CommentRecord};
@@ -30,9 +32,17 @@ pub struct CreateCommentRecord {
     pub created_at: i64,
 }
 
+pub trait CommentCreate: ApplicationStore {
+    fn create_comment(
+        &self,
+        task_id: &str,
+        input: CreateCommentRecord,
+    ) -> impl Future<Output = Result<CommentRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: CommentCreate,
     C: Clock,
 {
     pub async fn create_comment(&self, command: CreateCommentCommand) -> Result<CommentRecord> {
@@ -114,10 +124,36 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::KanbanError;
+    use kanban_core::{KanbanError, Result};
 
     use crate::operations::test_support::{FixedClock, StubStore};
     use crate::*;
+
+    impl CommentCreate for StubStore {
+        async fn create_comment(
+            &self,
+            task_id: &str,
+            input: CreateCommentRecord,
+        ) -> Result<CommentRecord> {
+            assert_eq!(task_id, "t_comment");
+            assert!(input.id.starts_with("c_"));
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.created_at, 100);
+            Ok(CommentRecord {
+                id: input.id,
+                board_id: "b_default".into(),
+                task_id: task_id.into(),
+                author: input.author,
+                author_type: input.author_type,
+                agent_type: input.agent_type,
+                body: input.body,
+                kind: input.kind,
+                metadata_json: input.metadata_json,
+                created_at: input.created_at,
+            })
+        }
+    }
+
     #[tokio::test]
     async fn create_comment_canonicalizes_input_and_rejects_signal_kind() {
         let service = ApplicationService::with_clock(

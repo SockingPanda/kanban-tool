@@ -1,6 +1,8 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result, TaskStatus, new_event_id};
 
-use crate::{ApplicationService, ApplicationStore, TaskStepsRecord};
+use crate::{ApplicationService, ApplicationStore, StepRecord, TaskRecord, TaskStepsRecord};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UpdateStepCommand {
@@ -29,9 +31,22 @@ pub struct UpdateStepRecord {
     pub expected_lock_version: i64,
 }
 
+pub trait StepUpdate: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn update_step(
+        &self,
+        task_id: &str,
+        step_id: &str,
+        input: UpdateStepRecord,
+    ) -> impl Future<Output = Result<StepRecord>> + Send;
+
+    fn list_steps(&self, task_id: &str) -> impl Future<Output = Result<TaskStepsRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: StepUpdate,
     C: Clock,
 {
     pub async fn update_step(&self, command: UpdateStepCommand) -> Result<TaskStepsRecord> {
@@ -145,10 +160,67 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::KanbanError;
+    use kanban_core::{KanbanError, Result};
 
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
     use crate::*;
+
+    impl StepUpdate for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn update_step(
+            &self,
+            task_id: &str,
+            step_id: &str,
+            input: UpdateStepRecord,
+        ) -> Result<StepRecord> {
+            assert_eq!(task_id, "t_step");
+            assert!(step_id.starts_with("step_"));
+            assert_eq!(input.title.as_deref(), Some("updated step"));
+            assert!(input.body.is_none());
+            assert_eq!(input.position, Some(2048));
+            assert_eq!(input.required, Some(false));
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.updated_by, "tester");
+            assert_eq!(input.updated_at, 100);
+            assert_eq!(input.expected_lock_version, 0);
+            Ok(StepRecord {
+                id: step_id.to_owned(),
+                parent_task_id: task_id.to_owned(),
+                title: input.title.unwrap_or_else(|| "step title".to_owned()),
+                body: input.body,
+                linked_task: None,
+                position: input.position.unwrap_or(1024),
+                required: input.required.unwrap_or(true),
+                status: "todo".to_owned(),
+                resolution_note: None,
+                resolved_by: None,
+                resolved_at: None,
+                created_by: "tester".to_owned(),
+                created_at: 100,
+                updated_by: input.updated_by,
+                updated_at: input.updated_at,
+            })
+        }
+
+        async fn list_steps(&self, task_id: &str) -> Result<TaskStepsRecord> {
+            assert_eq!(task_id, "t_step");
+            Ok(TaskStepsRecord {
+                task_id: task_id.to_owned(),
+                steps: vec![],
+                execution_plan: ExecutionPlanRecord {
+                    board_id: "b_default".into(),
+                    task_id: task_id.to_owned(),
+                    state: ExecutionPlanState::Planned,
+                    reason: None,
+                    updated_by: "tester".into(),
+                    updated_at: 100,
+                },
+            })
+        }
+    }
     #[tokio::test]
     async fn update_step_validates_patch_and_preserves_null_body_semantics() {
         let service = ApplicationService::with_clock(

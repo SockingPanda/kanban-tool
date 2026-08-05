@@ -1,10 +1,10 @@
-use std::path::Path;
+use std::{future::Future, path::Path};
 
 use kanban_core::{
     Clock, KanbanError, Result, is_claimable_task, new_event_id, new_run_id, new_typed_id,
 };
 
-use crate::{ApplicationService, ApplicationStore, ClaimRecord, ExecutionPlanState};
+use crate::{ApplicationService, ApplicationStore, ClaimRecord, ExecutionPlanState, TaskRecord};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClaimTaskCommand {
@@ -29,9 +29,19 @@ pub struct ClaimTaskRecord {
     pub claim_expires_at: i64,
 }
 
+pub trait TaskClaim: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn claim_task(
+        &self,
+        task_id: &str,
+        input: ClaimTaskRecord,
+    ) -> impl Future<Output = Result<ClaimRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskClaim,
     C: Clock,
 {
     pub async fn claim_task(&self, command: ClaimTaskCommand) -> Result<ClaimRecord> {
@@ -135,10 +145,75 @@ mod tests {
     use std::path::Path;
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::{KanbanError, TaskStatus};
+    use kanban_core::{KanbanError, Result, TaskStatus};
 
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
     use crate::*;
+
+    impl TaskClaim for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn claim_task(&self, task_id: &str, input: ClaimTaskRecord) -> Result<ClaimRecord> {
+            assert_eq!(task_id, "t_claim");
+            assert_eq!(input.expected_lock_version, 0);
+            assert_eq!(input.actor, "worker");
+            assert!(input.claim_token.starts_with("claim_"));
+            assert!(input.run_id.starts_with("r_"));
+            assert!(input.event_id.starts_with("e_"));
+            match input.worker_profile.as_str() {
+                "manual" => {
+                    assert_eq!(input.metadata_json, r#"{"source":"test"}"#);
+                    assert_eq!(input.log_path, None);
+                }
+                "dispatcher" => {
+                    assert_eq!(input.metadata_json, "{}");
+                    assert_eq!(
+                        input.log_path.as_deref(),
+                        Some(format!("dispatcher-logs/{}.log", input.run_id).as_str())
+                    );
+                }
+                profile => panic!("unexpected worker profile: {profile}"),
+            }
+            assert_eq!(input.now, 100);
+            assert_eq!(input.claim_expires_at, 400);
+            let claim_expires_at = input.claim_expires_at;
+            let mut task = task_for_id(task_id);
+            task.status = TaskStatus::Running;
+            task.has_claim_token = true;
+            task.claim_owner = Some(input.actor.clone());
+            task.claim_expires_at = Some(claim_expires_at);
+            task.last_heartbeat_at = Some(input.now);
+            task.current_run_id = Some(input.run_id.clone());
+            task.started_at = Some(input.now);
+            task.updated_at = input.now;
+            task.lock_version += 1;
+            Ok(ClaimRecord {
+                task,
+                run: RunRecord {
+                    id: input.run_id,
+                    board_id: "b_default".into(),
+                    task_id: task_id.to_owned(),
+                    status: RunStatus::Running,
+                    worker_profile: Some(input.worker_profile),
+                    worker_pid: None,
+                    claim_owner: input.actor,
+                    claim_expires_at,
+                    started_at: input.now,
+                    last_heartbeat_at: Some(input.now),
+                    finished_at: None,
+                    exit_code: None,
+                    summary: None,
+                    error: None,
+                    log_path: input.log_path,
+                    metadata_json: input.metadata_json,
+                },
+                claim_token: input.claim_token,
+                claim_expires_at,
+            })
+        }
+    }
     #[tokio::test]
     async fn claim_task_uses_core_guard_and_canonicalizes_lease_input() {
         let service = ApplicationService::with_clock(

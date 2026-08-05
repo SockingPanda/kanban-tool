@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result, TaskStatus, new_event_id, running_claim_is_present};
 
 use crate::{ApplicationService, ApplicationStore, TaskRecord};
@@ -24,9 +26,19 @@ pub struct CompleteTaskRecord {
     pub now: i64,
 }
 
+pub trait TaskDone: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn complete_task(
+        &self,
+        task_id: &str,
+        input: CompleteTaskRecord,
+    ) -> impl Future<Output = Result<TaskRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskDone,
     C: Clock,
 {
     pub async fn complete_task(&self, command: CompleteTaskCommand) -> Result<TaskRecord> {
@@ -99,10 +111,49 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::{KanbanError, TaskStatus};
+    use kanban_core::{KanbanError, Result, TaskStatus};
 
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
     use crate::*;
+
+    impl TaskDone for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn complete_task(
+            &self,
+            task_id: &str,
+            input: CompleteTaskRecord,
+        ) -> Result<TaskRecord> {
+            let expected_lock_version = if task_id == "t_complete_review" { 3 } else { 2 };
+            assert_eq!(input.expected_lock_version, expected_lock_version);
+            assert_eq!(input.actor, "worker");
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.now, 100);
+            let source = task_for_id(task_id);
+            if source.status == TaskStatus::Running
+                && !input.force
+                && input.claim_token.as_deref() != Some("claim_valid")
+            {
+                return Err(KanbanError::InvalidTransition(
+                    "claim token mismatch".to_owned(),
+                ));
+            }
+            let mut task = source;
+            task.status = TaskStatus::Done;
+            task.has_claim_token = false;
+            task.claim_owner = None;
+            task.claim_expires_at = None;
+            task.last_heartbeat_at = None;
+            task.result_summary = input.summary;
+            task.result_json = input.result_json;
+            task.completed_at = Some(input.now);
+            task.updated_at = input.now;
+            task.lock_version += 1;
+            Ok(task)
+        }
+    }
     #[tokio::test]
     async fn complete_task_handles_running_and_review_sources() {
         let service = ApplicationService::with_clock(

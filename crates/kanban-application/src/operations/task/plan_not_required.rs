@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result, new_event_id};
 
 use crate::{ApplicationService, ApplicationStore, ExecutionPlanRecord};
@@ -17,9 +19,17 @@ pub struct MarkExecutionPlanNotRequiredRecord {
     pub updated_at: i64,
 }
 
+pub trait TaskPlanNotRequired: ApplicationStore {
+    fn mark_execution_plan_not_required(
+        &self,
+        task_id: &str,
+        input: MarkExecutionPlanNotRequiredRecord,
+    ) -> impl Future<Output = Result<ExecutionPlanRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskPlanNotRequired,
     C: Clock,
 {
     pub async fn mark_execution_plan_not_required(
@@ -61,10 +71,32 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::KanbanError;
+    use kanban_core::{KanbanError, Result};
 
     use crate::operations::test_support::{FixedClock, StubStore};
     use crate::*;
+
+    impl TaskPlanNotRequired for StubStore {
+        async fn mark_execution_plan_not_required(
+            &self,
+            task_id: &str,
+            input: MarkExecutionPlanNotRequiredRecord,
+        ) -> Result<ExecutionPlanRecord> {
+            assert_eq!(task_id, "t_show");
+            assert_eq!(input.reason, "small task");
+            assert_eq!(input.actor, "tester");
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.updated_at, 100);
+            Ok(ExecutionPlanRecord {
+                board_id: "b_default".into(),
+                task_id: task_id.to_owned(),
+                state: ExecutionPlanState::NotRequired,
+                reason: Some(input.reason),
+                updated_by: input.actor,
+                updated_at: input.updated_at,
+            })
+        }
+    }
     #[tokio::test]
     async fn mark_execution_plan_not_required_canonicalizes_command() {
         let service = ApplicationService::with_clock(

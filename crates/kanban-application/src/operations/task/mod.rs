@@ -11,16 +11,17 @@ mod release;
 mod review;
 mod show;
 
-pub use block::{BlockTaskCommand, BlockTaskRecord};
-pub use claim::{ClaimTaskCommand, ClaimTaskRecord};
-pub use create::{CreateTaskCommand, CreateTaskRecord};
-pub use done::{CompleteTaskCommand, CompleteTaskRecord};
-pub use heartbeat::{HeartbeatTaskCommand, HeartbeatTaskRecord};
-pub use list::{TaskListOptions, TaskListPage, TaskListSort, TaskPlanFilter};
+pub use block::{BlockTaskCommand, BlockTaskRecord, TaskBlock};
+pub use claim::{ClaimTaskCommand, ClaimTaskRecord, TaskClaim};
+pub use create::{CreateTaskCommand, CreateTaskRecord, TaskCreate};
+pub use done::{CompleteTaskCommand, CompleteTaskRecord, TaskDone};
+pub use heartbeat::{HeartbeatTaskCommand, HeartbeatTaskRecord, TaskHeartbeat};
+pub use list::{TaskList, TaskListOptions, TaskListPage, TaskListSort, TaskPlanFilter};
 pub use plan_not_required::{
-    MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord,
+    MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord, TaskPlanNotRequired,
 };
-pub use promote::{PromoteTaskCommand, PromoteTaskRecord};
-pub use reclaim::ReclaimExpiredTaskRecord;
-pub use release::{ReleaseTaskCommand, ReleaseTaskRecord};
-pub use review::{SubmitReviewTaskCommand, SubmitReviewTaskRecord};
+pub use promote::{PromoteTaskCommand, PromoteTaskRecord, TaskPromote};
+pub use reclaim::{ReclaimExpiredTaskRecord, TaskReclaim};
+pub use release::{ReleaseTaskCommand, ReleaseTaskRecord, TaskRelease};
+pub use review::{SubmitReviewTaskCommand, SubmitReviewTaskRecord, TaskReview};
+pub use show::TaskShow;

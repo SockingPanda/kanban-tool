@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result, TaskStatus, new_event_id, running_claim_is_present};
 
 use crate::{ApplicationService, ApplicationStore, TaskRecord};
@@ -22,9 +24,19 @@ pub struct BlockTaskRecord {
     pub now: i64,
 }
 
+pub trait TaskBlock: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn block_task(
+        &self,
+        task_id: &str,
+        input: BlockTaskRecord,
+    ) -> impl Future<Output = Result<TaskRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskBlock,
     C: Clock,
 {
     pub async fn block_task(&self, command: BlockTaskCommand) -> Result<TaskRecord> {
@@ -97,10 +109,43 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::{KanbanError, TaskStatus};
+    use kanban_core::{KanbanError, Result, TaskStatus};
 
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
     use crate::*;
+
+    impl TaskBlock for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn block_task(&self, task_id: &str, input: BlockTaskRecord) -> Result<TaskRecord> {
+            let source = task_for_id(task_id);
+            assert_eq!(input.expected_lock_version, source.lock_version);
+            assert!(matches!(input.actor.as_str(), "worker" | "admin"));
+            assert_eq!(input.reason.trim(), "waiting");
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.now, 100);
+            if source.status == TaskStatus::Running
+                && !input.force
+                && input.claim_token.as_deref() != Some("claim_valid")
+            {
+                return Err(KanbanError::InvalidTransition(
+                    "claim token mismatch".to_owned(),
+                ));
+            }
+            let mut task = source;
+            task.status = TaskStatus::Blocked;
+            task.status_reason = Some(input.reason);
+            task.has_claim_token = false;
+            task.claim_owner = None;
+            task.claim_expires_at = None;
+            task.last_heartbeat_at = None;
+            task.updated_at = input.now;
+            task.lock_version += 1;
+            Ok(task)
+        }
+    }
     #[tokio::test]
     async fn block_task_handles_running_and_non_running_sources() {
         let service = ApplicationService::with_clock(

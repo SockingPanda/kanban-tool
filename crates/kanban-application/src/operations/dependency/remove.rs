@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result, new_event_id};
 
 use crate::{ApplicationService, ApplicationStore, DependencySnapshotRecord};
@@ -15,9 +17,20 @@ pub struct RemoveDependencyResult {
     pub dependencies: DependencySnapshotRecord,
 }
 
+pub trait DependencyRemove: ApplicationStore {
+    fn remove_dependency(
+        &self,
+        child_task_id: &str,
+        parent_task_id: &str,
+        actor: String,
+        event_id: String,
+        now: i64,
+    ) -> impl Future<Output = Result<RemoveDependencyResult>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: DependencyRemove,
     C: Clock,
 {
     pub async fn remove_dependency(
@@ -57,5 +70,28 @@ where
             )
             .await?;
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use kanban_core::{KanbanError, Result};
+
+    use crate::operations::test_support::StubStore;
+    use crate::*;
+
+    impl DependencyRemove for StubStore {
+        async fn remove_dependency(
+            &self,
+            _child_task_id: &str,
+            _parent_task_id: &str,
+            _actor: String,
+            _event_id: String,
+            _now: i64,
+        ) -> Result<RemoveDependencyResult> {
+            Err(KanbanError::FeatureNotAvailable(
+                "dependency stub is not configured".to_owned(),
+            ))
+        }
     }
 }

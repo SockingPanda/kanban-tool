@@ -1,9 +1,11 @@
+use std::future::Future;
+
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, TaskStatus, new_event_id, recompute_ready_status,
     retry_decision,
 };
 
-use crate::{ApplicationService, ApplicationStore, ExecutionPlanState};
+use crate::{ApplicationService, ApplicationStore, ExecutionPlanState, TaskRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReclaimExpiredTaskRecord {
@@ -16,9 +18,23 @@ pub struct ReclaimExpiredTaskRecord {
     pub now: i64,
 }
 
+pub trait TaskReclaim: ApplicationStore {
+    fn list_expired_claims(
+        &self,
+        board: &str,
+        now: i64,
+    ) -> impl Future<Output = Result<Vec<TaskRecord>>> + Send;
+
+    fn reclaim_expired_task(
+        &self,
+        task_id: &str,
+        input: ReclaimExpiredTaskRecord,
+    ) -> impl Future<Output = Result<Option<TaskRecord>>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskReclaim,
     C: Clock,
 {
     /// Reclaim only expired running leases for the in-process dispatcher.
@@ -89,10 +105,57 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::KanbanError;
+    use kanban_core::{KanbanError, Result, TaskStatus};
 
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
     use crate::*;
+
+    impl TaskReclaim for StubStore {
+        async fn list_expired_claims(&self, board: &str, now: i64) -> Result<Vec<TaskRecord>> {
+            assert_eq!(board, "default");
+            assert_eq!(now, 100);
+            let mut task = task_for_id("t_expired");
+            task.status = TaskStatus::Running;
+            task.execution_plan_state = ExecutionPlanState::NotRequired;
+            task.has_claim_token = true;
+            task.claim_owner = Some("worker".to_owned());
+            task.claim_expires_at = Some(90);
+            task.last_heartbeat_at = Some(80);
+            task.current_run_id = Some("r_expired".to_owned());
+            task.lock_version = 2;
+            task.max_retries = Some(2);
+            let mut planned_without_steps = task.clone();
+            planned_without_steps.id = "t_expired_planned".to_owned();
+            planned_without_steps.current_run_id = Some("r_expired_planned".to_owned());
+            planned_without_steps.execution_plan_state = ExecutionPlanState::Planned;
+            Ok(vec![task, planned_without_steps])
+        }
+
+        async fn reclaim_expired_task(
+            &self,
+            task_id: &str,
+            input: ReclaimExpiredTaskRecord,
+        ) -> Result<Option<TaskRecord>> {
+            assert!(matches!(task_id, "t_expired" | "t_expired_planned"));
+            assert_eq!(input.expected_lock_version, 2);
+            assert_eq!(input.actor, "dispatcher");
+            assert!(input.event_id.starts_with("e_"));
+            let expected_status = if task_id == "t_expired" {
+                TaskStatus::Ready
+            } else {
+                TaskStatus::Todo
+            };
+            assert_eq!(input.target_status, expected_status);
+            assert_eq!(input.retry_count, 1);
+            assert_eq!(input.reason, "claim expired");
+            assert_eq!(input.now, 100);
+            let mut task = task_for_id(task_id);
+            task.status = input.target_status;
+            task.retry_count = input.retry_count;
+            task.lock_version = input.expected_lock_version + 1;
+            Ok(Some(task))
+        }
+    }
     #[tokio::test]
     async fn reclaim_expired_uses_canonical_retry_and_readiness_decision() {
         let service = ApplicationService::with_clock(

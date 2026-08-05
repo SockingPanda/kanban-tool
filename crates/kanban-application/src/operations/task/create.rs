@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, ReadinessFacts, Result, TaskStatus, initial_status};
 
 use crate::{ApplicationService, ApplicationStore, TaskRecord};
@@ -38,9 +40,17 @@ pub struct CreateTaskRecord {
     pub created_by: String,
 }
 
+pub trait TaskCreate: ApplicationStore {
+    fn create_task(
+        &self,
+        board: &str,
+        input: CreateTaskRecord,
+    ) -> impl Future<Output = Result<TaskRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskCreate,
     C: Clock,
 {
     pub async fn create_task(&self, command: CreateTaskCommand) -> Result<TaskRecord> {
@@ -131,10 +141,17 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::TaskStatus;
+    use kanban_core::{Result, TaskStatus};
 
     use crate::operations::test_support::{FixedClock, StubStore};
     use crate::*;
+
+    impl TaskCreate for StubStore {
+        async fn create_task(&self, board: &str, input: CreateTaskRecord) -> Result<TaskRecord> {
+            assert_eq!(board, "default");
+            Ok(crate::operations::test_support::task_record(input))
+        }
+    }
     #[tokio::test]
     async fn create_task_validates_status_and_applies_unplanned_guard() {
         let service = ApplicationService::with_clock(

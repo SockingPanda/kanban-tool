@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use kanban_core::{Clock, KanbanError, Result, new_event_id, running_claim_is_present};
 
 use crate::{ApplicationService, ApplicationStore, TaskRecord};
@@ -22,9 +24,19 @@ pub struct SubmitReviewTaskRecord {
     pub now: i64,
 }
 
+pub trait TaskReview: ApplicationStore {
+    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
+
+    fn submit_review_task(
+        &self,
+        task_id: &str,
+        input: SubmitReviewTaskRecord,
+    ) -> impl Future<Output = Result<TaskRecord>> + Send;
+}
+
 impl<S, C> ApplicationService<S, C>
 where
-    S: ApplicationStore,
+    S: TaskReview,
     C: Clock,
 {
     pub async fn submit_review_task(&self, command: SubmitReviewTaskCommand) -> Result<TaskRecord> {
@@ -76,10 +88,43 @@ where
 mod tests {
     use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::{KanbanError, TaskStatus};
+    use kanban_core::{KanbanError, Result, TaskStatus};
 
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
     use crate::*;
+
+    impl TaskReview for StubStore {
+        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
+            Ok(task_for_id(task_id))
+        }
+
+        async fn submit_review_task(
+            &self,
+            task_id: &str,
+            input: SubmitReviewTaskRecord,
+        ) -> Result<TaskRecord> {
+            assert_eq!(task_id, "t_review");
+            assert_eq!(input.expected_lock_version, 2);
+            assert_eq!(input.actor, "worker");
+            assert!(input.event_id.starts_with("e_"));
+            assert_eq!(input.now, 100);
+            if !input.force && input.claim_token.as_deref() != Some("claim_valid") {
+                return Err(KanbanError::InvalidTransition(
+                    "claim token mismatch".to_owned(),
+                ));
+            }
+            let mut task = task_for_id(task_id);
+            task.status = TaskStatus::Review;
+            task.has_claim_token = false;
+            task.claim_owner = None;
+            task.claim_expires_at = None;
+            task.last_heartbeat_at = None;
+            task.result_summary = input.summary;
+            task.updated_at = input.now;
+            task.lock_version += 1;
+            Ok(task)
+        }
+    }
     #[tokio::test]
     async fn submit_review_task_validates_owner_and_preserves_exact_token() {
         let service = ApplicationService::with_clock(

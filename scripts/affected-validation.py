@@ -65,7 +65,7 @@ def is_desktop(path: str) -> bool:
 CORE_CRATES = {
     "kanban-core",
     "kanban-application",
-    "kanban-contract",
+    "kanban-protocol",
     "kanban-store-turso",
     "kanban-client",
     "kanban-server",
@@ -100,7 +100,7 @@ def is_workspace_member_manifest(path: str) -> bool:
         in {
             "crates/kanban-core/Cargo.toml",
             "crates/kanban-application/Cargo.toml",
-            "crates/kanban-contract/Cargo.toml",
+            "crates/kanban-protocol/Cargo.toml",
             "crates/kanban-store-turso/Cargo.toml",
             "crates/kanban-client/Cargo.toml",
             "crates/kanban-cli/Cargo.toml",
@@ -125,7 +125,7 @@ def is_schema_contract(path: str) -> bool:
             SCHEMA_TOOL_REGISTRY_APPROVAL,
         }
         or is_workspace_member_manifest(path)
-        or path.startswith("crates/kanban-contract/")
+        or path.startswith("crates/kanban-protocol/")
         or path.startswith("xtask/")
         or path.startswith("schemas/")
         or path in {
@@ -468,7 +468,7 @@ def self_test() -> None:
         (
             "schema contract",
             [
-                "crates/kanban-contract/src/schema.rs",
+                "crates/kanban-protocol/src/schema.rs",
                 "schemas/fixtures/api/error-response.v1.valid.json",
             ],
             {"core", "schema-contract"},

@@ -15,9 +15,9 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN_SCHEMA_FEATURES = {"schema", "schema-tool"}
-CONTRACT_PACKAGE = "kanban-contract"
+CONTRACT_PACKAGE = "kanban-protocol"
 SCHEMA_TOOL_PACKAGE = "xtask"
-CONTRACT_MANIFEST = Path("crates/kanban-contract/Cargo.toml")
+CONTRACT_MANIFEST = Path("crates/kanban-protocol/Cargo.toml")
 
 
 class WitnessGateError(RuntimeError):
@@ -76,7 +76,7 @@ def workspace_contract_identity(
         or actual_manifest != expected_manifest
     ):
         raise WitnessGateError(
-            "cargo metadata 中的 workspace kanban-contract identity 不可信: "
+            "cargo metadata 中的 workspace kanban-protocol identity 不可信: "
             f"expected_manifest={expected_manifest}"
         )
     return package_id, expected_manifest.parent
@@ -104,7 +104,7 @@ def require_runtime_dependency(
     package: str,
     repo_root: Path | None = None,
 ) -> tuple[str, Path]:
-    """要求 adopter 通过 normal dependency 引用当前 workspace kanban-contract。"""
+    """要求 adopter 通过 normal dependency 引用当前 workspace kanban-protocol。"""
 
     if package == SCHEMA_TOOL_PACKAGE:
         raise WitnessGateError(
@@ -134,7 +134,7 @@ def require_runtime_dependency(
     ]
     if not unconditional_normal_dependencies:
         raise WitnessGateError(
-            f"runtime adopter {package} 必须有 kanban-contract unconditional non-optional normal dependency，"
+            f"runtime adopter {package} 必须有 kanban-protocol unconditional non-optional normal dependency，"
             "dev-only、optional 或 target-specific dependency 不能证明运行时采用"
         )
 
@@ -148,7 +148,7 @@ def require_runtime_dependency(
     if not workspace_dependencies:
         raise WitnessGateError(
             f"runtime adopter {package} normal dependency 必须指向当前 "
-            f"workspace kanban-contract: {contract_path}"
+            f"workspace kanban-protocol: {contract_path}"
         )
 
     forbidden = sorted(
@@ -161,7 +161,7 @@ def require_runtime_dependency(
     )
     if forbidden:
         raise WitnessGateError(
-            f"runtime adopter {package} 禁止启用 kanban-contract schema feature: "
+            f"runtime adopter {package} 禁止启用 kanban-protocol schema feature: "
             f"{', '.join(forbidden)}"
         )
 
@@ -181,7 +181,7 @@ def require_runtime_dependency(
     if not resolved_dependencies:
         raise WitnessGateError(
             f"runtime adopter {package} 的 unconditional non-optional normal dependency package identity "
-            f"未解析到 workspace kanban-contract: {contract_id}"
+            f"未解析到 workspace kanban-protocol: {contract_id}"
         )
     return adopter_id, contract_path
 
@@ -190,7 +190,7 @@ def require_runtime_tree(
     tree_output: str, package: str, contract_path: Path | None = None
 ) -> None:
     forbidden = re.search(
-        r'xtask v|kanban-contract feature "schema(?:-tool)?"|schemars v1\.|jsonschema v',
+        r'xtask v|kanban-protocol feature "schema(?:-tool)?"|schemars v1\.|jsonschema v',
         tree_output,
     )
     if forbidden is not None:
@@ -199,17 +199,17 @@ def require_runtime_tree(
             f"{forbidden.group(0)}"
         )
     contract_lines = [
-        line for line in tree_output.splitlines() if "kanban-contract v" in line
+        line for line in tree_output.splitlines() if "kanban-protocol v" in line
     ]
     if not contract_lines:
         raise WitnessGateError(
-            f"runtime adopter {package} 默认 normal graph 未出现 kanban-contract"
+            f"runtime adopter {package} 默认 normal graph 未出现 kanban-protocol"
         )
     if contract_path is not None and not any(
         f"({contract_path})" in line for line in contract_lines
     ):
         raise WitnessGateError(
-            f"runtime adopter {package} normal graph 未出现 workspace kanban-contract"
+            f"runtime adopter {package} normal graph 未出现 workspace kanban-protocol"
         )
 
 

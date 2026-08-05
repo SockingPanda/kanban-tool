@@ -767,7 +767,7 @@ printf 'mutated\n' >> Cargo.lock
 EOF
   chmod +x "$repo/scripts/cargo-build-lock.sh" "$repo/bin/cargo"
   for recipe in schema-check schema-tool schema-surface-audit \
-    "feature-p kanban-contract schema"; do
+    "feature-p kanban-protocol schema"; do
     before="$(sha256sum "$repo/Cargo.lock")"
     set +e
     # shellcheck disable=SC2086 # recipe intentionally carries positional args

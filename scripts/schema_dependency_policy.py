@@ -15,7 +15,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONTRACT_PACKAGE = "kanban-contract"
+CONTRACT_PACKAGE = "kanban-protocol"
 TOOL_PACKAGE = "xtask"
 TOOL_MEMBER_PATH = "xtask"
 CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
@@ -61,6 +61,7 @@ WORKSPACE_CANONICAL_DEPENDENCIES = {
     "anyhow": "1.0",
     "axum": "0.7",
     "clap": "4.5",
+    "clap_complete": "4.5",
     "dirs-next": "2.0",
     "http-body-util": "0.1",
     "serde": "1.0",
@@ -91,7 +92,7 @@ WORKSPACE_CANONICAL_DEPENDENCIES = {
     "kanban-core": {"path": "crates/kanban-core"},
     "kanban-application": {"path": "crates/kanban-application"},
     CONTRACT_PACKAGE: {
-        "path": "crates/kanban-contract",
+        "path": "crates/kanban-protocol",
         "default-features": False,
     },
     "kanban-store-turso": {"path": "crates/kanban-store-turso"},
@@ -105,7 +106,7 @@ ROOT_DEPENDENCY_INHERITANCE_KEYS = ROOT_DEPENDENCY_IDENTITY_KEYS | {
 ACTIVE_MANIFESTS = {
     "kanban-core": "crates/kanban-core/Cargo.toml",
     "kanban-application": "crates/kanban-application/Cargo.toml",
-    CONTRACT_PACKAGE: "crates/kanban-contract/Cargo.toml",
+    CONTRACT_PACKAGE: "crates/kanban-protocol/Cargo.toml",
     "kanban-store-turso": "crates/kanban-store-turso/Cargo.toml",
     "kanban-client": "crates/kanban-client/Cargo.toml",
     "kanban-cli": "crates/kanban-cli/Cargo.toml",
@@ -129,7 +130,7 @@ TOKIO_FEATURES = (
 CORE_PACKAGES = (
     "kanban-core",
     "kanban-application",
-    "kanban-contract",
+    "kanban-protocol",
     "kanban-store-turso",
     "kanban-client",
     "kanban-cli",
@@ -148,7 +149,7 @@ AUTO_TARGET_FLAGS = {
 TOOL_MANIFEST_LIB = {"name": "xtask", "path": "src/lib.rs"}
 TOOL_MANIFEST_BINS = [{"name": "xtask", "path": "src/main.rs"}]
 TOOL_MANIFEST_TESTS = [{"name": "tooling", "path": "tests/tooling.rs"}]
-CONTRACT_MANIFEST_LIB = {"name": "kanban_contract", "path": "src/lib.rs"}
+CONTRACT_MANIFEST_LIB = {"name": "kanban_protocol", "path": "src/lib.rs"}
 CONTRACT_MANIFEST_TESTS = [
     {"name": "foundation", "path": "tests/foundation.rs"},
     {"name": "g0_metadata", "path": "tests/g0_metadata.rs"},
@@ -165,9 +166,9 @@ TOOL_TARGETS = {
     ("tooling", ("test",)): "xtask/tests/tooling.rs",
 }
 CONTRACT_TARGETS = {
-    ("kanban_contract", ("lib",)): "crates/kanban-contract/src/lib.rs",
-    ("foundation", ("test",)): "crates/kanban-contract/tests/foundation.rs",
-    ("g0_metadata", ("test",)): "crates/kanban-contract/tests/g0_metadata.rs",
+    ("kanban_protocol", ("lib",)): "crates/kanban-protocol/src/lib.rs",
+    ("foundation", ("test",)): "crates/kanban-protocol/tests/foundation.rs",
+    ("g0_metadata", ("test",)): "crates/kanban-protocol/tests/g0_metadata.rs",
 }
 TOOL_TARGET_DISCOVERY_FILES = {
     "src/main.rs",
@@ -404,7 +405,7 @@ def _audit_workspace_dependency_policy(
     }:
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-mcp 必须显式声明 kanban-contract/schema 运行时 schema exception"
+                "kanban-mcp 必须显式声明 kanban-protocol/schema 运行时 schema exception"
             )
         )
 
@@ -564,7 +565,7 @@ def _expected_tool_edge_signatures(
             **common,
             "name": CONTRACT_PACKAGE,
             "source": None,
-            "path": str(_lexical_absolute(repo_root / "crates/kanban-contract")),
+            "path": str(_lexical_absolute(repo_root / "crates/kanban-protocol")),
             "req": "*",
             "uses_default_features": False,
             "features": ["schema"],
@@ -716,7 +717,7 @@ def _audit_contract_metadata(
     ):
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-contract schema dependency 声明必须精确为三条唯一边: "
+                "kanban-protocol schema dependency 声明必须精确为三条唯一边: "
                 f"missing={missing}, unexpected={unexpected}, duplicates={duplicates}"
             )
         )
@@ -729,7 +730,7 @@ def _audit_contract_metadata(
         if actual != expected:
             raise DependencyPolicyError(
                 _phase_two_message(
-                    f"kanban-contract dependency {name} signature 偏离 Phase 1: "
+                    f"kanban-protocol dependency {name} signature 偏离 Phase 1: "
                     f"expected={expected}, actual={actual}"
                 )
             )
@@ -950,7 +951,7 @@ def audit_metadata(metadata: dict[str, Any], repo_root: Path = ROOT) -> set[str]
         tool, TOOL_PACKAGE, repo_root / "xtask/Cargo.toml"
     )
     contract_id = _canonical_workspace_record(
-        contract, CONTRACT_PACKAGE, repo_root / "crates/kanban-contract/Cargo.toml"
+        contract, CONTRACT_PACKAGE, repo_root / "crates/kanban-protocol/Cargo.toml"
     )
     if resolve.get("root") != tool_id:
         raise DependencyPolicyError(
@@ -997,13 +998,13 @@ def audit_metadata(metadata: dict[str, Any], repo_root: Path = ROOT) -> set[str]
     features = contract_node.get("features")
     if not isinstance(features, list) or "schema" not in features:
         raise DependencyPolicyError(
-            _phase_two_message("kanban-contract resolve node 必须启用 schema feature")
+            _phase_two_message("kanban-protocol resolve node 必须启用 schema feature")
         )
     schemars = package_by_id[contract_edges["schemars"]]
     if schemars.get("version") != "1.2.1":
         raise DependencyPolicyError(
             _phase_two_message(
-                f"kanban-contract/schema 必须 resolve schemars 1.2.1: {schemars.get('version')}"
+                f"kanban-protocol/schema 必须 resolve schemars 1.2.1: {schemars.get('version')}"
             )
         )
     schemars_node = node_by_id.get(contract_edges["schemars"])
@@ -1346,11 +1347,11 @@ def audit_manifest_data(
         )
 
     expected_contract_path = _lexical_absolute(
-        repo_root / "crates/kanban-contract"
+        repo_root / "crates/kanban-protocol"
     )
     if not expected_contract_path.is_dir():
         raise DependencyPolicyError(
-            f"canonical kanban-contract path 不存在: {expected_contract_path}"
+            f"canonical kanban-protocol path 不存在: {expected_contract_path}"
         )
 
 
@@ -1383,40 +1384,40 @@ def audit_contract_manifest_data(
 
     package = contract_manifest.get("package")
     if not isinstance(package, dict) or package.get("name") != CONTRACT_PACKAGE:
-        raise DependencyPolicyError("kanban-contract Cargo.toml package identity 无效")
+        raise DependencyPolicyError("kanban-protocol Cargo.toml package identity 无效")
     actual_flags = {name: package.get(name) for name in AUTO_TARGET_FLAGS}
     if actual_flags != AUTO_TARGET_FLAGS:
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-contract 必须关闭全部 Cargo auto target discovery: "
+                "kanban-protocol 必须关闭全部 Cargo auto target discovery: "
                 f"expected={AUTO_TARGET_FLAGS}, actual={actual_flags}"
             )
         )
     if contract_manifest.get("lib") != CONTRACT_MANIFEST_LIB:
         raise DependencyPolicyError(
-            _phase_two_message("kanban-contract 必须只声明 canonical lib target")
+            _phase_two_message("kanban-protocol 必须只声明 canonical lib target")
         )
     if contract_manifest.get("test") != CONTRACT_MANIFEST_TESTS:
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-contract 必须只声明 foundation/g0_metadata test targets"
+                "kanban-protocol 必须只声明 foundation/g0_metadata test targets"
             )
         )
     if contract_manifest.get("features") != CONTRACT_MANIFEST_FEATURES:
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-contract features 必须精确为 default=[] 与 schema=[dep:schemars]"
+                "kanban-protocol features 必须精确为 default=[] 与 schema=[dep:schemars]"
             )
         )
     if contract_manifest.get("dependencies") != CONTRACT_MANIFEST_DEPENDENCIES:
         raise DependencyPolicyError(
             _phase_two_message(
-                "kanban-contract dependencies 必须精确为 serde/serde_json 和 optional schemars"
+                "kanban-protocol dependencies 必须精确为 serde/serde_json 和 optional schemars"
             )
         )
     if "bin" in contract_manifest:
         raise DependencyPolicyError(
-            _phase_two_message("kanban-contract 不得拥有 binary")
+            _phase_two_message("kanban-protocol 不得拥有 binary")
         )
     for forbidden_section in (
         "dev-dependencies",
@@ -1428,7 +1429,7 @@ def audit_contract_manifest_data(
         if forbidden_section in contract_manifest:
             raise DependencyPolicyError(
                 _phase_two_message(
-                    f"kanban-contract 禁止声明 [{forbidden_section}] 依赖入口"
+                    f"kanban-protocol 禁止声明 [{forbidden_section}] 依赖入口"
                 )
             )
 
@@ -1471,7 +1472,7 @@ def audit_target_files(repo_root: Path = ROOT) -> None:
         ),
         (
             CONTRACT_PACKAGE,
-            repo_root / "crates/kanban-contract",
+            repo_root / "crates/kanban-protocol",
             CONTRACT_TARGET_DISCOVERY_FILES,
         ),
     )
@@ -1495,7 +1496,7 @@ def audit_manifests(repo_root: Path = ROOT) -> None:
     try:
         with (repo_root / "Cargo.toml").open("rb") as handle:
             workspace_manifest = tomllib.load(handle)
-        with (repo_root / "crates/kanban-contract/Cargo.toml").open("rb") as handle:
+        with (repo_root / "crates/kanban-protocol/Cargo.toml").open("rb") as handle:
             contract_manifest = tomllib.load(handle)
         with (repo_root / "xtask/Cargo.toml").open("rb") as handle:
             tool_manifest = tomllib.load(handle)

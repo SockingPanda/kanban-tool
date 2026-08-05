@@ -33,13 +33,13 @@ PRODUCTS = (
     "kanban-desktop",
 )
 TOOL_PACKAGE = "xtask"
-CONTRACT_PACKAGE = "kanban-contract"
+CONTRACT_PACKAGE = "kanban-protocol"
 TOOL_MEMBER = "xtask"
 
 
 CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
-CONTRACT_PATH = str(ROOT / "crates/kanban-contract")
-CONTRACT_MANIFEST_PATH = str(ROOT / "crates/kanban-contract/Cargo.toml")
+CONTRACT_PATH = str(ROOT / "crates/kanban-protocol")
+CONTRACT_MANIFEST_PATH = str(ROOT / "crates/kanban-protocol/Cargo.toml")
 TOOL_MANIFEST_PATH = str(ROOT / TOOL_MEMBER / "Cargo.toml")
 CONTRACT_ID = f"path+file:///workspace/{CONTRACT_PACKAGE}#2.1.3"
 TOOL_ID = f"path+file:///workspace/{TOOL_PACKAGE}#2.1.3"
@@ -58,7 +58,7 @@ TOOL_EDGE_SIGNATURES = {
         "uses_default_features": False,
         "features": [],
     },
-    "kanban-contract": {
+    "kanban-protocol": {
         "source": None,
         "req": "*",
         "uses_default_features": False,
@@ -108,7 +108,7 @@ CONTRACT_EDGE_SIGNATURES = {
 
 TOOL_MANIFEST_DEPENDENCIES = {
     "jsonschema": {"workspace": True, "default-features": False},
-    "kanban-contract": {
+    "kanban-protocol": {
         "workspace": True,
         "default-features": False,
         "features": ["schema"],
@@ -231,19 +231,19 @@ def canonical_targets(name: str) -> list[dict[str, object]]:
     if name == CONTRACT_PACKAGE:
         return [
             cargo_target(
-                "kanban_contract",
+                "kanban_protocol",
                 "lib",
-                str(ROOT / "crates/kanban-contract/src/lib.rs"),
+                str(ROOT / "crates/kanban-protocol/src/lib.rs"),
             ),
             cargo_target(
                 "foundation",
                 "test",
-                str(ROOT / "crates/kanban-contract/tests/foundation.rs"),
+                str(ROOT / "crates/kanban-protocol/tests/foundation.rs"),
             ),
             cargo_target(
                 "g0_metadata",
                 "test",
-                str(ROOT / "crates/kanban-contract/tests/g0_metadata.rs"),
+                str(ROOT / "crates/kanban-protocol/tests/g0_metadata.rs"),
             ),
         ]
     return []
@@ -539,25 +539,25 @@ class DependencyIsolationGateTests(unittest.TestCase):
                     tool_leak_package = os.environ.get("FAKE_CARGO_TOOL_LEAK_PACKAGE")
                     if package == tool_leak_package:
                         print(f"{package}\\n└── xtask v2.1.3")
-                    elif leak and package not in ("kanban-contract", "xtask"):
-                        print(f"{package}\\n└── kanban-contract feature \\\"{leak}\\\"")
+                    elif leak and package not in ("kanban-protocol", "xtask"):
+                        print(f"{package}\\n└── kanban-protocol feature \\\"{leak}\\\"")
                     elif package == "kanban-mcp":
                         print(
                             "kanban-mcp v2.1.3 (/workspace/crates/kanban-mcp)\\n"
-                            "├── kanban-contract feature \\\"schema\\\"\\n"
+                            "├── kanban-protocol feature \\\"schema\\\"\\n"
                             "├── rmcp v3.1.0\\n"
                             "└── schemars v1.2.1"
                         )
                     elif package == "xtask":
                         print(
                             "xtask v2.1.3 (/workspace/xtask)\\n"
-                            "├── kanban-contract feature \\\"schema\\\"\\n"
+                            "├── kanban-protocol feature \\\"schema\\\"\\n"
                             "├── schemars v1.2.1\\n"
                             "├── jsonschema v0.47.0\\n"
                             "└── sha2 v0.10.9"
                         )
                     else:
-                        print(f"{package}\\n└── kanban-contract v2.1.3 (/workspace/crates/kanban-contract)")
+                        print(f"{package}\\n└── kanban-protocol v2.1.3 (/workspace/crates/kanban-protocol)")
                     """
                 ),
                 encoding="utf-8",
@@ -687,7 +687,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
         self.assertNotIn("--all-features", records[0])
         self.assertEqual(
             records[0],
-            ["tree", "-p", "kanban-contract", "--target", "all", "--edges", "normal,features", "--locked"],
+            ["tree", "-p", "kanban-protocol", "--target", "all", "--edges", "normal,features", "--locked"],
         )
         for package, args in zip(PRODUCTS, records[1:-1], strict=True):
             self.assertEqual(
@@ -707,7 +707,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
         self.assertNotIn(TOOL_MEMBER, workspace["default-members"])
 
     def test_contract_manifest_has_only_model_schema_feature(self) -> None:
-        with (ROOT / "crates/kanban-contract/Cargo.toml").open("rb") as handle:
+        with (ROOT / "crates/kanban-protocol/Cargo.toml").open("rb") as handle:
             contract = tomllib.load(handle)
 
         self.assertEqual(set(contract["features"]), {"default", "schema"})
@@ -944,7 +944,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
     def test_contract_manifest_policy_accepts_current_phase_one_shape(self) -> None:
         with (ROOT / "Cargo.toml").open("rb") as handle:
             workspace = tomllib.load(handle)
-        with (ROOT / "crates/kanban-contract/Cargo.toml").open("rb") as handle:
+        with (ROOT / "crates/kanban-protocol/Cargo.toml").open("rb") as handle:
             contract = tomllib.load(handle)
 
         audit = getattr(
@@ -955,7 +955,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
     def test_contract_manifest_rejects_feature_dependency_and_section_drift(self) -> None:
         with (ROOT / "Cargo.toml").open("rb") as handle:
             workspace = tomllib.load(handle)
-        with (ROOT / "crates/kanban-contract/Cargo.toml").open("rb") as handle:
+        with (ROOT / "crates/kanban-protocol/Cargo.toml").open("rb") as handle:
             baseline = tomllib.load(handle)
         audit = getattr(
             dependency_policy, "audit_contract_manifest_data", lambda *_: None
@@ -990,7 +990,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
     def test_contract_manifest_rejects_auto_or_explicit_target_drift(self) -> None:
         with (ROOT / "Cargo.toml").open("rb") as handle:
             workspace = tomllib.load(handle)
-        with (ROOT / "crates/kanban-contract/Cargo.toml").open("rb") as handle:
+        with (ROOT / "crates/kanban-protocol/Cargo.toml").open("rb") as handle:
             baseline = tomllib.load(handle)
 
         mutations = []
@@ -1026,7 +1026,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
     def test_target_discovery_files_reject_extra_or_symlink_target(self) -> None:
         extras = (
             ("xtask/src/bin/extra.rs", False),
-            ("crates/kanban-contract/build.rs", False),
+            ("crates/kanban-protocol/build.rs", False),
             ("xtask/tests/tooling.rs", True),
         )
         for extra, symlink in extras:
@@ -1037,9 +1037,9 @@ class DependencyIsolationGateTests(unittest.TestCase):
                         "xtask/src/lib.rs",
                         "xtask/src/main.rs",
                         "xtask/tests/tooling.rs",
-                        "crates/kanban-contract/src/lib.rs",
-                        "crates/kanban-contract/tests/foundation.rs",
-                        "crates/kanban-contract/tests/g0_metadata.rs",
+                        "crates/kanban-protocol/src/lib.rs",
+                        "crates/kanban-protocol/tests/foundation.rs",
+                        "crates/kanban-protocol/tests/g0_metadata.rs",
                     )
                     for relative in approved:
                         target = root / relative
@@ -1064,9 +1064,9 @@ class DependencyIsolationGateTests(unittest.TestCase):
                 "xtask/src/lib.rs",
                 "xtask/src/main.rs",
                 "xtask/tests/tooling.rs",
-                "crates/kanban-contract/src/lib.rs",
-                "crates/kanban-contract/tests/foundation.rs",
-                "crates/kanban-contract/tests/g0_metadata.rs",
+                "crates/kanban-protocol/src/lib.rs",
+                "crates/kanban-protocol/tests/foundation.rs",
+                "crates/kanban-protocol/tests/g0_metadata.rs",
             )
             for relative in approved:
                 target = root / relative
@@ -1086,7 +1086,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
     def test_contract_manifest_rejects_root_schemars_canonical_drift(self) -> None:
         with (ROOT / "Cargo.toml").open("rb") as handle:
             baseline = tomllib.load(handle)
-        with (ROOT / "crates/kanban-contract/Cargo.toml").open("rb") as handle:
+        with (ROOT / "crates/kanban-protocol/Cargo.toml").open("rb") as handle:
             contract = tomllib.load(handle)
         audit = getattr(
             dependency_policy, "audit_contract_manifest_data", lambda *_: None
@@ -1333,7 +1333,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
             cargo_target(
                 "build-script-build",
                 "custom-build",
-                str(ROOT / "crates/kanban-contract/build.rs"),
+                str(ROOT / "crates/kanban-protocol/build.rs"),
             )
         )
         mutations.append(custom_build)
@@ -1343,7 +1343,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
         wrong_path = valid_phase_one_metadata()
         workspace_package(wrong_path, CONTRACT_PACKAGE)["targets"][0][
             "src_path"
-        ] = str(ROOT / "crates/kanban-contract/src/other.rs")
+        ] = str(ROOT / "crates/kanban-protocol/src/other.rs")
         mutations.append(wrong_path)
 
         for metadata in mutations:
@@ -1502,7 +1502,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
     def test_product_renamed_contract_dependency_is_allowed(self) -> None:
         metadata = valid_phase_one_metadata()
         workspace_package(metadata, "kanban-store-turso")["dependencies"].append(
-            dependency("kanban-contract", rename="wire-contract")
+            dependency("kanban-protocol", rename="wire-contract")
         )
 
         dependency_policy.audit_metadata(metadata)
@@ -1556,7 +1556,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
                 contract = next(
                     dependency
                     for dependency in workspace_package(metadata, TOOL_PACKAGE)["dependencies"]
-                    if dependency["name"] == "kanban-contract"
+                    if dependency["name"] == "kanban-protocol"
                 )
                 contract.update(mutation)
 
@@ -1637,7 +1637,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
                 contract = next(
                     dependency
                     for dependency in workspace_package(metadata, TOOL_PACKAGE)["dependencies"]
-                    if dependency["name"] == "kanban-contract"
+                    if dependency["name"] == "kanban-protocol"
                 )
                 contract.update(mutation)
 
@@ -1963,7 +1963,7 @@ class DependencyIsolationGateTests(unittest.TestCase):
     def test_contract_manifest_mutations_require_a_dedicated_policy(self) -> None:
         with (ROOT / "Cargo.toml").open("rb") as handle:
             workspace = tomllib.load(handle)
-        with (ROOT / "crates/kanban-contract/Cargo.toml").open("rb") as handle:
+        with (ROOT / "crates/kanban-protocol/Cargo.toml").open("rb") as handle:
             baseline = tomllib.load(handle)
         audit = getattr(
             dependency_policy, "audit_contract_manifest_data", lambda *_: None

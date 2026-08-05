@@ -15,7 +15,7 @@ import schema_adoption_witnesses as witness_gate
 
 
 WORKSPACE_ROOT = Path("/workspace/kanban-tool")
-CONTRACT_PATH = WORKSPACE_ROOT / "crates/kanban-contract"
+CONTRACT_PATH = WORKSPACE_ROOT / "crates/kanban-protocol"
 CONTRACT_ID = f"path+file://{CONTRACT_PATH}#2.1.3"
 ADOPTER_ID = f"path+file://{WORKSPACE_ROOT}/crates/runtime-adopter#0.1.0"
 
@@ -36,7 +36,7 @@ def metadata_with_dependency(
         "packages": [
             {
                 "id": CONTRACT_ID,
-                "name": "kanban-contract",
+                "name": "kanban-protocol",
                 "source": None,
                 "manifest_path": str(CONTRACT_PATH / "Cargo.toml"),
             },
@@ -48,7 +48,7 @@ def metadata_with_dependency(
                 ),
                 "dependencies": [
                     {
-                        "name": "kanban-contract",
+                        "name": "kanban-protocol",
                         "kind": kind,
                         "features": features or [],
                         "source": source,
@@ -69,7 +69,7 @@ def metadata_with_dependency(
                     "id": ADOPTER_ID,
                     "deps": [
                         {
-                            "name": "kanban_contract",
+                            "name": "kanban_protocol",
                             "pkg": resolved_package,
                             "dep_kinds": [{"kind": kind, "target": target}],
                         }
@@ -145,43 +145,43 @@ class WitnessGateNegativeTests(unittest.TestCase):
             None,
             source="registry+https://github.com/rust-lang/crates.io-index",
             path=None,
-            resolved_package="registry+https://github.com/rust-lang/crates.io-index#kanban-contract@2.1.3",
+            resolved_package="registry+https://github.com/rust-lang/crates.io-index#kanban-protocol@2.1.3",
         )
 
         with self.assertRaisesRegex(
-            witness_gate.WitnessGateError, "workspace kanban-contract"
+            witness_gate.WitnessGateError, "workspace kanban-protocol"
         ):
             witness_gate.require_runtime_dependency(metadata, "runtime-adopter")
 
     def test_git_dependency_cannot_impersonate_workspace_contract(self) -> None:
         metadata = metadata_with_dependency(
             None,
-            source="git+https://example.invalid/kanban-contract#deadbeef",
+            source="git+https://example.invalid/kanban-protocol#deadbeef",
             path=None,
-            resolved_package="git+https://example.invalid/kanban-contract#deadbeef",
+            resolved_package="git+https://example.invalid/kanban-protocol#deadbeef",
         )
 
         with self.assertRaisesRegex(
-            witness_gate.WitnessGateError, "workspace kanban-contract"
+            witness_gate.WitnessGateError, "workspace kanban-protocol"
         ):
             witness_gate.require_runtime_dependency(metadata, "runtime-adopter")
 
     def test_other_local_path_cannot_impersonate_workspace_contract(self) -> None:
         metadata = metadata_with_dependency(
             None,
-            path="/tmp/other/kanban-contract",
-            resolved_package="path+file:///tmp/other/kanban-contract#2.1.3",
+            path="/tmp/other/kanban-protocol",
+            resolved_package="path+file:///tmp/other/kanban-protocol#2.1.3",
         )
 
         with self.assertRaisesRegex(
-            witness_gate.WitnessGateError, "workspace kanban-contract"
+            witness_gate.WitnessGateError, "workspace kanban-protocol"
         ):
             witness_gate.require_runtime_dependency(metadata, "runtime-adopter")
 
     def test_resolved_package_identity_drift_is_rejected(self) -> None:
         metadata = metadata_with_dependency(
             None,
-            resolved_package="path+file:///tmp/identity-drift/kanban-contract#2.1.3",
+            resolved_package="path+file:///tmp/identity-drift/kanban-protocol#2.1.3",
         )
 
         with self.assertRaisesRegex(
@@ -219,7 +219,7 @@ class WitnessGateNegativeTests(unittest.TestCase):
     def test_target_specific_declaration_with_unconditional_dev_dependency_is_rejected(self) -> None:
         metadata = metadata_with_dependency(None, target='cfg(target_os = "windows")')
         metadata["packages"][1]["dependencies"].append(
-            {"name": "kanban-contract", "kind": "dev", "target": None, "optional": False}
+            {"name": "kanban-protocol", "kind": "dev", "target": None, "optional": False}
         )
 
         with self.assertRaisesRegex(
@@ -239,7 +239,7 @@ class WitnessGateNegativeTests(unittest.TestCase):
     def test_optional_only_dependency_is_rejected_even_with_dev_dependency(self) -> None:
         metadata = metadata_with_dependency(None, optional=True)
         metadata["packages"][1]["dependencies"].append(
-            {"name": "kanban-contract", "kind": "dev", "target": None, "optional": False}
+            {"name": "kanban-protocol", "kind": "dev", "target": None, "optional": False}
         )
 
         with self.assertRaisesRegex(
@@ -251,7 +251,7 @@ class WitnessGateNegativeTests(unittest.TestCase):
         metadata = metadata_with_dependency(None)
         metadata["packages"][1]["dependencies"].append(
             {
-                "name": "kanban-contract",
+                "name": "kanban-protocol",
                 "kind": None,
                 "target": 'cfg(target_os = "windows")',
                 "optional": False,
@@ -275,7 +275,7 @@ class WitnessGateNegativeTests(unittest.TestCase):
         metadata = metadata_with_dependency(None)
         metadata["packages"][1]["dependencies"].append(
             {
-                "name": "kanban-contract",
+                "name": "kanban-protocol",
                 "kind": "dev",
                 "features": ["schema"],
             }
@@ -322,7 +322,7 @@ class WitnessGateNegativeTests(unittest.TestCase):
             witness_gate.require_runtime_tree("runtime-adopter\n", "runtime-adopter")
 
     def test_forwarded_schema_feature_in_runtime_tree_is_rejected(self) -> None:
-        tree = 'runtime-adopter\n└── kanban-contract feature "schema"\n'
+        tree = 'runtime-adopter\n└── kanban-protocol feature "schema"\n'
 
         with self.assertRaisesRegex(
             witness_gate.WitnessGateError, "schema tooling"
@@ -331,7 +331,7 @@ class WitnessGateNegativeTests(unittest.TestCase):
 
     def test_all_target_tree_rejects_target_specific_schema_tooling(self) -> None:
         tree = (
-            f"runtime-adopter\n├── kanban-contract v2.1.3 ({CONTRACT_PATH})\n"
+            f"runtime-adopter\n├── kanban-protocol v2.1.3 ({CONTRACT_PATH})\n"
             "└── schemars v1.2.1\n"
         )
 
@@ -357,15 +357,15 @@ class WitnessGateNegativeTests(unittest.TestCase):
             witness_gate.require_runtime_tree(tree, "runtime-adopter")
 
     def test_clean_runtime_tree_is_accepted(self) -> None:
-        tree = "runtime-adopter\n└── kanban-contract v2.1.3\n"
+        tree = "runtime-adopter\n└── kanban-protocol v2.1.3\n"
 
         witness_gate.require_runtime_tree(tree, "runtime-adopter")
 
     def test_runtime_tree_rejects_same_name_without_workspace_path(self) -> None:
-        tree = "runtime-adopter\n└── kanban-contract v2.1.3\n"
+        tree = "runtime-adopter\n└── kanban-protocol v2.1.3\n"
 
         with self.assertRaisesRegex(
-            witness_gate.WitnessGateError, "workspace kanban-contract"
+            witness_gate.WitnessGateError, "workspace kanban-protocol"
         ):
             witness_gate.require_runtime_tree(
                 tree, "runtime-adopter", CONTRACT_PATH
@@ -374,7 +374,7 @@ class WitnessGateNegativeTests(unittest.TestCase):
     def test_runtime_tree_uses_package_identity_and_all_targets(self) -> None:
         metadata = metadata_with_dependency(None)
         tree = (
-            f"runtime-adopter\n└── kanban-contract v2.1.3 ({CONTRACT_PATH})\n"
+            f"runtime-adopter\n└── kanban-protocol v2.1.3 ({CONTRACT_PATH})\n"
         )
 
         with mock.patch.object(witness_gate, "run_checked", return_value=tree) as run:

@@ -23,7 +23,7 @@ EXPECTED_JUST_VERSION = "just 1.57.0"
 CORE_PACKAGES = (
     "kanban-core",
     "kanban-application",
-    "kanban-contract",
+    "kanban-protocol",
     "kanban-store-turso",
     "kanban-client",
     "kanban-server",
@@ -33,7 +33,7 @@ CORE_PACKAGES = (
 FULL_PACKAGES = (*CORE_PACKAGES, "kanban-desktop", "xtask")
 HELPER_PACKAGES: tuple[str, ...] = ()
 TOOL_PACKAGE = "xtask"
-CONTRACT_PACKAGE = "kanban-contract"
+CONTRACT_PACKAGE = "kanban-protocol"
 PROJECTION_RELEASE_FEATURES = "tantivy-backend,oxigraph-backend"
 RELEASE_WRAPPER_SHA256 = (
     "58e05c7436165c0c2de000f08553352f7b32d690b0d663a89a058290be83e2e3"
@@ -742,20 +742,20 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
 # 更新执行语义必须显式更新对应 hash，运行采样无法触达的 env/dead branch 仍然
 # fail closed。
 PROTECTED_RECIPE_AST_SHA256 = {
-    "fmt": "6cab417789f5b4a1da3c6f43baddcf5611641de5605e227ddd11c1b81f6cea89",
+    "fmt": "33feecc78fb8d5f8e326b84e616872e922434b17c16254e1b0be8bb8beacb50e",
     "fmt-check": "b2fdd96430312d9ee37d369ce26ff44dab2f6a10dfcbb29bb6380fa0c371d611",
-    "fmt-full": "23712b900768978c836bb34ab8239903d7a51e9268a98e96c0e102afd3f22e84",
+    "fmt-full": "a0f79f80c2a5f67aa4051168a96c38ce93262b5401ecde76c0f1fa361905ca35",
     "check": "cddd49fe5e50b59502f0a2a54cfd4e2acb4bb9b891f4de0c056e78f52e0783a7",
-    "check-core": "e00113ac5c727915a2e1dbf88231198e94807ffb9323e177881ed43583b7a155",
+    "check-core": "056f421df1a88b361b888568ba72425b6663d5e3aa7eaa87e99625d71c02d2f9",
     "check-full": "d9c6422d7e92bb1ffa11bc2337072444304948070cf35c79e4ffc5340e32bd92",
     "test": "d136c26efda43f4482000099f4917c98ba3407f2072d58ee7a6ffefebba798db",
     "test-p": "16d14ffcf302b2f745a4b4a0724a96e5a38b600870d58f36c344e185595a6b00",
     "check-p": "afb9f318d2aa509feed7efd372318cbd4c2993742a26f078c6f740349400e33e",
     "rust-fast": "9a013d3f1005dc4c21c44e1fc21e8d05dc36c9de73e79470021e4f62ac2801c9",
-    "test-core": "a54af8a77eaf60da89b50637c8c13d54a50d9a5a3464df0016d4e9e64c9a6349",
+    "test-core": "22126e61bc9eb8e90a0b9958fd564140a32fa2bacff639ccb2a67e7a8db12d91",
     "test-full": "85fb187f2cafa975a8ec17ff2df582475331b7669301e6693936b6420d10f219",
     "clippy": "e487d817f0f09efb21d91eaa4e9793f05cb2883723cc59758c2eaa4314384010",
-    "clippy-core": "1ce984e76b22d12fd9a28efe6ffa8f53b3d1698b493438d5739526b11785abfd",
+    "clippy-core": "c9027f430ed1217be6e78daf36618151aee26f7226a906de103a3d62198dcc4c",
     "clippy-full": "bbed85a04f195152be482141830dc9309e369ee7c4a12de75798a448b1917ef9",
     "rust-full": "05bd1a7769cf8d0ebde0582f37444132adfafd19ae8ff0682b1a8c45307b5288",
     "projection-release-cohort": "fa986fe568697b3f4fa7e62e65280b461f2d0b7f34d18a351d0cae6c330641f4",
@@ -768,14 +768,14 @@ PROTECTED_RECIPE_AST_SHA256 = {
     "schema-generate": "ddf296b4364a0f1d38d5204e7476414c5b86daeda1be7aee6a159e027b3b48fb",
     "schema-check": "1c9f2d84eb3f4d17714ecdcc9d693281b8c76aa305656ca86892434d30b50052",
     "schema-docs": "8f54ff9bd7e05e820243e82418b68c46316c11380fcadcbf816ab9a1cdfe40ac",
-    "schema-fmt": "fa2c32acb96075a365219141b025372bf6ce793538453a734b8be3c181308d39",
+    "schema-fmt": "8d8ff815a57613390b30e7a10b534835c3773a83ca38eca66813215748817071",
     "schema-tool": "5d75c9c43db9ef001fe8e39ec39d50a30b40239daa9cd4d163067bf4daccc230",
     "schema-dependency-isolation-self-test": "1f791d177b30a450e938734f8b48480f3c1d3fe5e77d1e4588771c405383f934",
     "schema-dependency-isolation": "70f9346e1e8d1be4d169bf6568fc743c93c445739e98fc5599c244ad8ff789bb",
     "schema-adoption-witness-self-test": "221fd748cf1b93cb7a11f90b70b398bd08b9122df154f61012a4b92661e81fc4",
     "schema-adoption-witness": "1c55f076cb1632e69be3f6c1b98da5ddfb292a91f238324a5f51fc584e860e1d",
     "schema-surface-audit": "afcc19fd50897a51ae12c3ea048840aa5624a2f4fe60d40ea61762b013255c5c",
-    "schema-contract": "5d0d2d21d1bc9a4543a9f938f8211a3387ec34812948c91cff6d7dee6e5521c7",
+    "schema-contract": "ed06e96e1e35471abc034bc873ef57835114ea58d3530d2b4b1c1e32fc4dbdaa",
     "schema-audit-closed": "fd7d65dbe4d9d19c2c92c26107ca33083fd61eb03ddca39e2c80a5ccbe2b87e5",
     "release": "1dae2a83fb1776567c134c61e610556f3fc39cc21d9642beeaa3ee7b226d8a4d",
 }
@@ -1842,7 +1842,7 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
     def test_test_full_fallback_package_cannot_drift(self) -> None:
         self.assert_mutation_rejected(
             "else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude xtask",
-            "else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude kanban-contract",
+            "else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude kanban-protocol",
             "test-full",
             _test_full,
             nextest=False,
@@ -2156,8 +2156,8 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
 
     def test_test_core_branch_package_mismatch_is_rejected(self) -> None:
         self.assert_mutation_rejected(
-            "-p kanban-core -p kanban-application -p kanban-contract -p kanban-store-turso \\\n",
-            "-p kanban-core -p kanban-application -p kanban-contract -p kanban-cli \\\n",
+            "-p kanban-core -p kanban-application -p kanban-protocol -p kanban-store-turso \\\n",
+            "-p kanban-core -p kanban-application -p kanban-protocol -p kanban-cli \\\n",
             "test-core",
             _test_core,
             nextest=False,

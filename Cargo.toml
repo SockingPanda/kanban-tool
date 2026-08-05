@@ -49,6 +49,7 @@ authors = ["SockingPanda"]
 anyhow = "1.0"
 axum = "0.7"
 clap = "4.5"
+clap_complete = "4.5"
 dirs-next = "2.0"
 http-body-util = "0.1"
 serde = "1.0"

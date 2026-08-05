@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use kanban_service::{ApplicationService, TursoApplicationStore, TursoStore};
+use kanban_service::{ApplicationService, TursoApplicationStore};
 use kanban_core::{KanbanError, Result};
 
 pub(crate) type HostApplicationService = ApplicationService<TursoApplicationStore>;
@@ -39,15 +39,13 @@ impl AppState {
             None => None,
         };
         let attachment_root = Arc::new(ensure_attachment_root(&db_path).await?);
-        let store = TursoStore::open(&db_path)
-            .await
-            .map_err(|error| KanbanError::Storage(error.to_string()))?;
-        store
-            .initialize()
-            .await
-            .map_err(|error| KanbanError::Storage(error.to_string()))?;
-        let application_store =
-            TursoApplicationStore::with_roots(store, run_log_root, attachment_root.clone());
+        let application_store = TursoApplicationStore::open_with_roots(
+            &db_path,
+            run_log_root,
+            attachment_root.clone(),
+        )
+        .await
+        .map_err(|error| KanbanError::Storage(error.to_string()))?;
         let vector_store = application_store.clone();
         Ok(Self {
             application: ApplicationService::new(application_store),

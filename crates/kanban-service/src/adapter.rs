@@ -38,6 +38,20 @@ pub struct TursoApplicationStore {
 }
 
 impl TursoApplicationStore {
+    /// 打开并初始化 host 唯一拥有的 canonical Turso 数据库。
+    ///
+    /// `kanban-server` 只负责解析和创建 host 目录；数据库装配、初始化以及
+    /// application store 的封装都在 service boundary 内完成。
+    pub async fn open_with_roots(
+        db_path: impl AsRef<Path>,
+        run_log_root: Option<Arc<PathBuf>>,
+        attachment_root: Arc<PathBuf>,
+    ) -> StoreResult<Self> {
+        let store = TursoStore::open(db_path).await?;
+        store.initialize().await?;
+        Ok(Self::with_roots(store, run_log_root, attachment_root))
+    }
+
     pub fn new(store: TursoStore) -> Self {
         Self {
             store,

@@ -5,13 +5,10 @@ use std::{
 
 use clap::Args;
 
-use crate::{context::CliContext, error::CliFailure};
+use crate::{config, context::CliContext, error::CliFailure};
 
 #[derive(Debug, Args)]
 pub(crate) struct ServeArgs {
-    /// Canonical Turso database owned by this host.
-    #[arg(long, env = "KANBAN_DB")]
-    pub(crate) db: Option<PathBuf>,
     /// Enable the in-process single-worker dispatcher with a strict TOML profile.
     #[arg(long)]
     pub(crate) dispatcher_profile: Option<PathBuf>,
@@ -42,7 +39,9 @@ pub(crate) async fn run(ctx: &CliContext, args: &ServeArgs) -> Result<(), CliFai
             )?),
             None => None,
         };
-    let db_path = args.db.clone().unwrap_or_else(default_db_path);
+    let db_path = config::resolve_db_path(ctx.db.as_deref())
+        .map_err(CliFailure::from)?
+        .value;
     let state = kanban_server::AppState::open_with_run_log_root(
         &db_path,
         ctx.actor(),
@@ -99,26 +98,10 @@ pub(crate) async fn run(ctx: &CliContext, args: &ServeArgs) -> Result<(), CliFai
     })
 }
 
-pub(crate) fn default_db_path() -> PathBuf {
-    dirs_next::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("kb")
-        .join("kanban.db")
-}
-
 #[cfg(test)]
 mod tests {
-    use super::default_db_path;
     use crate::{Cli, Command};
     use clap::Parser;
-
-    #[test]
-    fn default_database_uses_new_filename() {
-        assert_eq!(
-            default_db_path().file_name().and_then(|name| name.to_str()),
-            Some("kanban.db")
-        );
-    }
 
     #[test]
     fn serve_dispatcher_is_opt_in_by_profile_path() {

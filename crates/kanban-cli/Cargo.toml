@@ -12,15 +12,26 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true, features = ["derive", "env"] }
+clap_complete.workspace = true
 dirs-next.workspace = true
 kanban-client.workspace = true
 kanban-contract = { workspace = true, default-features = false }
+kanban-core.workspace = true
 kanban-server.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+serde_path_to_error.workspace = true
+toml.workspace = true
 tokio = { workspace = true, features = [
     "macros",
     "rt-multi-thread",
     "signal",
     "sync",
 ] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[test]]
+name = "cli_board_contract_adoption"
+path = "tests/cli_board_contract_adoption.rs"

@@ -1,4 +1,6 @@
 mod commands;
+mod completion;
+mod config;
 mod context;
 mod error;
 mod output;
@@ -30,8 +32,14 @@ struct Cli {
     )]
     server_url: String,
     /// Board slug or id used by board-scoped client commands.
-    #[arg(long, global = true, env = "KB_BOARD", default_value = "default")]
-    board: String,
+    #[arg(long, global = true)]
+    board: Option<String>,
+    /// Canonical Turso path used by `serve` and configuration inspection only.
+    #[arg(long, global = true)]
+    db: Option<std::path::PathBuf>,
+    /// Human-readable output locale; JSON keys and enums stay stable.
+    #[arg(long, global = true)]
+    locale: Option<String>,
     /// Audit actor sent to the application host.
     #[arg(long, global = true, env = "KANBAN_ACTOR")]
     actor: Option<String>,
@@ -50,6 +58,11 @@ enum Command {
     Board {
         #[command(subcommand)]
         command: commands::board::BoardCommand,
+    },
+    /// Select and inspect the project-local active board without opening Turso.
+    Config {
+        #[command(subcommand)]
+        command: commands::config::ConfigCommand,
     },
     /// Manage tasks through the canonical localhost host.
     Task {
@@ -89,8 +102,25 @@ enum Command {
         #[command(subcommand)]
         command: commands::index::IndexCommand,
     },
-    /// Removed direct-database initialization path.
-    Init,
+    /// Create the project `.kb/config.toml` selection file without opening Turso.
+    Init {
+        /// Idempotent compatibility flag; init never resets existing user settings.
+        #[arg(
+            long,
+            help = "Deprecated compatibility no-op; init is idempotent and never resets data"
+        )]
+        force: bool,
+    },
+    /// Generate shell completion scripts without touching configuration or Turso.
+    Completions { shell: completion::Shell },
+    /// Hidden protocol used by generated Bash/Zsh dynamic completion helpers.
+    #[command(name = "__complete", hide = true)]
+    Complete(completion::CompleteArgs),
+    /// Install or inspect Codex lifecycle hooks.
+    Hook {
+        #[command(subcommand)]
+        command: commands::hook::HookCommand,
+    },
     /// Commands not yet migrated to the canonical host fail without touching storage.
     #[command(external_subcommand)]
     FeatureNotAvailable(Vec<String>),
@@ -106,7 +136,32 @@ async fn main() -> ExitCode {
 }
 
 async fn run(cli: &Cli) -> Result<(), CliFailure> {
-    let ctx = CliContext::from_cli(cli);
+    if let Command::Completions { shell } = &cli.command {
+        return completion::generate(*shell).map_err(|error| CliFailure {
+            code: "generic_error",
+            message: error.to_string(),
+            exit_code: 1,
+        });
+    }
+    if let Command::Complete(args) = &cli.command {
+        return completion::complete(args, cli.board.as_deref());
+    }
+    if let Command::Config { command } = &cli.command {
+        return commands::config::run(
+            command,
+            cli.db.as_deref(),
+            cli.board.as_deref(),
+            cli.locale.as_deref(),
+            cli.json,
+        );
+    }
+    if let Command::Init { force: _ } = &cli.command {
+        return commands::init::run(cli.db.as_deref(), cli.board.as_deref(), cli.json);
+    }
+    if let Command::Hook { command } = &cli.command {
+        return commands::hook::run(command, cli.json);
+    }
+    let ctx = CliContext::from_cli(cli)?;
     match &cli.command {
         Command::Serve(args) => server::run(&ctx, args).await,
         Command::Board { command } => commands::board::run(&ctx, command),
@@ -119,9 +174,11 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Label { command } => commands::ontology::run(&ctx, command),
         Command::Search(args) => commands::search::run(&ctx, args),
         Command::Index { command } => commands::index::run(&ctx, command),
-        Command::Init => Err(feature_not_available(
-            "`kanban init` was removed; start `kanban serve` to initialize the canonical Turso database",
-        )),
+        Command::Config { .. }
+        | Command::Init { .. }
+        | Command::Hook { .. }
+        | Command::Completions { .. }
+        | Command::Complete(_) => unreachable!("handled before client command dispatch"),
         Command::FeatureNotAvailable(parts) => Err(feature_not_available(format!(
             "command `{}` is not available on the single-host path yet",
             parts.join(" ")
@@ -133,15 +190,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
 mod tests {
     use clap::Parser;
 
-    use crate::error::feature_not_available;
     use crate::{Cli, Command};
-
-    #[test]
-    fn init_is_a_stable_unavailable_feature() {
-        let failure = feature_not_available("not migrated");
-        assert_eq!(failure.code, "feature_not_available");
-        assert_eq!(failure.exit_code, 10);
-    }
 
     #[test]
     fn parses_run_list_command() {

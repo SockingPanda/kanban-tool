@@ -1,5 +1,7 @@
 use kanban_client::ClientError;
 
+use crate::config::ConfigError;
+
 #[derive(Debug, serde::Serialize)]
 pub(crate) struct CliErrorBody<'a> {
     pub(crate) code: &'a str,
@@ -38,6 +40,21 @@ impl From<ClientError> for CliFailure {
         Self {
             code,
             message: error.to_string(),
+            exit_code,
+        }
+    }
+}
+
+impl From<ConfigError> for CliFailure {
+    fn from(error: ConfigError) -> Self {
+        let message = error.to_string();
+        let (code, exit_code) = match error {
+            ConfigError::Parse { .. } => ("invalid_input", 2),
+            ConfigError::Io { .. } | ConfigError::Serialize { .. } => ("generic_error", 1),
+        };
+        Self {
+            code,
+            message,
             exit_code,
         }
     }

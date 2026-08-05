@@ -1,6 +1,6 @@
 use kanban_client::{ClientError, KanbanClient};
 
-use crate::{Cli, error::CliFailure};
+use crate::{Cli, config, error::CliFailure};
 
 /// Runtime values shared by command handlers after clap has parsed the CLI.
 ///
@@ -11,18 +11,21 @@ use crate::{Cli, error::CliFailure};
 pub(crate) struct CliContext {
     pub(crate) server_url: String,
     pub(crate) board: String,
+    pub(crate) db: Option<std::path::PathBuf>,
     pub(crate) actor: Option<String>,
     pub(crate) json: bool,
 }
 
 impl CliContext {
-    pub(crate) fn from_cli(cli: &Cli) -> Self {
-        Self {
+    pub(crate) fn from_cli(cli: &Cli) -> Result<Self, CliFailure> {
+        let board = config::resolve_board(cli.board.as_deref()).map_err(CliFailure::from)?;
+        Ok(Self {
             server_url: cli.server_url.clone(),
-            board: cli.board.clone(),
+            board: board.value,
+            db: cli.db.clone(),
             actor: cli.actor.clone(),
             json: cli.json,
-        }
+        })
     }
 
     pub(crate) fn client(&self) -> Result<KanbanClient, CliFailure> {

@@ -1,9 +1,12 @@
 pub(crate) mod board;
 pub(crate) mod comment;
+pub(crate) mod config;
 pub(crate) mod dependency;
 pub(crate) mod event;
 pub(crate) mod index;
 pub(crate) mod ontology;
+pub(crate) mod hook;
+pub(crate) mod init;
 pub(crate) mod run;
 pub(crate) mod search;
 pub(crate) mod task;

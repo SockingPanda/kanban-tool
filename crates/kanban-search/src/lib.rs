@@ -1,6 +1,6 @@
 //! Task search 的共享领域 query/result 类型。
 //!
-//! 搜索索引由 host 内的 `kanban-store-turso` 持有；本 crate 不包含任何
+//! 搜索索引由 host 内的 `kanban-service` 持有；本 crate 不包含任何
 //! 外部全文检索 provider。Turso 的 FTS projection 是可重建的派生物，canonical
 //! `tasks`、`task_comments`、`task_runs` 和 `task_events` 仍然是搜索事实来源。
 

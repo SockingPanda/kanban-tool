@@ -1,7 +1,5 @@
 use crate::{
-    CreateStepInput,
-    domain::TaskStepRecord,
-    error::StoreError,
+    CreateStepInput, domain::TaskStepRecord, error::StoreError,
     store_operations::shared::validate_task_id,
 };
 

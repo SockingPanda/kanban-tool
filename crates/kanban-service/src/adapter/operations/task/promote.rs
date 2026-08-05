@@ -1,8 +1,8 @@
+use crate::PromoteTaskInput as StorePromoteTask;
 use crate::{
     PromoteTaskRecord as ApplicationPromoteTask, TaskPromote, TaskRecord as ApplicationTask,
 };
 use kanban_core::Result;
-use crate::PromoteTaskInput as StorePromoteTask;
 
 use crate::adapter::{TursoApplicationStore, application_task, store_error};
 

@@ -11,13 +11,13 @@ use axum::{
     },
     routing::{get, post},
 };
-use kanban_service::KanbanError;
 use kanban_protocol::{
     DataEnvelope, VectorChunkResult, VectorConfigureRequest, VectorConfigureResponse,
     VectorLabelAtomResult, VectorProjectionRequest, VectorProjectionResponse, VectorQuery,
     VectorQueryChunksResponse, VectorQueryLabelAtomsResponse, VectorStatus, VectorStatusQuery,
     VectorStatusResponse,
 };
+use kanban_service::KanbanError;
 use kanban_service::{StoreError, TursoApplicationStore, VectorConfig, VectorStatusRecord};
 
 use crate::{error::ApiError, state::AppState};

@@ -1,7 +1,7 @@
 use crate::error::ApiError;
-use kanban_service::{SignalRecord, SignalStatus};
-use kanban_service::KanbanError;
 use kanban_protocol::{SignalObservationWire, SignalWire};
+use kanban_service::KanbanError;
+use kanban_service::{SignalRecord, SignalStatus};
 
 pub(crate) fn api_signal(signal: SignalRecord) -> Result<SignalWire, ApiError> {
     let evidence: serde_json::Value = serde_json::from_str(&signal.observation.evidence_json)

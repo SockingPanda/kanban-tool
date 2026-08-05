@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
+use kanban_protocol::{CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse};
 use kanban_service::CompleteTaskCommand;
 use kanban_service::KanbanError;
-use kanban_protocol::{CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse};
 
 pub(crate) async fn complete_task(
     State(state): State<AppState>,

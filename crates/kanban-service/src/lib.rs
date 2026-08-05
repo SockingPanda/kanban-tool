@@ -4,10 +4,10 @@
 //! store. CLI, MCP and Desktop never construct this service and never receive a
 //! storage handle; they reach it through the localhost API.
 
+mod adapter;
 mod db;
 mod domain;
 mod error;
-mod adapter;
 mod maintenance;
 mod migration;
 mod schema;
@@ -26,6 +26,7 @@ pub mod legacy_import;
 // Entity/relation/graph ports are re-exported below so every host adapter uses
 // the same canonical application boundary, including host-admin maintenance.
 
+pub use adapter::TursoApplicationStore;
 pub use dto::*;
 pub use kanban_core::{Board, BoardColumn, KanbanError, Result, TaskStatus, new_task_id};
 pub use operations::LabelOntologyOperations;
@@ -60,7 +61,6 @@ pub use operations::{
 };
 pub use ports::ApplicationStore;
 pub use service::ApplicationService;
-pub use adapter::TursoApplicationStore;
 
 /// Host-facing service store alias kept explicit so adapters do not depend on
 /// persistence row models or the old standalone store crate.
@@ -82,19 +82,18 @@ pub use maintenance::{
 pub use store_operations::{
     AddDependencyInput, AddDependencyRecord as StoreAddDependencyRecord, AddTaskLabelsInput,
     AddTaskLabelsRecord as StoreAddTaskLabelsRecord, ArchiveBoardInput, ArchiveTaskInput,
-    BlockTaskInput, ClaimTaskInput, ClaimTaskRecord as StoreClaimTaskRecord,
-    CompleteStepInput, CompleteTaskInput, CreateAttachmentInput, CreateBoardInput,
-    CreateCommentInput, CreateLabelInput, CreateSignalInput, CreateStepInput, CreateTaskInput,
-    EntityUpsertInput, HeartbeatTaskInput, LabelProposalDecisionInput, LabelProposalInput,
-    LabelSuggestionOptions, MarkExecutionPlanNotRequiredInput, OntologyActionInput,
-    OntologyActorInput, OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput,
-    OntologyValidateInput, PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput,
-    RelationDeleteInput, RelationPredicateInput, RelationUpsertInput, ReleaseTaskInput,
-    RemoveDependencyInput, RemoveDependencyRecord as StoreRemoveDependencyRecord, RemoveStepInput,
-    RemoveTaskLabelInput,
-    ReopenStepInput, ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput,
-    StoreSignalListOptions, SkipStepInput, SpecifyTaskInput, SubmitReviewTaskInput,
-    UnblockTaskInput, UpdateStepInput, UpdateTaskInput, UpsertLabelSemanticsInput,
+    BlockTaskInput, ClaimTaskInput, ClaimTaskRecord as StoreClaimTaskRecord, CompleteStepInput,
+    CompleteTaskInput, CreateAttachmentInput, CreateBoardInput, CreateCommentInput,
+    CreateLabelInput, CreateSignalInput, CreateStepInput, CreateTaskInput, EntityUpsertInput,
+    HeartbeatTaskInput, LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
+    MarkExecutionPlanNotRequiredInput, OntologyActionInput, OntologyActorInput,
+    OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
+    PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput, RelationDeleteInput,
+    RelationPredicateInput, RelationUpsertInput, ReleaseTaskInput, RemoveDependencyInput,
+    RemoveDependencyRecord as StoreRemoveDependencyRecord, RemoveStepInput, RemoveTaskLabelInput,
+    ReopenStepInput, ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SkipStepInput,
+    SpecifyTaskInput, StoreSignalListOptions, SubmitReviewTaskInput, UnblockTaskInput,
+    UpdateStepInput, UpdateTaskInput, UpsertLabelSemanticsInput,
 };
 
 pub use store_operations::search::{
@@ -108,14 +107,14 @@ pub use store_operations::{
 };
 
 pub use vector::{
-    content_hash, stable_id, ProjectionJobRecord, VectorChunkHitRecord, VectorConfig,
-    VectorDocumentInput, VectorEmbeddingInput, VectorLabelAtomHitRecord, VectorStatusRecord,
-    MAX_VECTOR_BATCH, MAX_VECTOR_CONTENT_BYTES, MAX_VECTOR_DIMENSIONS, VECTOR_BACKEND,
-    VECTOR_LABEL_ATOMS_PROJECTION, VECTOR_TASKS_PROJECTION,
+    MAX_VECTOR_BATCH, MAX_VECTOR_CONTENT_BYTES, MAX_VECTOR_DIMENSIONS, ProjectionJobRecord,
+    VECTOR_BACKEND, VECTOR_LABEL_ATOMS_PROJECTION, VECTOR_TASKS_PROJECTION, VectorChunkHitRecord,
+    VectorConfig, VectorDocumentInput, VectorEmbeddingInput, VectorLabelAtomHitRecord,
+    VectorStatusRecord, content_hash, stable_id,
 };
 
 #[cfg(feature = "legacy-sqlite-import")]
 pub use legacy_import::{
-    import_legacy_sqlite_v30, LegacyImportOptions, LegacyImportResult, LegacyImportTableCount,
-    LegacySqliteImportOptions, LegacySqliteImportResult,
+    LegacyImportOptions, LegacyImportResult, LegacyImportTableCount, LegacySqliteImportOptions,
+    LegacySqliteImportResult, import_legacy_sqlite_v30,
 };

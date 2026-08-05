@@ -1,9 +1,9 @@
+use crate::CreateCommentInput as StoreCreateComment;
 use crate::{
     CommentCreate, CommentRecord as ApplicationComment,
     CreateCommentRecord as ApplicationCreateComment,
 };
 use kanban_core::Result;
-use crate::CreateCommentInput as StoreCreateComment;
 
 use crate::adapter::{TursoApplicationStore, application_comment, store_error};
 

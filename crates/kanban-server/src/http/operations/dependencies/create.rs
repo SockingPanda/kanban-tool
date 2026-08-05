@@ -7,9 +7,9 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
+use kanban_protocol::{AddDependencyPath, AddDependencyRequest, AddDependencyResponse};
 use kanban_service::AddDependencyCommand;
 use kanban_service::KanbanError;
-use kanban_protocol::{AddDependencyPath, AddDependencyRequest, AddDependencyResponse};
 
 pub(crate) async fn add_dependency(
     State(state): State<AppState>,

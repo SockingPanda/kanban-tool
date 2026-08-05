@@ -4,8 +4,8 @@ mod create;
 mod get;
 mod list;
 
-use kanban_core::Board;
 use crate::domain::BoardRecord;
+use kanban_core::Board;
 
 pub(super) fn application_board(board: BoardRecord) -> Board {
     Board {

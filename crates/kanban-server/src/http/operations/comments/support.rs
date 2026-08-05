@@ -1,13 +1,11 @@
 use crate::error::ApiError;
+use kanban_protocol::ApiComment;
+use kanban_service::KanbanError;
 use kanban_service::{
     CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
 };
-use kanban_service::KanbanError;
-use kanban_protocol::ApiComment;
 
-pub(crate) fn api_comment(
-    comment: kanban_service::CommentRecord,
-) -> Result<ApiComment, ApiError> {
+pub(crate) fn api_comment(comment: kanban_service::CommentRecord) -> Result<ApiComment, ApiError> {
     let metadata = serde_json::from_str(&comment.metadata_json).map_err(|error| {
         KanbanError::Storage(format!("stored comment metadata is invalid JSON: {error}"))
     })?;

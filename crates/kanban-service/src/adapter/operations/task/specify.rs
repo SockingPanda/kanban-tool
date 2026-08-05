@@ -1,8 +1,8 @@
+use crate::SpecifyTaskInput as StoreSpecifyTask;
 use crate::{
     SpecifyTaskRecord as ApplicationSpecifyTask, TaskRecord as ApplicationTask, TaskSpecify,
 };
 use kanban_core::Result;
-use crate::SpecifyTaskInput as StoreSpecifyTask;
 
 use crate::adapter::{TursoApplicationStore, application_task, store_error};
 

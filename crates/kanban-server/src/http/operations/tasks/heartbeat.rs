@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
+use kanban_protocol::{HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse};
 use kanban_service::HeartbeatTaskCommand;
 use kanban_service::KanbanError;
-use kanban_protocol::{HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse};
 
 pub(crate) async fn heartbeat_task(
     State(state): State<AppState>,

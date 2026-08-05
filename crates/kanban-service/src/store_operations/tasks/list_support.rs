@@ -55,10 +55,7 @@ pub(crate) fn task_list_where(
         clauses.push(format!("t.status IN ({})", names.join(", ")));
         params.extend(
             options.statuses.iter().enumerate().map(|(index, status)| {
-                (
-                    format!(":status_{index}"),
-                    Value::Text(status.to_string()),
-                )
+                (format!(":status_{index}"), Value::Text(status.to_string()))
             }),
         );
     }

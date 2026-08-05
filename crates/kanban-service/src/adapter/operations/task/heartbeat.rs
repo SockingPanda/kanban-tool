@@ -1,8 +1,8 @@
+use crate::HeartbeatTaskInput as StoreHeartbeatTask;
 use crate::{
     HeartbeatTaskRecord as ApplicationHeartbeatTask, TaskHeartbeat, TaskRecord as ApplicationTask,
 };
 use kanban_core::Result;
-use crate::HeartbeatTaskInput as StoreHeartbeatTask;
 
 use crate::adapter::{TursoApplicationStore, application_task, store_error};
 

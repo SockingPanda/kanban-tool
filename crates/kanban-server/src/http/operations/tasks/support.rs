@@ -1,10 +1,10 @@
 use crate::error::ApiError;
-use kanban_service::{ExecutionPlanRecord, ExecutionPlanState, LabelRecord, TaskRecord};
-use kanban_service::{KanbanError, TaskStatus};
 use kanban_protocol::{
     ApiExecutionPlan, ApiExecutionPlanState, ApiStepStatus, ApiTask, ApiTaskPriority,
     ApiTaskStatus, ApiTaskStep,
 };
+use kanban_service::{ExecutionPlanRecord, ExecutionPlanState, LabelRecord, TaskRecord};
+use kanban_service::{KanbanError, TaskStatus};
 
 pub(crate) fn api_task_step(step: kanban_service::StepRecord) -> Result<ApiTaskStep, ApiError> {
     let status = match step.status.as_str() {

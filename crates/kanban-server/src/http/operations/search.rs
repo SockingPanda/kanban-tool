@@ -3,14 +3,14 @@ use axum::{
     extract::{Query, State, rejection::QueryRejection},
     routing::{get, post},
 };
-use kanban_service::{SearchIndexStatus, SearchMeta as AppSearchMeta, SearchQuery};
-use kanban_service::{KanbanError, TaskStatus};
 use kanban_protocol::{
     ApiTaskStatus, BoardQuery, DataEnvelope, MetadataEnvelope, OffsetPaginationMeta, SearchMeta,
     SearchPageMeta, SearchStatus, SearchStatusResponse, SearchTaskHit, SearchTaskStatusWindow,
     SearchTaskStatusWindows, SearchTasksByStatusResponse, SearchTasksData, SearchTasksQuery,
     SearchTasksResponse,
 };
+use kanban_service::{KanbanError, TaskStatus};
+use kanban_service::{SearchIndexStatus, SearchMeta as AppSearchMeta, SearchQuery};
 
 use crate::{error::ApiError, http::operations::tasks::support::api_task, state::AppState};
 

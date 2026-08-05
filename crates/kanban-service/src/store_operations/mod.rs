@@ -36,9 +36,7 @@ pub use lifecycle::{
     SubmitReviewTaskInput, UnblockTaskInput,
 };
 pub use ontology::*;
-pub use relations::{
-    RelationDeleteInput, RelationPredicateInput, RelationUpsertInput,
-};
+pub use relations::{RelationDeleteInput, RelationPredicateInput, RelationUpsertInput};
 pub use signals::{
     CreateSignalInput, ReviewSignalsInput, SignalLifecycleInput,
     SignalListOptions as StoreSignalListOptions,

@@ -7,9 +7,9 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
+use kanban_protocol::{CreateStepPath, CreateStepRequest, CreateStepResponse};
 use kanban_service::CreateStepCommand;
 use kanban_service::KanbanError;
-use kanban_protocol::{CreateStepPath, CreateStepRequest, CreateStepResponse};
 
 pub(crate) async fn create_step(
     State(state): State<AppState>,

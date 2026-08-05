@@ -1,8 +1,8 @@
 use turso::transaction::TransactionBehavior;
 
 use crate::{
-    db::TursoStore, domain::*, error::StoreError, store_operations::shared::canonical_ready_status,
-    shared::*,
+    db::TursoStore, domain::*, error::StoreError, shared::*,
+    store_operations::shared::canonical_ready_status,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

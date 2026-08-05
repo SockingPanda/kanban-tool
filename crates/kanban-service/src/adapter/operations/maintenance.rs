@@ -5,9 +5,7 @@ use crate::{
     VacuumReportRecord,
 };
 #[cfg(feature = "legacy-sqlite-import")]
-use crate::{
-    LegacyImportOptionsRecord, LegacyImportResultRecord, LegacyImportTableCountRecord,
-};
+use crate::{LegacyImportOptionsRecord, LegacyImportResultRecord, LegacyImportTableCountRecord};
 use kanban_core::Result;
 
 use crate::adapter::{TursoApplicationStore, store_error};

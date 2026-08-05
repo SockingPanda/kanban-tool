@@ -12,11 +12,11 @@ use crate::{
         TaskGraphMetaRecord, TaskGraphNodeRecord, TaskNeighborhoodRecord, TaskRecord,
     },
     error::StoreError,
-    store_operations::relations::{RelationListOptions, relation_from_row},
     shared::{
         TASK_SELECT, first_row, integer_value, now_ms, optional_integer_value, optional_text_value,
         task_from_row, text_value,
     },
+    store_operations::relations::{RelationListOptions, relation_from_row},
 };
 
 pub const MAX_GRAPH_DEPTH: usize = 8;

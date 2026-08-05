@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_service::ReleaseTaskCommand;
-use kanban_service::KanbanError;
 use kanban_protocol::{ReleaseTaskPath, ReleaseTaskRequest, ReleaseTaskResponse};
+use kanban_service::KanbanError;
+use kanban_service::ReleaseTaskCommand;
 
 pub(crate) async fn release_task(
     State(state): State<AppState>,

@@ -39,13 +39,10 @@ impl AppState {
             None => None,
         };
         let attachment_root = Arc::new(ensure_attachment_root(&db_path).await?);
-        let application_store = TursoApplicationStore::open_with_roots(
-            &db_path,
-            run_log_root,
-            attachment_root.clone(),
-        )
-        .await
-        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+        let application_store =
+            TursoApplicationStore::open_with_roots(&db_path, run_log_root, attachment_root.clone())
+                .await
+                .map_err(|error| KanbanError::Storage(error.to_string()))?;
         let vector_store = application_store.clone();
         Ok(Self {
             application: ApplicationService::new(application_store),

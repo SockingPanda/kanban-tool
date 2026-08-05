@@ -6,8 +6,8 @@ mod list;
 
 use crate::state::AppState;
 use axum::Router;
-use kanban_service::Board;
 use kanban_protocol::ApiBoard;
+use kanban_service::Board;
 
 pub(super) fn api_board(board: Board) -> ApiBoard {
     ApiBoard {

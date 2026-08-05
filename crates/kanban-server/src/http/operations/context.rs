@@ -3,12 +3,12 @@ use axum::{
     extract::{Path, Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_service::{ContextBuildOptions, ContextPack as ApplicationContextPack};
-use kanban_service::KanbanError;
 use kanban_protocol::{
     BuildContextPath, BuildContextQuery, BuildContextResponse, ContextDiagnostic, ContextEvidence,
     ContextItem, ContextPack, ContextPolicy, ContextProviderStatus, DataEnvelope,
 };
+use kanban_service::KanbanError;
+use kanban_service::{ContextBuildOptions, ContextPack as ApplicationContextPack};
 
 use crate::{error::ApiError, state::AppState};
 

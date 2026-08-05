@@ -7,9 +7,9 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
+use kanban_protocol::{ApiCreateTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse};
 use kanban_service::CreateTaskCommand;
 use kanban_service::{KanbanError, TaskStatus, new_task_id};
-use kanban_protocol::{ApiCreateTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse};
 
 fn create_status(status: ApiCreateTaskStatus) -> TaskStatus {
     match status {

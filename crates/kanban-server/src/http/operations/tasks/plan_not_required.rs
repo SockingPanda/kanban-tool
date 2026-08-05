@@ -7,12 +7,12 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_service::MarkExecutionPlanNotRequiredCommand;
-use kanban_service::KanbanError;
 use kanban_protocol::{
     MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse,
 };
+use kanban_service::KanbanError;
+use kanban_service::MarkExecutionPlanNotRequiredCommand;
 
 pub(crate) async fn mark_execution_plan_not_required(
     State(state): State<AppState>,

@@ -1,10 +1,10 @@
+use crate::CreateAttachmentInput as StoreCreateAttachment;
 use crate::{
     AttachmentContentRecord, AttachmentCreate, AttachmentDelete, AttachmentList, AttachmentRead,
     AttachmentRecord as ApplicationAttachment,
     CreateAttachmentRecord as ApplicationCreateAttachment, DeleteAttachmentCommand,
 };
 use kanban_core::{Clock, KanbanError, Result};
-use crate::CreateAttachmentInput as StoreCreateAttachment;
 
 use crate::adapter::{TursoApplicationStore, store_error};
 

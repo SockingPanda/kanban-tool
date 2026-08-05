@@ -1,8 +1,6 @@
-use crate::{
-    DependencyRemove, RemoveDependencyResult as ApplicationRemoveDependencyResult,
-};
-use kanban_core::Result;
 use crate::RemoveDependencyInput as StoreRemoveDependency;
+use crate::{DependencyRemove, RemoveDependencyResult as ApplicationRemoveDependencyResult};
+use kanban_core::Result;
 
 use crate::adapter::{TursoApplicationStore, application_dependency_snapshot, store_error};
 

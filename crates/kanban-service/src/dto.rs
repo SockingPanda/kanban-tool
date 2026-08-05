@@ -398,7 +398,7 @@ pub struct BoardTaskMapRecord {
 }
 
 // Compatibility facade for callers that historically imported all DTOs from
-// `kanban_application::dto`. Definitions now live next to their operation.
+// `kanban_service::dto`. Definitions now live next to their operation.
 pub use crate::operations::{
     AddDependencyCommand, AddDependencyRecord, AddDependencyResult, ArchiveBoardCommand,
     ArchiveBoardRecord, ArchiveTaskCommand, ArchiveTaskRecord, BlockTaskCommand, BlockTaskRecord,

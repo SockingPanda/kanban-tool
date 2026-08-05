@@ -1,9 +1,9 @@
+use crate::RemoveStepInput as StoreRemoveStep;
 use crate::{
     StepRecord as ApplicationStep,
     operations::{RemoveStepRecord as ApplicationRemoveStep, StepRemove},
 };
 use kanban_core::Result;
-use crate::RemoveStepInput as StoreRemoveStep;
 
 use crate::adapter::{TursoApplicationStore, application_step, store_error};
 

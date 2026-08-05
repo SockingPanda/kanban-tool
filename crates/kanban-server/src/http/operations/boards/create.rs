@@ -7,9 +7,9 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
+use kanban_protocol::{CreateBoardRequest, CreateBoardResponse};
 use kanban_service::CreateBoardCommand;
 use kanban_service::KanbanError;
-use kanban_protocol::{CreateBoardRequest, CreateBoardResponse};
 
 pub(crate) async fn create_board(
     State(state): State<AppState>,

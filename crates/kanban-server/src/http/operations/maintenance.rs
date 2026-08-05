@@ -5,7 +5,6 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
-use kanban_service::LegacyImportOptionsRecord;
 use kanban_protocol::{
     BackupReport, BackupResponse, CheckpointResponse, DataEnvelope, DoctorReport, DoctorResponse,
     ExportReport, ExportResponse, ImportReport, ImportResponse, LegacyImportReport,
@@ -14,6 +13,7 @@ use kanban_protocol::{
     MaintenanceStatusReport, MaintenanceStatusResponse, ProjectionStoreStatus, VacuumReport,
     VacuumResponse,
 };
+use kanban_service::LegacyImportOptionsRecord;
 
 pub(crate) async fn doctor(
     State(state): State<AppState>,

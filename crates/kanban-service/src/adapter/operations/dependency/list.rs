@@ -1,6 +1,4 @@
-use crate::{
-    DependencyList, DependencySnapshotRecord as ApplicationDependencySnapshot,
-};
+use crate::{DependencyList, DependencySnapshotRecord as ApplicationDependencySnapshot};
 use kanban_core::Result;
 
 use crate::adapter::{TursoApplicationStore, application_dependency_snapshot, store_error};

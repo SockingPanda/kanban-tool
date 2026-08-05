@@ -1,10 +1,10 @@
+use crate::MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired;
 use crate::{
     ExecutionPlanRecord as ApplicationExecutionPlan,
     MarkExecutionPlanNotRequiredRecord as ApplicationMarkExecutionPlanNotRequired,
     TaskPlanNotRequired,
 };
 use kanban_core::Result;
-use crate::MarkExecutionPlanNotRequiredInput as StoreMarkExecutionPlanNotRequired;
 
 use crate::adapter::{TursoApplicationStore, application_execution_plan, store_error};
 

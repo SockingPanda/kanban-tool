@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
+use kanban_protocol::{BlockTaskPath, BlockTaskRequest, BlockTaskResponse};
 use kanban_service::BlockTaskCommand;
 use kanban_service::KanbanError;
-use kanban_protocol::{BlockTaskPath, BlockTaskRequest, BlockTaskResponse};
 
 pub(crate) async fn block_task(
     State(state): State<AppState>,

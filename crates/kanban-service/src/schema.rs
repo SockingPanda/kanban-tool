@@ -1073,7 +1073,7 @@ BEGIN
 END;
 "#;
 
-/// FTS index 独立于 canonical schema checksum，但 `kanban-store-turso` 必须启用
+/// FTS index 独立于 canonical schema checksum，但 `kanban-service` 必须启用
 /// Turso 的 `fts` feature；初始化若不能创建该索引，会把 capability 记录为不可用。
 pub(crate) const FTS_SCHEMA: &str =
     "CREATE INDEX IF NOT EXISTS task_search_fts ON retrieval_documents USING fts (content);";

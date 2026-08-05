@@ -10,13 +10,13 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::{delete, get},
 };
-use kanban_service::{AddTaskLabelsCommand, CreateBoardLabelCommand, RemoveTaskLabelCommand};
-use kanban_service::KanbanError;
 use kanban_protocol::{
     AddTaskLabelPath, AddTaskLabelRequest, AddTaskLabelResponse, BoardLabelPath,
     CreateBoardLabelRequest, CreateBoardLabelResponse, DataEnvelope, ListBoardLabelsResponse,
     ListTaskLabelsPath, ListTaskLabelsResponse, RemoveTaskLabelPath, RemoveTaskLabelResponse,
 };
+use kanban_service::KanbanError;
+use kanban_service::{AddTaskLabelsCommand, CreateBoardLabelCommand, RemoveTaskLabelCommand};
 
 pub(crate) async fn list_board_labels(
     State(state): State<AppState>,

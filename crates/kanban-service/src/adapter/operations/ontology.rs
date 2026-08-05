@@ -4,12 +4,12 @@
 //! Turso store input 的边界，避免入口各自复制事务或 board 解析逻辑。
 
 use crate::LabelOntologyOperations;
-use kanban_core::{KanbanError, Result};
 use crate::{
     LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions, OntologyActionInput,
     OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
     TursoStore, UpsertLabelSemanticsInput,
 };
+use kanban_core::{KanbanError, Result};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 

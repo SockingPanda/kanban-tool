@@ -1,8 +1,8 @@
 use crate::error::ApiError;
 use axum::http::HeaderMap;
-use kanban_service::{RunRecord, RunStatus};
-use kanban_service::KanbanError;
 use kanban_protocol::{ApiRun, ApiRunStatus};
+use kanban_service::KanbanError;
+use kanban_service::{RunRecord, RunStatus};
 
 pub(crate) fn api_run(run: RunRecord) -> Result<ApiRun, ApiError> {
     let metadata = serde_json::from_str(&run.metadata_json).map_err(|error| {

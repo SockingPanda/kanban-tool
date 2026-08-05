@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_service::SubmitReviewTaskCommand;
-use kanban_service::KanbanError;
 use kanban_protocol::{SubmitReviewTaskPath, SubmitReviewTaskRequest, SubmitReviewTaskResponse};
+use kanban_service::KanbanError;
+use kanban_service::SubmitReviewTaskCommand;
 
 pub(crate) async fn submit_review_task(
     State(state): State<AppState>,

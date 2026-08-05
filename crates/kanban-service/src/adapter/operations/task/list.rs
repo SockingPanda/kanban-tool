@@ -1,12 +1,10 @@
+use crate::{StoreTaskListOptions, StoreTaskListSort, StoreTaskPlanFilter};
 use crate::{
     TaskList, TaskListOptions as ApplicationTaskListOptions,
     TaskListPage as ApplicationTaskListPage, TaskListSort as ApplicationTaskListSort,
     TaskPlanFilter as ApplicationTaskPlanFilter,
 };
 use kanban_core::Result;
-use crate::{
-    StoreTaskListOptions, StoreTaskListSort, StoreTaskPlanFilter,
-};
 
 use crate::adapter::{TursoApplicationStore, application_task, store_error};
 

@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::patch,
 };
-use kanban_service::UpdateStepCommand;
-use kanban_service::KanbanError;
 use kanban_protocol::{UpdateStepPath, UpdateStepRequest, UpdateStepResponse};
+use kanban_service::KanbanError;
+use kanban_service::UpdateStepCommand;
 
 pub(crate) async fn update_step(
     State(state): State<AppState>,

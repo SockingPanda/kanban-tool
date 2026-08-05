@@ -29,12 +29,12 @@ mod tests {
     use std::{collections::BTreeMap, fs};
 
     use crate::http::operations::test_support::*;
+    use kanban_protocol::{ApiErrorCode, ErrorEnvelope, GetRunLogResponse};
+    use kanban_service::TaskStatus;
     use kanban_service::{
         ClaimTaskCommand, CreateTaskCommand, MarkExecutionPlanNotRequiredCommand,
         PromoteTaskCommand,
     };
-    use kanban_service::TaskStatus;
-    use kanban_protocol::{ApiErrorCode, ErrorEnvelope, GetRunLogResponse};
 
     #[tokio::test]
     async fn run_log_route_uses_the_application_and_returns_contract_shape() {

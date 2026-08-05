@@ -1,4 +1,8 @@
 use crate::{
+    CompleteStepInput as StoreCompleteStep, ReopenStepInput as StoreReopenStep,
+    SkipStepInput as StoreSkipStep,
+};
+use crate::{
     StepRecord as ApplicationStep, TaskStepsRecord as ApplicationTaskSteps,
     operations::{
         CompleteStepRecord as ApplicationCompleteStep, ReopenStepRecord as ApplicationReopenStep,
@@ -6,10 +10,6 @@ use crate::{
     },
 };
 use kanban_core::Result;
-use crate::{
-    CompleteStepInput as StoreCompleteStep, ReopenStepInput as StoreReopenStep,
-    SkipStepInput as StoreSkipStep,
-};
 
 use crate::adapter::{
     TursoApplicationStore, application_execution_plan, application_step, application_task,

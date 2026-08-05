@@ -7,12 +7,12 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_service::operations::{CompleteStepCommand, ReopenStepCommand, SkipStepCommand};
-use kanban_service::KanbanError;
 use kanban_protocol::{
     CompleteStepPath, CompleteStepRequest, CompleteStepResponse, ReopenStepPath, ReopenStepRequest,
     ReopenStepResponse, SkipStepPath, SkipStepRequest, SkipStepResponse,
 };
+use kanban_service::KanbanError;
+use kanban_service::operations::{CompleteStepCommand, ReopenStepCommand, SkipStepCommand};
 
 pub(crate) async fn complete_step(
     State(state): State<AppState>,

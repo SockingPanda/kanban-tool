@@ -5,9 +5,9 @@ use axum::{
     extract::{Path, Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_service::SignalListOptions as ApplicationSignalListOptions;
-use kanban_service::KanbanError;
 use kanban_protocol::{BoardLabelPath, MetadataEnvelope, SignalFilterMeta, SignalQuery};
+use kanban_service::KanbanError;
+use kanban_service::SignalListOptions as ApplicationSignalListOptions;
 
 pub(crate) async fn list_signals(
     State(state): State<AppState>,

@@ -1,13 +1,13 @@
 use crate::{
+    AddTaskLabelsInput as StoreAddTaskLabelsInput, CreateLabelInput as StoreCreateLabelInput,
+    RemoveTaskLabelInput as StoreRemoveTaskLabelInput,
+};
+use crate::{
     AddTaskLabelsRecord as ApplicationAddTaskLabelsRecord, AddTaskLabelsRecordInput,
     BoardLabelCreate, BoardLabelList, CreateLabelRecord, LabelRecord as ApplicationLabel,
     TaskLabelAdd, TaskLabelList, TaskLabelRemove,
 };
 use kanban_core::Result;
-use crate::{
-    AddTaskLabelsInput as StoreAddTaskLabelsInput, CreateLabelInput as StoreCreateLabelInput,
-    RemoveTaskLabelInput as StoreRemoveTaskLabelInput,
-};
 
 use crate::adapter::{
     TursoApplicationStore, application_add_task_labels, application_label, application_task,

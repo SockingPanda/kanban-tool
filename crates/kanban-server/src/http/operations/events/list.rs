@@ -4,12 +4,12 @@ use axum::{
     extract::{Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_service::{EventListOptions as ApplicationEventListOptions, EventRecord};
-use kanban_service::KanbanError;
 use kanban_protocol::{
     ListEventsQuery, ListEventsResponse, NextAfterMeta, StreamEventData,
     event_payload::EventPayload,
 };
+use kanban_service::KanbanError;
+use kanban_service::{EventListOptions as ApplicationEventListOptions, EventRecord};
 use serde_json::Value;
 
 pub(crate) async fn list_events(

@@ -1,8 +1,8 @@
+use crate::CompleteTaskInput as StoreCompleteTask;
 use crate::{
     CompleteTaskRecord as ApplicationCompleteTask, TaskDone, TaskRecord as ApplicationTask,
 };
 use kanban_core::Result;
-use crate::CompleteTaskInput as StoreCompleteTask;
 
 use crate::adapter::{TursoApplicationStore, application_task, store_error};
 

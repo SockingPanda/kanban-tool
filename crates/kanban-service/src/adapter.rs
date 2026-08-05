@@ -15,16 +15,15 @@ use crate::{
     SignalStatus as ApplicationSignalStatus, StepRecord as ApplicationStep,
     TaskRecord as ApplicationTask,
 };
-use kanban_core::{KanbanError, Result, TaskStatus};
 use crate::{
-    StoreError, TursoStore,
+    StoreAddTaskLabelsRecord, StoreError, TursoStore,
     domain::{
         DependencySnapshotRecord as StoreDependencySnapshot,
         TaskExecutionPlanRecord as StoreExecutionPlan, TaskRecord as StoreTask,
         TaskRunRecord as StoreRun,
     },
-    StoreAddTaskLabelsRecord,
 };
+use kanban_core::{KanbanError, Result, TaskStatus};
 
 type StoreResult<T> = std::result::Result<T, StoreError>;
 
@@ -158,21 +157,11 @@ impl TursoApplicationStore {
         include_vector: bool,
     ) -> StoreResult<Vec<crate::VectorLabelAtomHitRecord>> {
         self.store
-            .query_vector_label_atoms(
-                board_id,
-                embedding,
-                model,
-                polarity,
-                limit,
-                include_vector,
-            )
+            .query_vector_label_atoms(board_id, embedding, model, polarity, limit, include_vector)
             .await
     }
 
-    pub async fn embed_query(
-        &self,
-        text: &str,
-    ) -> StoreResult<(crate::VectorConfig, Vec<f32>)> {
+    pub async fn embed_query(&self, text: &str) -> StoreResult<(crate::VectorConfig, Vec<f32>)> {
         crate::vector::embed_query(&self.store, text).await
     }
 
@@ -456,9 +445,7 @@ pub(crate) fn application_signal_status(status: String) -> Result<ApplicationSig
     }
 }
 
-pub(crate) fn application_signal(
-    signal: crate::domain::SignalRecord,
-) -> Result<ApplicationSignal> {
+pub(crate) fn application_signal(signal: crate::domain::SignalRecord) -> Result<ApplicationSignal> {
     Ok(ApplicationSignal {
         id: signal.id,
         board_id: signal.board_id,

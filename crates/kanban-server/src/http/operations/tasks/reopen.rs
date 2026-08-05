@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_service::ReopenTaskCommand;
-use kanban_service::KanbanError;
 use kanban_protocol::{ReopenTaskPath, ReopenTaskRequest, ReopenTaskResponse};
+use kanban_service::KanbanError;
+use kanban_service::ReopenTaskCommand;
 
 pub(crate) async fn reopen_task(
     State(state): State<AppState>,

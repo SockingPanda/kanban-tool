@@ -8,8 +8,8 @@ use sha2::{Digest, Sha256};
 use turso::transaction::TransactionBehavior;
 
 use crate::{
-    db::TursoStore, domain::AttachmentRecord, error::StoreError,
-    store_operations::shared::validate_task_id, shared::*,
+    db::TursoStore, domain::AttachmentRecord, error::StoreError, shared::*,
+    store_operations::shared::validate_task_id,
 };
 
 /// 创建附件时由 service 传入的元数据和内容。内容只经过 host 文件系统，绝不写入 Turso。

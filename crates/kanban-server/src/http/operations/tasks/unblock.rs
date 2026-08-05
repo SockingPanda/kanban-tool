@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_service::UnblockTaskCommand;
-use kanban_service::KanbanError;
 use kanban_protocol::{UnblockTaskPath, UnblockTaskRequest, UnblockTaskResponse};
+use kanban_service::KanbanError;
+use kanban_service::UnblockTaskCommand;
 
 pub(crate) async fn unblock_task(
     State(state): State<AppState>,

@@ -7,11 +7,11 @@ use axum::{
     http::StatusCode,
     routing::post,
 };
-use kanban_service::SignalRecordCommand;
-use kanban_service::KanbanError;
 use kanban_protocol::{
     BoardLabelPath, DataEnvelope, RecordSignalRequest, RecordSignalResponse, SignalRecordResult,
 };
+use kanban_service::KanbanError;
+use kanban_service::SignalRecordCommand;
 
 pub(crate) async fn record_signal(
     State(state): State<AppState>,

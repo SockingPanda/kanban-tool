@@ -1,10 +1,6 @@
-use crate::{
-    SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults, SearchTasks,
-};
+use crate::{SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults, SearchTasks};
+use crate::{StoreSearchIndexStatus, StoreSearchMeta, StoreSearchQuery, StoreSearchResults};
 use kanban_core::Result;
-use crate::{
-    StoreSearchIndexStatus, StoreSearchMeta, StoreSearchQuery, StoreSearchResults,
-};
 
 use crate::adapter::{TursoApplicationStore, store_error};
 

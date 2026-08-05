@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_service::SpecifyTaskCommand;
-use kanban_service::KanbanError;
 use kanban_protocol::{SpecifyTaskPath, SpecifyTaskRequest, SpecifyTaskResponse};
+use kanban_service::KanbanError;
+use kanban_service::SpecifyTaskCommand;
 
 pub(crate) async fn specify_task(
     State(state): State<AppState>,

@@ -1,9 +1,9 @@
+use crate::domain::TaskEventRecord as StoreEventRecord;
 use crate::{
     EventList, EventListOptions as ApplicationEventListOptions,
     EventListPage as ApplicationEventListPage, EventRecord as ApplicationEventRecord,
 };
 use kanban_core::Result;
-use crate::domain::TaskEventRecord as StoreEventRecord;
 
 use crate::adapter::{TursoApplicationStore, store_error};
 

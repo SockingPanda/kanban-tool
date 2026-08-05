@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
+use kanban_protocol::{ArchiveTaskPath, ArchiveTaskRequest, ArchiveTaskResponse};
 use kanban_service::ArchiveTaskCommand;
 use kanban_service::KanbanError;
-use kanban_protocol::{ArchiveTaskPath, ArchiveTaskRequest, ArchiveTaskResponse};
 
 pub(crate) async fn archive_task(
     State(state): State<AppState>,

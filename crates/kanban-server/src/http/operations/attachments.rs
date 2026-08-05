@@ -8,13 +8,13 @@ use axum::{
     response::Response,
     routing::get,
 };
-use kanban_service::{CreateAttachmentCommand, DeleteAttachmentCommand};
-use kanban_service::KanbanError;
 use kanban_protocol::{
     ApiAttachment, CreateAttachmentPath, CreateAttachmentRequest, CreateAttachmentResponse,
     DeleteAttachmentPath, DeleteAttachmentResponse, GetAttachmentPath, ListAttachmentsPath,
     ListAttachmentsResponse,
 };
+use kanban_service::KanbanError;
+use kanban_service::{CreateAttachmentCommand, DeleteAttachmentCommand};
 
 pub(crate) async fn list_attachments(
     State(state): State<AppState>,

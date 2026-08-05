@@ -1,7 +1,9 @@
 use turso::transaction::TransactionBehavior;
 
 use crate::store_operations::dependencies::support::dependency_task_in_transaction;
-use crate::store_operations::labels::{list_task_labels_in_transaction, resolve_label_in_transaction};
+use crate::store_operations::labels::{
+    list_task_labels_in_transaction, resolve_label_in_transaction,
+};
 use crate::{db::TursoStore, domain::*, error::StoreError, shared::*};
 
 use super::create_support::*;

@@ -8,11 +8,11 @@ use crate::{
     ContextBuild, ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence,
     ContextProviderStatus, ContextSources,
 };
-use kanban_core::{KanbanError, Result};
 use crate::{
     StoreSearchQuery, StoreSearchResults, StoreTaskNeighborhoodOptions, TursoStore,
     domain::{GraphStatusRecord, TaskRecord},
 };
+use kanban_core::{KanbanError, Result};
 
 use crate::adapter::{TursoApplicationStore, store_error};
 
@@ -178,10 +178,7 @@ async fn resolve_subject(
     ensure_board(value, board_id)
 }
 
-fn ensure_board(
-    task: TaskRecord,
-    board_id: &str,
-) -> Result<TaskRecord> {
+fn ensure_board(task: TaskRecord, board_id: &str) -> Result<TaskRecord> {
     if task.board_id != board_id {
         return Err(KanbanError::NotFound("context subject".to_owned()));
     }

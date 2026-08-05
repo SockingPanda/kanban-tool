@@ -1,13 +1,13 @@
 use crate::{
+    CreateSignalInput as StoreCreateSignal, ReviewSignalsInput as StoreReviewSignals,
+    SignalLifecycleInput as StoreSignalLifecycle, StoreSignalListOptions,
+};
+use crate::{
     SignalCreateRecord as ApplicationCreateSignal, SignalLedger,
     SignalListOptions as ApplicationSignalListOptions, SignalRecord as ApplicationSignal,
     SignalRecordResult as ApplicationSignalResult, SignalReviewRecord as ApplicationReviewSignals,
 };
 use kanban_core::Result;
-use crate::{
-    CreateSignalInput as StoreCreateSignal, ReviewSignalsInput as StoreReviewSignals,
-    SignalLifecycleInput as StoreSignalLifecycle, StoreSignalListOptions,
-};
 
 use crate::adapter::{
     TursoApplicationStore, application_signal, application_signal_result, store_error,
@@ -92,9 +92,7 @@ impl SignalLedger for TursoApplicationStore {
                     crate::SignalLifecycle::Confirm => StoreSignalLifecycle::Confirm,
                     crate::SignalLifecycle::Reject => StoreSignalLifecycle::Reject,
                     crate::SignalLifecycle::Resolve => StoreSignalLifecycle::Resolve,
-                    crate::SignalLifecycle::Supersede => {
-                        StoreSignalLifecycle::Supersede
-                    }
+                    crate::SignalLifecycle::Supersede => StoreSignalLifecycle::Supersede,
                 },
                 replacement_signal_id: input.replacement_signal_id,
                 actor: input.actor,

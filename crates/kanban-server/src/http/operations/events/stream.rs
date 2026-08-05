@@ -6,9 +6,9 @@ use axum::{
     response::Response,
     routing::get,
 };
+use kanban_protocol::{StreamEventData, StreamEventsQuery};
 use kanban_service::EventListOptions as ApplicationEventListOptions;
 use kanban_service::KanbanError;
-use kanban_protocol::{StreamEventData, StreamEventsQuery};
 
 use super::list::api_event;
 use crate::{error::ApiError, state::AppState};

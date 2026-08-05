@@ -1,8 +1,6 @@
-use crate::{
-    TaskRecord as ApplicationTask, TaskUpdate, UpdateTaskRecord as ApplicationUpdateTask,
-};
-use kanban_core::Result;
 use crate::UpdateTaskInput as StoreUpdateTask;
+use crate::{TaskRecord as ApplicationTask, TaskUpdate, UpdateTaskRecord as ApplicationUpdateTask};
+use kanban_core::Result;
 
 use crate::adapter::{TursoApplicationStore, application_task, store_error};
 

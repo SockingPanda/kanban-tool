@@ -7,12 +7,12 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
+use kanban_protocol::{CreateCommentPath, CreateCommentRequest, CreateCommentResponse};
+use kanban_service::KanbanError;
 use kanban_service::{
     CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
     CreateCommentCommand,
 };
-use kanban_service::KanbanError;
-use kanban_protocol::{CreateCommentPath, CreateCommentRequest, CreateCommentResponse};
 
 pub(crate) async fn create_comment(
     State(state): State<AppState>,

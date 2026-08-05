@@ -204,11 +204,10 @@ pub(crate) async fn run_dispatcher(
             return Ok(());
         }
 
-        if let Err(error) =
-            state
-                .vector_store()
-                .vector_worker_tick("vector-worker")
-                .await
+        if let Err(error) = state
+            .vector_store()
+            .vector_worker_tick("vector-worker")
+            .await
         {
             warn!(error = %error, "vector projection worker tick failed; canonical task queue continues");
         }

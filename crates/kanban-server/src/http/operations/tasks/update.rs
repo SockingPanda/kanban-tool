@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::patch,
 };
-use kanban_service::UpdateTaskCommand;
-use kanban_service::KanbanError;
 use kanban_protocol::{UpdateTaskPath, UpdateTaskRequest, UpdateTaskResponse};
+use kanban_service::KanbanError;
+use kanban_service::UpdateTaskCommand;
 
 pub(crate) async fn update_task(
     State(state): State<AppState>,

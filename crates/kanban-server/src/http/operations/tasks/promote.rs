@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_service::PromoteTaskCommand;
-use kanban_service::KanbanError;
 use kanban_protocol::{PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse};
+use kanban_service::KanbanError;
+use kanban_service::PromoteTaskCommand;
 
 pub(crate) async fn promote_task(
     State(state): State<AppState>,

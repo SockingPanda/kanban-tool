@@ -7,11 +7,11 @@ use crate::operations::{
     BoardTaskMapOptions, GraphNeighborsOptions, GraphQuery, GraphQueryOptions,
     ProjectionStatusOptions, TaskNeighborhoodOptions,
 };
-use kanban_core::{KanbanError, Result, TaskStatus};
 use crate::{
     StoreBoardTaskMapOptions, StoreGraphNeighborsOptions, StoreGraphQueryOptions,
     StoreProjectionStatusOptions, StoreTaskNeighborhoodOptions,
 };
+use kanban_core::{KanbanError, Result, TaskStatus};
 
 use super::relations::application_relation_record;
 use crate::adapter::{TursoApplicationStore, application_task, store_error};
@@ -159,9 +159,7 @@ fn application_projection_state(
     }
 }
 
-fn application_graph_status(
-    status: crate::domain::GraphStatusRecord,
-) -> Result<GraphStatusRecord> {
+fn application_graph_status(status: crate::domain::GraphStatusRecord) -> Result<GraphStatusRecord> {
     Ok(GraphStatusRecord {
         backend: status.backend,
         enabled: status.enabled,
@@ -225,9 +223,7 @@ fn application_board_task_map(
     })
 }
 
-fn application_graph_node(
-    node: crate::domain::TaskGraphNodeRecord,
-) -> Result<TaskGraphNodeRecord> {
+fn application_graph_node(node: crate::domain::TaskGraphNodeRecord) -> Result<TaskGraphNodeRecord> {
     Ok(TaskGraphNodeRecord {
         task: application_task(node.task)?,
         role: graph_node_role(&node.role)?,
@@ -235,9 +231,7 @@ fn application_graph_node(
     })
 }
 
-fn application_graph_edge(
-    edge: crate::domain::TaskGraphEdgeRecord,
-) -> Result<TaskGraphEdgeRecord> {
+fn application_graph_edge(edge: crate::domain::TaskGraphEdgeRecord) -> Result<TaskGraphEdgeRecord> {
     Ok(TaskGraphEdgeRecord {
         id: edge.id,
         source_task_id: edge.source_task_id,
@@ -248,9 +242,7 @@ fn application_graph_edge(
     })
 }
 
-fn application_graph_meta(
-    meta: crate::domain::TaskGraphMetaRecord,
-) -> Result<TaskGraphMetaRecord> {
+fn application_graph_meta(meta: crate::domain::TaskGraphMetaRecord) -> Result<TaskGraphMetaRecord> {
     Ok(TaskGraphMetaRecord {
         depth: meta.depth,
         context_depth: meta.context_depth,

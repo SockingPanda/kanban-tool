@@ -4,13 +4,13 @@ use axum::{
     extract::{Path, Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_service::dto::EntityRecord;
-use kanban_service::operations::{EntityListOptions, EntityUpsertCommand};
-use kanban_service::KanbanError;
 use kanban_protocol::{
     CliEntity, CliEntityListOutput, CliEntityShowOutput, DataEnvelope, EntityListQuery, EntityPath,
     EntityUpsertRequest,
 };
+use kanban_service::KanbanError;
+use kanban_service::dto::EntityRecord;
+use kanban_service::operations::{EntityListOptions, EntityUpsertCommand};
 
 pub(crate) async fn list_entities(
     State(state): State<AppState>,

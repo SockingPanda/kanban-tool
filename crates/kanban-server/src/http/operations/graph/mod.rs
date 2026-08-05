@@ -8,14 +8,6 @@ use axum::{
     extract::{Path, Query, State, rejection::QueryRejection},
     routing::{get, post},
 };
-use kanban_service::dto::{
-    BoardTaskMapRecord, RelationRecord, TaskGraphEdgeRecord, TaskGraphMetaRecord,
-    TaskGraphNodeRecord, TaskNeighborhoodRecord,
-};
-use kanban_service::operations::{
-    BoardTaskMapOptions, GraphNeighborsOptions, GraphQueryOptions, TaskNeighborhoodOptions,
-};
-use kanban_service::KanbanError;
 use kanban_protocol::cli_helpers::{CliGraphQueryBinding, CliGraphQueryOutput, CliGraphQueryRow};
 use kanban_protocol::{
     ApiRelation, ApiRelationProvenance, BoardQuery, BoardTaskMap, BoardTaskMapPath,
@@ -24,6 +16,14 @@ use kanban_protocol::{
     GraphStatus, GraphStatusResponse, LimitMeta, MetadataEnvelope, TaskGraphEdge, TaskGraphMeta,
     TaskGraphNode, TaskNeighborhood, TaskNeighborhoodPath, TaskNeighborhoodQuery,
     TaskNeighborhoodResponse,
+};
+use kanban_service::KanbanError;
+use kanban_service::dto::{
+    BoardTaskMapRecord, RelationRecord, TaskGraphEdgeRecord, TaskGraphMetaRecord,
+    TaskGraphNodeRecord, TaskNeighborhoodRecord,
+};
+use kanban_service::operations::{
+    BoardTaskMapOptions, GraphNeighborsOptions, GraphQueryOptions, TaskNeighborhoodOptions,
 };
 
 pub(crate) async fn graph_status(

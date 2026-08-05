@@ -6,11 +6,11 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use kanban_service::KanbanError;
 use kanban_protocol::{
     GetTaskDetailsResponse, GetTaskPath, GetTaskQuery, GetTaskResponse, TaskDetailAggregate,
     TaskDetailOntology, TaskOntologySignalSummary, TaskOntologySummary,
 };
+use kanban_service::KanbanError;
 
 use crate::http::operations::{
     comments::support::api_comment, dependencies::support::api_dependencies,

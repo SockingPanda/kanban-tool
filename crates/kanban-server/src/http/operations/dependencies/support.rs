@@ -1,7 +1,7 @@
 use crate::error::ApiError;
 use crate::http::operations::tasks::support::{api_task, api_task_status};
-use kanban_service::TaskRecord;
 use kanban_protocol::{ApiDependencies, ApiDependencyEdge, ApiDependencyTask};
+use kanban_service::TaskRecord;
 
 pub(crate) fn api_dependencies(
     dependencies: kanban_service::DependencySnapshotRecord,

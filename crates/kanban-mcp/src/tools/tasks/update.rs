@@ -6,19 +6,81 @@ use rmcp::{
     schemars, tool, tool_router,
 };
 use serde::Deserialize;
+
+fn deserialize_patch_nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
+fn deserialize_patch_present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskUpdateArgs {
     board: Option<String>,
     task_ref: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch_present",
+        skip_serializing_if = "Option::is_none"
+    )]
     title: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     description: Option<Option<String>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     assignee: Option<Option<String>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch_present",
+        skip_serializing_if = "Option::is_none"
+    )]
     priority: Option<i64>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     scheduled_at: Option<Option<i64>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     due_at: Option<Option<i64>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     max_retries: Option<Option<i64>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     metadata: Option<Option<serde_json::Value>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_patch_present",
+        skip_serializing_if = "Option::is_none"
+    )]
     expected_lock_version: Option<i64>,
 }
 #[tool_router(router = task_update_tools, vis = "pub(crate)")]

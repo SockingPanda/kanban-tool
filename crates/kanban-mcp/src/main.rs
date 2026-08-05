@@ -16,6 +16,7 @@ impl KanbanMcp {
             + Self::task_tools()
             + Self::comment_tools()
             + Self::dependency_tools()
+            + Self::run_tools()
             + Self::step_tools()
             + Self::lifecycle_tools()
     }
@@ -49,6 +50,7 @@ mod tests {
                 "dependency_create",
                 "dependency_list",
                 "dependency_remove",
+                "run_list",
                 "step_create",
                 "step_list",
                 "step_update",

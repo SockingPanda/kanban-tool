@@ -67,6 +67,8 @@ enum Command {
         #[command(subcommand)]
         command: commands::dependency::DependencyCommand,
     },
+    /// List execution runs for a task through the canonical localhost host.
+    Runs(commands::run::ListArgs),
     /// Removed direct-database initialization path.
     Init,
     /// Commands not yet migrated to the canonical host fail without touching storage.
@@ -90,6 +92,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Board { command } => commands::board::run(&ctx, command),
         Command::Comment { command } => commands::comment::run(&ctx, command),
         Command::Dependency { command } => commands::dependency::run(&ctx, command),
+        Command::Runs(args) => commands::run::list(&ctx, args),
         Command::Task { command } => commands::task::run(&ctx, command),
         Command::Init => Err(feature_not_available(
             "`kanban init` was removed; start `kanban serve` to initialize the canonical Turso database",
@@ -103,12 +106,25 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser;
+
     use crate::error::feature_not_available;
+    use crate::{Cli, Command};
 
     #[test]
     fn init_is_a_stable_unavailable_feature() {
         let failure = feature_not_available("not migrated");
         assert_eq!(failure.code, "feature_not_available");
         assert_eq!(failure.exit_code, 10);
+    }
+
+    #[test]
+    fn parses_run_list_command() {
+        let cli = Cli::try_parse_from(["kanban", "runs", "default#1"])
+            .expect("run list command should parse");
+        let Command::Runs(args) = cli.command else {
+            panic!("expected runs command");
+        };
+        assert_eq!(args.task_ref, "default#1");
     }
 }

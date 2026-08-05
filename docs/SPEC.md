@@ -149,7 +149,7 @@ status/run/rebuild/cleanup` 也只通过该 host 执行；它们不在 MCP surfa
 
 ### 6.2 MCP
 
-MCP 是最小 Rust stdio server，使用官方 `rmcp` tools/stdio transport；不提供 resources/prompts，不拉起 host，不解释状态转换。工具名与 operation 一一对应，参数和响应复用 `kanban-contract` DTO。
+MCP 是最小 Rust stdio server，使用官方 `rmcp` tools/stdio transport；不提供 resources/prompts，不拉起 host，不解释状态转换。工具名与 operation 一一对应，参数和响应复用 `kanban-protocol` DTO。
 
 ### 6.3 Desktop
 
@@ -188,7 +188,7 @@ loop 停止新 polling 后等待当前 worker 正常结束；第二次中断才�
 - board 解析优先级为 `--board` > `KB_BOARD` > 最近项目配置的 `board` > `default`；
   `KANBAN_SERVER_URL`、`--server-url` 只配置 client。
 - host 每个 operation 在同一进程中按需获取 Turso connection；不启用 `multiprocess_wal`。
-- `error.code`、DTO 和 HTTP status 映射由 `kanban-contract`/server/client 共同维护；adapter 不重新解释 domain error。
+- `error.code`、DTO 和 HTTP status 映射由 `kanban-protocol`/server/client 共同维护；adapter 不重新解释 domain error。
 - 关闭并重启 host 后，boards、tasks、plans、comments、steps、dependencies、runs 和 events 从 canonical DB 继续可读；不会由 adapter 创建第二个数据库。
 
 ## 9. 验收基线

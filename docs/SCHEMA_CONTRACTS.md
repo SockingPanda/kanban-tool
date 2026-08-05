@@ -17,7 +17,7 @@ ApplicationService + State Machine
 kanban-store-turso → canonical Turso database
 ```
 
-`kanban-contract` 是公开 DTO、事件 payload、错误 envelope、operation inventory 和
+`kanban-protocol` 是公开 DTO、事件 payload、错误 envelope、operation inventory 和
 transport descriptor 的 Rust 权威来源；只有根目录私有 `xtask` 生成和校验 JSON Schema
 artifact。`kanban-server`、`kanban-client`、CLI、MCP 和 Desktop 是运行时 producer/consumer，
 不能各自复制一套 DTO 或业务错误解释。
@@ -126,7 +126,7 @@ board selector、项目 `.kb/config.toml` 路径、配置来源及 `created`/`up
 
 ## 5. 依赖边界与单 Host gate
 
-active workspace 只保留 `kanban-core`、`kanban-application`、`kanban-contract`、
+active workspace 只保留 `kanban-core`、`kanban-application`、`kanban-protocol`、
 根目录私有 `xtask`、`kanban-store-turso`、`kanban-client`、`kanban-cli`、`kanban-mcp`、
 `kanban-server` 和 Desktop Tauri host。数据库依赖方向固定为：
 
@@ -143,7 +143,7 @@ specific dependency 和测试 fixture，不只检查源码 import。
 `scripts/check-single-host-dependencies.py` 是单 Host manifest gate；它拒绝 legacy package
 进入 workspace、projection helper 进入 active workspace，以及任意 adapter 的 forbidden
 dependency alias。schema tooling 另有独立边界：根目录私有 `xtask` 只能作为离线生成/
-校验工具，不能进入产品 runtime graph。`kanban-mcp` 会启用 `kanban-contract/schema`
+校验工具，不能进入产品 runtime graph。`kanban-mcp` 会启用 `kanban-protocol/schema`
 来生成 RMCP tool input schema；这不授权它依赖 `xtask`、`jsonschema` runtime 或数据库
 crate。
 
@@ -229,7 +229,7 @@ just schema-audit-closed
 - `schema-adoption-witness` 先按 `(package, test_target)` 分组列出并执行 exact witness，
   再报告 producer/consumer；缺失、重复、ignored 或未执行均失败。
 - `just schema-contract` 仍是现有 schema-contract composite gate，继续组合
-  `just schema-dependency-isolation`、`just schema-fmt`、`just feature-p kanban-contract schema`、
+  `just schema-dependency-isolation`、`just schema-fmt`、`just feature-p kanban-protocol schema`、
   `just schema-tool`、`just schema-check`、`just schema-docs`、`just schema-surface-audit` 和
   `just schema-adoption-witness`；它没有被 `xtask` 替代，也不会被 `xtask` 反向调用。
 - `schema-dependency-isolation`、`schema-surface-audit`、`schema-adoption-witness` 和
@@ -246,7 +246,7 @@ just schema-audit-closed
 
 新增 operation 时按以下顺序完成一个纵向 slice：
 
-1. 在 `kanban-contract` 定义精确 DTO、schema root、inventory 和 endpoint/surface descriptor。
+1. 在 `kanban-protocol` 定义精确 DTO、schema root、inventory 和 endpoint/surface descriptor。
 2. 添加 valid/invalid fixture，并为真实 producer 与 consumer 各提供独立 exact witness。
 3. 在 `kanban-store-turso`、ApplicationService、server、`kanban-client` 和所需 adapter
    中接通同一 operation；adapter 不得直连 store。

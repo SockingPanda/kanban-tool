@@ -24,7 +24,7 @@
 - `kanban-application`：use-case、DTO/port 和 application service；不复制 adapter 或存储规则。
 - `kanban-store-turso`：当前唯一直接依赖 `turso` 的 canonical persistence owner。
 - `kanban-server`：唯一 host、Axum routes、数据库装配、dispatcher 和 transport boundary。
-- `kanban-contract`：当前 active wire DTO/error/schema；不承载数据库 row 或 server/store 规则。
+- `kanban-protocol`：当前 active wire DTO/error/schema；不承载数据库 row 或 server/store 规则。
 - `kanban-client`：typed localhost HTTP client；CLI、MCP 和 Desktop 不直连数据库。
 - `kanban-cli`、`kanban-mcp`、`apps/desktop/src-tauri`：各自入口或 shell，保持薄 adapter；`xtask` 仅作离线工具。
 - 依赖方向和第三方依赖规则见 `$style`；架构事实以 `docs/ARCHITECTURE.md` 为准。

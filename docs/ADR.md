@@ -1006,7 +1006,7 @@ Signal 账本成为通用 agent/product 信号的权威存储。Label ontology �
 
 ### 决策
 
-在 `kanban-contract` 默认 feature 中保存 API/SSE 描述符；server router 以
+在 `kanban-protocol` 默认 feature 中保存 API/SSE 描述符；server router 以
 `operation_id` + 显式 `adapter_id` 绑定真实 handler，并读取描述符的 method/path。
 
 ### 影响
@@ -1168,7 +1168,7 @@ dispatcher 边界。第 6 条以及“非目标”中的 labels、signals、sear
 [`ARCHITECTURE.md`](ARCHITECTURE.md) 和 [`DATA_MODEL.md`](DATA_MODEL.md) 为准。
 
 在过渡期，`kanban-application` + `kanban-store-turso` 仍然是当前实现；目标是合并为
-`kanban-service`，并将 `kanban-contract` 收敛为 `kanban-protocol`。这些名称变化不会改变
+`kanban-service`，并保持当前 `kanban-protocol` 作为独立 wire/schema crate。这些名称变化不会改变
 single-host ownership，也不能用“暂不支持”替代 parity ledger 的闭合。
 
 ### 背景

@@ -18,7 +18,7 @@
 | Turso 表 | 35 | 38 | baseline 按 `migrations/001..030` replay 后的最终表名，忽略 `_new` 瞬态表；当前实现按 `crates/kanban-store-turso/src/schema.rs` 的最终 schema 统计。38 张表还包含 schema identity、capability、import journal 等单主机治理表，因此不能用数量相等代替逐表语义验收。 |
 | 普通 index | 61 | 45 | baseline 按最终 `CREATE/DROP INDEX` 状态解析；当前实现另有 1 个 Turso FTS index。名称与形状按目标查询契约重新设计，不要求复刻旧 index 名。 |
 | trigger | 13 | 22 | 当前 trigger 负责 nullable 关联的 board isolation、附件路径和跨表防护；其余不变量由 FK、CHECK、唯一约束与 service transaction 共同承担。 |
-| HTTP operation | 84 | 27 | baseline 取 `crates/kanban-contract/src/endpoint.rs` 的 `EndpointDescriptor`；当前实现取 `crates/kanban-server/src/http/operations/**` 的真实 `route(method,path)`。catalog descriptor 不能当作已注册 route。 |
+| HTTP operation | 84 | 27 | baseline（历史 `kanban-contract` crate）取 `crates/kanban-contract/src/endpoint.rs` 的 `EndpointDescriptor`；当前实现取 `crates/kanban-server/src/http/operations/**` 的真实 `route(method,path)`。catalog descriptor 不能当作已注册 route。 |
 | CLI leaf | 126 | 27（其中 26 可用） | 递归展开 baseline `crates/kanban-cli/src/args.rs` 和当前 clap enum；声明的 alias/variant 按命令名计，`Init` 计入但实际返回 `feature_not_available`，`FeatureNotAvailable` 外部 catch-all 不计 leaf。 |
 | MCP tool | 0 | 24 | baseline 没有 `crates/kanban-mcp`；当前实现按 `#[tool(name = ...)]` 及 `main.rs` 稳定 inventory 测试。 |
 | Desktop view | 10 | 6 可导航 | baseline `OperatorView` 全部 10 项；当前实现以 `NavigableOperatorView`/`sidebarViews` 为公开导航，4 项仍被排除。 |

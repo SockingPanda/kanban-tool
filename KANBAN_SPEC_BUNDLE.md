@@ -285,7 +285,7 @@ canonical 数据是业务事实。搜索、图、向量、缓存和 projection �
 
 ### 6.2 MCP
 
-MCP 是最小 Rust stdio server，使用官方 `rmcp` tools/stdio transport；不提供 resources/prompts，不拉起 host，不解释状态转换。工具名与 operation 一一对应，参数和响应复用 `kanban-contract` DTO。
+MCP 是最小 Rust stdio server，使用官方 `rmcp` tools/stdio transport；不提供 resources/prompts，不拉起 host，不解释状态转换。工具名与 operation 一一对应，参数和响应复用 `kanban-protocol` DTO。
 
 ### 6.3 Desktop
 
@@ -312,7 +312,7 @@ loop 停止新 polling 后等待当前 worker 正常结束；第二次中断才�
 - server 只监听 loopback；不提供远程访问和登录。
 - `KANBAN_DB`、`--db` 只配置 host 的数据库；`KANBAN_SERVER_URL`、`--server-url` 只配置 client。
 - host 每个 operation 在同一进程中按需获取 Turso connection；不启用 `multiprocess_wal`。
-- `error.code`、DTO 和 HTTP status 映射由 `kanban-contract`/server/client 共同维护；adapter 不重新解释 domain error。
+- `error.code`、DTO 和 HTTP status 映射由 `kanban-protocol`/server/client 共同维护；adapter 不重新解释 domain error。
 - 关闭并重启 host 后，boards、tasks、plans、comments、steps、dependencies、runs 和 events 从 canonical DB 继续可读；不会由 adapter 创建第二个数据库。
 
 ## 9. 验收基线
@@ -393,7 +393,7 @@ importer 的 typed host-admin route/client/CLI wiring 已接入，但实际只�
 kanban-core              领域类型、状态机和纯校验
 kanban-application       typed use case、ApplicationService 和 store port
 kanban-store-turso      Turso schema、migration 和 persistence
-kanban-contract          HTTP/CLI/MCP DTO、错误 envelope、schema 描述
+kanban-protocol          HTTP/CLI/MCP DTO、错误 envelope、schema 描述
 kanban-client            typed localhost HTTP client
 kanban-server            Axum host、routes、dispatcher 装配
 kanban-cli               参数解析、输出和 serve wrapper
@@ -415,7 +415,7 @@ xtask                    publish = false 的 schema/dependency/AGENTS 工具
 |---|---|
 | `kanban-core` | 纯领域类型、不变量、状态机、claim/lease、labels/ontology/signals、entity URI 和 board isolation；不依赖 Turso、HTTP 或异步 runtime |
 | `kanban-service` | 合并 `kanban-application` 与 `kanban-store-turso`；use case、schema/migration、repository、事务、projection、Ollama provider 和 SQLite 只读 importer |
-| `kanban-protocol` | 取代 `kanban-contract`；HTTP/SSE DTO、统一 error envelope、operation catalog 和 machine-readable schema |
+| `kanban-protocol` | HTTP/SSE DTO、统一 error envelope、operation catalog 和 machine-readable schema |
 | `kanban-client` | typed localhost HTTP/SSE client；不持有领域规则和数据库依赖 |
 | `kanban-server` | Axum routes、唯一 host 生命周期、dispatcher、projection worker 和管理操作 |
 | `kanban-cli` | 参数解析、人类/JSON 输出；普通命令调用 client，`serve` 负责装配 server |
@@ -435,7 +435,7 @@ kanban-core ◄── kanban-service ◄── kanban-server ◄── kanban-cl
 xtask ──► kanban-protocol[schema] + cargo metadata
 ```
 
-迁移期间保留 `kanban-application`/`kanban-store-turso` 和 `kanban-contract` 的现有路径，
+迁移期间保留 `kanban-application`/`kanban-store-turso` 和 `kanban-protocol` 的现有路径，
 但新能力不应再制造另一套 port、DTO 或 database adapter。合并完成前，不能把目标 crate
 名称写成已经存在的包，也不能以兼容 shim 掩盖未闭合的 service wiring。
 
@@ -511,7 +511,7 @@ Desktop 管理入口必须复用 host，不能打开第二个数据库。
 领域及 host 管理 catalog；SSE 事件从 append-only `task_events` 游标读取。`kanban-client`
 只负责 typed localhost HTTP/SSE，不复制状态机、SQL 或 fallback。
 
-当前 active 路由仍以 `kanban-contract` 和现有 API 文档为准；完整约 84 个 operation 的
+当前 active 路由仍以 `kanban-protocol` 和现有 API 文档为准；完整约 84 个 operation 的
 surface 必须逐项进入 parity ledger，不能用旧路径兼容或“暂不支持”关闭迁移。新 operation
 先在 protocol catalog 定义，再由 server/client/CLI/MCP/Desktop 逐面绑定。
 
@@ -564,8 +564,8 @@ kanban serve --dispatcher-profile profile.toml
 4. 通过迁移、失败回滚、崩溃恢复、重复执行、board isolation、claim/event 原子性和完整
    surface acceptance。
 
-当前 `kanban-application`、`kanban-store-turso` 和 `kanban-contract` 仍是实现过渡态；最终
-分别合并为 `kanban-service` 和 `kanban-protocol`。在合并和删除发生前，所有缺口都必须在
+当前 `kanban-application`、`kanban-store-turso` 和 `kanban-protocol` 仍是实现过渡态；最终
+前两者合并为 `kanban-service`，`kanban-protocol` 继续作为独立 wire/schema crate。在合并和删除发生前，所有缺口都必须在
 任务 ledger 中保持可审计，不能以“功能收缩”或新的兼容路径结束迁移。
 
 
@@ -1603,7 +1603,7 @@ ApplicationService + State Machine
 kanban-store-turso → canonical Turso database
 ```
 
-`kanban-contract` 是公开 DTO、事件 payload、错误 envelope、operation inventory 和
+`kanban-protocol` 是公开 DTO、事件 payload、错误 envelope、operation inventory 和
 transport descriptor 的 Rust 权威来源；只有根目录私有 `xtask` 生成和校验 JSON Schema
 artifact。`kanban-server`、`kanban-client`、CLI、MCP 和 Desktop 是运行时 producer/consumer，
 不能各自复制一套 DTO 或业务错误解释。
@@ -1707,7 +1707,7 @@ heartbeat、release、review、done、block 的共享 ApplicationService mutatio
 
 ## 5. 依赖边界与单 Host gate
 
-active workspace 只保留 `kanban-core`、`kanban-application`、`kanban-contract`、
+active workspace 只保留 `kanban-core`、`kanban-application`、`kanban-protocol`、
 根目录私有 `xtask`、`kanban-store-turso`、`kanban-client`、`kanban-cli`、`kanban-mcp`、
 `kanban-server` 和 Desktop Tauri host。数据库依赖方向固定为：
 
@@ -1724,7 +1724,7 @@ specific dependency 和测试 fixture，不只检查源码 import。
 `scripts/check-single-host-dependencies.py` 是单 Host manifest gate；它拒绝 legacy package
 进入 workspace、projection helper 进入 active workspace，以及任意 adapter 的 forbidden
 dependency alias。schema tooling 另有独立边界：根目录私有 `xtask` 只能作为离线生成/
-校验工具，不能进入产品 runtime graph。`kanban-mcp` 会启用 `kanban-contract/schema`
+校验工具，不能进入产品 runtime graph。`kanban-mcp` 会启用 `kanban-protocol/schema`
 来生成 RMCP tool input schema；这不授权它依赖 `xtask`、`jsonschema` runtime 或数据库
 crate。
 
@@ -1810,7 +1810,7 @@ just schema-audit-closed
 - `schema-adoption-witness` 先按 `(package, test_target)` 分组列出并执行 exact witness，
   再报告 producer/consumer；缺失、重复、ignored 或未执行均失败。
 - `just schema-contract` 仍是现有 schema-contract composite gate，继续组合
-  `just schema-dependency-isolation`、`just schema-fmt`、`just feature-p kanban-contract schema`、
+  `just schema-dependency-isolation`、`just schema-fmt`、`just feature-p kanban-protocol schema`、
   `just schema-tool`、`just schema-check`、`just schema-docs`、`just schema-surface-audit` 和
   `just schema-adoption-witness`；它没有被 `xtask` 替代，也不会被 `xtask` 反向调用。
 - `schema-dependency-isolation`、`schema-surface-audit`、`schema-adoption-witness` 和
@@ -1827,7 +1827,7 @@ just schema-audit-closed
 
 新增 operation 时按以下顺序完成一个纵向 slice：
 
-1. 在 `kanban-contract` 定义精确 DTO、schema root、inventory 和 endpoint/surface descriptor。
+1. 在 `kanban-protocol` 定义精确 DTO、schema root、inventory 和 endpoint/surface descriptor。
 2. 添加 valid/invalid fixture，并为真实 producer 与 consumer 各提供独立 exact witness。
 3. 在 `kanban-store-turso`、ApplicationService、server、`kanban-client` 和所需 adapter
    中接通同一 operation；adapter 不得直连 store。
@@ -2854,7 +2854,7 @@ Signal 账本成为通用 agent/product 信号的权威存储。Label ontology �
 
 ### 决策
 
-在 `kanban-contract` 默认 feature 中保存 API/SSE 描述符；server router 以
+在 `kanban-protocol` 默认 feature 中保存 API/SSE 描述符；server router 以
 `operation_id` + 显式 `adapter_id` 绑定真实 handler，并读取描述符的 method/path。
 
 ### 影响
@@ -3016,7 +3016,7 @@ dispatcher 边界。第 6 条以及“非目标”中的 labels、signals、sear
 [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) 和 [`DATA_MODEL.md`](docs/DATA_MODEL.md) 为准。
 
 在过渡期，`kanban-application` + `kanban-store-turso` 仍然是当前实现；目标是合并为
-`kanban-service`，并将 `kanban-contract` 收敛为 `kanban-protocol`。这些名称变化不会改变
+`kanban-service`，并保持当前 `kanban-protocol` 作为独立 wire/schema crate。这些名称变化不会改变
 single-host ownership，也不能用“暂不支持”替代 parity ledger 的闭合。
 
 ### 背景

@@ -5,11 +5,11 @@ import { ApiTransport } from "../transport"
 const ATTACHMENT_KEYS = ["id", "board_id", "task_id", "filename", "rel_path", "content_type", "size_bytes", "sha256", "created_by", "created_at"] as const
 
 export async function listAttachments(api: ApiTransport, taskId: string, options: RequestOptions = {}) {
-  return parseAttachmentListEnvelope(await api.requestRaw(`/api/v1/tasks/${encodePathSegment(taskId)}/attachments`, options)).data
+  return parseAttachmentListEnvelope(await api.requestRaw(`/api/v1/tasks/${encodeTaskSegment(taskId)}/attachments`, options)).data
 }
 
 export async function createAttachment(api: ApiTransport, taskId: string, input: CreateAttachmentInput, options: RequestOptions = {}) {
-  return parseAttachmentEnvelope(await api.requestRaw(`/api/v1/tasks/${encodePathSegment(taskId)}/attachments`, {
+  return parseAttachmentEnvelope(await api.requestRaw(`/api/v1/tasks/${encodeTaskSegment(taskId)}/attachments`, {
     method: "POST",
     body: input,
     actorHeader: true,
@@ -18,7 +18,7 @@ export async function createAttachment(api: ApiTransport, taskId: string, input:
 }
 
 export async function downloadAttachment(api: ApiTransport, taskId: string, attachmentId: string, options: RequestOptions = {}): Promise<DownloadedAttachment> {
-  const response = await api.requestBytes(`/api/v1/tasks/${encodePathSegment(taskId)}/attachments/${encodePathSegment(attachmentId)}`, options)
+  const response = await api.requestBytes(`/api/v1/tasks/${encodeTaskSegment(taskId)}/attachments/${encodeAttachmentSegment(attachmentId)}`, options)
   return {
     content_type: response.contentType,
     attachment_id: response.attachmentId,
@@ -28,7 +28,7 @@ export async function downloadAttachment(api: ApiTransport, taskId: string, atta
 }
 
 export async function deleteAttachment(api: ApiTransport, taskId: string, attachmentId: string, options: RequestOptions = {}) {
-  return parseDeleteAttachmentEnvelope(await api.requestRaw(`/api/v1/tasks/${encodePathSegment(taskId)}/attachments/${encodePathSegment(attachmentId)}`, {
+  return parseDeleteAttachmentEnvelope(await api.requestRaw(`/api/v1/tasks/${encodeTaskSegment(taskId)}/attachments/${encodeAttachmentSegment(attachmentId)}`, {
     method: "DELETE",
     actorHeader: true,
     signal: options.signal,
@@ -76,8 +76,16 @@ function parseDeleteAttachmentEnvelope(value: unknown) {
   return { data: { deleted: expectBoolean(data.deleted, "delete attachment response.data.deleted") } }
 }
 
-function encodePathSegment(value: string) {
+function encodeTaskSegment(value: string) {
+  return encodeIdSegment(value, "t_", "task selector must resolve to a global t_... id")
+}
+
+function encodeAttachmentSegment(value: string) {
+  return encodeIdSegment(value, "a_", "attachment id must start with a_")
+}
+
+function encodeIdSegment(value: string, prefix: string, message: string) {
   const trimmed = value.trim()
-  if (!trimmed) throw new ApiError("invalid_input", "attachment path segment must not be empty")
+  if (!trimmed.startsWith(prefix) || trimmed.length <= prefix.length) throw new ApiError("invalid_input", message)
   return encodeURIComponent(trimmed)
 }

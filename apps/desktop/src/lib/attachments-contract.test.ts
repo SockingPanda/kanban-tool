@@ -110,4 +110,14 @@ describe("attachments exact contracts", () => {
 
     await expect(new KanbanApi(config).listAttachments("t_fixture")).rejects.toMatchObject({ code: "invalid_response" })
   })
+
+  it("rejects non-canonical task and attachment ids before issuing HTTP", async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal("fetch", fetch)
+    const api = new KanbanApi(config)
+
+    await expect(api.listAttachments("default#1")).rejects.toMatchObject({ code: "invalid_input" })
+    await expect(api.downloadAttachment("t_fixture", "bad")).rejects.toMatchObject({ code: "invalid_input" })
+    expect(fetch).not.toHaveBeenCalled()
+  })
 })

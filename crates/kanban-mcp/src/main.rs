@@ -25,6 +25,7 @@ impl KanbanMcp {
             + Self::step_tools()
             + Self::lifecycle_tools()
             + Self::ontology_tools()
+            + Self::vector_tools()
     }
 }
 
@@ -130,6 +131,9 @@ mod tests {
                 "task_specify",
                 "task_unblock",
                 "task_update",
+                "vector_query_chunks",
+                "vector_query_label_atoms",
+                "vector_status",
             ]
         );
     }

@@ -11,3 +11,4 @@ mod search;
 mod signals;
 mod steps;
 mod tasks;
+pub(crate) mod vector;

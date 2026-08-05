@@ -7,6 +7,7 @@ mod board;
 mod comment;
 mod dependency;
 mod event;
+mod ontology;
 mod run;
 mod stats;
 mod step;
@@ -19,6 +20,7 @@ pub use board::{
 pub use comment::{CommentCreate, CommentList};
 pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
 pub use event::*;
+pub use ontology::LabelOntologyOperations;
 pub use run::*;
 pub use stats::*;
 pub use step::{StepComplete, StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate};

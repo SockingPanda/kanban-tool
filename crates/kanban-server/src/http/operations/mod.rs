@@ -3,6 +3,7 @@ mod comments;
 mod dependencies;
 mod events;
 mod health;
+mod ontology;
 mod runs;
 mod stats;
 mod steps;
@@ -24,6 +25,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .merge(steps::router())
         .merge(runs::router())
         .merge(stats::router())
+        .merge(ontology::router())
         .merge(events::router())
         .with_state(state)
 }

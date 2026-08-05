@@ -20,6 +20,7 @@ impl KanbanMcp {
             + Self::run_tools()
             + Self::step_tools()
             + Self::lifecycle_tools()
+            + Self::ontology_tools()
     }
 }
 
@@ -55,6 +56,30 @@ mod tests {
                 "dependency_list",
                 "dependency_remove",
                 "event_list",
+                "label_atom_explain",
+                "label_atom_index_query",
+                "label_atom_index_rebuild",
+                "label_atom_index_status",
+                "label_atoms_list",
+                "label_ontology_action",
+                "label_ontology_apply_atom",
+                "label_ontology_observe",
+                "label_ontology_quality",
+                "label_ontology_revert",
+                "label_ontology_review",
+                "label_ontology_signal_show",
+                "label_ontology_signals",
+                "label_ontology_validate",
+                "label_proposal_accept",
+                "label_proposal_reject",
+                "label_proposal_show",
+                "label_proposals_list",
+                "label_propose",
+                "label_semantics_delete",
+                "label_semantics_list",
+                "label_semantics_show",
+                "label_semantics_upsert",
+                "label_suggest",
                 "run_list",
                 "run_log",
                 "run_show",

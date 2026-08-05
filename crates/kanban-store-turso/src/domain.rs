@@ -211,7 +211,7 @@ pub struct TaskListPage {
 // Ontology records are intentionally kept as store-owned values.  JSON fields
 // remain opaque here; the application/contract adapters validate their shape
 // at the transport boundary while Turso enforces `json_valid` and board FKs.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelSemanticsRecord {
     pub label_id: String,
     pub board_id: String,
@@ -227,7 +227,7 @@ pub struct LabelSemanticsRecord {
     pub atoms: Vec<LabelAtomRecord>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct LabelAtomRecord {
     pub id: String,
     pub label_id: String,
@@ -242,13 +242,13 @@ pub struct LabelAtomRecord {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelAtomExplainActionRecord {
     pub action: LabelOntologyActionRecord,
     pub matched_by: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelAtomExplainSignalRecord {
     pub signal: LabelOntologySignalRecord,
     pub observation: LabelOntologyObservationRecord,
@@ -259,7 +259,7 @@ pub struct LabelAtomExplainSignalRecord {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelAtomExplainValidationRecord {
     pub action: LabelOntologyActionRecord,
     pub parent_action_id: String,
@@ -270,7 +270,7 @@ pub struct LabelAtomExplainValidationRecord {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelAtomExplainRecord {
     pub query: String,
     pub atom: Option<LabelAtomRecord>,
@@ -282,7 +282,7 @@ pub struct LabelAtomExplainRecord {
     pub legacy_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct LabelAtomIndexStatusRecord {
     pub backend: String,
     pub enabled: bool,
@@ -293,7 +293,7 @@ pub struct LabelAtomIndexStatusRecord {
     pub generation: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelSuggestionResultRecord {
     pub task_id: String,
     pub board_id: String,
@@ -308,7 +308,7 @@ pub struct LabelSuggestionResultRecord {
     pub diagnostics: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelSuggestionCandidateRecord {
     pub label_id: String,
     pub label_name: String,
@@ -319,7 +319,7 @@ pub struct LabelSuggestionCandidateRecord {
     pub negative_evidence_atoms: Vec<LabelSuggestionEvidenceRecord>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelSuggestionEvidenceRecord {
     pub atom_id: String,
     pub label_id: String,
@@ -330,7 +330,7 @@ pub struct LabelSuggestionEvidenceRecord {
     pub score: f32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelSemanticProposalRecord {
     pub id: String,
     pub board_id: String,
@@ -356,7 +356,7 @@ pub struct LabelSemanticProposalRecord {
     pub decided_at: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelProposalAttemptRecord {
     pub task_id: String,
     pub board_id: String,
@@ -370,7 +370,7 @@ pub struct LabelProposalAttemptRecord {
     pub top1_existing_label_name: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelOntologyObservationRecord {
     pub id: String,
     pub board_id: String,
@@ -395,7 +395,7 @@ pub struct LabelOntologyObservationRecord {
     pub signals: Vec<LabelOntologySignalRecord>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelOntologySignalRecord {
     pub id: String,
     pub observation_id: String,
@@ -429,7 +429,7 @@ pub struct LabelOntologySignalRecord {
     pub closed_at: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelOntologyActionRecord {
     pub id: String,
     pub board_id: String,
@@ -454,14 +454,14 @@ pub struct LabelOntologyActionRecord {
     pub signal_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelOntologySignalDetailRecord {
     pub signal: LabelOntologySignalRecord,
     pub observation: LabelOntologyObservationRecord,
     pub actions: Vec<LabelOntologyActionRecord>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelOntologyReviewGroupRecord {
     pub group_by: String,
     pub key: String,
@@ -496,7 +496,7 @@ pub struct LabelOntologyReviewGroupRecord {
     pub candidate_atom_variants_json: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelOntologyQualityRecord {
     pub board_id: String,
     pub denominator_json: String,

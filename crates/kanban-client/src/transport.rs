@@ -33,6 +33,21 @@ impl KanbanClient {
         decode_response(request.send_json(body))
     }
 
+    pub(crate) fn put<B, T>(&self, path: &str, body: &B) -> Result<T, ClientError>
+    where
+        B: Serialize,
+        T: DeserializeOwned,
+    {
+        let body = serde_json::to_value(body)
+            .map_err(|error| ClientError::InvalidResponse(error.to_string()))?;
+        let request = self
+            .agent
+            .request("PUT", &format!("{}{path}", self.base_url))
+            .set("Accept", "application/json")
+            .set("X-KB-Actor", &self.actor);
+        decode_response(request.send_json(body))
+    }
+
     pub(crate) fn delete<T>(&self, path: &str) -> Result<T, ClientError>
     where
         T: DeserializeOwned,

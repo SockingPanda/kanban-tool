@@ -10,6 +10,7 @@ pub mod ports;
 pub mod service;
 
 pub use dto::*;
+pub use operations::LabelOntologyOperations;
 pub use operations::{
     ArchiveBoardCommand, ArchiveBoardRecord, ArchiveTaskCommand, ArchiveTaskRecord, BoardArchive,
     BoardColumns, BoardCreate, BoardGet, BoardList, CommentCreate, CommentList, CreateBoardCommand,

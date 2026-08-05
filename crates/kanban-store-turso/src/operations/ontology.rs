@@ -5,6 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::Deserialize;
 use serde_json::{Value as JsonValue, json};
 use turso::{Connection, Row, transaction::TransactionBehavior};
 
@@ -28,7 +29,7 @@ use crate::{
 pub(crate) const LABEL_ATOM_INDEX_STORE: &str = "vector_label_atoms";
 const MAX_LIST_LIMIT: i64 = 1000;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct UpsertLabelSemanticsInput {
     pub expected_semantics_hash: Option<String>,
     pub replace: bool,
@@ -46,7 +47,7 @@ pub struct UpsertLabelSemanticsInput {
     pub source_signal_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct LabelSuggestionOptions {
     pub output_limit: usize,
     pub candidate_limit: usize,
@@ -67,7 +68,7 @@ impl Default for LabelSuggestionOptions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct LabelProposalInput {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -79,7 +80,7 @@ pub struct LabelProposalInput {
     pub source_signal_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct LabelProposalDecisionInput {
     pub proposal_id: String,
     pub accept: bool,
@@ -88,14 +89,14 @@ pub struct LabelProposalDecisionInput {
     pub source_signal_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct OntologyActorInput {
     pub name: String,
     pub actor_type: String,
     pub agent_type: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct OntologySignalInput {
     pub kind: String,
     pub target_label_ref: Option<String>,
@@ -116,7 +117,7 @@ pub struct OntologySignalInput {
     pub signal_key: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct OntologyObservationInput {
     pub actor: OntologyActorInput,
     pub task_ref: String,
@@ -133,7 +134,7 @@ pub struct OntologyObservationInput {
     pub signals: Vec<OntologySignalInput>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct OntologyActionInput {
     pub actor: OntologyActorInput,
     pub action_type: String,
@@ -153,7 +154,7 @@ pub struct OntologyActionInput {
     pub validation_json: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct OntologyApplyAtomInput {
     pub actor: OntologyActorInput,
     pub signal_ids: Vec<String>,
@@ -164,7 +165,7 @@ pub struct OntologyApplyAtomInput {
     pub reason: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct OntologyRevertInput {
     pub actor: OntologyActorInput,
     pub target_action_id: String,
@@ -172,7 +173,7 @@ pub struct OntologyRevertInput {
     pub reason: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct OntologyValidateInput {
     pub actor: OntologyActorInput,
     pub parent_action_id: String,

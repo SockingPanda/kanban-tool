@@ -2850,6 +2850,7 @@ name = "kanban-store-turso"
 version = "2.1.3"
 dependencies = [
  "rusqlite",
+ "serde",
  "serde_json",
  "sha2",
  "tempfile",

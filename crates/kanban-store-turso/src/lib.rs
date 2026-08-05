@@ -22,11 +22,13 @@ pub use operations::{
     AddDependencyInput, AddDependencyRecord, ArchiveBoardInput, ArchiveTaskInput, BlockTaskInput,
     ClaimTaskInput, ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput,
     CreateCommentInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
-    MarkExecutionPlanNotRequiredInput, PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput,
-    ReleaseTaskInput, RemoveDependencyInput, RemoveDependencyRecord, RemoveStepInput,
-    ReopenStepInput, ReopenTaskInput, SkipStepInput, SpecifyTaskInput, SubmitReviewTaskInput,
-    TaskListOptions, TaskListSort, TaskPlanFilter, UnblockTaskInput, UpdateStepInput,
-    UpdateTaskInput,
+    LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
+    MarkExecutionPlanNotRequiredInput, OntologyActionInput, OntologyApplyAtomInput,
+    OntologyObservationInput, OntologyRevertInput, OntologyValidateInput, PromoteTaskInput,
+    ReclaimExpiredTaskInput, ReclaimTaskInput, ReleaseTaskInput, RemoveDependencyInput,
+    RemoveDependencyRecord, RemoveStepInput, ReopenStepInput, ReopenTaskInput, SkipStepInput,
+    SpecifyTaskInput, SubmitReviewTaskInput, TaskListOptions, TaskListSort, TaskPlanFilter,
+    UnblockTaskInput, UpdateStepInput, UpdateTaskInput, UpsertLabelSemanticsInput,
 };
 
 #[cfg(test)]

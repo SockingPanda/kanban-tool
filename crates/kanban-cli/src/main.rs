@@ -56,6 +56,12 @@ enum Command {
         #[command(subcommand)]
         command: commands::task::TaskCommand,
     },
+    /// Manage label semantics and ontology ledger through the canonical host.
+    #[command(name = "label", visible_alias = "ontology", visible_alias = "labels")]
+    Label {
+        #[command(subcommand)]
+        command: commands::ontology::OntologyCommand,
+    },
     /// Manage task comments through the canonical localhost host.
     Comment {
         #[command(subcommand)]
@@ -103,6 +109,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Run { command } => commands::run::run(&ctx, command),
         Command::Runs(args) => commands::run::list(&ctx, args),
         Command::Task { command } => commands::task::run(&ctx, command),
+        Command::Label { command } => commands::ontology::run(&ctx, command),
         Command::Init => Err(feature_not_available(
             "`kanban init` was removed; start `kanban serve` to initialize the canonical Turso database",
         )),

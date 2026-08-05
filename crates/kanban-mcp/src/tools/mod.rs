@@ -3,6 +3,7 @@ mod comments;
 mod dependencies;
 mod events;
 mod lifecycle;
+mod ontology;
 mod runs;
 mod steps;
 mod tasks;

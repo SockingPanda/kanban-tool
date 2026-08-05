@@ -3,6 +3,7 @@ mod comments;
 mod dependencies;
 mod events;
 mod lifecycle;
+mod ontology;
 mod runs;
 pub(crate) mod shared;
 mod stats;
@@ -20,6 +21,7 @@ pub use lifecycle::{
     ReclaimExpiredTaskInput, ReclaimTaskInput, ReleaseTaskInput, ReopenTaskInput, SpecifyTaskInput,
     SubmitReviewTaskInput, UnblockTaskInput,
 };
+pub use ontology::*;
 pub use steps::{
     CompleteStepInput, CreateStepInput, RemoveStepInput, ReopenStepInput, SkipStepInput,
     UpdateStepInput,

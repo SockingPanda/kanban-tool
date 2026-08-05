@@ -29,17 +29,18 @@ pub use operations::search::{
     StoreSearchHit, StoreSearchIndexStatus, StoreSearchMeta, StoreSearchQuery, StoreSearchResults,
 };
 pub use operations::{
-    AddDependencyInput, AddDependencyRecord, ArchiveBoardInput, ArchiveTaskInput, BlockTaskInput,
-    ClaimTaskInput, ClaimTaskRecord, CompleteStepInput, CompleteTaskInput, CreateBoardInput,
-    CreateCommentInput, CreateSignalInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
+    AddDependencyInput, AddDependencyRecord, AddTaskLabelsInput, AddTaskLabelsRecord,
+    ArchiveBoardInput, ArchiveTaskInput, BlockTaskInput, ClaimTaskInput, ClaimTaskRecord,
+    CompleteStepInput, CompleteTaskInput, CreateBoardInput, CreateCommentInput, CreateLabelInput,
+    CreateSignalInput, CreateStepInput, CreateTaskInput, HeartbeatTaskInput,
     LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
     MarkExecutionPlanNotRequiredInput, OntologyActionInput, OntologyActorInput,
     OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
     PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput, ReleaseTaskInput,
-    RemoveDependencyInput, RemoveDependencyRecord, RemoveStepInput, ReopenStepInput,
-    ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SignalListOptions, SkipStepInput,
-    SpecifyTaskInput, SubmitReviewTaskInput, TaskListOptions, TaskListSort, TaskPlanFilter,
-    UnblockTaskInput, UpdateStepInput, UpdateTaskInput, UpsertLabelSemanticsInput,
+    RemoveDependencyInput, RemoveDependencyRecord, RemoveStepInput, RemoveTaskLabelInput,
+    ReopenStepInput, ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SignalListOptions,
+    SkipStepInput, SpecifyTaskInput, SubmitReviewTaskInput, TaskListOptions, TaskListSort,
+    TaskPlanFilter, UnblockTaskInput, UpdateStepInput, UpdateTaskInput, UpsertLabelSemanticsInput,
 };
 
 #[cfg(test)]

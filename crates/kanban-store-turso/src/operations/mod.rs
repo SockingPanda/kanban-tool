@@ -4,6 +4,7 @@ mod comments;
 mod dependencies;
 mod events;
 mod lifecycle;
+mod labels;
 mod ontology;
 #[cfg(test)]
 mod ontology_tests;
@@ -28,6 +29,9 @@ pub use lifecycle::{
     HeartbeatTaskInput, MarkExecutionPlanNotRequiredInput, PromoteTaskInput,
     ReclaimExpiredTaskInput, ReclaimTaskInput, ReleaseTaskInput, ReopenTaskInput, SpecifyTaskInput,
     SubmitReviewTaskInput, UnblockTaskInput,
+};
+pub use labels::{
+    AddTaskLabelsInput, AddTaskLabelsRecord, CreateLabelInput, RemoveTaskLabelInput,
 };
 pub use ontology::*;
 pub use signals::{CreateSignalInput, ReviewSignalsInput, SignalLifecycleInput, SignalListOptions};

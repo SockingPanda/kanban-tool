@@ -17,6 +17,7 @@ pub enum StoreError {
     },
     BoardNotFound(String),
     TaskNotFound(String),
+    LabelNotFound(String),
     RunNotFound(String),
     StepNotFound(String),
     AttachmentNotFound(String),
@@ -61,6 +62,7 @@ impl Display for StoreError {
             }
             Self::BoardNotFound(selector) => write!(formatter, "board not found: {selector}"),
             Self::TaskNotFound(task_id) => write!(formatter, "task not found: {task_id}"),
+            Self::LabelNotFound(label) => write!(formatter, "label not found: {label}"),
             Self::RunNotFound(run_id) => write!(formatter, "run not found: {run_id}"),
             Self::StepNotFound(step_id) => write!(formatter, "step not found: {step_id}"),
             Self::AttachmentNotFound(attachment_id) => {

@@ -21,6 +21,16 @@ pub struct ApplicationHealth {
     pub ok: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelRecord {
+    pub id: String,
+    pub board_id: String,
+    pub name: String,
+    pub color: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionPlanState {
@@ -225,6 +235,7 @@ pub struct TaskRecord {
     pub required_step_count: i64,
     pub completed_required_step_count: i64,
     pub optional_step_count: i64,
+    pub labels: Vec<LabelRecord>,
 }
 
 // Compatibility facade for callers that historically imported all DTOs from

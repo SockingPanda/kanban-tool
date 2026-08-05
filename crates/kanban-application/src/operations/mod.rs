@@ -9,6 +9,7 @@ mod board;
 mod comment;
 mod dependency;
 mod event;
+mod labels;
 mod maintenance;
 mod ontology;
 mod run;
@@ -29,6 +30,11 @@ pub use board::{
 pub use comment::{CommentCreate, CommentList};
 pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
 pub use event::*;
+pub use labels::{
+    AddTaskLabelsCommand, AddTaskLabelsRecord, AddTaskLabelsRecordInput, BoardLabelCreate,
+    BoardLabelList, CreateBoardLabelCommand, CreateLabelRecord, RemoveTaskLabelCommand,
+    RemoveTaskLabelRecord, TaskLabelAdd, TaskLabelList, TaskLabelRemove,
+};
 pub use maintenance::*;
 pub use ontology::LabelOntologyOperations;
 pub use run::*;

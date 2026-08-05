@@ -59,6 +59,7 @@ pub(crate) fn task_record(input: CreateTaskRecord) -> TaskRecord {
         required_step_count: 0,
         completed_required_step_count: 0,
         optional_step_count: 0,
+        labels: Vec::new(),
     }
 }
 

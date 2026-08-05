@@ -273,6 +273,99 @@ pub enum VectorHelperQueryLabelAtomsItem {
 pub type VectorHelperQueryLabelAtomsResponse = Vec<VectorHelperQueryLabelAtomsItem>;
 pub type VectorHelperEmbedQueryResponse = Vec<f32>;
 
+/// Canonical host vector status query。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VectorStatusQuery {
+    #[serde(default = "default_vector_board")]
+    pub board: String,
+}
+
+fn default_vector_board() -> String {
+    "default".to_owned()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VectorConfigureRequest {
+    pub provider: String,
+    pub endpoint: String,
+    pub model: String,
+    pub dimensions: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VectorProjectionRequest {
+    #[serde(default = "default_vector_board")]
+    pub board: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VectorQuery {
+    #[serde(default = "default_vector_board")]
+    pub board: String,
+    pub q: String,
+    #[serde(default = "default_vector_limit")]
+    pub limit: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub embedding_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub polarity: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub include_vector: bool,
+}
+
+fn default_vector_limit() -> usize {
+    20
+}
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VectorChunkResult {
+    pub id: String,
+    pub entity_uri: Option<String>,
+    pub source_kind: String,
+    pub content: String,
+    pub content_hash: String,
+    pub embedding_model: String,
+    pub distance: f32,
+    pub score: f32,
+}
+
+pub type VectorConfigureResponse = crate::DataEnvelope<VectorConfigureRequest>;
+pub type VectorProjectionResponse = crate::DataEnvelope<crate::VectorStatus>;
+pub type VectorQueryChunksResponse = crate::DataEnvelope<Vec<VectorChunkResult>>;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VectorLabelAtomResult {
+    pub atom_id: String,
+    pub label_id: String,
+    pub board_id: String,
+    pub polarity: String,
+    pub kind: String,
+    pub text: String,
+    pub ordinal: i64,
+    pub content_hash: String,
+    pub embedding_model: String,
+    pub distance: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vector: Option<Vec<f32>>,
+}
+
+pub type VectorQueryLabelAtomsResponse = crate::DataEnvelope<Vec<VectorLabelAtomResult>>;
+
 fn deserialize_required_nullable<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,

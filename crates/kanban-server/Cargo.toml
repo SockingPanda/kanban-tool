@@ -6,6 +6,10 @@ license.workspace = true
 authors.workspace = true
 autotests = false
 
+[features]
+default = []
+legacy-sqlite-import = ["kanban-store-turso/legacy-sqlite-import"]
+
 [dependencies]
 axum.workspace = true
 kanban-application.workspace = true

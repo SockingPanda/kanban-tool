@@ -95,6 +95,25 @@ enum Command {
     Events(commands::event::ListArgs),
     /// List execution runs for a task through the canonical localhost host.
     Runs(commands::run::ListArgs),
+    /// 检查 canonical 数据库健康状态。
+    Doctor,
+    /// 查询 canonical 队列统计。
+    Stats(commands::maintenance::StatsArgs),
+    /// 创建 verified backup。
+    Backup(commands::maintenance::PathArgs),
+    /// 导出 portable canonical JSONL。
+    Export(commands::maintenance::PathArgs),
+    /// 导入 portable canonical JSONL。
+    Import(commands::maintenance::ImportArgs),
+    /// 导入 legacy SQLite v30 数据（仅在 host feature 启用时可用）。
+    #[command(name = "import-v30")]
+    ImportV30(commands::maintenance::LegacyImportArgs),
+    /// 运行 WAL checkpoint。
+    Checkpoint,
+    /// 执行 host-owned compaction。
+    Vacuum,
+    /// 管理 projection owner、generation 和 recovery。
+    Maintenance(commands::maintenance::MaintenanceArgs),
     /// Inspect one execution run through the canonical localhost host.
     Run {
         #[command(subcommand)]
@@ -176,6 +195,15 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         Command::Events(args) => commands::event::run(&ctx, args),
         Command::Run { command } => commands::run::run(&ctx, command),
         Command::Runs(args) => commands::run::list(&ctx, args),
+        Command::Doctor => commands::maintenance::doctor(&ctx),
+        Command::Stats(args) => commands::maintenance::stats(&ctx, args),
+        Command::Backup(args) => commands::maintenance::backup(&ctx, args),
+        Command::Export(args) => commands::maintenance::export(&ctx, args),
+        Command::Import(args) => commands::maintenance::import(&ctx, args),
+        Command::ImportV30(args) => commands::maintenance::import_v30(&ctx, args),
+        Command::Checkpoint => commands::maintenance::checkpoint(&ctx),
+        Command::Vacuum => commands::maintenance::vacuum(&ctx),
+        Command::Maintenance(args) => commands::maintenance::maintenance(&ctx, args),
         Command::Task { command } => commands::task::run(&ctx, command),
         Command::Label { command } => commands::ontology::run(&ctx, command),
         Command::Search(args) => commands::search::run(&ctx, args),

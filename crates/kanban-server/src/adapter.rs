@@ -106,6 +106,11 @@ fn store_error(error: StoreError) -> KanbanError {
         } => KanbanError::IdempotencyConflict(format!(
             "board {board_id}, key {key}, existing task {existing_task_id}"
         )),
+        StoreError::MaintenanceBusy(message) => KanbanError::Conflict(message),
+        StoreError::BackupRequired(message) => KanbanError::Conflict(message),
+        StoreError::LegacyImport(message) => {
+            KanbanError::Storage(format!("legacy sqlite import failed: {message}"))
+        }
         other => KanbanError::Storage(other.to_string()),
     }
 }

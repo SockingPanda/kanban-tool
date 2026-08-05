@@ -4,6 +4,7 @@ mod comments;
 mod dependencies;
 mod events;
 mod health;
+mod maintenance;
 mod ontology;
 mod runs;
 mod search;
@@ -20,6 +21,7 @@ use axum::Router;
 pub(crate) fn router(state: AppState) -> Router {
     Router::new()
         .merge(health::router())
+        .merge(maintenance::router())
         .merge(boards::router())
         .merge(attachments::router())
         .merge(tasks::router())

@@ -7,6 +7,7 @@ pub(crate) mod event;
 pub(crate) mod hook;
 pub(crate) mod index;
 pub(crate) mod init;
+pub(crate) mod maintenance;
 pub(crate) mod ontology;
 pub(crate) mod run;
 pub(crate) mod search;

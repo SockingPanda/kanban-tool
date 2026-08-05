@@ -15,8 +15,8 @@ pub use error::StoreError;
 
 #[cfg(feature = "legacy-sqlite-import")]
 pub use legacy_import::{
-    LegacyImportOptions, LegacyImportResult, LegacySqliteImportOptions, LegacySqliteImportResult,
-    import_legacy_sqlite_v30,
+    LegacyImportOptions, LegacyImportResult, LegacyImportTableCount, LegacySqliteImportOptions,
+    LegacySqliteImportResult, import_legacy_sqlite_v30,
 };
 pub use operations::{
     AddDependencyInput, AddDependencyRecord, ArchiveBoardInput, BlockTaskInput, ClaimTaskInput,

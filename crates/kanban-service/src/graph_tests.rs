@@ -1,7 +1,10 @@
 use crate::{
-    EntityUpsertInput, GraphNeighborsOptions, RelationPredicateInput, RelationUpsertInput,
-    TaskNeighborhoodOptions,
+    EntityUpsertInput, RelationPredicateInput, RelationUpsertInput,
+    store_operations::{StoreGraphNeighborsOptions, StoreTaskNeighborhoodOptions},
 };
+
+type GraphNeighborsOptions = StoreGraphNeighborsOptions;
+type TaskNeighborhoodOptions = StoreTaskNeighborhoodOptions;
 
 use crate::test_support::{create_input, store};
 

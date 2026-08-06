@@ -17,6 +17,19 @@ mod store_operations;
 #[cfg(test)]
 mod test_support;
 
+// service 的持久化、迁移、能力和图约束测试必须显式挂载；仅保留文件不会进入测试二进制。
+#[cfg(test)]
+mod db_tests;
+
+#[cfg(test)]
+mod db_constraints_tests;
+
+#[cfg(test)]
+mod capability_tests;
+
+#[cfg(test)]
+mod graph_tests;
+
 // host 的 adoption 测试通过这个显式 feature 使用 service-owned 数据库 fixture；默认
 // 产品构建不会编译该模块，也不会因此获得第二个 SQLite runtime backend。
 #[cfg(feature = "test-support")]

@@ -363,13 +363,27 @@ mod tests {
             .await
             .expect("signal composite parent");
 
-        connection
-            .execute(
-                "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, title, created_at, updated_at) VALUES ('kb://task/t_ontology', 'task', 'tasks', 't_ontology', 'b_default', 't_ontology', 'Ontology task', 1, 1)",
+        // create_task 已经写入 canonical entity；这里确认复用同一 board-local 实体，避免重复插入。
+        let mut entity_rows = connection
+            .query(
+                "SELECT COUNT(*) FROM entities WHERE uri='kb://task/t_ontology' AND board_id='b_default'",
                 (),
             )
             .await
-            .expect("projection entity");
+            .expect("projection entity query");
+        let entity_row = entity_rows
+            .next()
+            .await
+            .expect("projection entity row")
+            .expect("projection entity result");
+        assert_eq!(
+            integer_value(
+                entity_row.get_value(0).expect("projection entity count"),
+                "projection entity count",
+            )
+            .expect("projection entity count integer"),
+            1
+        );
         connection
             .execute(
                 "INSERT INTO projection_jobs(source_event_id, target, entity_uri, board_id, operation, payload_json, status, attempts, lease_owner, lease_token, lease_expires_at, fence_epoch, generation, next_attempt_at, created_at, updated_at) VALUES (NULL, 'fts', 'kb://task/t_ontology', 'b_default', 'upsert', '{}', 'running', 1, 'worker', 'claim', 10, 1, 'gen-1', 11, 1, 1)",
@@ -432,20 +446,7 @@ mod tests {
             .expect_err("attachment update must reject parent traversal");
         assert!(update_error.to_string().contains("rel_path escapes"));
 
-        connection
-            .execute(
-                "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, created_at, updated_at) VALUES ('kb://task/t_default_guard', 'task', 'tasks', 't_default_guard', 'b_default', 't_default_guard', 1, 1)",
-                (),
-            )
-            .await
-            .expect("default entity");
-        connection
-            .execute(
-                "INSERT INTO entities(uri, kind, source_table, source_id, board_id, task_id, created_at, updated_at) VALUES ('kb://task/t_other_guard', 'task', 'tasks', 't_other_guard', 'b_guard_other', 't_other_guard', 1, 1)",
-                (),
-            )
-            .await
-            .expect("other entity");
+        // 两次 create_task 已经分别建立 default/guard-other 的 canonical entity。
         let relation_error = connection
             .execute(
                 "INSERT INTO entity_relations(subject_uri, predicate, object_uri, graph_uri, board_id, created_at, updated_at) VALUES ('kb://task/t_default_guard', 'depends_on', 'kb://task/t_other_guard', 'kb://graph/b_default', 'b_default', 1, 1)",

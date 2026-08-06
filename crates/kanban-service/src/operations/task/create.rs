@@ -1,10 +1,8 @@
-use std::future::Future;
+use std::collections::BTreeMap;
 
 use kanban_core::{Clock, KanbanError, ReadinessFacts, Result, TaskStatus, initial_status};
 
-use crate::{ApplicationService, ApplicationStore, TaskRecord};
-
-use std::collections::BTreeMap;
+use crate::{KanbanService, TaskRecord};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CreateTaskCommand {
@@ -27,70 +25,28 @@ pub struct CreateTaskCommand {
     pub actor: String,
 }
 
-/// application service 传给持久化层的规范化输入。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CreateTaskRecord {
-    pub id: String,
-    pub idempotency_key: Option<String>,
-    pub title: String,
-    pub description: Option<String>,
-    pub status: TaskStatus,
-    pub assignee: Option<String>,
-    pub priority: i64,
-    pub scheduled_at: Option<i64>,
-    pub due_at: Option<i64>,
-    pub max_retries: Option<i64>,
-    pub metadata_json: String,
-    pub labels: Vec<String>,
-    pub depends_on: Vec<String>,
-    pub created_by: String,
-}
-
-pub trait TaskCreate: ApplicationStore {
-    fn create_task(
-        &self,
-        board: &str,
-        input: CreateTaskRecord,
-    ) -> impl Future<Output = Result<TaskRecord>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: TaskCreate,
     C: Clock,
 {
     pub async fn create_task(&self, command: CreateTaskCommand) -> Result<TaskRecord> {
         validate_create_task(&command)?;
-        let candidate = initial_status(
-            command.requested_status,
-            ReadinessFacts {
-                title: &command.title,
-                description: command.description.as_deref(),
-                scheduled_at: command.scheduled_at,
-                dependencies_done: true,
-            },
-            self.clock.now_ms(),
-        )?;
-        // 每个新任务都从 unplanned execution plan 开始。因此，候选状态为 ready 的任务
-        // 会保持 todo，直到提供计划或显式标记为 not_required。
-        let status = if candidate == TaskStatus::Ready {
-            TaskStatus::Todo
-        } else {
-            candidate
-        };
+        let status = initial_task_status(&command, self.clock.now_ms())?;
         let metadata_json = serde_json::to_string(&command.metadata)
             .map_err(|error| KanbanError::InvalidInput(format!("invalid metadata: {error}")))?;
         let board = command.board.trim().to_owned();
         let _mutation = self.mutation_gate.lock().await;
-        self.store
+        self.application
+            .store
+            .store
             .create_task(
                 &board,
-                CreateTaskRecord {
+                crate::store_operations::CreateTaskInput {
                     id: command.task_id,
                     idempotency_key: command.idempotency_key,
                     title: command.title.trim().to_owned(),
                     description: command.description,
-                    status,
+                    status: status.as_str().to_owned(),
                     assignee: command.assignee,
                     priority: command.priority,
                     scheduled_at: command.scheduled_at,
@@ -113,7 +69,29 @@ where
                 },
             )
             .await
+            .map_err(crate::adapter::store_error)
+            .and_then(super::application_task)
     }
+}
+
+fn initial_task_status(command: &CreateTaskCommand, now: i64) -> Result<TaskStatus> {
+    let candidate = initial_status(
+        command.requested_status,
+        ReadinessFacts {
+            title: &command.title,
+            description: command.description.as_deref(),
+            scheduled_at: command.scheduled_at,
+            dependencies_done: true,
+        },
+        now,
+    )?;
+    // 每个新任务都从 unplanned execution plan 开始。因此，候选状态为 ready 的任务
+    // 会保持 todo，直到提供计划或显式标记为 not_required。
+    Ok(if candidate == TaskStatus::Ready {
+        TaskStatus::Todo
+    } else {
+        candidate
+    })
 }
 
 fn validate_create_task(command: &CreateTaskCommand) -> Result<()> {
@@ -169,79 +147,57 @@ fn validate_create_task(command: &CreateTaskCommand) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::sync::{Arc, atomic::AtomicUsize};
 
-    use kanban_core::{Result, TaskStatus};
+    use kanban_core::TaskStatus;
 
-    use crate::operations::test_support::{FixedClock, StubStore};
-    use crate::*;
+    use super::{CreateTaskCommand, initial_task_status};
 
-    impl TaskCreate for StubStore {
-        async fn create_task(&self, board: &str, input: CreateTaskRecord) -> Result<TaskRecord> {
-            assert_eq!(board, "default");
-            Ok(crate::operations::test_support::task_record(input))
-        }
-    }
-    #[tokio::test]
-    async fn create_task_validates_status_and_applies_unplanned_guard() {
-        let service = ApplicationService::with_clock(
-            StubStore {
-                calls: Arc::new(AtomicUsize::new(0)),
-            },
-            FixedClock(100),
-        );
-        let command = CreateTaskCommand {
+    fn command(
+        requested_status: Option<TaskStatus>,
+        scheduled_at: Option<i64>,
+    ) -> CreateTaskCommand {
+        CreateTaskCommand {
             task_id: "t_test".into(),
             board: "default".into(),
             idempotency_key: Some("retry-1".into()),
             title: " Ship ".into(),
             description: Some("ready spec".into()),
-            requested_status: Some(TaskStatus::Ready),
+            requested_status,
             assignee: None,
             priority: 2,
-            scheduled_at: None,
+            scheduled_at,
             due_at: None,
             max_retries: Some(3),
             metadata: BTreeMap::from([("source".into(), serde_json::json!("test"))]),
             labels: Vec::new(),
             depends_on: Vec::new(),
             actor: "tester".into(),
-        };
-
-        let task = service.create_task(command).await.unwrap();
-        assert_eq!(task.status, TaskStatus::Todo);
-        assert_eq!(task.title, "Ship");
-        assert_eq!(task.execution_plan_state, ExecutionPlanState::Unplanned);
+        }
     }
 
-    #[tokio::test]
-    async fn create_task_preserves_valid_scheduled_status() {
-        let service = ApplicationService::with_clock(
-            StubStore {
-                calls: Arc::new(AtomicUsize::new(0)),
-            },
-            FixedClock(100),
-        );
-        let task = service
-            .create_task(CreateTaskCommand {
-                task_id: "t_scheduled".into(),
-                board: "default".into(),
-                idempotency_key: None,
-                title: "Later".into(),
-                description: Some("ready spec".into()),
-                requested_status: Some(TaskStatus::Scheduled),
-                assignee: None,
-                priority: 3,
-                scheduled_at: Some(200),
-                due_at: None,
-                max_retries: None,
-                metadata: BTreeMap::new(),
-                labels: Vec::new(),
-                depends_on: Vec::new(),
-                actor: "tester".into(),
-            })
-            .await
-            .unwrap();
-        assert_eq!(task.status, TaskStatus::Scheduled);
+    #[test]
+    fn create_task_applies_unplanned_guard() {
+        let command = command(Some(TaskStatus::Ready), None);
+        let status = initial_task_status(&command, 100).unwrap();
+        assert_eq!(status, TaskStatus::Todo);
+    }
+
+    #[test]
+    fn create_task_preserves_valid_scheduled_status() {
+        let command = command(Some(TaskStatus::Scheduled), Some(200));
+        let status = initial_task_status(&command, 100).unwrap();
+        assert_eq!(status, TaskStatus::Scheduled);
+    }
+
+    #[test]
+    fn create_task_rejects_invalid_command_before_serialization() {
+        let mut command = command(None, None);
+        command.priority = 4;
+        assert!(super::validate_create_task(&command).is_err());
+
+        let mut command = command(None, None);
+        command.metadata = BTreeMap::new();
+        command.labels = vec![" ".into()];
+        assert!(super::validate_create_task(&command).is_err());
     }
 }

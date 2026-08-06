@@ -58,13 +58,13 @@ pub use operations::{
     ReopenTaskCommand, ReopenTaskRecord, RunLogRecord, SearchHit, SearchIndexStatus, SearchMeta,
     SearchQuery, SearchResults, SearchTasks, SpecifyTaskCommand, SpecifyTaskRecord, StepComplete,
     StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate, TaskArchive, TaskBlock,
-    TaskClaim, TaskCreate, TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskDone,
-    TaskHeartbeat, TaskLabelAdd, TaskLabelList, TaskLabelRemove, TaskNeighborhoodOptions,
+    TaskClaim, TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskDone, TaskHeartbeat,
+    TaskLabelAdd, TaskLabelList, TaskLabelRemove, TaskNeighborhoodOptions,
     TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord, TaskPlanNotRequired, TaskPromote,
     TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen, TaskReview, TaskSpecify,
-    TaskUnblock, TaskUpdate, UnblockTaskCommand, UnblockTaskRecord, UpdateTaskCommand,
-    UpdateTaskRecord, VacuumReportRecord, VectorChunkQueryCommand, VectorChunkResult,
-    VectorConfigureCommand, VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
+    TaskUnblock, UnblockTaskCommand, UnblockTaskRecord, UpdateTaskCommand, VacuumReportRecord,
+    VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,
+    VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
 };
 pub use ports::ApplicationStore;
 pub use service::{ApplicationService, KanbanService};

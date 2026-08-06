@@ -52,6 +52,23 @@ pub struct TaskListOptions {
     pub sort: TaskListSort,
 }
 
+impl Default for TaskListOptions {
+    fn default() -> Self {
+        Self {
+            statuses: Vec::new(),
+            priorities: Vec::new(),
+            labels: Vec::new(),
+            plan_filters: Vec::new(),
+            assignee: None,
+            query: None,
+            include_archived: false,
+            limit: 100,
+            offset: 0,
+            sort: TaskListSort::Position,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TaskListPage {
     pub tasks: Vec<TaskRecord>,

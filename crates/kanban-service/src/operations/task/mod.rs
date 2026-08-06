@@ -20,7 +20,7 @@ mod update;
 pub use archive::{ArchiveTaskCommand, ArchiveTaskRecord, TaskArchive};
 pub use block::{BlockTaskCommand, BlockTaskRecord, TaskBlock};
 pub use claim::{ClaimTaskCommand, ClaimTaskRecord, TaskClaim};
-pub use create::{CreateTaskCommand, CreateTaskRecord, TaskCreate};
+pub use create::CreateTaskCommand;
 pub use details::{
     TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskOntologySignalSummaryRecord,
     TaskOntologySummaryRecord,
@@ -41,7 +41,7 @@ pub use reopen::{ReopenTaskCommand, ReopenTaskRecord, TaskReopen};
 pub use review::{SubmitReviewTaskCommand, SubmitReviewTaskRecord, TaskReview};
 pub use specify::{SpecifyTaskCommand, SpecifyTaskRecord, TaskSpecify};
 pub use unblock::{TaskUnblock, UnblockTaskCommand, UnblockTaskRecord};
-pub use update::{TaskUpdate, UpdateTaskCommand, UpdateTaskRecord};
+pub use update::UpdateTaskCommand;
 
 /// 将 Turso 的任务 row 转为 application DTO。
 ///

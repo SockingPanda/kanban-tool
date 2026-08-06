@@ -20,23 +20,23 @@ impl Clock for FixedClock {
     }
 }
 
-pub(crate) fn task_record(input: CreateTaskRecord) -> TaskRecord {
+fn base_task(task_id: &str) -> TaskRecord {
     TaskRecord {
-        id: input.id,
+        id: task_id.to_owned(),
         board_id: "b_default".into(),
         board_slug: "default".into(),
         task_ref: "default#1".into(),
         seq: 1,
-        title: input.title,
-        description: input.description,
-        status: input.status,
+        title: "Promote".into(),
+        description: Some("ready spec".into()),
+        status: TaskStatus::Todo,
         status_reason: None,
-        assignee: input.assignee,
-        priority: input.priority,
+        assignee: None,
+        priority: 1,
         position: 1024,
-        scheduled_at: input.scheduled_at,
-        due_at: input.due_at,
-        created_by: input.created_by,
+        scheduled_at: None,
+        due_at: None,
+        created_by: "tester".into(),
         created_at: 100,
         updated_at: 100,
         started_at: None,
@@ -48,10 +48,10 @@ pub(crate) fn task_record(input: CreateTaskRecord) -> TaskRecord {
         last_heartbeat_at: None,
         current_run_id: None,
         retry_count: 0,
-        max_retries: input.max_retries,
+        max_retries: None,
         result_summary: None,
         result_json: None,
-        metadata_json: input.metadata_json,
+        metadata_json: "{}".into(),
         lock_version: 0,
         dependency_blocked: false,
         unfinished_parent_count: 0,
@@ -64,22 +64,7 @@ pub(crate) fn task_record(input: CreateTaskRecord) -> TaskRecord {
 }
 
 pub(crate) fn task_for_id(task_id: &str) -> TaskRecord {
-    let mut task = task_record(CreateTaskRecord {
-        id: task_id.to_owned(),
-        idempotency_key: None,
-        title: "Promote".into(),
-        description: Some("ready spec".into()),
-        status: TaskStatus::Todo,
-        assignee: None,
-        priority: 1,
-        scheduled_at: None,
-        due_at: None,
-        max_retries: None,
-        metadata_json: "{}".into(),
-        labels: Vec::new(),
-        depends_on: Vec::new(),
-        created_by: "tester".into(),
-    });
+    let mut task = base_task(task_id);
     match task_id {
         "t_promote" => task.execution_plan_state = ExecutionPlanState::NotRequired,
         "t_claim" => {

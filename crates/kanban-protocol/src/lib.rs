@@ -18,6 +18,7 @@ pub mod cli_labels;
 pub mod cli_operator;
 mod comments;
 pub mod contract_catalog;
+pub mod dependency_catalog;
 mod create_task;
 mod dependencies;
 mod derived;

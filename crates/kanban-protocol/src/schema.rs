@@ -3380,10 +3380,18 @@ pub fn schema_registry() -> &'static [SchemaRoot] {
 
 fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
     let board = crate::board_catalog::schema_roots();
+    let dependency = crate::dependency_catalog::schema_roots();
     let step = crate::step_catalog::schema_roots();
     let task = crate::task_catalog::schema_roots();
-    let mut registry = Vec::with_capacity(SCHEMA_REGISTRY.len() + 45);
+    let mut registry = Vec::with_capacity(SCHEMA_REGISTRY.len() + 55);
     for root in SCHEMA_REGISTRY {
+        if let Some(dependency_root) = dependency
+            .iter()
+            .find(|candidate| candidate.contract_id == root.contract_id)
+        {
+            registry.push(*dependency_root);
+            continue;
+        }
         if let Some(step_root) = step
             .iter()
             .find(|candidate| candidate.contract_id == root.contract_id)
@@ -3617,6 +3625,7 @@ fn portable_schema_roots() -> Vec<SchemaRoot> {
 
 fn header_schema_roots() -> Vec<SchemaRoot> {
     let board = crate::board_catalog::schema_roots();
+    let dependency = crate::dependency_catalog::schema_roots();
     let step = crate::step_catalog::schema_roots();
     let task = crate::task_catalog::schema_roots();
     crate::headers::api_header_contract_specs()
@@ -3629,6 +3638,12 @@ fn header_schema_roots() -> Vec<SchemaRoot> {
                 return *root;
             }
             if let Some(root) = task
+                .iter()
+                .find(|root| root.contract_id == spec.contract_id)
+            {
+                return *root;
+            }
+            if let Some(root) = dependency
                 .iter()
                 .find(|root| root.contract_id == spec.contract_id)
             {

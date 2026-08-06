@@ -35,14 +35,12 @@ const LOCALE_ACTOR_OPTIONAL_JSON_PARAMETERS: &[WireParameter] =
 
 const ACTOR_OPERATIONS: &[&str] = &[
     "api.accept-label-proposal",
-    "api.add-dependency",
     "api.add-task-label",
     "api.create-comment",
     "api.create-attachment",
     "api.delete-label-semantics",
     "api.delete-attachment",
     "api.propose-task-label",
-    "api.remove-dependency",
     "api.remove-task-label",
     "api.reject-label-proposal",
     "api.upsert-label-semantics",
@@ -101,6 +99,7 @@ pub fn api_header_contract_specs() -> Vec<ApiHeaderContractSpec> {
                     contract_id,
                     endpoint,
                     profile: crate::board_catalog::header_profile(endpoint.operation_id)
+                        .or_else(|| crate::dependency_catalog::header_profile(endpoint.operation_id))
                         .or_else(|| crate::step_catalog::header_profile(endpoint.operation_id))
                         .or_else(|| crate::task_catalog::header_profile(endpoint.operation_id))
                         .unwrap_or_else(|| header_profile(endpoint)),
@@ -116,6 +115,11 @@ pub(crate) fn header_operation_contracts() -> Vec<OperationContract> {
         .into_iter()
         .map(|spec| {
             if let Some(contract) = crate::board_catalog::header_contract(spec.endpoint.operation_id)
+            {
+                return contract;
+            }
+            if let Some(contract) =
+                crate::dependency_catalog::header_contract(spec.endpoint.operation_id)
             {
                 return contract;
             }

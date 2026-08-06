@@ -4870,11 +4870,19 @@ pub fn operation_inventory() -> &'static [OperationContract] {
 
 fn hybrid_static_inventory() -> Vec<OperationContract> {
     let board = crate::board_catalog::operation_contracts();
+    let dependency = crate::dependency_catalog::operation_contracts();
     let step = crate::step_catalog::operation_contracts();
     let task = crate::task_catalog::operation_contracts();
-    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 45);
+    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 55);
 
     for contract in OPERATION_INVENTORY {
+        if let Some(dependency_contract) = dependency
+            .iter()
+            .find(|candidate| candidate.id == contract.id)
+        {
+            inventory.push(*dependency_contract);
+            continue;
+        }
         if let Some(step_contract) = step.iter().find(|candidate| candidate.id == contract.id) {
             inventory.push(*step_contract);
             continue;

@@ -1,7 +1,8 @@
 mod labels_adoption {
     use kanban_protocol::{
         AddTaskLabelPath, AddTaskLabelRequest, AddTaskLabelResponse, BoardLabelPath,
-        CreateBoardLabelRequest, CreateBoardLabelResponse, ListBoardLabelsResponse,
+        CreateBoardLabelRequest, CreateBoardLabelResponse, DeleteBoardLabelPath,
+        DeleteBoardLabelQuery, DeleteBoardLabelResponse, ListBoardLabelsResponse,
         ListTaskLabelsPath, ListTaskLabelsResponse, RemoveTaskLabelPath, RemoveTaskLabelResponse,
     };
     use serde::{Serialize, de::DeserializeOwned};
@@ -23,6 +24,15 @@ mod labels_adoption {
             ),
             "create-board-label-response" => include_str!(
                 "../../../schemas/fixtures/api/create-board-label-response.v1.valid.json"
+            ),
+            "delete-board-label-path" => {
+                include_str!("../../../schemas/fixtures/api/delete-board-label-path.v1.valid.json")
+            }
+            "delete-board-label-query" => {
+                include_str!("../../../schemas/fixtures/api/delete-board-label-query.v1.valid.json")
+            }
+            "delete-board-label-response" => include_str!(
+                "../../../schemas/fixtures/api/delete-board-label-response.v1.valid.json"
             ),
             "list-task-labels-path" => {
                 include_str!("../../../schemas/fixtures/api/list-task-labels-path.v1.valid.json")
@@ -111,6 +121,107 @@ mod labels_adoption {
             serde_json::from_value(fixture("create-board-label-response"))
                 .expect("create board label response fixture");
         assert_eq!(response.data.name, "fixture");
+    }
+
+    #[test]
+    fn delete_board_label_path_dto_serializes_to_committed_fixture() {
+        assert_fixture_roundtrip::<DeleteBoardLabelPath>("delete-board-label-path");
+    }
+
+    #[test]
+    fn delete_board_label_path_fixture_is_consumed_by_real_router() {
+        let path: DeleteBoardLabelPath = serde_json::from_value(fixture("delete-board-label-path"))
+            .expect("delete board label path fixture");
+        assert_eq!(path.board, "fixture");
+        assert_eq!(path.label_id, "l_fixture");
+    }
+
+    #[test]
+    fn delete_board_label_query_dto_serializes_to_committed_fixture() {
+        assert_fixture_roundtrip::<DeleteBoardLabelQuery>("delete-board-label-query");
+    }
+
+    #[test]
+    fn delete_board_label_query_fixture_is_consumed_by_real_router() {
+        let query: DeleteBoardLabelQuery =
+            serde_json::from_value(fixture("delete-board-label-query"))
+                .expect("delete board label query fixture");
+        assert!(!query.force);
+    }
+
+    #[tokio::test]
+    async fn delete_board_label_response_fixture_is_produced_by_real_router() {
+        use axum::{
+            body::Body,
+            http::{Request, StatusCode},
+        };
+        use http_body_util::BodyExt;
+        use tower::ServiceExt;
+
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = crate::AppState::open(directory.path().join("kanban.db"), "adoption")
+            .await
+            .expect("application state");
+        let router = crate::build_router(state);
+        let create = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/boards/default/labels")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"name":"fixture-delete","color":null}"#))
+                    .expect("create request"),
+            )
+            .await
+            .expect("create response");
+        assert_eq!(create.status(), StatusCode::CREATED);
+        let created: CreateBoardLabelResponse = serde_json::from_slice(
+            &create
+                .into_body()
+                .collect()
+                .await
+                .expect("create body")
+                .to_bytes(),
+        )
+        .expect("create DTO");
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/v1/boards/default/labels/{}", created.data.id))
+                    .header("x-kb-actor", "adoption")
+                    .body(Body::empty())
+                    .expect("delete request"),
+            )
+            .await
+            .expect("delete response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let deleted: DeleteBoardLabelResponse = serde_json::from_slice(
+            &response
+                .into_body()
+                .collect()
+                .await
+                .expect("delete body")
+                .to_bytes(),
+        )
+        .expect("delete DTO");
+        assert_eq!(deleted.data.label.name, "fixture-delete");
+        assert!(!deleted.data.forced);
+        assert_eq!(deleted.data.removed_task_bindings, 0);
+        assert!(!deleted.data.removed_semantics);
+        assert_eq!(deleted.data.removed_atoms, 0);
+    }
+
+    #[test]
+    fn delete_board_label_response_fixture_is_consumed_by_contract_root() {
+        let response: DeleteBoardLabelResponse =
+            serde_json::from_value(fixture("delete-board-label-response"))
+                .expect("delete board label response fixture");
+        assert_eq!(response.data.label.name, "fixture");
+        assert!(response.data.forced);
+        assert_eq!(response.data.removed_task_bindings, 1);
     }
 
     fn assert_fixture_roundtrip<T>(name: &str)

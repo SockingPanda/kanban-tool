@@ -6,21 +6,25 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    extract::{
+        Path, Query, State,
+        rejection::{JsonRejection, QueryRejection},
+    },
     http::{HeaderMap, StatusCode},
     routing::{delete, get, post},
 };
 use kanban_protocol::{
     AddTaskLabelPath, AddTaskLabelRequest, AddTaskLabelResponse, BoardLabelPath,
     BootstrapTaskLabelRequest, BootstrapTaskLabelResponse, CreateBoardLabelRequest,
-    CreateBoardLabelResponse, DataEnvelope, LabelAtomWire, LabelSemanticsWire,
+    CreateBoardLabelResponse, DataEnvelope, DeleteBoardLabelPath, DeleteBoardLabelQuery,
+    DeleteBoardLabelResponse, DeleteBoardLabelResult, LabelAtomWire, LabelSemanticsWire,
     ListBoardLabelsResponse, ListTaskLabelsPath, ListTaskLabelsResponse, RemoveTaskLabelPath,
     RemoveTaskLabelResponse, TaskLabelSurfacePath,
 };
 use kanban_service::KanbanError;
 use kanban_service::{
     AddTaskLabelsCommand, BootstrapTaskLabelCommand, CreateBoardLabelCommand,
-    RemoveTaskLabelCommand,
+    DeleteBoardLabelCommand, RemoveTaskLabelCommand,
 };
 
 pub(crate) async fn list_board_labels(
@@ -54,6 +58,35 @@ pub(crate) async fn create_board_label(
             data: api_label(label),
         }),
     ))
+}
+
+pub(crate) async fn delete_board_label(
+    State(state): State<AppState>,
+    Path(DeleteBoardLabelPath { board, label_id }): Path<DeleteBoardLabelPath>,
+    headers: HeaderMap,
+    query: Result<Query<DeleteBoardLabelQuery>, QueryRejection>,
+) -> Result<Json<DeleteBoardLabelResponse>, ApiError> {
+    let Query(query) =
+        query.map_err(|error| KanbanError::InvalidInput(format!("查询参数无效：{error}")))?;
+    let actor = request_actor(None, &headers, state.default_actor())?;
+    let record = state
+        .application()
+        .delete_board_label(DeleteBoardLabelCommand {
+            board,
+            label_ref: label_id,
+            force: query.force,
+            actor,
+        })
+        .await?;
+    Ok(Json(DataEnvelope {
+        data: DeleteBoardLabelResult {
+            label: api_label(record.label),
+            forced: record.forced,
+            removed_task_bindings: record.removed_task_bindings,
+            removed_semantics: record.removed_semantics,
+            removed_atoms: record.removed_atoms,
+        },
+    }))
 }
 
 pub(crate) async fn list_task_labels(
@@ -162,6 +195,13 @@ pub(super) fn router() -> Router<AppState> {
                 ],
             ),
             get(list_board_labels).post(create_board_label),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Delete,
+                "/api/v1/boards/:board/labels/:label_id",
+            ),
+            delete(delete_board_label),
         )
         .route(
             crate::http::operations::registered_paths(

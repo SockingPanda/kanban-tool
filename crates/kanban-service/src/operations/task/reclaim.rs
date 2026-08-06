@@ -126,7 +126,10 @@ where
             .store
             .list_expired_claims(board, now)
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::adapter::store_error)?
+            .into_iter()
+            .map(super::application_task)
+            .collect::<Result<Vec<_>>>()?;
         let mut reclaimed = 0;
         for task in expired {
             let decision = retry_decision(task.retry_count, task.max_retries, TaskStatus::Ready);

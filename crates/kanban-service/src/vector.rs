@@ -1058,19 +1058,23 @@ pub async fn embed_query(
     let config = store
         .vector_config()
         .await?
-        .ok_or_else(|| StoreError::InvalidInput("vector provider 未配置".to_owned()))?;
+        .ok_or_else(|| vector_degraded("vector provider 未配置"))?;
     let config_for_task = config.clone();
     let text = text.to_owned();
     let embedding = tokio::task::spawn_blocking(move || {
         OllamaEmbeddingProvider::new(config_for_task).embed_batch(&[text])
     })
     .await
-    .map_err(|error| StoreError::InvalidInput(format!("vector provider worker failed: {error}")))?
-    .map_err(|error| StoreError::InvalidInput(format!("vector degraded: {}", error.message)))?
+    .map_err(|error| vector_degraded(format!("vector provider worker failed: {error}")))?
+    .map_err(|error| vector_degraded(error.message))?
     .into_iter()
     .next()
-    .ok_or_else(|| StoreError::InvalidInput("vector provider 返回空 embedding".to_owned()))?;
+    .ok_or_else(|| vector_degraded("vector provider 返回空 embedding"))?;
     Ok((config, embedding))
+}
+
+fn vector_degraded(message: impl Into<String>) -> StoreError {
+    StoreError::InvalidInput(format!("vector degraded: {}", message.into()))
 }
 
 /// 执行一个 host 内 vector projection worker tick。

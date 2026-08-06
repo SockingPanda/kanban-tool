@@ -263,6 +263,7 @@ fn portable_contract_catalog_freezes_all_jsonl_discriminators() {
 
 const B4_C2_LABEL_OPERATION_IDS: &[&str] = &[
     "api.list-board-labels",
+    "api.list-board-label-proposals",
     "api.create-board-label",
     "api.list-label-semantics",
     "api.get-label-semantics",
@@ -451,7 +452,7 @@ fn b7_header_profiles_fail_closed_over_actor_and_body_cardinality() {
 
 #[test]
 fn b4_c2_label_operations_exactly_own_all_non_header_dimensions() {
-    assert_eq!(B4_C2_LABEL_OPERATION_IDS.len(), 28);
+    assert_eq!(B4_C2_LABEL_OPERATION_IDS.len(), 29);
     for operation_id in B4_C2_LABEL_OPERATION_IDS {
         let endpoint = endpoint_descriptor(operation_id).expect("B4-C2 endpoint descriptor");
         assert_eq!(

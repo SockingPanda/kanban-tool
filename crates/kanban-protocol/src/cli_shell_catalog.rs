@@ -23,12 +23,6 @@ const CLI_HISTORY_WITNESS: AdoptionLocator = AdoptionLocator {
     exact_test: "history_cli_covers_runs_logs_comments_attachments_events_and_stats",
 };
 
-const CLI_STEPS_DEPENDENCIES_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-cli",
-    test_target: "cli_steps_dependencies_adoption",
-    exact_test: "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-};
-
 const CLI_KNOWLEDGE_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-cli",
     test_target: "cli_knowledge_adoption",
@@ -65,6 +59,57 @@ macro_rules! cli_contract_path {
 }
 
 macro_rules! adopted_cli_operation {
+    (
+        $operation_id:literal,
+        $key:literal,
+        $contract_id:literal,
+        $contract_slug:literal,
+        $operation:literal,
+        $schema_title:literal,
+        $schema_type:ty,
+        $witness:expr
+    ) => {{
+        static CONTRACTS: &[ContractDeclaration] = &[{
+            let contract = ContractDeclaration::new(
+                $contract_id,
+                cli_contract_path!($contract_slug, $operation),
+                ContractDirection::Serialize,
+                None,
+                ContractStrictness::DenyUnknownFields,
+                ContractGranularity::Exact,
+                ContractBinding::ExactSurface,
+            )
+            .with_schema(
+                concat!("urn:kanban-tool:schema:cli:", $contract_slug, "-output:v1"),
+                concat!("cli/", $contract_slug, "-output.v1.schema.json"),
+                $schema_title,
+                concat!(
+                    "schemas/fixtures/cli/",
+                    $contract_slug,
+                    "-output.v1.valid.json"
+                ),
+                concat!(
+                    "schemas/fixtures/cli/",
+                    $contract_slug,
+                    "-output.v1.invalid.json"
+                ),
+            )
+            .with_adoption($witness, $witness);
+            #[cfg(feature = "schema")]
+            let contract = contract.with_schema_type::<$schema_type>();
+            contract
+        }];
+        OperationDeclaration::new(
+            $operation_id,
+            ContractSurface::Cli,
+            None,
+            None,
+            $key,
+            $key,
+            MigrationState::Adopted,
+            CONTRACTS,
+        )
+    }};
     (
         $operation_id:literal,
         $key:literal,
@@ -247,33 +292,6 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "Kanban CLI context build output v1",
         crate::CliContextBuildOutput,
         CLI_KNOWLEDGE_WITNESS
-    ),
-    adopted_cli_operation!(
-        "cli.dep-add",
-        "dep add",
-        "dep-add",
-        "dep add",
-        "Kanban CLI dependency add output v1",
-        crate::CliDependencyAddOutput,
-        CLI_STEPS_DEPENDENCIES_WITNESS
-    ),
-    adopted_cli_operation!(
-        "cli.dep-list",
-        "dep list",
-        "dep-list",
-        "dep list",
-        "Kanban CLI dependency list output v1",
-        crate::CliDependencyListOutput,
-        CLI_STEPS_DEPENDENCIES_WITNESS
-    ),
-    adopted_cli_operation!(
-        "cli.dep-remove",
-        "dep remove",
-        "dep-remove",
-        "dep remove",
-        "Kanban CLI dependency remove output v1",
-        crate::CliDependencyRemoveOutput,
-        CLI_STEPS_DEPENDENCIES_WITNESS
     ),
     adopted_cli_operation!(
         "cli.doctor",
@@ -486,6 +504,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
     adopted_cli_operation!(
         "cli.maintenance-rebuild-v1",
         "maintenance rebuild",
+        "cli.maintenance-rebuild-v1.output",
         "maintenance-rebuild",
         "maintenance rebuild",
         "Kanban CLI maintenance rebuild output v1",
@@ -495,6 +514,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
     adopted_cli_operation!(
         "cli.maintenance-run-v1",
         "maintenance run",
+        "cli.maintenance-run-v1.output",
         "maintenance-run",
         "maintenance run",
         "Kanban CLI maintenance run output v1",
@@ -504,6 +524,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
     adopted_cli_operation!(
         "cli.maintenance-status-v1",
         "maintenance status",
+        "cli.maintenance-status-v1.output",
         "maintenance-status",
         "maintenance status",
         "Kanban CLI maintenance status output v1",
@@ -565,7 +586,7 @@ mod tests {
             .into_iter()
             .map(|operation| operation.key)
             .collect::<Vec<_>>();
-        assert_eq!(keys.len(), 44);
+        assert_eq!(keys.len(), 41);
         assert_eq!(keys[0], "__complete");
         assert_eq!(keys.last().map(String::as_str), Some("maintenance status"));
         for key in [
@@ -577,7 +598,7 @@ mod tests {
         ] {
             assert!(!keys.iter().any(|candidate| candidate == key));
         }
-        assert_eq!(operation_contracts().len(), 39);
+        assert_eq!(operation_contracts().len(), 36);
     }
 
     #[test]

@@ -10,6 +10,7 @@
 //! 位于独立的 `xtask` leaf crate。正常 runtime 依赖图只包含 Serde wire 类型。
 // 通用 signal DTO 由 HTTP、client、CLI 和 MCP 共享。
 
+pub mod admin_catalog;
 mod api_components;
 mod attachments;
 pub mod board_catalog;
@@ -29,13 +30,13 @@ pub mod event_payload;
 mod events;
 mod headers;
 pub mod history_catalog;
-pub mod labels_catalog;
-pub mod knowledge_catalog;
 mod inventory;
 pub mod jsonl_core;
 pub mod jsonl_ledger;
+pub mod knowledge_catalog;
 mod label_surfaces;
 mod labels;
+pub mod labels_catalog;
 mod lifecycle;
 mod mcp;
 mod ontology;

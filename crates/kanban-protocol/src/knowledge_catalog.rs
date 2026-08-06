@@ -250,9 +250,9 @@ const fn client_witness(exact_test: &'static str) -> AdoptionLocator {
 
 const fn header_witness(profile: ApiHeaderProfile) -> AdoptionLocator {
     match profile {
-        ApiHeaderProfile::Locale => server_witness(
-            "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
-        ),
+        ApiHeaderProfile::Locale => {
+            server_witness("knowledge_adoption::locale_header_fixture_is_consumed_by_real_router")
+        }
         ApiHeaderProfile::LocaleActor => server_witness(
             "knowledge_adoption::locale_actor_header_fixture_is_consumed_by_real_router",
         ),
@@ -354,8 +354,12 @@ const API_BOARD_TASK_MAP_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/board-task-map-path.v1.valid.json",
         "schemas/fixtures/api/board-task-map-path.v1.invalid.json",
         crate::BoardTaskMapPath,
-        server_witness("suite::task_graph_adoption::board_task_map_path_dto_serializes_to_committed_fixture"),
-        server_witness("suite::task_graph_adoption::board_task_map_path_fixture_is_consumed_by_real_router")
+        server_witness(
+            "suite::task_graph_adoption::board_task_map_path_dto_serializes_to_committed_fixture"
+        ),
+        server_witness(
+            "suite::task_graph_adoption::board_task_map_path_fixture_is_consumed_by_real_router"
+        )
     ),
     header_contract!(
         "api.board-task-map.headers",
@@ -383,8 +387,12 @@ const API_BOARD_TASK_MAP_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/board-task-map-query.v1.valid.json",
         "schemas/fixtures/api/board-task-map-query.v1.invalid.json",
         crate::BoardTaskMapQuery,
-        server_witness("suite::task_graph_adoption::board_task_map_query_dto_serializes_to_committed_fixture"),
-        server_witness("suite::task_graph_adoption::board_task_map_query_fixture_is_consumed_by_real_router")
+        server_witness(
+            "suite::task_graph_adoption::board_task_map_query_dto_serializes_to_committed_fixture"
+        ),
+        server_witness(
+            "suite::task_graph_adoption::board_task_map_query_fixture_is_consumed_by_real_router"
+        )
     ),
     api_contract!(
         "api.board-task-map.response",
@@ -400,8 +408,12 @@ const API_BOARD_TASK_MAP_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/board-task-map-response.v1.valid.json",
         "schemas/fixtures/api/board-task-map-response.v1.invalid.json",
         crate::BoardTaskMapResponse,
-        server_witness("suite::task_graph_adoption::board_task_map_response_fixture_is_produced_by_real_router"),
-        server_witness("suite::task_graph_adoption::board_task_map_response_fixture_is_consumed_by_contract_root")
+        server_witness(
+            "suite::task_graph_adoption::board_task_map_response_fixture_is_produced_by_real_router"
+        ),
+        server_witness(
+            "suite::task_graph_adoption::board_task_map_response_fixture_is_consumed_by_contract_root"
+        )
     ),
 ];
 
@@ -420,8 +432,12 @@ const API_TASK_NEIGHBORHOOD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/task-neighborhood-path.v1.valid.json",
         "schemas/fixtures/api/task-neighborhood-path.v1.invalid.json",
         crate::TaskNeighborhoodPath,
-        server_witness("suite::task_graph_adoption::task_neighborhood_path_dto_serializes_to_committed_fixture"),
-        server_witness("suite::task_graph_adoption::task_neighborhood_path_fixture_is_consumed_by_real_router")
+        server_witness(
+            "suite::task_graph_adoption::task_neighborhood_path_dto_serializes_to_committed_fixture"
+        ),
+        server_witness(
+            "suite::task_graph_adoption::task_neighborhood_path_fixture_is_consumed_by_real_router"
+        )
     ),
     header_contract!(
         "api.task-neighborhood.headers",
@@ -449,8 +465,12 @@ const API_TASK_NEIGHBORHOOD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/task-neighborhood-query.v1.valid.json",
         "schemas/fixtures/api/task-neighborhood-query.v1.invalid.json",
         crate::TaskNeighborhoodQuery,
-        server_witness("suite::task_graph_adoption::task_neighborhood_query_dto_serializes_to_committed_fixture"),
-        server_witness("suite::task_graph_adoption::task_neighborhood_query_fixture_is_consumed_by_real_router")
+        server_witness(
+            "suite::task_graph_adoption::task_neighborhood_query_dto_serializes_to_committed_fixture"
+        ),
+        server_witness(
+            "suite::task_graph_adoption::task_neighborhood_query_fixture_is_consumed_by_real_router"
+        )
     ),
     api_contract!(
         "api.task-neighborhood.response",
@@ -466,8 +486,12 @@ const API_TASK_NEIGHBORHOOD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/task-neighborhood-response.v1.valid.json",
         "schemas/fixtures/api/task-neighborhood-response.v1.invalid.json",
         crate::TaskNeighborhoodResponse,
-        server_witness("suite::task_graph_adoption::task_neighborhood_response_fixture_is_produced_by_real_router"),
-        server_witness("suite::task_graph_adoption::task_neighborhood_response_fixture_is_consumed_by_contract_root")
+        server_witness(
+            "suite::task_graph_adoption::task_neighborhood_response_fixture_is_produced_by_real_router"
+        ),
+        server_witness(
+            "suite::task_graph_adoption::task_neighborhood_response_fixture_is_consumed_by_contract_root"
+        )
     ),
 ];
 
@@ -543,8 +567,12 @@ const API_SEARCH_TASKS_BY_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-tasks-by-status-query.v1.valid.json",
         "schemas/fixtures/api/search-tasks-by-status-query.v1.invalid.json",
         crate::SearchTasksQuery,
-        server_witness("suite::derived_adoption::search_tasks_by_status_query_dto_serializes_to_committed_fixture"),
-        server_witness("suite::derived_adoption::search_tasks_by_status_query_fixture_is_consumed_by_real_router")
+        server_witness(
+            "suite::derived_adoption::search_tasks_by_status_query_dto_serializes_to_committed_fixture"
+        ),
+        server_witness(
+            "suite::derived_adoption::search_tasks_by_status_query_fixture_is_consumed_by_real_router"
+        )
     ),
     header_contract!(
         "api.search-tasks-by-status.headers",
@@ -572,8 +600,12 @@ const API_SEARCH_TASKS_BY_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-tasks-by-status-response.v1.valid.json",
         "schemas/fixtures/api/search-tasks-by-status-response.v1.invalid.json",
         crate::SearchTasksByStatusResponse,
-        server_witness("suite::derived_adoption::search_tasks_by_status_response_fixture_is_produced_by_real_router"),
-        server_witness("suite::derived_adoption::search_tasks_by_status_response_fixture_is_consumed_by_contract_root")
+        server_witness(
+            "suite::derived_adoption::search_tasks_by_status_response_fixture_is_produced_by_real_router"
+        ),
+        server_witness(
+            "suite::derived_adoption::search_tasks_by_status_response_fixture_is_consumed_by_contract_root"
+        )
     ),
 ];
 
@@ -898,8 +930,12 @@ const API_GRAPH_NEIGHBORS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-neighbors-query.v1.valid.json",
         "schemas/fixtures/api/graph-neighbors-query.v1.invalid.json",
         crate::GraphNeighborsQuery,
-        server_witness("suite::derived_adoption::graph_neighbors_query_dto_serializes_to_committed_fixture"),
-        server_witness("suite::derived_adoption::graph_neighbors_query_fixture_is_consumed_by_real_router")
+        server_witness(
+            "suite::derived_adoption::graph_neighbors_query_dto_serializes_to_committed_fixture"
+        ),
+        server_witness(
+            "suite::derived_adoption::graph_neighbors_query_fixture_is_consumed_by_real_router"
+        )
     ),
     header_contract!(
         "api.graph-neighbors.headers",
@@ -927,8 +963,12 @@ const API_GRAPH_NEIGHBORS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-neighbors-response.v1.valid.json",
         "schemas/fixtures/api/graph-neighbors-response.v1.invalid.json",
         crate::GraphNeighborsResponse,
-        server_witness("suite::derived_adoption::graph_neighbors_response_fixture_is_produced_by_real_router"),
-        server_witness("suite::derived_adoption::graph_neighbors_response_fixture_is_consumed_by_contract_root")
+        server_witness(
+            "suite::derived_adoption::graph_neighbors_response_fixture_is_produced_by_real_router"
+        ),
+        server_witness(
+            "suite::derived_adoption::graph_neighbors_response_fixture_is_consumed_by_contract_root"
+        )
     ),
 ];
 
@@ -1554,8 +1594,12 @@ const API_VECTOR_QUERY_LABEL_ATOMS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-query-label-atoms-query.v1.valid.json",
         "schemas/fixtures/api/vector-query-label-atoms-query.v1.invalid.json",
         crate::VectorQuery,
-        client_witness("operations::vector::tests::vector_query_label_atoms_query_fixture_is_produced"),
-        server_witness("vector::tests::vector_query_label_atoms_query_fixture_is_consumed_by_real_router")
+        client_witness(
+            "operations::vector::tests::vector_query_label_atoms_query_fixture_is_produced"
+        ),
+        server_witness(
+            "vector::tests::vector_query_label_atoms_query_fixture_is_consumed_by_real_router"
+        )
     ),
     header_contract!(
         "api.vector-query-label-atoms.headers",
@@ -1583,8 +1627,12 @@ const API_VECTOR_QUERY_LABEL_ATOMS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-query-label-atoms-response.v1.valid.json",
         "schemas/fixtures/api/vector-query-label-atoms-response.v1.invalid.json",
         crate::VectorQueryLabelAtomsResponse,
-        server_witness("vector::tests::vector_query_label_atoms_response_fixture_is_produced_by_real_router"),
-        client_witness("operations::vector::tests::vector_query_label_atoms_response_fixture_is_consumed_by_client")
+        server_witness(
+            "vector::tests::vector_query_label_atoms_response_fixture_is_produced_by_real_router"
+        ),
+        client_witness(
+            "operations::vector::tests::vector_query_label_atoms_response_fixture_is_consumed_by_client"
+        )
     ),
 ];
 
@@ -1937,9 +1985,11 @@ mod tests {
         assert_eq!(ids.len(), count);
         assert_eq!(KNOWLEDGE_OPERATIONS.len(), 22);
         assert_eq!(contracts.len(), 69);
-        assert!(KNOWLEDGE_OPERATIONS
-            .iter()
-            .all(|operation| operation.mcp_policy.is_some()));
+        assert!(
+            KNOWLEDGE_OPERATIONS
+                .iter()
+                .all(|operation| operation.mcp_policy.is_some())
+        );
     }
 
     #[test]

@@ -4864,7 +4864,10 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             converge_labels_catalog_contracts(&mut inventory);
             converge_knowledge_catalog_contracts(&mut inventory);
             inventory.extend(attachment_cli_contracts());
-            inventory.extend(maintenance_operation_contracts());
+            let mut legacy_maintenance = maintenance_operation_contracts();
+            legacy_maintenance.retain(|contract| contract.surface == ContractSurface::Cli);
+            inventory.extend(crate::admin_catalog::inventory_contracts());
+            inventory.extend(legacy_maintenance);
             converge_adoption_witnesses(&mut inventory);
             inventory
         })
@@ -4902,6 +4905,7 @@ fn converge_knowledge_catalog_contracts(inventory: &mut [OperationContract]) {
 }
 
 fn hybrid_static_inventory() -> Vec<OperationContract> {
+    let admin = crate::admin_catalog::operation_contracts();
     let board = crate::board_catalog::operation_contracts();
     let dependency = crate::dependency_catalog::operation_contracts();
     let step = crate::step_catalog::operation_contracts();
@@ -4942,6 +4946,14 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
             inventory.push(*knowledge_contract);
             continue;
         }
+        if contract.id == "api.doctor.response" {
+            append_board_contract(&mut inventory, &board, "api.list-board-columns.path");
+            append_board_contract(&mut inventory, &board, "api.list-board-columns.response");
+        }
+        if let Some(admin_contract) = admin.iter().find(|candidate| candidate.id == contract.id) {
+            inventory.push(*admin_contract);
+            continue;
+        }
         match contract.id {
             // Keep the historical CLI order around the retained board use/current rows.
             "cli.board-use.output" => {
@@ -4953,12 +4965,6 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
             "cli.task-list.output" => {
                 append_board_contract(&mut inventory, &board, "cli.board-archive.output");
                 append_board_contract(&mut inventory, &board, "cli.board-columns.output");
-                inventory.push(*contract);
-            }
-            // Columns used to sit immediately before maintenance doctor.
-            "api.doctor.response" => {
-                append_board_contract(&mut inventory, &board, "api.list-board-columns.path");
-                append_board_contract(&mut inventory, &board, "api.list-board-columns.response");
                 inventory.push(*contract);
             }
             // The CRUD board rows used to follow the shared error component.

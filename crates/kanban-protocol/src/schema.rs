@@ -3381,6 +3381,8 @@ pub fn schema_registry() -> &'static [SchemaRoot] {
 }
 
 fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
+    let admin = crate::admin_catalog::schema_roots();
+    let admin_templates = crate::admin_catalog::template_schema_roots();
     let board = crate::board_catalog::schema_roots();
     let dependency = crate::dependency_catalog::schema_roots();
     let step = crate::step_catalog::schema_roots();
@@ -3427,6 +3429,20 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
             .find(|candidate| candidate.contract_id == root.contract_id)
         {
             registry.push(*knowledge_root);
+            continue;
+        }
+        if let Some(admin_root) = admin
+            .iter()
+            .find(|candidate| candidate.contract_id == root.contract_id)
+        {
+            registry.push(*admin_root);
+            continue;
+        }
+        if let Some(admin_template_root) = admin_templates
+            .iter()
+            .find(|candidate| candidate.contract_id == root.contract_id)
+        {
+            registry.push(*admin_template_root);
             continue;
         }
         match root.contract_id {
@@ -3643,6 +3659,7 @@ fn portable_schema_roots() -> Vec<SchemaRoot> {
 }
 
 fn header_schema_roots() -> Vec<SchemaRoot> {
+    let admin = crate::admin_catalog::schema_roots();
     let board = crate::board_catalog::schema_roots();
     let dependency = crate::dependency_catalog::schema_roots();
     let history = crate::history_catalog::schema_roots();
@@ -3690,6 +3707,12 @@ fn header_schema_roots() -> Vec<SchemaRoot> {
                 return *root;
             }
             if let Some(root) = knowledge
+                .iter()
+                .find(|root| root.contract_id == spec.contract_id)
+            {
+                return *root;
+            }
+            if let Some(root) = admin
                 .iter()
                 .find(|root| root.contract_id == spec.contract_id)
             {

@@ -426,6 +426,43 @@ const API_ADD_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
     ),
 ];
 
+const API_BOOTSTRAP_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
+    path_contract!(
+        "api.bootstrap-task-label.path",
+        "POST /api/v1/tasks/:task_id/labels/bootstrap",
+        "bootstrap-task-label-path",
+        "Kanban bootstrap task label path v1",
+        TASK_LABEL_PATH_PARAMETERS,
+        crate::TaskLabelSurfacePath,
+        LABEL_WITNESS
+    ),
+    header_contract!(
+        "bootstrap-task-label",
+        "POST /api/v1/tasks/:task_id/labels/bootstrap",
+        ApiHeaderProfile::LocaleActorJson,
+        "locale-actor-json-headers",
+        crate::headers::LocaleActorJsonHeaders
+    ),
+    body_contract!(
+        "api.bootstrap-task-label.request",
+        "POST /api/v1/tasks/:task_id/labels/bootstrap",
+        "request",
+        "bootstrap-task-label-request",
+        "Kanban bootstrap task label request v1",
+        crate::BootstrapTaskLabelRequest,
+        LABEL_WITNESS
+    ),
+    response_contract!(
+        "api.bootstrap-task-label.response",
+        "POST /api/v1/tasks/:task_id/labels/bootstrap",
+        "success",
+        "bootstrap-task-label-response",
+        "Kanban bootstrap task label response v1",
+        crate::BootstrapTaskLabelResponse,
+        LABEL_WITNESS
+    ),
+];
+
 const API_REMOVE_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
     path_contract!(
         "api.remove-task-label.path",
@@ -1616,6 +1653,10 @@ const TASK_LABEL_ADD_BINDING: McpToolBinding = McpToolBinding {
     tool_name: "task_label_add",
     http_operations: &["api.list-tasks", "api.add-task-label"],
 };
+const TASK_LABEL_BOOTSTRAP_BINDING: McpToolBinding = McpToolBinding {
+    tool_name: "task_label_bootstrap",
+    http_operations: &["api.list-tasks", "api.bootstrap-task-label"],
+};
 const TASK_LABEL_REMOVE_BINDING: McpToolBinding = McpToolBinding {
     tool_name: "task_label_remove",
     http_operations: &["api.list-tasks", "api.remove-task-label"],
@@ -1656,6 +1697,19 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
     .with_shared_components(&["api.error.response"])
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
     .with_mcp_policy(policy!(TASK_LABEL_ADD_BINDING)),
+    OperationDeclaration::new(
+        "api.bootstrap-task-label",
+        ContractSurface::Api,
+        Some(HttpMethod::Post),
+        Some("/api/v1/tasks/:task_id/labels/bootstrap"),
+        "POST /api/v1/tasks/:task_id/labels/bootstrap",
+        "POST /api/v1/tasks/:task_id/labels/bootstrap",
+        MigrationState::Adopted,
+        API_BOOTSTRAP_TASK_LABEL_CONTRACTS,
+    )
+    .with_shared_components(&["api.error.response"])
+    .with_header_profile(ApiHeaderProfile::LocaleActorJson)
+    .with_mcp_policy(policy!(TASK_LABEL_BOOTSTRAP_BINDING)),
     OperationDeclaration::new(
         "api.remove-task-label",
         ContractSurface::Api,

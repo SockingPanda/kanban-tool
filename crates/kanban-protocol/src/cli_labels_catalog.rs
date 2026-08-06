@@ -108,6 +108,13 @@ const CLI_LABELS_OPERATIONS: &[OperationDeclaration] = &[
         LABEL_WITNESS
     ),
     cli_operation!(
+        "label-bootstrap",
+        "label bootstrap",
+        "Kanban CLI label bootstrap output v1",
+        crate::cli_labels::CliLabelBootstrapOutput,
+        LABEL_WITNESS
+    ),
+    cli_operation!(
         "label-atom-index-query",
         "label atom-index query",
         "Kanban CLI label atom-index query output v1",

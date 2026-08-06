@@ -2,7 +2,7 @@
 
 use crate::{ProjectConfigInput, WorkerProfileInput};
 use serde::de::DeserializeOwned;
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::path::Path;
 
 fn fixture(relative: &str) -> Value {

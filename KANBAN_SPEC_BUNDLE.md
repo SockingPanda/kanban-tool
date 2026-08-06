@@ -83,7 +83,12 @@ kanban vector status
 ## 入口和功能面
 
 - **CLI**：普通命令通过 `kanban-client` 访问 localhost；`serve`、`init`、配置/board 选择、completion 和 Codex hook 是本地 shell 或 host 装配命令。
-- **MCP**：`kanban-mcp` 使用 stdio 和 `rmcp`，当前工具清单由 `crates/kanban-mcp/src/main.rs` 的稳定 inventory 测试锁定；所有 tool 都调用 typed client，不启动 host、不直接写数据库。
+- **MCP**：`kanban-mcp` 使用 stdio 和 `rmcp`。公开工具由
+  `kanban-protocol::MCP_OPERATION_CATALOG`（`mcp_operation_catalog()`）机器可读目录固定，
+  共 102 个 tool，覆盖全部 101 个非 host-admin HTTP operation；
+  `MCP_HOST_ADMIN_OPERATION_IDS` 明确禁止 12 个 host-admin operation。所有 tool 都调用
+  typed client，不启动 host、不直接写数据库。search/graph/vector 与 label atom-index 的
+  domain `rebuild`/`sync` 不属于这 12 个 host-admin operation，仍由 catalog 覆盖。
 - **Desktop**：Tauri/React shell 通过 typed HTTP 使用 `board`、`list`、`map`、`events`、`runs`、`signals`、`ontology`、`maintenance`、`health`、`settings` 十个导航视图；task detail、attachments、steps、comments、dependencies、context 和 maintenance 继续复用同一 host。
 
 CLI 的 canonical leaf 和 HTTP 的 method/path 由 `kanban-protocol` 的
@@ -101,7 +106,7 @@ neighborhood/map，以及 search index 的 status/doctor/rebuild/sync；完整�
 | search | Turso FTS `task_search_fts`；未 ready/stale 时由 service 回退 canonical SQL |
 | graph | `entities`、`relation_predicates`、`entity_relations` canonical；service 执行有深度上限、环检测和 board isolation 的 BFS |
 | vector/context | Turso `vector32`、host 内 Ollama provider 和 bounded context merge；provider 不可用时返回 degraded diagnostics |
-| maintenance/migration | host-owned doctor、checkpoint、backup、portable import/export、vacuum、projection rebuild/cleanup，以及可选 `legacy-sqlite-import` v30 importer |
+| maintenance/migration | host-owned doctor、checkpoint、backup、portable import/export、vacuum、`/api/v1/maintenance/rebuild`、`/api/v1/maintenance/cleanup`，以及可选 `legacy-sqlite-import` v30 importer |
 
 FTS、vector、graph、context 和 projection 均可从 canonical facts 删除后重建，不能反向改变业务事实。
 
@@ -233,7 +238,12 @@ projection/admin、独立 lifecycle leaf 和 task-read 旧路径不属于 active
 
 ### 4.3 MCP
 
-`kanban-mcp` 是 Rust stdio server，当前 89 个 tool 的排序由 `crates/kanban-mcp/src/main.rs::tool_inventory_is_stable` 锁定，覆盖任务生命周期、labels/ontology/signals、graph/context/search/vector、comments/steps/dependencies、attachments、runs/events 和 boards。MCP 不启动 host、不打开数据库、不提供 migration/backup/vacuum/replace 管理命令。
+`kanban-mcp` 是 Rust stdio server。公开工具由
+`kanban-protocol::MCP_OPERATION_CATALOG`（`mcp_operation_catalog()`）机器可读目录固定，共
+102 个 tool，覆盖全部 101 个非 host-admin HTTP operation；
+`MCP_HOST_ADMIN_OPERATION_IDS` 明确禁止 12 个 host-admin operation。MCP 不启动 host、不打开
+数据库、不提供 migration/backup/vacuum/replace 管理命令；search/graph/vector 与 label
+atom-index 的 domain `rebuild`/`sync` 不属于这 12 个禁止项。
 
 ### 4.4 Desktop
 
@@ -255,7 +265,9 @@ schema family 为 `kanban.turso`，当前 lineage 为 v1/v2：queue/history、la
 1. **Turso v1 → v2 原地升级**：host 校验 family、exact shape、constraints、foreign keys 和 board isolation；创建 verified sibling backup 后运行事务 migration，失败 rollback，重复启动幂等。
 2. **portable/legacy 导入**：portable JSONL 只写 canonical facts，按 `import_journal` 记录 fingerprint/staging/phase，提交后入队 derived rebuild；`import-v30` 只读 legacy SQLite v30，attachment 先 staging、checksum/board isolation preflight，显式 feature 未启用则 fail-closed。
 
-backup、export/import、checkpoint、vacuum、projection rebuild/cleanup 和数据库替换都由 host 管理；MCP 不承载这些命令。
+backup、export/import、checkpoint、vacuum、`/api/v1/maintenance/rebuild|cleanup` 和数据库
+替换都由 host 管理；这里的 maintenance operation 不应与 MCP 可调用的 search/graph/vector
+或 label atom-index domain `rebuild`/`sync` 混同。MCP 不承载前述 host-admin 命令。
 
 ## 6. 契约和错误
 
@@ -378,13 +390,20 @@ canonical mutation 写 facts、event 和 `projection_jobs`；FTS、vector、rela
 1. **Turso v1 → v2 原地升级**：host 先检查 schema family、table/column/index/trigger/constraint、foreign keys 和 board isolation，创建 verified sibling backup，然后在事务内升级；失败 rollback，重复启动幂等。
 2. **portable/legacy 导入**：portable JSONL 只导入 canonical facts，`import_journal` 记录 fingerprint、staging 和 phase，提交后 enqueue derived rebuild；`import-v30` 只读 legacy SQLite v30，attachment 先做 schema/计数/checksum/board preflight，在显式 `legacy-sqlite-import` feature 下由 service 执行，默认构建 fail-closed。
 
-backup、export/import、checkpoint、vacuum、maintenance/rebuild/cleanup 和 database replace 都是 host-admin operation。CLI、HTTP、Desktop 管理入口复用 host；MCP 只承载领域 query/mutation，不承载数据库替换或迁移管理。
+backup、export/import、checkpoint、vacuum、`/api/v1/maintenance/rebuild|cleanup` 和 database
+replace 都是 host-admin operation。CLI、HTTP、Desktop 管理入口复用 host；MCP 只承载领域
+query/mutation，不承载数据库替换或迁移管理。search/graph/vector 与 label atom-index 的
+domain `rebuild`/`sync` 不属于 host-admin surface。
 
 ## 6. Surface 与 worker
 
 `kanban-server/src/http/operations` 当前合并 boards、tasks、steps、comments、attachments、dependencies、entities、graph、search、context、labels、ontology、signals、runs、events、stats、maintenance 和 vector routers；`/health`、`/api/v1/stream/events` 也由 host 提供。真实 route 与 `kanban-protocol::endpoint_catalog()` 必须同步，但 catalog/adoption descriptor 不能替代 actual route test。
 
-CLI domain 命令、MCP 89-tool inventory 和 Desktop 十个导航视图都通过 typed client 接入。Desktop Tauri command 不持有 Turso；claim token 仅在会话状态中保存。维护操作显示 host 返回的 phase、degraded 和 `restart_required`，不凭 UI 状态推断 canonical 成功。
+CLI domain 命令、MCP protocol machine-readable catalog（102 个 tool，覆盖 101 个非
+host-admin HTTP operation）和 Desktop 十个导航视图都通过 typed client 接入；catalog 明确
+拒绝 12 个 host-admin operation。Desktop Tauri command 不持有 Turso；claim token 仅在会话
+状态中保存。维护操作显示 host 返回的 phase、degraded 和 `restart_required`，不凭 UI 状态
+推断 canonical 成功。
 
 dispatcher 只有传入 `--dispatcher-profile` 才启动，轮询 `ready`、复用 claim/heartbeat/finish、优雅停止等待当前 worker；projection worker 与 host 共用 lifecycle/maintenance lease，按 job generation 处理 FTS/vector/relations/context。两类 worker 都不打开第二数据库、不维护第二状态机、不直接改 adapter DTO。
 
@@ -924,7 +943,9 @@ host 未启动或 URL 不可达时，client 返回稳定的 `server_unavailable`
 | `POST` | `/api/v1/maintenance/rebuild` | projection rebuild |
 | `POST` | `/api/v1/maintenance/cleanup` | 仅清理可重建派生内容 |
 
-`projection_maintenance_owner` 保护并发；portable import 只写 canonical facts，提交后 enqueue FTS/vector/graph rebuild。MCP 不提供这些 host-admin mutations。
+`projection_maintenance_owner` 保护并发；portable import 只写 canonical facts，提交后 enqueue
+FTS/vector/graph rebuild。MCP 不提供这些 host-admin mutations；这不限制 MCP 对 search/graph/
+vector 或 label atom-index domain `rebuild`/`sync` 的调用。
 
 ## 4. Boards、tasks、plans、steps、dependencies
 
@@ -1154,7 +1175,10 @@ canonical Turso
 
 - API：health、boards（含 columns）、tasks/lifecycle（含 specify）、steps、comments、attachments、dependencies、entities（含 upsert）、graph（含 neighborhood/map）、search/context（含 index rebuild/sync）、labels/ontology、signals、runs/events、maintenance 和 vector；
 - CLI：board/config/task/label/comment/context/attachment/dep/entity/graph/search/index/signal/vector、run/event、host-admin、hook/init/completion；原始 bytes 下载、completion、hook stdin/stdout、serve daemon 等非 JSON 输出保持 `excluded`。canonical leaf 以 Clap `get_name()` 为准，visible alias 不重复登记；
-- MCP：`crates/kanban-mcp/src/main.rs` 的 89-tool inventory；
+- MCP：`kanban-protocol::MCP_OPERATION_CATALOG` 的 machine-readable catalog，共 102 个
+  tool，覆盖全部 101 个非 host-admin HTTP operation；`MCP_HOST_ADMIN_OPERATION_IDS` 明确
+  禁止 12 个 host-admin operation。search/graph/vector 与 label atom-index 的 domain
+  `rebuild`/`sync` 仍属于允许的 MCP surface；
 - JSONL/metadata/config：portable import/export、decision/signal/ontology metadata、project config。
 
 旧 backend/helper/projection 名称若仍出现在 historical catalog、migration fixture 或 archive 文档中，只表示 baseline/data lineage；active owner 已是 `kanban-service` 的 Turso FTS/vector32/BFS/worker，不能据此重新引入第二 backend。

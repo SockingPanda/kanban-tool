@@ -2,6 +2,8 @@ mod attachments;
 mod boards;
 pub(crate) mod comments;
 mod context;
+#[cfg(test)]
+mod contract_adoption;
 mod dependencies;
 mod entities;
 mod events;

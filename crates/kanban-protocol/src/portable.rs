@@ -429,17 +429,6 @@ pub fn portable_contract_catalog() -> &'static [PortableContractDescriptor] {
         .as_slice()
 }
 
-/// 返回该 family 的 surface operation projection。
-pub fn surface_catalog() -> Vec<crate::SurfaceOperation> {
-    crate::CatalogProjection::new(PORTABLE_OPERATIONS).surfaces()
-}
-
-/// 返回该 family 的 schema root projection。
-#[cfg(feature = "schema")]
-pub fn schema_roots() -> Vec<crate::schema::SchemaRoot> {
-    crate::CatalogProjection::new(PORTABLE_OPERATIONS).schemas()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

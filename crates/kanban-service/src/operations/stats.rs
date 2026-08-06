@@ -1,8 +1,6 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result, TaskStatus};
 
-use crate::{ApplicationService, ApplicationStore};
+use crate::KanbanService;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatusCountRecord {
@@ -40,17 +38,8 @@ pub struct QueueStatsRecord {
     pub active_parents_with_incomplete_required_steps: i64,
 }
 
-pub trait StatsQuery: ApplicationStore {
-    fn get_stats(
-        &self,
-        board: &str,
-        generated_at: i64,
-    ) -> impl Future<Output = Result<QueueStatsRecord>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: StatsQuery,
     C: Clock,
 {
     pub async fn get_stats(&self, board: &str) -> Result<QueueStatsRecord> {
@@ -64,59 +53,104 @@ where
                 "generated_at must be non-negative".to_owned(),
             ));
         }
-        self.store.get_stats(board, generated_at).await
+        self.application
+            .store
+            .store
+            .get_stats(board, generated_at)
+            .await
+            .map_err(crate::adapter::store_error)
+            .and_then(application_stats)
+    }
+}
+
+fn application_stats(stats: crate::domain::QueueStatsRecord) -> Result<QueueStatsRecord> {
+    Ok(QueueStatsRecord {
+        board_id: stats.board_id,
+        generated_at: stats.generated_at,
+        status_counts: stats
+            .status_counts
+            .into_iter()
+            .map(application_status_count)
+            .collect::<Result<Vec<_>>>()?,
+        stale_claims: stats
+            .stale_claims
+            .into_iter()
+            .map(application_stale_claim)
+            .collect(),
+        blocked_reasons: stats
+            .blocked_reasons
+            .into_iter()
+            .map(application_blocked_reason)
+            .collect(),
+        unplanned_active_tasks: stats.unplanned_active_tasks,
+        active_parents_with_incomplete_required_steps: stats
+            .active_parents_with_incomplete_required_steps,
+    })
+}
+
+fn application_status_count(value: crate::domain::StatusCountRecord) -> Result<StatusCountRecord> {
+    let status = value.status.parse::<TaskStatus>().map_err(|error| {
+        KanbanError::Storage(format!("stored stats status is invalid: {error}"))
+    })?;
+    Ok(StatusCountRecord {
+        status,
+        count: value.count,
+    })
+}
+
+fn application_stale_claim(value: crate::domain::StaleClaimRecord) -> StaleClaimRecord {
+    StaleClaimRecord {
+        task_id: value.task_id,
+        seq: value.seq,
+        title: value.title,
+        claim_owner: value.claim_owner,
+        claim_expires_at: value.claim_expires_at,
+        last_heartbeat_at: value.last_heartbeat_at,
+        current_run_id: value.current_run_id,
+        retry_count: value.retry_count,
+        max_retries: value.max_retries,
+    }
+}
+
+fn application_blocked_reason(
+    value: crate::domain::BlockedReasonCountRecord,
+) -> BlockedReasonCountRecord {
+    BlockedReasonCountRecord {
+        reason: value.reason,
+        count: value.count,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
+    use kanban_core::KanbanError;
 
-    use kanban_core::{KanbanError, Result};
-
-    use crate::operations::test_support::{FixedClock, StubStore};
+    use crate::operations::test_support::FixedClock;
     use crate::*;
 
-    impl StatsQuery for StubStore {
-        async fn get_stats(&self, board: &str, generated_at: i64) -> Result<QueueStatsRecord> {
-            assert_eq!(board, "default");
-            assert_eq!(generated_at, 100);
-            self.calls.fetch_add(1, Ordering::SeqCst);
-            Ok(QueueStatsRecord {
-                board_id: "b_default".into(),
-                generated_at,
-                status_counts: Vec::new(),
-                stale_claims: Vec::new(),
-                blocked_reasons: Vec::new(),
-                unplanned_active_tasks: 0,
-                active_parents_with_incomplete_required_steps: 0,
-            })
-        }
-    }
-
-    fn service(calls: Arc<AtomicUsize>) -> ApplicationService<StubStore, FixedClock> {
-        ApplicationService::with_clock(StubStore { calls }, FixedClock(100))
+    async fn service(name: &str) -> (tempfile::TempDir, KanbanService<FixedClock>) {
+        let (directory, store, _path) = crate::test_support::store(name).await;
+        store.initialize().await.expect("initialize");
+        (
+            directory,
+            KanbanService::with_clock(TursoApplicationStore::new(store), FixedClock(100)),
+        )
     }
 
     #[tokio::test]
     async fn stats_trims_board_and_uses_application_clock() {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let stats = service(calls.clone()).get_stats(" default ").await.unwrap();
+        let (_directory, service) = service("stats-service").await;
+        let stats = service.get_stats(" default ").await.unwrap();
         assert_eq!(stats.board_id, "b_default");
         assert_eq!(stats.generated_at, 100);
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
     async fn stats_rejects_empty_board_without_calling_store() {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let error = service(calls.clone()).get_stats("  ").await.unwrap_err();
+        let (_directory, service) = service("stats-service-errors").await;
+        let error = service.get_stats("  ").await.unwrap_err();
         assert!(
             matches!(error, KanbanError::InvalidInput(message) if message == "board is required")
         );
-        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 }

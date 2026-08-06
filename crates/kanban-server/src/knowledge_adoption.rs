@@ -849,11 +849,12 @@ async fn signal_routes_consume_record_list_show_and_review_fixtures() {
         .expect("confirm signals response");
     assert_eq!(response.status(), StatusCode::OK);
     let confirmed: ConfirmSignalsResponse = response_json(response).await;
-    let _expected_confirmed: ConfirmSignalsResponse = fixture!(
+    let expected_confirmed: ConfirmSignalsResponse = fixture!(
         ConfirmSignalsResponse,
         "confirm-signals-response.v1.valid.json"
     );
     assert_eq!(confirmed.data.len(), 1);
+    assert_eq!(confirmed.data.len(), expected_confirmed.data.len());
     assert_eq!(confirmed.data[0].id, signal_id);
     assert_eq!(confirmed.data[0].status, "confirmed");
 }

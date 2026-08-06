@@ -169,12 +169,6 @@ impl ContractDeclaration {
         self
     }
 
-    /// 覆盖该 child 的 migration 状态。
-    pub const fn with_migration(mut self, migration: MigrationState) -> Self {
-        self.migration = Some(migration);
-        self
-    }
-
     /// 覆盖该 child 的 exclusion reason。
     pub const fn with_exclusion(mut self, reason: &'static str) -> Self {
         self.exclusion = Some(reason);

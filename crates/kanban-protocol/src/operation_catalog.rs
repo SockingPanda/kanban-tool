@@ -5,9 +5,7 @@
 //! 薄 facade。声明数组的书写顺序就是 canonical order；projection 不经过无序 map，也
 //! 不按 operation id 猜测 schema/type。
 
-use crate::{
-    AdoptionWitness, EndpointDescriptor, OperationContract, OperationDeclaration, SurfaceOperation,
-};
+use crate::{EndpointDescriptor, OperationContract, OperationDeclaration, SurfaceOperation};
 
 /// 声明 source 的 projection 视图。
 #[derive(Debug, Clone, Copy)]
@@ -48,21 +46,6 @@ impl<'a> CatalogProjection<'a> {
         self.declarations
             .iter()
             .map(OperationDeclaration::surface_operation)
-            .collect()
-    }
-
-    /// 展开所有 producer/consumer witness；结果保留 source 与 child 顺序。
-    pub fn adoption_witnesses(&self) -> Vec<AdoptionWitness> {
-        self.declarations
-            .iter()
-            .flat_map(|parent| {
-                parent.contracts.iter().flat_map(|contract| {
-                    [contract.producer, contract.consumer]
-                        .into_iter()
-                        .flatten()
-                        .map(|locator| contract.adoption_witness(parent, locator))
-                })
-            })
             .collect()
     }
 

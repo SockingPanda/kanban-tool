@@ -5215,6 +5215,24 @@ fn canonical_cli_witness(id: &str) -> WitnessLocator {
             "generic_signals_record_review_and_confirm_flow_through_real_cli",
         );
     }
+    if id.starts_with("cli.hook-") {
+        return cli_test(
+            "cli_admin_adoption",
+            "codex_hooks_install_handle_status_and_uninstall_use_real_binary",
+        );
+    }
+    if id.starts_with("cli.completion") || id.starts_with("cli.__complete") {
+        return cli_test(
+            "cli_admin_adoption",
+            "completion_and_hidden_complete_are_local_and_do_not_open_database",
+        );
+    }
+    if id == "cli.dispatch.output" {
+        return cli_test(
+            "cli_admin_adoption",
+            "dispatcher_profile_is_consumed_by_real_serve_and_only_claims_ready",
+        );
+    }
     if id.starts_with("cli.graph-")
         || id.starts_with("cli.entity-")
         || id.starts_with("cli.search-")
@@ -5232,9 +5250,6 @@ fn canonical_cli_witness(id: &str) -> WitnessLocator {
         || id.starts_with("cli.doctor")
         || id.starts_with("cli.checkpoint")
         || id.starts_with("cli.stats")
-        || id.starts_with("cli.dispatch")
-        || id.starts_with("cli.hook-")
-        || id.starts_with("cli.completion")
         || id.starts_with("cli.derived-")
         || id.starts_with("cli.outbox-")
     {
@@ -5253,9 +5268,7 @@ fn canonical_api_witness(contract: &OperationContract, consumer: bool) -> Option
     let id = contract.id;
 
     if id.ends_with(".headers") {
-        return Some(server_route_test(
-            "knowledge_adoption::label_add_route_consumes_committed_header_fixture",
-        ));
+        return Some(header_witness(contract));
     }
     if id == "api.vector-configure.request" {
         return Some(if consumer {
@@ -5391,6 +5404,20 @@ fn canonical_api_witness(contract: &OperationContract, consumer: bool) -> Option
     if id.starts_with("api.maintenance-") {
         return Some(server_route_test(maintenance_witness(id, consumer)));
     }
+    if id == "api.doctor.response" {
+        return Some(server_route_test(if consumer {
+            "suite::maintenance_adoption::doctor_response_contract_consumes_producer_fixture"
+        } else {
+            "suite::maintenance_adoption::doctor_response_maps_real_non_default_report_before_fixture_normalization"
+        }));
+    }
+    if id == "api.checkpoint.response" {
+        return Some(server_route_test(if consumer {
+            "suite::maintenance_adoption::checkpoint_response_contract_consumes_producer_fixture"
+        } else {
+            "suite::maintenance_adoption::checkpoint_response_reports_real_wal_field_relationships"
+        }));
+    }
     if id == "api.health.response" {
         return Some(server_route_test(
             "http::operations::contract_adoption::suite_health_and_errors_use_real_router_fixtures",
@@ -5416,6 +5443,29 @@ fn canonical_api_witness(contract: &OperationContract, consumer: bool) -> Option
         || id == "api.remove-task-label.response"
     {
         return None;
+    }
+
+    if matches!(
+        id,
+        "api.list-tasks.path"
+            | "api.list-tasks.query"
+            | "api.list-tasks.response"
+            | "api.list-tasks-by-status.path"
+            | "api.list-tasks-by-status.query"
+            | "api.list-tasks-by-status.response"
+            | "api.create-task.path"
+            | "api.create-task.request"
+            | "api.create-task.response"
+            | "api.get-task.path"
+            | "api.get-task.query"
+            | "api.get-task.response"
+            | "api.update-task.path"
+            | "api.update-task.request"
+            | "api.update-task.response"
+    ) {
+        return Some(server_route_test(
+            "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        ));
     }
 
     let route_test = if id.contains("label-ontology") || id.contains("ontology-") {
@@ -5454,6 +5504,24 @@ fn canonical_api_witness(contract: &OperationContract, consumer: bool) -> Option
         "http::operations::contract_adoption::suite_health_and_errors_use_real_router_fixtures"
     };
     Some(server_route_test(route_test))
+}
+
+fn header_witness(contract: &OperationContract) -> WitnessLocator {
+    let fixture = contract.fixture.unwrap_or_default();
+    let exact_test = if fixture.contains("locale-actor-optional-json-headers") {
+        "knowledge_adoption::locale_actor_optional_json_header_fixture_is_consumed_by_real_router"
+    } else if fixture.contains("locale-actor-json-headers") {
+        "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router"
+    } else if fixture.contains("locale-actor-headers") {
+        "knowledge_adoption::locale_actor_header_fixture_is_consumed_by_real_router"
+    } else if fixture.contains("locale-json-headers") {
+        "knowledge_adoption::locale_json_header_fixture_is_consumed_by_real_router"
+    } else if fixture.contains("locale-headers") {
+        "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router"
+    } else {
+        panic!("unmapped API header fixture: {fixture}");
+    };
+    server_route_test(exact_test)
 }
 
 fn maintenance_witness(id: &str, consumer: bool) -> &'static str {

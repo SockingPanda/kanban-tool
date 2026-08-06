@@ -13,26 +13,27 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use kanban_protocol::{
-    AddTaskLabelRequest, ApiCreateTaskStatus, ApiTask, BoardLabelPath, BoardQuery,
-    BoardTaskMapPath, BoardTaskMapQuery, BoardTaskMapResponse, BuildContextPath, BuildContextQuery,
-    BuildContextResponse, ConfirmSignalsResponse, CreateBoardLabelRequest,
-    CreateBoardLabelResponse, CreateBoardRequest, CreateBoardResponse, CreateTaskRequest,
-    CreateTaskResponse, EntityListQuery, EntityListResponse, EntityPath, EntityResponse,
-    EntityUpsertRequest, ErrorEnvelope, GetLabelOntologySignalResponse, GetLabelProposalResponse,
-    GetSignalResponse, GraphMaintenanceResponse, GraphNeighborsQuery, GraphNeighborsResponse,
-    GraphQueryQuery, GraphStatusResponse, LabelAtomIndexStatusResponse, LabelOntologyActionRequest,
+    AddTaskLabelRequest, AddTaskLabelResponse, ApiCreateTaskStatus, ApiTask, ArchiveBoardRequest,
+    ArchiveBoardResponse, BoardLabelPath, BoardQuery, BoardTaskMapPath, BoardTaskMapQuery,
+    BoardTaskMapResponse, BuildContextPath, BuildContextQuery, BuildContextResponse,
+    ConfirmSignalsResponse, CreateBoardLabelRequest, CreateBoardLabelResponse, CreateBoardRequest,
+    CreateBoardResponse, CreateTaskRequest, CreateTaskResponse, EntityListQuery,
+    EntityListResponse, EntityPath, EntityResponse, EntityUpsertRequest, ErrorEnvelope,
+    GetLabelOntologySignalResponse, GetLabelProposalResponse, GetSignalResponse,
+    GraphMaintenanceResponse, GraphNeighborsQuery, GraphNeighborsResponse, GraphQueryQuery,
+    GraphStatusResponse, LabelAtomIndexStatusResponse, LabelOntologyActionRequest,
     LabelOntologyActionResponse, LabelOntologyReviewQuery, LabelOntologySignalQuery,
     LabelOntologySignalWire, LabelOntologySignalsResponse, LabelProposalCandidateWire,
-    LabelProposalDecisionRequest, LabelSemanticsPath, ListLabelAtomsResponse,
+    LabelProposalDecisionRequest, LabelSemanticsPath, ListBoardsResponse, ListLabelAtomsResponse,
     ListLabelSemanticsResponse, ListSignalsResponse, ListTaskLabelProposalsResponse,
     MetadataEnvelope, ProposalPath, ProposeTaskLabelRequest, ProposeTaskLabelResponse,
     RecordLabelOntologyObservationRequest, RecordLabelOntologyObservationResponse,
-    RecordSignalRequest, RecordSignalResponse, ReviewSignalsRequest, SearchStatusResponse,
-    SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse, SignalFilterMeta,
-    SignalPath, TaskNeighborhoodPath, TaskNeighborhoodQuery, TaskNeighborhoodResponse,
-    UpsertLabelSemanticsRequest, UpsertLabelSemanticsResponse, VectorConfigureRequest,
-    VectorConfigureResponse, VectorProjectionRequest, VectorProjectionResponse, VectorQuery,
-    VectorStatusQuery, VectorStatusResponse,
+    RecordSignalRequest, RecordSignalResponse, RemoveTaskLabelResponse, ReviewSignalsRequest,
+    SearchStatusResponse, SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse,
+    SignalFilterMeta, SignalPath, TaskNeighborhoodPath, TaskNeighborhoodQuery,
+    TaskNeighborhoodResponse, UpsertLabelSemanticsRequest, UpsertLabelSemanticsResponse,
+    VectorConfigureRequest, VectorConfigureResponse, VectorProjectionRequest,
+    VectorProjectionResponse, VectorQuery, VectorStatusQuery, VectorStatusResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use tempfile::TempDir;
@@ -102,6 +103,20 @@ fn request_json_with_headers<T: Serialize>(
         .expect("JSON request with headers")
 }
 
+fn request_empty_with_headers(
+    method: Method,
+    uri: &str,
+    headers: &BTreeMap<String, String>,
+) -> Request<Body> {
+    let mut builder = Request::builder().method(method).uri(uri);
+    for (name, value) in headers {
+        builder = builder.header(name, value);
+    }
+    builder
+        .body(Body::empty())
+        .expect("empty request with headers")
+}
+
 fn request_empty(method: Method, uri: &str) -> Request<Body> {
     Request::builder()
         .method(method)
@@ -112,6 +127,32 @@ fn request_empty(method: Method, uri: &str) -> Request<Body> {
 
 fn actor_headers() -> BTreeMap<String, String> {
     fixture!(BTreeMap<String, String>, "headers/locale-actor-json-headers.v1.valid.json")
+}
+
+fn header_fixture(path: &str) -> BTreeMap<String, String> {
+    match path {
+        "locale-headers" => fixture!(
+            BTreeMap<String, String>,
+            "headers/locale-headers.v1.valid.json"
+        ),
+        "locale-json-headers" => fixture!(
+            BTreeMap<String, String>,
+            "headers/locale-json-headers.v1.valid.json"
+        ),
+        "locale-actor-headers" => fixture!(
+            BTreeMap<String, String>,
+            "headers/locale-actor-headers.v1.valid.json"
+        ),
+        "locale-actor-json-headers" => fixture!(
+            BTreeMap<String, String>,
+            "headers/locale-actor-json-headers.v1.valid.json"
+        ),
+        "locale-actor-optional-json-headers" => fixture!(
+            BTreeMap<String, String>,
+            "headers/locale-actor-optional-json-headers.v1.valid.json"
+        ),
+        _ => panic!("unknown header fixture {path}"),
+    }
 }
 
 async fn create_task(router: &Router, board: &str, task_id: &str, title: &str) -> ApiTask {
@@ -348,7 +389,7 @@ async fn labels_semantics_and_atoms_use_committed_fixtures_through_host() {
 }
 
 #[tokio::test]
-async fn label_add_route_consumes_committed_header_fixture() {
+async fn locale_actor_json_header_fixture_is_consumed_by_real_router() {
     let (_directory, router) = test_router().await;
     create_board(&router, "fixture").await;
     let task = create_task(&router, "fixture", "t_fixture", "fixture label task").await;
@@ -385,6 +426,113 @@ async fn label_add_route_consumes_committed_header_fixture() {
     let added: kanban_protocol::AddTaskLabelResponse = response_json(response).await;
     assert_eq!(added.data.labels.len(), 1);
     assert_eq!(added.data.labels[0].id, label.data.id);
+}
+
+#[tokio::test]
+async fn locale_header_fixture_is_consumed_by_real_router() {
+    let (_directory, router) = test_router().await;
+    let headers = header_fixture("locale-headers");
+    let response = router
+        .oneshot(request_empty_with_headers(
+            Method::GET,
+            "/api/v1/boards",
+            &headers,
+        ))
+        .await
+        .expect("list boards response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let _: ListBoardsResponse = response_json(response).await;
+}
+
+#[tokio::test]
+async fn locale_json_header_fixture_is_consumed_by_real_router() {
+    let (_directory, router) = test_router().await;
+    create_board(&router, "fixture").await;
+    let headers = header_fixture("locale-json-headers");
+    let request: CreateBoardLabelRequest = fixture!(
+        CreateBoardLabelRequest,
+        "create-board-label-request.v1.valid.json"
+    );
+    let response = router
+        .oneshot(request_json_with_headers(
+            Method::POST,
+            "/api/v1/boards/fixture/labels",
+            &request,
+            &headers,
+        ))
+        .await
+        .expect("create board label response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let _: CreateBoardLabelResponse = response_json(response).await;
+}
+
+#[tokio::test]
+async fn locale_actor_header_fixture_is_consumed_by_real_router() {
+    let (_directory, router) = test_router().await;
+    create_board(&router, "fixture").await;
+    let task = create_task(&router, "fixture", "t_fixture", "fixture label task").await;
+    let label = create_label(
+        &router,
+        "fixture",
+        CreateBoardLabelRequest {
+            name: "fixture".to_owned(),
+            color: None,
+        },
+    )
+    .await;
+    let add_request = AddTaskLabelRequest {
+        name: Some(label.data.name.clone()),
+        names: None,
+        create_missing: false,
+        actor: Some("fixture-agent".to_owned()),
+    };
+    let add_response = router
+        .clone()
+        .oneshot(request_json(
+            Method::POST,
+            &format!("/api/v1/tasks/{}/labels", task.id),
+            &add_request,
+        ))
+        .await
+        .expect("add label response");
+    assert_eq!(add_response.status(), StatusCode::CREATED);
+    let _: AddTaskLabelResponse = response_json(add_response).await;
+
+    let headers = header_fixture("locale-actor-headers");
+    let response = router
+        .oneshot(request_empty_with_headers(
+            Method::DELETE,
+            &format!("/api/v1/tasks/{}/labels/{}", task.id, label.data.id),
+            &headers,
+        ))
+        .await
+        .expect("remove label response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let _: RemoveTaskLabelResponse = response_json(response).await;
+}
+
+#[tokio::test]
+async fn locale_actor_optional_json_header_fixture_is_consumed_by_real_router() {
+    let (_directory, router) = test_router().await;
+    create_board(&router, "fixture").await;
+    let mut headers = header_fixture("locale-actor-optional-json-headers");
+    // This profile intentionally makes Content-Type optional, while the archive
+    // route still receives its actor-bearing JSON body through Axum's Json extractor.
+    assert!(!headers.contains_key("Content-Type"));
+    headers.insert("Content-Type".to_owned(), "application/json".to_owned());
+    let request: ArchiveBoardRequest =
+        fixture!(ArchiveBoardRequest, "archive-board-request.v1.valid.json");
+    let response = router
+        .oneshot(request_json_with_headers(
+            Method::POST,
+            "/api/v1/boards/fixture/archive",
+            &request,
+            &headers,
+        ))
+        .await
+        .expect("archive board response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let _: ArchiveBoardResponse = response_json(response).await;
 }
 
 #[tokio::test]

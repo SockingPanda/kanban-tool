@@ -16,11 +16,13 @@ use turso::{Value, transaction::TransactionBehavior};
 
 use crate::{
     db::TursoStore,
+    domain::LabelAtomRecord,
     error::StoreError,
     shared::{
         first_row, integer_value, now_ms, optional_integer_value, optional_text_value, text_value,
     },
     store_operations::{AtomBuildInput, BootstrapTaskLabelInput, build_atoms},
+    suggestion_engine::{AtomKind, AtomPolarity, RetrievedAtom, SolverConfig, resolve_from_atoms},
 };
 
 pub(crate) const VECTOR_TASKS_PROJECTION: &str = "vector_tasks";
@@ -1147,60 +1149,199 @@ pub(crate) async fn verify_bootstrap_task_label(
             MAX_VECTOR_BATCH - 1
         )));
     }
-    let task_text = match task.description.as_deref().map(str::trim) {
-        Some(description) if !description.is_empty() => {
-            format!("{}\n\n{}", task.title.trim(), description)
-        }
-        _ => task.title.trim().to_owned(),
-    };
-    let candidate_count = positive_atoms.len();
-    let existing_atoms = store.list_label_atoms(&task.board_id).await?;
-    let existing_capacity = MAX_VECTOR_BATCH.saturating_sub(candidate_count + 1);
-    let mut texts = Vec::with_capacity(candidate_count + existing_capacity + 1);
+    let existing_atoms =
+        stage_bootstrap_label_atom_vectors(store, &task.board_id, &input.label_id, &config.model)
+            .await
+            .map_err(bootstrap_verification_degraded)?;
+    let task_text = bootstrap_task_query_text(&task.title, task.description.as_deref());
+    let mut texts = Vec::with_capacity(atoms.len() + 1);
     texts.push(task_text);
-    texts.extend(positive_atoms.iter().map(|atom| atom.text.clone()));
-    texts.extend(
-        existing_atoms
-            .iter()
-            .take(existing_capacity)
-            .map(|atom| atom.text.clone()),
-    );
-    let embeddings = embed_texts(config.clone(), texts).await.map_err(|error| {
-        StoreError::InvalidInput(format!(
-            "label bootstrap verification 失败：label suggest degraded（vector_query_error：{}）",
-            error.message
-        ))
-    })?;
-    let query = embeddings.first().ok_or_else(|| {
-        StoreError::InvalidInput(
-            "label bootstrap verification 失败：label suggest degraded（vector_query_error：缺少 task embedding）"
-                .to_owned(),
-        )
-    })?;
-    let score = embeddings[1..=candidate_count]
-        .iter()
-        .map(|embedding| cosine(query, embedding))
-        .fold(0.0_f32, f32::max);
-    if score <= f32::EPSILON {
-        return Err(StoreError::InvalidInput(format!(
-            "label bootstrap verification 失败：label {} 未被 label suggest 返回（was not returned by label suggest）",
-            name
+    texts.extend(atoms.iter().map(|atom| atom.text.clone()));
+    let embeddings = embed_texts(config.clone(), texts)
+        .await
+        .map_err(|error| bootstrap_verification_degraded(error.message))?;
+    let query = embeddings
+        .first()
+        .ok_or_else(|| bootstrap_verification_degraded("provider 返回空 task embedding"))?;
+    let candidate_vectors = embeddings.iter().skip(1).cloned().collect::<Vec<_>>();
+    if candidate_vectors.len() != atoms.len() {
+        return Err(bootstrap_verification_degraded(format!(
+            "candidate embedding 数量不匹配：期望 {}，实际 {}",
+            atoms.len(),
+            candidate_vectors.len()
         )));
     }
+    let mut staged_atoms = existing_atoms;
+    staged_atoms.extend(
+        atoms
+            .iter()
+            .zip(candidate_vectors)
+            .map(|(atom, vector)| retrieved_bootstrap_atom(atom, vector))
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    let solver_config = SolverConfig {
+        max_candidates: 32,
+        retrieval_limit: 80,
+        max_selected_labels: 4,
+        min_candidate_score: 0.0,
+        ..SolverConfig::default()
+    };
+    let solver_result = resolve_from_atoms(query, &solver_config, &staged_atoms)
+        .map_err(bootstrap_verification_degraded)?;
+    let target = solver_result
+        .selected_labels
+        .iter()
+        .find(|label| label.label_id == input.label_id)
+        .map(|label| (label.score, "selected_labels"))
+        .or_else(|| {
+            solver_result
+                .candidates
+                .iter()
+                .find(|candidate| candidate.label_id == input.label_id)
+                .map(|candidate| (candidate.score, "candidates"))
+        });
+    let Some((score, source)) = target else {
+        return Err(StoreError::InvalidInput(format!(
+            "label bootstrap verification 失败：label {name} 未被 label suggest 返回"
+        )));
+    };
     if score < min_score {
         return Err(StoreError::InvalidInput(format!(
-            "label bootstrap verification 失败：label {} 的 score {score:.3} 低于 min_verify_score {min_score:.3}（below min_verify_score）",
-            name
+            "label bootstrap verification 失败：label {name} 的 score {score:.3} 低于 min_verify_score {min_score:.3}"
         )));
     }
     Ok(crate::BootstrapTaskLabelVerification {
         label_name: name,
         score,
-        source: "selected_labels".to_owned(),
+        source: source.to_owned(),
         min_score,
         degraded: false,
         diagnostics: Vec::new(),
     })
+}
+
+const MAX_BOOTSTRAP_STAGED_ATOMS: usize = 4096;
+
+async fn stage_bootstrap_label_atom_vectors(
+    store: &TursoStore,
+    board_id: &str,
+    target_label_id: &str,
+    embedding_model: &str,
+) -> Result<Vec<RetrievedAtom>, StoreError> {
+    let connection = store.connection().await?;
+    let mut rows = connection
+        .query(
+            &format!(
+                "SELECT a.id,a.label_id,l.name,a.polarity,a.kind,a.text,a.content_hash,d.id,d.source_kind,d.content_hash,v.embedding_model,vector_extract(v.embedding) FROM label_atoms a JOIN labels l ON l.id=a.label_id AND l.board_id=a.board_id JOIN retrieval_vectors v ON v.board_id=a.board_id AND v.content_hash=a.content_hash JOIN retrieval_documents d ON d.id=v.document_id AND d.board_id=a.board_id AND d.source_kind='label_atom' AND d.content_hash=a.content_hash AND d.content=a.text WHERE a.board_id=:board AND a.label_id!=:target_label AND v.embedding_model=:model ORDER BY a.label_id,a.ordinal,a.id LIMIT {MAX_BOOTSTRAP_STAGED_ATOMS}"
+            ),
+            [
+                (":board", board_id),
+                (":target_label", target_label_id),
+                (":model", embedding_model),
+            ],
+        )
+        .await?;
+    let mut atoms = Vec::new();
+    while let Some(row) = rows.next().await? {
+        let atom_id = text_value(row.get_value(0)?, "label_atoms.id")?;
+        let atom_hash = text_value(row.get_value(6)?, "label_atoms.content_hash")?;
+        let document_id = text_value(row.get_value(7)?, "retrieval_documents.id")?;
+        let expected_document_id = stable_id("doc", &["label_atom", &atom_id]);
+        if document_id != expected_document_id {
+            continue;
+        }
+        let source_kind = text_value(row.get_value(8)?, "retrieval_documents.source_kind")?;
+        if source_kind != "label_atom" {
+            continue;
+        }
+        let document_hash = text_value(row.get_value(9)?, "retrieval_documents.content_hash")?;
+        if document_hash != atom_hash {
+            return Err(StoreError::SchemaMismatch(
+                "label atom vector document content_hash 不匹配".to_owned(),
+            ));
+        }
+        let actual_model = text_value(row.get_value(10)?, "retrieval_vectors.embedding_model")?;
+        if actual_model != embedding_model {
+            return Err(StoreError::SchemaMismatch(
+                "label atom vector embedding model 不匹配".to_owned(),
+            ));
+        }
+        let vector = match row.get_value(11)? {
+            Value::Text(value) => serde_json::from_str::<Vec<f32>>(&value).map_err(|error| {
+                StoreError::SchemaMismatch(format!("label atom vector 提取失败：{error}"))
+            })?,
+            _ => {
+                return Err(StoreError::InvalidStoredValue {
+                    field: "retrieval_vectors.embedding",
+                });
+            }
+        };
+        atoms.push(RetrievedAtom {
+            atom_id,
+            label_id: text_value(row.get_value(1)?, "label_atoms.label_id")?,
+            label_name: text_value(row.get_value(2)?, "labels.name")?,
+            polarity: bootstrap_atom_polarity(&text_value(
+                row.get_value(3)?,
+                "label_atoms.polarity",
+            )?)?,
+            kind: bootstrap_atom_kind(&text_value(row.get_value(4)?, "label_atoms.kind")?)?,
+            text: text_value(row.get_value(5)?, "label_atoms.text")?,
+            vector,
+        });
+    }
+    Ok(atoms)
+}
+
+fn retrieved_bootstrap_atom(
+    atom: &LabelAtomRecord,
+    vector: Vec<f32>,
+) -> Result<RetrievedAtom, StoreError> {
+    Ok(RetrievedAtom {
+        atom_id: atom.id.clone(),
+        label_id: atom.label_id.clone(),
+        label_name: atom.label_name.clone(),
+        polarity: bootstrap_atom_polarity(&atom.polarity)?,
+        kind: bootstrap_atom_kind(&atom.kind)?,
+        text: atom.text.clone(),
+        vector,
+    })
+}
+
+fn bootstrap_task_query_text(title: &str, description: Option<&str>) -> String {
+    match description.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(description) => format!("{}\n\n{}", title.trim(), description),
+        None => title.trim().to_owned(),
+    }
+}
+
+fn bootstrap_atom_polarity(value: &str) -> Result<AtomPolarity, StoreError> {
+    match value {
+        "positive" => Ok(AtomPolarity::Positive),
+        "negative" => Ok(AtomPolarity::Negative),
+        _ => Err(StoreError::SchemaMismatch(format!(
+            "未知 label atom polarity：{value}"
+        ))),
+    }
+}
+
+fn bootstrap_atom_kind(value: &str) -> Result<AtomKind, StoreError> {
+    match value {
+        "name" => Ok(AtomKind::Name),
+        "description" => Ok(AtomKind::Description),
+        "applies_when" => Ok(AtomKind::AppliesWhen),
+        "positive_example" => Ok(AtomKind::PositiveExample),
+        "excludes_when" => Ok(AtomKind::ExcludesWhen),
+        "negative_example" => Ok(AtomKind::NegativeExample),
+        _ => Err(StoreError::SchemaMismatch(format!(
+            "未知 label atom kind：{value}"
+        ))),
+    }
+}
+
+fn bootstrap_verification_degraded(error: impl std::fmt::Display) -> StoreError {
+    StoreError::InvalidInput(format!(
+        "label bootstrap verification 失败：label suggest degraded（vector_query_error：{error}）"
+    ))
 }
 
 fn normalize_bootstrap_values(values: &[String]) -> Vec<String> {
@@ -1209,21 +1350,6 @@ fn normalize_bootstrap_values(values: &[String]) -> Vec<String> {
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
         .collect()
-}
-
-fn cosine(left: &[f32], right: &[f32]) -> f32 {
-    let dot = left
-        .iter()
-        .zip(right)
-        .map(|(left, right)| left * right)
-        .sum::<f32>();
-    let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
-    let right_norm = right.iter().map(|value| value * value).sum::<f32>().sqrt();
-    if left_norm == 0.0 || right_norm == 0.0 {
-        0.0
-    } else {
-        dot / (left_norm * right_norm)
-    }
 }
 
 async fn embed_texts(

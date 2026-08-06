@@ -314,6 +314,7 @@ mod tests {
     use crate::{
         BootstrapTaskLabelCommand, TursoStore,
         test_support::{count_rows, create_input},
+        vector::{VectorEmbeddingInput, content_hash, stable_id},
     };
 
     async fn service() -> (tempfile::TempDir, KanbanService) {
@@ -488,6 +489,62 @@ mod tests {
         }
     }
 
+    async fn seed_existing_label_atom(
+        store: &TursoStore,
+        label_id: &str,
+        label_name: &str,
+        atom_id: &str,
+        text: &str,
+        vector: Vec<f32>,
+        model: &str,
+    ) {
+        let connection = store.connection().await.expect("connection");
+        let hash = content_hash(text);
+        connection
+            .execute(
+                "INSERT INTO labels(id,board_id,name,created_at,updated_at) VALUES (:label,'b_default',:name,1,1)",
+                turso::named_params! { ":label": label_id, ":name": label_name },
+            )
+            .await
+            .expect("existing label");
+        connection
+            .execute(
+                "INSERT INTO label_atoms(id,label_id,board_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at) VALUES (:atom,:label,'b_default','positive','description',:text,0,:hash,1,1)",
+                turso::named_params! {
+                    ":atom": atom_id,
+                    ":label": label_id,
+                    ":text": text,
+                    ":hash": hash.as_str(),
+                },
+            )
+            .await
+            .expect("existing label atom");
+        let document = store
+            .vector_label_atom_document(atom_id)
+            .await
+            .expect("existing atom document")
+            .expect("existing atom document row");
+        store
+            .upsert_vector_document(&document)
+            .await
+            .expect("existing vector document");
+        store
+            .upsert_vector_embedding(&VectorEmbeddingInput {
+                id: stable_id("vec", &[&document.id, model]),
+                board_id: document.board_id.clone(),
+                entity_uri: document.entity_uri.clone(),
+                document_id: document.id.clone(),
+                embedding: vector,
+                dimensions: 4,
+                embedding_model: model.to_owned(),
+                content_hash: document.content_hash.clone(),
+                created_at: document.created_at,
+                updated_at: document.updated_at,
+            })
+            .await
+            .expect("existing vector embedding");
+    }
+
     async fn bootstrap_canonical_counts(
         store: &TursoStore,
     ) -> (i64, i64, i64, i64, i64, i64, i64, Option<i64>) {
@@ -557,6 +614,7 @@ mod tests {
         handle.join().expect("mock Ollama thread");
         let verification = result.verification.expect("verification result");
         assert!(verification.score >= 0.50);
+        assert_eq!(verification.source, "selected_labels");
         assert_eq!(result.task.labels.len(), 1);
         assert_eq!(
             service
@@ -593,6 +651,103 @@ mod tests {
             crate::shared::text_value(action.get_value(0).expect("change json"), "change_json")
                 .expect("change text");
         assert!(change_json.contains("bootstrap_verification"));
+        assert!(change_json.contains("selected_labels"));
+    }
+
+    #[tokio::test]
+    async fn bootstrap_verification_falls_back_to_candidates_when_existing_label_selected() {
+        let (_directory, store) = {
+            let directory = tempfile::tempdir().expect("temporary database directory");
+            let store = TursoStore::open(directory.path().join("bootstrap-verify-candidate.db"))
+                .await
+                .expect("open store");
+            store.initialize().await.expect("initialize store");
+            (directory, store)
+        };
+        store
+            .create_task(
+                "default",
+                create_input(
+                    "t_bootstrap_verify_candidate",
+                    Some("bootstrap-verify-candidate"),
+                    "matching-bootstrap target",
+                ),
+            )
+            .await
+            .expect("create task");
+        seed_existing_label_atom(
+            &store,
+            "l_existing",
+            "alpha existing",
+            "la_existing",
+            "existing matching evidence",
+            vec![1.0, 0.0, 0.0, 0.0],
+            "mock-bootstrap",
+        )
+        .await;
+        let (endpoint, handle) = mock_ollama();
+        let service = KanbanService::new(store.clone());
+        let before = bootstrap_canonical_counts(&store).await;
+        let result = service
+            .bootstrap_task_label(bootstrap_command(
+                "t_bootstrap_verify_candidate",
+                endpoint,
+                "matching-bootstrap database persistence",
+            ))
+            .await
+            .expect("candidate fallback should pass");
+        handle.join().expect("mock Ollama thread");
+        let verification = result.verification.expect("verification result");
+        assert_eq!(verification.source, "candidates");
+        assert!(verification.score >= 0.50);
+        let after = bootstrap_canonical_counts(&store).await;
+        assert_eq!(after.0, before.0 + 1);
+        assert_eq!(after.1, before.1 + 1);
+        assert!(after.2 > before.2);
+        assert_eq!(after.3, before.3 + 1);
+        assert_eq!(after.4, before.4 + 1);
+        assert_eq!(after.5, before.5 + (after.2 - before.2));
+        assert_eq!(after.6, before.6 + 2);
+    }
+
+    #[tokio::test]
+    async fn bootstrap_verification_negative_evidence_rejects_without_writes() {
+        let (_directory, store) = {
+            let directory = tempfile::tempdir().expect("temporary database directory");
+            let store = TursoStore::open(directory.path().join("bootstrap-verify-negative.db"))
+                .await
+                .expect("open store");
+            store.initialize().await.expect("initialize store");
+            (directory, store)
+        };
+        store
+            .create_task(
+                "default",
+                create_input(
+                    "t_bootstrap_verify_negative",
+                    Some("bootstrap-verify-negative"),
+                    "matching-bootstrap target",
+                ),
+            )
+            .await
+            .expect("create task");
+        let (endpoint, handle) = mock_ollama();
+        let service = KanbanService::new(store.clone());
+        let before = bootstrap_canonical_counts(&store).await;
+        let mut command = bootstrap_command(
+            "t_bootstrap_verify_negative",
+            endpoint,
+            "matching-bootstrap database persistence",
+        );
+        command.min_verify_score = 0.50;
+        command.excludes_when = vec!["matching-bootstrap exclusion".to_owned()];
+        let error = service
+            .bootstrap_task_label(command)
+            .await
+            .expect_err("negative evidence should lower the score below threshold");
+        handle.join().expect("mock Ollama thread");
+        assert!(error.to_string().contains("低于 min_verify_score"));
+        assert_eq!(bootstrap_canonical_counts(&store).await, before);
     }
 
     #[tokio::test]
@@ -631,7 +786,7 @@ mod tests {
             .await
             .expect_err("verification threshold should fail");
         handle.join().expect("mock Ollama thread");
-        assert!(error.to_string().contains("below min_verify_score"));
+        assert!(error.to_string().contains("低于 min_verify_score"));
         assert!(
             service
                 .list_board_labels("default")
@@ -686,11 +841,7 @@ mod tests {
             .await
             .expect_err("verification without a returned target should fail");
         handle.join().expect("mock Ollama thread");
-        assert!(
-            error
-                .to_string()
-                .contains("was not returned by label suggest")
-        );
+        assert!(error.to_string().contains("未被 label suggest 返回"));
         assert!(
             service
                 .list_board_labels("default")
@@ -737,6 +888,8 @@ mod tests {
                 .to_string()
                 .contains("label bootstrap verification")
         );
+        assert!(provider_error.to_string().contains("degraded"));
+        assert!(provider_error.to_string().contains("vector_query_error"));
         assert!(
             service
                 .list_board_labels("default")

@@ -178,7 +178,147 @@ mod tests {
         assert_eq!(reopened.completed_at, None);
         assert_eq!(reopened.result_summary.as_deref(), Some("result"));
         assert_eq!(reopened.result_json.as_deref(), Some(r#"{"ok":true}"#));
+        assert_eq!(reopened.current_run_id, None);
         assert_eq!(reopened.lock_version, 4);
+
+        let claimed_again = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    4,
+                    "worker",
+                    "claim-reopen-again",
+                    "r_reopen_again",
+                    "e_reopen_claim_again",
+                    "{}",
+                    500,
+                    300,
+                ),
+            )
+            .await
+            .expect("claim reopened task");
+        assert_eq!(claimed_again.task.status, "running");
+        assert_eq!(
+            claimed_again.task.current_run_id.as_deref(),
+            Some("r_reopen_again")
+        );
+
+        let connection = store.connection().await.expect("connection");
+        let old_run = first_row(
+            connection
+                .query(
+                    "SELECT status FROM task_runs WHERE id = ?1",
+                    [claimed.run.id.as_str()],
+                )
+                .await
+                .expect("old run query"),
+        )
+        .await
+        .expect("old run row");
+        assert_eq!(
+            text_value(old_run.get_value(0).expect("old run status"), "run.status")
+                .expect("old run status text"),
+            "succeeded"
+        );
+    }
+
+    #[tokio::test]
+    async fn running_block_unblock_clears_run_pointer_and_allows_reclaim() {
+        let (_directory, store, _path) = store("task-block-unblock-reclaim").await;
+        store.initialize().await.expect("initialize");
+        let task = ready_task_for_claim(
+            &store,
+            "t_block_unblock_reclaim",
+            "block-unblock-reclaim",
+            "Block and unblock",
+        )
+        .await;
+        let claimed = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    1,
+                    "worker",
+                    "claim-block",
+                    "r_block_first",
+                    "e_block_first_claim",
+                    "{}",
+                    300,
+                    300,
+                ),
+            )
+            .await
+            .expect("claim block task");
+        let blocked = store
+            .block_task(
+                &task.id,
+                block_input(
+                    2,
+                    "worker",
+                    Some("claim-block"),
+                    false,
+                    "waiting",
+                    400,
+                    "e_block_running",
+                ),
+            )
+            .await
+            .expect("block running task");
+        assert_eq!(blocked.status, "blocked");
+        assert_eq!(blocked.current_run_id.as_deref(), Some("r_block_first"));
+
+        let unblocked = store
+            .unblock_task(
+                &task.id,
+                unblock_input(3, "worker", "e_unblock_running", 500),
+            )
+            .await
+            .expect("unblock running task");
+        assert_eq!(unblocked.status, "ready");
+        assert_eq!(unblocked.current_run_id, None);
+
+        let claimed_again = store
+            .claim_task(
+                &task.id,
+                claim_input(
+                    4,
+                    "worker",
+                    "claim-block-again",
+                    "r_block_again",
+                    "e_block_again_claim",
+                    "{}",
+                    600,
+                    300,
+                ),
+            )
+            .await
+            .expect("claim unblocked task");
+        assert_eq!(claimed_again.task.status, "running");
+        assert_eq!(
+            claimed_again.task.current_run_id.as_deref(),
+            Some("r_block_again")
+        );
+
+        let connection = store.connection().await.expect("connection");
+        let old_run = first_row(
+            connection
+                .query(
+                    "SELECT status FROM task_runs WHERE id = ?1",
+                    [claimed.run.id.as_str()],
+                )
+                .await
+                .expect("blocked run query"),
+        )
+        .await
+        .expect("blocked run row");
+        assert_eq!(
+            text_value(
+                old_run.get_value(0).expect("blocked run status"),
+                "run.status"
+            )
+            .expect("blocked run status text"),
+            "failed"
+        );
     }
 
     #[tokio::test]

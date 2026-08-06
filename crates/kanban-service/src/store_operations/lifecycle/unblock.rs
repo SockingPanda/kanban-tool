@@ -91,7 +91,7 @@ impl TursoStore {
         }
         if transaction
             .execute(
-                "UPDATE tasks SET status = :status, status_reason = NULL, updated_at = :updated_at, lock_version = lock_version + 1 WHERE id = :task_id AND board_id = :board_id AND status = 'blocked' AND lock_version = :expected_lock_version",
+                "UPDATE tasks SET status = :status, status_reason = NULL, current_run_id = NULL, updated_at = :updated_at, lock_version = lock_version + 1 WHERE id = :task_id AND board_id = :board_id AND status = 'blocked' AND lock_version = :expected_lock_version",
                 (
                     (":status", status),
                     (":updated_at", input.now),

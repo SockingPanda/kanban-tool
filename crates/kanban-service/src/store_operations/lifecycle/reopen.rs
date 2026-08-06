@@ -95,7 +95,7 @@ impl TursoStore {
         }
         let changed = transaction
             .execute(
-                "UPDATE tasks SET status = :status, status_reason = NULL, completed_at = NULL, updated_at = :updated_at, lock_version = lock_version + 1 WHERE id = :task_id AND board_id = :board_id AND status = 'done' AND lock_version = :expected_lock_version",
+                "UPDATE tasks SET status = :status, status_reason = NULL, completed_at = NULL, current_run_id = NULL, updated_at = :updated_at, lock_version = lock_version + 1 WHERE id = :task_id AND board_id = :board_id AND status = 'done' AND lock_version = :expected_lock_version",
                 (
                     (":status", target_status),
                     (":updated_at", input.now),

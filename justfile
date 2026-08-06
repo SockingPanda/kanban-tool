@@ -113,12 +113,10 @@ desktop-build:
     pnpm --dir apps/desktop build
 
 desktop-package:
-    scripts/prepare-desktop-helper-binaries.sh
-    scripts/test-desktop-helper-sidecars.sh
     scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build
 
 cli-package:
-    scripts/package-cli-linux.sh --format deb --no-default-features --features "tantivy-backend,oxigraph-backend"
+    scripts/package-cli-linux.sh --format deb
 
 cli-package-layout:
     scripts/test-cli-package-layout.sh
@@ -138,7 +136,6 @@ audit:
 
 target-tools:
     scripts/test-cargo-target-tools.sh
-    scripts/test-helper-cargo-tree.sh
     scripts/test-windows-durability-gate.sh
     python3 -B scripts/test_windows_durability_gate.py
     python3 -B scripts/test_release_safe_path.py
@@ -228,8 +225,8 @@ schema-audit-closed:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema audit --require-closed
 
 projection-release-cohort:
-    just feature-p kanban-cli "tantivy-backend,oxigraph-backend"
-    just feature-p kanban-server "tantivy-backend,oxigraph-backend"
+    just check-p kanban-service
+    just check-p kanban-server
 
 schema *args:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema "$@"

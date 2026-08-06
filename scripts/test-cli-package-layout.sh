@@ -17,9 +17,7 @@ fi
 
 contents="$(dpkg-deb -c "$deb_path")"
 for path in \
-  './usr/bin/kanban' \
-  './usr/lib/kanban/kanban-vector-lancedb' \
-  './usr/lib/kanban/kanban-graph-oxigraph'
+  './usr/bin/kanban'
 do
   grep -Fq "$path" <<<"$contents" || {
     echo "error: package $deb_path is missing $path" >&2
@@ -65,4 +63,4 @@ if [[ "$manifest_set" -eq 1 ]]; then
   }
 fi
 
-echo "ok: $deb_path contains CLI and helper layout"
+echo "ok: $deb_path contains the CLI layout"

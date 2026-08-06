@@ -173,7 +173,6 @@ assert_target_dir_probe_call_sites_quote_paths() {
   local file line_number line
   local files=(
     "$ROOT/scripts/package-cli-linux.sh"
-    "$ROOT/scripts/prepare-desktop-helper-binaries.sh"
     "$ROOT/scripts/test-cli-package-layout.sh"
     "$ROOT/scripts/test-desktop-package-layout.sh"
     "$ROOT/scripts/release-cohort.sh"
@@ -471,7 +470,7 @@ case "${1:-}" in
     touch "$PACKAGE_METADATA_MARKER"
     [[ "$has_locked" == "1" ]]
     [[ "$(cat "$PACKAGE_TEST_REPO/Cargo.lock")" == "resolved-lock" ]]
-    printf '{"packages":[{"name":"kanban-cli"},{"name":"kanban-vector-lancedb"},{"name":"kanban-graph-oxigraph"}]}\n'
+    printf '{"packages":[{"name":"kanban-cli"}]}\n'
     ;;
   build)
     touch "$PACKAGE_BUILD_MARKER"
@@ -482,11 +481,6 @@ case "${1:-}" in
     if [[ " $* " == *' -p kanban-cli '* ]]; then
       touch "$target/kanban" "$target/kanban.d"
       chmod +x "$target/kanban"
-    else
-      for helper in kanban-vector-lancedb kanban-graph-oxigraph; do
-        touch "$target/$helper" "$target/$helper.d"
-        chmod +x "$target/$helper"
-      done
     fi
     ;;
   *)
@@ -604,15 +598,13 @@ assert_package_layout_provenance_pairing() {
   local desktop_deb="$fixture_root/kanban-tool-desktop.deb"
   local script package label mode output status expected
 
-  mkdir -p "$cli_root/DEBIAN" "$cli_root/usr/bin" "$cli_root/usr/lib/kanban" \
+  mkdir -p "$cli_root/DEBIAN" "$cli_root/usr/bin" \
     "$cli_root/usr/share/doc/kanban-tool-cli"
   chmod 0755 "$cli_root/DEBIAN"
   touch "$cli_root/usr/bin/kanban" \
-    "$cli_root/usr/lib/kanban/kanban-vector-lancedb" \
-    "$cli_root/usr/lib/kanban/kanban-graph-oxigraph" \
     "$cli_root/usr/share/doc/kanban-tool-cli/source-provenance.json" \
     "$cli_root/usr/share/doc/kanban-tool-cli/derived-projection-v2-source-map.json"
-  chmod 0755 "$cli_root/usr/bin/kanban" "$cli_root/usr/lib/kanban"/*
+  chmod 0755 "$cli_root/usr/bin/kanban"
   printf '%s\n' \
     'Package: kanban-tool-cli' \
     'Version: 1' \
@@ -625,8 +617,6 @@ assert_package_layout_provenance_pairing() {
     "$desktop_root/usr/share/doc/kanban-tool-desktop"
   chmod 0755 "$desktop_root/DEBIAN"
   touch "$desktop_root/usr/bin/kanban-desktop" \
-    "$desktop_root/usr/bin/kanban-vector-lancedb" \
-    "$desktop_root/usr/bin/kanban-graph-oxigraph" \
     "$desktop_root/usr/share/doc/kanban-tool-desktop/source-provenance.json" \
     "$desktop_root/usr/share/doc/kanban-tool-desktop/derived-projection-v2-source-map.json"
   chmod 0755 "$desktop_root/usr/bin"/*

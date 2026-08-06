@@ -129,17 +129,5 @@ sqlite = { package = "kanban-sqlite", path = "../kanban-sqlite" }
 
         self.assertTrue(any("kanban-test-support" in failure and "kanban-sqlite" in failure for failure in failures))
 
-    def test_projection_helper_workspace_member_is_rejected_by_package_name(self) -> None:
-        self._write_workspace(REQUIRED + ("kanban-vector-lancedb",))
-        self._write(
-            "crates/kanban-vector-lancedb/Cargo.toml",
-            "[package]\nname = \"kanban-vector-lancedb\"\n",
-        )
-
-        failures = GATE.check_workspace(self.root)
-
-        self.assertTrue(any("projection helper kanban-vector-lancedb" in failure for failure in failures))
-
-
 if __name__ == "__main__":
     unittest.main()

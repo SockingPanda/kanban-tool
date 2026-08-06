@@ -16,7 +16,7 @@ from typing import Any, Iterator
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STORE_PACKAGE = "kanban-service"
+SERVICE_PACKAGE = "kanban-service"
 SERVER_PACKAGE = "kanban-server"
 LEGACY_PACKAGES = {"kanban-sqlite", "kanban-local"}
 # ``rusqlite`` remains forbidden for the retired backend, but the host-owned
@@ -25,18 +25,8 @@ LEGACY_PACKAGES = {"kanban-sqlite", "kanban-local"}
 FORBIDDEN_LEGACY = LEGACY_PACKAGES | {"rusqlite"}
 LEGACY_IMPORT_FEATURE = "legacy-sqlite-import"
 
-# These crates are intentionally kept as source/archive material, but are not
-# part of the single-host active workspace.  Package names are checked only
-# after parsing their Cargo.toml, never by matching path or source text.
-PROJECTION_HELPER_PACKAGES = {
-    "kanban-derived-io",
-    "kanban-graph-oxigraph",
-    "kanban-search",
-    "kanban-vector-lancedb",
-}
-
 REQUIRED_ACTIVE_PACKAGES = {
-    STORE_PACKAGE,
+    SERVICE_PACKAGE,
     SERVER_PACKAGE,
     "kanban-client",
     "kanban-cli",
@@ -127,7 +117,7 @@ def allows_store_legacy_import(
 ) -> bool:
     """Allow only the optional rusqlite dependency owned by the store importer."""
 
-    if package != STORE_PACKAGE or alias != "rusqlite" or table_name != "dependencies":
+    if package != SERVICE_PACKAGE or alias != "rusqlite" or table_name != "dependencies":
         return False
     if not isinstance(value, dict) or value.get("optional") is not True:
         return False
@@ -263,10 +253,6 @@ def check_workspace(root: Path = ROOT) -> list[str]:
             failures.append(
                 f"{manifest_path.relative_to(root)}: legacy package {name} cannot be an active workspace member"
             )
-        if name in PROJECTION_HELPER_PACKAGES:
-            failures.append(
-                f"{manifest_path.relative_to(root)}: projection helper {name} cannot be an active workspace member"
-            )
 
     for manifest_path in _collect_test_support_paths(root, active_paths, failures):
         manifest = _read_manifest(manifest_path, failures)
@@ -312,17 +298,13 @@ def check_workspace(root: Path = ROOT) -> list[str]:
                     failures.append(
                         f"{location}: active package {name} depends on legacy {dependency}"
                     )
-                if dependency == "turso" and name != STORE_PACKAGE:
+                if dependency == "turso" and name != SERVICE_PACKAGE:
                     failures.append(
-                        f"{location}: only {STORE_PACKAGE} may depend directly on turso"
+                        f"{location}: only {SERVICE_PACKAGE} may depend directly on turso"
                     )
-                if dependency == STORE_PACKAGE and name != SERVER_PACKAGE:
+                if dependency == SERVICE_PACKAGE and name != SERVER_PACKAGE:
                     failures.append(
-                        f"{location}: only {SERVER_PACKAGE} may depend on {STORE_PACKAGE}"
-                    )
-                if dependency in PROJECTION_HELPER_PACKAGES:
-                    failures.append(
-                        f"{location}: projection helper {dependency} cannot enter the active workspace"
+                        f"{location}: only {SERVER_PACKAGE} may depend on {SERVICE_PACKAGE}"
                     )
 
     missing = sorted(REQUIRED_ACTIVE_PACKAGES - package_names)

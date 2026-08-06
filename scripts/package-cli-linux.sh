@@ -4,8 +4,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 PACKAGE_NAME="kanban-tool-cli"
 BIN_NAME="kanban"
-HELPER_BINARIES=("kanban-vector-lancedb" "kanban-graph-oxigraph")
-HELPER_INSTALL_DIR="usr/lib/kanban"
 REVISION="1"
 BUILD_ARGS=()
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
@@ -138,16 +136,6 @@ reject_release_build_environment() {
   done
 }
 
-assert_release_build_args() {
-  [[ "${#BUILD_ARGS[@]}" -eq 3 &&
-    "${BUILD_ARGS[0]}" == "--no-default-features" &&
-    "${BUILD_ARGS[1]}" == "--features" &&
-    "${BUILD_ARGS[2]}" == "tantivy-backend,oxigraph-backend" ]] || {
-    echo "error: release CLI package requires --no-default-features --features tantivy-backend,oxigraph-backend" >&2
-    exit 1
-  }
-}
-
 prepare_release_provenance() {
   local metadata_line
   local -a metadata
@@ -267,7 +255,7 @@ if not isinstance(identity, dict):
 features = identity.get("features")
 target = identity.get("target")
 toolchain = identity.get("toolchain")
-if features != {"effective": ["oxigraph-backend", "tantivy-backend"], "no_default_features": True}:
+if features != {"effective": [], "no_default_features": False}:
     raise SystemExit("error: source provenance does not carry the canonical feature contract")
 if not isinstance(target, dict) or not isinstance(target.get("triple"), str):
     raise SystemExit("error: source provenance lacks a target triple")
@@ -278,8 +266,8 @@ write_stable(stage / "derived-projection-v2-source-map.json", source_map_bytes, 
 print("\t".join((
     str(manifest.get("version", "")),
     target["triple"],
-    "tantivy-backend,oxigraph-backend",
-    "1",
+    "",
+    "0",
     toolchain["rustc_vv_sha256"],
     toolchain["cargo_version_sha256"],
 )))
@@ -294,15 +282,13 @@ PY
     RELEASE_NO_DEFAULT_FEATURES RELEASE_RUSTC_VV_SHA256 RELEASE_CARGO_VERSION_SHA256 \
     <<<"${metadata[0]}"
   [[ -n "$RELEASE_VERSION" && -n "$RELEASE_TARGET_TRIPLE" &&
-    "$RELEASE_FEATURES" == "tantivy-backend,oxigraph-backend" &&
-    "$RELEASE_NO_DEFAULT_FEATURES" == "1" ]] || {
+    -z "$RELEASE_FEATURES" && "$RELEASE_NO_DEFAULT_FEATURES" == "0" ]] || {
     echo "error: release provenance metadata is incomplete" >&2
     exit 1
   }
   "$SOURCE_GATE" validate --manifest "$TMPDIR/source-provenance.json"
   RELEASE_SOURCE_MANIFEST_STABLE="$TMPDIR/source-provenance.json"
   RELEASE_SOURCE_MAP_STABLE="$TMPDIR/derived-projection-v2-source-map.json"
-  assert_release_build_args
   if [[ "${CARGO_BUILD_TARGET+x}" == "x" && "$CARGO_BUILD_TARGET" != "$RELEASE_TARGET_TRIPLE" ]]; then
     echo "error: CARGO_BUILD_TARGET does not match release provenance target" >&2
     exit 1
@@ -634,14 +620,6 @@ install_payload() {
     cli_source="$RELEASE_BINARY_STAGE_DIR/$BIN_NAME"
   fi
   install -Dm755 "$cli_source" "$root/usr/bin/$BIN_NAME"
-  local helper
-  for helper in "${HELPER_BINARIES[@]}"; do
-    local helper_source="$TARGET_DIR/$helper"
-    if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
-      helper_source="$RELEASE_BINARY_STAGE_DIR/$helper"
-    fi
-    install -Dm755 "$helper_source" "$root/$HELPER_INSTALL_DIR/$helper"
-  done
   install -Dm644 "$ROOT/README.md" "$root/usr/share/doc/$PACKAGE_NAME/README.md"
   if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
     install -Dm644 "$RELEASE_SOURCE_MANIFEST_STABLE" \
@@ -788,19 +766,11 @@ build_binary() {
   )
   "$PROVENANCE" --invalidate-packages "$TARGET_DIR" "${workspace_packages[@]}"
   rm -f "$BIN_PATH" "$TARGET_DIR/$BIN_NAME.d"
-  local helper
-  for helper in "${HELPER_BINARIES[@]}"; do
-    rm -f "$TARGET_DIR/$helper" "$TARGET_DIR/$helper.d"
-  done
   (
     cd "$ROOT"
     "$LOCK" -- "${RELEASE_CARGO_PATH:-cargo}" build --locked -p kanban-cli --release "${BUILD_ARGS[@]}"
-    "$LOCK" -- "${RELEASE_CARGO_PATH:-cargo}" build --locked -p kanban-vector-lancedb -p kanban-graph-oxigraph --release --bins
   )
   [[ -x "$BIN_PATH" ]] || { echo "error: expected binary not found: $BIN_PATH" >&2; exit 1; }
-  for helper in "${HELPER_BINARIES[@]}"; do
-    [[ -x "$TARGET_DIR/$helper" ]] || { echo "error: expected helper binary not found: $TARGET_DIR/$helper" >&2; exit 1; }
-  done
   if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
     RELEASE_BINARY_STAGE_DIR="$TMPDIR/release-binaries"
     python3 "$SAFE_PATH" ensure-dir --root "$TMPDIR_PARENT" \
@@ -808,38 +778,9 @@ build_binary() {
     python3 "$SAFE_PATH" validate-file --root "$TARGET_ROOT" --path "$BIN_PATH"
     python3 "$SAFE_PATH" copy-file --root "$TMPDIR_PARENT" \
       --source "$BIN_PATH" --destination "$RELEASE_BINARY_STAGE_DIR/$BIN_NAME" --mode 0555
-    for helper in "${HELPER_BINARIES[@]}"; do
-      python3 "$SAFE_PATH" validate-file --root "$TARGET_ROOT" --path "$TARGET_DIR/$helper"
-      python3 "$SAFE_PATH" copy-file --root "$TMPDIR_PARENT" \
-        --source "$TARGET_DIR/$helper" \
-        --destination "$RELEASE_BINARY_STAGE_DIR/$helper" --mode 0555
-    done
-    for dep_info in "$TARGET_DIR/$BIN_NAME.d" \
-      "$TARGET_DIR/${HELPER_BINARIES[0]}.d" "$TARGET_DIR/${HELPER_BINARIES[1]}.d"; do
-      python3 "$SAFE_PATH" validate-file --root "$TARGET_ROOT" --path "$dep_info"
-    done
+    python3 "$SAFE_PATH" validate-file --root "$TARGET_ROOT" --path "$TARGET_DIR/$BIN_NAME.d"
   fi
   "$PROVENANCE" --verify-dep-info "$ROOT" "$TARGET_DIR/$BIN_NAME.d"
-  for helper in "${HELPER_BINARIES[@]}"; do
-    "$PROVENANCE" --verify-dep-info "$ROOT" "$TARGET_DIR/$helper.d"
-  done
-  if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
-    local helper_identity
-    for helper in "${HELPER_BINARIES[@]}"; do
-      helper_identity="$("$RELEASE_BINARY_STAGE_DIR/$helper" __build-identity 2>"$TMPDIR/$helper.identity.stderr")" || {
-        echo "error: helper build identity command failed: $helper" >&2
-        exit 1
-      }
-      [[ ! -s "$TMPDIR/$helper.identity.stderr" ]] || {
-        echo "error: helper build identity command wrote stderr: $helper" >&2
-        exit 1
-      }
-      [[ "$helper_identity" == "$RELEASE_BUILD_ID" ]] || {
-        echo "error: helper runtime identity does not match KANBAN_BUILD_ID: $helper" >&2
-        exit 1
-      }
-    done
-  fi
 }
 
 deb_depends() {
@@ -861,10 +802,6 @@ Architecture: any
 EOF
 
   local shlib_inputs=("$package_root/usr/bin/$BIN_NAME")
-  local helper
-  for helper in "${HELPER_BINARIES[@]}"; do
-    shlib_inputs+=("$package_root/$HELPER_INSTALL_DIR/$helper")
-  done
 
   output="$(
     cd "$dep_workspace"

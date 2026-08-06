@@ -92,7 +92,7 @@ case "${1:-}" in
     ;;
   metadata)
     printf '%s\n' \
-      '{"packages":[{"name":"kanban-cli"},{"name":"kanban-vector-lancedb"},{"name":"kanban-graph-oxigraph"}]}'
+      '{"packages":[{"name":"kanban-cli"}]}'
     ;;
   build)
     target="$PACKAGE_TEST_TARGET_ROOT/release"
@@ -101,12 +101,6 @@ case "${1:-}" in
       printf '#!/usr/bin/env bash\nexit 0\n' > "$target/kanban"
       printf 'dep-info\n' > "$target/kanban.d"
       chmod 0755 "$target/kanban"
-    else
-      for helper in kanban-vector-lancedb kanban-graph-oxigraph; do
-        printf '#!/usr/bin/env bash\nif [[ "${1:-}" == "__build-identity" ]]; then if [[ "${PACKAGE_TEST_HELPER_MISMATCH:-}" == "%s" ]]; then printf wrong-helper-identity; else printf "%%s" "${KANBAN_BUILD_ID:?}"; fi; exit 0; fi\nexit 0\n' "$helper" > "$target/$helper"
-        printf 'dep-info\n' > "$target/$helper.d"
-        chmod 0755 "$target/$helper"
-      done
     fi
     ;;
   *)
@@ -189,7 +183,7 @@ EOF
     "$FIXTURE_BIN/mktemp"
 }
 
-assert_release_provenance_inputs_and_helper_identity() {
+assert_release_provenance_inputs() {
   local output="$FIXTURE/provenance-inputs.output"
   local manifest="$FIXTURE/provenance/source-provenance.json"
   local source_map="$FIXTURE_REPO/docs/release/derived-projection-v2-source-map.json"
@@ -216,8 +210,8 @@ cargo_version = "cargo 1.0.0 (fixture)"
 identity_payload = {
     "cargo_lock": {"path": "Cargo.lock", "sha256": "0" * 64},
     "features": {
-        "effective": ["oxigraph-backend", "tantivy-backend"],
-        "no_default_features": True,
+        "effective": [],
+        "no_default_features": False,
     },
     "registry_closure": {
         "path": "policy/schema-tool-registry-closure.json",
@@ -325,13 +319,6 @@ PY
     KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
     KANBAN_RELEASE_SOURCE_MAP="$source_map"
 
-  assert_fails "provenance rejects mismatched helper identity" run_package "$output" env \
-    PACKAGE_TEST_PROVENANCE=1 \
-    PACKAGE_TEST_HELPER_MISMATCH=kanban-vector-lancedb \
-    KANBAN_BUILD_ID="$build_id" \
-    KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
-    KANBAN_RELEASE_SOURCE_MAP="$source_map"
-
   cp "$source_map" "$tampered_map"
   printf '\n' >> "$tampered_map"
   assert_fails "provenance rejects source-map hash drift" run_package "$output" env \
@@ -389,8 +376,7 @@ run_package() {
       PACKAGE_TEST_CARGO_TRACE="$FIXTURE/cargo.trace" \
       TMPDIR="$FIXTURE_TEMP_PARENT" \
       PATH="$FIXTURE_BIN:$PATH" \
-      "$@" "$FIXTURE_REPO/scripts/package-cli-linux.sh" --format deb \
-      --no-default-features --features "tantivy-backend,oxigraph-backend"
+      "$@" "$FIXTURE_REPO/scripts/package-cli-linux.sh" --format deb
   ) >"$output" 2>&1
 }
 
@@ -407,7 +393,6 @@ run_package_spoofed_lock_environment() {
     TMPDIR="$FIXTURE_TEMP_PARENT" \
     PATH="$FIXTURE_BIN:$PATH" \
     "$@" "$FIXTURE_REPO/scripts/package-cli-linux.sh" --format deb \
-    --no-default-features --features "tantivy-backend,oxigraph-backend" \
     >"$output" 2>&1
 }
 
@@ -426,7 +411,6 @@ run_package_unlocked() {
     TMPDIR="$FIXTURE_TEMP_PARENT" \
     PATH="$FIXTURE_BIN:$PATH" \
     "$@" "$FIXTURE_REPO/scripts/package-cli-linux.sh" --format deb \
-    --no-default-features --features "tantivy-backend,oxigraph-backend" \
     >"$output" 2>&1
 }
 
@@ -940,6 +924,6 @@ make_fixture signal-temp
 assert_signal_cleanup_preserves_replaced_temp
 
 make_fixture provenance-inputs
-assert_release_provenance_inputs_and_helper_identity
+assert_release_provenance_inputs
 
 echo "ok: CLI package paths, private stages, and cleanup identities are safe"

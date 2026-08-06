@@ -4,7 +4,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
 DEB_DIR="$("$LOCK" --print-target-dir)/release/bundle/deb"
-HELPERS=("kanban-vector-lancedb" "kanban-graph-oxigraph")
 
 deb_path="${1:-}"
 if [[ -z "$deb_path" ]]; then
@@ -23,13 +22,6 @@ grep -Eq '(^|[[:space:]])(\./)?usr/bin/kanban-desktop$' <<<"$contents" || {
   echo "error: Desktop deb is missing usr/bin/kanban-desktop: $deb_path" >&2
   exit 1
 }
-
-for helper in "${HELPERS[@]}"; do
-  grep -Eq "(^|[[:space:]])(\\./)?usr/bin/$helper$" <<<"$contents" || {
-    echo "error: Desktop deb is missing usr/bin/$helper: $deb_path" >&2
-    exit 1
-  }
-done
 
 if grep -Eq '(^|[[:space:]])(\./)?usr/bin/kanban$' <<<"$contents"; then
   echo "error: Desktop deb unexpectedly contains standalone CLI usr/bin/kanban" >&2
@@ -68,4 +60,4 @@ if [[ "$manifest_set" -eq 1 ]]; then
   }
 fi
 
-echo "ok: $deb_path contains Desktop app and bundled helper binaries"
+echo "ok: $deb_path contains the Desktop app"

@@ -18,7 +18,28 @@ description: 在 kanban-tool 新写或修改 Rust、Cargo manifest、模块、�
 - 项目 Rust 注释/rustdoc 以简体中文为主，机器标识和协议 literal 保持原文。
 - owner guide 接入 rustdoc 时使用准确 `#[doc = include_str!(...)]`，不改变现有 crate/module attrs 和行为。
 
-## 文档规则
+下面四个 section 是可执行的组织默认和条件规则；除上面明确列出的边界外，不把排版偏好当作无条件 hard invariant。
+
+## General
+
+- 类型定义后优先紧跟该类型的主要 inherent `impl`；相关 trait `impl` 默认排在 inherent `impl` 之后。只有条件编译、宏生成、trait 组织或清晰度确实需要时才拆开，并保持邻接关系可读。
+- `#[cfg(test)] mod tests` 默认放在文件底部，使生产代码和测试边界容易定位；测试 fixture 属于独立模块、适合靠近被测私有实现，或由集成测试承担时，可保留更合适的布局。
+- free function 如果主要构造、校验或操作单一类型，优先收入该类型的 inherent `impl`；跨类型通用、纯粹模块工具或保持独立 ownership 时保留为 free function。
+- 默认使用 safe Rust。只有安全抽象、外部 FFI/API 或可核对的性能约束确实需要 `unsafe` 时，才使用最小范围的 `unsafe`，并在邻近文档中说明 safety invariant；不要为了风格整片改写既有代码。
+
+## Modules and barrel files
+
+- active module tree 统一使用 `foo.rs` + `foo/`；不要新增 `foo/mod.rs`。既有 `mod.rs` 迁移为独立的纯机械提交，与业务或行为变更分离并单独验证，不在业务改动中顺手混入。
+- 内部 barrel 只在承担聚合职责时对项目内子模块使用 glob re-export（例如 `pub(crate) use child::*;`）；需要稳定、选择性的公开面或存在名称冲突时改用显式列表。
+- peer 模块反复共享的类型、helper 或测试支持进入同级 `common.rs`/`common` 模块；仅被一个 peer 拥有的逻辑留在 owner 模块，`common` 不作为无边界的杂物箱。
+
+## Dependencies
+
+- 新增第三方依赖放在实际使用它的最窄 crate；workspace 只统一 version/source/path，positive features 由 leaf crate 选择。不要为方便跨层调用而扩大 dependency owner。
+- 第三方类型需要 re-export 时使用显式 named re-export（例如 `pub use dep::{TypeA, TypeB};`），不要用 glob 让依赖升级悄然扩大公开 API；项目内部聚合仍遵循上面的 barrel 规则。
+- 保持现有专用 owner：`turso` → `kanban-service`、`axum` → `kanban-server`、`ureq` → `kanban-client`、`rmcp` → `kanban-mcp`、`tauri` → Desktop；adapter 不绕过共享 application/service path。
+
+## Documentation
 
 item docs 面向调用者，描述当前行为和边界，避免 exhaustive inventory；Rust 示例优先通过类型检查，长期取舍链接
 到 owner guide/ADR，而不是把实现清单写入 prose。
@@ -29,6 +50,8 @@ item docs 面向调用者，描述当前行为和边界，避免 exhaustive inve
 
 ## 验证案例
 
+- 类型新增或重排时应能看出定义、主要 inherent `impl`、trait `impl` 和底部测试的关系；条件编译、宏生成或清晰度需要时，合理拆分不应被机械拒绝。
+- 新的嵌套模块与机械迁移后的 active module tree 应采用 `foo.rs` + `foo/`；内部 barrel 可用 glob 聚合，第三方 re-export 仍列出明确名称，peer 共享内容进入同级 `common`。
 - 新增依赖应由真实 crate 使用并通过依赖 owner 检查。
 - 文档 include 路径失效属于错误，应在 docs gate 中暴露，而不是删除 include 规避。
 - 私有重命名且公开边界不变时不扩写根规格或新增抽象。

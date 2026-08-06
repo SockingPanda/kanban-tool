@@ -7,7 +7,7 @@ pub enum ClientError {
     InvalidInput(String),
     #[error("invalid server URL: {0}")]
     InvalidServerUrl(String),
-    #[error("server unavailable: {0}")]
+    #[error("server unavailable：请检查 server URL，并确认已运行 `kanban serve`：{0}")]
     ServerUnavailable(String),
     #[error("{code:?}: {message}")]
     Api {
@@ -46,5 +46,24 @@ const fn api_error_code(code: ApiErrorCode) -> &'static str {
         ApiErrorCode::ClaimConflict => "claim_conflict",
         ApiErrorCode::InvalidTransition => "invalid_transition",
         ApiErrorCode::Internal => "internal",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ClientError;
+
+    #[test]
+    fn server_unavailable_display_includes_actionable_host_hint() {
+        let error = ClientError::ServerUnavailable(
+            "http://127.0.0.1:8721/api/v1/boards/default: connection refused".to_owned(),
+        );
+        let message = error.to_string();
+
+        assert_eq!(error.code(), "server_unavailable");
+        assert!(message.contains("server unavailable"));
+        assert!(message.contains("server URL"));
+        assert!(message.contains("kanban serve"));
+        assert!(message.contains("http://127.0.0.1:8721"));
     }
 }

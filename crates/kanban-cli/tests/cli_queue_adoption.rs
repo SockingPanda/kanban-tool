@@ -166,11 +166,11 @@ fn queue_cli_reports_server_unavailable_with_stable_hint() {
     assert_eq!(output.status.code(), Some(9));
     let value: Value = serde_json::from_slice(&output.stdout).expect("解析 server unavailable");
     assert_eq!(value["error"]["code"], "server_unavailable");
-    assert!(
-        value["error"]["message"]
-            .as_str()
-            .expect("server unavailable message")
-            .contains("server unavailable")
-    );
+    let message = value["error"]["message"]
+        .as_str()
+        .expect("server unavailable message");
+    assert!(message.contains("server unavailable"));
+    assert!(message.contains("server URL"));
+    assert!(message.contains("kanban serve"));
     assert!(!output.stderr.is_empty() || output.status.code() == Some(9));
 }

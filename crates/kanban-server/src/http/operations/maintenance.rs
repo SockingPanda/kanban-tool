@@ -193,8 +193,18 @@ pub(crate) async fn import_legacy_sqlite_v30(
 #[cfg(not(feature = "legacy-sqlite-import"))]
 pub(crate) async fn import_legacy_sqlite_v30(
     State(_state): State<AppState>,
-    Json(_request): Json<LegacyImportRequest>,
+    Json(request): Json<LegacyImportRequest>,
 ) -> Result<(StatusCode, Json<LegacyImportResponse>), ApiError> {
+    if request.path.trim().is_empty()
+        || request
+            .canonical_attachment_root
+            .as_deref()
+            .is_some_and(|root| root.trim().is_empty())
+    {
+        return Err(ApiError(kanban_service::KanbanError::InvalidInput(
+            "path 不能为空".to_owned(),
+        )));
+    }
     Err(ApiError(kanban_service::KanbanError::FeatureNotAvailable(
         "legacy sqlite v30 importer is not enabled".to_owned(),
     )))

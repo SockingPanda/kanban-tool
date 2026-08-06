@@ -30,6 +30,7 @@ mod events;
 mod headers;
 pub mod history_catalog;
 pub mod labels_catalog;
+pub mod knowledge_catalog;
 mod inventory;
 pub mod jsonl_core;
 pub mod jsonl_ledger;

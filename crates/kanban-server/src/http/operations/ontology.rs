@@ -525,10 +525,11 @@ pub(crate) async fn get_proposal(
     Ok(Json(json!({"data": value})))
 }
 
-pub(crate) async fn decide_proposal(
+async fn decide_proposal(
     State(state): State<AppState>,
-    Path((proposal_id, decision)): Path<(String, String)>,
+    proposal_id: String,
     Json(mut body): Json<Value>,
+    accept: bool,
 ) -> Result<Json<Value>, ApiError> {
     actor_object(&mut body);
     if let Some(actor) = body.get("actor").and_then(Value::as_object) {
@@ -541,12 +542,28 @@ pub(crate) async fn decide_proposal(
         );
     }
     body["proposal_id"] = Value::String(proposal_id);
-    body["accept"] = Value::Bool(decision == "accept");
+    body["accept"] = Value::Bool(accept);
     if body.get("actor").is_none() {
         body["actor"] = Value::String("user".to_owned());
     }
     let Json(value) = run(State(state), "decide_proposal", GLOBAL_RECORD_SCOPE, body).await?;
     Ok(Json(json!({"data": value})))
+}
+
+pub(crate) async fn accept_proposal(
+    State(state): State<AppState>,
+    Path(proposal_id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    decide_proposal(State(state), proposal_id, Json(body), true).await
+}
+
+pub(crate) async fn reject_proposal(
+    State(state): State<AppState>,
+    Path(proposal_id): Path<String>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    decide_proposal(State(state), proposal_id, Json(body), false).await
 }
 
 pub(crate) async fn create_action(
@@ -672,10 +689,10 @@ pub(super) fn router() -> Router<AppState> {
         .route("/api/v1/label-proposals/:proposal_id", get(get_proposal))
         .route(
             "/api/v1/label-proposals/:proposal_id/accept",
-            post(decide_proposal),
+            post(accept_proposal),
         )
         .route(
             "/api/v1/label-proposals/:proposal_id/reject",
-            post(decide_proposal),
+            post(reject_proposal),
         )
 }

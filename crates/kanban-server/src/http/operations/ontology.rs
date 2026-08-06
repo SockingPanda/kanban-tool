@@ -26,28 +26,27 @@ fn body_or_empty(body: Option<Json<Value>>) -> Value {
 }
 
 fn actor_object(value: &mut Value) {
-    if let Some(actor) = value.get_mut("actor").and_then(Value::as_object_mut) {
-        if actor.get("actor_type").is_none() {
-            if let Some(actor_type) = actor.remove("type") {
-                actor.insert("actor_type".to_owned(), actor_type);
-            }
-        }
+    if let Some(actor) = value.get_mut("actor").and_then(Value::as_object_mut)
+        && actor.get("actor_type").is_none()
+        && let Some(actor_type) = actor.remove("type")
+    {
+        actor.insert("actor_type".to_owned(), actor_type);
     }
     let ontology_actor = value
         .get_mut("ontology_actor")
         .and_then(Value::as_object_mut)
         .map(|actor| {
-            if actor.get("actor_type").is_none() {
-                if let Some(actor_type) = actor.remove("type") {
-                    actor.insert("actor_type".to_owned(), actor_type);
-                }
+            if actor.get("actor_type").is_none()
+                && let Some(actor_type) = actor.remove("type")
+            {
+                actor.insert("actor_type".to_owned(), actor_type);
             }
             actor.clone()
         });
-    if value.get("actor").is_none() {
-        if let Some(actor) = ontology_actor {
-            value["actor"] = Value::Object(actor);
-        }
+    if value.get("actor").is_none()
+        && let Some(actor) = ontology_actor
+    {
+        value["actor"] = Value::Object(actor);
     }
 }
 
@@ -105,21 +104,21 @@ fn normalize_observation_body(value: &mut Value) {
                 if let Some(item) = object.remove("proposal") {
                     object.insert("proposal_json".to_owned(), Value::String(item.to_string()));
                 }
-                if let Some(candidate) = object.remove("candidate_atom") {
-                    if let Some(candidate) = candidate.as_object() {
-                        object.insert(
-                            "candidate_atom_polarity".to_owned(),
-                            candidate.get("polarity").cloned().unwrap_or(Value::Null),
-                        );
-                        object.insert(
-                            "candidate_atom_kind".to_owned(),
-                            candidate.get("kind").cloned().unwrap_or(Value::Null),
-                        );
-                        object.insert(
-                            "candidate_text".to_owned(),
-                            candidate.get("text").cloned().unwrap_or(Value::Null),
-                        );
-                    }
+                if let Some(candidate) = object.remove("candidate_atom")
+                    && let Some(candidate) = candidate.as_object()
+                {
+                    object.insert(
+                        "candidate_atom_polarity".to_owned(),
+                        candidate.get("polarity").cloned().unwrap_or(Value::Null),
+                    );
+                    object.insert(
+                        "candidate_atom_kind".to_owned(),
+                        candidate.get("kind").cloned().unwrap_or(Value::Null),
+                    );
+                    object.insert(
+                        "candidate_text".to_owned(),
+                        candidate.get("text").cloned().unwrap_or(Value::Null),
+                    );
                 }
                 if object.get("related_labels_json").is_none() {
                     object.insert(

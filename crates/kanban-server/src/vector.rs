@@ -107,10 +107,10 @@ async fn query_chunks(
     let Query(query) = query.map_err(|error| invalid(format!("invalid vector query: {error}")))?;
     validate_query(&query)?;
     let (config, embedding) = embed_query(state.vector_store(), &query.q).await?;
-    if let Some(model) = query.embedding_model.as_deref() {
-        if model != config.model {
-            return Err(invalid("embedding model 与当前 vector 配置不一致"));
-        }
+    if let Some(model) = query.embedding_model.as_deref()
+        && model != config.model
+    {
+        return Err(invalid("embedding model 与当前 vector 配置不一致"));
     }
     let board_id = state
         .vector_store()
@@ -146,10 +146,10 @@ async fn query_label_atoms(
         query.map_err(|error| invalid(format!("invalid vector label query: {error}")))?;
     validate_query(&query)?;
     let (config, embedding) = embed_query(state.vector_store(), &query.q).await?;
-    if let Some(model) = query.embedding_model.as_deref() {
-        if model != config.model {
-            return Err(invalid("embedding model 与当前 vector 配置不一致"));
-        }
+    if let Some(model) = query.embedding_model.as_deref()
+        && model != config.model
+    {
+        return Err(invalid("embedding model 与当前 vector 配置不一致"));
     }
     let board_id = state
         .vector_store()
@@ -290,7 +290,6 @@ mod tests {
     use serde::{Serialize, de::DeserializeOwned};
     use tower::ServiceExt;
 
-    use super::VectorConfig;
     use crate::http::operations::test_support::build_router;
 
     fn fixture(path: &str) -> serde_json::Value {

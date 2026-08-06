@@ -13,9 +13,19 @@ describe("drag transition policy", () => {
     })
   })
 
-  it("rejects triage to todo drops without generating specify", () => {
-    expect(planDragTransition(task({ status: "triage", description: "ready enough" }), "todo", null)).toMatchObject({
+  it("requires viable triage spec before specifying to todo", () => {
+    expect(planDragTransition(task({ status: "triage", description: "" }), "todo", null)).toEqual({
       ok: false,
+      reason: { key: "Triage tasks need a description before specify." },
+    })
+    expect(planDragTransition(task({ status: "triage", description: null }), "todo", null)).toEqual({
+      ok: false,
+      reason: { key: "Triage tasks need a description before specify." },
+    })
+    expect(planDragTransition(task({ status: "triage", description: "ready enough" }), "todo", null)).toMatchObject({
+      ok: true,
+      action: "specify",
+      body: { description: "ready enough" },
     })
   })
 
@@ -98,14 +108,33 @@ describe("drag transition policy", () => {
     })
   })
 
-  it("rejects archived drops without generating archive", () => {
-    expect(planDragTransition(task({ status: "running" }), "archived", "claim_123")).toMatchObject({ ok: false })
-    expect(planDragTransition(task({ status: "ready" }), "archived", null)).toMatchObject({ ok: false })
+  it("always force-confirms running archive drops", () => {
+    expect(planDragTransition(task({ status: "running" }), "archived", "claim_123")).toMatchObject({
+      ok: true,
+      action: "archive",
+      body: { force: true },
+      confirm: { key: "Force archive running task #{seq}?", values: { seq: 1 } },
+    })
+    expect(planDragTransition(task({ status: "running" }), "archived", null)).toMatchObject({
+      ok: true,
+      action: "archive",
+      body: { force: true },
+      confirm: { key: "Force archive running task #{seq}?", values: { seq: 1 } },
+    })
+    expect(planDragTransition(task({ status: "ready" }), "archived", null)).toMatchObject({
+      ok: true,
+      action: "archive",
+      body: {},
+    })
     expect(planDragTransition(task({ status: "archived" }), "ready", null)).toMatchObject({ ok: false })
   })
 
-  it("rejects blocked drops without generating unblock", () => {
-    expect(planDragTransition(task({ status: "blocked" }), "ready", null)).toMatchObject({ ok: false })
+  it("routes blocked drops through unblock instead of setting a target status", () => {
+    expect(planDragTransition(task({ status: "blocked" }), "ready", null)).toMatchObject({
+      ok: true,
+      action: "unblock",
+      body: {},
+    })
     expect(planDragTransition(task({ status: "blocked" }), "done", null)).toMatchObject({ ok: false })
   })
 })

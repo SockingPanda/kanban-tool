@@ -1,12 +1,16 @@
-import { CheckCircle2, HeartPulse, PauseCircle, Play, XCircle, type LucideIcon } from "lucide-react"
+import { Archive, CheckCircle2, HeartPulse, ListChecks, PauseCircle, Play, RefreshCcw, XCircle, type LucideIcon } from "lucide-react"
 
-import type { KanbanApi, Task } from "@/lib/api"
+import type { KanbanApi, Task, TaskStatus } from "@/lib/api"
 import {
+  archiveTaskBody,
   blockTaskBody,
+  canArchiveTask,
   canBlockTask,
   canCompleteTask,
+  canSpecifyTask,
   completeTaskBody,
   requiresForceConfirmation,
+  specifyTaskBody,
 } from "@/lib/action-policy"
 import type { I18nMessage } from "@/i18n"
 
@@ -20,7 +24,13 @@ export type LegalTaskAction = {
 }
 
 export function legalActions(task: Task, claimToken: string | null, blockReason: string): LegalTaskAction[] {
-  return [
+  const actions: LegalTaskAction[] = [
+    {
+      label: "Specify",
+      icon: ListChecks,
+      enabled: canSpecifyTask(task.status, task.description),
+      run: (api, item) => api.transition(item, "specify", specifyTaskBody(item.description)),
+    },
     {
       label: "Promote",
       icon: Play,
@@ -64,7 +74,57 @@ export function legalActions(task: Task, claimToken: string | null, blockReason:
       danger: true,
       run: (api, item) => api.transition(item, "block", blockTaskBody(item.status, claimToken, blockReason)),
     },
+    {
+      label: "Unblock",
+      icon: RefreshCcw,
+      enabled: task.status === "blocked",
+      run: (api, item) => api.transition(item, "unblock"),
+    },
+    {
+      label: "Archive",
+      icon: Archive,
+      enabled: canArchiveTask(task.status),
+      confirmation: requiresForceConfirmation(task.status, "archive", claimToken)
+        ? message("Force archive running task #{seq}?", { seq: task.seq })
+        : undefined,
+      danger: true,
+      run: (api, item) => api.transition(item, "archive", archiveTaskBody(item.status)),
+    },
   ]
+
+  // 只暴露当前状态机允许的源状态；claim、步骤和原因等运行时门禁仍由 enabled 保留。
+  return actions.filter((action) => isLegalSourceAction(task.status, action.label))
+}
+
+function isLegalSourceAction(status: TaskStatus, label: string) {
+  switch (label) {
+    case "Specify":
+      return status === "triage"
+    case "Promote":
+      return status === "todo" || status === "scheduled"
+    case "Claim":
+      return status === "ready"
+    case "Heartbeat":
+    case "Review":
+      return status === "running"
+    case "Complete":
+      return status === "running" || status === "review"
+    case "Block":
+      return (
+        status === "triage" ||
+        status === "todo" ||
+        status === "scheduled" ||
+        status === "ready" ||
+        status === "running" ||
+        status === "review"
+      )
+    case "Unblock":
+      return status === "blocked"
+    case "Archive":
+      return status !== "archived"
+    default:
+      return false
+  }
 }
 
 function message(key: string, values?: Record<string, string | number>): I18nMessage {

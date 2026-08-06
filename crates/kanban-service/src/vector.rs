@@ -31,8 +31,11 @@ pub(crate) const VECTOR_BACKEND: &str = "turso-vector32";
 pub(crate) const MAX_VECTOR_BATCH: usize = 64;
 pub(crate) const MAX_VECTOR_DIMENSIONS: usize = 16_384;
 pub(crate) const MAX_VECTOR_CONTENT_BYTES: usize = 1_048_576;
+const VECTOR_WORKER_TICK_MAX_JOBS: usize = 8;
 
-const VECTOR_JOB_LEASE_MS: i64 = 30_000;
+// Ollama 最长 provider 调用约 35 秒；lease 还要覆盖连接/写入收尾，避免同一
+// worker 的后续 job 在串行处理前就被其他 host 错误 reclaim。
+const VECTOR_JOB_LEASE_MS: i64 = 90_000;
 
 const OLLAMA_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const OLLAMA_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -578,6 +581,11 @@ impl TursoStore {
     }
 
     /// 将一个 canonical 事实加入 vector projection 队列。重复事件通过 dedupe key 合并。
+    ///
+    /// 显式 `rebuild` 是新的重建意图：即使旧 job 已达到 `max_attempts`，也会
+    /// 清除旧 lease/error、重置 attempts 并递增 fence，使其可以重新 claim；旧
+    /// worker 携带的 token/fence 因此不会重新获得写入资格。普通 `upsert` 重试
+    /// 仍遵守原 job 的 attempts 上限。
     pub async fn enqueue_vector_job(
         &self,
         board_id: Option<&str>,
@@ -604,7 +612,7 @@ impl TursoStore {
         let connection = self.connection().await?;
         connection
             .execute(
-                "INSERT INTO projection_jobs(board_id, source_event_id, target, entity_uri, dedupe_key, operation, payload_json, status, attempts, max_attempts, next_attempt_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'pending', 0, 10, ?8, ?8, ?8) ON CONFLICT(target, dedupe_key) DO UPDATE SET source_event_id=excluded.source_event_id, payload_json=excluded.payload_json, status=CASE WHEN projection_jobs.status='done' THEN 'pending' ELSE projection_jobs.status END, next_attempt_at=excluded.next_attempt_at, updated_at=excluded.updated_at",
+                "INSERT INTO projection_jobs(board_id, source_event_id, target, entity_uri, dedupe_key, operation, payload_json, status, attempts, max_attempts, next_attempt_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'pending', 0, 10, ?8, ?8, ?8) ON CONFLICT(target, dedupe_key) DO UPDATE SET source_event_id=excluded.source_event_id, payload_json=excluded.payload_json, status=CASE WHEN excluded.operation='rebuild' THEN 'pending' WHEN projection_jobs.status='done' THEN 'pending' ELSE projection_jobs.status END, attempts=CASE WHEN excluded.operation='rebuild' THEN 0 ELSE projection_jobs.attempts END, lease_owner=CASE WHEN excluded.operation='rebuild' THEN NULL ELSE projection_jobs.lease_owner END, lease_token=CASE WHEN excluded.operation='rebuild' THEN NULL ELSE projection_jobs.lease_token END, lease_expires_at=CASE WHEN excluded.operation='rebuild' THEN NULL ELSE projection_jobs.lease_expires_at END, fence_epoch=CASE WHEN excluded.operation='rebuild' THEN projection_jobs.fence_epoch + 1 ELSE projection_jobs.fence_epoch END, next_attempt_at=excluded.next_attempt_at, last_error=CASE WHEN excluded.operation='rebuild' THEN NULL ELSE projection_jobs.last_error END, updated_at=excluded.updated_at",
                 (board_id, source_event_id, target, entity_uri, dedupe.as_str(), operation, payload_json, now),
             )
             .await?;
@@ -932,14 +940,15 @@ impl TursoStore {
         let ready = first_row(
             transaction
                 .query(
-                    "SELECT COUNT(*) FROM projection_state WHERE projection IN ('vector_tasks','vector_label_atoms') AND provider_fingerprint=?1 AND dirty=1 AND (building_fingerprint IS NULL OR building_fingerprint=?1)",
+                    "SELECT COUNT(*), COALESCE(SUM(dirty=1), 0) FROM projection_state WHERE projection IN ('vector_tasks','vector_label_atoms') AND provider_fingerprint=?1 AND (building_fingerprint IS NULL OR building_fingerprint=?1)",
                     [fingerprint],
                 )
                 .await?,
         )
         .await?;
         let ready_rows = integer_value(ready.get_value(0)?, "projection_state.publish_ready")?;
-        if ready_rows != 2 {
+        let dirty_rows = integer_value(ready.get_value(1)?, "projection_state.publish_dirty")?;
+        if ready_rows != 2 || dirty_rows == 0 {
             transaction.commit().await?;
             return Ok(());
         }
@@ -959,7 +968,7 @@ impl TursoStore {
 
         let changed = transaction
             .execute(
-                "UPDATE projection_state SET lifecycle_status='ready', active_generation=?1, active_fingerprint=?2, dirty=0, last_success_at=?3, last_error=NULL, updated_at=?3 WHERE projection IN ('vector_tasks','vector_label_atoms') AND provider_fingerprint=?2 AND dirty=1 AND (building_fingerprint IS NULL OR building_fingerprint=?2) AND (SELECT COUNT(*) FROM projection_state WHERE projection IN ('vector_tasks','vector_label_atoms') AND provider_fingerprint=?2 AND dirty=1 AND (building_fingerprint IS NULL OR building_fingerprint=?2))=2 AND NOT EXISTS (SELECT 1 FROM projection_jobs WHERE target IN ('vector_tasks','vector_label_atoms') AND status IN ('pending','running','failed'))",
+                "UPDATE projection_state SET lifecycle_status='ready', active_generation=?1, active_fingerprint=?2, dirty=0, last_success_at=?3, last_error=NULL, updated_at=?3 WHERE projection IN ('vector_tasks','vector_label_atoms') AND provider_fingerprint=?2 AND (building_fingerprint IS NULL OR building_fingerprint=?2) AND (SELECT COUNT(*) FROM projection_state WHERE projection IN ('vector_tasks','vector_label_atoms') AND provider_fingerprint=?2 AND (building_fingerprint IS NULL OR building_fingerprint=?2))=2 AND (SELECT COALESCE(SUM(dirty=1), 0) FROM projection_state WHERE projection IN ('vector_tasks','vector_label_atoms') AND provider_fingerprint=?2 AND (building_fingerprint IS NULL OR building_fingerprint=?2))>0 AND NOT EXISTS (SELECT 1 FROM projection_jobs WHERE target IN ('vector_tasks','vector_label_atoms') AND status IN ('pending','running','failed'))",
                 (generation, fingerprint, now),
             )
             .await?;
@@ -1452,9 +1461,13 @@ pub(crate) async fn worker_tick(store: TursoStore, owner: &str) -> Result<usize,
     let Some(config) = store.vector_config().await? else {
         return Ok(0);
     };
-    let jobs = store.claim_vector_jobs(owner, 8, now_ms()).await?;
     let mut completed = 0;
-    for job in jobs {
+    // 每次只持有一个 provider lease；claim 8 个再串行处理会让排在后面的
+    // job 在前一个 35 秒 provider 调用期间过期，被其他 host 提前 reclaim。
+    for _ in 0..VECTOR_WORKER_TICK_MAX_JOBS {
+        let Some(job) = store.claim_vector_jobs(owner, 1, now_ms()).await?.pop() else {
+            break;
+        };
         match process_job(&store, &config, &job).await {
             Ok(()) => {
                 if store.complete_vector_job(&job).await? {
@@ -1735,7 +1748,7 @@ fn parse_authority(authority: &str) -> Result<(&str, u16), ProviderFailure> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::store;
+    use crate::test_support::{create_input, store};
 
     fn test_config() -> VectorConfig {
         VectorConfig {
@@ -1869,6 +1882,116 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn explicit_rebuild_reopens_job_after_attempt_limit() {
+        let (_directory, store, _path) = store("vector-rebuild-reopen").await;
+        store.initialize().await.expect("initialize");
+        store
+            .create_task(
+                "default",
+                create_input("t_vector_rebuild_reopen", None, "rebuild target"),
+            )
+            .await
+            .expect("task");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "DELETE FROM projection_jobs WHERE target='vector_tasks'",
+                (),
+            )
+            .await
+            .expect("clear generated jobs");
+        connection
+            .execute(
+                "INSERT INTO projection_jobs(board_id,target,entity_uri,dedupe_key,operation,payload_json,status,attempts,max_attempts,next_attempt_at,created_at,updated_at) VALUES ('b_default','vector_tasks','kb://task/t_vector_rebuild_reopen','vector_tasks:kb://task/t_vector_rebuild_reopen:rebuild','rebuild','{}','pending',0,1,0,1,1)",
+                (),
+            )
+            .await
+            .expect("rebuild job");
+        drop(connection);
+
+        let first_now = now_ms();
+        let first = store
+            .claim_vector_jobs("worker-a", 1, first_now)
+            .await
+            .expect("first claim")
+            .pop()
+            .expect("first job");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE projection_jobs SET lease_expires_at=?1 WHERE id=?2",
+                (first_now.saturating_sub(1), first.id),
+            )
+            .await
+            .expect("expire lease");
+        drop(connection);
+        assert!(
+            store
+                .claim_vector_jobs("worker-b", 1, first_now.saturating_add(1))
+                .await
+                .expect("terminal reclaim")
+                .is_empty()
+        );
+
+        let connection = store.connection().await.expect("connection");
+        let row = first_row(
+            connection
+                .query(
+                    "SELECT status,attempts,fence_epoch FROM projection_jobs WHERE id=?1",
+                    [first.id],
+                )
+                .await
+                .expect("terminal status query"),
+        )
+        .await
+        .expect("terminal status row");
+        assert_eq!(
+            text_value(row.get_value(0).expect("status"), "status").expect("status text"),
+            "failed"
+        );
+        assert_eq!(
+            integer_value(row.get_value(1).expect("attempts"), "attempts")
+                .expect("attempts integer"),
+            1
+        );
+        let terminal_fence =
+            integer_value(row.get_value(2).expect("fence"), "fence").expect("fence integer");
+        drop(connection);
+
+        store
+            .enqueue_vector_job(
+                Some("b_default"),
+                None,
+                VECTOR_TASKS_PROJECTION,
+                "kb://task/t_vector_rebuild_reopen",
+                "rebuild",
+                r#"{"task_id":"t_vector_rebuild_reopen"}"#,
+            )
+            .await
+            .expect("reopen rebuild");
+        let reopened = store
+            .claim_vector_jobs("worker-c", 1, now_ms().saturating_add(1_000))
+            .await
+            .expect("reopened claim")
+            .pop()
+            .expect("reopened job");
+        assert_eq!(reopened.attempts, 1);
+        assert_eq!(reopened.fence_epoch, terminal_fence + 2);
+        assert!(
+            !store
+                .complete_vector_job(&first)
+                .await
+                .expect("late terminal owner complete")
+        );
+        assert!(
+            store
+                .complete_vector_job(&reopened)
+                .await
+                .expect("reopened complete")
+        );
+    }
+
+    #[tokio::test]
     async fn publish_vector_generation_keeps_dirty_when_new_job_is_pending() {
         let (_directory, store, _path) = store("vector-publish-cas").await;
         store.initialize().await.expect("initialize");
@@ -1914,6 +2037,68 @@ mod tests {
         assert_eq!(
             ready.generation, None,
             "non-numeric generation is not parsed"
+        );
+    }
+
+    #[tokio::test]
+    async fn publish_vector_generation_accepts_incremental_single_projection_dirty() {
+        let (_directory, store, _path) = store("vector-publish-incremental").await;
+        store.initialize().await.expect("initialize");
+        let config = test_config();
+        store
+            .configure_vector(&config)
+            .await
+            .expect("configure vector");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE projection_state SET lifecycle_status='ready',active_generation='old',active_fingerprint=?1,dirty=0 WHERE projection='vector_tasks'",
+                [config.fingerprint()],
+            )
+            .await
+            .expect("clean task projection");
+        drop(connection);
+        insert_rebuild_job(
+            &store,
+            "b_default",
+            VECTOR_LABEL_ATOMS_PROJECTION,
+            "done",
+            1,
+            3,
+            10,
+        )
+        .await;
+
+        store
+            .publish_vector_generation("generation-3", &config.fingerprint())
+            .await
+            .expect("incremental publish");
+        let status = store.vector_status(None).await.expect("vector status");
+        assert_eq!(status.dirty, Some(false));
+        assert_eq!(
+            status.generation, None,
+            "non-numeric generation is not parsed"
+        );
+        let connection = store.connection().await.expect("connection");
+        let mut rows = connection
+            .query(
+                "SELECT lifecycle_status,dirty FROM projection_state WHERE projection='vector_tasks'",
+                (),
+            )
+            .await
+            .expect("projection state query");
+        let row = rows
+            .next()
+            .await
+            .expect("projection row result")
+            .expect("projection row");
+        assert_eq!(
+            text_value(row.get_value(0).expect("lifecycle"), "lifecycle").expect("lifecycle text"),
+            "ready"
+        );
+        assert_eq!(
+            integer_value(row.get_value(1).expect("dirty"), "dirty").expect("dirty integer"),
+            0
         );
     }
 

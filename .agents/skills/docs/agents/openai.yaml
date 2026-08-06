@@ -1,4 +1,4 @@
 interface:
   display_name: "项目文档"
-  short_description: "按当前事实源选择并同步 kanban-tool 项目文档"
-  default_prompt: "使用 $docs 选择并同步项目文档事实源。"
+  short_description: "按 owner 放置并同步当前项目文档"
+  default_prompt: "使用 $docs 为当前行为选择 owner 文档并检查链接与事实源。"

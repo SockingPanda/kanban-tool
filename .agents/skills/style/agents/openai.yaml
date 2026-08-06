@@ -1,4 +1,4 @@
 interface:
   display_name: "Rust 项目风格"
-  short_description: "维护 kanban-tool 的 Rust 结构、依赖和测试边界"
-  default_prompt: "使用 $style 指导本项目的 Rust 结构、依赖和测试。"
+  short_description: "维护 Rust crate、依赖和 owner 边界"
+  default_prompt: "使用 $style 指导 kanban-tool 的 Rust 结构、依赖、rustdoc 和测试边界。"

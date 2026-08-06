@@ -1,4 +1,4 @@
 interface:
   display_name: "项目验证"
-  short_description: "按改动影响面选择最小充分的 kanban-tool 验证"
-  default_prompt: "使用 $check 选择并报告最小充分的项目验证。"
+  short_description: "按影响面选择当前项目验证"
+  default_prompt: "使用 $check 根据当前 justfile 选择并报告最小充分验证。"

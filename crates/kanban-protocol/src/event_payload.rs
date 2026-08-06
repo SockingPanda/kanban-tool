@@ -1,4 +1,4 @@
-//! Typed known-event payloads and the lossless unknown-kind fallback.
+//! 已知事件的 typed payload，以及无损的未知 kind 回退。
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -235,7 +235,7 @@ fn execution_plan_payload(
     let payload = serde_json::from_value::<ExecutionPlanPayload>(value)?;
     if payload.state != expected {
         return Err(payload_mismatch(format!(
-            "execution plan event requires state {expected:?}"
+            "execution plan event 要求 state 为 {expected:?}"
         )));
     }
     Ok(EventPayload::ExecutionPlan(payload))
@@ -248,7 +248,7 @@ fn label_proposal_payload(
     let payload = serde_json::from_value::<LabelProposalPayload>(value)?;
     if payload.status != expected {
         return Err(payload_mismatch(format!(
-            "label proposal event requires status {expected:?}"
+            "label proposal event 要求 status 为 {expected:?}"
         )));
     }
     Ok(EventPayload::LabelProposal(payload))
@@ -261,7 +261,7 @@ fn task_step_payload(
     let payload = serde_json::from_value::<TaskStepPayload>(value)?;
     if expected.is_some_and(|expected| payload.status != expected) {
         return Err(payload_mismatch(format!(
-            "task step event requires status {expected:?}"
+            "task step event 要求 status 为 {expected:?}"
         )));
     }
     Ok(EventPayload::TaskStep(payload))

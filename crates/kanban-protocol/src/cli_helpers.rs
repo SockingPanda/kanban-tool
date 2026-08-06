@@ -1,4 +1,4 @@
-//! CLI graph、vector、context、search 与 index machine contracts。
+//! CLI graph、vector、context、search 与 index 机器契约。
 //!
 //! 每个 alias 对应一个精确 Clap leaf 的有限 `--json` output root；运行时 adapter
 //! 只负责把 domain record 映射到这些 wire DTO。

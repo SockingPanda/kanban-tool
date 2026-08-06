@@ -1,9 +1,8 @@
-//! Contract-owned output DTOs for every `kanban label ... --json` leaf.
+//! 每个 `kanban label ... --json` leaf 的 contract-owned output DTO。
 //!
-//! The CLI adapter converts SQLite service records into these types before
-//! serialization. API exact roots remain owned by `label_surfaces`; the CLI
-//! roots below deliberately have their own names even when they reuse the same
-//! closed wire components.
+//! CLI adapter 在序列化前将 SQLite service record 转换为这些类型。API exact root
+//! 仍由 `label_surfaces` 拥有；下面的 CLI root 即使复用相同的封闭 wire component，
+//! 也有意使用独立名称。
 
 use std::collections::BTreeMap;
 

@@ -1,4 +1,4 @@
-//! Natural JSON structured metadata contracts shared by public adapters.
+//! 公共 adapter 共享的自然 JSON 结构化元数据契约。
 
 use std::collections::BTreeMap;
 
@@ -15,7 +15,7 @@ impl UnitInterval {
         if value.is_finite() && (0.0..=1.0).contains(&value) {
             Ok(Self(value))
         } else {
-            Err("value must be finite and within 0..=1".to_owned())
+            Err("值必须是有限数，且范围为 0..=1".to_owned())
         }
     }
 
@@ -40,7 +40,7 @@ impl PositiveRank {
         if value >= 1 {
             Ok(Self(value))
         } else {
-            Err("rank must be at least 1".to_owned())
+            Err("rank 必须至少为 1".to_owned())
         }
     }
 

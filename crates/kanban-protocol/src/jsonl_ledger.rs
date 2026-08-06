@@ -1,19 +1,18 @@
-//! Label, signal, ontology and setting portable JSONL DTO owner.
+//! label、signal、ontology 和 setting portable JSONL DTO 的 owner。
 //!
-//! These DTOs describe the portable JSON document, not the SQLite row. JSON stored as text in
-//! SQLite is deliberately exposed as natural arrays/objects and every nullable database column is
-//! required on the wire (with `null` as its value).
+//! 这些 DTO 描述 portable JSON 文档，而不是 SQLite row。SQLite 中按文本存储的 JSON
+//! 会以自然数组/对象暴露；数据库中每个可空列在 wire 上都必须存在（值为 `null`）。
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value};
 
-/// Intentionally opaque JSON object whose outer kind is stable while provider-specific members
-/// remain extensible. The containing row and field name are still closed.
+/// 有意保持 opaque 的 JSON 对象：外层 kind 稳定，provider-specific 成员仍可扩展，
+/// 但包含它的 row 和字段名仍是封闭的。
 pub type JsonObject = BTreeMap<String, Value>;
 
-/// A key that is mandatory on the wire while its value may explicitly be JSON `null`.
+/// wire 上必须存在的 key，但其值可以明确为 JSON `null`。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(transparent)]
@@ -539,7 +538,7 @@ macro_rules! normalize_match {
         match $discriminator {
             $($wire => normalize::<$row>($data),)+
             other => Err(<serde_json::Error as serde::de::Error>::custom(format!(
-                "ledger contract does not own discriminator: {other}"
+                "ledger contract 不拥有 discriminator：{other}"
             ))),
         }
     };

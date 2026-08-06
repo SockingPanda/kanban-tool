@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize, de};
 use serde_json::{Map, Value};
 
-/// Phase 4 的并行实现 lane。这里只冻结 wire contract 的所有权，不表达 SQLite 表语义。
+/// 第 4 阶段的并行实现 lane。这里只冻结 wire contract 的所有权，不表达 SQLite 表语义。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PortableContractLane {
@@ -21,9 +21,9 @@ pub struct PortableContractSide {
     pub consumer_test: &'static str,
 }
 
-/// Portable JSONL discriminator 的稳定 contract descriptor。
+/// portable JSONL discriminator 的稳定 contract 描述符。
 ///
-/// SQLite table、scope 和 import guard 仍由 canonical service 拥有；这里仅作为
+/// SQLite 表、scope 和 import guard 仍由 canonical service 拥有；这里仅作为
 /// surface operation、contract ID、URN、fixture 与 adoption witness locator 的单一来源。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct PortableContractDescriptor {
@@ -43,8 +43,8 @@ struct PortableJsonlInputEnvelope {
 }
 
 impl PortableContractDescriptor {
-    /// Decode the complete import root and bind its singleton `type` to this descriptor.
-    /// Lane adapters subsequently validate the closed record-specific `data` DTO.
+    /// 解码完整的导入根对象，并将其中唯一的 `type` 绑定到此描述符。
+    /// 随后的 lane adapter 会校验封闭的 record-specific `data` DTO。
     pub fn decode_input_envelope(
         &self,
         value: Value,
@@ -52,7 +52,7 @@ impl PortableContractDescriptor {
         let envelope = serde_json::from_value::<PortableJsonlInputEnvelope>(value)?;
         if envelope.discriminator != self.discriminator {
             return Err(de::Error::custom(format!(
-                "expected singleton type={}, got {}",
+                "期望单一 type={}，实际得到 {}",
                 self.discriminator, envelope.discriminator
             )));
         }

@@ -1,4 +1,4 @@
-//! Generic signal ledger HTTP 请求与响应契约。
+//! 通用 signal ledger 的 HTTP 请求与响应契约。
 
 use crate::structured_metadata::SignalEvidence;
 use crate::{ApiComment, DataEnvelope, SignalWire};

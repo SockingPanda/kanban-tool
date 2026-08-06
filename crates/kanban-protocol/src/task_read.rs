@@ -112,9 +112,7 @@ impl<'de> Deserialize<'de> for TaskReadLabel {
     {
         let value = String::deserialize(deserializer)?;
         Self::new(value).ok_or_else(|| {
-            de::Error::custom(
-                "task-read label must contain a non-whitespace character and be at most 128 Unicode characters",
-            )
+            de::Error::custom("task-read label 必须包含非空白字符，且最多 128 个 Unicode 字符")
         })
     }
 }

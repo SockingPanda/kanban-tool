@@ -227,19 +227,18 @@ pub struct BuildContextQuery {
     pub vector_limit: usize,
     #[serde(default = "default_context_max_items")]
     pub max_items: usize,
-    /// Optional global task id.  When omitted, `reference` or `query` selects
-    /// the context subject.
+    /// 可选的全局任务 ID。省略时由 `reference` 或 `query` 选择上下文主体。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub task: Option<String>,
-    /// Board-local task reference such as `kanban-tool#12`.
+    /// 看板内任务引用，例如 `kanban-tool#12`。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<String>,
-    /// Free-text query used for lexical/vector subject resolution.
+    /// 用于词法/向量主体解析的自由文本查询。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<String>,
     #[serde(default = "default_context_depth")]
     pub depth: usize,
-    /// Total item budget.  `max_items` remains accepted as the v1 alias.
+    /// 条目总预算。`max_items` 仍作为 v1 别名接受。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget: Option<usize>,
 }

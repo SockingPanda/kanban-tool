@@ -230,9 +230,8 @@ pub struct MaintenanceRunRequest {
     pub action: Option<String>,
 }
 
-/// Legacy SQLite v30 import request.  This host-admin path is deliberately
-/// separate from portable JSONL import because it reads an old on-disk schema
-/// and may need an explicit attachment-root mapping.
+/// Legacy SQLite v30 导入请求。此 host-admin 路径有意与 portable JSONL 导入分开，
+/// 因为它读取旧的磁盘 schema，并可能需要显式的附件根目录映射。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]

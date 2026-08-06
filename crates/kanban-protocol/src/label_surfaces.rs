@@ -1,4 +1,4 @@
-//! Lightweight wire DTOs for the label, semantics, atom, proposal, signal and ontology API family.
+//! label、semantics、atom、proposal、signal 和 ontology API 家族的轻量 wire DTO。
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

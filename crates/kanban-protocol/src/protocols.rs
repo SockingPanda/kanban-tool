@@ -1,8 +1,7 @@
-//! Project configuration and canonical host vector wire contracts.
+//! 项目配置与 canonical host vector wire contract。
 //!
-//! These DTOs own only decoded configuration and host HTTP shapes. Path
-//! resolution, provider availability and dispatcher policy remain in the
-//! runtime adapters that consume them.
+//! 这些 DTO 只拥有已解码的配置和 host HTTP shape。路径解析、provider 可用性和
+//! dispatcher 策略仍由使用它们的 runtime adapter 负责。
 
 use std::path::PathBuf;
 
@@ -41,7 +40,7 @@ impl Default for ProjectVectorConfigInput {
     }
 }
 
-/// Canonical projection corpus identity reported by host maintenance APIs.
+/// host maintenance API 报告的 canonical projection corpus identity。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
@@ -52,8 +51,8 @@ pub struct ProjectionCorpusMetadata {
     pub embedding_dimensions: usize,
 }
 
-/// Strict decoded shape for the single `[workers.<profile>]` section selected by the CLI.
-/// Selection and opaque handling of other profile sections remain adapter concerns.
+/// CLI 选中的单个 `[workers.<profile>]` 小节的严格解码结构。
+/// 其它 profile 小节的选择与 opaque 处理仍属于 adapter 关注点。
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
@@ -82,7 +81,7 @@ pub enum WorkerFinishPolicy {
     Ready,
 }
 
-/// Canonical host vector status query。
+/// canonical host vector 状态查询。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]

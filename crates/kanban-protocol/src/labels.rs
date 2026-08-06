@@ -39,11 +39,11 @@ pub struct AddTaskLabelRequest {
 impl AddTaskLabelRequest {
     pub fn label_names(&self) -> Result<Vec<String>, &'static str> {
         match (&self.name, &self.names) {
-            (Some(_), Some(_)) => Err("provide either name or names, not both"),
+            (Some(_), Some(_)) => Err("name 和 names 只能提供一个，不能同时提供"),
             (Some(name), None) => Ok(vec![name.clone()]),
-            (None, Some(names)) if names.is_empty() => Err("names must contain at least one label"),
+            (None, Some(names)) if names.is_empty() => Err("names 至少要包含一个标签"),
             (None, Some(names)) => Ok(names.clone()),
-            (None, None) => Err("name or names is required"),
+            (None, None) => Err("必须提供 name 或 names"),
         }
     }
 }

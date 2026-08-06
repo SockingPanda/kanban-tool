@@ -379,7 +379,7 @@ pub fn surface_operation_catalog() -> Vec<SurfaceOperation> {
         .iter()
         .map(|endpoint| SurfaceOperation {
             key: String::new(),
-            // The debug form is normalized below to keep the historical catalog key.
+            // 下方会对 debug 形式做规范化，以保留历史 catalog key。
             surface: endpoint.surface,
             contracts: endpoint_contract_references(endpoint),
             migration: endpoint.migration,

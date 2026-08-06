@@ -33,7 +33,7 @@ impl TryFrom<&str> for ApiRunStatus {
             "failed" => Ok(Self::Failed),
             "canceled" => Ok(Self::Canceled),
             "expired" => Ok(Self::Expired),
-            other => Err(format!("unknown run status {other}")),
+            other => Err(format!("未知的 run status：{other}")),
         }
     }
 }

@@ -35,10 +35,10 @@ pub struct CliInitResult {
     pub db_path: String,
     pub board_id: String,
     pub board_slug: String,
-    /// Project config path created or reused by `kanban init`; database ownership remains with `serve`.
+    /// `kanban init` 创建或复用的项目配置路径；数据库仍由 `serve` 独占。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_path: Option<String>,
-    /// Whether this invocation changed the project config file.
+    /// 本次调用是否修改了项目配置文件。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created: Option<bool>,
 }

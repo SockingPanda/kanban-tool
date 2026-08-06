@@ -66,6 +66,6 @@ pub type CreateAttachmentResponse = DataEnvelope<ApiAttachment>;
 pub type ListAttachmentsResponse = DataEnvelope<Vec<ApiAttachment>>;
 pub type DeleteAttachmentResponse = DeleteResponse;
 
-/// Download success payload is raw bytes on HTTP; this alias is the logical
-/// typed payload used by schema tooling and non-HTTP adapters.
+/// HTTP 下载成功时 payload 是原始字节；此别名是 schema 工具和非 HTTP
+/// adapter 使用的逻辑 typed payload。
 pub type AttachmentDownloadResponse = Vec<u8>;

@@ -19,7 +19,7 @@ pub struct GetTaskQuery {
     pub include: Option<String>,
 }
 
-/// Derived ontology metadata remains opaque at the transport boundary.
+/// 派生的 ontology 元数据在 transport boundary 保持 opaque。
 pub type GetTaskResponse =
     OptionalMetadataEnvelope<ApiTask, TaskOntologyDetailsMeta<Option<TaskOntologySummary>>>;
 
@@ -77,8 +77,8 @@ pub struct TaskOntologySignalSummary {
     pub action_count: i64,
 }
 
-/// Explicit opt-in task detail aggregate. The default task show response stays
-/// intentionally small; this shape is used by `include=details`.
+/// 显式 opt-in 的任务详情聚合。默认的任务 show 响应保持精简；
+/// `include=details` 使用此 shape。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
@@ -117,8 +117,8 @@ pub struct UpdateTaskPath {
     pub task_id: String,
 }
 
-/// Explicitly writable PATCH fields. Canonical status, claim credentials,
-/// current run identity, and completion timestamp are intentionally absent.
+/// 明确可写的 PATCH 字段。这里有意不包含 canonical status、claim 凭据、
+/// 当前 run identity 和完成时间戳。
 fn deserialize_patch_nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
     D: serde::Deserializer<'de>,

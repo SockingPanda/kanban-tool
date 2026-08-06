@@ -1,7 +1,7 @@
-//! Closed wire DTOs for the core portable JSONL records.
+//! 核心 portable JSONL record 的封闭 wire DTO。
 //!
-//! These types own the public `{"type", "data"}` shape. SQLite column names and
-//! JSON-in-TEXT storage remain private to `kanban-sqlite`'s portable adapter.
+//! 这些类型拥有公开的 `{"type", "data"}` shape。SQLite 列名和 JSON-in-TEXT 存储
+//! 仍属于 `kanban-sqlite` portable adapter 的私有实现。
 
 use std::collections::BTreeMap;
 
@@ -73,16 +73,15 @@ pub enum PortableRunStatus {
     Expired,
 }
 
-/// An uninhabited value makes a required nullable field accept only JSON null.
+/// 无 inhabitant 的值让必需的可空字段只能接受 JSON null。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum PortableNever {}
 
-/// Schema-only marker for a key that must be present but may contain JSON null.
+/// 仅供 schema 使用的标记，表示 key 必须存在但可以包含 JSON null。
 ///
-/// A bare `Option<T>` is considered omittable by schemars, while
-/// `#[schemars(required)]` deliberately removes its null branch. This
-/// transparent non-Option wrapper preserves both halves of the wire contract.
+/// schemars 会把裸 `Option<T>` 视为可省略，而 `#[schemars(required)]` 会有意移除
+/// null 分支。这个透明的非 Option wrapper 保留 wire contract 的两部分。
 #[cfg(feature = "schema")]
 #[derive(schemars::JsonSchema)]
 #[serde(transparent)]

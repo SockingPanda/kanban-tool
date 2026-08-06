@@ -84,7 +84,9 @@ impl<'de> Deserialize<'de> for ApiTaskPriority {
     {
         let value = i64::deserialize(deserializer)?;
         Self::try_from(value).map_err(|value| {
-            de::Error::custom(format!("task priority must be in 0..=3, got {value}"))
+            de::Error::custom(format!(
+                "task priority 必须在 0..=3 范围内，实际得到 {value}"
+            ))
         })
     }
 }

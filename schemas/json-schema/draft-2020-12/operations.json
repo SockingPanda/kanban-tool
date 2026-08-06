@@ -14047,7 +14047,7 @@
       "consumer": {
         "contract_id": "api.board-task-map.path",
         "direction": "deserialize",
-        "exact_test": "suite::task_graph_adoption::board_task_map_path_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/boards/:board/task-map",
         "package": "kanban-server",
         "surface": "api",
@@ -14056,7 +14056,7 @@
       "producer": {
         "contract_id": "api.board-task-map.path",
         "direction": "deserialize",
-        "exact_test": "suite::task_graph_adoption::board_task_map_path_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/boards/:board/task-map",
         "package": "kanban-server",
         "surface": "api",
@@ -14139,7 +14139,7 @@
       "consumer": {
         "contract_id": "api.board-task-map.query",
         "direction": "deserialize",
-        "exact_test": "suite::task_graph_adoption::board_task_map_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/boards/:board/task-map",
         "package": "kanban-server",
         "surface": "api",
@@ -14148,7 +14148,7 @@
       "producer": {
         "contract_id": "api.board-task-map.query",
         "direction": "deserialize",
-        "exact_test": "suite::task_graph_adoption::board_task_map_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/boards/:board/task-map",
         "package": "kanban-server",
         "surface": "api",
@@ -14205,7 +14205,7 @@
       "consumer": {
         "contract_id": "api.board-task-map.response",
         "direction": "serialize",
-        "exact_test": "suite::task_graph_adoption::board_task_map_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/boards/:board/task-map",
         "package": "kanban-server",
         "surface": "api",
@@ -14214,7 +14214,7 @@
       "producer": {
         "contract_id": "api.board-task-map.response",
         "direction": "serialize",
-        "exact_test": "suite::task_graph_adoption::board_task_map_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/boards/:board/task-map",
         "package": "kanban-server",
         "surface": "api",
@@ -14246,7 +14246,7 @@
       "consumer": {
         "contract_id": "api.task-neighborhood.path",
         "direction": "deserialize",
-        "exact_test": "suite::task_graph_adoption::task_neighborhood_path_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/neighborhood",
         "package": "kanban-server",
         "surface": "api",
@@ -14255,7 +14255,7 @@
       "producer": {
         "contract_id": "api.task-neighborhood.path",
         "direction": "deserialize",
-        "exact_test": "suite::task_graph_adoption::task_neighborhood_path_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/neighborhood",
         "package": "kanban-server",
         "surface": "api",
@@ -14338,7 +14338,7 @@
       "consumer": {
         "contract_id": "api.task-neighborhood.query",
         "direction": "deserialize",
-        "exact_test": "suite::task_graph_adoption::task_neighborhood_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/neighborhood",
         "package": "kanban-server",
         "surface": "api",
@@ -14347,7 +14347,7 @@
       "producer": {
         "contract_id": "api.task-neighborhood.query",
         "direction": "deserialize",
-        "exact_test": "suite::task_graph_adoption::task_neighborhood_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/neighborhood",
         "package": "kanban-server",
         "surface": "api",
@@ -14392,7 +14392,7 @@
       "consumer": {
         "contract_id": "api.task-neighborhood.response",
         "direction": "serialize",
-        "exact_test": "suite::task_graph_adoption::task_neighborhood_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/neighborhood",
         "package": "kanban-server",
         "surface": "api",
@@ -14401,7 +14401,7 @@
       "producer": {
         "contract_id": "api.task-neighborhood.response",
         "direction": "serialize",
-        "exact_test": "suite::task_graph_adoption::task_neighborhood_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/neighborhood",
         "package": "kanban-server",
         "surface": "api",
@@ -14433,7 +14433,7 @@
       "consumer": {
         "contract_id": "api.search-tasks.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::search_tasks_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/tasks",
         "package": "kanban-server",
         "surface": "api",
@@ -14442,7 +14442,7 @@
       "producer": {
         "contract_id": "api.search-tasks.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::search_tasks_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/tasks",
         "package": "kanban-server",
         "surface": "api",
@@ -14553,7 +14553,7 @@
       "consumer": {
         "contract_id": "api.search-tasks.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::search_tasks_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/tasks",
         "package": "kanban-server",
         "surface": "api",
@@ -14562,7 +14562,7 @@
       "producer": {
         "contract_id": "api.search-tasks.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::search_tasks_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/tasks",
         "package": "kanban-server",
         "surface": "api",
@@ -14594,7 +14594,7 @@
       "consumer": {
         "contract_id": "api.search-tasks-by-status.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::search_tasks_by_status_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/tasks/by-status",
         "package": "kanban-server",
         "surface": "api",
@@ -14603,7 +14603,7 @@
       "producer": {
         "contract_id": "api.search-tasks-by-status.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::search_tasks_by_status_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/tasks/by-status",
         "package": "kanban-server",
         "surface": "api",
@@ -14714,7 +14714,7 @@
       "consumer": {
         "contract_id": "api.search-tasks-by-status.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::search_tasks_by_status_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/tasks/by-status",
         "package": "kanban-server",
         "surface": "api",
@@ -14723,7 +14723,7 @@
       "producer": {
         "contract_id": "api.search-tasks-by-status.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::search_tasks_by_status_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/tasks/by-status",
         "package": "kanban-server",
         "surface": "api",
@@ -14755,7 +14755,7 @@
       "consumer": {
         "contract_id": "api.search-status.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::search_status_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/status",
         "package": "kanban-server",
         "surface": "api",
@@ -14764,7 +14764,7 @@
       "producer": {
         "contract_id": "api.search-status.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::search_status_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/status",
         "package": "kanban-server",
         "surface": "api",
@@ -14847,7 +14847,7 @@
       "consumer": {
         "contract_id": "api.search-status.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::search_status_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/status",
         "package": "kanban-server",
         "surface": "api",
@@ -14856,7 +14856,7 @@
       "producer": {
         "contract_id": "api.search-status.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::search_status_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "GET /api/v1/search/status",
         "package": "kanban-server",
         "surface": "api",
@@ -14888,7 +14888,7 @@
       "consumer": {
         "contract_id": "api.rebuild-search-index.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::search_status_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "POST /api/v1/search/index/rebuild",
         "package": "kanban-server",
         "surface": "api",
@@ -14897,7 +14897,7 @@
       "producer": {
         "contract_id": "api.rebuild-search-index.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::search_status_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "POST /api/v1/search/index/rebuild",
         "package": "kanban-server",
         "surface": "api",
@@ -14980,7 +14980,7 @@
       "consumer": {
         "contract_id": "api.rebuild-search-index.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::search_status_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "POST /api/v1/search/index/rebuild",
         "package": "kanban-server",
         "surface": "api",
@@ -14989,7 +14989,7 @@
       "producer": {
         "contract_id": "api.rebuild-search-index.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::search_status_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "POST /api/v1/search/index/rebuild",
         "package": "kanban-server",
         "surface": "api",
@@ -15021,7 +15021,7 @@
       "consumer": {
         "contract_id": "api.sync-search-index.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::search_status_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "POST /api/v1/search/index/sync",
         "package": "kanban-server",
         "surface": "api",
@@ -15030,7 +15030,7 @@
       "producer": {
         "contract_id": "api.sync-search-index.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::search_status_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "POST /api/v1/search/index/sync",
         "package": "kanban-server",
         "surface": "api",
@@ -15113,7 +15113,7 @@
       "consumer": {
         "contract_id": "api.sync-search-index.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::search_status_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "POST /api/v1/search/index/sync",
         "package": "kanban-server",
         "surface": "api",
@@ -15122,7 +15122,7 @@
       "producer": {
         "contract_id": "api.sync-search-index.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::search_status_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
         "operation": "POST /api/v1/search/index/sync",
         "package": "kanban-server",
         "surface": "api",
@@ -15154,7 +15154,7 @@
       "consumer": {
         "contract_id": "api.build-context.path",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::build_context_path_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/context",
         "package": "kanban-server",
         "surface": "api",
@@ -15163,7 +15163,7 @@
       "producer": {
         "contract_id": "api.build-context.path",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::build_context_path_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/context",
         "package": "kanban-server",
         "surface": "api",
@@ -15246,7 +15246,7 @@
       "consumer": {
         "contract_id": "api.build-context.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::build_context_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/context",
         "package": "kanban-server",
         "surface": "api",
@@ -15255,7 +15255,7 @@
       "producer": {
         "contract_id": "api.build-context.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::build_context_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/context",
         "package": "kanban-server",
         "surface": "api",
@@ -15328,7 +15328,7 @@
       "consumer": {
         "contract_id": "api.build-context.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::build_context_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/context",
         "package": "kanban-server",
         "surface": "api",
@@ -15337,7 +15337,7 @@
       "producer": {
         "contract_id": "api.build-context.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::build_context_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures",
         "operation": "GET /api/v1/tasks/:task_id/context",
         "package": "kanban-server",
         "surface": "api",
@@ -15369,7 +15369,7 @@
       "consumer": {
         "contract_id": "api.graph-status.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::graph_status_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/status",
         "package": "kanban-server",
         "surface": "api",
@@ -15378,7 +15378,7 @@
       "producer": {
         "contract_id": "api.graph-status.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::graph_status_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/status",
         "package": "kanban-server",
         "surface": "api",
@@ -15461,7 +15461,7 @@
       "consumer": {
         "contract_id": "api.graph-status.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::graph_status_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/status",
         "package": "kanban-server",
         "surface": "api",
@@ -15470,7 +15470,7 @@
       "producer": {
         "contract_id": "api.graph-status.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::graph_status_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/status",
         "package": "kanban-server",
         "surface": "api",
@@ -15502,7 +15502,7 @@
       "consumer": {
         "contract_id": "api.graph-neighbors.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::graph_neighbors_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/neighbors",
         "package": "kanban-server",
         "surface": "api",
@@ -15511,7 +15511,7 @@
       "producer": {
         "contract_id": "api.graph-neighbors.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::graph_neighbors_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/neighbors",
         "package": "kanban-server",
         "surface": "api",
@@ -15606,7 +15606,7 @@
       "consumer": {
         "contract_id": "api.graph-neighbors.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::graph_neighbors_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/neighbors",
         "package": "kanban-server",
         "surface": "api",
@@ -15615,7 +15615,7 @@
       "producer": {
         "contract_id": "api.graph-neighbors.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::graph_neighbors_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/neighbors",
         "package": "kanban-server",
         "surface": "api",
@@ -15647,7 +15647,7 @@
       "consumer": {
         "contract_id": "api.graph-query.query",
         "direction": "deserialize",
-        "exact_test": "suite::graph_adoption::graph_query_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/query",
         "package": "kanban-server",
         "surface": "api",
@@ -15656,7 +15656,7 @@
       "producer": {
         "contract_id": "api.graph-query.query",
         "direction": "deserialize",
-        "exact_test": "suite::graph_adoption::graph_query_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/query",
         "package": "kanban-server",
         "surface": "api",
@@ -15747,7 +15747,7 @@
       "consumer": {
         "contract_id": "api.graph-query.response",
         "direction": "serialize",
-        "exact_test": "suite::graph_adoption::graph_query_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/query",
         "package": "kanban-server",
         "surface": "api",
@@ -15756,7 +15756,7 @@
       "producer": {
         "contract_id": "api.graph-query.response",
         "direction": "serialize",
-        "exact_test": "suite::graph_adoption::graph_query_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "GET /api/v1/graph/query",
         "package": "kanban-server",
         "surface": "api",
@@ -15788,7 +15788,7 @@
       "consumer": {
         "contract_id": "api.graph-rebuild.query",
         "direction": "deserialize",
-        "exact_test": "suite::graph_adoption::graph_rebuild_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "POST /api/v1/graph/rebuild",
         "package": "kanban-server",
         "surface": "api",
@@ -15797,7 +15797,7 @@
       "producer": {
         "contract_id": "api.graph-rebuild.query",
         "direction": "deserialize",
-        "exact_test": "suite::graph_adoption::graph_rebuild_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "POST /api/v1/graph/rebuild",
         "package": "kanban-server",
         "surface": "api",
@@ -15880,7 +15880,7 @@
       "consumer": {
         "contract_id": "api.graph-rebuild.response",
         "direction": "serialize",
-        "exact_test": "suite::graph_adoption::graph_rebuild_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "POST /api/v1/graph/rebuild",
         "package": "kanban-server",
         "surface": "api",
@@ -15889,7 +15889,7 @@
       "producer": {
         "contract_id": "api.graph-rebuild.response",
         "direction": "serialize",
-        "exact_test": "suite::graph_adoption::graph_rebuild_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "POST /api/v1/graph/rebuild",
         "package": "kanban-server",
         "surface": "api",
@@ -15921,7 +15921,7 @@
       "consumer": {
         "contract_id": "api.graph-sync.query",
         "direction": "deserialize",
-        "exact_test": "suite::graph_adoption::graph_sync_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "POST /api/v1/graph/sync",
         "package": "kanban-server",
         "surface": "api",
@@ -15930,7 +15930,7 @@
       "producer": {
         "contract_id": "api.graph-sync.query",
         "direction": "deserialize",
-        "exact_test": "suite::graph_adoption::graph_sync_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "POST /api/v1/graph/sync",
         "package": "kanban-server",
         "surface": "api",
@@ -16013,7 +16013,7 @@
       "consumer": {
         "contract_id": "api.graph-sync.response",
         "direction": "serialize",
-        "exact_test": "suite::graph_adoption::graph_sync_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "POST /api/v1/graph/sync",
         "package": "kanban-server",
         "surface": "api",
@@ -16022,7 +16022,7 @@
       "producer": {
         "contract_id": "api.graph-sync.response",
         "direction": "serialize",
-        "exact_test": "suite::graph_adoption::graph_sync_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures",
         "operation": "POST /api/v1/graph/sync",
         "package": "kanban-server",
         "surface": "api",
@@ -16054,7 +16054,7 @@
       "consumer": {
         "contract_id": "api.entity-list.query",
         "direction": "deserialize",
-        "exact_test": "suite::entity_adoption::entity_list_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "GET /api/v1/entities",
         "package": "kanban-server",
         "surface": "api",
@@ -16063,7 +16063,7 @@
       "producer": {
         "contract_id": "api.entity-list.query",
         "direction": "deserialize",
-        "exact_test": "suite::entity_adoption::entity_list_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "GET /api/v1/entities",
         "package": "kanban-server",
         "surface": "api",
@@ -16154,7 +16154,7 @@
       "consumer": {
         "contract_id": "api.entity-list.response",
         "direction": "serialize",
-        "exact_test": "suite::entity_adoption::entity_list_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "GET /api/v1/entities",
         "package": "kanban-server",
         "surface": "api",
@@ -16163,7 +16163,7 @@
       "producer": {
         "contract_id": "api.entity-list.response",
         "direction": "serialize",
-        "exact_test": "suite::entity_adoption::entity_list_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "GET /api/v1/entities",
         "package": "kanban-server",
         "surface": "api",
@@ -16245,7 +16245,7 @@
       "consumer": {
         "contract_id": "api.entity-upsert.request",
         "direction": "deserialize",
-        "exact_test": "suite::entity_adoption::entity_upsert_request_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "PUT /api/v1/entities",
         "package": "kanban-server",
         "surface": "api",
@@ -16254,7 +16254,7 @@
       "producer": {
         "contract_id": "api.entity-upsert.request",
         "direction": "deserialize",
-        "exact_test": "suite::entity_adoption::entity_upsert_request_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "PUT /api/v1/entities",
         "package": "kanban-server",
         "surface": "api",
@@ -16286,7 +16286,7 @@
       "consumer": {
         "contract_id": "api.entity-upsert.response",
         "direction": "serialize",
-        "exact_test": "suite::entity_adoption::entity_upsert_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "PUT /api/v1/entities",
         "package": "kanban-server",
         "surface": "api",
@@ -16295,7 +16295,7 @@
       "producer": {
         "contract_id": "api.entity-upsert.response",
         "direction": "serialize",
-        "exact_test": "suite::entity_adoption::entity_upsert_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "PUT /api/v1/entities",
         "package": "kanban-server",
         "surface": "api",
@@ -16327,7 +16327,7 @@
       "consumer": {
         "contract_id": "api.entity.path",
         "direction": "deserialize",
-        "exact_test": "suite::entity_adoption::entity_path_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "GET /api/v1/entities/:uri",
         "package": "kanban-server",
         "surface": "api",
@@ -16336,7 +16336,7 @@
       "producer": {
         "contract_id": "api.entity.path",
         "direction": "deserialize",
-        "exact_test": "suite::entity_adoption::entity_path_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "GET /api/v1/entities/:uri",
         "package": "kanban-server",
         "surface": "api",
@@ -16419,7 +16419,7 @@
       "consumer": {
         "contract_id": "api.entity.response",
         "direction": "serialize",
-        "exact_test": "suite::entity_adoption::entity_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "GET /api/v1/entities/:uri",
         "package": "kanban-server",
         "surface": "api",
@@ -16428,7 +16428,7 @@
       "producer": {
         "contract_id": "api.entity.response",
         "direction": "serialize",
-        "exact_test": "suite::entity_adoption::entity_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures",
         "operation": "GET /api/v1/entities/:uri",
         "package": "kanban-server",
         "surface": "api",
@@ -16460,7 +16460,7 @@
       "consumer": {
         "contract_id": "api.vector-status.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::vector_status_query_fixture_is_consumed_by_real_router",
+        "exact_test": "knowledge_adoption::vector_routes_consume_typed_projection_fixtures_and_real_degraded_queries",
         "operation": "GET /api/v1/vector/status",
         "package": "kanban-server",
         "surface": "api",
@@ -16469,7 +16469,7 @@
       "producer": {
         "contract_id": "api.vector-status.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::vector_status_query_dto_serializes_to_committed_fixture",
+        "exact_test": "knowledge_adoption::vector_routes_consume_typed_projection_fixtures_and_real_degraded_queries",
         "operation": "GET /api/v1/vector/status",
         "package": "kanban-server",
         "surface": "api",
@@ -16552,7 +16552,7 @@
       "consumer": {
         "contract_id": "api.vector-status.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::vector_status_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "knowledge_adoption::vector_routes_consume_typed_projection_fixtures_and_real_degraded_queries",
         "operation": "GET /api/v1/vector/status",
         "package": "kanban-server",
         "surface": "api",
@@ -16561,7 +16561,7 @@
       "producer": {
         "contract_id": "api.vector-status.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::vector_status_response_fixture_is_produced_by_real_router",
+        "exact_test": "knowledge_adoption::vector_routes_consume_typed_projection_fixtures_and_real_degraded_queries",
         "operation": "GET /api/v1/vector/status",
         "package": "kanban-server",
         "surface": "api",
@@ -17382,7 +17382,7 @@
       "consumer": {
         "contract_id": "api.get-stats.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::get_stats_query_fixture_is_consumed_by_real_router",
+        "exact_test": "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
         "operation": "GET /api/v1/stats",
         "package": "kanban-server",
         "surface": "api",
@@ -17391,7 +17391,7 @@
       "producer": {
         "contract_id": "api.get-stats.query",
         "direction": "deserialize",
-        "exact_test": "suite::derived_adoption::get_stats_query_dto_serializes_to_committed_fixture",
+        "exact_test": "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
         "operation": "GET /api/v1/stats",
         "package": "kanban-server",
         "surface": "api",
@@ -17474,7 +17474,7 @@
       "consumer": {
         "contract_id": "api.get-stats.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::get_stats_response_fixture_is_consumed_by_contract_root",
+        "exact_test": "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
         "operation": "GET /api/v1/stats",
         "package": "kanban-server",
         "surface": "api",
@@ -17483,7 +17483,7 @@
       "producer": {
         "contract_id": "api.get-stats.response",
         "direction": "serialize",
-        "exact_test": "suite::derived_adoption::get_stats_response_fixture_is_produced_by_real_router",
+        "exact_test": "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
         "operation": "GET /api/v1/stats",
         "package": "kanban-server",
         "surface": "api",
@@ -20688,7 +20688,7 @@
         "operation": "label bootstrap",
         "package": "kanban-cli",
         "surface": "cli",
-        "test_target": "label_contract_adoption"
+        "test_target": "cli_label_contract_adoption"
       },
       "producer": {
         "contract_id": "cli.label-bootstrap.output",
@@ -20697,7 +20697,7 @@
         "operation": "label bootstrap",
         "package": "kanban-cli",
         "surface": "cli",
-        "test_target": "label_contract_adoption"
+        "test_target": "cli_label_contract_adoption"
       },
       "producer_fixture": "schemas/fixtures/cli/label-bootstrap-output.v1.valid.json"
     },

@@ -17,7 +17,7 @@ const LABEL_WITNESS: AdoptionLocator = AdoptionLocator {
 };
 const LABEL_BOOTSTRAP_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-cli",
-    test_target: "label_contract_adoption",
+    test_target: "cli_label_contract_adoption",
     exact_test: "bootstrap_label_flow_through_real_cli",
 };
 

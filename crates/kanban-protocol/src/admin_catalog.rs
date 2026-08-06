@@ -71,22 +71,26 @@ const HEALTH_RESPONSE_CONSUMER: AdoptionLocator = HEALTH_RESPONSE_PRODUCER;
 const STATS_QUERY_PRODUCER: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test: "suite::derived_adoption::get_stats_query_dto_serializes_to_committed_fixture",
+    exact_test:
+        "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
 };
 const STATS_QUERY_CONSUMER: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test: "suite::derived_adoption::get_stats_query_fixture_is_consumed_by_real_router",
+    exact_test:
+        "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
 };
 const STATS_RESPONSE_PRODUCER: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test: "suite::derived_adoption::get_stats_response_fixture_is_produced_by_real_router",
+    exact_test:
+        "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
 };
 const STATS_RESPONSE_CONSUMER: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test: "suite::derived_adoption::get_stats_response_fixture_is_consumed_by_contract_root",
+    exact_test:
+        "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
 };
 
 const DOCTOR_RESPONSE_PRODUCER: AdoptionLocator = AdoptionLocator {

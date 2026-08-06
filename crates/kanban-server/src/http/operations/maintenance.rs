@@ -7,12 +7,13 @@ use axum::{
 };
 use kanban_protocol::{
     BackupReport, BackupResponse, CheckpointResponse, DataEnvelope, DoctorReport, DoctorResponse,
-    ExportReport, ExportResponse, ImportReport, ImportResponse, LegacyImportReport,
-    LegacyImportRequest, LegacyImportResponse, MaintenanceImportRequest, MaintenanceOwnerStatus,
-    MaintenancePathRequest, MaintenanceRunReport, MaintenanceRunRequest, MaintenanceRunResponse,
-    MaintenanceStatusReport, MaintenanceStatusResponse, ProjectionStoreStatus, VacuumReport,
-    VacuumResponse,
+    ExportReport, ExportResponse, ImportReport, ImportResponse, LegacyImportRequest,
+    LegacyImportResponse, MaintenanceImportRequest, MaintenanceOwnerStatus, MaintenancePathRequest,
+    MaintenanceRunReport, MaintenanceRunRequest, MaintenanceRunResponse, MaintenanceStatusReport,
+    MaintenanceStatusResponse, ProjectionStoreStatus, VacuumReport, VacuumResponse,
 };
+#[cfg(feature = "legacy-sqlite-import")]
+use kanban_protocol::LegacyImportReport;
 #[cfg(feature = "legacy-sqlite-import")]
 use kanban_service::LegacyImportOptions;
 

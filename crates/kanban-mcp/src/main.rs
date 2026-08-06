@@ -46,7 +46,8 @@ async fn main() -> anyhow::Result<()> {
 mod tests {
     use super::KanbanMcp;
     use kanban_protocol::{
-        MCP_HOST_ADMIN_OPERATION_IDS, mcp_operation_catalog, validate_mcp_operation_catalog,
+        McpOperationClass, operation_catalog, project_mcp_policy,
+        validate_mcp_policy_projection,
     };
 
     #[test]
@@ -57,23 +58,29 @@ mod tests {
             .map(|tool| tool.name.to_string())
             .collect();
 
-        let catalog_names: Vec<_> = mcp_operation_catalog()
+        let projection = project_mcp_policy(operation_catalog()).expect("MCP policy projection");
+        let mut catalog_names: Vec<_> = projection
+            .tool_bindings()
             .iter()
-            .map(|operation| operation.tool_name)
+            .map(|binding| binding.tool_name)
             .collect();
+        catalog_names.sort_unstable();
         assert_eq!(names, catalog_names);
-        validate_mcp_operation_catalog(mcp_operation_catalog())
-            .expect("MCP catalog 只能绑定已存在的领域 endpoint");
+        validate_mcp_policy_projection(&projection)
+            .expect("MCP projection 只能绑定已存在的领域 endpoint");
         assert_eq!(catalog_names.len(), 103);
     }
 
     #[test]
     fn host_admin_operations_are_not_exposed_by_catalog_or_router() {
-        let bound_operations = mcp_operation_catalog()
+        let projection = project_mcp_policy(operation_catalog()).expect("MCP policy projection");
+        let bound_operations = projection
+            .tool_bindings()
             .iter()
-            .flat_map(|operation| operation.http_operations)
+            .filter(|binding| binding.class == McpOperationClass::Domain)
+            .flat_map(|binding| binding.http_operations.iter().copied())
             .collect::<std::collections::BTreeSet<_>>();
-        for operation_id in MCP_HOST_ADMIN_OPERATION_IDS {
+        for operation_id in projection.operations(McpOperationClass::HostAdmin) {
             assert!(
                 !bound_operations.contains(operation_id),
                 "MCP catalog 意外绑定了 host-admin operation：{operation_id}"

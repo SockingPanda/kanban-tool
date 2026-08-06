@@ -332,6 +332,91 @@ fn same_invariants(first: &[McpOperationInvariant], second: &[McpOperationInvari
     first.len() == second.len() && first.iter().all(|invariant| second.contains(invariant))
 }
 
+/// 验证 declaration projection 的唯一性、endpoint 绑定和 host-admin 隔离。
+///
+/// 暴露策略完全来自 `McpPolicyProjection`：这里不维护第二份 host-admin operation
+/// 清单，projection 中没有明确归类的 API operation 会按 fail-closed 处理。
+pub fn validate_mcp_policy_projection(projection: &McpPolicyProjection) -> Result<(), String> {
+    let endpoint_ids = endpoint_catalog()
+        .iter()
+        .map(|endpoint| endpoint.operation_id)
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut tool_names = BTreeMap::new();
+
+    for (index, binding) in projection.tool_bindings.iter().enumerate() {
+        if binding.tool_name.is_empty() {
+            return Err(format!("MCP projection 第 {index} 项缺少 canonical tool name"));
+        }
+        if let Some(first_index) = tool_names.insert(binding.tool_name, index) {
+            return Err(format!(
+                "MCP projection 存在重复 tool name：{}（第 {first_index}、{index} 项）",
+                binding.tool_name
+            ));
+        }
+        if binding.class != McpOperationClass::Domain {
+            return Err(format!(
+                "MCP projection 不得暴露 host-admin tool：{}",
+                binding.tool_name
+            ));
+        }
+        if binding.invariants.as_slice() != projection.domain_invariants.as_slice() {
+            return Err(format!(
+                "MCP domain tool 不变量不完整：{}",
+                binding.tool_name
+            ));
+        }
+        if binding.http_operations.is_empty() {
+            return Err(format!(
+                "MCP tool 缺少 HTTP operation 绑定：{}",
+                binding.tool_name
+            ));
+        }
+        for operation_id in &binding.http_operations {
+            if !endpoint_ids.contains(operation_id) {
+                return Err(format!(
+                    "MCP tool {} 引用了不存在的 endpoint operation：{}",
+                    binding.tool_name, operation_id
+                ));
+            }
+            let endpoint = crate::endpoint_descriptor(operation_id)
+                .expect("endpoint ID 已由 endpoint catalog 验证存在");
+            if endpoint.surface != ContractSurface::Api {
+                return Err(format!(
+                    "MCP tool {} 只能绑定 API endpoint，实际为 {:?}：{}",
+                    binding.tool_name, endpoint.surface, operation_id
+                ));
+            }
+            if projection.host_admin_operations.contains(operation_id) {
+                return Err(format!(
+                    "MCP tool {} 绑定了禁止的 host-admin operation：{}",
+                    binding.tool_name, operation_id
+                ));
+            }
+        }
+    }
+
+    let bound_operations = projection
+        .tool_bindings
+        .iter()
+        .flat_map(|binding| binding.http_operations.iter().copied())
+        .collect::<std::collections::BTreeSet<_>>();
+    let missing_operations = endpoint_catalog()
+        .iter()
+        .filter(|endpoint| endpoint.surface == ContractSurface::Api)
+        .map(|endpoint| endpoint.operation_id)
+        .filter(|operation_id| !projection.host_admin_operations.contains(operation_id))
+        .filter(|operation_id| !bound_operations.contains(operation_id))
+        .collect::<Vec<_>>();
+    if !missing_operations.is_empty() {
+        return Err(format!(
+            "MCP projection 缺少非 host-admin API operation：{}",
+            missing_operations.join(", ")
+        ));
+    }
+
+    Ok(())
+}
+
 /// 一个 MCP tool 的 canonical name、HTTP operation 绑定和边界不变量。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct McpOperationDescriptor {

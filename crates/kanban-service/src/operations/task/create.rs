@@ -191,13 +191,13 @@ mod tests {
 
     #[test]
     fn create_task_rejects_invalid_command_before_serialization() {
-        let mut command = command(None, None);
-        command.priority = 4;
-        assert!(super::validate_create_task(&command).is_err());
+        let mut invalid_priority = command(None, None);
+        invalid_priority.priority = 4;
+        assert!(super::validate_create_task(&invalid_priority).is_err());
 
-        let mut command = command(None, None);
-        command.metadata = BTreeMap::new();
-        command.labels = vec![" ".into()];
-        assert!(super::validate_create_task(&command).is_err());
+        let mut invalid_label = command(None, None);
+        invalid_label.metadata = BTreeMap::new();
+        invalid_label.labels = vec![" ".into()];
+        assert!(super::validate_create_task(&invalid_label).is_err());
     }
 }

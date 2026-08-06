@@ -239,6 +239,7 @@ mod maintenance_adoption {
     use tokio::sync::OnceCell;
     use tower::ServiceExt;
 
+    use super::legacy_adoption::ensure_legacy_http_flow;
     use crate::{AppState, build_router};
 
     static HTTP_FLOW: OnceCell<()> = OnceCell::const_new();
@@ -471,6 +472,26 @@ mod maintenance_adoption {
         };
     }
 
+    macro_rules! legacy_adoption_pair {
+        ($producer:ident, $consumer:ident, $ty:ty, $fixture:expr) => {
+            #[tokio::test]
+            async fn $producer() {
+                ensure_http_flow().await;
+                ensure_legacy_http_flow().await;
+                assert_fixture_roundtrip::<$ty>($fixture);
+            }
+
+            #[tokio::test]
+            async fn $consumer() {
+                ensure_http_flow().await;
+                ensure_legacy_http_flow().await;
+                let value: $ty = serde_json::from_str($fixture).expect("maintenance fixture DTO");
+                let encoded = serde_json::to_value(value).expect("serialize maintenance DTO");
+                assert!(encoded.is_object());
+            }
+        };
+    }
+
     adoption_pair!(
         maintenance_path_request_producer,
         maintenance_path_request_consumer,
@@ -513,7 +534,7 @@ mod maintenance_adoption {
         MaintenanceRunRequest,
         include_str!("../../../schemas/fixtures/api/maintenance-cleanup-request.v1.valid.json")
     );
-    adoption_pair!(
+    legacy_adoption_pair!(
         legacy_import_v30_request_producer,
         legacy_import_v30_request_consumer,
         LegacyImportRequest,
@@ -567,7 +588,7 @@ mod maintenance_adoption {
         MaintenanceRunResponse,
         include_str!("../../../schemas/fixtures/api/maintenance-cleanup-response.v1.valid.json")
     );
-    adoption_pair!(
+    legacy_adoption_pair!(
         legacy_import_v30_response_producer,
         legacy_import_v30_response_consumer,
         LegacyImportResponse,
@@ -617,3 +638,5 @@ mod maintenance_adoption {
         assert_eq!(response.data.user_version, 1);
     }
 }
+
+mod legacy_adoption;

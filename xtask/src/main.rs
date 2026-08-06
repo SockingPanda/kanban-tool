@@ -429,12 +429,16 @@ fn include_targets(
     let mut targets = Vec::new();
     let mut remaining = text;
     while let Some(start) = remaining.find("include_str!(") {
-        let after = &remaining[start + "include_str!(".len()..];
-        let Some(quote) = after.find('"') else {
-            remaining = &after[after.len()..];
+        if remaining[..start].chars().last() == Some('"') {
+            remaining = &remaining[start + "include_str!(".len()..];
             continue;
-        };
-        let after_quote = &after[quote + 1..];
+        }
+        let after = remaining[start + "include_str!(".len()..].trim_start();
+        if !after.starts_with('"') {
+            remaining = after;
+            continue;
+        }
+        let after_quote = &after[1..];
         let Some(end) = after_quote.find('"') else {
             return Err(std::io::Error::other(format!(
                 "include_str! 字符串未闭合: {}",

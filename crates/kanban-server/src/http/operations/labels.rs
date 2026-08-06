@@ -173,14 +173,14 @@ pub(crate) async fn bootstrap_task_label(
             actor,
             verify: body.verify,
             min_verify_score: body.min_verify_score,
-            vector_config: body
-                .vector_config
-                .map(|config| kanban_service::VectorConfig {
+            vector_config: body.vector_config.map(|config| {
+                kanban_service::VectorConfigureCommand {
                     provider: config.provider,
                     endpoint: config.endpoint,
                     model: config.model,
                     dimensions: config.dimensions,
-                }),
+                }
+            }),
         })
         .await?;
     Ok((

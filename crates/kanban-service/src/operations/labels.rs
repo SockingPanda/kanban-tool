@@ -5,7 +5,7 @@ use kanban_core::{Clock, KanbanError, Result, new_event_id, new_typed_id};
 use crate::{
     AddTaskLabelsInput, BootstrapTaskLabelInput, BootstrapTaskLabelVerification,
     DeleteBoardLabelInput, KanbanService, LabelAtomRecord, LabelRecord, LabelSemanticsRecord,
-    TaskRecord, VectorConfig,
+    TaskRecord, VectorConfigureCommand,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,7 +65,7 @@ pub struct BootstrapTaskLabelCommand {
     pub actor: String,
     pub verify: bool,
     pub min_verify_score: f32,
-    pub vector_config: Option<VectorConfig>,
+    pub vector_config: Option<VectorConfigureCommand>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -265,7 +265,12 @@ where
         // store 内以 task/label/ontology 快照做最后一次 CAS。
         let verification = if verify {
             let config = match command.vector_config.clone() {
-                Some(config) => config,
+                Some(config) => crate::vector::VectorConfig {
+                    provider: config.provider,
+                    endpoint: config.endpoint,
+                    model: config.model,
+                    dimensions: config.dimensions,
+                },
                 None => self
                     .store
                     .vector_config()

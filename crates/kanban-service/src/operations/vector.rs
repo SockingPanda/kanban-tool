@@ -312,7 +312,7 @@ mod tests {
         KanbanService, VectorChunkQueryCommand, VectorConfigureCommand, VectorLabelAtomQueryCommand,
     };
     use crate::{
-        BootstrapTaskLabelCommand, TursoStore, VectorConfig,
+        BootstrapTaskLabelCommand, TursoStore,
         test_support::{count_rows, create_input},
     };
 
@@ -479,7 +479,7 @@ mod tests {
             actor: "tester".to_owned(),
             verify: true,
             min_verify_score: 0.50,
-            vector_config: Some(VectorConfig {
+            vector_config: Some(VectorConfigureCommand {
                 provider: "ollama".to_owned(),
                 endpoint,
                 model: "mock-bootstrap".to_owned(),

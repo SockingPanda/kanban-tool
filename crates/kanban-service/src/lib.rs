@@ -72,7 +72,9 @@ pub use service::KanbanService;
 
 // 规范持久化入口只在 service crate 内可见；host 只能使用上面的 KanbanService。
 // Store row model 和 StoreError 不进入跨 crate 的 application API。
-pub(crate) use db::{TursoStore, UpgradeBackupHook, UpgradeBackupRequest};
+pub(crate) use db::TursoStore;
+#[cfg(test)]
+pub(crate) use db::{UpgradeBackupHook, UpgradeBackupRequest};
 pub(crate) use error::StoreError;
 
 // 输入在 service 边界显式使用别名。与 application DTO 重名的 record 和 option

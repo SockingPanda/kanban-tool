@@ -162,10 +162,7 @@ pub async fn validate_portable_export(
         actual.sort();
         let mut expected = columns;
         expected.sort();
-        assert_eq!(
-            actual, expected,
-            "portable {table} 列集合必须完整"
-        );
+        assert_eq!(actual, expected, "portable {table} 列集合必须完整");
         *counts.entry(table.to_owned()).or_default() += 1;
         records_by_table
             .entry(table.to_owned())

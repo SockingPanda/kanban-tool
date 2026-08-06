@@ -38,9 +38,7 @@ struct DesktopRuntime {
 
 impl DesktopRuntime {
     fn config(&self) -> MutexGuard<'_, RuntimeConfig> {
-        self.config
-            .lock()
-            .expect("桌面运行时配置锁已失效")
+        self.config.lock().expect("桌面运行时配置锁已失效")
     }
 }
 
@@ -166,9 +164,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         match setup_status_notifier_tray(app) {
             Ok(()) => return Ok(()),
             Err(error) => {
-                eprintln!(
-                    "kanban 状态通知托盘不可用，将回退到 tauri 托盘：{error:?}"
-                );
+                eprintln!("kanban 状态通知托盘不可用，将回退到 tauri 托盘：{error:?}");
             }
         }
     }

@@ -634,7 +634,6 @@ fn public_operation_inventory_covers_every_public_surface() {
         ContractSurface::Sse,
         ContractSurface::Metadata,
         ContractSurface::Config,
-        ContractSurface::Helper,
     ]);
     assert_eq!(
         actual, expected,
@@ -799,6 +798,9 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:supersede-signals-path:v1",
         "urn:kanban-tool:schema:api:supersede-signals-response:v1",
         "urn:kanban-tool:schema:api:review-signals-request:v1",
+        "urn:kanban-tool:schema:api:reject-signals-request:v1",
+        "urn:kanban-tool:schema:api:resolve-signals-request:v1",
+        "urn:kanban-tool:schema:api:supersede-signals-request:v1",
         "urn:kanban-tool:schema:api:get-task-path:v1",
         "urn:kanban-tool:schema:api:get-task-query:v1",
         "urn:kanban-tool:schema:api:get-task-response:v1",
@@ -984,7 +986,7 @@ fn foundation_registry_contains_generated_roots() {
             .filter(|contract| {
                 matches!(
                     contract.surface,
-                    ContractSurface::Config | ContractSurface::Helper
+                    ContractSurface::Config
                 )
             })
             .map(|contract| contract.schema_id.expect("adopted protocol schema id")),
@@ -1883,22 +1885,10 @@ fn current_train_freeze_requires_closed_authority() {
 }
 
 #[test]
-fn config_and_helper_protocols_have_exact_roots_surfaces_and_witnesses() {
+fn config_protocols_have_exact_roots_surfaces_and_witnesses() {
     let expected = [
         "config.project.input",
         "config.selected-worker-profile.input",
-        "helper.vector.handshake.response",
-        "helper.vector.error.response",
-        "helper.vector.check-provider.response",
-        "helper.vector.status.response",
-        "helper.vector.rebuild.response",
-        "helper.vector.sync.response",
-        "helper.vector.label-atoms-status.response",
-        "helper.vector.rebuild-label-atoms.response",
-        "helper.vector.sync-label-atoms.response",
-        "helper.vector.query-chunks.response",
-        "helper.vector.query-label-atoms.response",
-        "helper.vector.embed-query.response",
     ];
     let inventory = operation_inventory();
     let roots = kanban_protocol::schema_registry();
@@ -1935,54 +1925,6 @@ fn config_and_helper_protocols_have_exact_roots_surfaces_and_witnesses() {
             "{contract_id}"
         );
     }
-}
-
-#[test]
-fn vector_projection_protocol_has_two_exact_roots_and_four_runtime_witnesses() {
-    let contract_ids = [
-        "helper.vector-projection.request",
-        "helper.vector-projection.response",
-    ];
-    let inventory = operation_inventory();
-    let roots = kanban_protocol::schema_registry();
-    let surfaces = surface_operation_catalog();
-
-    for contract_id in contract_ids {
-        let contract = inventory
-            .iter()
-            .find(|contract| contract.id == contract_id)
-            .unwrap_or_else(|| panic!("missing vector projection contract {contract_id}"));
-        assert_eq!(contract.migration, MigrationState::Adopted);
-        assert!(contract.schema_id.is_some());
-        assert!(contract.fixture.is_some());
-        let adoption = contract.adoption.expect("runtime adoption witnesses");
-        assert_eq!(adoption.producer.package, "kanban-vector-lancedb");
-        assert_eq!(adoption.consumer.package, "kanban-vector-lancedb");
-        assert_eq!(
-            adoption.producer.test_target,
-            "vector_projection_contract_adoption"
-        );
-        assert_eq!(
-            adoption.consumer.test_target,
-            "vector_projection_contract_adoption"
-        );
-        assert_eq!(
-            roots
-                .iter()
-                .filter(|root| root.contract_id == contract_id)
-                .count(),
-            1
-        );
-    }
-
-    let surfaces = surfaces
-        .iter()
-        .filter(|surface| surface.key == "vector projection helper protocol")
-        .collect::<Vec<_>>();
-    assert_eq!(surfaces.len(), 1);
-    assert_eq!(surfaces[0].migration, MigrationState::Adopted);
-    assert_eq!(surfaces[0].surface, ContractSurface::Helper);
-    assert_eq!(surfaces[0].contracts, contract_ids);
 }
 
 #[test]

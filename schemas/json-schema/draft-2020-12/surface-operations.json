@@ -264,6 +264,66 @@
   },
   {
     "contracts": [
+      "api.record-signal.path",
+      "api.record-signal.headers",
+      "api.record-signal.request",
+      "api.record-signal.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/signals",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.confirm-signals.path",
+      "api.confirm-signals.headers",
+      "api.confirm-signals.request",
+      "api.confirm-signals.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/signals/confirm",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.reject-signals.path",
+      "api.reject-signals.headers",
+      "api.reject-signals.request",
+      "api.reject-signals.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/signals/reject",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.resolve-signals.path",
+      "api.resolve-signals.headers",
+      "api.resolve-signals.request",
+      "api.resolve-signals.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/signals/resolve",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.supersede-signals.path",
+      "api.supersede-signals.headers",
+      "api.supersede-signals.request",
+      "api.supersede-signals.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/signals/supersede",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
       "api.board-task-map.path",
       "api.board-task-map.query",
       "api.board-task-map.headers",
@@ -1139,7 +1199,7 @@
       "api.doctor.response"
     ],
     "exclusion": null,
-    "key": "POST /api/v1/maintenance/doctor",
+    "key": "GET /api/v1/maintenance/doctor",
     "migration": "adopted",
     "surface": "api"
   },
@@ -1154,6 +1214,103 @@
     "surface": "api"
   },
   {
+    "contracts": [
+      "api.maintenance-backup.headers",
+      "api.maintenance-backup.request",
+      "api.maintenance-backup.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/backup",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-export.headers",
+      "api.maintenance-export.request",
+      "api.maintenance-export.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/export",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-import.headers",
+      "api.maintenance-import.request",
+      "api.maintenance-import.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/import",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-vacuum.headers",
+      "api.maintenance-vacuum.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/vacuum",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-status.headers",
+      "api.maintenance-status.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/maintenance/status",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-run.headers",
+      "api.maintenance-run.request",
+      "api.maintenance-run.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/run",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-rebuild.headers",
+      "api.maintenance-rebuild.request",
+      "api.maintenance-rebuild.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/rebuild",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-cleanup.headers",
+      "api.maintenance-cleanup.request",
+      "api.maintenance-cleanup.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/cleanup",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-import-v30.headers",
+      "api.maintenance-import-v30.request",
+      "api.maintenance-import-v30.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/import-v30",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
     "contracts": [],
     "exclusion": "隐藏的动态补全候选使用逐行文本协议，不是 JSON document",
     "key": "__complete",
@@ -1162,7 +1319,7 @@
   },
   {
     "contracts": [
-      "cli.backup.output"
+      "cli.maintenance-backup.output"
     ],
     "exclusion": null,
     "key": "backup",
@@ -1392,7 +1549,7 @@
   },
   {
     "contracts": [
-      "cli.export.output"
+      "cli.maintenance-export.output"
     ],
     "exclusion": null,
     "key": "export",
@@ -1487,7 +1644,7 @@
   },
   {
     "contracts": [
-      "cli.import.output"
+      "cli.maintenance-import.output"
     ],
     "exclusion": null,
     "key": "import",
@@ -1577,7 +1734,7 @@
   },
   {
     "contracts": [
-      "cli.maintenance-rebuild.output"
+      "cli.maintenance-rebuild-v1.output"
     ],
     "exclusion": null,
     "key": "maintenance rebuild",
@@ -1586,7 +1743,7 @@
   },
   {
     "contracts": [
-      "cli.maintenance-run.output"
+      "cli.maintenance-run-v1.output"
     ],
     "exclusion": null,
     "key": "maintenance run",
@@ -1595,7 +1752,7 @@
   },
   {
     "contracts": [
-      "cli.maintenance-status.output"
+      "cli.maintenance-status-v1.output"
     ],
     "exclusion": null,
     "key": "maintenance status",
@@ -2259,7 +2416,7 @@
   },
   {
     "contracts": [
-      "cli.vacuum.output"
+      "cli.maintenance-vacuum.output"
     ],
     "exclusion": null,
     "key": "vacuum",
@@ -2322,6 +2479,24 @@
   },
   {
     "contracts": [
+      "cli.maintenance-cleanup.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance cleanup",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.import-v30.output"
+    ],
+    "exclusion": null,
+    "key": "import-v30",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
       "metadata.decision.input"
     ],
     "exclusion": null,
@@ -2376,6 +2551,15 @@
   },
   {
     "contracts": [
+      "api.maintenance-path.request"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/{operation}",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
       "config.project.input"
     ],
     "exclusion": null,
@@ -2391,173 +2575,6 @@
     "key": "selected dispatcher worker profile after TOML decoding",
     "migration": "adopted",
     "surface": "config"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
-    "key": "graph helper handshake response",
-    "migration": "excluded",
-    "surface": "helper"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
-    "key": "graph helper error response",
-    "migration": "excluded",
-    "surface": "helper"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
-    "key": "graph helper status response",
-    "migration": "excluded",
-    "surface": "helper"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
-    "key": "graph helper rebuild response",
-    "migration": "excluded",
-    "surface": "helper"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
-    "key": "graph helper sync response",
-    "migration": "excluded",
-    "surface": "helper"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
-    "key": "graph helper neighbors response",
-    "migration": "excluded",
-    "surface": "helper"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Oxigraph helper lane retired; canonical graph maintenance is host-owned",
-    "key": "graph helper query response",
-    "migration": "excluded",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.handshake.response"
-    ],
-    "exclusion": null,
-    "key": "vector helper handshake response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.error.response"
-    ],
-    "exclusion": null,
-    "key": "vector helper error response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.check-provider.response"
-    ],
-    "exclusion": null,
-    "key": "vector provider availability response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.status.response"
-    ],
-    "exclusion": null,
-    "key": "vector helper status response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.rebuild.response"
-    ],
-    "exclusion": null,
-    "key": "vector helper rebuild response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.sync.response"
-    ],
-    "exclusion": null,
-    "key": "vector helper sync response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.label-atoms-status.response"
-    ],
-    "exclusion": null,
-    "key": "label atom vector status response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.rebuild-label-atoms.response"
-    ],
-    "exclusion": null,
-    "key": "label atom vector rebuild response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.sync-label-atoms.response"
-    ],
-    "exclusion": null,
-    "key": "label atom vector sync response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.query-chunks.response"
-    ],
-    "exclusion": null,
-    "key": "vector chunk query response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.query-label-atoms.response"
-    ],
-    "exclusion": null,
-    "key": "label atom vector query response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.embed-query.response"
-    ],
-    "exclusion": null,
-    "key": "vector embedding response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector-projection.request",
-      "helper.vector-projection.response"
-    ],
-    "exclusion": null,
-    "key": "vector projection helper protocol",
-    "migration": "adopted",
-    "surface": "helper"
   },
   {
     "contracts": [

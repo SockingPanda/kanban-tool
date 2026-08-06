@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:supersede-signals-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "board"
+  ],
+  "title": "Supersede Signals Path v1",
+  "type": "object"
+}

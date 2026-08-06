@@ -39,3 +39,15 @@ tempfile.workspace = true
 [[test]]
 name = "cli_board_contract_adoption"
 path = "tests/cli_board_contract_adoption.rs"
+
+[[test]]
+name = "cli_maintenance_contract_adoption"
+path = "tests/maintenance_contract_adoption.rs"
+
+[[test]]
+name = "cli_task_contract_adoption"
+path = "tests/task_contract_adoption.rs"
+
+[[test]]
+name = "cli_config_contract_adoption"
+path = "tests/config_contract_adoption.rs"

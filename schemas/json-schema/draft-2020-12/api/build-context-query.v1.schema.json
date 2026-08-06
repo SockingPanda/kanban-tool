@@ -7,6 +7,21 @@
       "default": "default",
       "type": "string"
     },
+    "budget": {
+      "description": "Total item budget.  `max_items` remains accepted as the v1 alias.",
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "depth": {
+      "default": 1,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
     "graph_limit": {
       "default": 10,
       "format": "uint",
@@ -24,6 +39,27 @@
       "format": "uint",
       "minimum": 0,
       "type": "integer"
+    },
+    "query": {
+      "description": "Free-text query used for lexical/vector subject resolution.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reference": {
+      "description": "Board-local task reference such as `kanban-tool#12`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "task": {
+      "description": "Optional global task id.  When omitted, `reference` or `query` selects\nthe context subject.",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "vector_limit": {
       "default": 5,

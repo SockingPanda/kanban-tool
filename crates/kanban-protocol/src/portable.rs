@@ -23,7 +23,7 @@ pub struct PortableContractSide {
 
 /// Portable JSONL discriminator 的稳定 contract descriptor。
 ///
-/// SQLite table、scope 和 import guard 仍由 `kanban-sqlite` 拥有；这里仅作为
+/// SQLite table、scope 和 import guard 仍由 canonical service 拥有；这里仅作为
 /// surface operation、contract ID、URN、fixture 与 adoption witness locator 的单一来源。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct PortableContractDescriptor {
@@ -79,9 +79,17 @@ macro_rules! portable_descriptor {
                     $discriminator,
                     "-input.v1.invalid.json"
                 ),
-                test_target: $target,
-                producer_test: concat!($discriminator, "_input_fixture_is_produced_by_contract"),
-                consumer_test: concat!($discriminator, "_input_fixture_is_consumed_by_real_import"),
+                test_target: "lib",
+                producer_test: concat!(
+                    "suite::portable_adoption::",
+                    $discriminator,
+                    "_input_fixture_is_produced_by_contract"
+                ),
+                consumer_test: concat!(
+                    "suite::portable_adoption::",
+                    $discriminator,
+                    "_input_fixture_is_consumed_by_real_import"
+                ),
             },
             output: PortableContractSide {
                 contract_id: concat!("jsonl.", $discriminator, ".output"),
@@ -100,12 +108,17 @@ macro_rules! portable_descriptor {
                     $discriminator,
                     "-output.v1.invalid.json"
                 ),
-                test_target: $target,
+                test_target: "lib",
                 producer_test: concat!(
+                    "suite::portable_adoption::",
                     $discriminator,
                     "_output_fixture_is_produced_by_real_export"
                 ),
-                consumer_test: concat!($discriminator, "_output_fixture_is_consumed_by_contract"),
+                consumer_test: concat!(
+                    "suite::portable_adoption::",
+                    $discriminator,
+                    "_output_fixture_is_consumed_by_contract"
+                ),
             },
         }
     };

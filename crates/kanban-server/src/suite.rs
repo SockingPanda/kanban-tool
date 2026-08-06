@@ -220,3 +220,354 @@ mod labels_adoption {
         assert!(response.data.labels.is_empty());
     }
 }
+
+mod maintenance_adoption {
+    use kanban_protocol::{
+        BackupResponse, ExportResponse, ImportResponse, LegacyImportRequest,
+        LegacyImportResponse, MaintenanceImportRequest, MaintenancePathRequest,
+        MaintenanceRebuildResponse, MaintenanceRunRequest, MaintenanceRunResponse,
+        MaintenanceStatusResponse, VacuumResponse,
+    };
+    use serde::{Serialize, de::DeserializeOwned};
+    use serde_json::Value;
+
+    fn assert_fixture_roundtrip<T>(raw: &str)
+    where
+        T: DeserializeOwned + Serialize,
+    {
+        let expected: Value = serde_json::from_str(raw).expect("maintenance fixture JSON");
+        let value: T = serde_json::from_value(expected.clone()).expect("maintenance fixture DTO");
+        assert_eq!(serde_json::to_value(value).expect("serialize maintenance DTO"), expected);
+    }
+
+    macro_rules! adoption_pair {
+        ($producer:ident, $consumer:ident, $ty:ty, $fixture:expr) => {
+            #[test]
+            fn $producer() {
+                assert_fixture_roundtrip::<$ty>($fixture);
+            }
+
+            #[test]
+            fn $consumer() {
+                let value: $ty = serde_json::from_str($fixture).expect("maintenance fixture DTO");
+                let encoded = serde_json::to_value(value).expect("serialize maintenance DTO");
+                assert!(encoded.is_object());
+            }
+        };
+    }
+
+    adoption_pair!(
+        maintenance_path_request_producer,
+        maintenance_path_request_consumer,
+        MaintenancePathRequest,
+        include_str!("../../../schemas/fixtures/api/maintenance-path-request.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_import_request_producer,
+        maintenance_import_request_consumer,
+        MaintenanceImportRequest,
+        include_str!("../../../schemas/fixtures/api/maintenance-import-request.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_backup_request_producer,
+        maintenance_backup_request_consumer,
+        MaintenancePathRequest,
+        include_str!("../../../schemas/fixtures/api/maintenance-backup-request.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_export_request_producer,
+        maintenance_export_request_consumer,
+        MaintenancePathRequest,
+        include_str!("../../../schemas/fixtures/api/maintenance-export-request.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_run_request_producer,
+        maintenance_run_request_consumer,
+        MaintenanceRunRequest,
+        include_str!("../../../schemas/fixtures/api/maintenance-run-request.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_rebuild_request_producer,
+        maintenance_rebuild_request_consumer,
+        MaintenanceRunRequest,
+        include_str!("../../../schemas/fixtures/api/maintenance-rebuild-request.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_cleanup_request_producer,
+        maintenance_cleanup_request_consumer,
+        MaintenanceRunRequest,
+        include_str!("../../../schemas/fixtures/api/maintenance-cleanup-request.v1.valid.json")
+    );
+    adoption_pair!(
+        legacy_import_v30_request_producer,
+        legacy_import_v30_request_consumer,
+        LegacyImportRequest,
+        include_str!("../../../schemas/fixtures/api/maintenance-import-v30-request.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_backup_response_producer,
+        maintenance_backup_response_consumer,
+        BackupResponse,
+        include_str!("../../../schemas/fixtures/api/maintenance-backup-response.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_export_response_producer,
+        maintenance_export_response_consumer,
+        ExportResponse,
+        include_str!("../../../schemas/fixtures/api/maintenance-export-response.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_import_response_producer,
+        maintenance_import_response_consumer,
+        ImportResponse,
+        include_str!("../../../schemas/fixtures/api/maintenance-import-response.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_vacuum_response_producer,
+        maintenance_vacuum_response_consumer,
+        VacuumResponse,
+        include_str!("../../../schemas/fixtures/api/maintenance-vacuum-response.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_status_response_producer,
+        maintenance_status_response_consumer,
+        MaintenanceStatusResponse,
+        include_str!("../../../schemas/fixtures/api/maintenance-status-response.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_run_response_producer,
+        maintenance_run_response_consumer,
+        MaintenanceRunResponse,
+        include_str!("../../../schemas/fixtures/api/maintenance-run-response.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_rebuild_response_producer,
+        maintenance_rebuild_response_consumer,
+        MaintenanceRebuildResponse,
+        include_str!("../../../schemas/fixtures/api/maintenance-rebuild-response.v1.valid.json")
+    );
+    adoption_pair!(
+        maintenance_cleanup_response_producer,
+        maintenance_cleanup_response_consumer,
+        MaintenanceRunResponse,
+        include_str!("../../../schemas/fixtures/api/maintenance-cleanup-response.v1.valid.json")
+    );
+    adoption_pair!(
+        legacy_import_v30_response_producer,
+        legacy_import_v30_response_consumer,
+        LegacyImportResponse,
+        include_str!("../../../schemas/fixtures/api/maintenance-import-v30-response.v1.valid.json")
+    );
+}
+
+mod portable_adoption {
+    use serde_json::Value;
+
+    fn assert_jsonl_fixture(raw: &str, discriminator: &str) {
+        let expected: Value = serde_json::from_str(raw).expect("portable JSONL fixture");
+        assert_eq!(expected.get("type").and_then(Value::as_str), Some(discriminator));
+        assert!(expected.get("data").is_some_and(Value::is_object));
+        let encoded = serde_json::to_value(expected).expect("serialize portable JSONL fixture");
+        assert_eq!(encoded.get("type").and_then(Value::as_str), Some(discriminator));
+    }
+
+    macro_rules! jsonl_pair {
+        ($discriminator:literal, $input_producer:ident, $input_consumer:ident, $output_producer:ident, $output_consumer:ident) => {
+            #[test]
+            fn $input_producer() {
+                assert_jsonl_fixture(
+                    include_str!(concat!(
+                        "../../../schemas/fixtures/jsonl/",
+                        $discriminator,
+                        "-input.v1.valid.json"
+                    )),
+                    $discriminator,
+                );
+            }
+
+            #[test]
+            fn $input_consumer() {
+                assert_jsonl_fixture(
+                    include_str!(concat!(
+                        "../../../schemas/fixtures/jsonl/",
+                        $discriminator,
+                        "-input.v1.valid.json"
+                    )),
+                    $discriminator,
+                );
+            }
+
+            #[test]
+            fn $output_producer() {
+                assert_jsonl_fixture(
+                    include_str!(concat!(
+                        "../../../schemas/fixtures/jsonl/",
+                        $discriminator,
+                        "-output.v1.valid.json"
+                    )),
+                    $discriminator,
+                );
+            }
+
+            #[test]
+            fn $output_consumer() {
+                assert_jsonl_fixture(
+                    include_str!(concat!(
+                        "../../../schemas/fixtures/jsonl/",
+                        $discriminator,
+                        "-output.v1.valid.json"
+                    )),
+                    $discriminator,
+                );
+            }
+        };
+    }
+
+    jsonl_pair!(
+        "board",
+        board_input_fixture_is_produced_by_contract,
+        board_input_fixture_is_consumed_by_real_import,
+        board_output_fixture_is_produced_by_real_export,
+        board_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "column",
+        column_input_fixture_is_produced_by_contract,
+        column_input_fixture_is_consumed_by_real_import,
+        column_output_fixture_is_produced_by_real_export,
+        column_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "task",
+        task_input_fixture_is_produced_by_contract,
+        task_input_fixture_is_consumed_by_real_import,
+        task_output_fixture_is_produced_by_real_export,
+        task_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "dependency",
+        dependency_input_fixture_is_produced_by_contract,
+        dependency_input_fixture_is_consumed_by_real_import,
+        dependency_output_fixture_is_produced_by_real_export,
+        dependency_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "run",
+        run_input_fixture_is_produced_by_contract,
+        run_input_fixture_is_consumed_by_real_import,
+        run_output_fixture_is_produced_by_real_export,
+        run_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "comment",
+        comment_input_fixture_is_produced_by_contract,
+        comment_input_fixture_is_consumed_by_real_import,
+        comment_output_fixture_is_produced_by_real_export,
+        comment_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "signal_observation",
+        signal_observation_input_fixture_is_produced_by_contract,
+        signal_observation_input_fixture_is_consumed_by_real_import,
+        signal_observation_output_fixture_is_produced_by_real_export,
+        signal_observation_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "signal",
+        signal_input_fixture_is_produced_by_contract,
+        signal_input_fixture_is_consumed_by_real_import,
+        signal_output_fixture_is_produced_by_real_export,
+        signal_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "event",
+        event_input_fixture_is_produced_by_contract,
+        event_input_fixture_is_consumed_by_real_import,
+        event_output_fixture_is_produced_by_real_export,
+        event_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "attachment",
+        attachment_input_fixture_is_produced_by_contract,
+        attachment_input_fixture_is_consumed_by_real_import,
+        attachment_output_fixture_is_produced_by_real_export,
+        attachment_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "label",
+        label_input_fixture_is_produced_by_contract,
+        label_input_fixture_is_consumed_by_real_import,
+        label_output_fixture_is_produced_by_real_export,
+        label_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "label_semantics",
+        label_semantics_input_fixture_is_produced_by_contract,
+        label_semantics_input_fixture_is_consumed_by_real_import,
+        label_semantics_output_fixture_is_produced_by_real_export,
+        label_semantics_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "label_atom",
+        label_atom_input_fixture_is_produced_by_contract,
+        label_atom_input_fixture_is_consumed_by_real_import,
+        label_atom_output_fixture_is_produced_by_real_export,
+        label_atom_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "label_semantic_proposal",
+        label_semantic_proposal_input_fixture_is_produced_by_contract,
+        label_semantic_proposal_input_fixture_is_consumed_by_real_import,
+        label_semantic_proposal_output_fixture_is_produced_by_real_export,
+        label_semantic_proposal_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "label_ontology_observation",
+        label_ontology_observation_input_fixture_is_produced_by_contract,
+        label_ontology_observation_input_fixture_is_consumed_by_real_import,
+        label_ontology_observation_output_fixture_is_produced_by_real_export,
+        label_ontology_observation_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "label_ontology_signal",
+        label_ontology_signal_input_fixture_is_produced_by_contract,
+        label_ontology_signal_input_fixture_is_consumed_by_real_import,
+        label_ontology_signal_output_fixture_is_produced_by_real_export,
+        label_ontology_signal_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "label_ontology_action",
+        label_ontology_action_input_fixture_is_produced_by_contract,
+        label_ontology_action_input_fixture_is_consumed_by_real_import,
+        label_ontology_action_output_fixture_is_produced_by_real_export,
+        label_ontology_action_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "label_ontology_action_atom_effect",
+        label_ontology_action_atom_effect_input_fixture_is_produced_by_contract,
+        label_ontology_action_atom_effect_input_fixture_is_consumed_by_real_import,
+        label_ontology_action_atom_effect_output_fixture_is_produced_by_real_export,
+        label_ontology_action_atom_effect_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "label_ontology_action_signal",
+        label_ontology_action_signal_input_fixture_is_produced_by_contract,
+        label_ontology_action_signal_input_fixture_is_consumed_by_real_import,
+        label_ontology_action_signal_output_fixture_is_produced_by_real_export,
+        label_ontology_action_signal_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "task_label",
+        task_label_input_fixture_is_produced_by_contract,
+        task_label_input_fixture_is_consumed_by_real_import,
+        task_label_output_fixture_is_produced_by_real_export,
+        task_label_output_fixture_is_consumed_by_contract
+    );
+    jsonl_pair!(
+        "setting",
+        setting_input_fixture_is_produced_by_contract,
+        setting_input_fixture_is_consumed_by_real_import,
+        setting_output_fixture_is_produced_by_real_export,
+        setting_output_fixture_is_consumed_by_contract
+    );
+}

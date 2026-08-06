@@ -42,7 +42,7 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "__complete",
             "隐藏的动态补全候选使用逐行文本协议，不是 JSON document"
         ),
-        adopted!(Cli, "backup", "cli.backup.output"),
+        adopted!(Cli, "backup", "cli.maintenance-backup.output"),
         adopted!(Cli, "board archive", "cli.board-archive.output"),
         adopted!(Cli, "board create", "cli.board-create.output"),
         adopted!(Cli, "board current", "cli.board-current.output"),
@@ -76,7 +76,7 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         adopted!(Cli, "entity list", "cli.entity-list.output"),
         adopted!(Cli, "entity show", "cli.entity-show.output"),
         adopted!(Cli, "events", "cli.events.output"),
-        adopted!(Cli, "export", "cli.export.output"),
+        adopted!(Cli, "export", "cli.maintenance-export.output"),
         adopted!(Cli, "graph neighbors", "cli.graph-neighbors.output"),
         adopted!(Cli, "graph query", "cli.graph-query.output"),
         adopted!(Cli, "graph rebuild", "cli.graph-rebuild.output"),
@@ -99,7 +99,7 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "hook codex uninstall",
             "cli.hook-codex-uninstall.output"
         ),
-        adopted!(Cli, "import", "cli.import.output"),
+        adopted!(Cli, "import", "cli.maintenance-import.output"),
         adopted!(Cli, "index doctor", "cli.index-doctor.output"),
         adopted!(Cli, "index rebuild", "cli.index-rebuild.output"),
         adopted!(Cli, "index status", "cli.index-status.output"),
@@ -125,9 +125,9 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "maintenance cleanup-legacy verify",
             "cli.maintenance-cleanup-legacy-verify.output"
         ),
-        adopted!(Cli, "maintenance rebuild", "cli.maintenance-rebuild.output"),
-        adopted!(Cli, "maintenance run", "cli.maintenance-run.output"),
-        adopted!(Cli, "maintenance status", "cli.maintenance-status.output"),
+        adopted!(Cli, "maintenance rebuild", "cli.maintenance-rebuild-v1.output"),
+        adopted!(Cli, "maintenance run", "cli.maintenance-run-v1.output"),
+        adopted!(Cli, "maintenance status", "cli.maintenance-status-v1.output"),
         adopted!(Cli, "label add", "cli.label-add.output"),
         adopted!(
             Cli,
@@ -293,7 +293,7 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         adopted!(Cli, "task step update", "cli.task-step-update.output"),
         adopted!(Cli, "task unblock", "cli.task-unblock.output"),
         adopted!(Cli, "task update", "cli.task-update.output"),
-        adopted!(Cli, "vacuum", "cli.vacuum.output"),
+        adopted!(Cli, "vacuum", "cli.maintenance-vacuum.output"),
         adopted!(Cli, "vector configure", "cli.vector-configure.output"),
         adopted!(Cli, "vector query-chunks", "cli.vector-query-chunks.output"),
         adopted!(
@@ -304,6 +304,8 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         adopted!(Cli, "vector rebuild", "cli.vector-rebuild.output"),
         adopted!(Cli, "vector status", "cli.vector-status.output"),
         adopted!(Cli, "vector sync", "cli.vector-sync.output"),
+        adopted!(Cli, "maintenance cleanup", "cli.maintenance-cleanup.output"),
+        adopted!(Cli, "import-v30", "cli.import-v30.output"),
         adopted!(
             Metadata,
             "structured decision comment metadata input",
@@ -335,6 +337,11 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "metadata.ontology-validation-evidence.input"
         ),
         adopted!(
+            Api,
+            "POST /api/v1/maintenance/{operation}",
+            "api.maintenance-path.request"
+        ),
+        adopted!(
             Config,
             "project-local config after TOML decoding",
             "config.project.input"
@@ -344,111 +351,6 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "selected dispatcher worker profile after TOML decoding",
             "config.selected-worker-profile.input"
         ),
-        excluded!(
-            Helper,
-            "graph helper handshake response",
-            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
-        ),
-        excluded!(
-            Helper,
-            "graph helper error response",
-            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
-        ),
-        excluded!(
-            Helper,
-            "graph helper status response",
-            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
-        ),
-        excluded!(
-            Helper,
-            "graph helper rebuild response",
-            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
-        ),
-        excluded!(
-            Helper,
-            "graph helper sync response",
-            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
-        ),
-        excluded!(
-            Helper,
-            "graph helper neighbors response",
-            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
-        ),
-        excluded!(
-            Helper,
-            "graph helper query response",
-            "Oxigraph helper lane retired; canonical graph maintenance is host-owned"
-        ),
-        adopted!(
-            Helper,
-            "vector helper handshake response",
-            "helper.vector.handshake.response"
-        ),
-        adopted!(
-            Helper,
-            "vector helper error response",
-            "helper.vector.error.response"
-        ),
-        adopted!(
-            Helper,
-            "vector provider availability response",
-            "helper.vector.check-provider.response"
-        ),
-        adopted!(
-            Helper,
-            "vector helper status response",
-            "helper.vector.status.response"
-        ),
-        adopted!(
-            Helper,
-            "vector helper rebuild response",
-            "helper.vector.rebuild.response"
-        ),
-        adopted!(
-            Helper,
-            "vector helper sync response",
-            "helper.vector.sync.response"
-        ),
-        adopted!(
-            Helper,
-            "label atom vector status response",
-            "helper.vector.label-atoms-status.response"
-        ),
-        adopted!(
-            Helper,
-            "label atom vector rebuild response",
-            "helper.vector.rebuild-label-atoms.response"
-        ),
-        adopted!(
-            Helper,
-            "label atom vector sync response",
-            "helper.vector.sync-label-atoms.response"
-        ),
-        adopted!(
-            Helper,
-            "vector chunk query response",
-            "helper.vector.query-chunks.response"
-        ),
-        adopted!(
-            Helper,
-            "label atom vector query response",
-            "helper.vector.query-label-atoms.response"
-        ),
-        adopted!(
-            Helper,
-            "vector embedding response",
-            "helper.vector.embed-query.response"
-        ),
-        SurfaceOperation {
-            key: "vector projection helper protocol".to_owned(),
-            surface: ContractSurface::Helper,
-            contracts: vec![
-                "helper.vector-projection.request",
-                "helper.vector-projection.response",
-            ],
-            migration: MigrationState::Adopted,
-            exclusion: None,
-        },
     ];
     operations.extend(
         portable_contract_catalog()

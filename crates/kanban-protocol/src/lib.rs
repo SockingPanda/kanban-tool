@@ -31,7 +31,6 @@ mod labels;
 mod lifecycle;
 mod ontology;
 mod portable;
-mod projection;
 #[cfg(all(test, feature = "schema"))]
 mod protocol_tests;
 mod protocols;
@@ -144,7 +143,6 @@ pub use portable::{
     PortableContractDescriptor, PortableContractLane, PortableContractSide,
     portable_contract_catalog,
 };
-pub use projection::*;
 pub use protocols::*;
 pub use runs::{
     ApiClaim, ApiRun, ApiRunLog, ApiRunStatus, GetRunLogPath, GetRunLogResponse, GetRunPath,

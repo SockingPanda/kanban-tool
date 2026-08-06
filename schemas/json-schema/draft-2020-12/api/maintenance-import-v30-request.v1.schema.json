@@ -1,0 +1,23 @@
+{
+  "$id": "urn:kanban-tool:schema:api:maintenance-import-v30-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Legacy SQLite v30 import request.  This host-admin path is deliberately\nseparate from portable JSONL import because it reads an old on-disk schema\nand may need an explicit attachment-root mapping.",
+  "properties": {
+    "canonical_attachment_root": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "path": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "title": "Kanban legacy SQLite v30 import request v1",
+  "type": "object"
+}

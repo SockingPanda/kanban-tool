@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "SignalCommentRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:record-signal-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_type": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "comment": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SignalCommentRequest"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "comment_id": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "dedupe_key": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence": {
+      "additionalProperties": true,
+      "default": null,
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "kind": {
+      "type": "string"
+    },
+    "run_id": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "severity": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "task_id": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "task_ref": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "title",
+    "summary"
+  ],
+  "title": "Record signal request v1",
+  "type": "object"
+}

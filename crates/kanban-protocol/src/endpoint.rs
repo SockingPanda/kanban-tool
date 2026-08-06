@@ -2644,7 +2644,6 @@ fn contract_surface_name(surface: crate::ContractSurface) -> &'static str {
         crate::ContractSurface::Sse => "sse",
         crate::ContractSurface::Metadata => "metadata",
         crate::ContractSurface::Config => "config",
-        crate::ContractSurface::Helper => "helper",
     }
 }
 

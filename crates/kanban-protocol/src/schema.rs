@@ -13,14 +13,13 @@ use crate::{
     AttachmentDownloadResponse, BlockTaskPath, BlockTaskRequest, BlockTaskResponse,
     BoardTaskMapPath, BoardTaskMapQuery, BoardTaskMapResponse, CheckpointResponse, ClaimTaskPath,
     ClaimTaskRequest, ClaimTaskResponse, CliAttachmentAddOutput, CliAttachmentListOutput,
-    CliAttachmentRemoveOutput, CliBackupOutput, CliBoardCurrentOutput, CliBoardUseOutput,
+    CliAttachmentRemoveOutput, CliBoardCurrentOutput, CliBoardUseOutput,
     CliCheckpointOutput, CliCommentAddOutput, CliCommentListOutput, CliConfigShowOutput,
     CliDependencyAddOutput, CliDependencyListOutput, CliDependencyRemoveOutput,
     CliDerivedStatusOutput, CliDoctorOutput, CliEntityListOutput, CliEntityShowOutput,
     CliEventsOutput, CliIndexDoctorOutput, CliIndexStatusOutput, CliInitOutput,
     CliMaintenanceLegacyCleanupApplyOutput, CliMaintenanceLegacyCleanupInventoryOutput,
     CliMaintenanceLegacyCleanupRestoreOutput, CliMaintenanceLegacyCleanupVerifyOutput,
-    CliMaintenanceRebuildOutput, CliMaintenanceRunOutput, CliMaintenanceStatusOutput,
     CliOutboxListOutput, CliRunLogsOutput, CliRunShowOutput, CliRunsOutput, CliStatsOutput,
     CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput, CliTaskCompleteOutput,
     CliTaskCreateOutput, CliTaskDoneOutput, CliTaskHeartbeatOutput, CliTaskListOutput,
@@ -28,7 +27,7 @@ use crate::{
     CliTaskReviewOutput, CliTaskShowOutput, CliTaskStartOutput, CliTaskStepAddOutput,
     CliTaskStepDoneOutput, CliTaskStepListOutput, CliTaskStepNotRequiredOutput,
     CliTaskStepRemoveOutput, CliTaskStepReopenOutput, CliTaskStepSkipOutput,
-    CliTaskStepUpdateOutput, CliTaskUnblockOutput, CliTaskUpdateOutput, CliVacuumOutput,
+    CliTaskStepUpdateOutput, CliTaskUnblockOutput, CliTaskUpdateOutput,
     CompleteStepPath, CompleteStepRequest, CompleteStepResponse, CompleteTaskPath,
     CompleteTaskRequest, CompleteTaskResponse, ConfirmSignalsResponse, ContractDirection,
     ContractStrictness, CreateAttachmentPath, CreateAttachmentRequest, CreateAttachmentResponse,
@@ -183,33 +182,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         CliIndexDoctorOutput
     ),
     response_schema_root!(
-        "urn:kanban-tool:schema:cli:maintenance-status-output:v2",
-        "cli/maintenance-status-output.v2.schema.json",
-        "Kanban CLI maintenance status output v2",
-        "cli.maintenance-status.output",
-        "schemas/fixtures/cli/maintenance-status-output.v2.valid.json",
-        "schemas/fixtures/cli/maintenance-status-output.v2.invalid.json",
-        CliMaintenanceStatusOutput
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:maintenance-run-output:v2",
-        "cli/maintenance-run-output.v2.schema.json",
-        "Kanban CLI maintenance run output v2",
-        "cli.maintenance-run.output",
-        "schemas/fixtures/cli/maintenance-run-output.v2.valid.json",
-        "schemas/fixtures/cli/maintenance-run-output.v2.invalid.json",
-        CliMaintenanceRunOutput
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:maintenance-rebuild-output:v2",
-        "cli/maintenance-rebuild-output.v2.schema.json",
-        "Kanban CLI maintenance rebuild output v2",
-        "cli.maintenance-rebuild.output",
-        "schemas/fixtures/cli/maintenance-rebuild-output.v2.valid.json",
-        "schemas/fixtures/cli/maintenance-rebuild-output.v2.invalid.json",
-        CliMaintenanceRebuildOutput
-    ),
-    response_schema_root!(
         "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-inventory-output:v1",
         "cli/maintenance-cleanup-legacy-inventory-output.v1.schema.json",
         "Kanban CLI maintenance cleanup legacy inventory output v1",
@@ -300,15 +272,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         CliStatsOutput
     ),
     response_schema_root!(
-        "urn:kanban-tool:schema:cli:backup-output:v1",
-        "cli/backup-output.v1.schema.json",
-        "Kanban CLI backup output v1",
-        "cli.backup.output",
-        "schemas/fixtures/cli/backup-output.v1.valid.json",
-        "schemas/fixtures/cli/backup-output.v1.invalid.json",
-        CliBackupOutput
-    ),
-    response_schema_root!(
         "urn:kanban-tool:schema:cli:checkpoint-output:v1",
         "cli/checkpoint-output.v1.schema.json",
         "Kanban CLI checkpoint output v1",
@@ -316,15 +279,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/cli/checkpoint-output.v1.valid.json",
         "schemas/fixtures/cli/checkpoint-output.v1.invalid.json",
         CliCheckpointOutput
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:vacuum-output:v1",
-        "cli/vacuum-output.v1.schema.json",
-        "Kanban CLI vacuum output v1",
-        "cli.vacuum.output",
-        "schemas/fixtures/cli/vacuum-output.v1.valid.json",
-        "schemas/fixtures/cli/vacuum-output.v1.invalid.json",
-        CliVacuumOutput
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:maintenance-backup-output:v1",
@@ -963,16 +917,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         CliHookCodexUninstallOutput
     ),
     cli_response_schema_root!("dispatch", "dispatch", CliDispatchOutput),
-    cli_response_schema_root!("export", "export", CliExportOutput),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:import-output:v2",
-        "cli/import-output.v2.schema.json",
-        "Kanban CLI import output v2",
-        "cli.import.output",
-        "schemas/fixtures/cli/import-output.v2.valid.json",
-        "schemas/fixtures/cli/import-output.v2.invalid.json",
-        CliImportOutput
-    ),
     request_schema_root!(
         "urn:kanban-tool:schema:api:get-stats-query:v1",
         "api/get-stats-query.v1.schema.json",
@@ -3011,9 +2955,36 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "urn:kanban-tool:schema:api:review-signals-request:v1",
         "api/review-signals-request.v1.schema.json",
         "Review signals request v1",
-        "api.review-signals.request",
+        "api.confirm-signals.request",
         "schemas/fixtures/api/review-signals-request.v1.valid.json",
         "schemas/fixtures/api/review-signals-request.v1.invalid.json",
+        ReviewSignalsRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:reject-signals-request:v1",
+        "api/reject-signals-request.v1.schema.json",
+        "Reject signals request v1",
+        "api.reject-signals.request",
+        "schemas/fixtures/api/reject-signals-request.v1.valid.json",
+        "schemas/fixtures/api/reject-signals-request.v1.invalid.json",
+        ReviewSignalsRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:resolve-signals-request:v1",
+        "api/resolve-signals-request.v1.schema.json",
+        "Resolve signals request v1",
+        "api.resolve-signals.request",
+        "schemas/fixtures/api/resolve-signals-request.v1.valid.json",
+        "schemas/fixtures/api/resolve-signals-request.v1.invalid.json",
+        ReviewSignalsRequest
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:supersede-signals-request:v1",
+        "api/supersede-signals-request.v1.schema.json",
+        "Supersede signals request v1",
+        "api.supersede-signals.request",
+        "schemas/fixtures/api/supersede-signals-request.v1.valid.json",
+        "schemas/fixtures/api/supersede-signals-request.v1.invalid.json",
         ReviewSignalsRequest
     ),
     response_schema_root!(
@@ -3621,132 +3592,6 @@ fn protocol_schema_roots() -> Vec<SchemaRoot> {
             "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json",
             "schemas/fixtures/config/selected-worker-profile-input.v1.invalid.json",
             crate::WorkerProfileInput
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-handshake-response:v1",
-            "helper/vector-handshake-response.v1.schema.json",
-            "Vector Helper Handshake Response v1",
-            "helper.vector.handshake.response",
-            "schemas/fixtures/helper/vector-handshake-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-handshake-response.v1.invalid.json",
-            crate::VectorHelperHandshakeResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-error-response:v1",
-            "helper/vector-error-response.v1.schema.json",
-            "Vector Helper Error Response v1",
-            "helper.vector.error.response",
-            "schemas/fixtures/helper/vector-error-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-error-response.v1.invalid.json",
-            crate::VectorHelperErrorResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-check-provider-response:v1",
-            "helper/vector-check-provider-response.v1.schema.json",
-            "Vector Helper Check Provider Response v1",
-            "helper.vector.check-provider.response",
-            "schemas/fixtures/helper/vector-check-provider-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-check-provider-response.v1.invalid.json",
-            crate::VectorHelperCheckProviderResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-status-response:v1",
-            "helper/vector-status-response.v1.schema.json",
-            "Vector Helper Status Response v1",
-            "helper.vector.status.response",
-            "schemas/fixtures/helper/vector-status-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-status-response.v1.invalid.json",
-            crate::VectorHelperStatusResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-rebuild-response:v1",
-            "helper/vector-rebuild-response.v1.schema.json",
-            "Vector Helper Rebuild Response v1",
-            "helper.vector.rebuild.response",
-            "schemas/fixtures/helper/vector-rebuild-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-rebuild-response.v1.invalid.json",
-            crate::VectorHelperRebuildResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-sync-response:v1",
-            "helper/vector-sync-response.v1.schema.json",
-            "Vector Helper Sync Response v1",
-            "helper.vector.sync.response",
-            "schemas/fixtures/helper/vector-sync-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-sync-response.v1.invalid.json",
-            crate::VectorHelperSyncResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-label-atoms-status-response:v1",
-            "helper/vector-label-atoms-status-response.v1.schema.json",
-            "Vector Helper Label Atoms Status Response v1",
-            "helper.vector.label-atoms-status.response",
-            "schemas/fixtures/helper/vector-label-atoms-status-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-label-atoms-status-response.v1.invalid.json",
-            crate::VectorHelperLabelAtomsStatusResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-rebuild-label-atoms-response:v1",
-            "helper/vector-rebuild-label-atoms-response.v1.schema.json",
-            "Vector Helper Rebuild Label Atoms Response v1",
-            "helper.vector.rebuild-label-atoms.response",
-            "schemas/fixtures/helper/vector-rebuild-label-atoms-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-rebuild-label-atoms-response.v1.invalid.json",
-            crate::VectorHelperRebuildLabelAtomsResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-sync-label-atoms-response:v1",
-            "helper/vector-sync-label-atoms-response.v1.schema.json",
-            "Vector Helper Sync Label Atoms Response v1",
-            "helper.vector.sync-label-atoms.response",
-            "schemas/fixtures/helper/vector-sync-label-atoms-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-sync-label-atoms-response.v1.invalid.json",
-            crate::VectorHelperSyncLabelAtomsResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-query-chunks-response:v1",
-            "helper/vector-query-chunks-response.v1.schema.json",
-            "Vector Helper Query Chunks Response v1",
-            "helper.vector.query-chunks.response",
-            "schemas/fixtures/helper/vector-query-chunks-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-query-chunks-response.v1.invalid.json",
-            crate::VectorHelperQueryChunksResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-query-label-atoms-response:v1",
-            "helper/vector-query-label-atoms-response.v1.schema.json",
-            "Vector Helper Query Label Atoms Response v1",
-            "helper.vector.query-label-atoms.response",
-            "schemas/fixtures/helper/vector-query-label-atoms-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-query-label-atoms-response.v1.invalid.json",
-            crate::VectorHelperQueryLabelAtomsResponse
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-embed-query-response:v1",
-            "helper/vector-embed-query-response.v1.schema.json",
-            "Vector Helper Embed Query Response v1",
-            "helper.vector.embed-query.response",
-            "schemas/fixtures/helper/vector-embed-query-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-embed-query-response.v1.invalid.json",
-            crate::VectorHelperEmbedQueryResponse
-        ),
-        request_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-projection-request:v2",
-            "helper/vector-projection-request.v2.schema.json",
-            "Vector Projection Helper Request v2",
-            "helper.vector-projection.request",
-            "schemas/fixtures/helper/vector-projection-request.v2.valid.json",
-            "schemas/fixtures/helper/vector-projection-request.v2.invalid.json",
-            crate::VectorProjectionHelperRequest
-        ),
-        response_schema_root!(
-            "urn:kanban-tool:schema:helper:vector-projection-response:v1",
-            "helper/vector-projection-response.v1.schema.json",
-            "Vector Projection Helper Response v1",
-            "helper.vector-projection.response",
-            "schemas/fixtures/helper/vector-projection-response.v1.valid.json",
-            "schemas/fixtures/helper/vector-projection-response.v1.invalid.json",
-            crate::VectorProjectionHelperResponse
         ),
     ]
 }

@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:maintenance-path-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "path": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "title": "Kanban maintenance path request v1",
+  "type": "object"
+}

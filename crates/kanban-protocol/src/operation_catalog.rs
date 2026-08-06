@@ -95,10 +95,12 @@ pub fn operation_catalog() -> &'static [OperationDeclaration] {
     ALL.get_or_init(|| {
         let mut declarations = Vec::with_capacity(
             crate::board_catalog::operation_declarations().len()
-                + crate::task_catalog::operation_declarations().len(),
+                + crate::task_catalog::operation_declarations().len()
+                + crate::step_catalog::operation_declarations().len(),
         );
         declarations.extend_from_slice(crate::board_catalog::operation_declarations());
         declarations.extend_from_slice(crate::task_catalog::operation_declarations());
+        declarations.extend_from_slice(crate::step_catalog::operation_declarations());
         declarations
     })
     .as_slice()
@@ -263,7 +265,7 @@ mod tests {
 
     #[test]
     fn migrated_domain_source_is_exposed_without_legacy_duplication() {
-        assert_eq!(operation_catalog().len(), 27);
+        assert_eq!(operation_catalog().len(), 35);
         assert_eq!(
             operation_catalog()
                 .iter()
@@ -274,6 +276,11 @@ mod tests {
                 .map(|operation| operation.operation_id)
                 .chain(
                     crate::task_catalog::operation_declarations()
+                        .iter()
+                        .map(|operation| operation.operation_id),
+                )
+                .chain(
+                    crate::step_catalog::operation_declarations()
                         .iter()
                         .map(|operation| operation.operation_id),
                 )

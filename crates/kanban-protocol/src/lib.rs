@@ -29,6 +29,7 @@ pub mod jsonl_ledger;
 mod label_surfaces;
 mod labels;
 mod lifecycle;
+mod mcp;
 mod ontology;
 mod portable;
 #[cfg(all(test, feature = "schema"))]
@@ -137,6 +138,11 @@ pub use lifecycle::{
     ClaimTaskRequest, CompleteTaskRequest, HeartbeatTaskRequest, PromoteTaskRequest,
     ReclaimTargetStatus, ReclaimTaskRequest, ReleaseTaskRequest, ReopenTaskRequest,
     SpecifyTaskRequest, SubmitReviewTaskRequest, UnblockTaskRequest,
+};
+pub use mcp::{
+    MCP_HOST_ADMIN_OPERATION_IDS, MCP_OPERATION_CATALOG, McpOperationClass, McpOperationDescriptor,
+    McpOperationInvariant, mcp_operation_catalog, mcp_operation_descriptor,
+    validate_mcp_operation_catalog,
 };
 pub use ontology::{LabelOntologySignalWire, LabelOntologySignalsResponse};
 pub use portable::{

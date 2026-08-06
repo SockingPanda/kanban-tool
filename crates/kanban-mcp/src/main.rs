@@ -18,6 +18,7 @@ impl KanbanMcp {
             + Self::context_tools()
             + Self::attachment_tools()
             + Self::dependency_tools()
+            + Self::entity_tools()
             + Self::event_tools()
             + Self::label_tools()
             + Self::graph_tools()
@@ -27,6 +28,7 @@ impl KanbanMcp {
             + Self::step_tools()
             + Self::lifecycle_tools()
             + Self::ontology_tools()
+            + Self::stats_tools()
             + Self::vector_tools()
     }
 }
@@ -41,6 +43,9 @@ async fn main() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::KanbanMcp;
+    use kanban_protocol::{
+        MCP_HOST_ADMIN_OPERATION_IDS, mcp_operation_catalog, validate_mcp_operation_catalog,
+    };
 
     #[test]
     fn tool_inventory_is_stable() {
@@ -50,99 +55,49 @@ mod tests {
             .map(|tool| tool.name.to_string())
             .collect();
 
-        assert_eq!(
-            names,
-            vec![
-                "attachment_create",
-                "attachment_download",
-                "attachment_list",
-                "attachment_remove",
-                "board_archive",
-                "board_create",
-                "board_list",
-                "board_show",
-                "board_task_map",
-                "comment_create",
-                "comment_list",
-                "context_build",
-                "dependency_create",
-                "dependency_list",
-                "dependency_remove",
-                "event_list",
-                "graph_neighbors",
-                "graph_query",
-                "graph_status",
-                "label_atom_explain",
-                "label_atom_index_query",
-                "label_atom_index_rebuild",
-                "label_atom_index_status",
-                "label_atoms_list",
-                "label_create",
-                "label_list",
-                "label_ontology_action",
-                "label_ontology_apply_atom",
-                "label_ontology_observe",
-                "label_ontology_quality",
-                "label_ontology_revert",
-                "label_ontology_review",
-                "label_ontology_signal_show",
-                "label_ontology_signals",
-                "label_ontology_validate",
-                "label_proposal_accept",
-                "label_proposal_reject",
-                "label_proposal_show",
-                "label_proposals_list",
-                "label_propose",
-                "label_semantics_delete",
-                "label_semantics_list",
-                "label_semantics_show",
-                "label_semantics_upsert",
-                "label_suggest",
-                "run_list",
-                "run_log",
-                "run_show",
-                "search_status",
-                "search_tasks",
-                "signal_confirm",
-                "signal_list",
-                "signal_record",
-                "signal_reject",
-                "signal_resolve",
-                "signal_review",
-                "signal_show",
-                "signal_supersede",
-                "step_create",
-                "step_done",
-                "step_list",
-                "step_remove",
-                "step_reopen",
-                "step_skip",
-                "step_update",
-                "task_archive",
-                "task_block",
-                "task_claim",
-                "task_create",
-                "task_done",
-                "task_heartbeat",
-                "task_label_add",
-                "task_label_list",
-                "task_label_remove",
-                "task_list",
-                "task_neighborhood",
-                "task_plan_not_required",
-                "task_promote",
-                "task_reclaim",
-                "task_release",
-                "task_reopen",
-                "task_review",
-                "task_show",
-                "task_specify",
-                "task_unblock",
-                "task_update",
-                "vector_query_chunks",
-                "vector_query_label_atoms",
-                "vector_status",
-            ]
-        );
+        let catalog_names: Vec<_> = mcp_operation_catalog()
+            .iter()
+            .map(|operation| operation.tool_name)
+            .collect();
+        assert_eq!(names, catalog_names);
+        validate_mcp_operation_catalog(mcp_operation_catalog())
+            .expect("MCP catalog must bind only existing domain endpoints");
+        assert_eq!(catalog_names.len(), 102);
+    }
+
+    #[test]
+    fn host_admin_operations_are_not_exposed_by_catalog_or_router() {
+        let bound_operations = mcp_operation_catalog()
+            .iter()
+            .flat_map(|operation| operation.http_operations)
+            .collect::<std::collections::BTreeSet<_>>();
+        for operation_id in MCP_HOST_ADMIN_OPERATION_IDS {
+            assert!(
+                !bound_operations.contains(operation_id),
+                "host-admin operation unexpectedly bound by MCP catalog: {operation_id}"
+            );
+        }
+
+        let names: Vec<_> = KanbanMcp::tool_router()
+            .list_all()
+            .into_iter()
+            .map(|tool| tool.name.to_string())
+            .collect();
+        for forbidden in [
+            "backup",
+            "checkpoint",
+            "doctor",
+            "export",
+            "import",
+            "maintenance",
+            "migration",
+            "vacuum",
+            "database_replace",
+        ] {
+            assert!(
+                names.iter().all(|name| !name.contains(forbidden)),
+                "host-admin tool unexpectedly exposed: {forbidden}"
+            );
+        }
     }
 }

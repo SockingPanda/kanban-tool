@@ -1,3 +1,4 @@
+mod maintenance;
 mod map;
 mod neighborhood;
 mod neighbors;
@@ -11,6 +12,7 @@ use crate::shared::KanbanMcp;
 impl KanbanMcp {
     pub(crate) fn graph_tools() -> ToolRouter<Self> {
         Self::graph_map_tools()
+            + Self::graph_maintenance_tools()
             + Self::graph_neighbors_tools()
             + Self::graph_neighborhood_tools()
             + Self::graph_query_tools()

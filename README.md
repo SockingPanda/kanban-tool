@@ -1,69 +1,98 @@
 # Kanban Tool
 
-kanban-tool 是本地优先、单机单用户的看板与 durable work queue。它把任务状态、执行 claim、事件和
-可重建的检索/图投影放在同一个本地 host 边界内，适合个人开发流程和本地自动化。
+Kanban Tool 是本地优先、单机、单用户的看板与 durable work queue。任务、执行记录、评论、附件、
+labels、ontology、signals、entities、relations、检索、上下文和可重建投影都在同一个 canonical
+Turso host 边界内协作。
 
-## 快速开始
-
-启动唯一 host：
-
-```bash
-kanban serve
-```
-
-在另一个终端创建并查看任务：
-
-```bash
-kanban board list
-kanban task create "准备发布说明"
-kanban task list
-```
-
-脚本需要稳定结构时使用 `--json`；完整 flags 和 alias 以 `kanban --help` 及子命令 help 为准。
-
-## 工作原理
+产品只有一条运行路径：
 
 ```text
 CLI / MCP / Desktop
         │ typed localhost HTTP/SSE
         ▼
 kanban serve（唯一 host）
-        │ 共享 application service
+        │ KanbanService application path
         ▼
-kanban-core + kanban-service
-        │ canonical Turso 数据库
+kanban-service（唯一 Turso owner）
+        │
         ▼
-可重建的 FTS / vector / graph / context projection
+canonical Turso database + 可重建 projection
 ```
 
-所有 mutation 经过共享 service path；`tasks.status` 是状态事实，`ready -> running` 只能由原子 claim
-完成。跨 crate 拓扑、依赖方向和数据 ownership 见 [`docs/architecture.md`](docs/architecture.md)。
+只有 `kanban serve` 可以打开、初始化、迁移、备份、替换和关闭 Turso。CLI、MCP、Desktop 和
+dispatcher 通过 typed localhost contract 访问 host；host 不可用时返回稳定错误，不会直开数据库、
+创建第二个 backend 或切换到 embedded/SQLite fallback。
 
-## 主要能力
+## 快速开始
 
-- 任务流程：显式创建、规格、claim、heartbeat、review、done、block、reopen 和 archive；见
-  [`kanban-core` 状态机](crates/kanban-core/docs/state_machine.md)。
-- 持久执行：host 维护 run、lease、event 和 dispatcher；见 [`kanban-server`](crates/kanban-server/README.md)。
-- 持久化与恢复：Turso canonical facts、upgrade、import、backup 和 rebuild；见
-  [`kanban-service`](crates/kanban-service/README.md)。
-- 类型化集成：HTTP/SSE、CLI、MCP 和 Desktop 都从 protocol/client contract 工作；见各 owner README。
+```bash
+kanban serve
+```
+
+另一个终端可以创建任务并查看队列：
+
+```bash
+kanban board list
+kanban task create "准备发布说明"
+kanban task list
+kanban task step not-required default#1 --reason "单步任务"
+kanban task promote default#1
+```
+
+需要稳定脚本输出时使用 `--json`；精确 flags、alias 和 leaf command 以 Clap help 与各自 owner
+文档为准。
+
+## 当前功能
+
+所有 mutation/query 都经过共享 `kanban-service::KanbanService`、`kanban-core` 状态机和 service-owned
+事务。当前功能面包括：
+
+- boards、tasks、execution plans、steps、dependencies、comments、attachments、runs 和 events；
+- board/task labels、label semantics、atoms、atom-index、suggestions、proposals 和 ontology ledger；
+- 通用 signals、entities/relations、bounded graph BFS、Turso FTS search、`vector32`/Ollama vector
+  provider 以及 bounded context pack；
+- host-owned doctor、checkpoint、backup、portable import/export、vacuum、projection rebuild/cleanup
+  和可选 `legacy-sqlite-import` v30 importer。
+
+label proposal 同时支持 task scope 和 board scope。CLI 不带 `--task-ref` 的
+`kanban label proposals list` 走 board-wide 查询；HTTP 对应
+`GET /api/v1/boards/:board/label-proposals`，可用 `status` query 过滤。
+
+FTS、vector、graph、context 和 projection state 都是可重建派生数据，不能反向写 canonical facts。
+
+## 状态与一致性
+
+`tasks.status` 是唯一状态事实，`board_columns` 只是展示映射。`ready -> running` 只能通过原子
+claim，并与 active run、lease 和 event 同事务提交；heartbeat、release、review、done、block、
+specify、unblock、reopen、reclaim 和 archive 都是显式 service command，不提供任意
+`transition(target_status)`。dispatcher 只 claim `ready`，不会自动 claim `review`、`todo` 或
+`scheduled`。
+
+## 入口边界
+
+- **CLI**：除 `serve`、配置/init、completion 和 hook 外，通过 `kanban-client` 请求 host；不直接开库。
+- **MCP**：stdio tools 只调用 typed client，不启动 host，也不暴露 host-admin 数据库管理操作。
+- **Desktop**：Tauri/React shell 只调用 loopback API，不直连 Turso、不复制状态机。
 
 ## 深入阅读
 
-- [架构](docs/architecture.md)
-- [CLI](crates/kanban-cli/README.md)
-- [类型化客户端](crates/kanban-client/README.md)
-- [HTTP 主机](crates/kanban-server/README.md)
-- [MCP](crates/kanban-mcp/README.md)
-- [Desktop](apps/desktop/README.md)
-- [Schema 契约](crates/kanban-protocol/docs/schema.md)
-- [架构决策](docs/adr/README.md)
+- [跨 crate 架构与 ownership](docs/architecture.md)
+- [`kanban-core` 状态机](crates/kanban-core/docs/state_machine.md)
+- [`kanban-service` 持久化](crates/kanban-service/docs/persistence.md)
+- [`kanban-service` 迁移与导入](crates/kanban-service/docs/migration.md)
+- [`kanban-service` 维护](crates/kanban-service/docs/maintenance.md)
+- [`kanban-protocol` schema/wire 契约](crates/kanban-protocol/docs/schema.md)
+- [全功能 parity ledger](docs/migration/turso-full-feature-parity.md)
+- [CLI](crates/kanban-cli/README.md)、[HTTP host](crates/kanban-server/README.md)、[MCP](crates/kanban-mcp/README.md)、[Desktop](apps/desktop/README.md)
+
+文档变更至少运行 `just docs-check` 与 `just diff-check`。未运行的 schema/adoption/full/release gate
+以 parity ledger 的 `pending-gate`/`unknown` 为准；文档更新不会替代这些证据。
 
 ## 范围
 
-产品面向本机 loopback host 和单一用户，不提供 SaaS、多租户、远程访问、RBAC、云同步或第二个
-canonical mutation path。CLI、MCP、Desktop 和 dispatcher 都不能绕过 `kanban serve` 直接写数据库。
+产品面向本机 loopback 和单一用户，不提供 SaaS、多租户、RBAC、公网访问、云同步、第二 canonical
+backend 或第二 mutation path。旧 sidecar 只在历史迁移证据中保留，不是当前 runtime owner。
 
 ## 许可证
 
- Apache-2.0，见 [`LICENSE`](LICENSE)。
+Apache-2.0，见 [`LICENSE`](LICENSE)。

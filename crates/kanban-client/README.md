@@ -7,3 +7,7 @@
 访问 board、task、lifecycle、search、graph、maintenance 等 surface。精确 path 和 DTO 由
 `kanban-protocol` catalog 持有。
 
+label proposal 查询区分 task scope 与 board scope：`list_task_label_proposals` 请求
+`/api/v1/tasks/:task_id/label-proposals`，`list_board_label_proposals` 请求
+`GET /api/v1/boards/:board/label-proposals`，后者可传 `status` 过滤。client 只负责 typed transport
+和错误映射，不复制 proposal 或 board isolation 规则。

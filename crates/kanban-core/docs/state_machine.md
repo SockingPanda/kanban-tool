@@ -1,7 +1,7 @@
 # 任务状态机
 
-本指南描述 `kanban-core` 拥有的状态语义和纯状态规则。HTTP、CLI、MCP 和 Desktop 只调用 service
-的显式 lifecycle command；精确入口由各自 owner 提供。
+本指南描述 `kanban-core` 拥有的状态语义和纯状态规则。HTTP、CLI、MCP、Desktop 和 dispatcher
+只调用 `kanban-service::KanbanService` 的显式 lifecycle command；精确入口由各自 owner 提供。
 
 ## 状态
 
@@ -23,7 +23,9 @@ readiness 根据标题和描述、排期、父依赖以及 execution plan 重新
 - `triage|todo|scheduled|ready|running|review -> blocked` 需要非空原因。
 - `blocked`、`done` 和 `review` 的恢复路径都保留历史并重新计算可执行状态。
 
-具体 transition 的持久化、event 和错误映射属于 `kanban-service`；不要在 adapter 中复制状态机。
+具体 transition 的持久化、event、projection enqueue 和错误映射属于 `kanban-service`；不要在
+adapter 中复制状态机。labels、ontology、signals、attachments 和 import 也不能绕过这条 service
+path 直接改写 `tasks.status` 或其他 canonical facts。
 
 ## Claim 与 lease
 

@@ -13,6 +13,8 @@ upgrade。升级前创建并验证 sibling backup；校验失败或 migration �
 
 portable JSONL import/export 只交换 canonical facts。`import_journal` 记录 source fingerprint、阶段
 和错误，使 staging、校验、发布和重启恢复可审计；替换模式必须先完成 verified backup，事务失败回滚。
+导出的 label/ontology/proposal、signal、relation 和 attachment metadata 与任务事实一起迁移；FTS、
+vector、graph、context 等派生结果在提交后由 host 重建，不缩减产品功能面。
 
 ## Legacy SQLite 导入
 

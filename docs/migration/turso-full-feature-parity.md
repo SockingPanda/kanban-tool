@@ -1,22 +1,23 @@
 # Turso 全功能 parity ledger
 
-本账本以 `6ea277583e51ea010aa6739a53091337676b4cff` 为功能基线（下文简称 baseline），以当前主线
-基线 `5834e04c` 为本轮实现快照；source-doc 收敛后的最终 HEAD 与 full gates 仍待集成，保持
-`pending`。它回答四个问题：baseline 每个领域现在由谁拥有、HTTP/CLI/MCP/Desktop 通过什么入口、
-数据/语义如何迁移、哪些测试已经存在以及最终 gates 还缺什么。
+本账本以 `6ea277583e51ea010aa6739a53091337676b4cff` 为功能基线（下文简称 baseline），以当前
+工作树的 `kanban-service`/`kanban-server`/`kanban-protocol` 实现为事实快照；最终集成 HEAD 与
+full gates 仍按实际执行结果记录，保持 `pending`。它回答四个问题：baseline 每个领域现在由谁
+拥有、HTTP/CLI/MCP/Desktop 通过什么入口、数据/语义如何迁移、哪些测试已经存在以及最终 gates
+还缺什么。
 
 本账本不把 catalog、孤立文件或一次未运行的命令标为 green。状态含义：
 
 | 状态 | 含义 |
 | --- | --- |
-| `implemented-evidence` | 当前代码和代表性测试已显示纵向路径；仍需按 §8 的最终 gate 复核 |
+| `implemented-evidence` | 当前代码和代表性测试已显示纵向路径；仍需按 §5 的最终 gate 复核 |
 | `protocol-adopted` | protocol/schema surface 已标为 `adopted`，但不能替代 runtime/full gate |
 | `pending-gate` | 已有 owner/实现或局部测试，尚未有本轮完整 adoption/full 证据 |
 | `historical` | baseline/旧 sidecar 的迁移证据；不属于 active runtime |
 
 ## 0. 快照与证据口径
 
-baseline 的 machine source 是 `6ea277` 中的 migration、`crates/kanban-contract`、CLI args、Desktop navigation 和 helper/backend crates；当前 source 是 `Cargo.toml`、`crates/kanban-service/src/schema.rs`、`crates/kanban-server/src/http/operations/**`、`crates/kanban-client/src/**`、`crates/kanban-cli/src/main.rs`、`crates/kanban-protocol/src/mcp.rs` 的 MCP catalog、`crates/kanban-mcp/src/main.rs` 的 adapter 对齐测试、`apps/desktop/src` 和 `crates/kanban-protocol` catalog。
+baseline 的 machine source 是 `6ea277` 中的 migration、`crates/kanban-contract`、CLI args、Desktop navigation 和 helper/backend crates；当前 source 是 `Cargo.toml`、`crates/kanban-service/src/schema.rs`/`service.rs`、`crates/kanban-server/src/http/operations/**`、`crates/kanban-client/src/**`、`crates/kanban-cli/src/main.rs`、`crates/kanban-protocol` catalog、`crates/kanban-mcp/src/main.rs` 的 adapter 对齐测试和 `apps/desktop/src`。
 
 可复核命令：
 
@@ -39,7 +40,7 @@ rg -n 'MCP_OPERATION_CATALOG|MCP_HOST_ADMIN_OPERATION_IDS|mcp_operation_catalog'
 | `task_comments`、decision metadata、signal backlink | service comment/signal transaction | `/tasks/:id/comments`、`/boards/:board/signals`；`kanban comment`/`signal`；MCP comment/signal；Desktop detail/Signals | comment idempotency 归 task；signal record/backlink/event 同事务；保留 unknown metadata JSON | server comment/signal tests；`signal_tools_are_independently_locatable`；Desktop comments/signals contract tests | `implemented-evidence`; full adoption witness pending |
 | `task_attachments`、staging | service attachment + host filesystem root | `/tasks/:id/attachments` list/create/download/delete；CLI/MCP attachment；Desktop TaskAttachmentsPanel | metadata 进 Turso；content 先 staging+fsync+SHA，再原子 publish；删除移 `.trash/`，事务失败恢复；portable/v30 由 journal 关联 | attachment server/desktop contract tests；service attachment/path guard capability test | `implemented-evidence`; v30 end-to-end gate pending |
 | `labels`、`task_labels` | service label facts/transactions | `/boards/:board/labels`、`/tasks/:id/labels`；CLI `label`；MCP label tools；Desktop detail/ontology | identity 与 binding 保留 board composite FK；task create/list/query 通过 service labels 参数；不隐式删除 semantics/atoms | `labels_round_trip_is_idempotent_and_emits_add_remove_events`；`label_commands_trim_and_dedupe_names`；CLI label contract tests；MCP label inventory | `implemented-evidence`; Desktop end-to-end/adoption gate pending |
-| `label_semantics`、`label_atoms`、proposal | service ontology facts + Turso vector atom index | ontology/atom-index/suggest/proposal HTTP；CLI `label semantics/atoms/atom-index/suggest/propose/proposals`；MCP ontology tools；Desktop Ontology workbench | semantics CAS/hash、atom effect、proposal accept/reject 保留；atom index 可删可 rebuild；provider degraded 不写错误 canonical | `delete_semantics_removes_derived_atoms`；`apply_and_revert_keep_canonical_hashes_and_atoms_in_sync`；ontology MCP/tool tests；Desktop Ontology tests | `implemented-evidence`; final index/adoption gate pending |
+| `label_semantics`、`label_atoms`、proposal | service ontology facts + Turso vector atom index | task proposal：`/api/v1/tasks/:task_id/label-proposals`；board-wide proposal：`GET /api/v1/boards/:board/label-proposals`（可选 `status`）；CLI `label semantics/atoms/atom-index/suggest/propose/proposals`（`--task-ref` 省略时按 board 列出）；MCP `label_proposals_list`；Desktop Ontology workbench | semantics CAS/hash、atom effect、proposal accept/reject 保留；atom index 可删可 rebuild；provider degraded 不写错误 canonical；task/board proposal 查询都经 `KanbanService` | `delete_semantics_removes_derived_atoms`；`apply_and_revert_keep_canonical_hashes_and_atoms_in_sync`；`board_proposal_list_uses_the_board_scoped_service_path`；`label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal`；CLI label contract tests | `implemented-evidence`; final index/adoption gate pending |
 | ontology ledger (`observations/signals/actions/effects`) | service ontology ledger | `/label-ontology/*`；CLI `label ontology ...`；MCP ontology tools；Desktop Ontology | record/review/quality/confirm/reject/resolve/supersede/apply/revert/validate 共用 CAS、board guard、event；不将 graph projection 当事实 | `crates/kanban-service/src/store_operations/ontology_tests.rs`；server ontology route fixtures；CLI ontology contract tests | `implemented-evidence`; full semantic acceptance pending |
 | generic `signal_observations`、`signals` | service signal ledger | `/boards/:board/signals{,/review,/confirm...}`、`/signals/:id`；CLI `signal`；MCP signal tools；Desktop Signals | record、backlink、review transition 与 event 原子提交；同 board dedupe key idempotent | server signal record/review tests；MCP `signal_tools_are_independently_locatable`；Desktop SignalsWorkbench tests | `implemented-evidence`; full cross-surface gate pending |
 | `entities`、`relation_predicates`、`entity_relations`、baseline substrate | service canonical relation store | `/entities`；`entity list/show/upsert`；MCP graph/task map；Desktop Map/context | relation facts 迁入 Turso；board composite FK；旧派生控制面改为 host `projection_jobs/state`，不保留第二 control plane | `entity_upsert_list_and_show_are_available_on_host`；`unknown_entity_is_not_found`；`graph_reads_canonical_relations_with_cycle_safe_bounded_bfs`；`graph_neighbors_enforces_board_isolation` | `implemented-evidence`; full graph rebuild/repair gate pending |
@@ -63,15 +64,17 @@ rg -n 'MCP_OPERATION_CATALOG|MCP_HOST_ADMIN_OPERATION_IDS|mcp_operation_catalog'
 
 ### HTTP / typed client
 
-`kanban-server/src/http/operations` 当前覆盖 board/task/lifecycle/steps/comments/attachments/dependencies/entities/graph/search/context/labels/ontology/signals/runs/events/stats/maintenance；`crates/kanban-server/src/vector.rs` 注册 vector 路径。`kanban-client` 的 operations 与 server route 对应，失败映射统一 protocol error。
+`kanban-server/src/http/operations` 当前覆盖 board/task/lifecycle/steps/comments/attachments/dependencies/entities/graph/search/context/labels/ontology/signals/runs/events/stats/maintenance；`crates/kanban-server/src/vector.rs` 注册 vector 路径。`kanban-client` 的 operations 与 server route 对应，失败映射统一 protocol error。Ontology router 已同时注册 task-scoped 与 board-wide label proposal list；后者是 `GET /api/v1/boards/:board/label-proposals`，可选 `status` query。
 
-实际 evidence：server route tests、vector fixture producer/consumer tests、`kanban-protocol` endpoint catalog/schema tests；本次 by-status 切片另已运行 `just schema-surface-audit` 与 `just schema-adoption-witness`。剩余 gate 是完整 package/full tests，不能从 route inventory 数量推断完成。
+实际 evidence：server route tests、vector fixture producer/consumer tests、`kanban-protocol` endpoint catalog/schema tests。`schema-surface-audit`、`schema-adoption-witness` 和完整 package/full tests 的当前状态以 §5 为准，不能从 route inventory 数量推断完成。
 
 ### CLI
 
 当前 Clap 顶层覆盖 `serve`、board/config/task/label/comment/context/attachment/dep/entity/graph/events/runs/run/search/index/signal/vector、doctor/stats/backup/export/import/import-v30/checkpoint/vacuum/maintenance、init/completions/__complete/hook。canonical leaf 已包含 `board columns`、`entity upsert`、`task specify`、`graph neighborhood`、`graph map`、`index rebuild` 和 `index sync`；CLI contract tests 已覆盖 board/task/label/maintenance/config 等 adapter；`surface.rs` 中非 JSON 输出（serve、completion、raw attachment、hook handler）明确 `excluded`，不算 JSON adoption。visible alias 不单独形成 surface operation。
 
 迁移规则：普通 command 只调用 client；host-admin 命令只调用 host；不恢复 baseline direct DB path。剩余 gate 是 clap leaf 与 protocol surface inventory 的精确审计，以及未在本轮运行的 exact witness/full tests。
+
+`label proposals list` 的 `--task-ref` 是可选的；省略时按当前 board 调用 board-wide proposal API，不能误写为只支持 task scope。
 
 ### MCP
 
@@ -116,15 +119,13 @@ portable path 导出/导入 canonical facts，`replace=true` 在 host 独占窗�
 
 | gate | 目的 | 本次状态 |
 | --- | --- | --- |
-| `just diff-check` | 文档空白/冲突检查 | 已运行，exit 0 |
-| `just spec-bundle-generate` + 独立 bundle commit | 从 source docs 生成 `KANBAN_SPEC_BUNDLE.md` | 已生成；bundle 仍需独立提交并复核 diff |
-| `just spec-bundle-check` | bundle 与 source docs 一致 | 已运行，5 项测试与 source check 均通过 |
-| `just schema-check` | protocol schema/catalog 一致性 | 已运行，566 roots、0 未闭合项；不等于 runtime/full gate |
-| `just schema-docs` | spec bundle、schema marker、fixture 映射 | 已运行，14 项 marker 测试通过；不因 bundle 生成成功自动通过 runtime gate |
-| `just schema-surface-audit` | 实际 HTTP/CLI/MCP surface 与 catalog 对齐 | 已运行，server route 与 CLI leaf 对齐 |
-| `just schema-adoption-witness` | exact producer/consumer witness | 已运行，566 contracts / 1132 mappings |
+| `just docs-check` | 文档链接、rustdoc include、crate README 和 ADR index | 本次尝试受并发代码编译失败影响，未形成通过证据；稳定主线需复跑 |
+| `just diff-check` | 文档空白/冲突检查 | 本次运行 exit 0 |
+| `just schema-check` | protocol schema/catalog 一致性 | 本任务未运行，保持 `pending-gate` |
+| `just schema-surface-audit` | 实际 HTTP/CLI surface 与 catalog 对齐 | 本任务未运行，保持 `pending-gate` |
+| `just schema-adoption-witness` | exact producer/consumer witness | 本任务未运行，保持 `pending-gate` |
 | final HEAD / full gate | 集成后的最终 revision 与完整 runtime/full 证据 | pending；本账本不预先宣称通过 |
-| 受影响 Rust/CLI/MCP/Desktop package tests | 纵向行为和 UI contract | protocol/server/client/mcp 与 Desktop web 已运行；CLI/full package 仍待运行 |
+| 受影响 Rust/CLI/MCP/Desktop package tests | 纵向行为和 UI contract | 本任务未运行 package/full gate；已有代表性测试名仅作证据索引，未运行项保持 `unknown` |
 | release/package/PR | 发布/外部协调 | 明确不在本任务范围 |
 
 本 ledger 的最终状态必须在上述 gates 实际执行后更新；未运行的 gate 永远保持 `pending-gate`/`unknown`，不能用文档或生成物替代测试证据。

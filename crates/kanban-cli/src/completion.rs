@@ -105,10 +105,16 @@ _kanban_dynamic_completions() {
       --kind) kind="comment-kind" ;;
     esac
     if [[ -z "$kind" ]]; then
+      case "${positional[0]} ${#positional[@]}" in
+        "events 1"|"runs 1")
+          kind="task-ref" ;;
+      esac
+    fi
+    if [[ -z "$kind" ]]; then
       case "${positional[0]} ${positional[1]} ${#positional[@]}" in
         "dep add 2"|"dep add 3"|"dep remove 2"|"dep remove 3"|"dep list 2"|"dependency add 2"|"dependency add 3"|"dependency remove 2"|"dependency remove 3"|"dependency list 2")
           kind="dependency-task-ref" ;;
-        "task show 2"|"task update 2"|"task promote 2"|"task claim 2"|"task heartbeat 2"|"task release 2"|"task done 2"|"task complete 2"|"task review 2"|"task block 2"|"task unblock 2"|"task specify 2"|"task reopen 2"|"task reclaim 2"|"task archive 2"|"task step add 3"|"task step list 3"|"task step done 3"|"task step skip 3"|"task step reopen 3"|"task step remove 3"|"task step update 3"|"task step not-required 3"|"comment list 2"|"comment add 2"|"context build 2"|"events 1"|"runs 1"|"attachment add 2"|"attachment list 2"|"attachment download 2"|"attachment remove 2"|"label add 2"|"label remove 2"|"labels add 2"|"labels remove 2"|"ontology add 2"|"ontology remove 2")
+        "task show 2"|"task update 2"|"task promote 2"|"task claim 2"|"task heartbeat 2"|"task release 2"|"task done 2"|"task complete 2"|"task review 2"|"task block 2"|"task unblock 2"|"task specify 2"|"task reopen 2"|"task reclaim 2"|"task archive 2"|"task step add 3"|"task step list 3"|"task step done 3"|"task step skip 3"|"task step reopen 3"|"task step remove 3"|"task step update 3"|"task step not-required 3"|"comment list 2"|"comment add 2"|"context build 2"|"attachment add 2"|"attachment list 2"|"attachment download 2"|"attachment remove 2"|"label add 2"|"label remove 2"|"labels add 2"|"labels remove 2"|"ontology add 2"|"ontology remove 2")
           kind="task-ref" ;;
         "board show 2"|"board use 2"|"board archive 2")
           kind="board" ;;
@@ -154,10 +160,16 @@ _kanban_dynamic_completions() {
     --kind) kind="comment-kind" ;;
   esac
   if [[ -z "$kind" ]]; then
+    case "${positional[1]} ${#positional[@]}" in
+      "events 1"|"runs 1")
+        kind="task-ref" ;;
+    esac
+  fi
+  if [[ -z "$kind" ]]; then
     case "${positional[1]} ${positional[2]} ${#positional[@]}" in
       "dep add 2"|"dep add 3"|"dep remove 2"|"dep remove 3"|"dep list 2"|"dependency add 2"|"dependency add 3"|"dependency remove 2"|"dependency remove 3"|"dependency list 2")
         kind="dependency-task-ref" ;;
-      "task show 2"|"task update 2"|"task promote 2"|"task claim 2"|"task heartbeat 2"|"task release 2"|"task done 2"|"task complete 2"|"task review 2"|"task block 2"|"task unblock 2"|"task specify 2"|"task reopen 2"|"task reclaim 2"|"task archive 2"|"task step add 3"|"task step list 3"|"task step done 3"|"task step skip 3"|"task step reopen 3"|"task step remove 3"|"task step update 3"|"task step not-required 3"|"comment list 2"|"comment add 2"|"context build 2"|"events 1"|"runs 1"|"attachment add 2"|"attachment list 2"|"attachment download 2"|"attachment remove 2"|"label add 2"|"label remove 2"|"labels add 2"|"labels remove 2"|"ontology add 2"|"ontology remove 2")
+      "task show 2"|"task update 2"|"task promote 2"|"task claim 2"|"task heartbeat 2"|"task release 2"|"task done 2"|"task complete 2"|"task review 2"|"task block 2"|"task unblock 2"|"task specify 2"|"task reopen 2"|"task reclaim 2"|"task archive 2"|"task step add 3"|"task step list 3"|"task step done 3"|"task step skip 3"|"task step reopen 3"|"task step remove 3"|"task step update 3"|"task step not-required 3"|"comment list 2"|"comment add 2"|"context build 2"|"attachment add 2"|"attachment list 2"|"attachment download 2"|"attachment remove 2"|"label add 2"|"label remove 2"|"labels add 2"|"labels remove 2"|"ontology add 2"|"ontology remove 2")
         kind="task-ref" ;;
       "board show 2"|"board use 2"|"board archive 2")
         kind="board" ;;

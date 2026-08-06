@@ -516,8 +516,8 @@ async fn locale_actor_optional_json_header_fixture_is_consumed_by_real_router() 
     let (_directory, router) = test_router().await;
     create_board(&router, "fixture").await;
     let mut headers = header_fixture("locale-actor-optional-json-headers");
-    // This profile intentionally makes Content-Type optional, while the archive
-    // route still receives its actor-bearing JSON body through Axum's Json extractor.
+    // 此 profile 有意将 Content-Type 设为可选；archive route 仍通过 Axum 的
+    // Json extractor 接收带 actor 的 JSON body。
     assert!(!headers.contains_key("Content-Type"));
     headers.insert("Content-Type".to_owned(), "application/json".to_owned());
     let request: ArchiveBoardRequest =

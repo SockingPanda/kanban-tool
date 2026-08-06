@@ -40,7 +40,7 @@ where
             .map_err(crate::error::store_error)?;
 
         read_run_log_file(
-            self.run_log_root.as_deref(),
+            self.run_log_root.as_deref().map(PathBuf::as_path),
             &run.id,
             run.log_path.as_deref(),
             RUN_LOG_TAIL_BYTES,

@@ -540,7 +540,7 @@ fn graph_provider_from_status(
 }
 
 async fn vector_candidates(
-    store: &crate::db::TursoStore,
+    store: &crate::TursoStore,
     query: &str,
     board_id: &str,
     limit: usize,

@@ -66,9 +66,9 @@ pub use error::StoreError;
 // 保持在 `store_operations` 内部。
 pub(crate) use store_operations::{
     AddTaskLabelsInput, ArchiveBoardInput, ArchiveTaskInput, BlockTaskInput, ClaimTaskInput,
-    ClaimTaskRecord as StoreClaimTaskRecord, CompleteTaskInput, CreateAttachmentInput,
-    CreateBoardInput, CreateCommentInput, CreateLabelInput, CreateSignalInput, EntityUpsertInput,
-    HeartbeatTaskInput, LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
+    CompleteTaskInput, CreateAttachmentInput, CreateBoardInput, CreateCommentInput,
+    CreateLabelInput, CreateSignalInput, EntityUpsertInput, HeartbeatTaskInput,
+    LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
     MarkExecutionPlanNotRequiredInput, OntologyActionInput, OntologyActorInput,
     OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
     PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput, RelationDeleteInput,

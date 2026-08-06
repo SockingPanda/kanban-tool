@@ -2,7 +2,7 @@
 //!
 //! 每个 operation 模块都向共享的 application/service 入口添加一个内聚的 command 或 query。
 //! 共享 service 状态仍保留在 service core 中。
-// Signal ledger operation 由所有 adapter 共享。
+// Signal ledger operation 由所有 host surface 共享。
 
 mod attachment;
 mod board;
@@ -33,12 +33,14 @@ pub use context::{
     ContextPack, ContextPolicy, ContextProviderStatus, ContextSources, MAX_CONTEXT_BUDGET,
     MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT,
 };
+pub(crate) use dependency::application_dependency_snapshot;
 pub use entities::{EntityListOptions, EntityUpsertCommand};
 pub use event::*;
 pub use graph::{
     BoardTaskMapOptions, GraphNeighborsOptions, GraphQueryOptions, ProjectionStatusOptions,
     TaskNeighborhoodOptions,
 };
+pub(crate) use labels::application_label;
 pub use labels::{
     AddTaskLabelsCommand, AddTaskLabelsRecord, CreateBoardLabelCommand, RemoveTaskLabelCommand,
 };
@@ -54,7 +56,7 @@ pub use signal::*;
 pub use stats::*;
 pub(crate) use task::application_task;
 pub use task::{
-    TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskOntologySignalSummaryRecord,
+    TaskDetailOntologyRecord, TaskDetailRecord, TaskOntologySignalSummaryRecord,
     TaskOntologySummaryRecord,
 };
 pub use vector::{
@@ -76,6 +78,3 @@ pub use task::{
     SubmitReviewTaskCommand, TaskListOptions, TaskListPage, TaskListSort, TaskPlanFilter,
     UnblockTaskCommand, UpdateTaskCommand,
 };
-
-#[cfg(test)]
-pub(crate) mod test_support;

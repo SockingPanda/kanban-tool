@@ -102,7 +102,7 @@ const SCHEMA_TABLES: &[&str] = &[
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreDoctorReport {
+pub(crate) struct StoreDoctorReport {
     pub ok: bool,
     pub integrity_check: String,
     pub migration_version: Option<i64>,
@@ -134,7 +134,7 @@ pub struct StoreDoctorReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreDoctorDerivedStore {
+pub(crate) struct StoreDoctorDerivedStore {
     pub store_name: String,
     pub schema_version: i64,
     pub last_event_id: i64,
@@ -146,7 +146,7 @@ pub struct StoreDoctorDerivedStore {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreDoctorIssue {
+pub(crate) struct StoreDoctorIssue {
     pub severity: String,
     pub code: String,
     pub message: String,
@@ -154,14 +154,14 @@ pub struct StoreDoctorIssue {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreCheckpointReport {
+pub(crate) struct StoreCheckpointReport {
     pub busy: i64,
     pub log_frames: i64,
     pub checkpointed_frames: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreBackupReport {
+pub(crate) struct StoreBackupReport {
     pub out_path: String,
     pub checksum_sha256: String,
     pub bytes: u64,
@@ -169,7 +169,7 @@ pub struct StoreBackupReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreExportReport {
+pub(crate) struct StoreExportReport {
     pub out_path: String,
     pub checksum_sha256: String,
     pub bytes: u64,
@@ -178,7 +178,7 @@ pub struct StoreExportReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreImportReport {
+pub(crate) struct StoreImportReport {
     pub in_path: String,
     pub source_fingerprint: String,
     pub imported_records: u64,
@@ -196,7 +196,7 @@ pub struct StoreImportReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreVacuumReport {
+pub(crate) struct StoreVacuumReport {
     pub ok: bool,
     pub before_bytes: u64,
     pub after_bytes: u64,
@@ -204,7 +204,7 @@ pub struct StoreVacuumReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreMaintenanceOwner {
+pub(crate) struct StoreMaintenanceOwner {
     pub owner: Option<String>,
     pub mode: Option<String>,
     pub lease_expires_at: Option<i64>,
@@ -215,7 +215,7 @@ pub struct StoreMaintenanceOwner {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreProjectionStatus {
+pub(crate) struct StoreProjectionStatus {
     pub store_name: String,
     pub active_generation: Option<String>,
     pub active_fingerprint: Option<String>,
@@ -239,7 +239,7 @@ pub struct StoreProjectionStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreMaintenanceStatus {
+pub(crate) struct StoreMaintenanceStatus {
     pub database_instance_id: String,
     pub protocol_version: i64,
     pub owner: StoreMaintenanceOwner,
@@ -247,7 +247,7 @@ pub struct StoreMaintenanceStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoreMaintenanceRun {
+pub(crate) struct StoreMaintenanceRun {
     pub database_instance_id: String,
     pub protocol_version: i64,
     pub owner: String,
@@ -295,11 +295,11 @@ struct PortableSnapshot {
 }
 
 impl TursoStore {
-    pub async fn doctor(&self) -> Result<StoreDoctorReport, StoreError> {
+    pub(crate) async fn doctor(&self) -> Result<StoreDoctorReport, StoreError> {
         doctor_connection(&self.connection().await?).await
     }
 
-    pub async fn checkpoint(&self) -> Result<StoreCheckpointReport, StoreError> {
+    pub(crate) async fn checkpoint(&self) -> Result<StoreCheckpointReport, StoreError> {
         let lease = self
             .acquire_maintenance_lease("backup", "host-admin")
             .await?;
@@ -327,7 +327,7 @@ impl TursoStore {
         })
     }
 
-    pub async fn backup(
+    pub(crate) async fn backup(
         &self,
         out_path: impl AsRef<Path>,
     ) -> Result<StoreBackupReport, StoreError> {
@@ -352,7 +352,7 @@ impl TursoStore {
         Ok(report)
     }
 
-    pub async fn export(
+    pub(crate) async fn export(
         &self,
         out_path: impl AsRef<Path>,
     ) -> Result<StoreExportReport, StoreError> {
@@ -411,7 +411,7 @@ impl TursoStore {
 
     /// 当前 host 已持有 Turso handle，replace 不直接替换旧 inode。非 replace 导入
     /// 只允许空 canonical target，并通过 `import_journal` 记录可恢复阶段。
-    pub async fn import(
+    pub(crate) async fn import(
         &self,
         in_path: impl AsRef<Path>,
         replace: bool,
@@ -444,7 +444,7 @@ impl TursoStore {
     ///
     /// 供 host lifecycle 预检使用的 typed seam。普通 HTTP/CLI `import --replace` 不走此
     /// 预检路径，而是在当前 host-owned Turso handle 内完成真实事务替换。
-    pub async fn prepare_import(
+    pub(crate) async fn prepare_import(
         &self,
         in_path: impl AsRef<Path>,
     ) -> Result<StoreImportReport, StoreError> {
@@ -879,7 +879,7 @@ impl TursoStore {
         Ok((staged_fingerprint, jobs))
     }
 
-    pub async fn vacuum(&self) -> Result<StoreVacuumReport, StoreError> {
+    pub(crate) async fn vacuum(&self) -> Result<StoreVacuumReport, StoreError> {
         let before_bytes = fs::metadata(self.database_path()).map_err(io_error)?.len();
         let lease = self
             .acquire_maintenance_lease("compact", "host-admin")
@@ -898,11 +898,11 @@ impl TursoStore {
         Ok(report)
     }
 
-    pub async fn maintenance_status(&self) -> Result<StoreMaintenanceStatus, StoreError> {
+    pub(crate) async fn maintenance_status(&self) -> Result<StoreMaintenanceStatus, StoreError> {
         maintenance_status_connection(&self.connection().await?).await
     }
 
-    pub async fn maintenance_run(
+    pub(crate) async fn maintenance_run(
         &self,
         owner: &str,
         action: &str,

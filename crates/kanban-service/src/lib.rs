@@ -1,11 +1,10 @@
 #![doc = include_str!("../README.md")]
 
-//! 所有 kanban-tool adapter 共享的 application service 与规范 Turso 边界。
+//! kanban-tool 的 application service 与规范 Turso 边界。
 //!
-//! HTTP host 在规范 store 之上构造一个 [`ApplicationService`]。CLI、MCP 和 Desktop
-//! 从不构造此 service，也不会接收 storage handle；它们通过 localhost API 访问。
+//! `kanban-server` 通过 [`KanbanService`] 持有唯一的 canonical store；CLI、MCP 和 Desktop
+//! 通过 localhost API 访问，不直接接触数据库。
 
-mod adapter;
 mod db;
 mod domain;
 mod error;
@@ -26,19 +25,19 @@ pub mod adoption_test_support;
 
 pub mod dto;
 pub mod operations;
-pub mod ports;
 pub mod service;
 pub mod vector;
 
 #[cfg(feature = "legacy-sqlite-import")]
 pub mod legacy_import;
 
-// 下面重新导出 entity/relation/graph DTO，使每个 host adapter 都使用同一个规范
-// service boundary。
-
-pub use adapter::TursoApplicationStore;
 pub use dto::*;
 pub use kanban_core::{Board, BoardColumn, KanbanError, Result, TaskStatus, new_task_id};
+pub use operations::maintenance::{
+    BackupReportRecord, CheckpointReportRecord, DoctorDerivedStoreRecord, DoctorIssueRecord,
+    DoctorReportRecord, ExportReportRecord, ImportReportRecord, MaintenanceOwnerRecord,
+    MaintenanceRunRecord, MaintenanceStatusRecord, ProjectionStatusRecord, VacuumReportRecord,
+};
 pub use operations::{
     AddTaskLabelsCommand, AddTaskLabelsRecord, ArchiveBoardCommand, ArchiveBoardRecord,
     ArchiveTaskCommand, BoardTaskMapOptions, ContextBuildOptions, ContextCandidate,
@@ -51,32 +50,21 @@ pub use operations::{
     ReclaimTaskCommand, RelationDeleteCommand, RelationListOptions, RelationPredicateCommand,
     RelationUpsertCommand, RemoveTaskLabelCommand, ReopenTaskCommand, RunLogRecord, SearchHit,
     SearchIndexStatus, SearchMeta, SearchQuery, SearchResults, SpecifyTaskCommand,
-    TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskNeighborhoodOptions,
+    TaskDetailOntologyRecord, TaskDetailRecord, TaskNeighborhoodOptions,
     TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord, UnblockTaskCommand,
     UpdateTaskCommand, VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,
     VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
 };
-pub use ports::ApplicationStore;
-pub use service::{ApplicationService, KanbanService};
-
-/// 明确保留的 host-facing service store 别名，使 adapter 不依赖持久化 row model
-/// 或旧的独立 store crate。
-pub type ServiceStore = TursoApplicationStore;
+pub use service::KanbanService;
 
 // 规范持久化入口。Store row model 保持私有，避免 service DTO 边界意外暴露第二套
 // application model。
 pub use db::{CapabilityRecord, TursoStore, UpgradeBackupHook, UpgradeBackupRequest};
 pub use error::StoreError;
 
-pub use maintenance::{
-    StoreBackupReport, StoreCheckpointReport, StoreDoctorDerivedStore, StoreDoctorIssue,
-    StoreDoctorReport, StoreExportReport, StoreImportReport, StoreMaintenanceOwner,
-    StoreMaintenanceRun, StoreMaintenanceStatus, StoreProjectionStatus, StoreVacuumReport,
-};
-
 // 输入在 service 边界显式使用别名。与 application DTO 重名的 record 和 option
 // 保持在 `store_operations` 内部。
-pub use store_operations::{
+pub(crate) use store_operations::{
     AddTaskLabelsInput, ArchiveBoardInput, ArchiveTaskInput, BlockTaskInput, ClaimTaskInput,
     ClaimTaskRecord as StoreClaimTaskRecord, CompleteTaskInput, CreateAttachmentInput,
     CreateBoardInput, CreateCommentInput, CreateLabelInput, CreateSignalInput, EntityUpsertInput,

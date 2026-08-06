@@ -5,6 +5,8 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
+#[cfg(feature = "legacy-sqlite-import")]
+use kanban_protocol::LegacyImportReport;
 use kanban_protocol::{
     BackupReport, BackupResponse, CheckpointResponse, DataEnvelope, DoctorReport, DoctorResponse,
     ExportReport, ExportResponse, ImportReport, ImportResponse, LegacyImportRequest,
@@ -12,8 +14,6 @@ use kanban_protocol::{
     MaintenanceRunReport, MaintenanceRunRequest, MaintenanceRunResponse, MaintenanceStatusReport,
     MaintenanceStatusResponse, ProjectionStoreStatus, VacuumReport, VacuumResponse,
 };
-#[cfg(feature = "legacy-sqlite-import")]
-use kanban_protocol::LegacyImportReport;
 #[cfg(feature = "legacy-sqlite-import")]
 use kanban_service::LegacyImportOptions;
 
@@ -283,7 +283,7 @@ pub(crate) async fn maintenance_cleanup(
     Ok(Json(DataEnvelope::new(run_report(report))))
 }
 
-fn projection_status(value: kanban_service::StoreProjectionStatus) -> ProjectionStoreStatus {
+fn projection_status(value: kanban_service::ProjectionStatusRecord) -> ProjectionStoreStatus {
     ProjectionStoreStatus {
         store_name: value.store_name,
         active_generation: value.active_generation,
@@ -305,7 +305,7 @@ fn projection_status(value: kanban_service::StoreProjectionStatus) -> Projection
     }
 }
 
-fn run_report(value: kanban_service::StoreMaintenanceRun) -> MaintenanceRunReport {
+fn run_report(value: kanban_service::MaintenanceRunRecord) -> MaintenanceRunReport {
     MaintenanceRunReport {
         database_instance_id: value.database_instance_id,
         protocol_version: value.protocol_version,

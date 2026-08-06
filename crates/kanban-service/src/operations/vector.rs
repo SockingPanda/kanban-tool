@@ -6,7 +6,7 @@
 
 use kanban_core::{Clock, KanbanError, Result};
 
-use crate::{ApplicationService, VectorConfig, VectorStatusRecord, adapter::TursoApplicationStore};
+use crate::{KanbanService, VectorConfig, VectorStatusRecord};
 
 /// 配置 host 内 vector provider 的 service command。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,7 +82,7 @@ pub struct VectorLabelAtomResult {
     pub vector: Option<Vec<f32>>,
 }
 
-impl<C> ApplicationService<TursoApplicationStore, C>
+impl<C> KanbanService<C>
 where
     C: Clock,
 {
@@ -141,9 +141,7 @@ where
         command: VectorChunkQueryCommand,
     ) -> Result<Vec<VectorChunkResult>> {
         validate_query(&command.board, &command.q, command.limit)?;
-        let (config, embedding) = self
-            .store
-            .embed_query(&command.q)
+        let (config, embedding) = crate::vector::embed_query(&self.store, &command.q)
             .await
             .map_err(vector_store_error)?;
         validate_embedding_model(command.embedding_model.as_deref(), &config.model)?;
@@ -178,9 +176,7 @@ where
         command: VectorLabelAtomQueryCommand,
     ) -> Result<Vec<VectorLabelAtomResult>> {
         validate_query(&command.board, &command.q, command.limit)?;
-        let (config, embedding) = self
-            .store
-            .embed_query(&command.q)
+        let (config, embedding) = crate::vector::embed_query(&self.store, &command.q)
             .await
             .map_err(vector_store_error)?;
         validate_embedding_model(command.embedding_model.as_deref(), &config.model)?;
@@ -227,8 +223,7 @@ where
                 "vector worker owner 不能为空".to_owned(),
             ));
         }
-        self.store
-            .vector_worker_tick(owner)
+        crate::vector::worker_tick(self.store.clone(), owner)
             .await
             .map_err(vector_store_error)
     }
@@ -307,21 +302,17 @@ fn vector_store_error(error: crate::StoreError) -> KanbanError {
 #[cfg(test)]
 mod tests {
     use super::{
-        ApplicationService, VectorChunkQueryCommand, VectorConfigureCommand,
-        VectorLabelAtomQueryCommand,
+        KanbanService, VectorChunkQueryCommand, VectorConfigureCommand, VectorLabelAtomQueryCommand,
     };
-    use crate::{TursoApplicationStore, TursoStore};
+    use crate::TursoStore;
 
-    async fn service() -> (tempfile::TempDir, ApplicationService<TursoApplicationStore>) {
+    async fn service() -> (tempfile::TempDir, KanbanService) {
         let directory = tempfile::tempdir().expect("temporary database directory");
         let store = TursoStore::open(directory.path().join("kanban.db"))
             .await
             .expect("open store");
         store.initialize().await.expect("initialize store");
-        (
-            directory,
-            ApplicationService::new(TursoApplicationStore::new(store)),
-        )
+        (directory, KanbanService::new(store))
     }
 
     #[tokio::test]

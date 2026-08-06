@@ -1,5 +1,3 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result};
 use serde_json::{Value, json};
 
@@ -8,7 +6,7 @@ use crate::{
     RunRecord, StepRecord, TaskRecord,
 };
 
-/// task show 的可选聚合读取结果。各集合均来自 canonical host，adapter 不负责拼接业务语义。
+/// task show 的可选聚合读取结果。各集合均来自 canonical host，由 service 统一聚合。
 #[derive(Debug, Clone, PartialEq)]
 pub struct TaskDetailRecord {
     pub task: TaskRecord,
@@ -80,15 +78,7 @@ pub struct TaskOntologySignalSummaryRecord {
     pub action_count: i64,
 }
 
-/// 由 application service 聚合 task 的 canonical 相关记录。
-pub trait TaskDetailRead {
-    fn get_task_detail_parts(
-        &self,
-        task_id: &str,
-    ) -> impl Future<Output = Result<TaskDetailRecord>> + Send;
-}
-
-impl<C> TaskDetailRead for KanbanService<C>
+impl<C> KanbanService<C>
 where
     C: Clock + Sync,
 {

@@ -1923,8 +1923,13 @@ pub fn endpoint_catalog() -> &'static [EndpointDescriptor] {
     CATALOG
         .get_or_init(|| {
             let board = crate::board_catalog::endpoint_catalog();
-            let mut catalog = Vec::with_capacity(ENDPOINTS.len() + board.len());
+            let mut catalog = Vec::with_capacity(ENDPOINTS.len() + board.len() + 17);
             for endpoint in ENDPOINTS {
+                if let Some(task) = crate::task_catalog::endpoint_descriptor(endpoint.operation_id)
+                {
+                    catalog.push(task);
+                    continue;
+                }
                 catalog.push(*endpoint);
                 if endpoint.operation_id == "api.health" {
                     catalog.extend(board.iter().copied());

@@ -82,14 +82,26 @@ impl<'a> CatalogProjection<'a> {
     }
 }
 
-/// 当前已迁移的 domain source；其余 operation 继续由 legacy registry 提供 compatibility
-/// baseline，直到对应 family 完成 declaration migration。
+/// 已迁移的 Board source；`operation_catalog()` 会按 family 顺序汇总所有已迁移声明。
+///
+/// 该常量保留给旧的编译期 consumer；新增 consumer 应使用 `operation_catalog()`，以免
+/// 忽略后续迁移的 family。
 pub const OPERATION_DECLARATIONS: &[OperationDeclaration] =
     crate::board_catalog::operation_declarations();
 
 /// 返回当前 declaration source。
-pub const fn operation_catalog() -> &'static [OperationDeclaration] {
-    OPERATION_DECLARATIONS
+pub fn operation_catalog() -> &'static [OperationDeclaration] {
+    static ALL: std::sync::OnceLock<Vec<OperationDeclaration>> = std::sync::OnceLock::new();
+    ALL.get_or_init(|| {
+        let mut declarations = Vec::with_capacity(
+            crate::board_catalog::operation_declarations().len()
+                + crate::task_catalog::operation_declarations().len(),
+        );
+        declarations.extend_from_slice(crate::board_catalog::operation_declarations());
+        declarations.extend_from_slice(crate::task_catalog::operation_declarations());
+        declarations
+    })
+    .as_slice()
 }
 
 /// 使用任意 declaration source 创建 projection。
@@ -251,7 +263,7 @@ mod tests {
 
     #[test]
     fn migrated_domain_source_is_exposed_without_legacy_duplication() {
-        assert_eq!(operation_catalog().len(), 10);
+        assert_eq!(operation_catalog().len(), 27);
         assert_eq!(
             operation_catalog()
                 .iter()
@@ -260,6 +272,11 @@ mod tests {
             crate::board_catalog::operation_declarations()
                 .iter()
                 .map(|operation| operation.operation_id)
+                .chain(
+                    crate::task_catalog::operation_declarations()
+                        .iter()
+                        .map(|operation| operation.operation_id),
+                )
                 .collect::<Vec<_>>()
         );
     }

@@ -4870,9 +4870,14 @@ pub fn operation_inventory() -> &'static [OperationContract] {
 
 fn hybrid_static_inventory() -> Vec<OperationContract> {
     let board = crate::board_catalog::operation_contracts();
+    let task = crate::task_catalog::operation_contracts();
     let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 15);
 
     for contract in OPERATION_INVENTORY {
+        if let Some(task_contract) = task.iter().find(|candidate| candidate.id == contract.id) {
+            inventory.push(*task_contract);
+            continue;
+        }
         match contract.id {
             // Keep the historical CLI order around the retained board use/current rows.
             "cli.board-use.output" => {

@@ -44,6 +44,7 @@ mod sse;
 mod steps;
 pub mod structured_metadata;
 mod surface;
+pub mod task_catalog;
 mod task_core;
 mod task_graph;
 mod task_read;

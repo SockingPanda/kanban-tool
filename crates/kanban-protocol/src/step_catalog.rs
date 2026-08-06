@@ -393,7 +393,7 @@ macro_rules! step_transition_contracts {
             ),
             api_contract!(
                 concat!("api.", $slug, ".request"),
-                $path,
+                concat!($path, " request"),
                 ContractDirection::Deserialize,
                 HttpTransportLocation::Body,
                 &[],
@@ -469,7 +469,7 @@ const API_PLAN_CONTRACTS: &[ContractDeclaration] = &[
     ),
     api_contract!(
         "api.mark-execution-plan-not-required.request",
-        "POST /api/v1/tasks/:task_id/execution-plan/not-required",
+        "POST /api/v1/tasks/:task_id/execution-plan/not-required body",
         ContractDirection::Deserialize,
         HttpTransportLocation::Body,
         &[],

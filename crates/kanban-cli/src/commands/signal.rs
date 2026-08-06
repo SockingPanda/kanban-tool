@@ -314,7 +314,7 @@ fn signal_line(signal: &CliSignal) -> String {
     format!(
         "{} [{}] kind={} severity={} title={} task={}",
         signal.id,
-        signal.status.as_str(),
+        signal.status.status_str(),
         signal.kind,
         signal.severity,
         signal.title,
@@ -341,11 +341,11 @@ fn invalid_input(message: String) -> CliFailure {
 }
 
 trait SignalStatusDisplay {
-    fn as_str(self) -> &'static str;
+    fn status_str(self) -> &'static str;
 }
 
 impl SignalStatusDisplay for CliSignalStatus {
-    fn as_str(self) -> &'static str {
+    fn status_str(self) -> &'static str {
         match self {
             Self::Open => "open",
             Self::Confirmed => "confirmed",

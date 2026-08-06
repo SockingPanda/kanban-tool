@@ -136,14 +136,16 @@ fn emit<T: serde::Serialize + std::fmt::Debug>(
 
 #[allow(dead_code)]
 fn _typed_output_witness(
-    _: DoctorReport,
-    _: CheckpointReport,
-    _: BackupReport,
-    _: ExportReport,
-    _: ImportReport,
-    _: VacuumReport,
-    _: MaintenanceStatusReport,
-    _: MaintenanceRunReport,
-    _: QueueStats,
+    _: (
+        DoctorReport,
+        CheckpointReport,
+        BackupReport,
+        ExportReport,
+        ImportReport,
+        VacuumReport,
+        MaintenanceStatusReport,
+        MaintenanceRunReport,
+        QueueStats,
+    ),
 ) {
 }

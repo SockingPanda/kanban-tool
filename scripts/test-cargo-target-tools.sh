@@ -175,8 +175,6 @@ assert_target_dir_probe_call_sites_quote_paths() {
     "$ROOT/scripts/package-cli-linux.sh"
     "$ROOT/scripts/test-cli-package-layout.sh"
     "$ROOT/scripts/test-desktop-package-layout.sh"
-    "$ROOT/scripts/release-cohort.sh"
-    "$ROOT/scripts/release-artifact-manifest.sh"
     "$ROOT/scripts/ontology-bootstrap-verify-e2e.sh"
     "$ROOT/scripts/ontology-closure-e2e.sh"
     "$ROOT/scripts/ontology-negative-atom-e2e.sh"
@@ -586,150 +584,6 @@ assert_package_source_provenance_is_current_and_non_mutating() {
   [[ -e "$TARGET_ROOT/release/deps/libregistry_crate-bbb.rlib" ]]
 }
 
-assert_package_layout_provenance_pairing() {
-  local fixture_root="$TMPDIR/package-layout-provenance"
-  local manifest="$fixture_root/source-provenance.json"
-  local source_map="$fixture_root/derived-projection-v2-source-map.json"
-  local manifest_bad="$fixture_root/source-provenance.bad.json"
-  local source_map_bad="$fixture_root/derived-projection-v2-source-map.bad.json"
-  local cli_root="$fixture_root/cli-root"
-  local desktop_root="$fixture_root/desktop-root"
-  local cli_deb="$fixture_root/kanban-tool-cli.deb"
-  local desktop_deb="$fixture_root/kanban-tool-desktop.deb"
-  local script package label mode output status expected
-
-  mkdir -p "$cli_root/DEBIAN" "$cli_root/usr/bin" \
-    "$cli_root/usr/share/doc/kanban-tool-cli"
-  chmod 0755 "$cli_root/DEBIAN"
-  touch "$cli_root/usr/bin/kanban" \
-    "$cli_root/usr/share/doc/kanban-tool-cli/source-provenance.json" \
-    "$cli_root/usr/share/doc/kanban-tool-cli/derived-projection-v2-source-map.json"
-  chmod 0755 "$cli_root/usr/bin/kanban"
-  printf '%s\n' \
-    'Package: kanban-tool-cli' \
-    'Version: 1' \
-    'Architecture: amd64' \
-    'Maintainer: fixture <fixture@example.invalid>' \
-    'Depends: libc6' \
-    'Description: package-layout provenance fixture' > "$cli_root/DEBIAN/control"
-
-  mkdir -p "$desktop_root/DEBIAN" "$desktop_root/usr/bin" \
-    "$desktop_root/usr/share/doc/kanban-tool-desktop"
-  chmod 0755 "$desktop_root/DEBIAN"
-  touch "$desktop_root/usr/bin/kanban-desktop" \
-    "$desktop_root/usr/share/doc/kanban-tool-desktop/source-provenance.json" \
-    "$desktop_root/usr/share/doc/kanban-tool-desktop/derived-projection-v2-source-map.json"
-  chmod 0755 "$desktop_root/usr/bin"/*
-  printf '%s\n' \
-    'Package: kanban-tool-desktop' \
-    'Version: 1' \
-    'Architecture: amd64' \
-    'Maintainer: fixture <fixture@example.invalid>' \
-    'Description: package-layout provenance fixture' > "$desktop_root/DEBIAN/control"
-
-  printf 'manifest fixture v1\n' > "$manifest"
-  printf 'source-map fixture v1\n' > "$source_map"
-  cp "$manifest" "$cli_root/usr/share/doc/kanban-tool-cli/source-provenance.json"
-  cp "$source_map" "$cli_root/usr/share/doc/kanban-tool-cli/derived-projection-v2-source-map.json"
-  cp "$manifest" "$desktop_root/usr/share/doc/kanban-tool-desktop/source-provenance.json"
-  cp "$source_map" "$desktop_root/usr/share/doc/kanban-tool-desktop/derived-projection-v2-source-map.json"
-  printf 'manifest fixture mismatch\n' > "$manifest_bad"
-  printf 'source-map fixture mismatch\n' > "$source_map_bad"
-  dpkg-deb --build --root-owner-group "$cli_root" "$cli_deb" >/dev/null
-  dpkg-deb --build --root-owner-group "$desktop_root" "$desktop_deb" >/dev/null
-
-  for script in "$ROOT/scripts/test-cli-package-layout.sh" \
-    "$ROOT/scripts/test-desktop-package-layout.sh"; do
-    if [[ "$script" == *test-cli-package-layout.sh ]]; then
-      package="$cli_deb"
-      label="CLI"
-    else
-      package="$desktop_deb"
-      label="Desktop"
-    fi
-
-    for mode in neither both manifest-only map-only manifest-mismatch map-mismatch; do
-      case "$mode" in
-        neither|both)
-          expected=0
-          ;;
-        manifest-only|map-only|manifest-mismatch|map-mismatch)
-          expected=1
-          ;;
-      esac
-      set +e
-      case "$mode" in
-        neither)
-          output="$(env -u KANBAN_RELEASE_SOURCE_MANIFEST \
-            -u KANBAN_RELEASE_SOURCE_MAP \
-            KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-            "$script" "$package" 2>&1)"
-          ;;
-        both)
-          output="$(env -u KANBAN_RELEASE_SOURCE_MANIFEST \
-            -u KANBAN_RELEASE_SOURCE_MAP \
-            KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-            KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
-            KANBAN_RELEASE_SOURCE_MAP="$source_map" \
-            "$script" "$package" 2>&1)"
-          ;;
-        manifest-only)
-          output="$(env -u KANBAN_RELEASE_SOURCE_MAP \
-            KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-            KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
-            "$script" "$package" 2>&1)"
-          ;;
-        map-only)
-          output="$(env -u KANBAN_RELEASE_SOURCE_MANIFEST \
-            KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-            KANBAN_RELEASE_SOURCE_MAP="$source_map" \
-            "$script" "$package" 2>&1)"
-          ;;
-        manifest-mismatch)
-          output="$(env -u KANBAN_RELEASE_SOURCE_MANIFEST \
-            -u KANBAN_RELEASE_SOURCE_MAP \
-            KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-            KANBAN_RELEASE_SOURCE_MANIFEST="$manifest_bad" \
-            KANBAN_RELEASE_SOURCE_MAP="$source_map" \
-            "$script" "$package" 2>&1)"
-          ;;
-        map-mismatch)
-          output="$(env -u KANBAN_RELEASE_SOURCE_MANIFEST \
-            -u KANBAN_RELEASE_SOURCE_MAP \
-            KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-            KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
-            KANBAN_RELEASE_SOURCE_MAP="$source_map_bad" \
-            "$script" "$package" 2>&1)"
-          ;;
-      esac
-      status=$?
-      set -e
-      [[ "$status" -eq "$expected" ]] || {
-        echo "$output" >&2
-        fail "$label package-layout $mode expected status $expected, got $status"
-      }
-      case "$mode" in
-        manifest-only)
-          [[ "$output" == *"requires KANBAN_RELEASE_SOURCE_MAP when KANBAN_RELEASE_SOURCE_MANIFEST is set"* ]] ||
-            fail "$label package-layout manifest-only mutation lacks a diagnostic pairing error"
-          ;;
-        map-only)
-          [[ "$output" == *"requires KANBAN_RELEASE_SOURCE_MANIFEST when KANBAN_RELEASE_SOURCE_MAP is set"* ]] ||
-            fail "$label package-layout map-only mutation lacks a diagnostic pairing error"
-          ;;
-        manifest-mismatch)
-          [[ "$output" == *"$label package source provenance does not match the release cohort"* ]] ||
-            fail "$label package-layout did not compare the source manifest"
-          ;;
-        map-mismatch)
-          [[ "$output" == *"$label package source map does not match the release cohort"* ]] ||
-            fail "$label package-layout did not compare the source map"
-          ;;
-      esac
-    done
-  done
-}
-
 assert_schema_cargo_lanes_stale_lock_fail_without_mutation() {
   local repo="$TMPDIR/stale-lock-repo"
   local before after status recipe
@@ -833,41 +687,6 @@ assert_resource_limit_defaults() {
     touch "$1"
   ' _ "$nested_marker"
   [[ -e "$nested_marker" ]] || fail "nested resource limit command did not run"
-}
-
-assert_release_resource_environment_compatibility() {
-  local source_gate="$ROOT/scripts/release-source-gate.sh"
-
-  # Cloud setup's canonical auto policy intentionally leaves all three
-  # tool-specific variables unset; the release entrypoint must accept that
-  # inherited lock shape just as it accepts the wrapper's explicit 2/2/2
-  # defaults.
-  env -u CARGO_BUILD_JOBS -u NEXTEST_TEST_THREADS -u RUST_TEST_THREADS \
-    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-    KANBAN_CARGO_BUILD_JOBS=auto KANBAN_TEST_THREADS=auto \
-    "$LOCK_SCRIPT" -- "$source_gate" --help >/dev/null
-
-  env -u KANBAN_CARGO_BUILD_JOBS -u KANBAN_TEST_THREADS \
-    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-    "$LOCK_SCRIPT" -- "$source_gate" --help >/dev/null
-
-  assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-    CARGO_BUILD_JOBS=9 "$LOCK_SCRIPT" -- "$source_gate" --help
-  assert_failure env -u NEXTEST_TEST_THREADS -u RUST_TEST_THREADS \
-    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-    KANBAN_CARGO_BUILD_JOBS=auto KANBAN_TEST_THREADS=auto \
-    CARGO_BUILD_JOBS=2 "$LOCK_SCRIPT" -- "$source_gate" --help
-  assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-    NEXTEST_TEST_THREADS=2 RUST_TEST_THREADS=9 \
-    "$LOCK_SCRIPT" -- "$source_gate" --help
-  assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-    KANBAN_CARGO_BUILD_JOBS=9 KANBAN_TEST_THREADS=auto \
-    "$LOCK_SCRIPT" -- "$source_gate" --help
-
-  # A release entrypoint invoked directly, without the wrapper-owned marker,
-  # must continue to reject caller-supplied Cargo resource overrides.
-  assert_failure env -u KANBAN_CARGO_BUILD_LOCK_HELD \
-    CARGO_BUILD_JOBS=2 "$source_gate" --help
 }
 
 assert_dev_profile_disables_incremental_without_test_override() {
@@ -1206,7 +1025,7 @@ assert_fresh_lock_path_safety
 
 assert_target_tools_safe_path_gate_order() {
   local -a recipe=()
-  local line safe_path_count=0 provenance_count=0 safe_path_index=-1 provenance_index=-1
+  local line safe_path_count=0
 
   mapfile -t recipe < <(
     awk '
@@ -1223,20 +1042,12 @@ assert_target_tools_safe_path_gate_order() {
         safe_path_count=$((safe_path_count + 1))
         safe_path_index=$index
         ;;
-      "    scripts/test-release-provenance.sh")
-        provenance_count=$((provenance_count + 1))
-        provenance_index=$index
-        ;;
     esac
     index=$((index + 1))
   done
 
   [[ "$safe_path_count" -eq 1 ]] ||
     fail "target-tools recipe must invoke standalone release safe-path tests exactly once"
-  [[ "$provenance_count" -eq 1 ]] ||
-    fail "target-tools recipe must invoke complete release provenance gate exactly once"
-  [[ "$safe_path_index" -lt "$provenance_index" ]] ||
-    fail "standalone release safe-path tests must run before complete release provenance gate"
 }
 
 assert_target_tools_safe_path_gate_order
@@ -1247,10 +1058,8 @@ assert_package_lock_marker_is_wrapper_owned
 assert_package_waits_for_shared_build_lock
 assert_cli_package_stale_lock_fails_closed_without_mutation
 assert_package_source_provenance_is_current_and_non_mutating
-assert_package_layout_provenance_pairing
 assert_schema_cargo_lanes_stale_lock_fail_without_mutation
 assert_resource_limit_defaults
-assert_release_resource_environment_compatibility
 assert_no_bare_target_writing_cargo
 assert_target_dir_probe_call_sites_quote_paths
 assert_target_dir_probe_handles_space_paths

@@ -42,7 +42,6 @@ make_fixture() {
     "$FIXTURE_TARGET" "$FIXTURE_TEMP_PARENT"
   cp "$PACKAGE" "$FIXTURE_REPO/scripts/package-cli-linux.sh"
   cp "$SAFE_PATH" "$FIXTURE_REPO/scripts/release-safe-path.py"
-  cp "$ROOT/scripts/release-source-gate.sh" "$FIXTURE_REPO/scripts/release-source-gate.sh"
   printf '# package safety fixture\n' > "$FIXTURE_REPO/README.md"
 
   cat > "$FIXTURE_REPO/scripts/cargo-build-lock.sh" <<'EOF'
@@ -124,9 +123,6 @@ EOF
 cat > "$FIXTURE_BIN/dpkg-deb" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "${PACKAGE_TEST_PROVENANCE:-0}" == "1" ]]; then
-  exec /usr/bin/dpkg-deb "$@"
-fi
 package_root="${@: -2:1}"
 output="${@: -1}"
 stage="$(dirname "$output")"
@@ -173,7 +169,6 @@ EOF
   chmod 0755 \
     "$FIXTURE_REPO/scripts/package-cli-linux.sh" \
     "$FIXTURE_REPO/scripts/release-safe-path.py" \
-    "$FIXTURE_REPO/scripts/release-source-gate.sh" \
     "$FIXTURE_REPO/scripts/cargo-build-lock.sh" \
     "$FIXTURE_REPO/scripts/package-source-provenance.sh" \
     "$FIXTURE_BIN/cargo" \
@@ -181,165 +176,6 @@ EOF
     "$FIXTURE_BIN/dpkg-shlibdeps" \
     "$FIXTURE_BIN/dpkg-deb" \
     "$FIXTURE_BIN/mktemp"
-}
-
-assert_release_provenance_inputs() {
-  local output="$FIXTURE/provenance-inputs.output"
-  local manifest="$FIXTURE/provenance/source-provenance.json"
-  local source_map="$FIXTURE_REPO/docs/release/derived-projection-v2-source-map.json"
-  local copied_map="$FIXTURE/copied-source-map.json"
-  local tampered_map="$FIXTURE/tampered-source-map.json"
-  local symlink_manifest="$FIXTURE/symlink-manifest.json"
-  local build_id
-  mkdir -p "$(dirname "$source_map")"
-  cp "$ROOT/docs/release/derived-projection-v2-source-map.json" "$source_map"
-  mkdir -p "$(dirname "$manifest")"
-  local map_hash
-  map_hash="$(sha256sum "$source_map" | awk '{print $1}')"
-  python3 - "$manifest" "$map_hash" <<'PY'
-import hashlib
-import json
-import pathlib
-import sys
-
-path, map_hash = sys.argv[1:]
-commit = "a" * 40
-tree = "b" * 40
-rustc_vv = "rustc 1.0.0\nhost: x86_64-unknown-linux-gnu"
-cargo_version = "cargo 1.0.0 (fixture)"
-identity_payload = {
-    "cargo_lock": {"path": "Cargo.lock", "sha256": "0" * 64},
-    "features": {
-        "effective": [],
-        "no_default_features": False,
-    },
-    "registry_closure": {
-        "path": "policy/schema-tool-registry-closure.json",
-        "sha256": "1" * 64,
-    },
-    "target": {
-        "deb_arch": "amd64",
-        "machine_arch": "x86_64",
-        "platform": "Linux",
-        "triple": "x86_64-unknown-linux-gnu",
-    },
-    "toolchain": {
-        "cargo_version": cargo_version,
-        "cargo_version_sha256": hashlib.sha256(cargo_version.encode()).hexdigest(),
-        "rustc_vv": rustc_vv,
-        "rustc_vv_sha256": hashlib.sha256(rustc_vv.encode()).hexdigest(),
-    },
-}
-canonical = json.dumps(identity_payload, sort_keys=True, separators=(",", ":"))
-identity_sha = hashlib.sha256(canonical.encode()).hexdigest()
-identity = dict(identity_payload)
-identity["identity_sha256"] = identity_sha
-version = "1.2.3"
-build_id = f"kanban-tool/{version};commit={commit};tree={tree};identity={identity_sha}"
-document = {
-    "branch": "main",
-    "build_id": build_id,
-    "commit": commit,
-    "generation_key": f"{commit}-{tree}-{identity_sha}",
-    "identity": identity,
-    "identity_sha256": identity_sha,
-    "project": "kanban-tool",
-    "remote": {"commit": commit, "name": "origin", "ref": "refs/heads/main"},
-    "schema_version": 3,
-    "semantic_source": {
-        "name": "origin/derived-projection-v2",
-        "no_merge_base_with_main": True,
-        "remote_ref": "refs/heads/derived-projection-v2",
-        "remote_tip": "c" * 40,
-        "saved_ref": "refs/remotes/origin/derived-projection-v2",
-        "saved_tip": "c" * 40,
-        "verified_source_commits": ["d" * 40, "e" * 40, "f" * 40],
-    },
-    "source_map": {
-        "path": "docs/release/derived-projection-v2-source-map.json",
-        "sha256": map_hash,
-    },
-    "tree": tree,
-    "version": version,
-}
-pathlib.Path(path).write_text(
-    json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n"
-)
-PY
-  build_id="$(python3 - "$manifest" <<'PY'
-import json
-import pathlib
-import sys
-print(json.loads(pathlib.Path(sys.argv[1]).read_text())["build_id"])
-PY
-)"
-
-  if ! run_package "$output" env \
-    PACKAGE_TEST_PROVENANCE=1 \
-    KANBAN_BUILD_ID="$build_id" \
-    KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
-    KANBAN_RELEASE_SOURCE_MAP="$source_map"; then
-    cat "$output" >&2
-    fail "provenance-enabled package failed to build"
-  fi
-  local deb
-  deb="$(expected_deb)"
-  [[ -f "$deb" ]] || fail "provenance-enabled package was not produced"
-  local control="$FIXTURE/control"
-  rm -rf "$control"
-  mkdir -p "$control"
-  /usr/bin/dpkg-deb -e "$deb" "$control"
-  [[ "$(grep -Fc 'X-Kanban-Build-Id:' "$control/control")" == "1" ]] ||
-    fail "provenance-enabled control does not contain exactly one build identity field"
-  grep -Fqx "X-Kanban-Build-Id: $build_id" "$control/control" ||
-    fail "provenance-enabled control has the wrong build identity"
-
-  if ! PACKAGE_TEST_AUTO_RESOURCES=1 run_package "$output" env \
-    PACKAGE_TEST_PROVENANCE=1 \
-    KANBAN_BUILD_ID="$build_id" \
-    KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
-    KANBAN_RELEASE_SOURCE_MAP="$source_map"; then
-    cat "$output" >&2
-    fail "provenance-enabled package rejected canonical auto resources"
-  fi
-
-  assert_fails "provenance package accepted marker/target lock spoof" \
-    run_package_spoofed_lock_environment "$output" env \
-    CARGO_BUILD_JOBS=9 \
-    PACKAGE_TEST_PROVENANCE=1 \
-    KANBAN_BUILD_ID="$build_id" \
-    KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
-    KANBAN_RELEASE_SOURCE_MAP="$source_map"
-
-  assert_fails "provenance package accepted valid-fd noncanonical CARGO_BUILD_JOBS" \
-    run_package "$output" env \
-    CARGO_BUILD_JOBS=9 \
-    PACKAGE_TEST_PROVENANCE=1 \
-    KANBAN_BUILD_ID="$build_id" \
-    KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
-    KANBAN_RELEASE_SOURCE_MAP="$source_map"
-
-  cp "$source_map" "$tampered_map"
-  printf '\n' >> "$tampered_map"
-  assert_fails "provenance rejects source-map hash drift" run_package "$output" env \
-    PACKAGE_TEST_PROVENANCE=1 \
-    KANBAN_BUILD_ID="$build_id" \
-    KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
-    KANBAN_RELEASE_SOURCE_MAP="$tampered_map"
-
-  cp "$source_map" "$copied_map"
-  assert_fails "provenance rejects noncanonical source-map path" run_package "$output" env \
-    PACKAGE_TEST_PROVENANCE=1 \
-    KANBAN_BUILD_ID="$build_id" \
-    KANBAN_RELEASE_SOURCE_MANIFEST="$manifest" \
-    KANBAN_RELEASE_SOURCE_MAP="$copied_map"
-
-  ln -s "$manifest" "$symlink_manifest"
-  assert_fails "provenance rejects symlinked source manifest" run_package "$output" env \
-    PACKAGE_TEST_PROVENANCE=1 \
-    KANBAN_BUILD_ID="$build_id" \
-    KANBAN_RELEASE_SOURCE_MANIFEST="$symlink_manifest" \
-    KANBAN_RELEASE_SOURCE_MAP="$source_map"
 }
 
 use_real_build_lock() {
@@ -370,8 +206,6 @@ run_package() {
     fi
     env \
       -u KANBAN_BUILD_ID \
-      -u KANBAN_RELEASE_SOURCE_MANIFEST \
-      -u KANBAN_RELEASE_SOURCE_MAP \
       PACKAGE_TEST_TARGET_ROOT="$FIXTURE_TARGET" \
       PACKAGE_TEST_CARGO_TRACE="$FIXTURE/cargo.trace" \
       TMPDIR="$FIXTURE_TEMP_PARENT" \
@@ -403,8 +237,6 @@ run_package_unlocked() {
     -u CARGO_TARGET_DIR \
     -u KANBAN_CARGO_BUILD_LOCK_HELD \
     -u KANBAN_BUILD_ID \
-    -u KANBAN_RELEASE_SOURCE_MANIFEST \
-    -u KANBAN_RELEASE_SOURCE_MAP \
     KANBAN_CARGO_TARGET_ROOT="$FIXTURE_TARGET" \
     PACKAGE_TEST_TARGET_ROOT="$FIXTURE_TARGET" \
     PACKAGE_TEST_CARGO_TRACE="$FIXTURE/cargo.trace" \
@@ -448,8 +280,6 @@ assert_physical_source_root_rejects_in_tree_target() {
   env \
     -u CARGO_TARGET_DIR \
     -u KANBAN_BUILD_ID \
-    -u KANBAN_RELEASE_SOURCE_MANIFEST \
-    -u KANBAN_RELEASE_SOURCE_MAP \
     KANBAN_CARGO_BUILD_LOCK_HELD=1 \
     PACKAGE_TEST_TARGET_ROOT="$FIXTURE_TARGET" \
     PACKAGE_TEST_CARGO_TRACE="$FIXTURE/cargo.trace" \
@@ -923,7 +753,5 @@ assert_replaced_stage_is_retained_on_failure
 make_fixture signal-temp
 assert_signal_cleanup_preserves_replaced_temp
 
-make_fixture provenance-inputs
-assert_release_provenance_inputs
 
 echo "ok: CLI package paths, private stages, and cleanup identities are safe"

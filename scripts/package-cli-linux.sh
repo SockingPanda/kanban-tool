@@ -9,23 +9,7 @@ BUILD_ARGS=()
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
 PROVENANCE="$ROOT/scripts/package-source-provenance.sh"
 SAFE_PATH="$ROOT/scripts/release-safe-path.py"
-SOURCE_GATE="$ROOT/scripts/release-source-gate.sh"
 ORIGINAL_ARGS=("$@")
-RELEASE_SOURCE_MANIFEST="${KANBAN_RELEASE_SOURCE_MANIFEST:-}"
-RELEASE_SOURCE_MAP="${KANBAN_RELEASE_SOURCE_MAP:-}"
-RELEASE_BUILD_ID="${KANBAN_BUILD_ID:-}"
-RELEASE_PROVENANCE_ENABLED=0
-RELEASE_SOURCE_MANIFEST_STABLE=""
-RELEASE_SOURCE_MAP_STABLE=""
-RELEASE_VERSION=""
-RELEASE_TARGET_TRIPLE=""
-RELEASE_FEATURES=""
-RELEASE_NO_DEFAULT_FEATURES=""
-RELEASE_RUSTC_VV_SHA256=""
-RELEASE_CARGO_VERSION_SHA256=""
-RELEASE_RUSTC_PATH=""
-RELEASE_CARGO_PATH=""
-RELEASE_BINARY_STAGE_DIR=""
 
 lock_environment_is_internal() {
   local expected_target
@@ -122,8 +106,6 @@ reject_release_build_environment() {
         fi
         ;;
       CARGO_BUILD_TARGET)
-        # release-cohort exports the canonical target while nested recipes
-        # run; prepare_release_provenance checks it against the manifest.
         ;;
       CARGO_BUILD_*|CARGO_HTTP_*|CARGO_NET_*|CARGO_PROFILE_*|CARGO_REGISTRIES_*|\
       CARGO_SOURCE_*|RUSTUP_*|CC_*|CXX_*|PKG_CONFIG_*)
@@ -134,166 +116,6 @@ reject_release_build_environment() {
         ;;
     esac
   done
-}
-
-prepare_release_provenance() {
-  local metadata_line
-  local -a metadata
-  [[ "$RELEASE_SOURCE_MANIFEST" == /* && "$RELEASE_SOURCE_MAP" == /* ]] || {
-    echo "error: release provenance paths must be absolute" >&2
-    exit 1
-  }
-  [[ "$RELEASE_SOURCE_MANIFEST" != *"/../"* && "$RELEASE_SOURCE_MAP" != *"/../"* &&
-    "$RELEASE_SOURCE_MANIFEST" != */.. && "$RELEASE_SOURCE_MAP" != */.. ]] || {
-    echo "error: release provenance paths must not contain parent traversal" >&2
-    exit 1
-  }
-  [[ -f "$RELEASE_SOURCE_MANIFEST" && ! -L "$RELEASE_SOURCE_MANIFEST" ]] || {
-    echo "error: KANBAN_RELEASE_SOURCE_MANIFEST is missing or unsafe" >&2
-    exit 1
-  }
-  [[ -f "$RELEASE_SOURCE_MAP" && ! -L "$RELEASE_SOURCE_MAP" ]] || {
-    echo "error: KANBAN_RELEASE_SOURCE_MAP is missing or unsafe" >&2
-    exit 1
-  }
-  metadata_line="$(python3 - "$RELEASE_SOURCE_MANIFEST" "$RELEASE_SOURCE_MAP" \
-    "$RELEASE_BUILD_ID" "$ROOT" "$TARGET_ROOT" "$TMPDIR" <<'PY'
-import hashlib
-import json
-import os
-import pathlib
-import stat
-import sys
-
-manifest_path = pathlib.Path(sys.argv[1])
-source_map_raw = sys.argv[2]
-build_id = sys.argv[3]
-root = pathlib.Path(sys.argv[4])
-target_root = pathlib.Path(sys.argv[5])
-stage = pathlib.Path(sys.argv[6])
-source_map_rel = pathlib.PurePosixPath("docs/release/derived-projection-v2-source-map.json")
-
-def safe_read(path: pathlib.Path, label: str) -> bytes:
-    if not path.is_absolute() or ".." in path.parts:
-        raise SystemExit(f"error: {label} path is not absolute/traversal-free: {path}")
-    current = pathlib.Path(path.anchor)
-    for component in path.parts[1:]:
-        current /= component
-        try:
-            metadata = os.lstat(current)
-        except OSError as error:
-            raise SystemExit(f"error: cannot inspect {label} path: {path}: {error}")
-        if stat.S_ISLNK(metadata.st_mode):
-            raise SystemExit(f"error: {label} path contains a symlink: {current}")
-        if current == path and (
-            not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1
-        ):
-            raise SystemExit(f"error: {label} path is not a single-link regular file: {path}")
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as error:
-        raise SystemExit(f"error: cannot open {label} safely: {path}: {error}")
-    try:
-        before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
-            raise SystemExit(f"error: {label} is not a single-link regular file: {path}")
-        chunks = []
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        after = os.fstat(descriptor)
-        identity = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns", "st_nlink")
-        if any(getattr(before, field) != getattr(after, field) for field in identity):
-            raise SystemExit(f"error: {label} changed while being sampled: {path}")
-        return b"".join(chunks)
-    finally:
-        os.close(descriptor)
-
-def write_stable(path: pathlib.Path, payload: bytes, label: str) -> None:
-    flags = (
-        os.O_WRONLY | os.O_CREAT | os.O_EXCL |
-        getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    )
-    try:
-        descriptor = os.open(path, flags, 0o600)
-    except OSError as error:
-        raise SystemExit(f"error: cannot create stable {label}: {path}: {error}")
-    try:
-        view = memoryview(payload)
-        while view:
-            written = os.write(descriptor, view)
-            view = view[written:]
-        os.fchmod(descriptor, 0o444)
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-expected_map = root / source_map_rel
-if source_map_raw != str(expected_map):
-    raise SystemExit("error: release source map is not the canonical source-tree path")
-source_map_path = pathlib.Path(source_map_raw)
-manifest_bytes = safe_read(manifest_path, "source provenance manifest")
-source_map_bytes = safe_read(source_map_path, "release source map")
-try:
-    manifest = json.loads(manifest_bytes.decode("utf-8"))
-except (UnicodeDecodeError, json.JSONDecodeError) as error:
-    raise SystemExit(f"error: release source provenance is not valid JSON: {error}")
-if manifest.get("build_id") != build_id:
-    raise SystemExit("error: KANBAN_BUILD_ID does not match source provenance")
-source = manifest.get("source_map")
-if not isinstance(source, dict) or source.get("path") != source_map_rel.as_posix():
-    raise SystemExit("error: source provenance does not name the canonical source map")
-source_map_hash = hashlib.sha256(source_map_bytes).hexdigest()
-if source.get("sha256") != source_map_hash:
-    raise SystemExit("error: release source map hash does not match source provenance")
-identity = manifest.get("identity")
-if not isinstance(identity, dict):
-    raise SystemExit("error: source provenance lacks release identity")
-features = identity.get("features")
-target = identity.get("target")
-toolchain = identity.get("toolchain")
-if features != {"effective": [], "no_default_features": False}:
-    raise SystemExit("error: source provenance does not carry the canonical feature contract")
-if not isinstance(target, dict) or not isinstance(target.get("triple"), str):
-    raise SystemExit("error: source provenance lacks a target triple")
-if not isinstance(toolchain, dict) or not isinstance(toolchain.get("rustc_vv_sha256"), str) or not isinstance(toolchain.get("cargo_version_sha256"), str):
-    raise SystemExit("error: source provenance lacks toolchain output hashes")
-write_stable(stage / "source-provenance.json", manifest_bytes, "source provenance")
-write_stable(stage / "derived-projection-v2-source-map.json", source_map_bytes, "source map")
-print("\t".join((
-    str(manifest.get("version", "")),
-    target["triple"],
-    "",
-    "0",
-    toolchain["rustc_vv_sha256"],
-    toolchain["cargo_version_sha256"],
-)))
-PY
-  )"
-  mapfile -t metadata < <(printf '%s\n' "$metadata_line")
-  [[ "${#metadata[@]}" -eq 1 ]] || {
-    echo "error: release provenance metadata probe returned an unexpected result" >&2
-    exit 1
-  }
-  IFS=$'\t' read -r RELEASE_VERSION RELEASE_TARGET_TRIPLE RELEASE_FEATURES \
-    RELEASE_NO_DEFAULT_FEATURES RELEASE_RUSTC_VV_SHA256 RELEASE_CARGO_VERSION_SHA256 \
-    <<<"${metadata[0]}"
-  [[ -n "$RELEASE_VERSION" && -n "$RELEASE_TARGET_TRIPLE" &&
-    -z "$RELEASE_FEATURES" && "$RELEASE_NO_DEFAULT_FEATURES" == "0" ]] || {
-    echo "error: release provenance metadata is incomplete" >&2
-    exit 1
-  }
-  "$SOURCE_GATE" validate --manifest "$TMPDIR/source-provenance.json"
-  RELEASE_SOURCE_MANIFEST_STABLE="$TMPDIR/source-provenance.json"
-  RELEASE_SOURCE_MAP_STABLE="$TMPDIR/derived-projection-v2-source-map.json"
-  if [[ "${CARGO_BUILD_TARGET+x}" == "x" && "$CARGO_BUILD_TARGET" != "$RELEASE_TARGET_TRIPLE" ]]; then
-    echo "error: CARGO_BUILD_TARGET does not match release provenance target" >&2
-    exit 1
-  fi
-  export CARGO_BUILD_TARGET="$RELEASE_TARGET_TRIPLE"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -330,15 +152,7 @@ done
 
 require_inherited_lock_if_marked
 
-if [[ -n "$RELEASE_SOURCE_MANIFEST" || -n "$RELEASE_SOURCE_MAP" || -n "$RELEASE_BUILD_ID" ]]; then
-  RELEASE_PROVENANCE_ENABLED=1
-  [[ -n "$RELEASE_BUILD_ID" && -n "$RELEASE_SOURCE_MANIFEST" &&
-    -n "$RELEASE_SOURCE_MAP" ]] || {
-    echo "error: release provenance requires build id, source manifest, and source map" >&2
-    exit 1
-  }
-  reject_release_build_environment
-fi
+reject_release_build_environment
 
 validate_target_root_hint() {
   local target_hint="$1"
@@ -547,57 +361,8 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
-  prepare_release_provenance
-  RELEASE_RUSTC_PATH="$(command -v rustc 2>/dev/null || true)"
-  RELEASE_CARGO_PATH="$(command -v cargo 2>/dev/null || true)"
-  [[ -x "$RELEASE_RUSTC_PATH" && -x "$RELEASE_CARGO_PATH" ]] || {
-    echo "error: release package requires executable rustc and cargo" >&2
-    exit 1
-  }
-  if [[ "${RUSTC+x}" == "x" && "$RUSTC" != "$RELEASE_RUSTC_PATH" ]]; then
-    echo "error: RUSTC does not resolve to the release identity executable" >&2
-    exit 1
-  fi
-  if [[ "${CARGO+x}" == "x" && "$CARGO" != "$RELEASE_CARGO_PATH" ]]; then
-    echo "error: CARGO does not resolve to the release identity executable" >&2
-    exit 1
-  fi
-  actual_rustc_vv="$($RELEASE_RUSTC_PATH -vV)" || {
-    echo "error: recorded rustc -vV failed during release package" >&2
-    exit 1
-  }
-  actual_cargo_version="$($RELEASE_CARGO_PATH --version)" || {
-    echo "error: recorded cargo --version failed during release package" >&2
-    exit 1
-  }
-  [[ "$(printf '%s' "$actual_rustc_vv" | sha256sum | awk '{print $1}')" == \
-    "$RELEASE_RUSTC_VV_SHA256" ]] || {
-    echo "error: rustc output does not match source provenance" >&2
-    exit 1
-  }
-  [[ "$(printf '%s' "$actual_cargo_version" | sha256sum | awk '{print $1}')" == \
-    "$RELEASE_CARGO_VERSION_SHA256" ]] || {
-    echo "error: cargo output does not match source provenance" >&2
-    exit 1
-  }
-  TARGET_TRIPLE="$(awk '/^host:[[:space:]]+/ { print $2; count += 1 } END { if (count != 1) exit 1 }' <<<"$actual_rustc_vv")" || {
-    echo "error: rustc output has no unique host target" >&2
-    exit 1
-  }
-  [[ "$TARGET_TRIPLE" == "$RELEASE_TARGET_TRIPLE" ]] || {
-    echo "error: rustc host target does not match source provenance" >&2
-    exit 1
-  }
-  VERSION="$($RELEASE_CARGO_PATH pkgid --locked -p kanban-cli | sed 's/.*#//')"
-  [[ "$VERSION" == "$RELEASE_VERSION" ]] || {
-    echo "error: Cargo package version does not match source provenance" >&2
-    exit 1
-  }
-else
-  VERSION="$(cargo pkgid --locked -p kanban-cli | sed 's/.*#//')"
-  TARGET_TRIPLE="$(rustc -vV | awk '/^host:/ { print $2 }')"
-fi
+VERSION="$(cargo pkgid --locked -p kanban-cli | sed 's/.*#//')"
+TARGET_TRIPLE="$(rustc -vV | awk '/^host:/ { print $2 }')"
 RUST_ARCH="${TARGET_TRIPLE%%-*}"
 
 deb_arch() {
@@ -615,171 +380,25 @@ deb_arch() {
 
 install_payload() {
   local root="$1"
-  local cli_source="$BIN_PATH"
-  if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
-    cli_source="$RELEASE_BINARY_STAGE_DIR/$BIN_NAME"
-  fi
-  install -Dm755 "$cli_source" "$root/usr/bin/$BIN_NAME"
+  install -Dm755 "$BIN_PATH" "$root/usr/bin/$BIN_NAME"
   install -Dm644 "$ROOT/README.md" "$root/usr/share/doc/$PACKAGE_NAME/README.md"
-  if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
-    install -Dm644 "$RELEASE_SOURCE_MANIFEST_STABLE" \
-      "$root/usr/share/doc/$PACKAGE_NAME/source-provenance.json"
-    install -Dm644 "$RELEASE_SOURCE_MAP_STABLE" \
-      "$root/usr/share/doc/$PACKAGE_NAME/derived-projection-v2-source-map.json"
-  fi
-}
-
-rewrite_and_verify_control() {
-  local control="$1"
-  python3 - "$control" "$RELEASE_BUILD_ID" <<'PY'
-import os
-import pathlib
-import re
-import stat
-import sys
-
-path = pathlib.Path(sys.argv[1])
-build_id = sys.argv[2]
-if not build_id or any(char in build_id for char in "\r\n\x00"):
-    raise SystemExit("error: build identity cannot be represented in Debian control")
-
-def parse(payload: bytes):
-    try:
-        text = payload.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise SystemExit(f"error: Debian control is not valid UTF-8: {error}")
-    if "\x00" in text:
-        raise SystemExit("error: Debian control contains NUL")
-    lines = text.splitlines()
-    fields = []
-    current = None
-    for index, line in enumerate(lines):
-        if line.startswith((" ", "\t")):
-            if current is None:
-                raise SystemExit(f"error: orphan Debian control continuation at line {index + 1}")
-            current["lines"].append((index, line))
-            continue
-        if not line:
-            current = None
-            continue
-        match = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9-]*):(.*)", line)
-        if match is None:
-            raise SystemExit(f"error: malformed Debian control field at line {index + 1}")
-        current = {
-            "key": match.group(1),
-            "value": match.group(2),
-            "index": index,
-            "lines": [(index, line)],
-        }
-        fields.append(current)
-    return lines, fields
-
-def read_regular() -> bytes:
-    descriptor = os.open(
-        path,
-        os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-    )
-    try:
-        metadata = os.fstat(descriptor)
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
-            raise SystemExit("error: Debian control is not a single-link regular file")
-        chunks = []
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        after = os.fstat(descriptor)
-        if (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns,
-            metadata.st_ctime_ns, metadata.st_nlink) != (
-            after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns,
-            after.st_ctime_ns, after.st_nlink
-        ):
-            raise SystemExit("error: Debian control changed while being read")
-        return b"".join(chunks)
-    finally:
-        os.close(descriptor)
-
-payload = read_regular()
-lines, fields = parse(payload)
-matches = [field for field in fields if field["key"].lower() == "x-kanban-build-id"]
-if len(matches) > 1:
-    raise SystemExit("error: Debian control contains duplicate X-Kanban-Build-Id fields")
-if matches:
-    field = matches[0]
-    if field["lines"] != [(field["index"], field["lines"][0][1])] or field["value"] != " " + build_id:
-        raise SystemExit("error: Debian control contains a conflicting X-Kanban-Build-Id field")
-
-remove = set()
-for field in matches:
-    remove.update(index for index, _ in field["lines"])
-remaining = [line for index, line in enumerate(lines) if index not in remove]
-description_at = next(
-    (index for index, line in enumerate(remaining) if line.startswith("Description:")),
-    len(remaining),
-)
-remaining.insert(description_at, f"X-Kanban-Build-Id: {build_id}")
-rewritten = ("\n".join(remaining) + "\n").encode("utf-8")
-
-parent = path.parent
-parent_fd = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0))
-temporary_name = f".control-rewrite.{os.getpid()}"
-try:
-    descriptor = os.open(
-        temporary_name,
-        os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
-        0o600,
-        dir_fd=parent_fd,
-    )
-    try:
-        view = memoryview(rewritten)
-        while view:
-            written = os.write(descriptor, view)
-            view = view[written:]
-        os.fchmod(descriptor, 0o644)
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    os.replace(temporary_name, path.name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
-    os.fsync(parent_fd)
-finally:
-    try:
-        os.unlink(temporary_name, dir_fd=parent_fd)
-    except FileNotFoundError:
-        pass
-    os.close(parent_fd)
-
-_, final_fields = parse(read_regular())
-final_matches = [field for field in final_fields if field["key"].lower() == "x-kanban-build-id"]
-if len(final_matches) != 1 or final_matches[0]["key"] != "X-Kanban-Build-Id" or \
-    final_matches[0]["value"] != " " + build_id or len(final_matches[0]["lines"]) != 1:
-    raise SystemExit("error: Debian control does not contain exactly one canonical build identity field")
-PY
 }
 
 build_binary() {
   local workspace_packages
   mapfile -t workspace_packages < <(
     cd "$ROOT"
-    "${RELEASE_CARGO_PATH:-cargo}" metadata --locked --no-deps --format-version 1 |
+    "cargo" metadata --locked --no-deps --format-version 1 |
       python3 -c 'import json,sys; print("\n".join(p["name"] for p in json.load(sys.stdin)["packages"]))'
   )
   "$PROVENANCE" --invalidate-packages "$TARGET_DIR" "${workspace_packages[@]}"
   rm -f "$BIN_PATH" "$TARGET_DIR/$BIN_NAME.d"
   (
     cd "$ROOT"
-    "$LOCK" -- "${RELEASE_CARGO_PATH:-cargo}" build --locked -p kanban-cli --release "${BUILD_ARGS[@]}"
+    "$LOCK" -- "cargo" build --locked -p kanban-cli --release "${BUILD_ARGS[@]}"
   )
   [[ -x "$BIN_PATH" ]] || { echo "error: expected binary not found: $BIN_PATH" >&2; exit 1; }
-  if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
-    RELEASE_BINARY_STAGE_DIR="$TMPDIR/release-binaries"
-    python3 "$SAFE_PATH" ensure-dir --root "$TMPDIR_PARENT" \
-      --path "$RELEASE_BINARY_STAGE_DIR" --mode 0700
-    python3 "$SAFE_PATH" validate-file --root "$TARGET_ROOT" --path "$BIN_PATH"
-    python3 "$SAFE_PATH" copy-file --root "$TMPDIR_PARENT" \
-      --source "$BIN_PATH" --destination "$RELEASE_BINARY_STAGE_DIR/$BIN_NAME" --mode 0555
-    python3 "$SAFE_PATH" validate-file --root "$TARGET_ROOT" --path "$TARGET_DIR/$BIN_NAME.d"
-  fi
+
   "$PROVENANCE" --verify-dep-info "$ROOT" "$TARGET_DIR/$BIN_NAME.d"
 }
 
@@ -846,16 +465,10 @@ Depends: $depends
 Maintainer: SockingPanda <42059910+SockingPanda@users.noreply.github.com>
 Installed-Size: $installed_size
 EOF
-  if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
-    printf 'X-Kanban-Build-Id: %s\n' "$RELEASE_BUILD_ID" >> "$control_dir/control"
-  fi
   cat >> "$control_dir/control" <<EOF
 Description: Local-first Kanban CLI
  Standalone kanban command line client for the Kanban Tool local work queue.
 EOF
-  if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
-    rewrite_and_verify_control "$control_dir/control"
-  fi
 
   local -a stage_identity
   mapfile -t stage_identity < <(
@@ -873,25 +486,7 @@ EOF
   staged_file="$staged_dir/$(basename "$out_file")"
   dpkg-deb --root-owner-group --build "$package_root" "$staged_file"
   python3 "$SAFE_PATH" validate-file --root "$TARGET_ROOT" --path "$staged_file"
-  if [[ "$RELEASE_PROVENANCE_ENABLED" == "1" ]]; then
-    verify_dir="$TMPDIR/deb-control-verify"
-    mkdir -m 0700 "$verify_dir"
-    dpkg-deb -e "$staged_file" "$verify_dir"
-    rewrite_and_verify_control "$verify_dir/control"
-    payload_verify_dir="$TMPDIR/deb-payload-verify"
-    mkdir -m 0700 "$payload_verify_dir"
-    dpkg-deb -x "$staged_file" "$payload_verify_dir"
-    cmp -s "$payload_verify_dir/usr/share/doc/$PACKAGE_NAME/source-provenance.json" \
-      "$RELEASE_SOURCE_MANIFEST_STABLE" || {
-      echo "error: CLI package source provenance payload drifted" >&2
-      exit 1
-    }
-    cmp -s "$payload_verify_dir/usr/share/doc/$PACKAGE_NAME/derived-projection-v2-source-map.json" \
-      "$RELEASE_SOURCE_MAP_STABLE" || {
-      echo "error: CLI package source map payload drifted" >&2
-      exit 1
-    }
-  fi
+
   # Revalidate the creation token immediately before publication; do not
   # resample a replacement directory as a new baseline.
   python3 "$SAFE_PATH" dir-identity --root "$TARGET_ROOT" --path "$OUTPUT_STAGE" \

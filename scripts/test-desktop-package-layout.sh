@@ -28,36 +28,4 @@ if grep -Eq '(^|[[:space:]])(\./)?usr/bin/kanban$' <<<"$contents"; then
   exit 1
 fi
 
-manifest_set=0
-map_set=0
-[[ "${KANBAN_RELEASE_SOURCE_MANIFEST+x}" == "x" ]] && manifest_set=1
-[[ "${KANBAN_RELEASE_SOURCE_MAP+x}" == "x" ]] && map_set=1
-if [[ "$manifest_set" -ne "$map_set" ]]; then
-  if [[ "$manifest_set" -eq 1 ]]; then
-    echo "error: release provenance requires KANBAN_RELEASE_SOURCE_MAP when KANBAN_RELEASE_SOURCE_MANIFEST is set" >&2
-  else
-    echo "error: release provenance requires KANBAN_RELEASE_SOURCE_MANIFEST when KANBAN_RELEASE_SOURCE_MAP is set" >&2
-  fi
-  exit 1
-fi
-if [[ "$manifest_set" -eq 1 ]]; then
-  [[ -n "$KANBAN_RELEASE_SOURCE_MANIFEST" && -n "$KANBAN_RELEASE_SOURCE_MAP" ]] || {
-    echo "error: release provenance requires non-empty KANBAN_RELEASE_SOURCE_MANIFEST and KANBAN_RELEASE_SOURCE_MAP" >&2
-    exit 1
-  }
-  TMPDIR="$(mktemp -d)"
-  trap 'rm -rf "$TMPDIR"' EXIT
-  dpkg-deb -x "$deb_path" "$TMPDIR"
-  cmp -s "$TMPDIR/usr/share/doc/kanban-tool-desktop/source-provenance.json" \
-    "$KANBAN_RELEASE_SOURCE_MANIFEST" || {
-    echo "error: Desktop package source provenance does not match the release cohort" >&2
-    exit 1
-  }
-  cmp -s "$TMPDIR/usr/share/doc/kanban-tool-desktop/derived-projection-v2-source-map.json" \
-    "$KANBAN_RELEASE_SOURCE_MAP" || {
-    echo "error: Desktop package source map does not match the release cohort" >&2
-    exit 1
-  }
-fi
-
 echo "ok: $deb_path contains the Desktop app"

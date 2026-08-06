@@ -136,14 +136,8 @@ audit:
 
 target-tools:
     scripts/test-cargo-target-tools.sh
-    scripts/test-windows-durability-gate.sh
-    python3 -B scripts/test_windows_durability_gate.py
     python3 -B scripts/test_release_safe_path.py
-    scripts/test-release-provenance.sh
     scripts/test-package-cli-linux-safe.sh
-
-release-recovery-runbook-contract:
-    python3 -B scripts/test_release_recovery_runbook.py
 
 diff-check:
     git diff --check
@@ -224,10 +218,6 @@ schema-audit-closed:
     just schema-adoption-witness
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema audit --require-closed
 
-projection-release-cohort:
-    just check-p kanban-service
-    just check-p kanban-server
-
 schema *args:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema "$@"
 
@@ -236,6 +226,3 @@ deps *args:
 
 agents *args:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- agents "$@"
-
-release:
-    scripts/release-cohort.sh

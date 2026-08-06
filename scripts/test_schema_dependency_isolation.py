@@ -42,7 +42,6 @@ CONTRACT_MANIFEST_PATH = str(ROOT / "crates/kanban-protocol/Cargo.toml")
 TOOL_MANIFEST_PATH = str(ROOT / TOOL_MEMBER / "Cargo.toml")
 CONTRACT_ID = f"path+file:///workspace/{CONTRACT_PACKAGE}#2.1.3"
 TOOL_ID = f"path+file:///workspace/{TOOL_PACKAGE}#2.1.3"
-INTERNAL_PACKAGE = "kanban-context"
 REGISTRY_VERSIONS = {
     "jsonschema": "0.47.0",
     "schemars": "1.2.1",
@@ -301,7 +300,7 @@ def valid_phase_one_metadata() -> dict[str, object]:
         [tool_dependency(name) for name in TOOL_EDGE_SIGNATURES],
     )
     workspace = [contract, tool]
-    workspace.extend(package(name) for name in (*PRODUCTS, INTERNAL_PACKAGE))
+    workspace.extend(package(name) for name in PRODUCTS)
     registry = [registry_package(name) for name in REGISTRY_VERSIONS]
     nodes = [resolve_node(record["id"]) for record in (*workspace, *registry)]
     tool_dependencies = [
@@ -1464,35 +1463,6 @@ class DependencyIsolationGateTests(unittest.TestCase):
         metadata = valid_phase_one_metadata()
         workspace_package(metadata, "kanban-server")["dependencies"].append(
             dependency(TOOL_PACKAGE, kind="build", rename="schema-build-tool")
-        )
-
-        with self.assertRaises(dependency_policy.DependencyPolicyError):
-            dependency_policy.audit_metadata(metadata)
-
-    def test_unlisted_internal_crate_tool_dependency_is_rejected_for_all_kinds(self) -> None:
-        for kind in (None, "dev", "build"):
-            with self.subTest(kind=kind):
-                metadata = valid_phase_one_metadata()
-                workspace_package(metadata, INTERNAL_PACKAGE)["dependencies"].append(
-                    dependency(TOOL_PACKAGE, kind=kind, rename="internal-schema-tool")
-                )
-
-                with self.assertRaises(dependency_policy.DependencyPolicyError):
-                    dependency_policy.audit_metadata(metadata)
-
-    def test_workspace_target_specific_tool_dependency_is_rejected(self) -> None:
-        metadata = valid_phase_one_metadata()
-        workspace_package(metadata, INTERNAL_PACKAGE)["dependencies"].append(
-            dependency(TOOL_PACKAGE, target="cfg(unix)")
-        )
-
-        with self.assertRaises(dependency_policy.DependencyPolicyError):
-            dependency_policy.audit_metadata(metadata)
-
-    def test_workspace_optional_tool_dependency_is_rejected(self) -> None:
-        metadata = valid_phase_one_metadata()
-        workspace_package(metadata, INTERNAL_PACKAGE)["dependencies"].append(
-            dependency(TOOL_PACKAGE, optional=True)
         )
 
         with self.assertRaises(dependency_policy.DependencyPolicyError):

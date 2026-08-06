@@ -25,8 +25,7 @@ const REMOVE_DEPENDENCY_PATH_PARAMETERS: &[WireParameter] = &[
 const DEPENDENCY_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "http::operations::contract_adoption::suite_dependencies_adoption_uses_path_body_and_response_fixtures",
+    exact_test: "http::operations::contract_adoption::suite_dependencies_adoption_uses_path_body_and_response_fixtures",
 };
 const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",

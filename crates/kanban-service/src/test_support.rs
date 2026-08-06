@@ -6,9 +6,8 @@ pub(crate) use crate::domain::{TaskExecutionPlanRecord, TaskRecord};
 pub(crate) use crate::shared::{Value, first_row, integer_value, optional_text_value, text_value};
 pub(crate) use crate::store_operations::{
     AddDependencyInput, CreateStepInput, CreateTaskInput, RemoveDependencyInput,
-    StoreTaskListOptions as TaskListOptions,
-    StoreTaskListSort as TaskListSort, StoreTaskPlanFilter as TaskPlanFilter, UpdateStepInput,
-    UpdateTaskInput,
+    StoreTaskListOptions as TaskListOptions, StoreTaskListSort as TaskListSort,
+    StoreTaskPlanFilter as TaskPlanFilter, UpdateStepInput, UpdateTaskInput,
 };
 pub(crate) use crate::{
     ArchiveTaskInput, BlockTaskInput, ClaimTaskInput, CompleteTaskInput, CreateCommentInput,

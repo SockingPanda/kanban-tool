@@ -25,8 +25,7 @@ const STEP_ITEM_PATH_PARAMETERS: &[WireParameter] = &[
 const STEP_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "http::operations::contract_adoption::suite_steps_and_plans_adoption_uses_real_router_fixtures",
+    exact_test: "http::operations::contract_adoption::suite_steps_and_plans_adoption_uses_real_router_fixtures",
 };
 const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",

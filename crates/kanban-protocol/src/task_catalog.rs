@@ -80,14 +80,12 @@ const DOMAIN_INVARIANTS: &[crate::McpOperationInvariant] = &[
 const TASK_READ_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+    exact_test: "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
 };
 const TASK_LIFECYCLE_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "http::operations::contract_adoption::suite_task_lifecycle_adoption_uses_committed_requests_and_typed_responses",
+    exact_test: "http::operations::contract_adoption::suite_task_lifecycle_adoption_uses_committed_requests_and_typed_responses",
 };
 const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
@@ -112,8 +110,7 @@ const HEADER_ACTOR_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
 const HEADER_OPTIONAL_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "knowledge_adoption::locale_actor_optional_json_header_fixture_is_consumed_by_real_router",
+    exact_test: "knowledge_adoption::locale_actor_optional_json_header_fixture_is_consumed_by_real_router",
 };
 
 macro_rules! api_contract {
@@ -1083,9 +1080,11 @@ mod tests {
         assert_eq!(ids.len(), count);
         assert_eq!(TASK_OPERATIONS.len(), 17);
         assert_eq!(contracts.len(), 68);
-        assert!(TASK_OPERATIONS
-            .iter()
-            .all(|operation| operation.mcp_policy.is_some()));
+        assert!(
+            TASK_OPERATIONS
+                .iter()
+                .all(|operation| operation.mcp_policy.is_some())
+        );
     }
 
     #[test]

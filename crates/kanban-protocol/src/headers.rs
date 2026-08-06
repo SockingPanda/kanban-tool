@@ -99,7 +99,9 @@ pub fn api_header_contract_specs() -> Vec<ApiHeaderContractSpec> {
                     contract_id,
                     endpoint,
                     profile: crate::board_catalog::header_profile(endpoint.operation_id)
-                        .or_else(|| crate::dependency_catalog::header_profile(endpoint.operation_id))
+                        .or_else(|| {
+                            crate::dependency_catalog::header_profile(endpoint.operation_id)
+                        })
                         .or_else(|| crate::step_catalog::header_profile(endpoint.operation_id))
                         .or_else(|| crate::task_catalog::header_profile(endpoint.operation_id))
                         .unwrap_or_else(|| header_profile(endpoint)),

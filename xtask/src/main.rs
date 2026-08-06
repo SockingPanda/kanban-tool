@@ -219,9 +219,6 @@ fn section_contains_bullet(section: &str, needle: &str) -> bool {
 
 fn check_markdown_links(root: &Path) -> xtask::ToolResult<()> {
     for path in repository_files(root, "md")? {
-        if is_archived_markdown(root, &path) {
-            continue;
-        }
         let text = fs::read_to_string(&path)?;
         for target in markdown_targets(&text) {
             if target.is_empty() || target.starts_with('#') || is_external_link(&target) {
@@ -339,24 +336,61 @@ fn check_adr_index(root: &Path) -> xtask::ToolResult<()> {
 }
 
 fn workspace_members(root: &Path) -> xtask::ToolResult<Vec<String>> {
-    let manifest = fs::read_to_string(root.join("Cargo.toml"))?;
-    let (_, remainder) = manifest
-        .split_once("members = [")
-        .ok_or_else(|| std::io::Error::other("Cargo.toml 缺少 workspace members"))?;
-    let members_text = remainder
-        .split_once(']')
-        .map(|(value, _)| value)
-        .ok_or_else(|| std::io::Error::other("workspace members 未闭合"))?;
-    let mut members = Vec::new();
-    for line in members_text.lines() {
-        let line = line.trim();
-        if let Some(value) = line
-            .strip_prefix('"')
-            .and_then(|value| value.strip_suffix(','))
-            .and_then(|value| value.strip_suffix('"'))
-        {
-            members.push(value.to_owned());
-        }
+    #[derive(serde::Deserialize)]
+    struct CargoMetadata {
+        packages: Vec<CargoPackage>,
+        workspace_members: Vec<String>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct CargoPackage {
+        id: String,
+        manifest_path: String,
+    }
+
+    let root = fs::canonicalize(root)?;
+    let output = Command::new("cargo")
+        .args([
+            "metadata",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--locked",
+            "--manifest-path",
+        ])
+        .arg(root.join("Cargo.toml"))
+        .current_dir(&root)
+        .output()?;
+    if !output.status.success() {
+        return Err(std::io::Error::other(format!(
+            "cargo metadata 失败（{}）: {}",
+            status_description(output.status),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+        .into());
+    }
+    let metadata = serde_json::from_slice::<CargoMetadata>(&output.stdout)
+        .map_err(|error| std::io::Error::other(format!("cargo metadata 输出解析失败: {error}")))?;
+    let mut members = Vec::with_capacity(metadata.workspace_members.len());
+    for member_id in metadata.workspace_members {
+        let package = metadata
+            .packages
+            .iter()
+            .find(|package| package.id == member_id)
+            .ok_or_else(|| {
+                std::io::Error::other(format!("cargo metadata 缺少 workspace member: {member_id}"))
+            })?;
+        let member_root = Path::new(&package.manifest_path)
+            .parent()
+            .ok_or_else(|| std::io::Error::other("workspace member manifest 缺少父目录"))?;
+        let relative = member_root.strip_prefix(&root).map_err(|error| {
+            std::io::Error::other(format!("workspace member 不在 workspace root 下: {error}"))
+        })?;
+        members.push(if relative.as_os_str().is_empty() {
+            ".".to_owned()
+        } else {
+            relative.to_string_lossy().into_owned()
+        });
     }
     if members.is_empty() {
         return Err(std::io::Error::other("workspace members 为空").into());
@@ -400,11 +434,6 @@ fn collect_files(
         collect_files(&entry.path(), extension, files)?;
     }
     Ok(())
-}
-
-fn is_archived_markdown(root: &Path, path: &Path) -> bool {
-    let relative = path.strip_prefix(root).unwrap_or(path);
-    relative.starts_with("docs/release") || relative.starts_with("docs/migration")
 }
 
 fn markdown_targets(text: &str) -> Vec<String> {
@@ -535,21 +564,43 @@ fn check_skill_contract(skill: &str, text: &str) -> xtask::ToolResult<()> {
         ))
         .into());
     }
-    if !frontmatter.lines().any(|line| {
-        line.strip_prefix("description:")
-            .is_some_and(|value| !value.trim().is_empty())
-    }) {
-        return Err(std::io::Error::other(format!(
-            "技能包 {skill} frontmatter 缺少非空 description:"
-        ))
-        .into());
-    }
-    for heading in ["## 行为契约", "## 验证案例"] {
-        if !text.contains(heading) {
-            return Err(std::io::Error::other(format!("技能包 {skill} 缺少 {heading}")).into());
-        }
+    let description = frontmatter
+        .lines()
+        .find_map(|line| line.strip_prefix("description:").map(str::trim))
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            std::io::Error::other(format!("技能包 {skill} frontmatter 缺少非空 description:"))
+        })?;
+    if !description_expresses_trigger(description) {
+        return Err(
+            std::io::Error::other(format!("技能包 {skill} description 必须表达触发条件")).into(),
+        );
     }
     Ok(())
+}
+
+fn description_expresses_trigger(description: &str) -> bool {
+    const TRIGGER_TERMS: &[&str] = &[
+        "when",
+        "if ",
+        "适用于",
+        "用于",
+        "当",
+        "在",
+        "只有",
+        "需要",
+        "明确",
+        "为",
+    ];
+    const ACTION_TERMS: &[&str] = &[
+        "Use", "run", "check", "build", "create", "write", "review", "maintain", "apply",
+        "execute", "use", "使用", "运行", "验证", "改动", "选择", "执行", "维护", "判断", "编写",
+        "重写", "描述", "新写", "修改", "起草", "创建", "检查", "保持", "提交",
+    ];
+    let description = description.trim();
+    description.chars().count() >= 4
+        && TRIGGER_TERMS.iter().any(|term| description.contains(term))
+        && ACTION_TERMS.iter().any(|term| description.contains(term))
 }
 
 fn check_openai_contract(skill: &str, path: &Path) -> xtask::ToolResult<()> {
@@ -694,11 +745,8 @@ mod tests {
         path
     }
 
-    fn skill_text(name: &str, headings: (&str, &str)) -> String {
-        format!(
-            "---\nname: {name}\ndescription: test skill\n---\n\n{}\n\n{}\n",
-            headings.0, headings.1
-        )
+    fn skill_text(name: &str, description: &str, body: &str) -> String {
+        format!("---\nname: {name}\ndescription: {description}\n---\n\n{body}\n")
     }
 
     fn write_skill(root: &Path, name: &str) {
@@ -706,7 +754,7 @@ mod tests {
         fs::create_dir_all(skill.join("agents")).expect("skill directory should be creatable");
         fs::write(
             skill.join("SKILL.md"),
-            skill_text(name, ("## 行为契约", "## 验证案例")),
+            skill_text(name, "用于在需要验证时运行此 skill", "# 自定义正文结构"),
         )
         .expect("skill contract should be writable");
         fs::write(
@@ -725,31 +773,117 @@ mod tests {
             .expect("workspace manifest should be readable");
         fs::write(root.join("Cargo.toml"), manifest)
             .expect("workspace manifest should be writable");
+        for (index, member) in workspace_members(&repository)
+            .unwrap()
+            .into_iter()
+            .enumerate()
+        {
+            let member_root = root.join(member);
+            fs::create_dir_all(member_root.join("src"))
+                .expect("workspace fixture directory should be creatable");
+            fs::write(
+                member_root.join("Cargo.toml"),
+                format!(
+                    "[package]\nname = \"xtask-fixture-{index}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n"
+                ),
+            )
+            .expect("workspace fixture manifest should be writable");
+            fs::write(member_root.join("src/lib.rs"), "")
+                .expect("workspace source should be writable");
+        }
     }
 
     #[test]
-    fn skill_contract_requires_chinese_headings_and_exact_name() {
+    fn skill_contract_requires_frontmatter_and_trigger_description_but_not_headings() {
         assert!(
             check_skill_contract(
                 "check",
-                &skill_text("wrong", ("## 行为契约", "## 验证案例"))
+                &skill_text("wrong", "用于在需要验证时运行此 skill", "任意正文")
             )
             .is_err()
         );
         assert!(
-            check_skill_contract(
-                "check",
-                &skill_text("check", ("## Behavior contract", "## Evidence cases"))
-            )
-            .is_err()
+            check_skill_contract("check", &skill_text("check", "generic skill", "任意正文"))
+                .is_err()
         );
+        assert!(check_skill_contract("check", &skill_text("check", "", "任意正文")).is_err());
+        assert!(check_skill_contract("check", &skill_text("check", "用于", "任意正文")).is_err());
+        assert!(!description_expresses_trigger("当"));
         assert!(
             check_skill_contract(
                 "check",
-                &skill_text("check", ("## 行为契约", "## 验证案例"))
+                &skill_text("check", "用于在需要验证时运行此 skill", "任意正文")
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn workspace_members_reads_the_workspace_table_with_cargo_metadata() {
+        let root = temp_root("workspace-members");
+        fs::write(
+            root.join("Cargo.toml"),
+            r#"
+[workspace.metadata]
+members = ["not/a/workspace/member"]
+
+[workspace]
+members = [
+    "crates/one", # inline comments are valid TOML
+    "apps/two",
+]
+"#,
+        )
+        .expect("workspace manifest should be writable");
+        for member in ["crates/one", "apps/two"] {
+            let member_root = root.join(member);
+            fs::create_dir_all(member_root.join("src"))
+                .expect("workspace fixture directory should be creatable");
+            fs::write(
+                member_root.join("Cargo.toml"),
+                format!(
+                    "[package]\nname = \"{}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+                    member.replace('/', "-")
+                ),
+            )
+            .expect("workspace fixture manifest should be writable");
+            fs::write(member_root.join("src/lib.rs"), "")
+                .expect("workspace source should be writable");
+        }
+
+        assert_eq!(
+            workspace_members(&root).expect("workspace members should parse"),
+            vec!["crates/one", "apps/two"]
+        );
+
+        fs::remove_dir_all(root).expect("temporary root should be removable");
+    }
+
+    #[test]
+    fn markdown_links_check_archived_directories() {
+        let root = temp_root("markdown-archives");
+        fs::create_dir_all(root.join("docs/release"))
+            .expect("release directory should be creatable");
+        fs::create_dir_all(root.join("docs/migration"))
+            .expect("migration directory should be creatable");
+        fs::write(
+            root.join("docs/release/README.md"),
+            "[broken](missing-release.md)\n",
+        )
+        .expect("release markdown should be writable");
+        fs::write(
+            root.join("docs/migration/README.md"),
+            "[broken](missing-migration.md)\n",
+        )
+        .expect("migration markdown should be writable");
+
+        assert!(check_markdown_links(&root).is_err());
+
+        fs::remove_file(root.join("docs/release/README.md"))
+            .expect("release markdown should be removable");
+        assert!(check_markdown_links(&root).is_err());
+
+        fs::remove_dir_all(root).expect("temporary root should be removable");
     }
 
     #[test]

@@ -680,7 +680,8 @@ fn bounded_message(message: &str) -> String {
     message.chars().take(240).collect()
 }
 
-fn push_unique(values: &mut Vec<String>, value: &str) {
+fn push_unique(values: &mut Vec<String>, value: impl AsRef<str>) {
+    let value = value.as_ref();
     if !values.iter().any(|item| item == value) {
         values.push(value.to_owned());
     }
@@ -831,12 +832,6 @@ fn merge_candidate(existing: &mut ContextItem, candidate: ContextCandidate) {
     }
     if existing.reason.is_empty() {
         existing.reason = candidate.reason;
-    }
-}
-
-fn push_unique(values: &mut Vec<String>, value: String) {
-    if !values.iter().any(|existing| existing == &value) {
-        values.push(value);
     }
 }
 

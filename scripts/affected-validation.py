@@ -31,7 +31,7 @@ class Plan(TypedDict):
     classifications: Classifications
     commands: list[Command]
     full_gate_recommended: bool
-    release_authoritative_command: str
+    full_gate_commands: list[Command]
     notes: list[str]
     sources: NotRequired[dict[str, list[str]]]
 
@@ -255,6 +255,10 @@ WORKSPACE_RUST_FAST_PATTERNS = {
     ".config/nextest.toml",
 }
 
+# `just rust-full` 是当前仓库的完整 Rust 验证入口。它只表达人工复核建议，
+# 不把 package/release 流程自动加入 affected 计划。
+FULL_GATE_COMMANDS: tuple[Command, ...] = (["just", "rust-full"],)
+
 
 def run_git(args: list[str]) -> list[str]:
     completed = subprocess.run(
@@ -335,10 +339,16 @@ def build_plan(base: str, paths: list[str]) -> Plan:
             commands.append(["just", "diff-check"])
 
     full_gate_recommended = any(has_full_gate_file(path) for path in paths)
+    full_gate_commands = (
+        [list(command) for command in FULL_GATE_COMMANDS]
+        if full_gate_recommended
+        else []
+    )
     notes: list[str] = []
     if full_gate_recommended:
         notes.append(
-            "`just release` 仍是 release-sensitive diff 的权威发布检查。"
+            "建议按需人工运行当前完整 Rust 验证 `just rust-full`；"
+            "affected 计划不自动执行 package/release。"
         )
     if not paths:
         notes.append("未检测到 base、staged、working tree 或 untracked 文件变更。")
@@ -349,7 +359,7 @@ def build_plan(base: str, paths: list[str]) -> Plan:
         "classifications": classifications,
         "commands": dedupe_commands(commands),
         "full_gate_recommended": full_gate_recommended,
-        "release_authoritative_command": "just release",
+        "full_gate_commands": full_gate_commands,
         "notes": notes,
     }
 
@@ -357,6 +367,13 @@ def build_plan(base: str, paths: list[str]) -> Plan:
 def print_plan(plan: Plan) -> None:
     print(f"base: {plan['base']}")
     print(f"full_gate_recommended: {str(plan['full_gate_recommended']).lower()}")
+    print("full_gate_commands:")
+    full_gate_commands = plan["full_gate_commands"]
+    if full_gate_commands:
+        for command in full_gate_commands:
+            print(f"  - {' '.join(command)}")
+    else:
+        print("  - <none>")
     print("changed_files:")
     changed = plan["changed_files"]
     if changed:
@@ -616,6 +633,16 @@ def self_test() -> None:
             raise AssertionError(
                 f"{name}: full_gate_recommended 预期为 {expected_full_gate}，"
                 f"实际为 {plan['full_gate_recommended']}"
+            )
+        expected_full_gate_commands = (
+            [list(command) for command in FULL_GATE_COMMANDS]
+            if expected_full_gate
+            else []
+        )
+        if plan["full_gate_commands"] != expected_full_gate_commands:
+            raise AssertionError(
+                f"{name}: full_gate_commands 预期为 {expected_full_gate_commands}，"
+                f"实际为 {plan['full_gate_commands']}"
             )
 
     if is_allowed_empty_test_result(["just", "test-p", "kanban-client"], 4):

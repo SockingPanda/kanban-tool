@@ -40,7 +40,6 @@ const PORTABLE_TABLES: &[&str] = &[
     "entity_relations",
     "label_semantics",
     "label_atoms",
-    "label_atom_index_boards",
     "label_semantic_proposals",
     "label_ontology_observations",
     "label_ontology_signals",
@@ -50,6 +49,9 @@ const PORTABLE_TABLES: &[&str] = &[
     "signal_observations",
     "signals",
 ];
+
+/// 这些表由 provider/worker 派生，portable adoption 只验证它们不进入事实快照。
+const DERIVED_TABLES: &[&str] = &["label_atom_index_boards"];
 
 /// 在已经由 service 初始化的 canonical 数据库中预置 portable adoption 事实。
 pub async fn populate_portable_source(path: &Path) -> Result<(), String> {
@@ -168,6 +170,18 @@ pub async fn validate_portable_export(
             .entry(table.to_owned())
             .or_default()
             .push(Value::Object(data.clone().into_iter().collect()));
+    }
+
+    for table in DERIVED_TABLES {
+        assert!(
+            !records_by_table.contains_key(*table),
+            "portable adoption 不得导出 derived 表 {table}"
+        );
+        let source_rows = table_count(&connection, table).await?;
+        assert!(
+            source_rows > 0,
+            "portable fixture 必须保留 derived 表 {table} 见证行"
+        );
     }
 
     let header_counts = header

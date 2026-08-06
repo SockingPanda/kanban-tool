@@ -2,6 +2,9 @@ use std::path::PathBuf;
 
 use turso::Connection;
 
+#[cfg(feature = "test-support")]
+pub mod adoption;
+
 pub(crate) use crate::domain::{TaskExecutionPlanRecord, TaskRecord};
 pub(crate) use crate::shared::{Value, first_row, integer_value, optional_text_value, text_value};
 pub(crate) use crate::{

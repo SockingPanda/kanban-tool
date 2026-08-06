@@ -8,6 +8,8 @@ authors.workspace = true
 [features]
 default = []
 legacy-sqlite-import = ["dep:rusqlite"]
+# 仅供 host adoption 测试使用；与 legacy importer 分离，不改变默认运行时。
+test-support = ["dep:rusqlite"]
 
 [dependencies]
 kanban-core.workspace = true

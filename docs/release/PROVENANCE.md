@@ -1,4 +1,10 @@
-# Release provenance
+# Release provenance（历史归档）
+
+> **历史归档，不是当前 release gate。** 本文描述 baseline 的 `derived-projection-v2`
+> cohort、外部 helper 和发布 wrapper。当前任务只同步 source docs/parity ledger；当前 active
+> workspace 已删除旧 backend/helper，发布、push、PR、merge 和 release cohort 不在本任务范围。
+> 现行架构与未运行 gates 以 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) 和
+> [`docs/migration/turso-full-feature-parity.md`](../migration/turso-full-feature-parity.md) 为准。
 
 `just release` 只进入 `scripts/release-cohort.sh`。该 wrapper 是一次发布 cohort 的唯一
 进程 owner；不要逐条手工执行其中的 gate 后拼装发布包。

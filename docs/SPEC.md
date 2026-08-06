@@ -1,202 +1,121 @@
 # Kanban Tool 产品规范
 
-文档类型：当前实现规范
+文档类型：当前实现规范。代码、`kanban-protocol` catalog、真实 router/adapter 和测试优先于历史快照；尚未运行的 adoption/full gate 不在本文中标记为通过。
 
-Kanban Tool 是本地优先、单用户的看板与 durable work queue。任务事实只保存在 canonical Turso 数据库中；CLI、MCP、Desktop 和可选 dispatcher 共享同一个 application service、状态机、事务和错误语义。
+Kanban Tool 是本地优先、单机、单用户的看板与 durable work queue。canonical 事实只存于 host-owned Turso 数据库；CLI、MCP、Desktop 和 dispatcher 共享同一个 `ApplicationService`、状态机、事务和错误语义。
 
 ## 1. 固定执行路径
 
 ```text
 CLI / MCP / Desktop
-        ↓ typed localhost HTTP
-      kanban serve
+        ↓ typed localhost HTTP / SSE
+      kanban serve（唯一 host）
         ↓
-ApplicationService + state machine
+ApplicationService + kanban-core 状态机
         ↓
-   kanban-service
+kanban-service（Turso、schema、migration、projection provider）
         ↓
-   canonical kanban.db
+canonical Turso database
 ```
 
 硬性规则：
 
-1. 只有 `kanban serve` 可以打开、初始化和关闭 Turso 数据库。
-2. CLI、MCP、Desktop 只能依赖 `kanban-client`（或 Desktop 的 TS HTTP client），不得依赖 `kanban-service`、SQLite 或任何 DB-owning crate。
-3. 所有 mutation 必须进入同一组 typed application command；adapter 只解析输入、调用 client、映射结果或渲染输出。
-4. 不存在“server 运行时走 RPC、server 停止时直开数据库”的 fallback。
-5. 本轮不引入自定义 IPC、runtime protocol、capability catalog、通用 receipt 或第二 backend。
+1. 只有 `kanban serve` 可以打开、初始化、迁移、备份、替换和关闭 Turso。
+2. CLI、MCP、Desktop 只依赖 `kanban-client` 或 Desktop 的 TS HTTP client；它们不依赖数据库-owning crate，也不在 host 停止时 fallback。
+3. 所有 mutation/query 都进入共享 service path。adapter 只解析输入、发送 typed request、映射 error 或渲染输出。
+4. `tasks.status` 是事实，board column 只是展示；没有任意 `transition(target_status)`。
+5. canonical facts、event 和 projection job enqueue 必须在规定的同一事务边界内提交或回滚。
 
-Host 默认监听 `http://127.0.0.1:8721`，默认数据库为 `~/.local/share/kb/kanban.db`。只有
-`kanban serve` 会打开、初始化或迁移该数据库；`config show`、`init`、`board use/current`、
-completion 和 Codex hook 是不触库的本地 shell 命令。它们可以解析 `--db`/`KANBAN_DB`，但
-不会因为解析路径而创建数据库；其他 domain 命令只接受 `--server-url`/`KANBAN_SERVER_URL`
-并通过 localhost HTTP 访问 host。
+默认 host 为 `http://127.0.0.1:8721`，默认数据库为 `$XDG_DATA_HOME/kb/kanban.db`；`--db`、`KANBAN_DB`、`KB_DB` 只由 `serve`/配置解析使用。`config show`、`init`、`board use/current`、completion 和 Codex hook 是不触库的本地 shell。
 
-## 2. 产品目标与非目标
+## 2. 产品范围
 
-### 2.1 目标
+### 2.1 当前功能域
 
-- 将 task、plan、依赖、评论、steps、runs 和 events 持久化为可重启恢复的 canonical 数据。
-- 由同一状态机保护状态转换、原子 claim、lease/heartbeat 和 run/event 一致性。
-- 让 CLI、MCP、Desktop 对同一 task 立即看到相同结果。
-- 保持本地单用户语义；`actor` 只用于审计，不承担鉴权。
+| 域 | canonical owner | 当前入口 |
+| --- | --- | --- |
+| boards/tasks/plans/steps/dependencies/comments/runs/events | `kanban-service` | HTTP、typed client、CLI、MCP、Desktop detail/board |
+| labels、ontology、signals | `kanban-service` ledger | HTTP、CLI、MCP、Desktop workbench/detail |
+| search/index | Turso FTS + host projection worker | HTTP、CLI、MCP、Desktop list/context |
+| entities/relations/graph | `kanban-service` canonical relations + bounded BFS | HTTP、CLI、MCP、Desktop map/context |
+| vector/context | Turso `vector32` + host Ollama provider + service merge | HTTP、CLI、MCP、Desktop typed API |
+| host maintenance/migration | host-owned service/worker | HTTP、CLI、Desktop Maintenance/Health；MCP 不暴露管理写操作 |
+
+以上功能共享同一条事实路径。FTS/vector/graph/context/projection 是可重建派生结果，不是第二事实源。
 
 ### 2.2 非目标
 
-以下能力不属于当前 canonical path：
+- 多用户、团队、邀请、RBAC、多租户、SaaS、云同步、公网监听或远程 worker；
+- 第二 canonical backend、CLI/MCP/Desktop 直开数据库、embedded fallback 或自定义 IPC；
+- 外部 Tantivy/LanceDB/Oxigraph/helper sidecar 作为 active runtime；旧 sidecar 仅在历史归档与迁移证据中保留；
+- 自动 server supervision、`multiprocess_wal`、通用 mutation receipt、发布、push、PR、merge 或 release cohort。
 
-- 多用户、团队、邀请、RBAC、多租户、SaaS、云同步或远程 worker；
-- SQLite/Turso 双 backend、远程数据库或远程 worker；SQLite v30 importer 仅在显式 host feature 下启用；
-- `kanban-runtime*`、framed IPC、named pipe、跨版本握手、capability negotiation、mutation receipt 和 crash matrix；
-- 自动 server supervision、系统服务注册、Windows Job Object、`multiprocess_wal`；
-- 外部 Tantivy/LanceDB/Oxigraph projection、独立 derived control plane 或第二个数据库；
-- 为未来部署方式预先建设兼容层或通用 backend abstraction。
+`legacy-sqlite-import` 是 host 的显式可选 feature，不等于第二 runtime backend；它只读 legacy SQLite v30，并把事实导入 canonical Turso。
 
-这些项目可以作为独立后续工作，但不阻塞当前三阶段链路。
+## 3. 状态与队列
 
-## 3. 当前公开 operation
-
-每个 operation 按纵向切片闭合 service → protocol/HTTP → typed client → adapter → test。
-
-| 阶段 | operation |
-| --- | --- |
-| Walking skeleton | `board.list`、`board.columns`、`task.create`、`task.list`、`task.show`、`task.plan.not_required`、`task.promote` |
-| Durable queue | `task.claim`、`task.heartbeat`、`task.release`、`task.review`、`task.done`、`task.block`；opt-in dispatcher |
-| 协作信息 | `comment.create/list`、`step.create/list/update`、`dependency.create/list/remove`、`run.list/show/log`、`event.list` |
-| 检索 projection | `search.tasks`、`search.tasks.by_status`、`search.status`、`index.rebuild`、`index.sync` |
-
-`health`、`board.columns`、`stats`、task selector query 和 task search/index status 是只读
-query，同样通过 `ApplicationService` 提供。run 不提供独立 create/update mutation；claim 同
-事务创建 run，后续 lifecycle command 同事务更新 run 和 event。task search 的 FTS projection
-只读 canonical task/comment/run/event，未 ready 时显式回退 canonical SQL。
-
-MCP 使用 `board_list`、`task_*`、`search_tasks`、`search_status`、Stage 2 lifecycle tools
-和 Stage 3 collaboration tools。所有 MCP `tools/call` 只调用 typed localhost client；MCP
-不启动 host。
-
-## 4. 状态模型
-
-权威 `tasks.status` 为：
+canonical 状态集合：
 
 ```text
 triage | todo | scheduled | ready | running | blocked | review | done | archived
 ```
 
-`board_columns` 只是展示映射。应用层不提供任意 `transition(target_status)`；每个公开 mutation 都是有明确前置条件和输入的 typed command。
+`ready` 表示规格、排期、依赖和 execution plan 均允许执行；只有 `task.claim` 能把它原子地变为 `running`。claim 同事务创建 active run 和 event，最多一个 active run。`heartbeat`、`release`、`review`、`done`、`block`、`specify`、`unblock`、`reopen`、`reclaim`、`archive` 都是显式 typed command；dispatcher 只扫描 `ready`。
 
-| 状态 | 语义 |
-| --- | --- |
-| `triage` | 规格尚不完整，不能执行。 |
-| `todo` | 已定义，但计划、依赖或其他条件尚未满足。 |
-| `scheduled` | 等待未来排期。 |
-| `ready` | 满足条件，可由人工或显式 dispatcher claim。 |
-| `running` | 已 claim，拥有 active run 和 lease。 |
-| `blocked` | 因外部依赖、失败或人工输入暂停。 |
-| `review` | 执行结果待人工确认。 |
-| `done` | 已完成。 |
-| `archived` | 隐藏的历史记录，不进入默认调度。 |
+状态机完整 guard 和 event 见 [`STATE_MACHINE.md`](STATE_MACHINE.md)。
 
-`task.plan.not_required` 和 `task.promote` 共同完成 walking-skeleton 的 `todo → ready` 检查；plan、依赖、排期和 archived 保护由 service 重新计算，adapter 不自行判断。
+## 4. Host、adapter 与 worker
 
-Durable queue 的不变量：
+### 4.1 HTTP/SSE
 
-- `ready → running` 只能通过原子 `task.claim`；两个调用方并发 claim 同一 task 时恰好一个成功。
-- `running` 必须有 `claim_token`、`claim_owner`、`claim_expires_at` 和一个 active run。
-- `heartbeat`、`release`、`review`、`done`、`block` 先校验 task、owner、token 和 lease，再在同一事务更新 task、run、event。
-- `release` 只允许 matching claim owner/token 主动释放；成功后 task 回到 `ready`、active run 变为 `canceled`，并写 `task.released`。
-- dispatcher 只扫描 `ready`，绝不自动 claim `review`、`todo` 或 `scheduled`。
+`kanban-server` 合并 boards、tasks、steps、comments、attachments、dependencies、entities、graph、search、context、labels、ontology、signals、runs、events、stats、maintenance 和 vector routers；`/health` 与 `/api/v1/stream/events` 也由同一 host 提供。`kanban-client` 只做 typed localhost HTTP/SSE，不复制 SQL 或 fallback。
 
-完整转换表与 guard 见 [`STATE_MACHINE.md`](STATE_MACHINE.md)。
+### 4.2 CLI
 
-## 5. Canonical 数据与 schema
+CLI 顶层包括 `serve`、board/config/task/label/comment/context/attachment/dep/entity/graph/events/runs/run/search/index/signal/vector、doctor/stats/backup/export/import/import-v30/checkpoint/vacuum/maintenance、init/completions/__complete/hook。所有 domain/host-admin 命令（`serve` 除外）通过 client 请求 host；`import-v30` 未启用 feature 时返回 `feature_not_available`。
 
-`kanban-service` 使用 `turso = 0.7.2`、`default-features = false`。schema 是 embedded SQL，使用简单的 `schema_migrations` 表和事务性、可重复执行的初始化。首次 host 启动幂等 seed `default` board 与固定 status columns。
+### 4.3 MCP
 
-canonical baseline 包含：
+`kanban-mcp` 是 Rust stdio server，当前 89 个 tool 的排序由 `crates/kanban-mcp/src/main.rs::tool_inventory_is_stable` 锁定，覆盖任务生命周期、labels/ontology/signals、graph/context/search/vector、comments/steps/dependencies、attachments、runs/events 和 boards。MCP 不启动 host、不打开数据库、不提供 migration/backup/vacuum/replace 管理命令。
 
-- `boards`、`board_columns`；
-- `tasks`、`task_execution_plans`、`task_steps`；
-- `task_dependencies`；
-- `task_runs`；
-- `task_comments`；
-- `task_events`。
+### 4.4 Desktop
 
-数据库必须保证：
+Desktop 通过 `KanbanApi` 使用 HTTP，只保留 `apiBaseUrl`、actor、board 等运行时配置。十个导航视图为 `board`、`list`、`map`、`runs`、`events`、`signals`、`ontology`、`maintenance`、`health`、`settings`；task detail 继续承载 attachments、comments、dependencies、steps、runs/events、labels 和 context 的 typed API。危险 maintenance 操作需要二次确认，并展示 `server_unavailable`/`restart_required` 等稳定结果。
 
-- status、run status、step status、priority 等 CHECK；
-- board 与 task/comment/step/dependency/run/event 的复合外键和 board isolation；
-- `(board_id, seq)`、实体 id、active run 和实体本地 `idempotency_key` 唯一约束；
-- dependency 自身约束、禁止 self-dependency；
-- task snapshot 与对应 event 在同一事务提交。
+### 4.5 Worker
 
-canonical 数据是业务事实。搜索的 FTS projection、图、向量、缓存和其他 projection 只能从
-canonical 数据重建，不能成为 mutation path。
+- dispatcher 是 `kanban serve --dispatcher-profile <path>` 启动的同进程单 worker；只 claim `ready`，复用 lifecycle commands。
+- projection worker 在同一个 host 生命周期内处理 FTS、vector32/Ollama、relations 和 context 的 `projection_jobs`，支持 generation、fingerprint、lease、重试、degraded 和 rebuild。
 
-## 6. Adapter 规则
+两个 worker 都不得打开第二个数据库、维护第二套状态机或直接写 adapter DTO。
 
-### 6.1 CLI
+## 5. 数据与迁移
 
-`kanban serve [--db <path>] [--dispatcher-profile <path>]` 是唯一 DB owner。其他 domain 命令
-通过 `kanban-client` 访问默认 `http://127.0.0.1:8721`，支持 `--json`、`--board`、`--actor`
-和 board-local/global task selector。`kanban search` 与 `kanban index
-status|doctor|rebuild|sync` 复用同一 search service。`doctor`、`stats`、`checkpoint`、verified
-`backup`、portable `export/import`、`import-v30`、`vacuum` 和 `maintenance
-status/run/rebuild/cleanup` 也只通过该 host 执行；它们不在 MCP surface 中。`import-v30`
-需要 host 的 `legacy-sqlite-import` feature，未启用时返回 `feature_not_available`。
-`kanban config show`、`kanban init`、`kanban board use/current`、`kanban completions`、隐藏
-`__complete` 以及 `kanban hook codex ...` 只处理本地配置、completion 或 hook 文件，不打开
-数据库；host 不可用时，domain 命令返回 `server_unavailable`。
+schema family 为 `kanban.turso`，当前 lineage 为 v1/v2：queue/history、labels/ontology/signals、entities/relations、retrieval、projection、import journal 和 attachment staging 均由 `kanban-service` 持有。canonical facts 包括 boards/tasks/plans/steps/dependencies/runs/comments/events、labels/ontology/signals、entities/relations、attachment metadata 和导入事实；`retrieval_documents`、`retrieval_vectors`、FTS、vector、BFS 结果及 projection control rows 可删除后重建。
 
-### 6.2 MCP
+支持两条迁移路径：
 
-MCP 是最小 Rust stdio server，使用官方 `rmcp` tools/stdio transport；不提供 resources/prompts，不拉起 host，不解释状态转换。工具名与 operation 一一对应，参数和响应复用 `kanban-protocol` DTO。
+1. **Turso v1 → v2 原地升级**：host 校验 family、exact shape、constraints、foreign keys 和 board isolation；创建 verified sibling backup 后运行事务 migration，失败 rollback，重复启动幂等。
+2. **portable/legacy 导入**：portable JSONL 只写 canonical facts，按 `import_journal` 记录 fingerprint/staging/phase，提交后入队 derived rebuild；`import-v30` 只读 legacy SQLite v30，attachment 先 staging、checksum/board isolation preflight，显式 feature 未启用则 fail-closed。
 
-### 6.3 Desktop
+backup、export/import、checkpoint、vacuum、projection rebuild/cleanup 和数据库替换都由 host 管理；MCP 不承载这些命令。
 
-Desktop 保留已有页面结构和 TS `KanbanApi`，只通过 external host HTTP 工作。`RuntimeConfig`
-只有 `apiBaseUrl`、`actor`、`board`；claim token 只在当前会话内保存，不写入磁盘。
-Maintenance 页面通过同一 `KanbanApi` 访问 host-owned 的 `backup`、portable
-`export/import`、`import-v30`、`vacuum` 和 `maintenance status/run/rebuild/cleanup`；危险操作
-必须二次确认，`server_unavailable` 与 `restart_required` 需要显示可执行提示。Desktop 不打开
-canonical 数据库，也不把这些 host-admin 操作暴露到 MCP。
-labels/signals/neighborhood 等未迁移视图必须隐藏或禁用，不发送失败请求；Desktop search
-view 仍需独立 slice 接入。
+## 6. 契约和错误
 
-## 7. Dispatcher
+`kanban-protocol` 是 DTO、event payload、错误 envelope、endpoint/surface catalog 和 JSON Schema 的权威来源。错误以稳定 `error.code` 表示，message 不属于机器契约；常见 code 包括 `invalid_input`、`not_found`、`conflict`、`idempotency_conflict`、`dependency_cycle`、`claim_conflict`、`claim_token_mismatch`、`invalid_transition`、`feature_not_available`、`server_unavailable` 和 `internal`。
 
-dispatcher 是 `kanban serve` 内的 opt-in、单 worker loop，不是独立 daemon。`--dispatcher-profile <path>` profile 固定包含：
+HTTP/API、CLI output、MCP tool schema 和 Desktop parser 必须引用同一 protocol DTO。schema adoption witness、surface audit 和完整测试尚未在本次文档任务中运行，不能因为 catalog 已有 `adopted` 条目就宣称所有 runtime gate 完成。
 
-```text
-board
-worker command
-poll interval
-claim TTL
-heartbeat interval
-success/failure policy
-log directory
-```
+## 7. 验收边界
 
-loop 停止新 polling 后等待当前 worker 正常结束；第二次中断才强制退出。worker 的 claim、heartbeat、finish 必须调用同一 application command，stdout/stderr 仅写 profile 指定日志路径，数据库保存摘要和路径。
+每个功能域的“已接入”至少需要：
 
-## 8. 配置、错误与重启
+1. canonical schema/constraint 与 service operation；
+2. HTTP route + typed client；
+3. 需要的 CLI/MCP/Desktop entry；
+4. producer/consumer fixture、真实 route/adapter 测试和 board/事务负向测试；
+5. FTS/vector/graph/context 可从 canonical facts rebuild，且旧 sidecar 不在 active workspace。
 
-- server 只监听 loopback；不提供远程访问和登录。
-- DB 解析优先级固定为 `--db` > `KANBAN_DB` > `KB_DB` > 最近项目 `.kb/config.toml` 的
-  `db` > XDG 配置目录下 `kanban/config.toml` 的 `db` > XDG data-local 默认路径；项目或
-  全局配置中的相对路径以各自 `config.toml` 所在目录为基准。该解析器供 `serve`、`config
-  show` 和 `init` 共享，但只有 `serve` 会打开或初始化 Turso。
-- board 解析优先级为 `--board` > `KB_BOARD` > 最近项目配置的 `board` > `default`；
-  `KANBAN_SERVER_URL`、`--server-url` 只配置 client。
-- host 每个 operation 在同一进程中按需获取 Turso connection；不启用 `multiprocess_wal`。
-- `error.code`、DTO 和 HTTP status 映射由 `kanban-protocol`/server/client 共同维护；adapter 不重新解释 domain error。
-- 关闭并重启 host 后，boards、tasks、plans、comments、steps、dependencies、runs 和 events 从 canonical DB 继续可读；不会由 adapter 创建第二个数据库。
+本文件只记录当前源码和已有测试事实；最终 adoption/full/schema gate、release、push 和 PR 由单独任务执行并独立报告。
 
-## 9. 验收基线
-
-Stage 1 的最小验收：CLI 创建 task，Desktop 从同一 host 读到，MCP 调用 `task_plan_not_required` 和 `task_promote`，CLI show 得到 `ready`；停止并重启 host 后 task、plan、event 仍存在。
-
-Stage 2 的最小验收：并发 claim 恰好一次成功；正确/错误 token 的 heartbeat、release、review、done、block 保持 task/run/event 原子一致；release 后可以再次 claim，dispatcher 不 claim `review`。
-
-Stage 3 的最小验收：comment、step、dependency、run 和 event 在 CLI、MCP、Desktop 之间一致；cross-board、FK、唯一约束和 dependency cycle 被拒绝；重启后历史仍可读。
-
-详细 HTTP/CLI wire contract 分别见 [`API_SPEC.md`](API_SPEC.md) 和 [`CLI_SPEC.md`](CLI_SPEC.md)。
+详细 wire 行为见 [`API_SPEC.md`](API_SPEC.md) 与 [`CLI_SPEC.md`](CLI_SPEC.md)；逐域 baseline、owner、入口、迁移规则、实际测试和未完成 gates 见 [`migration/turso-full-feature-parity.md`](migration/turso-full-feature-parity.md)。

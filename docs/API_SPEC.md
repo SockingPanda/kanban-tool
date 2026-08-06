@@ -1,434 +1,196 @@
 # 本地 HTTP API 规范
 
-本 API 是 `kanban serve` 提供的本机应用服务入口。CLI、MCP 和 Desktop
-只能通过 typed localhost client 调用它；它们不打开数据库，也不各自实现业务状态转换。
-
-默认监听地址为 `http://127.0.0.1:8721`，只接受 loopback 绑定。所有产品路由的基础路径为
-`/api/v1`；健康检查是 `/health`。
-
-本文件描述当前已接入的 single-host 路由；signals ledger 已通过同一 application/service
-path 接入，task search/context 已通过 Turso FTS、canonical relation BFS 和可降级 vector
-provider 接入，host-admin maintenance 只由 HTTP/CLI 调用，MCP 不暴露这些操作。labels、
-graph、vector 的维护操作仍按 parity ledger 逐项恢复；旧的直接数据库路径不会恢复。
+`kanban serve` 提供本机 application API。CLI、MCP、Desktop 只能通过 typed localhost HTTP/SSE client 调用它；它们不打开数据库，也不各自实现状态转换。默认地址为 `http://127.0.0.1:8721`，产品路由前缀为 `/api/v1`，健康路由为 `/health`。
 
 ## 1. 通用契约
 
-### 1.1 HTTP
+- 请求/响应使用 JSON；成功 envelope 为 `{ "data": ... }`，列表可带 `meta`。
+- server 只绑定 loopback；client 拒绝非 loopback URL。host 停止时返回 `server_unavailable`，不会 fallback。
+- mutation actor 依次来自 body `actor`、`X-KB-Actor`、host 默认 actor；comment `author` 是命名上的 body 优先级例外。
+- `error.code` 是稳定机器字段，`message` 只供人阅读。常见 code：`invalid_input`（400）、`not_found`（404）、`conflict`/`idempotency_conflict`/`dependency_cycle`/`claim_conflict`/`invalid_transition`（409）、`claim_token_mismatch`（403）、`feature_not_available`（501）、`internal`（500）。
+- path 中 task 使用全局 `t_...`，run 使用 `r_...`，step 使用 `step_...`；board-local selector 由 typed client 先解析，不在 handler 里复制第二套语义。
 
-- JSON 请求使用 `Content-Type: application/json`。
-- JSON 响应使用 `Content-Type: application/json`。
-- GET 查询只使用各 endpoint 列出的 URL query 参数。task list 与 event list 会严格拒绝
-  未知参数；没有 query contract 的 endpoint 不把未知参数解释为新能力。
-- 服务端只绑定 loopback；client 也拒绝非 loopback URL。
-- 正常响应使用 `{ "data": ... }`；事件列表额外包含 `meta`。
-
-<!-- schema-doc-ignore: 通用 data envelope 的说明性最小示例，不代表具体 endpoint contract -->
+<!-- schema-doc-ignore: envelope 说明性示例，不绑定具体 endpoint root。 -->
 ```json
-{ "data": {} }
+{"data": {}}
 ```
 
-分页/游标响应使用：
+## 2. Host、health、boards 和 stats
 
-<!-- schema-doc-ignore: 分页 meta 的说明性示例，具体 endpoint 仍以各自 fixture 为准 -->
-```json
-{ "data": [], "meta": { "limit": 100, "offset": 0, "total": 0 } }
+| Method | Path | 语义 |
+| --- | --- | --- |
+| `GET` | `/health` | host、Turso path/fingerprint 和版本健康 |
+| `GET` | `/api/v1/boards` | board 列表，可 `include_archived` |
+| `POST` | `/api/v1/boards` | 创建 board，返回 `CreateBoardResponse` |
+| `GET` | `/api/v1/boards/:board` | board 详情 |
+| `POST` | `/api/v1/boards/:board/archive` | 显式归档 board，拒绝 active running work |
+| `GET` | `/api/v1/boards/:board/columns` | 固定 status columns |
+| `GET` | `/api/v1/stats` | board-scoped queue/claim/step 统计 |
+
+`board_columns` 只做展示，不写第二套状态机。
+
+## 3. Host-admin maintenance
+
+以下操作都在唯一 host 的 Turso handle 内执行；backup/export 先 staging、校验、原子 rename，不覆盖既有目标或 symlink。
+
+| Method | Path | 结果 |
+| --- | --- | --- |
+| `GET` | `/api/v1/maintenance/doctor` | schema/FK/task/run/projection diagnostics |
+| `POST` | `/api/v1/maintenance/checkpoint` | WAL/checkpoint report |
+| `POST` | `/api/v1/maintenance/backup` | verified backup、SHA-256、bytes |
+| `POST` | `/api/v1/maintenance/export` | portable canonical JSONL |
+| `POST` | `/api/v1/maintenance/import` | portable import；`replace=true` 走 verified backup + atomic canonical replace |
+| `POST` | `/api/v1/maintenance/import-v30` | legacy SQLite v30 importer；需 `legacy-sqlite-import` feature，否则 `feature_not_available` |
+| `POST` | `/api/v1/maintenance/vacuum` | host-owned compaction |
+| `GET` | `/api/v1/maintenance/status` | owner lease、generation、dirty/error、job count |
+| `POST` | `/api/v1/maintenance/run` | action `run|compact|rebuild|cleanup` |
+| `POST` | `/api/v1/maintenance/rebuild` | projection rebuild |
+| `POST` | `/api/v1/maintenance/cleanup` | 仅清理可重建派生内容 |
+
+`projection_maintenance_owner` 保护并发；portable import 只写 canonical facts，提交后 enqueue FTS/vector/graph rebuild。MCP 不提供这些 host-admin mutations。
+
+## 4. Boards、tasks、plans、steps、dependencies
+
+### Board/task
+
+| Method | Path | 语义 |
+| --- | --- | --- |
+| `GET` | `/api/v1/boards/:board/tasks` | status/priority/plan/assignee/query/pagination/sort 过滤 |
+| `POST` | `/api/v1/boards/:board/tasks` | task create；支持 task/idempotency key、metadata、labels、depends_on |
+| `GET` | `/api/v1/tasks/:task_id` | task aggregate；`include=details` 可返回 ontology/labels/dependencies/steps/runs/event meta |
+| `PATCH` | `/api/v1/tasks/:task_id` | 只更新 service 允许的内容/排期/metadata 字段，不直接改 status |
+| `POST` | `/api/v1/tasks/:task_id/execution-plan/not-required` | 显式 plan gate |
+
+task list/search 默认排除 `archived`；所有 selector、board isolation、idempotency 和 dependency guard 由 service 处理。
+
+### Lifecycle
+
+| Method | Path | 语义 |
+| --- | --- | --- |
+| `POST` | `/api/v1/tasks/:task_id/transitions/promote` | `todo|scheduled → ready` |
+| `POST` | `/api/v1/tasks/:task_id/transitions/specify` | 补充 triage 规格并重算状态 |
+| `POST` | `/api/v1/tasks/:task_id/transitions/claim` | 原子 `ready → running`，创建 run + event |
+| `POST` | `/api/v1/tasks/:task_id/transitions/heartbeat` | matching token 延长 lease |
+| `POST` | `/api/v1/tasks/:task_id/transitions/release` | matching token 取消 run 并回到 ready |
+| `POST` | `/api/v1/tasks/:task_id/transitions/submit-review` | running → review，结束 active run |
+| `POST` | `/api/v1/tasks/:task_id/transitions/complete` | running/review → done；校验 required steps |
+| `POST` | `/api/v1/tasks/:task_id/transitions/block` | 非空 reason，必要时结束 run |
+| `POST` | `/api/v1/tasks/:task_id/transitions/unblock` | blocked 后按 canonical facts 重算目标 |
+| `POST` | `/api/v1/tasks/:task_id/transitions/reopen` | 保留完成历史并重算活动状态 |
+| `POST` | `/api/v1/tasks/:task_id/transitions/reclaim` | expired/force claim 的显式回收 |
+| `POST` | `/api/v1/tasks/:task_id/transitions/archive` | 显式归档 guard |
+
+所有 lifecycle mutation 共享 `ApplicationService`；不提供任意目标状态 endpoint。
+
+### Steps/dependencies
+
+| Method | Path | 语义 |
+| --- | --- | --- |
+| `GET/POST` | `/api/v1/tasks/:task_id/steps` | list/create execution steps |
+| `PATCH/DELETE` | `/api/v1/tasks/:task_id/steps/:step_id` | update/remove step |
+| `POST` | `/api/v1/tasks/:task_id/steps/:step_id/{done,skip,reopen}` | step lifecycle |
+| `GET/POST` | `/api/v1/tasks/:task_id/dependencies` | list/add same-board parent edge |
+| `DELETE` | `/api/v1/tasks/:child_task_id/dependencies/:parent_task_id` | remove edge；cycle/FK 在 service 拒绝 |
+
+## 5. Comments、attachments、runs、events
+
+| Method | Path | 语义 |
+| --- | --- | --- |
+| `GET/POST` | `/api/v1/tasks/:task_id/comments` | note/decision/signal comment；task-local idempotency |
+| `GET/POST` | `/api/v1/tasks/:task_id/attachments` | metadata + staged file publish；checksum/path guard |
+| `GET` | `/api/v1/tasks/:task_id/attachments/:attachment_id` | 重新校验 size/SHA 后下载 raw bytes |
+| `DELETE` | `/api/v1/tasks/:task_id/attachments/:attachment_id` | `.trash/` reversible delete + event |
+| `GET` | `/api/v1/tasks/:task_id/runs` | task runs |
+| `GET` | `/api/v1/runs/:run_id` | run detail |
+| `GET` | `/api/v1/runs/:run_id/log` | 固定 256 KiB bounded log snapshot |
+| `GET` | `/api/v1/events` | append-only event list，`after` + `limit` cursor |
+| `GET` | `/api/v1/stream/events` | SSE finite event snapshot/stream |
+
+run 没有独立 create/update API；claim 创建 run，后续 lifecycle 同事务更新 run/event。未知 event kind 的 JSON payload 原样保留。
+
+## 6. Labels、ontology、signals
+
+### Labels
+
+| Method | Path | 语义 |
+| --- | --- | --- |
+| `GET/POST` | `/api/v1/boards/:board/labels` | board label list/create |
+| `GET/POST` | `/api/v1/tasks/:task_id/labels` | task label list/add |
+| `DELETE` | `/api/v1/tasks/:task_id/labels/:label_id` | task label remove |
+
+### Ontology/atom/proposal
+
+语义、atoms、atom-index、suggestions、proposals 和 ontology ledger 的当前路径包括：
+
+```text
+GET/PUT/DELETE /api/v1/boards/:board/labels/{semantics,atoms,atom-index/*}
+GET           /api/v1/boards/:board/labels/atoms/:atom_ref/explain
+GET           /api/v1/tasks/:task_id/labels/suggestions
+GET/POST       /api/v1/tasks/:task_id/label-proposals
+GET/POST       /api/v1/tasks/:task_id/label-ontology/observations
+GET/POST       /api/v1/boards/:board/label-ontology/{signals,review,actions,apply/atom,revert,validate}
+GET/POST       /api/v1/{label-ontology/signals/:signal_id,label-proposals/:proposal_id*}
 ```
 
-事件列表的 `meta` 形状为 `{ "next_after": 123 }`。
+每个 action 由 service 做 CAS、board guard、atom effects、review/validate/revert 和 event；index 是可重建派生状态。
 
-### 1.2 actor
+### Generic signals
 
-mutation 请求中的 actor 由服务端按以下顺序解析：
-
-1. JSON body 的 `actor`（如果该 request DTO 有此字段）；
-2. `X-KB-Actor` 请求头；
-3. `kanban serve` 启动时配置的默认 actor。
-
-actor 会被写入 canonical mutation/event 审计记录。只读请求不需要 body；client 会发送
-`X-KB-Actor`，服务端不会据此改变查询结果。comment create 是命名上的例外：
-`CreateCommentRequest.author` 占据 body actor 的优先级，并作为 comment author/event
-actor；body 未提供 author 时才回退到 header 和 host 默认值。
-
-### 1.3 错误封装与状态码
-
-由 handler/ApplicationService 返回的产品错误使用：
-
-<!-- schema-doc-ignore: 错误 envelope 的说明性示例，code/message 用于解释状态码映射 -->
-```json
-{
-  "error": {
-    "code": "invalid_transition",
-    "message": "cannot promote task from status done"
-  }
-}
+```text
+GET/POST /api/v1/boards/:board/signals
+GET      /api/v1/boards/:board/signals/review
+POST     /api/v1/boards/:board/signals/{confirm,reject,resolve,supersede}
+GET      /api/v1/signals/:signal_id
 ```
 
-`code` 是稳定机器契约，`message` 只供人阅读，调用方不得解析 message。Axum 在 route
-匹配之前产生的 malformed path、method-not-allowed 等框架级 4xx 不属于该产品 error
-envelope；typed client 不会主动构造这类请求。
+record、backlink comment、review transition 和 `signal.reviewed` event 在同一事务提交。
 
-| `error.code` | HTTP | 用途 |
-|---|---:|---|
-| `invalid_input` | 400 | handler 已接收的 JSON、path/query value 或字段值无效 |
-| `not_found` | 404 | board、task、step、dependency 或 run 不存在 |
-| `conflict` | 409 | 一般业务冲突、维护 lease 忙、目标文件已存在或导入目标非空 |
-| `idempotency_conflict` | 409 | 同一实体 key 重放但 canonical payload 不同 |
-| `dependency_cycle` | 409 | dependency 会形成环 |
-| `execution_plan_required` | 409 | promote 前没有计划或 not-required 标记 |
-| `steps_incomplete` | 409 | review/done 的必需 step 尚未完成 |
-| `dependency_blocked` | 409 | 依赖阻止进入目标状态 |
-| `claim_conflict` | 409 | 并发 claim 或 claim 条件冲突 |
-| `invalid_transition` | 409 | 状态机拒绝转换 |
-| `claim_token_mismatch` | 403 | claim owner/token 不匹配 |
-| `feature_not_available` | 501 | 当前 single-host 尚未提供该 surface |
-| `internal` | 500 | storage 或 host 内部错误 |
+## 7. Search、FTS、graph、vector、context
 
-### 1.4 ID 与 task selector
+### Search
 
-HTTP path 中的 task 必须使用 canonical 全局 `t_...` ID；run 使用全局 `r_...` ID，step
-使用全局 `step_...` ID。typed `kanban-client` 对 `t_...` 直接透传；对 board 上下文中的
-`board#seq`、`#seq`、数字 seq，先通过 task list 解析为全局 ID，再发起后续请求。服务端
-不在 mutation handler 内实现第二套 selector 语义。
+```text
+GET  /api/v1/search/tasks
+GET  /api/v1/search/tasks/by-status
+GET  /api/v1/search/status
+POST /api/v1/search/index/rebuild
+POST /api/v1/search/index/sync
+```
 
-## 2. 健康与看板（只读）
+普通文本在 Turso FTS `task_search_fts` ready 时使用 match/score/highlight；exact `t_...`/`board#seq`/`#seq` 走 canonical selector。FTS stale/unavailable 时 service 回退 canonical SQL，并在 `search_meta` 标记 `backend`、`generation`、`fallback_reason`。
 
-### `GET /health`
+### Graph/entity
 
-返回 `HealthResponse`：`data.ok`、`data.db`（当前为 `"turso"`）、`data.version`、
-`data.db_path` 和 `data.db_fingerprint`。该路由只检查已打开 host 的健康状态，不创建备用数据库。
+```text
+GET/PUT /api/v1/entities
+GET     /api/v1/entities/:uri
+GET     /api/v1/graph/status
+GET     /api/v1/graph/neighbors
+GET     /api/v1/graph/query
+POST    /api/v1/graph/rebuild
+POST    /api/v1/graph/sync
+GET     /api/v1/tasks/:task_id/neighborhood
+GET     /api/v1/boards/:board/task-map
+```
 
-### `GET /api/v1/boards`
+graph query 使用 canonical `entities`/relations 的 bounded BFS，包含 depth、dedup、cycle 和 board isolation。
 
-Query：`include_archived`（默认 `false`）。返回 `ListBoardsResponse`，即 `data` 为
-`ApiBoard[]`。
+### Vector/context
 
-### `GET /api/v1/boards/{board}/columns`
+```text
+GET  /api/v1/vector/status
+POST /api/v1/vector/configure
+POST /api/v1/vector/rebuild
+POST /api/v1/vector/sync
+GET  /api/v1/vector/query-chunks
+GET  /api/v1/vector/query-label-atoms
+GET  /api/v1/tasks/:task_id/context
+```
 
-返回 `ListBoardColumnsResponse`，即固定看板列的 `ApiBoardColumn[]`。列的 status 使用
-`triage`、`todo`、`scheduled`、`ready`、`running`、`blocked`、`review`、`done`、`archived`。
+vector32 查询使用 host Ollama embedding provider；provider outage 返回 typed degraded diagnostics。context pack 按 subject、lexical、graph、vector、budget 和 provenance 稳定合并；不可用 provider 不阻断可用 lexical/canonical 结果。
 
-当前 host 没有 board create/get/archive route；调用这些旧路径应视为未提供功能，而不是
-另起一个数据库路径。
+## 8. Contract 与验证边界
 
-### `GET /api/v1/stats`
+`kanban-protocol::endpoint_catalog()` 是 method/path/DTO/schema descriptor 的权威来源；真实 router、typed client、CLI/MCP/Desktop 和 fixture/adoption witness 必须逐项绑定。catalog 中的 `adopted` 只表示 protocol surface contract 已闭合，不能单独证明运行时 full/adoption gate 已运行。
 
-Query：`board`（默认 `default`）。返回 `StatsResponse`（`data: QueueStats`）：
-`board_id`、`generated_at`、按 status 计数、过期 running claim、blocked reason 计数、
-未规划 active task 数，以及仍有未完成 required step 的 active parent 数。该 query 通过
-ApplicationService 读取 canonical Turso snapshot，不执行 claim/reclaim 或其他 mutation。
-
-## 2.1 Host maintenance（只允许 canonical host）
-
-以下 route 都通过 `kanban-server` 的唯一 Turso owner 执行。成功响应使用 `{ "data": ... }`；
-backup/export 先写同目录临时文件、校验后原子 rename，并拒绝覆盖既有文件或 symlink。
-
-| Method | Path | 请求 | 结果 |
-|---|---|---|---|
-| GET | `/api/v1/maintenance/doctor` | 无 | `DoctorResponse`，含 integrity、migration、task/run、FK 和 projection 检查 |
-| POST | `/api/v1/maintenance/checkpoint` | `{}` | `CheckpointResponse` |
-| POST | `/api/v1/maintenance/backup` | `MaintenancePathRequest { path }` | `201 BackupResponse`，含 SHA-256 和字节数 |
-| POST | `/api/v1/maintenance/export` | `MaintenancePathRequest { path }` | `201 ExportResponse`，portable canonical JSONL |
-| POST | `/api/v1/maintenance/import` | `MaintenanceImportRequest { path, replace }` | `ImportResponse`；`replace=true` 在 host-owned Turso handle 内完成 verified backup、单事务事实替换和校验后返回 `phase=completed`，随后入队派生 projection rebuild |
-| POST | `/api/v1/maintenance/import-v30` | `LegacyImportRequest { path, canonical_attachment_root? }` | `LegacyImportResponse`；仅在 host 的 `legacy-sqlite-import` feature 启用时执行，否则返回 `feature_not_available` |
-| POST | `/api/v1/maintenance/vacuum` | `{}` | `VacuumResponse`，host-owned compaction |
-| GET | `/api/v1/maintenance/status` | 无 | `MaintenanceStatusResponse`，owner lease、fence/generation、dirty/error 和 job 计数 |
-| POST | `/api/v1/maintenance/run` | `MaintenanceRunRequest { owner?, action? }` | `MaintenanceRunResponse`；`action` 为 `run|compact|rebuild|cleanup` |
-| POST | `/api/v1/maintenance/rebuild` | `MaintenanceRunRequest { owner? }` | 等价 `action=rebuild` |
-| POST | `/api/v1/maintenance/cleanup` | `MaintenanceRunRequest { owner? }` | 等价 `action=cleanup` |
-
-每个写入 maintenance operation 在 `projection_maintenance_owner` 上使用 immediate lease，
-成功后释放；并发持有有效 lease 时返回 `409 conflict`。portable export 只包含 canonical
-表，不把 FTS/vector/graph/projection 表当作业务事实。`replace=true` 由 host 在独占窗口内
-先保存并校验 verified backup，再以 `BEGIN IMMEDIATE` 按外键顺序清空和严格插入 canonical
-facts；任何事务错误都 rollback，旧数据库保持可启动。提交后入队 search/vector/graph
-rebuild，重复 source fingerprint 返回已完成结果；prepare staging 的异常恢复仍可返回
-`phase=validated`/`restart_required`，但不代表正常 replace 成功路径。
-
-## 3. Task 读取与创建
-
-### `GET /api/v1/boards/{board}/tasks`（只读）
-
-返回 `ListTasksResponse`：`data: ApiTask[]` 与
-`meta: { limit, offset, total }`。
-
-支持的 query 参数：
-
-- `status`：可重复，任务状态枚举；
-- `priority`：可重复，`0..=3`；
-- `plan_filter`：`plan_needed`、`has_steps`、`incomplete_required_steps`；
-- `assignee`、`q`、`include_archived`；
-- `limit`（默认 100，最大 1000）、`offset`（默认 0）；
-- `sort`：`seq`、`-seq`、`title`、`-title`、`status`、`-status`、
-  `position`、`-position`、`priority`、`-priority`、`assignee`、
-  `-assignee`、`scheduled_at`、`-scheduled_at`、`due_at`、`-due_at`、
-  `created_at`、`-created_at`、`updated_at`、`-updated_at`（默认 `position`）。
-
-当前 task list 尚未接通 label filter；传入 `label` 会暂时返回
-`feature_not_available`。labels 切片完成后必须恢复该 query contract。
-
-### `POST /api/v1/boards/{board}/tasks`（mutation）
-
-请求为 `CreateTaskRequest`：`title` 必填；可选 `task_id`、`idempotency_key`、
-`description`、`status`（`triage|todo|scheduled|ready`）、`assignee`、`priority`、
-`scheduled_at`、`due_at`、`max_retries`、`metadata`、`actor`。`labels` 和 `depends_on`
-字段当前必须为空；queue/labels 切片必须在共享 application transaction 中恢复这两个
-surface。
-
-成功返回 HTTP `201` 与 `CreateTaskResponse { data: ApiTask }`。同一 board 内相同
-`idempotency_key` 与相同 canonical payload 返回已有 task；payload 不同返回
-`idempotency_conflict`。请求中的 `status` 是期望初始状态；ApplicationService 仍会应用
-execution-plan、依赖与排期 guard，例如尚未满足 ready 条件时返回的 task 会处于 `todo`。
-
-### `GET /api/v1/tasks/{task_id}`（只读）
-
-`task_id` 必须是全局 `t_...`。返回 `GetTaskResponse`：`data: ApiTask`，当前不带 ontology
-`meta`。`include=ontology` 当前尚未接通，ontology 切片完成后必须恢复。
-
-## 4. Task search 与 FTS projection
-
-### `GET /api/v1/search/tasks`
-
-Query：`board`（默认 `default`）、`q`、可重复的 `status` 与 `label`、`assignee`、
-`include_archived`（默认 `false`）、`limit`（默认 20，最大 1000）和 `offset`（默认 0）。
-返回 `SearchTasksResponse`：`data.hits` 为带 `task_id`、`seq`、`score`、highlight `snippet`
-和 `ApiTask` 的结果，`data.meta` 描述 backend、generation、index version、event lag 与
-fallback reason；分页 `meta` 保留 `limit`/`offset`。
-
-exact `t_...`、`board#seq`、`#seq` 或数字 seq 走 canonical selector 查询；普通文本在
-Turso FTS ready 时使用 `task_search_fts`。索引尚未 ready、落后或 provider/query 失败时
-回退 canonical SQL，并在 `data.meta.stale` 与 `fallback_reason` 中标记，不触碰第二个数据源。
-
-### `GET /api/v1/search/tasks/by-status`
-
-使用同一 query contract，按请求中每个 `status` 返回一个 `SearchTaskStatusWindow`，每个窗口
-带独立 `search_meta` 与 `page`。顺序与重复 status 保持请求顺序；任务结果仍受 board、label、
-assignee、archive、query 和分页过滤。
-
-### `GET /api/v1/search/status`
-
-Query：`board`（默认 `default`）。返回 `SearchStatusResponse`，报告 Turso FTS capability、
-projection generation、ready/degraded/stale、最后 event 与 lag。projection 不可用时
-`backend` 为 `canonical`、`derived_index` 为 `false`，但 search query 仍可用 canonical fallback。
-
-### `POST /api/v1/search/index/rebuild` 与 `POST /api/v1/search/index/sync`
-
-Query：`board`（默认 `default`），请求体为空 JSON。`rebuild` 从 canonical task、comment、run
-和 event 事实重建 `task_search_fts`；`sync` 在存在 pending projection job 或 event lag 时
-执行同一可重放 rebuild。两者返回 `SearchStatusResponse`，不会修改 canonical task 状态。
-
-### `GET /api/v1/tasks/{task_id}/context`
-
-这是只读的 bounded context pack 查询。`task_id` 是默认 subject；也可以在 query 中使用
-`task`（全局 `t_...`）、`reference`（board-local reference）或 `query`（自由文本）选择
-subject。至少提供一个 selector；query-only 调用可将 path 占位写为 `query`。
-
-支持的 query 参数：`board`（默认 `default`）、`lexical_limit`（默认 5）、`graph_limit`
-（默认 10）、`vector_limit`（默认 5）、`depth`（默认 1，最大 8）、`max_items`（默认 20）
-和 `budget`（总 item 预算，默认使用 `max_items`）。各 limit 和 budget 范围为 `1..=1000`。
-
-响应为 `BuildContextResponse`，`data.items` 按 subject、lexical、graph、vector 的稳定顺序
-合并，并按 `entity_uri` 去重；每项包含 `source`、`provenance`、可选 `score`、`rank`、
-`reason` 和 task/relation `evidence`。`providers` 报告 provider capability、可用性、
-降级原因；`degraded`/`diagnostics` 与 `truncated`/`truncation_reason` 让调用方无需解析
-人类 message 即可处理部分结果。
-
-所有 provider 结果都按 subject board 做 isolation，canonical task/relation 只读；graph
-BFS 自带 cycle/dedup 保护。vector 或 graph 不可用时不会阻断 lexical 结果；Turso FTS 不可用
-或 stale 时由 canonical SQL fallback 并在 provider diagnostics 中标记。
-
-## 5. Execution plan 与 task state machine
-
-所有以下 endpoint 都调用同一个 ApplicationService/state machine；不存在通用的
-`POST .../transitions/{target_status}`。
-
-### `POST /api/v1/tasks/{task_id}/execution-plan/not-required`（mutation）
-
-请求：`{ "reason": string, "actor": string|null }`。返回 `MarkExecutionPlanNotRequiredResponse`
-（`data: ApiExecutionPlan`）。这是 walking skeleton 中显式完成计划前置条件的操作。
-
-### `POST /api/v1/tasks/{task_id}/transitions/promote`（mutation）
-
-请求：`{ "actor": string|null }`。只允许状态机认可的 todo/scheduled 到 ready 转换；返回
-`PromoteTaskResponse`（`data: ApiTask`）。
-
-### `POST /api/v1/tasks/{task_id}/transitions/claim`（mutation）
-
-请求字段：`actor`、`ttl_ms`（默认 300000）、可选 `worker_profile`、`metadata`。这是原子
-`ready -> running` claim，同时创建 active run 和 event。返回 `ClaimTaskResponse`：
-`data.task`、`data.run`、`data.claim_token`、`data.claim_expires_at`。竞争调用恰有一个成功，
-失败者收到 `claim_conflict`。
-
-### `POST /api/v1/tasks/{task_id}/transitions/heartbeat`（mutation）
-
-请求：`claim_token` 必填，`ttl_ms`（默认 300000），可选 `actor`、`note`。token/owner 不匹配
-返回 `claim_token_mismatch`；成功返回 `HeartbeatTaskResponse`（`data: ApiTask`）。
-
-### `POST /api/v1/tasks/{task_id}/transitions/release`（mutation）
-
-请求：`claim_token` 必填，可选 `actor`。只有 active running claim owner 能调用；事务内将 task
-回到 ready、清除 claim、取消 active run 并写 `task.released`。成功返回 `ReleaseTaskResponse`
-（`data: ApiTask`），失败不会留下部分写入。
-
-### `POST /api/v1/tasks/{task_id}/transitions/submit-review`（mutation）
-
-请求：可选 `actor`、`claim_token`、`summary`，以及 `force`（默认 false）。返回
-`SubmitReviewTaskResponse`（`data: ApiTask`）。
-
-### `POST /api/v1/tasks/{task_id}/transitions/complete`（mutation）
-
-请求：可选 `actor`、`claim_token`、`summary`、`result`，以及 `force`（默认 false）。返回
-`CompleteTaskResponse`（`data: ApiTask`）。
-
-### `POST /api/v1/tasks/{task_id}/transitions/block`（mutation）
-
-请求：`reason` 必填；可选 `actor`、`claim_token`、`force`（默认 false）。返回
-`BlockTaskResponse`（`data: ApiTask`）。
-
-review、complete、block 的 claim 校验、required steps、依赖检查与 run 更新均在同一
-application transaction 中完成。
-
-## 6. Comments
-
-### `GET /api/v1/tasks/{task_id}/comments`（只读）
-
-返回 `ListCommentsResponse`（`data: ApiComment[]`）。
-
-### `POST /api/v1/tasks/{task_id}/comments`（mutation）
-
-请求为 `CreateCommentRequest`：`body` 必填；可选 `idempotency_key`、`author`、`kind`
-（wire enum 为 `note|decision|signal`）、`author_type`（`user|agent`）、`agent_type`、
-`metadata`。普通 comment 的 canonical path 接受 `note|decision`；signal backlink 由
-signal record 事务创建为 `kind=signal`，不绕过 comment service。
-成功返回 HTTP `201` 与 `CreateCommentResponse`（`data: ApiComment`）。idempotency key
-属于 task；相同 key/相同 payload 重放返回已有 comment，不同 payload 返回
-`idempotency_conflict`。
-
-## 7. Signals
-
-### `POST /api/v1/boards/{board}/signals`（mutation）
-
-请求为 `RecordSignalRequest`：`kind`、`title`、`summary` 必填；可选 `severity`、task/run/comment
-引用、actor、agent type、dedupe key、source、evidence object 和 comment body。成功返回
-HTTP `201` 与 `RecordSignalResponse`；当请求包含 task 与 comment body 时，response 同时返回
-`backlink_comment`。observation、signal、backlink comment 和事件在一个事务中提交；同一
-board 的相同 dedupe key 且 payload 相同为安全重放，payload 不同返回
-`idempotency_conflict`。
-
-### `GET /api/v1/boards/{board}/signals` 与 `/signals/review`（只读）
-
-查询参数可重复传入 `status`、`kind`，另有 `task_ref`、`include_all` 和 `limit`。list 默认只
-返回 `open|confirmed`；review 默认排除已处理状态。返回
-`MetadataEnvelope<Vec<SignalWire>, SignalFilterMeta>`。
-
-### `GET /api/v1/signals/{signal_id}`（只读）
-
-按全局 `sig_...` ID 返回 `GetSignalResponse`。
-
-### `POST /api/v1/boards/{board}/signals/{confirm|reject|resolve|supersede}`（mutation）
-
-请求为 `ReviewSignalsRequest`：`signal_ids` 与 `reason` 必填；supersede 额外需要
-`replacement_signal_id`（CLI/MCP 使用 `--by`/`by`）。批量 transition 校验同一 board、合法
-状态迁移和 supersede 环；更新 signal、backlink metadata 与 `signal.reviewed` events 原子
-提交，返回 `DataEnvelope<Vec<SignalWire>>`。
-
-## 8. Attachments
-
-### `GET /api/v1/tasks/{task_id}/attachments`（只读）
-
-返回 `ListAttachmentsResponse`（`data: ApiAttachment[]`）。数据库只保存附件 metadata；
-`rel_path` 是 host attachment root 下、按 `{board_id}/{task_id}/` 隔离的相对路径。
-
-### `POST /api/v1/tasks/{task_id}/attachments`（mutation）
-
-请求为 `CreateAttachmentRequest`：`filename` 必填，`content` 是 JSON byte array（可为空）；
-可选 `id`、`content_type`、`sha256`、`actor`。host 先在同文件系统 staging 写入并
-`fsync`，再原子发布文件，随后在同一 Turso transaction 写 metadata 与
-`task.attachment.created` event；checksum 不匹配、绝对/穿越路径和 symlink destination
-直接拒绝。重复 `id` 且 metadata/content 相同返回已有记录，不同 payload 返回 `conflict`。
-成功返回 HTTP `201` 与 `CreateAttachmentResponse`。
-
-### `GET /api/v1/tasks/{task_id}/attachments/{attachment_id}`（download）
-
-返回原始 bytes；`Content-Type` 来自 metadata（缺失时为 `application/octet-stream`），并
-附带 `X-KB-Attachment-ID` 与可选 `X-KB-Attachment-SHA256`。host 重新校验 size/SHA 后才返回；
-metadata 指向的文件缺失或校验失败返回 storage error。
-
-### `DELETE /api/v1/tasks/{task_id}/attachments/{attachment_id}`（mutation）
-
-要求 `X-KB-Actor`。active board/task 才能删除；文件先移动到 host root 的 `.trash/`，再在
-同一 Turso transaction 删除 metadata 并写 `task.attachment.deleted` event。事务失败会恢复
-canonical path；成功返回 `DeleteAttachmentResponse`。列表/下载/删除均按 task id 与 board-scoped
-metadata 查询，不能跨 task 读取文件。
-
-## 9. Steps 与 execution plan
-
-### `GET /api/v1/tasks/{task_id}/steps`（只读）
-
-返回 `ListStepsResponse`（`data.task_id`、`data.steps`、`data.execution_plan`）。
-
-### `POST /api/v1/tasks/{task_id}/steps`（mutation）
-
-请求：`title` 必填；可选 `idempotency_key`、`body`、`linked_task_ref`、`position`、
-`required`（默认 true）、`actor`。`linked_task_ref` 在 HTTP contract 中必须是全局
-`t_...` ID；board-local selector 由 typed adapter 先解析。成功返回 HTTP `201` 与
-`CreateStepResponse`。step create 的 key 只在当前 task 内幂等。
-
-### `PATCH /api/v1/tasks/{task_id}/steps/{step_id}`（mutation）
-
-请求可更新 `title`、`body`、`linked_task_ref`/`unlink_task`、`position`、`required`、
-`actor`；不改变 step status。返回 `UpdateStepResponse`（同一 `ApiTaskSteps` 形状）。
-
-## 10. Dependencies
-
-### `GET /api/v1/tasks/{task_id}/dependencies`（只读）
-
-返回 `ListDependenciesResponse`（`data.task`、`parents`、`children`、`edges`）。
-
-### `POST /api/v1/tasks/{task_id}/dependencies`（mutation）
-
-请求：`parent_task_id` 必须是同一 board 的全局 task ID，可选 `actor`。返回
-`AddDependencyResponse`。复合唯一约束保证重复 add 幂等；跨 board、未知 task 和 dependency
-cycle 拒绝。
-
-### `DELETE /api/v1/tasks/{child_task_id}/dependencies/{parent_task_id}`（mutation）
-
-删除同一 board 的 parent edge，返回 `RemoveDependencyResponse`（当前 dependencies 快照）。
-目标 task 存在但 edge 已不存在时是成功 no-op，不追加 remove event。
-
-## 11. Runs 与 log（run 不是独立 mutation surface）
-
-run 只能由 task claim 创建，并由 heartbeat/release/review/complete/block 同事务更新。HTTP
-没有 run create/update endpoint；以下全部是只读查询。
-
-### `GET /api/v1/tasks/{task_id}/runs`
-
-返回 `ListRunsResponse`（`data: ApiRun[]`）。
-
-### `GET /api/v1/runs/{run_id}`
-
-返回 `GetRunResponse`（`data: ApiRun`）。
-
-### `GET /api/v1/runs/{run_id}/log`
-
-返回 `GetRunLogResponse`：`data.run_id`、`data.content`、`data.truncated`。读取使用固定
-256 KiB 的文件尾部 snapshot；超过上限时返回最后 256 KiB 并设置 `truncated=true`。
-typed client 不发送 `tail` query，服务端也不会把未知 query 解释为可配置读取范围；没有
-任意文件路径输入或第二种 log 协议。
-
-## 12. Events
-
-### `GET /api/v1/events`
-
-Query：`board`（默认 `default`）、可选全局 `task_id`、`after`（默认 0）、`limit`（默认
-100，服务端上限 1000，超过时收敛到 1000）。返回 `ListEventsResponse`：
-`data: StreamEventData[]` 与 `meta.next_after`。
-known event kind 使用 typed payload；未知 kind 保留原 JSON payload，不被 adapter 丢弃。
-
-event list 是只读；所有 mutation 通过 ApplicationService 写 canonical event。
-
-## 13. 停止路径
-
-服务停止后，client 返回 `server_unavailable`，不得 fallback 到嵌入式数据库、旧 SQLite
-路径或另一个 host。迁移期间尚未接通的 labels、graph、vector 等命令暂时返回
-`feature_not_available`，不会触碰数据库；只要该临时响应仍存在，对应 parity 项就不能
-标记完成。maintenance 路由不属于该临时路径。
+已有 server/service evidence 包括 task lifecycle、label round-trip、ontology action/revert、signal ledger、FTS capability、graph BFS/rebuild、vector fixture/degraded、context merge、maintenance import/replace 和 Desktop contract tests。完整 schema adoption、surface audit、full package、release 和 PR gate 不由本文档更新自动执行，结果见 parity ledger 的待验收清单。

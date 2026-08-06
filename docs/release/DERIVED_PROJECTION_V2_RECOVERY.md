@@ -1,4 +1,12 @@
-# Derived Projection v2 生产恢复 runbook
+# Derived Projection v2 生产恢复 runbook（历史归档）
+
+> **历史归档，不是当前 runtime 或 release gate。** 本文记录 baseline 时期的 SQLite +
+> Tantivy/Oxigraph/LanceDB/helper sidecar recovery protocol。当前 active 架构已删除这些
+> backend/helper，使用 `kanban serve` 单一 Turso owner、Turso FTS、`vector32` 和
+> `kanban-service` bounded BFS/projection worker。本文仅用于迁移证据和历史 provenance；不要
+> 按本文启动 sidecar、helper、旧 release 命令或把其 gate 当作当前完成证明。当前事实源见
+> [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)、[`docs/DATA_MODEL.md`](../DATA_MODEL.md) 和
+> [`docs/migration/turso-full-feature-parity.md`](../migration/turso-full-feature-parity.md)。
 
 本 runbook 只适用于一个 SQLite 数据库对应的一套 DB-scoped Projection v2。SQLite 是唯一
 canonical truth；Tantivy、Oxigraph、LanceDB task chunks 和 LanceDB label atoms 都是可删除、

@@ -2,7 +2,9 @@
 
 本文件按时间记录 SPEC 的关键架构决策。每条 ADR 的背景、统计值和迁移状态都是
 决策时快照，不会随着实现自动改写；当前行为和实时契约覆盖以对应的
-`docs/*_SPEC.md` 与 `docs/SCHEMA_CONTRACTS.md` 为准。
+`docs/*_SPEC.md`、`docs/SCHEMA_CONTRACTS.md` 与 `docs/migration/turso-full-feature-parity.md`
+为准。ADR-0023 记录当前最终 Turso 架构；历史 ADR 中的旧 SQLite/backend/helper 名称不
+表示 active workspace 仍保留这些路径。
 
 ADR-0001 和 ADR-0004 保留为历史记录，但已被当前的 single-host 决策
 （ADR-0022）取代。它们中关于 CLI 直开数据库或旧文件名的内容不再描述当前产品。
@@ -301,7 +303,11 @@ MVP 不提供 `0.0.0.0` 远程模式。
 
 ### 状态
 
-已被 ADR-0022 取代（projection lane 非 active）
+历史决策（外部 projection lane 已退出 active workspace）
+
+当前 `entities`、`relation_predicates`、`entity_relations` 和检索/向量派生语义由
+`kanban-service` 在 Turso host 内提供；旧 Tantivy/Oxigraph/LanceDB/helper 仅保留为
+迁移证据。当前 owner 与 rebuild 规则见 ADR-0023、`DATA_MODEL.md`。
 
 ### 背景
 
@@ -783,7 +789,9 @@ Dispatcher 不看：
 
 ### 状态
 
-已接受
+历史 provider 边界；当前 ontology/label proposal owner 已收敛到 `kanban-service`，
+Turso `vector32`/host Ollama 只提供可降级、可重建的派生能力。文中
+`kanban-sqlite`、LanceDB 和旧 runtime 名称只描述决策快照。
 
 ### 背景
 
@@ -842,7 +850,9 @@ credential 和 runtime 配置拖入 SQLite service。这样会破坏本项目的
 
 ### 状态
 
-已接受
+历史决策（不建立独立 ontology graph）；当前仍不建立 ontology 专属 graph mutation path，
+但通用 entities/relations 的 canonical BFS 已由 `kanban-service` 提供。Ontology ledger
+继续由 Turso facts/service actions 负责，graph 故障不会改变 canonical ontology。
 
 ### 背景
 
@@ -1155,15 +1165,13 @@ RUSTSEC-2026-0194/RUSTSEC-2026-0195 影响的 `quick-xml < 0.41`；仓库当前�
 
 ### 状态
 
-已接受（single-host ownership 仍为当前架构；初始功能收敛条款已由完整功能迁移计划接续）
+已接受（当前唯一 host/owner 决策）
 
 ### 后续决策
 
 本 ADR 继续约束唯一 host、typed localhost client、共享 mutation path、Turso ownership 和
-dispatcher 边界。第 6 条以及“非目标”中的 labels、signals、search、graph、vector、projection
-和 importer，是当时为先完成 host 收敛而设的阶段性后置项，不是删除用户能力或永久不支持的
-产品决定。当前锁定的完整功能 Turso 重构计划要求逐项恢复这些能力、旧数据迁移和 Desktop
-历史 surface；具体 owner、入口、迁移规则和验收测试以
+dispatcher 边界。它作出时的“阶段性后置项”已经由完整功能重构接入当前 service path；具体
+owner、入口、迁移规则、已有测试和未运行 gates 以
 [`docs/migration/turso-full-feature-parity.md`](migration/turso-full-feature-parity.md)、
 [`ARCHITECTURE.md`](ARCHITECTURE.md) 和 [`DATA_MODEL.md`](DATA_MODEL.md) 为准。
 
@@ -1191,8 +1199,9 @@ fallback 会把数据库 ownership 问题扩展成另一套产品协议。
 5. dispatcher 只作为 `kanban serve --dispatcher-profile <path>` 的同进程 opt-in 单 worker
    loop，复用 application commands；默认不自动消费队列。
 6. 不建设或保留自定义 framed IPC、named pipe、runtime protocol、capability negotiation、
-   generalized mutation receipt、projection control plane 或旧 API 兼容层。未迁移的 labels、
-   signals、search、graph、vector、projection 和 importer 留给独立后续工作。
+   generalized mutation receipt、第二 projection control plane 或旧 API 兼容层。labels、
+   signals、search、graph、vector、context、projection 和 importer 若提供能力，必须复用
+   当前 `kanban-service`/Turso host path。
 
 > 历史范围说明：这里的“未迁移”描述 ADR-0022 作出时的阶段，不代表完整功能重构可以删去
 > 这些能力；后续迁移仍必须复用本 ADR 定义的 single-host application path。
@@ -1209,13 +1218,63 @@ fallback 会把数据库 ownership 问题扩展成另一套产品协议。
 
 - 使用 CLI、MCP 或 Desktop 前必须先运行 `kanban serve`。
 - host 是本机单用户服务，不提供离线直连、多进程数据库访问或公网 API。
-- 未迁移能力会显式返回 `feature_not_available`，不以兼容 shim 掩盖未完成迁移。
+- 未注册或显式 feature-disabled 的路径才返回 `feature_not_available`；当前已接入的 labels、
+  signals、search、graph、vector、context、projection 和 maintenance 不得用该错误码
+  代替实现。最终 adoption/full 状态仍以 parity ledger 的实际 gate 为准。
 
 ### 非目标
 
-本决策不定义 SQLite importer、自动 server supervision、跨机器 worker、备份/恢复产品、
-projection rebuild 或未来 backend。它只收敛当前 canonical application path；任何新增能力
-必须先证明不会引入第二条 mutation path。完整功能迁移计划已经将 SQLite v30 import、
-projection rebuild、FTS/vector/graph/search、labels/ontology/signals、backup/maintenance
-和 Desktop 历史 surface 纳入后续实现；这些能力的完成状态由 parity ledger 和对应验收测试
-判断，而不是由本 ADR 的历史“非目标”段落推断。
+本决策不定义多用户/RBAC/云同步、公网 host、自动 server supervision、跨机器 worker 或
+发布/PR 工作流。`legacy-sqlite-import` 只是 host 的显式只读导入 feature，不是第二
+canonical backend。FTS/vector/graph/context/projection rebuild、backup/maintenance 和
+Desktop 历史 surface 已有当前 owner，但完成状态仍由 parity ledger 的实际测试/gate 判断，
+不能从本 ADR 的决策文字推断为 release ready。
+
+---
+
+## ADR-0023：最终 Turso 全功能 workspace 收敛
+
+### 状态
+
+已接受；schema adoption、surface audit、full package 和 Desktop check 仍须以实际命令结果
+单独记录，不由本 ADR 标为通过。
+
+### 背景
+
+baseline `6ea277` 同时存在窄 queue、外部 projection/helper、独立 backend、多个 adapter
+路径和十个 Desktop 视图。继续保留这些进程会让 canonical owner、状态机、依赖和导入语义
+出现第二套事实。当前实现已经把完整业务域接回 Turso single-host，文档需要固定最终边界
+并明确未运行的验收 gates。
+
+### 决策
+
+1. active 产品单元固定为七个 Rust crate：`kanban-core`、`kanban-service`、
+   `kanban-protocol`、`kanban-client`、`kanban-server`、`kanban-cli`、`kanban-mcp`，加
+   Desktop `kanban-desktop` 和私有 `xtask`；不新增 backend/helper sidecar。
+2. `kanban serve` 是唯一 Turso host/owner。CLI、MCP、Desktop 只能经 typed localhost
+   HTTP/SSE；所有 mutation/query 经过 `ApplicationService`、`kanban-core` guard、Turso
+   transaction 和 protocol DTO。
+3. 搜索使用 Turso FTS `task_search_fts`，向量使用 Turso `vector32` + host Ollama provider，
+   图和 context 使用 `kanban-service` canonical relation + bounded BFS/merge。FTS/vector/
+   graph/context/projection 可删可重建，provider/index 故障只产生 degraded diagnostics。
+4. 数据迁移保留两条路径：Turso v1→v2 原地升级（verified sibling backup + transaction
+   rollback）和 portable JSONL/legacy SQLite v30 导入（`import_journal`、staging、fingerprint、
+   derived rebuild；v30 仅显式 `legacy-sqlite-import` feature）。导入不创建第二 runtime backend。
+5. baseline 的旧 backend、external projection、helper protocol 和 sidecar 已删除；相关
+   release/projection 文档只允许标为 historical archive，不得成为 active runbook 或 release
+   gate。
+6. release、push、PR、merge、发布和外部协调不是本次 architecture/parity 文档的验收条件。
+
+### 影响
+
+- 七个 crate、Desktop 和 `xtask` 的依赖方向可由 manifest 与 single-host dependency gate
+  审计；不存在第二产品 runtime。
+- HTTP、CLI、MCP、Desktop 的 domain surface 可以按 parity ledger 逐域核验，catalog adopted
+  不再被误读为 full runtime green。
+- canonical Turso 事实、event、run/claim 和导入 journal 的一致性优先于 projection
+  availability；FTS/vector/graph/context 的重建和 degraded 状态可观察、可回放。
+
+### 非目标
+
+不引入多用户/RBAC/云同步、公网访问、自动 server supervision、自定义 IPC 或另一套
+projection control plane。历史 sidecar 文档不承诺兼容行为，也不替代实际 gate 结果。

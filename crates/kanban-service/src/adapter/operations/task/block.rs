@@ -2,7 +2,8 @@ use crate::BlockTaskInput as StoreBlockTask;
 use crate::{BlockTaskRecord as ApplicationBlockTask, TaskBlock, TaskRecord as ApplicationTask};
 use kanban_core::Result;
 
-use crate::adapter::{TursoApplicationStore, application_task, store_error};
+use crate::adapter::{TursoApplicationStore, store_error};
+use crate::operations::application_task;
 
 impl TaskBlock for TursoApplicationStore {
     async fn get_task(&self, task_id: &str) -> Result<ApplicationTask> {

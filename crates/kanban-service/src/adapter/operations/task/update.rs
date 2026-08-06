@@ -1,8 +1,9 @@
-use crate::UpdateTaskInput as StoreUpdateTask;
 use crate::{TaskRecord as ApplicationTask, TaskUpdate, UpdateTaskRecord as ApplicationUpdateTask};
 use kanban_core::Result;
 
-use crate::adapter::{TursoApplicationStore, application_task, store_error};
+use crate::adapter::{TursoApplicationStore, store_error};
+use crate::operations::application_task;
+use crate::store_operations::UpdateTaskInput as StoreUpdateTask;
 
 impl TaskUpdate for TursoApplicationStore {
     async fn get_task(&self, task_id: &str) -> Result<ApplicationTask> {

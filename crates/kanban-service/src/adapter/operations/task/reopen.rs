@@ -2,7 +2,8 @@ use crate::ReopenTaskInput as StoreReopenTask;
 use crate::{ReopenTaskRecord as ApplicationReopenTask, TaskRecord as ApplicationTask, TaskReopen};
 use kanban_core::Result;
 
-use crate::adapter::{TursoApplicationStore, application_task, store_error};
+use crate::adapter::{TursoApplicationStore, store_error};
+use crate::operations::application_task;
 
 impl TaskReopen for TursoApplicationStore {
     async fn get_task(&self, task_id: &str) -> Result<ApplicationTask> {

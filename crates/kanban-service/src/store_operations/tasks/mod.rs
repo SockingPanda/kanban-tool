@@ -5,9 +5,9 @@ mod list_support;
 mod show;
 mod update;
 
-pub use create::CreateTaskInput;
-pub use list::{TaskListOptions, TaskListSort, TaskPlanFilter};
-pub use update::UpdateTaskInput;
+pub(crate) use create::CreateTaskInput;
+pub(crate) use list::{TaskListOptions, TaskListSort, TaskPlanFilter};
+pub(crate) use update::UpdateTaskInput;
 
 #[cfg(test)]
 mod create_tests;

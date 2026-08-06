@@ -10,9 +10,9 @@ use crate::{
 use kanban_core::Result;
 
 use crate::adapter::{
-    TursoApplicationStore, application_add_task_labels, application_label, application_task,
-    store_error,
+    TursoApplicationStore, application_add_task_labels, application_label, store_error,
 };
+use crate::operations::application_task;
 
 impl BoardLabelList for TursoApplicationStore {
     async fn list_board_labels(&self, board: &str) -> Result<Vec<ApplicationLabel>> {

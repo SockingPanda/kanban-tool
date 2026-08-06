@@ -59,9 +59,9 @@ pub use operations::{
     SearchQuery, SearchResults, SearchTasks, SpecifyTaskCommand, SpecifyTaskRecord, StepComplete,
     StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate, TaskArchive, TaskBlock,
     TaskClaim, TaskCreate, TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskDone,
-    TaskHeartbeat, TaskLabelAdd, TaskLabelList, TaskLabelRemove, TaskList, TaskNeighborhoodOptions,
+    TaskHeartbeat, TaskLabelAdd, TaskLabelList, TaskLabelRemove, TaskNeighborhoodOptions,
     TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord, TaskPlanNotRequired, TaskPromote,
-    TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen, TaskReview, TaskShow, TaskSpecify,
+    TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen, TaskReview, TaskSpecify,
     TaskUnblock, TaskUpdate, UnblockTaskCommand, UnblockTaskRecord, UpdateTaskCommand,
     UpdateTaskRecord, VacuumReportRecord, VectorChunkQueryCommand, VectorChunkResult,
     VectorConfigureCommand, VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
@@ -91,8 +91,8 @@ pub use store_operations::{
     AddTaskLabelsRecord as StoreAddTaskLabelsRecord, ArchiveBoardInput, ArchiveTaskInput,
     BlockTaskInput, ClaimTaskInput, ClaimTaskRecord as StoreClaimTaskRecord, CompleteStepInput,
     CompleteTaskInput, CreateAttachmentInput, CreateBoardInput, CreateCommentInput,
-    CreateLabelInput, CreateSignalInput, CreateStepInput, CreateTaskInput, EntityUpsertInput,
-    HeartbeatTaskInput, LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
+    CreateLabelInput, CreateSignalInput, CreateStepInput, EntityUpsertInput, HeartbeatTaskInput,
+    LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
     MarkExecutionPlanNotRequiredInput, OntologyActionInput, OntologyActorInput,
     OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
     PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput, RelationDeleteInput,
@@ -100,7 +100,7 @@ pub use store_operations::{
     RemoveDependencyRecord as StoreRemoveDependencyRecord, RemoveStepInput, RemoveTaskLabelInput,
     ReopenStepInput, ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SkipStepInput,
     SpecifyTaskInput, StoreSignalListOptions, SubmitReviewTaskInput, UnblockTaskInput,
-    UpdateStepInput, UpdateTaskInput, UpsertLabelSemanticsInput,
+    UpdateStepInput, UpsertLabelSemanticsInput,
 };
 
 pub use store_operations::search::{
@@ -110,7 +110,7 @@ pub use store_operations::search::{
 pub use store_operations::{
     StoreBoardTaskMapOptions, StoreEntityListOptions, StoreGraphNeighborsOptions,
     StoreGraphQueryOptions, StoreProjectionStatusOptions, StoreRelationListOptions,
-    StoreTaskListOptions, StoreTaskListSort, StoreTaskNeighborhoodOptions, StoreTaskPlanFilter,
+    StoreTaskNeighborhoodOptions,
 };
 
 pub use vector::{

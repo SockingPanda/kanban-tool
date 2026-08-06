@@ -14,7 +14,8 @@ use crate::{
 use kanban_core::{KanbanError, Result, TaskStatus};
 
 use super::relations::application_relation_record;
-use crate::adapter::{TursoApplicationStore, application_task, store_error};
+use crate::adapter::{TursoApplicationStore, store_error};
+use crate::operations::application_task;
 
 impl GraphQuery for TursoApplicationStore {
     async fn graph_neighbors(&self, options: GraphNeighborsOptions) -> Result<Vec<RelationRecord>> {

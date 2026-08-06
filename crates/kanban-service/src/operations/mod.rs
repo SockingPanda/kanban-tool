@@ -60,11 +60,12 @@ pub use search::{
 pub use signal::*;
 pub use stats::*;
 pub use step::{StepComplete, StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate};
+pub(crate) use task::application_task;
 pub use task::{
     TaskArchive, TaskBlock, TaskClaim, TaskCreate, TaskDetailOntologyRecord, TaskDetailRead,
-    TaskDetailRecord, TaskDone, TaskHeartbeat, TaskList, TaskOntologySignalSummaryRecord,
+    TaskDetailRecord, TaskDone, TaskHeartbeat, TaskOntologySignalSummaryRecord,
     TaskOntologySummaryRecord, TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskReclaimExplicit,
-    TaskRelease, TaskReopen, TaskReview, TaskShow, TaskSpecify, TaskUnblock, TaskUpdate,
+    TaskRelease, TaskReopen, TaskReview, TaskSpecify, TaskUnblock, TaskUpdate,
 };
 pub use vector::{
     VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,

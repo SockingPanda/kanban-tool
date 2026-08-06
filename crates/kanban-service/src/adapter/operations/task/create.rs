@@ -1,8 +1,9 @@
-use crate::CreateTaskInput as StoreCreateTask;
 use crate::{CreateTaskRecord as ApplicationCreateTask, TaskCreate, TaskRecord as ApplicationTask};
 use kanban_core::Result;
 
-use crate::adapter::{TursoApplicationStore, application_task, store_error};
+use crate::adapter::{TursoApplicationStore, store_error};
+use crate::operations::application_task;
+use crate::store_operations::CreateTaskInput as StoreCreateTask;
 
 impl TaskCreate for TursoApplicationStore {
     async fn create_task(

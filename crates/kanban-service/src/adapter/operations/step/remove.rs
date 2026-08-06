@@ -6,6 +6,7 @@ use crate::{
 use kanban_core::Result;
 
 use crate::adapter::{TursoApplicationStore, application_step, store_error};
+use crate::operations::application_task;
 
 impl StepRemove for TursoApplicationStore {
     async fn get_task(&self, task_id: &str) -> Result<crate::TaskRecord> {
@@ -13,7 +14,7 @@ impl StepRemove for TursoApplicationStore {
             .get_task_global(task_id)
             .await
             .map_err(store_error)
-            .and_then(crate::adapter::application_task)
+            .and_then(application_task)
     }
 
     async fn remove_step(

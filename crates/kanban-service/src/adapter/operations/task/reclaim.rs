@@ -7,7 +7,8 @@ use crate::{
 };
 use kanban_core::Result;
 
-use crate::adapter::{TursoApplicationStore, application_task, store_error};
+use crate::adapter::{TursoApplicationStore, store_error};
+use crate::operations::application_task;
 
 impl TaskReclaim for TursoApplicationStore {
     async fn list_expired_claims(&self, board: &str, now: i64) -> Result<Vec<ApplicationTask>> {

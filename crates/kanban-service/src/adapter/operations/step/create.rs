@@ -6,9 +6,9 @@ use crate::{
 use kanban_core::Result;
 
 use crate::adapter::{
-    TursoApplicationStore, application_execution_plan, application_step, application_task,
-    store_error,
+    TursoApplicationStore, application_execution_plan, application_step, store_error,
 };
+use crate::operations::application_task;
 
 impl StepCreate for TursoApplicationStore {
     async fn get_task(&self, task_id: &str) -> Result<crate::TaskRecord> {

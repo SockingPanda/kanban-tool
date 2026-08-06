@@ -6,9 +6,8 @@ use crate::{
 };
 use kanban_core::Result;
 
-use crate::adapter::{
-    TursoApplicationStore, application_dependency_snapshot, application_task, store_error,
-};
+use crate::adapter::{TursoApplicationStore, application_dependency_snapshot, store_error};
+use crate::operations::application_task;
 
 impl DependencyCreate for TursoApplicationStore {
     async fn get_task(&self, task_id: &str) -> Result<ApplicationTask> {

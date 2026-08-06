@@ -45,7 +45,7 @@ pub use steps::{
     CompleteStepInput, CreateStepInput, RemoveStepInput, ReopenStepInput, SkipStepInput,
     UpdateStepInput,
 };
-pub use tasks::{CreateTaskInput, UpdateTaskInput};
+pub(crate) use tasks::{CreateTaskInput, UpdateTaskInput};
 
 // 这些名称有意与 service root 上的 application DTO 保持区分。
 pub use entities::EntityListOptions as StoreEntityListOptions;
@@ -57,7 +57,7 @@ pub use graph::{
     TaskNeighborhoodOptions as StoreTaskNeighborhoodOptions,
 };
 pub use relations::RelationListOptions as StoreRelationListOptions;
-pub use tasks::{
+pub(crate) use tasks::{
     TaskListOptions as StoreTaskListOptions, TaskListSort as StoreTaskListSort,
     TaskPlanFilter as StoreTaskPlanFilter,
 };

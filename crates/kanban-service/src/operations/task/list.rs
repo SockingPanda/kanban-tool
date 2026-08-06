@@ -1,8 +1,6 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result, TaskStatus};
 
-use crate::{ApplicationService, ApplicationStore, TaskRecord};
+use crate::{KanbanService, TaskRecord};
 
 const MAX_TASK_LIST_LIMIT: usize = 1_000;
 const MAX_TASK_QUERY_CHARS: usize = 1_024;
@@ -60,70 +58,99 @@ pub struct TaskListPage {
     pub total: usize,
 }
 
-pub trait TaskList: ApplicationStore {
-    fn list_tasks(
-        &self,
-        board: &str,
-        options: TaskListOptions,
-    ) -> impl Future<Output = Result<TaskListPage>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: TaskList,
     C: Clock,
 {
-    pub async fn list_tasks(
-        &self,
-        board: &str,
-        mut options: TaskListOptions,
-    ) -> Result<TaskListPage> {
-        let board = board.trim();
-        if board.is_empty() {
-            return Err(KanbanError::InvalidInput("board is required".to_owned()));
-        }
-        if options.limit > MAX_TASK_LIST_LIMIT {
-            return Err(KanbanError::InvalidInput(format!(
-                "limit must be <= {MAX_TASK_LIST_LIMIT}"
-            )));
-        }
-        if options
-            .assignee
-            .as_deref()
-            .is_some_and(|value| value.chars().count() > MAX_TASK_ASSIGNEE_CHARS)
-        {
-            return Err(KanbanError::InvalidInput(format!(
-                "assignee exceeds {MAX_TASK_ASSIGNEE_CHARS} characters"
-            )));
-        }
-        if options
-            .query
-            .as_deref()
-            .is_some_and(|value| value.chars().count() > MAX_TASK_QUERY_CHARS)
-        {
-            return Err(KanbanError::InvalidInput(format!(
-                "query exceeds {MAX_TASK_QUERY_CHARS} characters"
-            )));
-        }
-        if options
-            .priorities
-            .iter()
-            .any(|value| !(0..=3).contains(value))
-        {
-            return Err(KanbanError::InvalidInput(
-                "priority filters must be between 0 and 3".to_owned(),
-            ));
-        }
-        options.assignee = trimmed_optional(options.assignee);
-        options.query = trimmed_optional(options.query);
-        options.labels = options
-            .labels
-            .into_iter()
-            .map(|label| label.trim().to_owned())
-            .filter(|label| !label.is_empty())
-            .collect();
-        self.store.list_tasks(board, options).await
+    pub async fn list_tasks(&self, board: &str, options: TaskListOptions) -> Result<TaskListPage> {
+        let board = board.trim().to_owned();
+        let options = normalize_task_list_options(&board, options)?;
+        let store_options = crate::store_operations::StoreTaskListOptions {
+            statuses: options
+                .statuses
+                .into_iter()
+                .map(|status| status.as_str().to_owned())
+                .collect(),
+            priorities: options.priorities,
+            labels: options.labels,
+            include_archived: options.include_archived,
+            assignee: options.assignee,
+            q: options.query,
+            plan_filters: options
+                .plan_filters
+                .into_iter()
+                .map(store_plan_filter)
+                .collect(),
+            sort: store_task_sort(options.sort),
+            limit: options.limit,
+            offset: options.offset,
+        };
+        let page = self
+            .application
+            .store
+            .store
+            .list_tasks(&board, store_options)
+            .await
+            .map_err(crate::adapter::store_error)?;
+        Ok(TaskListPage {
+            tasks: page
+                .tasks
+                .into_iter()
+                .map(super::application_task)
+                .collect::<Result<Vec<_>>>()?,
+            total: page.total,
+        })
     }
+}
+
+fn normalize_task_list_options(
+    board: &str,
+    mut options: TaskListOptions,
+) -> Result<TaskListOptions> {
+    if board.is_empty() {
+        return Err(KanbanError::InvalidInput("board is required".to_owned()));
+    }
+    if options.limit > MAX_TASK_LIST_LIMIT {
+        return Err(KanbanError::InvalidInput(format!(
+            "limit must be <= {MAX_TASK_LIST_LIMIT}"
+        )));
+    }
+    if options
+        .assignee
+        .as_deref()
+        .is_some_and(|value| value.chars().count() > MAX_TASK_ASSIGNEE_CHARS)
+    {
+        return Err(KanbanError::InvalidInput(format!(
+            "assignee exceeds {MAX_TASK_ASSIGNEE_CHARS} characters"
+        )));
+    }
+    if options
+        .query
+        .as_deref()
+        .is_some_and(|value| value.chars().count() > MAX_TASK_QUERY_CHARS)
+    {
+        return Err(KanbanError::InvalidInput(format!(
+            "query exceeds {MAX_TASK_QUERY_CHARS} characters"
+        )));
+    }
+    if options
+        .priorities
+        .iter()
+        .any(|value| !(0..=3).contains(value))
+    {
+        return Err(KanbanError::InvalidInput(
+            "priority filters must be between 0 and 3".to_owned(),
+        ));
+    }
+    options.assignee = trimmed_optional(options.assignee);
+    options.query = trimmed_optional(options.query);
+    options.labels = options
+        .labels
+        .into_iter()
+        .map(|label| label.trim().to_owned())
+        .filter(|label| !label.is_empty())
+        .collect();
+    Ok(options)
 }
 
 fn trimmed_optional(value: Option<String>) -> Option<String> {
@@ -133,73 +160,105 @@ fn trimmed_optional(value: Option<String>) -> Option<String> {
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use std::sync::{Arc, atomic::AtomicUsize};
-
-    use kanban_core::{KanbanError, Result, TaskStatus};
-
-    use crate::operations::test_support::{FixedClock, StubStore};
-    use crate::*;
-
-    impl TaskList for StubStore {
-        async fn list_tasks(&self, board: &str, options: TaskListOptions) -> Result<TaskListPage> {
-            assert_eq!(board, "default");
-            assert_eq!(options.assignee.as_deref(), Some("worker"));
-            assert_eq!(options.query.as_deref(), Some("needle"));
-            assert_eq!(options.labels, vec!["bug"]);
-            Ok(TaskListPage {
-                tasks: Vec::new(),
-                total: 0,
-            })
+fn store_plan_filter(filter: TaskPlanFilter) -> crate::store_operations::StoreTaskPlanFilter {
+    match filter {
+        TaskPlanFilter::PlanNeeded => crate::store_operations::StoreTaskPlanFilter::PlanNeeded,
+        TaskPlanFilter::HasSteps => crate::store_operations::StoreTaskPlanFilter::HasSteps,
+        TaskPlanFilter::IncompleteRequiredSteps => {
+            crate::store_operations::StoreTaskPlanFilter::IncompleteRequiredSteps
         }
     }
-    #[tokio::test]
-    async fn list_tasks_validates_and_normalizes_query_options() {
-        let service = ApplicationService::with_clock(
-            StubStore {
-                calls: Arc::new(AtomicUsize::new(0)),
-            },
-            FixedClock(100),
-        );
-        let page = service
-            .list_tasks(
-                " default ",
-                TaskListOptions {
-                    statuses: vec![TaskStatus::Todo],
-                    priorities: vec![1],
-                    labels: vec![" bug ".into()],
-                    plan_filters: Vec::new(),
-                    assignee: Some(" worker ".into()),
-                    query: Some(" needle ".into()),
-                    include_archived: false,
-                    limit: 25,
-                    offset: 0,
-                    sort: crate::TaskListSort::UpdatedAtDesc,
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(page.total, 0);
+}
 
-        let error = service
-            .list_tasks(
-                "default",
-                TaskListOptions {
-                    statuses: Vec::new(),
-                    priorities: Vec::new(),
-                    labels: Vec::new(),
-                    plan_filters: Vec::new(),
-                    assignee: None,
-                    query: None,
-                    include_archived: false,
-                    limit: 1_001,
-                    offset: 0,
-                    sort: crate::TaskListSort::default(),
-                },
-            )
-            .await
-            .unwrap_err();
+fn store_task_sort(sort: TaskListSort) -> crate::store_operations::StoreTaskListSort {
+    use crate::store_operations::StoreTaskListSort as StoreSort;
+    match sort {
+        TaskListSort::Seq => StoreSort::Seq,
+        TaskListSort::SeqDesc => StoreSort::SeqDesc,
+        TaskListSort::Title => StoreSort::Title,
+        TaskListSort::TitleDesc => StoreSort::TitleDesc,
+        TaskListSort::Status => StoreSort::Status,
+        TaskListSort::StatusDesc => StoreSort::StatusDesc,
+        TaskListSort::Position => StoreSort::Position,
+        TaskListSort::PositionDesc => StoreSort::PositionDesc,
+        TaskListSort::Priority => StoreSort::Priority,
+        TaskListSort::PriorityDesc => StoreSort::PriorityDesc,
+        TaskListSort::Assignee => StoreSort::Assignee,
+        TaskListSort::AssigneeDesc => StoreSort::AssigneeDesc,
+        TaskListSort::ScheduledAt => StoreSort::ScheduledAt,
+        TaskListSort::ScheduledAtDesc => StoreSort::ScheduledAtDesc,
+        TaskListSort::DueAt => StoreSort::DueAt,
+        TaskListSort::DueAtDesc => StoreSort::DueAtDesc,
+        TaskListSort::CreatedAt => StoreSort::CreatedAt,
+        TaskListSort::CreatedAtDesc => StoreSort::CreatedAtDesc,
+        TaskListSort::UpdatedAt => StoreSort::UpdatedAt,
+        TaskListSort::UpdatedAtDesc => StoreSort::UpdatedAtDesc,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use kanban_core::{KanbanError, TaskStatus};
+
+    #[test]
+    fn list_options_normalize_query_filters() {
+        let options = normalize_task_list_options(
+            "default",
+            TaskListOptions {
+                statuses: vec![TaskStatus::Todo],
+                priorities: vec![1],
+                labels: vec![" bug ".into(), " ".into()],
+                plan_filters: Vec::new(),
+                assignee: Some(" worker ".into()),
+                query: Some(" needle ".into()),
+                include_archived: false,
+                limit: 25,
+                offset: 0,
+                sort: TaskListSort::UpdatedAtDesc,
+            },
+        )
+        .unwrap();
+        assert_eq!(options.assignee.as_deref(), Some("worker"));
+        assert_eq!(options.query.as_deref(), Some("needle"));
+        assert_eq!(options.labels, vec!["bug"]);
+    }
+
+    #[test]
+    fn list_options_reject_invalid_limit_and_priority() {
+        let error = normalize_task_list_options(
+            "default",
+            TaskListOptions {
+                limit: 1_001,
+                statuses: Vec::new(),
+                priorities: Vec::new(),
+                labels: Vec::new(),
+                plan_filters: Vec::new(),
+                assignee: None,
+                query: None,
+                include_archived: false,
+                offset: 0,
+                sort: TaskListSort::default(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(error, KanbanError::InvalidInput(_)));
+
+        let error = normalize_task_list_options(
+            "default",
+            TaskListOptions {
+                statuses: Vec::new(),
+                priorities: vec![4],
+                labels: Vec::new(),
+                plan_filters: Vec::new(),
+                assignee: None,
+                query: None,
+                include_archived: false,
+                limit: 100,
+                offset: 0,
+                sort: TaskListSort::default(),
+            },
+        )
+        .unwrap_err();
         assert!(matches!(error, KanbanError::InvalidInput(_)));
     }
 }

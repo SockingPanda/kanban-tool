@@ -12,9 +12,9 @@ use crate::{
 use kanban_core::Result;
 
 use crate::adapter::{
-    TursoApplicationStore, application_execution_plan, application_step, application_task,
-    store_error,
+    TursoApplicationStore, application_execution_plan, application_step, store_error,
 };
+use crate::operations::application_task;
 
 fn application_steps(steps: crate::domain::TaskStepsRecord) -> Result<ApplicationTaskSteps> {
     Ok(ApplicationTaskSteps {

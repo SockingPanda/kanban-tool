@@ -11,16 +11,15 @@ use crate::{
     LabelRecord as ApplicationLabel, SignalObservationRecord as ApplicationSignalObservation,
     SignalRecord as ApplicationSignal, SignalRecordResult as ApplicationSignalResult,
     SignalStatus as ApplicationSignalStatus, StepRecord as ApplicationStep,
-    TaskRecord as ApplicationTask,
 };
 use crate::{
     StoreAddTaskLabelsRecord, StoreError, TursoStore,
     domain::{
         DependencySnapshotRecord as StoreDependencySnapshot,
-        TaskExecutionPlanRecord as StoreExecutionPlan, TaskRecord as StoreTask,
+        TaskExecutionPlanRecord as StoreExecutionPlan,
     },
 };
-use kanban_core::{KanbanError, Result, TaskStatus};
+use kanban_core::{KanbanError, Result};
 
 type StoreResult<T> = std::result::Result<T, StoreError>;
 
@@ -249,60 +248,7 @@ fn application_dependency_snapshot(
     })
 }
 
-fn application_task(task: StoreTask) -> Result<ApplicationTask> {
-    let execution_plan_state = match task.execution_plan_state.as_str() {
-        "unplanned" => ExecutionPlanState::Unplanned,
-        "planned" => ExecutionPlanState::Planned,
-        "not_required" => ExecutionPlanState::NotRequired,
-        other => {
-            return Err(KanbanError::Storage(format!(
-                "stored execution plan state is invalid: {other}"
-            )));
-        }
-    };
-    Ok(ApplicationTask {
-        id: task.id,
-        board_id: task.board_id,
-        board_slug: task.board_slug,
-        task_ref: task.task_ref,
-        seq: task.seq,
-        title: task.title,
-        description: task.description,
-        status: task.status.parse::<TaskStatus>()?,
-        status_reason: task.status_reason,
-        assignee: task.assignee,
-        priority: task.priority,
-        position: task.position,
-        scheduled_at: task.scheduled_at,
-        due_at: task.due_at,
-        created_by: task.created_by,
-        created_at: task.created_at,
-        updated_at: task.updated_at,
-        started_at: task.started_at,
-        completed_at: task.completed_at,
-        archived_at: task.archived_at,
-        has_claim_token: task.claim_token.is_some(),
-        claim_owner: task.claim_owner,
-        claim_expires_at: task.claim_expires_at,
-        last_heartbeat_at: task.last_heartbeat_at,
-        current_run_id: task.current_run_id,
-        retry_count: task.retry_count,
-        max_retries: task.max_retries,
-        result_summary: task.result_summary,
-        result_json: task.result_json,
-        metadata_json: task.metadata_json,
-        lock_version: task.lock_version,
-        dependency_blocked: task.dependency_blocked,
-        unfinished_parent_count: task.unfinished_parent_count,
-        execution_plan_state,
-        required_step_count: task.required_step_count,
-        completed_required_step_count: task.completed_required_step_count,
-        optional_step_count: task.optional_step_count,
-        labels: task.labels.into_iter().map(application_label).collect(),
-    })
-}
-
-fn application_label(label: crate::domain::LabelRecord) -> ApplicationLabel {
+pub(crate) fn application_label(label: crate::domain::LabelRecord) -> ApplicationLabel {
     ApplicationLabel {
         id: label.id,
         board_id: label.board_id,

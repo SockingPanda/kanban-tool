@@ -1929,7 +1929,7 @@ pub fn endpoint_catalog() -> &'static [EndpointDescriptor] {
                     + board.len()
                     + knowledge.len()
                     + crate::admin_catalog::endpoint_catalog().len()
-                    + 39,
+                    + 40,
             );
             for endpoint in ENDPOINTS {
                 if let Some(admin) =
@@ -1967,6 +1967,13 @@ pub fn endpoint_catalog() -> &'static [EndpointDescriptor] {
                     crate::labels_catalog::endpoint_descriptor(endpoint.operation_id)
                 {
                     catalog.push(labels);
+                    if endpoint.operation_id == "api.list-board-labels" {
+                        if let Some(board_proposals) = crate::labels_catalog::endpoint_descriptor(
+                            "api.list-board-label-proposals",
+                        ) {
+                            catalog.push(board_proposals);
+                        }
+                    }
                     continue;
                 }
                 if let Some(knowledge) =

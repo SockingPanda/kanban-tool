@@ -1148,7 +1148,7 @@ const API_LIST_BOARD_LABEL_PROPOSALS_CONTRACTS: &[ContractDeclaration] = &[
             "schemas/fixtures/api/headers/list-board-label-proposals-locale-headers.v1.valid.json",
             "schemas/fixtures/api/headers/list-board-label-proposals-locale-headers.v1.invalid.json",
         )
-        .with_adoption(PROPOSAL_WITNESS, PROPOSAL_WITNESS);
+        .with_adoption(HEADER_LOCALE_WITNESS, HEADER_LOCALE_WITNESS);
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<crate::headers::LocaleHeaders>();
         contract
@@ -2128,8 +2128,8 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), count);
-        assert_eq!(LABEL_OPERATIONS.len(), 36);
-        assert_eq!(contracts.len(), 132);
+        assert_eq!(LABEL_OPERATIONS.len(), 37);
+        assert_eq!(contracts.len(), 136);
         assert!(
             LABEL_OPERATIONS
                 .iter()

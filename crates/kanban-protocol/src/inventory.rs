@@ -4928,7 +4928,7 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
     let metadata_config = crate::metadata_config_catalog::operation_contracts();
     let shared_components = crate::metadata_config_catalog::shared_component_contracts();
     let cli_labels = crate::cli_labels_catalog::operation_contracts();
-    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 108);
+    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 111);
 
     for contract in OPERATION_INVENTORY {
         // archive-board request 历史上以 add-dependency 作为插入锚点。
@@ -4953,6 +4953,23 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
         }
         if let Some(labels_contract) = labels.iter().find(|candidate| candidate.id == contract.id) {
             inventory.push(*labels_contract);
+            if contract.id == "api.list-board-labels.response" {
+                append_labels_contract(
+                    &mut inventory,
+                    &labels,
+                    "api.list-board-label-proposals.path",
+                );
+                append_labels_contract(
+                    &mut inventory,
+                    &labels,
+                    "api.list-board-label-proposals.query",
+                );
+                append_labels_contract(
+                    &mut inventory,
+                    &labels,
+                    "api.list-board-label-proposals.response",
+                );
+            }
             continue;
         }
         if let Some(knowledge_contract) = knowledge
@@ -5037,6 +5054,20 @@ fn append_board_contract(
             .find(|contract| contract.id == id)
             .copied()
             .unwrap_or_else(|| panic!("missing board catalog contract: {id}")),
+    );
+}
+
+fn append_labels_contract(
+    inventory: &mut Vec<OperationContract>,
+    labels: &[OperationContract],
+    id: &str,
+) {
+    inventory.push(
+        labels
+            .iter()
+            .find(|contract| contract.id == id)
+            .copied()
+            .unwrap_or_else(|| panic!("missing labels catalog contract: {id}")),
     );
 }
 

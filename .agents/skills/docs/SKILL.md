@@ -34,7 +34,7 @@ wire/schema/catalog；`kanban-client` → typed transport；`kanban-server` → 
 
 ## History and evidence
 
-当前指南只描述当前行为；已完成 ledger、旧 recovery runbook 和 bundle 离开 active tree。修改前先核对
+当前指南只描述当前行为；已完成 ledger、旧 recovery runbook 和聚合快照离开 active tree。修改前先核对
 owner source，冲突时报告 current implementation 与既有承诺，不静默创造第二份规范。
 
 ## 验证案例

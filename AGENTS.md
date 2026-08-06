@@ -77,5 +77,5 @@
 ## 9. 维护
 
 - 根文件只做入口和路由；领域行为跟随 owner crate/app，机器 inventory 跟随代码或生成 artifact。
-- 修改文档源后直接运行相应 owner/docs gate；不生成 bundle，不手工维护派生规格。
+- 修改文档源后直接运行相应 owner/docs gate；不生成聚合快照，不手工维护派生规格。
 - 任何长期架构取舍落在对应 ADR；实现进度、review finding 和一次性 workaround 留在任务或 runbook。

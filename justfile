@@ -98,6 +98,11 @@ deps-check:
 agents-check:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- agents check
 
+docs-check:
+    scripts/cargo-build-lock.sh -- cargo doc --workspace --no-deps
+    scripts/cargo-build-lock.sh -- cargo test --doc --workspace
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- docs check
+
 web-test:
     pnpm --dir apps/desktop test
 
@@ -174,29 +179,18 @@ feature-p package features:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p {{package}} --features "{{features}}" --no-fail-fast --no-tests pass; else scripts/cargo-build-lock.sh -- cargo test --locked -p {{package}} --features "{{features}}"; fi
     scripts/cargo-build-lock.sh -- cargo clippy --locked -p {{package}} --all-targets --features "{{features}}" -- -D warnings
 
-spec-bundle-generate:
-    python3 -B scripts/spec_bundle.py --root . --write
-
-spec-bundle-check:
-    python3 -B scripts/test_spec_bundle.py
-    python3 -B scripts/spec_bundle.py --root . --check
-
 schema-generate:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema generate
 
 schema-check:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema check
 
-schema-docs:
-    just spec-bundle-check
-    python3 -B scripts/test_schema_docs_markers.py
-    python3 -B scripts/schema_docs_markers.py --root .
-
 # CI 的完整编排只组合真实 recipes；日常窄 gate 仍保持 core 与单包范围。
 ci-full:
     just rust-full
     just desktop-check
     just web-build
+    just docs-check
     just schema-contract
     just deps-check
     just agents-check
@@ -238,7 +232,6 @@ schema-contract:
     just feature-p kanban-protocol schema
     just schema-tool
     just schema-check
-    just schema-docs
     just schema-surface-audit
     just schema-adoption-witness
 

@@ -15,8 +15,6 @@ from typing import Iterable, NotRequired, TypedDict
 
 sys.dont_write_bytecode = True
 
-from spec_bundle import SOURCE_PATHS as SPEC_BUNDLE_SOURCE_PATHS
-
 
 Command = list[str]
 Classifications = dict[str, list[str]]
@@ -52,7 +50,6 @@ def _parts(path: str) -> tuple[str, ...]:
 def is_docs_only(path: str) -> bool:
     return (
         path == "README.md"
-        or path == "KANBAN_SPEC_BUNDLE.md"
         or path.startswith("docs/")
         or path.endswith(".md")
     )
@@ -84,12 +81,9 @@ def is_core(path: str) -> bool:
     return (
         crate_name(path) in CORE_CRATES
         or path.startswith("migrations/")
-        or path in {
-            "docs/STATE_MACHINE.md",
-            "docs/DATA_MODEL.md",
-            "docs/CLI_SPEC.md",
-            "docs/API_SPEC.md",
-        }
+        or path.startswith("crates/kanban-core/docs/")
+        or path.startswith("crates/kanban-service/docs/")
+        or path.startswith("crates/kanban-protocol/docs/")
     )
 
 
@@ -118,8 +112,6 @@ def is_schema_contract(path: str) -> bool:
             ".cargo/config",
             ".cargo/config.toml",
             "AGENTS.md",
-            "docs/ARCHITECTURE.md",
-            "docs/SCHEMA_CONTRACTS.md",
             SCHEMA_TOOL_REGISTRY_APPROVAL,
         }
         or is_workspace_member_manifest(path)
@@ -133,37 +125,24 @@ def is_schema_contract(path: str) -> bool:
             "scripts/test-schema-cargo-tree.sh",
             "scripts/test_schema_dependency_isolation.py",
             "scripts/test_schema_recipe_witness.py",
-            "scripts/schema_docs_markers.py",
-            "scripts/test_schema_docs_markers.py",
-            "scripts/spec_bundle.py",
-            "scripts/test_spec_bundle.py",
         }
     )
 
 
-def is_schema_docs(path: str) -> bool:
-    return (
-        ("/" not in path and path.endswith(".md"))
-        or (path.startswith("docs/") and path.endswith(".md"))
-        or path in SPEC_BUNDLE_SOURCE_PATHS
-        or path in {"scripts/spec_bundle.py", "scripts/test_spec_bundle.py"}
-    )
-
-
 def is_cli(path: str) -> bool:
-    return path.startswith("crates/kanban-cli/") or path == "docs/CLI_SPEC.md"
+    return path.startswith("crates/kanban-cli/")
 
 
 def is_server_api(path: str) -> bool:
-    return path.startswith("crates/kanban-server/") or path == "docs/API_SPEC.md"
+    return path.startswith("crates/kanban-server/")
 
 
 def is_sqlite_core_state_machine(path: str) -> bool:
     return (
         path.startswith("crates/kanban-core/")
         or path.startswith("migrations/")
-        or path == "docs/STATE_MACHINE.md"
-        or path == "docs/DATA_MODEL.md"
+        or path.startswith("crates/kanban-core/docs/")
+        or path.startswith("crates/kanban-service/docs/")
     )
 
 
@@ -195,7 +174,6 @@ CLASSIFIERS = {
     "desktop": is_desktop,
     "core": is_core,
     "schema-contract": is_schema_contract,
-    "schema-docs": is_schema_docs,
     "cli": is_cli,
     "server/api": is_server_api,
     "sqlite/core/state-machine": is_sqlite_core_state_machine,
@@ -207,7 +185,6 @@ RULES = (
     Rule("desktop", (["just", "desktop-check"],)),
     Rule("core", (["just", "check-core"],)),
     Rule("schema-contract", (["just", "schema-contract"],)),
-    Rule("schema-docs", (["just", "schema-docs"],)),
     Rule(
         "cli",
         (
@@ -329,6 +306,7 @@ def build_plan(base: str, paths: list[str]) -> Plan:
     commands: list[Command] = []
 
     if docs_only:
+        commands.append(["just", "docs-check"])
         commands.append(["just", "diff-check"])
     else:
         if any(path in WORKSPACE_RUST_FAST_PATTERNS for path in paths):
@@ -336,6 +314,8 @@ def build_plan(base: str, paths: list[str]) -> Plan:
         for rule in RULES:
             if any(rule.matches(path) for path in paths):
                 commands.extend(rule.commands)
+        if any(path.endswith(".md") for path in paths):
+            commands.append(["just", "docs-check"])
         if paths:
             commands.append(["just", "diff-check"])
 
@@ -440,10 +420,10 @@ def is_allowed_empty_test_result(command: Command, returncode: int) -> bool:
 def self_test() -> None:
     cases = [
         (
-            "spec bundle docs",
-            ["docs/SPEC.md"],
-            {"docs-only", "schema-docs"},
-            [["just", "schema-docs"], ["just", "diff-check"]],
+            "architecture docs",
+            ["docs/architecture.md"],
+            {"docs-only"},
+            [["just", "docs-check"], ["just", "diff-check"]],
             False,
         ),
         (
@@ -461,17 +441,17 @@ def self_test() -> None:
             False,
         ),
         (
-            "cli spec",
-            ["docs/CLI_SPEC.md"],
-            {"docs-only", "schema-docs", "core", "cli"},
-            [["just", "schema-docs"], ["just", "check-core"], ["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
+            "cli guide",
+            ["crates/kanban-cli/README.md"],
+            {"docs-only", "core", "cli"},
+            [["just", "docs-check"], ["just", "check-core"], ["just", "check-p", "kanban-cli"], ["just", "diff-check"]],
             False,
         ),
         (
             "server api",
-            ["crates/kanban-server/src/router.rs", "docs/API_SPEC.md"],
-            {"core", "server/api", "docs-only", "schema-docs"},
-            [["just", "schema-docs"], ["just", "check-core"], ["just", "check-p", "kanban-server"], ["just", "diff-check"]],
+            ["crates/kanban-server/src/router.rs", "crates/kanban-server/README.md"],
+            {"core", "server/api", "docs-only"},
+            [["just", "docs-check"], ["just", "check-core"], ["just", "check-p", "kanban-server"], ["just", "diff-check"]],
             False,
         ),
         (
@@ -613,9 +593,9 @@ def self_test() -> None:
         ),
         (
             "schema architecture policy docs",
-            ["AGENTS.md", "docs/ARCHITECTURE.md", "docs/SCHEMA_CONTRACTS.md"],
-            {"docs-only", "schema-contract"},
-            [["just", "schema-contract"], ["just", "diff-check"]],
+            ["AGENTS.md", "docs/architecture.md"],
+            {"docs-only"},
+            [["just", "docs-check"], ["just", "diff-check"]],
             False,
         ),
     ]
@@ -659,13 +639,6 @@ def self_test() -> None:
         ".cargo/config",
         ".cargo/config.toml",
         "scripts/test_schema_recipe_witness.py",
-        "scripts/schema_docs_markers.py",
-        "scripts/test_schema_docs_markers.py",
-        "scripts/spec_bundle.py",
-        "scripts/test_spec_bundle.py",
-        "AGENTS.md",
-        "docs/ARCHITECTURE.md",
-        "docs/SCHEMA_CONTRACTS.md",
         *(f"{member}/Cargo.toml" for member in workspace["members"]),
     ]
     for path in schema_inputs:
@@ -677,18 +650,6 @@ def self_test() -> None:
         if ["just", "schema-contract"] not in plan["commands"]:
             raise AssertionError(
                 f"schema manifest 路由缺少命令: {path}；实际为 {plan['commands']}"
-            )
-
-    for path in SPEC_BUNDLE_SOURCE_PATHS:
-        plan = build_plan("main", [path])
-        if "schema-docs" not in plan["classifications"]:
-            raise AssertionError(
-                f"SPEC bundle source 缺少 schema-docs 分类: {path}"
-            )
-        if ["just", "schema-docs"] not in plan["commands"]:
-            raise AssertionError(
-                f"SPEC bundle source 缺少 schema-docs 命令: {path}；"
-                f"实际为 {plan['commands']}"
             )
 
     duplicate_plan = build_plan("main", ["crates/kanban-cli/src/main.rs", "crates/kanban-cli/tests/task.rs"])

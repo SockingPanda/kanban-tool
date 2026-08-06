@@ -284,6 +284,14 @@ def _agents_check(root: Path, _: bool) -> list[Event]:
     return _xtask(root, "agents", "check")
 
 
+def _docs_check(root: Path, _: bool) -> list[Event]:
+    return [
+        *_locked(root, "doc", "--workspace", "--no-deps"),
+        *_locked(root, "test", "--doc", "--workspace"),
+        *_xtask(root, "docs", "check"),
+    ]
+
+
 def _schema_tool(root: Path, nextest: bool) -> list[Event]:
     check = _locked(root, "check", "--locked", "-p", TOOL_PACKAGE, "--tests")
     probe = _cargo(root, "nextest", "--version")
@@ -308,14 +316,6 @@ def _schema_tool(root: Path, nextest: bool) -> list[Event]:
     return [*check, *tests, *clippy]
 
 
-def _schema_docs(root: Path, _: bool) -> list[Event]:
-    return [
-        _event(root, "just", ["spec-bundle-check"]),
-        _event(root, "python3", ["-B", "scripts/test_schema_docs_markers.py"]),
-        _event(root, "python3", ["-B", "scripts/schema_docs_markers.py", "--root", "."]),
-    ]
-
-
 def _schema_contract(root: Path, _: bool) -> list[Event]:
     calls = (
         ("schema-dependency-isolation",),
@@ -323,7 +323,6 @@ def _schema_contract(root: Path, _: bool) -> list[Event]:
         ("feature-p", CONTRACT_PACKAGE, "schema"),
         ("schema-tool",),
         ("schema-check",),
-        ("schema-docs",),
         ("schema-surface-audit",),
         ("schema-adoption-witness",),
     )
@@ -377,28 +376,6 @@ def _schema_audit_closed(root: Path, _: bool) -> list[Event]:
     ]
 
 
-def _spec_bundle_generate(root: Path, _: bool) -> list[Event]:
-    return [
-        _event(
-            root,
-            "python3",
-            ["-B", "scripts/spec_bundle.py", "--root", ".", "--write"],
-        )
-    ]
-
-
-def _spec_bundle_check(root: Path, _: bool) -> list[Event]:
-    return [
-        _event(root, "python3", ["-B", "scripts/test_spec_bundle.py"]),
-        _event(
-            root,
-            "python3",
-            ["-B", "scripts/spec_bundle.py", "--root", ".", "--check"],
-        ),
-    ]
-
-
-
 CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
     ("fmt", (), _fmt, True),
     ("fmt-check", (), _fmt, True),
@@ -437,11 +414,9 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
     ("deps-check", (), _deps_check, True),
     ("agents", ("check",), _agents_check, True),
     ("agents-check", (), _agents_check, True),
+    ("docs-check", (), _docs_check, False),
     ("schema-generate", (), _schema_generate, True),
     ("schema-check", (), _schema_check, True),
-    ("spec-bundle-generate", (), _spec_bundle_generate, False),
-    ("spec-bundle-check", (), _spec_bundle_check, False),
-    ("schema-docs", (), _schema_docs, False),
     ("schema-fmt", (), _schema_fmt, True),
     ("schema-tool", (), _schema_tool, True),
     ("schema-dependency-isolation-self-test", (), _schema_dependency_self_test, False),
@@ -481,16 +456,14 @@ PROTECTED_RECIPE_AST_SHA256 = {
     "rust-full": "05bd1a7769cf8d0ebde0582f37444132adfafd19ae8ff0682b1a8c45307b5288",
     "deps-check": "7824b938b43d31ee949e73de09cc16fd79c7f879971f7c46c0af9a62bd7f3e4a",
     "agents-check": "e7b40d27ccebd5b11109cf65f982ae2eaf8c4cb3be6bf3703828b27f901990db",
-    "ci-full": "818403d9e593045933ffc30111c8a1288eb69a83e3ff5ce90ffbbcc8e435cdfb",
+    "docs-check": "17266a88a2cd9099fef6978a8cde76c5beb8fd60fefbee9f1bf2c98759dfe16c",
+    "ci-full": "fdbfc72f576ab28a1e7e37e17beaa9ce1ee4556a47dbf9fd73a0da036c6d21a9",
     "feature-p": "90a48cdda4600c6cffd88614a139b22584936690af300aaec2a2e60bdc3fec09",
-    "spec-bundle-generate": "4ad6e58b6600690d8a85c9d5472efe999b8c356f2eeafc86978edd4ccbe24fa9",
-    "spec-bundle-check": "deb622cf88b3dff62e5abbeaa87996cd5cc05cf83a9175c51376110f3f337bcb",
     "schema": "0cff732b7615a43b4298c1c301be4cdaeb78db50cf10e85ca2ea1cd8bcb4d1fa",
     "deps": "838be60d806471013e820358bd9be0c208a3819821f7b9a503aae3dcfc93e784",
     "agents": "71c4c7a0101b1ce7a81f19ee62c74813e55c6ad2298c0592c1dcc18dc09c6327",
     "schema-generate": "ddf296b4364a0f1d38d5204e7476414c5b86daeda1be7aee6a159e027b3b48fb",
     "schema-check": "1c9f2d84eb3f4d17714ecdcc9d693281b8c76aa305656ca86892434d30b50052",
-    "schema-docs": "8f54ff9bd7e05e820243e82418b68c46316c11380fcadcbf816ab9a1cdfe40ac",
     "schema-fmt": "8d8ff815a57613390b30e7a10b534835c3773a83ca38eca66813215748817071",
     "schema-tool": "5d75c9c43db9ef001fe8e39ec39d50a30b40239daa9cd4d163067bf4daccc230",
     "schema-dependency-isolation-self-test": "1f791d177b30a450e938734f8b48480f3c1d3fe5e77d1e4588771c405383f934",
@@ -498,7 +471,7 @@ PROTECTED_RECIPE_AST_SHA256 = {
     "schema-adoption-witness-self-test": "221fd748cf1b93cb7a11f90b70b398bd08b9122df154f61012a4b92661e81fc4",
     "schema-adoption-witness": "1c55f076cb1632e69be3f6c1b98da5ddfb292a91f238324a5f51fc584e860e1d",
     "schema-surface-audit": "afcc19fd50897a51ae12c3ea048840aa5624a2f4fe60d40ea61762b013255c5c",
-    "schema-contract": "ed06e96e1e35471abc034bc873ef57835114ea58d3530d2b4b1c1e32fc4dbdaa",
+    "schema-contract": "a109c2b3743eaa2e7ba798a1cd880382dababd050791967d65c9998877f74f23",
     "schema-audit-closed": "fd7d65dbe4d9d19c2c92c26107ca33083fd61eb03ddca39e2c80a5ccbe2b87e5",
 }
 AST_ONLY_RECIPE_NAMES = {"check-p", "test-p", "ci-full"}

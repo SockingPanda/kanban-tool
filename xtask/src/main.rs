@@ -31,9 +31,12 @@ fn run() -> xtask::ToolResult<()> {
 
     match (group, subcommand) {
         ("schema", Some(command)) => run_schema(command, &root, options.require_closed),
+        ("docs", Some("check")) => run_docs_check(&root),
         ("deps", Some("check")) => run_deps_check(&root),
         ("agents", Some("check")) => run_agents_check(&root),
         ("schema", None) => invalid("schema 缺少子命令"),
+        ("docs", Some(command)) => invalid(format!("docs 不支持子命令: {command}")),
+        ("docs", None) => invalid("docs 缺少子命令"),
         ("deps", Some(command)) => invalid(format!("deps 不支持子命令: {command}")),
         ("agents", Some(command)) => invalid(format!("agents 不支持子命令: {command}")),
         (group, Some(command)) => invalid(format!("未知 command: {group} {command}")),
@@ -154,6 +157,19 @@ fn run_agents_check(root: &Path) -> xtask::ToolResult<()> {
     Ok(())
 }
 
+fn run_docs_check(root: &Path) -> xtask::ToolResult<()> {
+    let agents = root.join("AGENTS.md");
+    ensure_regular_file(&agents, "根 AGENTS.md")?;
+    let agents_text = fs::read_to_string(&agents)?;
+    check_agents_document_contract(root, &agents_text)?;
+    check_markdown_links(root)?;
+    check_include_str_targets(root)?;
+    check_crate_readme_includes(root, &agents_text)?;
+    check_adr_index(root)?;
+    println!("ok: 文档链接、include_str!、crate README、ADR index 和 workspace crate map 已通过");
+    Ok(())
+}
+
 const REQUIRED_AGENT_SECTIONS: &[&str] = &[
     "## 1. 产品边界",
     "## 2. 稳定不变量",
@@ -168,31 +184,7 @@ const REQUIRED_AGENT_SECTIONS: &[&str] = &[
 
 const REQUIRED_SKILL_ROUTES: &[&str] = &["$style", "$prose", "$docs", "$check", "$commit"];
 
-const REQUIRED_WORKSPACE_MAP: &[&str] = &[
-    "kanban-core",
-    "kanban-service",
-    "kanban-protocol",
-    "kanban-client",
-    "kanban-server",
-    "kanban-cli",
-    "kanban-mcp",
-    "apps/desktop/src-tauri",
-    "kanban-desktop",
-    "xtask",
-];
-
-const REQUIRED_DOCUMENT_LINKS: &[&str] = &[
-    "docs/SPEC.md",
-    "docs/ARCHITECTURE.md",
-    "docs/STATE_MACHINE.md",
-    "docs/DATA_MODEL.md",
-    "docs/API_SPEC.md",
-    "docs/CLI_SPEC.md",
-    "docs/SCHEMA_CONTRACTS.md",
-    "docs/DESKTOP_LAYOUT_SMOKE.md",
-];
-
-fn check_agents_document_contract(root: &Path, text: &str) -> xtask::ToolResult<()> {
+fn check_agents_document_contract(_root: &Path, text: &str) -> xtask::ToolResult<()> {
     for heading in REQUIRED_AGENT_SECTIONS {
         if !text.lines().any(|line| line.trim() == *heading) {
             return Err(
@@ -206,27 +198,6 @@ fn check_agents_document_contract(root: &Path, text: &str) -> xtask::ToolResult<
             return Err(
                 std::io::Error::other(format!("根 AGENTS.md 缺少技能路由: {route}")).into(),
             );
-        }
-    }
-    let workspace_section = section_body(text, "## 3. 工作区地图")?;
-    for package in REQUIRED_WORKSPACE_MAP {
-        if !section_contains_bullet(workspace_section, package) {
-            return Err(std::io::Error::other(format!(
-                "根 AGENTS.md 工作区地图缺少 active package/path: {package}"
-            ))
-            .into());
-        }
-    }
-    let document_section = section_body(text, "## 6. 文档地图")?;
-    for link in REQUIRED_DOCUMENT_LINKS {
-        if !section_contains_bullet(document_section, link) {
-            return Err(std::io::Error::other(format!(
-                "根 AGENTS.md 文档地图缺少 canonical link: {link}"
-            ))
-            .into());
-        }
-        if root.join("Cargo.toml").is_file() {
-            ensure_regular_file(&root.join(link), "AGENTS.md canonical 文档链接")?;
         }
     }
     Ok(())
@@ -243,6 +214,249 @@ fn section_contains_bullet(section: &str, needle: &str) -> bool {
     section
         .lines()
         .any(|line| line.trim_start().starts_with("- ") && line.contains(needle))
+}
+
+fn check_markdown_links(root: &Path) -> xtask::ToolResult<()> {
+    for path in repository_files(root, "md")? {
+        if is_archived_markdown(root, &path) {
+            continue;
+        }
+        let text = fs::read_to_string(&path)?;
+        for target in markdown_targets(&text) {
+            if target.is_empty() || target.starts_with('#') || is_external_link(&target) {
+                continue;
+            }
+            let target_path = target.split('#').next().unwrap_or_default();
+            if target_path.is_empty() {
+                continue;
+            }
+            let candidate = path.parent().unwrap_or(root).join(target_path);
+            if !candidate.exists() {
+                return Err(std::io::Error::other(format!(
+                    "Markdown 本地链接不存在: {} -> {}",
+                    path.strip_prefix(root).unwrap_or(&path).display(),
+                    target
+                ))
+                .into());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_include_str_targets(root: &Path) -> xtask::ToolResult<()> {
+    for path in repository_files(root, "rs")? {
+        let text = fs::read_to_string(&path)?;
+        for target in include_targets(root, &path, &text)? {
+            ensure_regular_file(&target, "include_str! 目标")?;
+        }
+    }
+    Ok(())
+}
+
+fn check_crate_readme_includes(root: &Path, agents_text: &str) -> xtask::ToolResult<()> {
+    let members = workspace_members(root)?;
+    let workspace_section = section_body(agents_text, "## 3. 工作区地图")?;
+    for member in members {
+        let member_root = root.join(&member);
+        ensure_regular_directory(&member_root, "workspace crate")?;
+        let readme = if member == "apps/desktop/src-tauri" {
+            root.join("apps/desktop/README.md")
+        } else {
+            member_root.join("README.md")
+        };
+        ensure_regular_file(&readme, "workspace crate README")?;
+
+        let included = repository_files(&member_root, "rs")?
+            .into_iter()
+            .map(|source| {
+                let text = fs::read_to_string(&source)?;
+                Ok(include_targets(root, &source, &text)?
+                    .into_iter()
+                    .any(|target| same_file(&target, &readme)))
+            })
+            .collect::<xtask::ToolResult<Vec<_>>>()?
+            .into_iter()
+            .any(|included| included);
+        if !included {
+            return Err(std::io::Error::other(format!(
+                "workspace crate 缺少 README include_str!: {member}"
+            ))
+            .into());
+        }
+
+        let map_key = member
+            .rsplit('/')
+            .next()
+            .filter(|name| *name != "src-tauri")
+            .unwrap_or(member.as_str());
+        if !section_contains_bullet(workspace_section, map_key)
+            && !section_contains_bullet(workspace_section, &member)
+        {
+            return Err(std::io::Error::other(format!(
+                "根 AGENTS.md 工作区地图缺少 workspace member: {member}"
+            ))
+            .into());
+        }
+    }
+    Ok(())
+}
+
+fn check_adr_index(root: &Path) -> xtask::ToolResult<()> {
+    let directory = root.join("docs/adr");
+    let index = directory.join("README.md");
+    ensure_regular_file(&index, "ADR index")?;
+    let index_text = fs::read_to_string(&index)?;
+    for entry in fs::read_dir(&directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("md")
+            || path.file_name().and_then(|value| value.to_str()) == Some("README.md")
+        {
+            continue;
+        }
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+        if !index_text.contains(file_name) {
+            return Err(std::io::Error::other(format!("ADR index 未列出文件: {file_name}")).into());
+        }
+    }
+    Ok(())
+}
+
+fn workspace_members(root: &Path) -> xtask::ToolResult<Vec<String>> {
+    let manifest = fs::read_to_string(root.join("Cargo.toml"))?;
+    let (_, remainder) = manifest
+        .split_once("members = [")
+        .ok_or_else(|| std::io::Error::other("Cargo.toml 缺少 workspace members"))?;
+    let members_text = remainder
+        .split_once(']')
+        .map(|(value, _)| value)
+        .ok_or_else(|| std::io::Error::other("workspace members 未闭合"))?;
+    let mut members = Vec::new();
+    for line in members_text.lines() {
+        let line = line.trim();
+        if let Some(value) = line
+            .strip_prefix('"')
+            .and_then(|value| value.strip_suffix(','))
+        {
+            if let Some(value) = value.strip_suffix('"') {
+                members.push(value.to_owned());
+            }
+        }
+    }
+    if members.is_empty() {
+        return Err(std::io::Error::other("workspace members 为空").into());
+    }
+    Ok(members)
+}
+
+fn repository_files(root: &Path, extension: &str) -> xtask::ToolResult<Vec<std::path::PathBuf>> {
+    let mut files = Vec::new();
+    collect_files(root, extension, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_files(
+    path: &Path,
+    extension: &str,
+    files: &mut Vec<std::path::PathBuf>,
+) -> xtask::ToolResult<()> {
+    if path.is_symlink() {
+        return Ok(());
+    }
+    if path.is_file() {
+        if path.extension().and_then(|value| value.to_str()) == Some(extension) {
+            files.push(path.to_owned());
+        }
+        return Ok(());
+    }
+    if !path.is_dir() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if name == ".git" || name == "target" {
+            continue;
+        }
+        collect_files(&entry.path(), extension, files)?;
+    }
+    Ok(())
+}
+
+fn is_archived_markdown(root: &Path, path: &Path) -> bool {
+    let relative = path.strip_prefix(root).unwrap_or(path);
+    relative.starts_with("docs/release") || relative.starts_with("docs/migration")
+}
+
+fn markdown_targets(text: &str) -> Vec<String> {
+    let mut targets = Vec::new();
+    let mut remaining = text;
+    while let Some(start) = remaining.find("](") {
+        let after = &remaining[start + 2..];
+        let Some(end) = after.find(')') else { break };
+        let raw = after[..end].trim();
+        let raw = raw
+            .strip_prefix('<')
+            .and_then(|value| value.strip_suffix('>'))
+            .unwrap_or(raw);
+        if let Some(target) = raw.split_whitespace().next() {
+            targets.push(target.trim_matches('"').to_owned());
+        }
+        remaining = &after[end + 1..];
+    }
+    targets
+}
+
+fn is_external_link(target: &str) -> bool {
+    target.starts_with("//")
+        || target.starts_with('/')
+        || target.starts_with("http://")
+        || target.starts_with("https://")
+        || target.starts_with("mailto:")
+        || target.starts_with("file:")
+}
+
+fn include_targets(
+    root: &Path,
+    source: &Path,
+    text: &str,
+) -> xtask::ToolResult<Vec<std::path::PathBuf>> {
+    let mut targets = Vec::new();
+    let mut remaining = text;
+    while let Some(start) = remaining.find("include_str!(") {
+        let after = &remaining[start + "include_str!(".len()..];
+        let Some(quote) = after.find('"') else {
+            remaining = &after[after.len()..];
+            continue;
+        };
+        let after_quote = &after[quote + 1..];
+        let Some(end) = after_quote.find('"') else {
+            return Err(std::io::Error::other(format!(
+                "include_str! 字符串未闭合: {}",
+                source.strip_prefix(root).unwrap_or(source).display()
+            ))
+            .into());
+        };
+        let relative = &after_quote[..end];
+        if relative.contains('\\') {
+            return Err(
+                std::io::Error::other(format!("include_str! 不支持转义路径: {relative}")).into(),
+            );
+        }
+        let target = source.parent().unwrap_or(root).join(relative);
+        targets.push(target);
+        remaining = &after_quote[end + 1..];
+    }
+    Ok(targets)
+}
+
+fn same_file(left: &Path, right: &Path) -> bool {
+    fs::canonicalize(left).ok() == fs::canonicalize(right).ok()
 }
 
 fn check_skill_packages(root: &Path) -> xtask::ToolResult<()> {
@@ -434,7 +648,7 @@ fn invalid(message: impl Into<String>) -> xtask::ToolResult<()> {
 
 fn print_usage() {
     println!(
-        "用法：xtask <schema generate|check|audit|witnesses|deps check|agents check> [--root PATH] [--require-closed]"
+        "用法：xtask <docs check|schema generate|check|audit|witnesses|deps check|agents check> [--root PATH] [--require-closed]"
     );
 }
 

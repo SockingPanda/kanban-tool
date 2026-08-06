@@ -4863,6 +4863,7 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             converge_history_catalog_contracts(&mut inventory);
             converge_labels_catalog_contracts(&mut inventory);
             converge_knowledge_catalog_contracts(&mut inventory);
+            converge_cli_labels_catalog_contracts(&mut inventory);
             inventory.extend(attachment_cli_contracts());
             let mut legacy_maintenance = maintenance_operation_contracts();
             legacy_maintenance.retain(|contract| contract.surface == ContractSurface::Cli);
@@ -4904,6 +4905,18 @@ fn converge_knowledge_catalog_contracts(inventory: &mut [OperationContract]) {
     }
 }
 
+fn converge_cli_labels_catalog_contracts(inventory: &mut [OperationContract]) {
+    let cli_labels = crate::cli_labels_catalog::operation_contracts();
+    for contract in inventory {
+        if let Some(source) = cli_labels
+            .iter()
+            .find(|candidate| candidate.id == contract.id)
+        {
+            *contract = *source;
+        }
+    }
+}
+
 fn hybrid_static_inventory() -> Vec<OperationContract> {
     let admin = crate::admin_catalog::operation_contracts();
     let board = crate::board_catalog::operation_contracts();
@@ -4914,7 +4927,8 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
     let knowledge = crate::knowledge_catalog::operation_contracts();
     let metadata_config = crate::metadata_config_catalog::operation_contracts();
     let shared_components = crate::metadata_config_catalog::shared_component_contracts();
-    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 64);
+    let cli_labels = crate::cli_labels_catalog::operation_contracts();
+    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 108);
 
     for contract in OPERATION_INVENTORY {
         // archive-board request 历史上以 add-dependency 作为插入锚点。
@@ -4946,6 +4960,13 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
             .find(|candidate| candidate.id == contract.id)
         {
             inventory.push(*knowledge_contract);
+            continue;
+        }
+        if let Some(cli_labels_contract) = cli_labels
+            .iter()
+            .find(|candidate| candidate.id == contract.id)
+        {
+            inventory.push(*cli_labels_contract);
             continue;
         }
         if contract.id == "api.doctor.response" {

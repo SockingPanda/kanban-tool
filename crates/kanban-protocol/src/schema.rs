@@ -3390,6 +3390,7 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
     let labels = crate::labels_catalog::schema_roots();
     let knowledge = crate::knowledge_catalog::schema_roots();
     let metadata_config = crate::metadata_config_catalog::schema_roots();
+    let cli_labels = crate::cli_labels_catalog::schema_roots();
     let mut registry = Vec::with_capacity(SCHEMA_REGISTRY.len() + 55);
     for root in SCHEMA_REGISTRY {
         // archive-board request 历史上以 add-dependency 作为插入锚点。
@@ -3430,6 +3431,13 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
             .find(|candidate| candidate.contract_id == root.contract_id)
         {
             registry.push(*knowledge_root);
+            continue;
+        }
+        if let Some(cli_labels_root) = cli_labels
+            .iter()
+            .find(|candidate| candidate.contract_id == root.contract_id)
+        {
+            registry.push(*cli_labels_root);
             continue;
         }
         if root.contract_id == "api.health.response" {

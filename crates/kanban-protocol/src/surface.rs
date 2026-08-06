@@ -118,138 +118,6 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "maintenance status",
             "cli.maintenance-status-v1.output"
         ),
-        adopted!(Cli, "label add", "cli.label-add.output"),
-        adopted!(
-            Cli,
-            "label atom-index query",
-            "cli.label-atom-index-query.output"
-        ),
-        adopted!(
-            Cli,
-            "label atom-index rebuild",
-            "cli.label-atom-index-rebuild.output"
-        ),
-        adopted!(
-            Cli,
-            "label atom-index status",
-            "cli.label-atom-index-status.output"
-        ),
-        adopted!(Cli, "label atoms explain", "cli.label-atoms-explain.output"),
-        adopted!(Cli, "label atoms list", "cli.label-atoms-list.output"),
-        adopted!(Cli, "label create", "cli.label-create.output"),
-        adopted!(Cli, "label list", "cli.label-list.output"),
-        adopted!(
-            Cli,
-            "label ontology apply atom",
-            "cli.label-ontology-apply-atom.output"
-        ),
-        adopted!(
-            Cli,
-            "label ontology confirm",
-            "cli.label-ontology-confirm.output"
-        ),
-        adopted!(Cli, "label ontology list", "cli.label-ontology-list.output"),
-        adopted!(
-            Cli,
-            "label ontology quality",
-            "cli.label-ontology-quality.output"
-        ),
-        adopted!(
-            Cli,
-            "label ontology record",
-            "cli.label-ontology-record.output"
-        ),
-        adopted!(
-            Cli,
-            "label ontology reject",
-            "cli.label-ontology-reject.output"
-        ),
-        adopted!(
-            Cli,
-            "label ontology resolve",
-            "cli.label-ontology-resolve.output"
-        ),
-        adopted!(
-            Cli,
-            "label ontology revert",
-            "cli.label-ontology-revert.output"
-        ),
-        adopted!(
-            Cli,
-            "label ontology review",
-            "cli.label-ontology-review.output"
-        ),
-        adopted!(Cli, "label ontology show", "cli.label-ontology-show.output"),
-        adopted!(
-            Cli,
-            "label ontology supersede",
-            "cli.label-ontology-supersede.output"
-        ),
-        adopted!(
-            Cli,
-            "label ontology validate",
-            "cli.label-ontology-validate.output"
-        ),
-        adopted!(
-            Cli,
-            "label proposals accept",
-            "cli.label-proposals-accept.output"
-        ),
-        adopted!(
-            Cli,
-            "label proposals list",
-            "cli.label-proposals-list.output"
-        ),
-        adopted!(
-            Cli,
-            "label proposals reject",
-            "cli.label-proposals-reject.output"
-        ),
-        adopted!(
-            Cli,
-            "label proposals show",
-            "cli.label-proposals-show.output"
-        ),
-        adopted!(Cli, "label propose", "cli.label-propose.output"),
-        adopted!(Cli, "label remove", "cli.label-remove.output"),
-        adopted!(
-            Cli,
-            "label semantics delete",
-            "cli.label-semantics-delete.output"
-        ),
-        adopted!(
-            Cli,
-            "label semantics list",
-            "cli.label-semantics-list.output"
-        ),
-        adopted!(
-            Cli,
-            "label semantics show",
-            "cli.label-semantics-show.output"
-        ),
-        adopted!(
-            Cli,
-            "label semantics upsert",
-            "cli.label-semantics-upsert.output"
-        ),
-        adopted!(Cli, "label suggest", "cli.label-suggest.output"),
-        adopted!(Cli, "run logs", "cli.run-logs.output"),
-        adopted!(Cli, "run show", "cli.run-show.output"),
-        adopted!(Cli, "runs", "cli.runs.output"),
-        adopted!(Cli, "search", "cli.search.output"),
-        excluded!(
-            Cli,
-            "serve",
-            "daemon lifecycle 不产生有限 JSON document；运行诊断固定写 stderr"
-        ),
-        adopted!(Cli, "signal confirm", "cli.signal-confirm.output"),
-        adopted!(Cli, "signal list", "cli.signal-list.output"),
-        adopted!(Cli, "signal record", "cli.signal-record.output"),
-        adopted!(Cli, "signal reject", "cli.signal-reject.output"),
-        adopted!(Cli, "signal resolve", "cli.signal-resolve.output"),
-        adopted!(Cli, "signal review", "cli.signal-review.output"),
-        adopted!(Cli, "signal show", "cli.signal-show.output"),
-        adopted!(Cli, "signal supersede", "cli.signal-supersede.output"),
         adopted!(Cli, "stats", "cli.stats.output"),
         adopted!(Cli, "task archive", "cli.task-archive.output"),
         adopted!(Cli, "task block", "cli.task-block.output"),
@@ -338,6 +206,14 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "config.selected-worker-profile.input"
         ),
     ];
+    let insertion = operations
+        .iter()
+        .position(|operation| operation.key == "stats")
+        .expect("legacy CLI surface must retain stats insertion anchor");
+    operations.splice(
+        insertion..insertion,
+        crate::cli_labels_catalog::surface_catalog(),
+    );
     operations.extend(crate::portable::surface_catalog());
     // Metadata/Config rows remain in the legacy vector for compatibility, but their declaration
     // source owns the projected surface facts. shared API error is intentionally not a surface

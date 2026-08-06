@@ -6,7 +6,7 @@ use crate::{context::CliContext, error::CliFailure, output};
 
 #[derive(Debug, Args)]
 pub(crate) struct SearchArgs {
-    /// Search text or an exact task reference such as `default#12`.
+    /// 搜索文本或精确任务 reference，例如 `default#12`。
     pub(crate) query: String,
     #[arg(long, value_enum)]
     pub(crate) status: Vec<SearchStatus>,

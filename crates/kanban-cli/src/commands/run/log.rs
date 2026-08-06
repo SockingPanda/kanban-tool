@@ -6,7 +6,7 @@ use crate::{context::CliContext, error::CliFailure, output};
 
 #[derive(Debug, Args)]
 pub(crate) struct LogArgs {
-    /// Global r_... run id.
+    /// 全局 r_... run ID。
     pub(crate) run_id: String,
 }
 

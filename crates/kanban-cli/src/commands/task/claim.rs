@@ -29,7 +29,7 @@ pub(crate) fn run(
     if ctx.json {
         output::print_json(&ClaimTaskResponse::new(claim));
     } else {
-        println!("Claimed {} token={}", claim.task.id, claim.claim_token);
+        println!("已 claim {} token={}", claim.task.id, claim.claim_token);
     }
     Ok(())
 }

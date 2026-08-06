@@ -8,11 +8,11 @@ use crate::{context::CliContext, error::CliFailure};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum EntityCommand {
-    /// List canonical entities.
+    /// 列出 canonical entity。
     List(list::ListArgs),
-    /// Show one canonical entity by URI.
+    /// 按 URI 查看一个 canonical entity。
     Show(show::ShowArgs),
-    /// Insert or update one canonical entity.
+    /// 插入或更新一个 canonical entity。
     Upsert(upsert::UpsertArgs),
 }
 

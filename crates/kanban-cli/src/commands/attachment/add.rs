@@ -20,10 +20,7 @@ pub(crate) struct AddArgs {
 pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
     let content = std::fs::read(&args.path).map_err(|error| CliFailure {
         code: "invalid_input",
-        message: format!(
-            "cannot read attachment file {}: {error}",
-            args.path.display()
-        ),
+        message: format!("读取附件文件 {} 失败：{error}", args.path.display()),
         exit_code: 2,
     })?;
     let filename = args
@@ -55,7 +52,7 @@ pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
     if ctx.json {
         output::print_json(&CliAttachmentAddOutput { data: attachment });
     } else {
-        println!("{} {} bytes", attachment.id, attachment.size_bytes);
+        println!("{} {} 字节", attachment.id, attachment.size_bytes);
     }
     Ok(())
 }

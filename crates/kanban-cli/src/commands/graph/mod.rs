@@ -12,19 +12,19 @@ use crate::{context::CliContext, error::CliFailure};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum GraphCommand {
-    /// Show canonical graph and projection status.
+    /// 查看 canonical graph 和 projection 状态。
     Status,
-    /// List outgoing canonical relation facts for an entity.
+    /// 列出 entity 的 canonical 出向关系事实。
     Neighbors(neighbors::NeighborsArgs),
-    /// Run the bounded, read-only graph query compatibility surface.
+    /// 执行有界只读 graph query 兼容 surface。
     Query(query::QueryArgs),
-    /// Show one task's bounded neighborhood.
+    /// 查看一个任务的有界 neighborhood。
     Neighborhood(neighborhood::NeighborhoodArgs),
-    /// Show a board's bounded task map.
+    /// 查看一个看板的有界任务 map。
     Map(map::MapArgs),
-    /// Reconcile graph facts (canonical relation facts are already current).
+    /// 对账 graph 事实（canonical 关系事实已是最新）。
     Rebuild,
-    /// Synchronize graph facts (canonical relation facts are already current).
+    /// 同步 graph 事实（canonical 关系事实已是最新）。
     Sync,
 }
 

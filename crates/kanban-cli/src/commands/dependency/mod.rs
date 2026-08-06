@@ -9,11 +9,11 @@ use crate::{context::CliContext, error::CliFailure};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum DependencyCommand {
-    /// Add a parent dependency to a child task.
+    /// 为子任务添加父任务依赖。
     Add(add::AddArgs),
-    /// Remove a parent dependency from a child task.
+    /// 移除子任务的父任务依赖。
     Remove(remove::RemoveArgs),
-    /// List direct parent and child dependencies for a task.
+    /// 列出任务的直接父子依赖。
     List(list::ListArgs),
 }
 

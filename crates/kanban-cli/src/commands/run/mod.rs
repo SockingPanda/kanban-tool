@@ -9,9 +9,9 @@ use crate::{context::CliContext, error::CliFailure};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum RunCommand {
-    /// Show one execution run.
+    /// 查看一个执行 run。
     Show(show::ShowArgs),
-    /// Read the bounded log snapshot for one execution run.
+    /// 读取一个执行 run 的有界日志快照。
     #[command(visible_alias = "log")]
     Logs(log::LogArgs),
 }

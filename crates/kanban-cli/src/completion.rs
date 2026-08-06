@@ -39,8 +39,8 @@ pub(crate) fn generate(shell: Shell) -> io::Result<()> {
 pub(crate) fn complete(args: &CompleteArgs, board_flag: Option<&str>) -> Result<(), CliFailure> {
     let current = args.current.as_deref().unwrap_or_default();
     let candidates: Vec<String> = match args.kind {
-        // Canonical task refs belong to the host. Completion never opens or probes Turso;
-        // returning no candidates is a quiet, successful fallback while the host is absent.
+        // canonical 任务 reference 属于 host。completion 从不打开或探测 Turso；
+        // host 不可用时返回空候选即可静默成功。
         CompleteKind::TaskRef | CompleteKind::DependencyTaskRef => Vec::new(),
         CompleteKind::Board => config::resolve_board(board_flag)
             .ok()
@@ -75,7 +75,7 @@ pub(crate) fn complete(args: &CompleteArgs, board_flag: Option<&str>) -> Result<
 
 const BASH_DYNAMIC: &str = r#"
 
-# Dynamic candidates are intentionally host-independent. They never open a database.
+# 动态候选有意与 host 无关，从不打开数据库。
 _kanban_dynamic_completions() {
     local cur prev kind
     local -a cmd positional
@@ -115,7 +115,7 @@ _kanban_dynamic_completions() {
       esac
     fi
     if [[ -n "$kind" ]]; then
-      # Keep this exact argv shape stable for shell integrations: "${cmd[@]} __complete".
+      # 为 shell integration 保持此 argv 形状稳定："${cmd[@]} __complete"。
       COMPREPLY=( $("${cmd[@]}" __complete "$kind" "$cur" 2>/dev/null) )
       return 0
     fi
@@ -126,7 +126,7 @@ complete -o default -F _kanban_dynamic_completions kanban
 
 const ZSH_DYNAMIC: &str = r#"
 
-# Dynamic candidates are intentionally host-independent. They never open a database.
+# 动态候选有意与 host 无关，从不打开数据库。
 _kanban_dynamic_completions() {
   local cur="${words[CURRENT]}" prev="${words[CURRENT-1]}" kind="" output
   local -a cmd candidates positional

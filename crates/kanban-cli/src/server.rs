@@ -9,13 +9,13 @@ use crate::{config, context::CliContext, error::CliFailure};
 
 #[derive(Debug, Args)]
 pub(crate) struct ServeArgs {
-    /// Enable the in-process single-worker dispatcher with a strict TOML profile.
+    /// 使用严格 TOML profile 启用进程内单 worker dispatcher。
     #[arg(long)]
     pub(crate) dispatcher_profile: Option<PathBuf>,
-    /// Loopback address to listen on.
+    /// 要监听的 loopback 地址。
     #[arg(long, default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
     pub(crate) host: IpAddr,
-    /// Local HTTP port.
+    /// 本地 HTTP 端口。
     #[arg(long, default_value_t = 8721)]
     pub(crate) port: u16,
 }
@@ -24,7 +24,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ServeArgs) -> Result<(), CliFai
     if !args.host.is_loopback() {
         return Err(CliFailure {
             code: "invalid_input",
-            message: "kanban serve only accepts a loopback --host".to_owned(),
+            message: "kanban serve 的 --host 只能是 loopback 地址".to_owned(),
             exit_code: 2,
         });
     }
@@ -57,7 +57,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ServeArgs) -> Result<(), CliFai
     })?;
     let addr = SocketAddr::new(args.host, args.port);
     eprintln!(
-        "kanban serve listening on http://{addr}; database={}; dispatcher={}",
+        "kanban serve 正在监听 http://{addr}；数据库={}；dispatcher={}",
         db_path.display(),
         dispatcher
             .as_ref()

@@ -9,13 +9,13 @@ use crate::{context::CliContext, error::CliFailure};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum AttachmentCommand {
-    /// Add a file-backed attachment to a task.
+    /// 向任务添加文件型附件。
     Add(add::AddArgs),
-    /// List attachment metadata for a task.
+    /// 列出任务的附件元数据。
     List(list::ListArgs),
-    /// Download attachment bytes into a local path.
+    /// 将附件字节下载到本地路径。
     Download(download::DownloadArgs),
-    /// Remove an attachment while retaining a host-local trash copy.
+    /// 移除附件，同时保留 host 本地 trash 副本。
     Remove(remove::RemoveArgs),
 }
 

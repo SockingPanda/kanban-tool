@@ -63,7 +63,7 @@ pub(crate) fn block_reason(args: &BlockArgs) -> Result<String, CliFailure> {
         (None, Some(path)) => {
             let file = std::fs::File::open(path).map_err(|error| CliFailure {
                 code: "invalid_input",
-                message: format!("failed to read --reason-file {}: {error}", path.display()),
+                message: format!("读取 --reason-file {} 失败：{error}", path.display()),
                 exit_code: 2,
             })?;
             read_limited_text(file, &format!("--reason-file {}", path.display()))?
@@ -71,7 +71,7 @@ pub(crate) fn block_reason(args: &BlockArgs) -> Result<String, CliFailure> {
         _ => {
             return Err(CliFailure {
                 code: "invalid_input",
-                message: "block requires exactly one reason or --reason-file".to_owned(),
+                message: "必须且只能提供一个阻塞原因或 --reason-file".to_owned(),
                 exit_code: 2,
             });
         }
@@ -80,7 +80,7 @@ pub(crate) fn block_reason(args: &BlockArgs) -> Result<String, CliFailure> {
     if reason.is_empty() {
         return Err(CliFailure {
             code: "invalid_input",
-            message: "block reason is required".to_owned(),
+            message: "必须提供阻塞原因".to_owned(),
             exit_code: 2,
         });
     }
@@ -94,19 +94,19 @@ fn read_limited_text(reader: impl Read, label: &str) -> Result<String, CliFailur
         .read_to_end(&mut bytes)
         .map_err(|error| CliFailure {
             code: "invalid_input",
-            message: format!("failed to read {label}: {error}"),
+            message: format!("读取 {label} 失败：{error}"),
             exit_code: 2,
         })?;
     if bytes.len() > MAX_TEXT_INPUT_BYTES {
         return Err(CliFailure {
             code: "invalid_input",
-            message: format!("{label} exceeds the 1 MiB input limit"),
+            message: format!("{label} 超过 1 MiB 输入限制"),
             exit_code: 2,
         });
     }
     String::from_utf8(bytes).map_err(|error| CliFailure {
         code: "invalid_input",
-        message: format!("{label} must be UTF-8: {error}"),
+        message: format!("{label} 必须是 UTF-8：{error}"),
         exit_code: 2,
     })
 }

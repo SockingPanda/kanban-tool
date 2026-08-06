@@ -34,7 +34,7 @@ pub(crate) fn run(ctx: &CliContext, client: &KanbanClient, args: &Args) -> Resul
     if ctx.json {
         output::print_json(&output_value);
     } else {
-        println!("vector configured: {} {}", args.model, args.dimensions);
+        println!("vector 已配置：{} {}", args.model, args.dimensions);
     }
     Ok(())
 }

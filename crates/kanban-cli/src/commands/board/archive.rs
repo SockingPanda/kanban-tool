@@ -17,7 +17,7 @@ pub(crate) fn run(ctx: &CliContext, args: &ArchiveArgs) -> Result<(), CliFailure
     if ctx.json {
         output::print_json(&ArchiveBoardResponse { data: board });
     } else {
-        println!("{} {} archived", board.id, board.slug);
+        println!("{} {} 已归档", board.id, board.slug);
     }
     Ok(())
 }

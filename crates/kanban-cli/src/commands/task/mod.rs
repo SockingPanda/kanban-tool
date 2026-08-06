@@ -23,31 +23,31 @@ use crate::{context::CliContext, error::CliFailure};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum TaskCommand {
-    /// Create a task through the shared application service.
+    /// 通过共享 application service 创建任务。
     Create(create::CreateArgs),
-    /// List tasks through the shared application service.
+    /// 通过共享 application service 列出任务。
     List(list::ListArgs),
-    /// Show a task resolved by global id or board-local reference.
+    /// 按全局 ID 或看板内 reference 解析并查看任务。
     Show(show::ShowArgs),
-    /// Manage a task's execution plan.
+    /// 管理任务的 execution plan。
     Step {
         #[command(subcommand)]
         command: step::TaskStepCommand,
     },
-    /// Promote an eligible todo or due scheduled task to ready.
+    /// 将符合条件的 todo 或到期 scheduled 任务提升为 ready。
     Promote(promote::PromoteArgs),
-    /// Atomically claim a ready task and start a run.
+    /// 原子 claim 一个 ready 任务并启动 run。
     Claim(claim::ClaimArgs),
-    /// Extend the active claim lease with a matching token.
+    /// 使用匹配 token 延长 active claim lease。
     Heartbeat(heartbeat::HeartbeatArgs),
-    /// Return an actively claimed task to ready.
+    /// 将 active claim 的任务退回 ready。
     Release(release::ReleaseArgs),
-    /// Finish the active run and submit the task for review.
+    /// 完成 active run 并将任务提交 review。
     Review(review::ReviewArgs),
-    /// Complete a running or reviewed task.
+    /// 完成 running 或 review 状态的任务。
     #[command(visible_alias = "complete")]
     Done(done::DoneArgs),
-    /// Block an active task with a required reason.
+    /// 使用必填原因阻塞 active 任务。
     Block(block::BlockArgs),
     /// 更新任务的安全字段。
     Update(update::UpdateArgs),

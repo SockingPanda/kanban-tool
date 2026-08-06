@@ -23,19 +23,19 @@ pub(crate) struct CreateArgs {
     pub(crate) due_at: Option<i64>,
     #[arg(long)]
     pub(crate) max_retries: Option<i64>,
-    /// JSON object stored as task metadata.
+    /// 作为任务 metadata 存储的 JSON 对象。
     #[arg(long)]
     pub(crate) metadata: Option<String>,
-    /// Stable retry key scoped to this board.
+    /// 作用域限定在此看板内的稳定重试 key。
     #[arg(long)]
     pub(crate) idempotency_key: Option<String>,
-    /// Optional client-selected typed task id.
+    /// 可选的、由 client 选择的 typed task ID。
     #[arg(long)]
     pub(crate) task_id: Option<String>,
-    /// Attach existing board labels by name or id (repeatable).
+    /// 按名称或 ID 绑定已有看板 label（可重复）。
     #[arg(long = "label")]
     pub(crate) labels: Vec<String>,
-    /// Add existing parent tasks by global id (repeatable).
+    /// 按全局 ID 添加已有父任务（可重复）。
     #[arg(long = "depends-on")]
     pub(crate) depends_on: Vec<String>,
 }
@@ -97,7 +97,7 @@ fn parse_metadata(
         .map(|metadata| {
             serde_json::from_str(metadata).map_err(|error| CliFailure {
                 code: "invalid_input",
-                message: format!("--metadata must be a JSON object: {error}"),
+                message: format!("--metadata 必须是 JSON 对象：{error}"),
                 exit_code: 2,
             })
         })

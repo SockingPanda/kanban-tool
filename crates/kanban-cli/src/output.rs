@@ -7,7 +7,7 @@ use crate::error::{CliErrorBody, CliErrorEnvelope, CliFailure};
 pub(crate) fn print_json<T: Serialize>(value: &T) {
     println!(
         "{}",
-        serde_json::to_string(value).expect("CLI response is serializable")
+        serde_json::to_string(value).expect("CLI 响应必须可序列化")
     );
 }
 

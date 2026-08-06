@@ -27,7 +27,7 @@ pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
             .cloned()
             .ok_or_else(|| CliFailure {
                 code: "invalid_response",
-                message: "dependency add response omitted the new edge".to_owned(),
+                message: "dependency add 响应缺少新 edge".to_owned(),
                 exit_code: 2,
             })?;
         output::print_json(&kanban_protocol::CliDependencyAddOutput {

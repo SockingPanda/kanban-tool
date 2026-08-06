@@ -10,7 +10,7 @@ use crate::{config, error::CliFailure, output};
 pub(crate) enum ConfigCommand {
     /// 查看当前配置值及其来源；不会打开、初始化或创建 Turso 数据库。
     #[command(
-        after_help = "Notes:\n  This command only resolves configuration; it does not open, initialize, migrate, or create the Turso database.\n  With --json, read data.db.source.kind, data.board.source.kind, and data.locale.source.kind instead of parsing human output.\n\nExamples:\n  kanban config show\n  kanban --json config show"
+        after_help = "说明：\n  此命令只解析配置，不会打开、初始化、迁移或创建 Turso 数据库。\n  使用 --json 时，请读取 data.db.source.kind、data.board.source.kind 和 data.locale.source.kind，\n  不要解析人类可读输出。\n\n示例：\n  kanban config show\n  kanban --json config show"
     )]
     Show,
 }
@@ -60,7 +60,7 @@ fn show(
         output::print_json(&envelope);
     } else {
         println!(
-            "db: {} ({})\nboard: {} ({})\nlocale: {} ({})",
+            "数据库：{}（{}）\n看板：{}（{}）\nlocale：{}（{}）",
             value.db.value,
             source_summary(&value.db.source),
             value.board.value,
@@ -94,12 +94,12 @@ fn source(source: config::ConfigValueSource) -> CliConfigSource {
 
 fn source_summary(source: &CliConfigSource) -> String {
     match source {
-        CliConfigSource::Flag { name } => format!("flag {name}"),
-        CliConfigSource::Env { name } => format!("env {name}"),
+        CliConfigSource::Flag { name } => format!("命令行 flag {name}"),
+        CliConfigSource::Env { name } => format!("环境变量 {name}"),
         CliConfigSource::ProjectConfig { path, key } => {
-            format!("project config {path}:{key}")
+            format!("项目配置 {path}:{key}")
         }
-        CliConfigSource::GlobalConfig { path, key } => format!("global config {path}:{key}"),
-        CliConfigSource::Default => "default".to_owned(),
+        CliConfigSource::GlobalConfig { path, key } => format!("全局配置 {path}:{key}"),
+        CliConfigSource::Default => "默认值".to_owned(),
     }
 }

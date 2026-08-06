@@ -10,42 +10,42 @@ use crate::{context::CliContext, error::CliFailure};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum LabelCommand {
-    /// List labels defined on the selected board.
+    /// 列出所选看板定义的 label。
     List(list::ListArgs),
-    /// Create a board label, or return the existing label with the same name.
+    /// 创建看板 label；若同名则返回已有 label。
     Create(create::CreateArgs),
-    /// Attach one or more labels to a task.
+    /// 将一个或多个 label 绑定到任务。
     Add(add::AddArgs),
-    /// Remove a label from a task by id or name.
+    /// 按 ID 或名称移除任务的 label。
     Remove(remove::RemoveArgs),
-    /// Manage label semantics text and examples.
+    /// 管理 label semantics 文本和示例。
     Semantics {
         #[command(subcommand)]
         command: ontology::SemanticsCommand,
     },
-    /// Inspect label ontology atoms.
+    /// 查看 label ontology atom。
     #[command(alias = "atom")]
     Atoms {
         #[command(subcommand)]
         command: ontology::AtomCommand,
     },
-    /// Maintain and query the label atom index.
+    /// 维护并查询 label atom index。
     #[command(name = "atom-index")]
     AtomIndex {
         #[command(subcommand)]
         command: ontology::AtomIndexCommand,
     },
-    /// Suggest labels for a task.
+    /// 为任务建议 label。
     Suggest(ontology::SuggestArgs),
-    /// Create a label proposal from task context or JSON input.
+    /// 根据任务上下文或 JSON 输入创建 label proposal。
     Propose(ontology::ProposeArgs),
-    /// Review and decide pending label proposals.
+    /// 审核并决定待处理的 label proposal。
     #[command(alias = "proposal")]
     Proposals {
         #[command(subcommand)]
         command: ontology::ProposalCommand,
     },
-    /// Record, review, apply, and validate label ontology signals.
+    /// 记录、审核、应用并校验 label ontology signal。
     Ontology {
         #[command(subcommand)]
         command: ontology::LedgerCommand,

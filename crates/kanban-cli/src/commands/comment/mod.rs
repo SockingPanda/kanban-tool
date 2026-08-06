@@ -7,9 +7,9 @@ use crate::{context::CliContext, error::CliFailure};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum CommentCommand {
-    /// Add one note or decision comment to a task.
+    /// 向任务添加备注或决策评论。
     Add(add::AddArgs),
-    /// List task comments from the canonical application host.
+    /// 从 canonical application host 列出任务评论。
     List(list::ListArgs),
 }
 

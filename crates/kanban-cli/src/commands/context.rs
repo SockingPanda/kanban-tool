@@ -50,7 +50,7 @@ pub(crate) fn run(ctx: &CliContext, command: &ContextCommand) -> Result<(), CliF
     if task.is_none() && reference.is_none() && query.is_none() {
         return Err(CliFailure {
             code: "invalid_input",
-            message: "one of subject, --task, --reference or --query is required".to_owned(),
+            message: "必须提供 subject、--task、--reference 或 --query 之一".to_owned(),
             exit_code: 2,
         });
     }
@@ -80,17 +80,13 @@ pub(crate) fn run(ctx: &CliContext, command: &ContextCommand) -> Result<(), CliF
         }
         if response.data.truncated {
             println!(
-                "truncated: {}",
-                response
-                    .data
-                    .truncation_reason
-                    .as_deref()
-                    .unwrap_or("unknown")
+                "已截断：{}",
+                response.data.truncation_reason.as_deref().unwrap_or("未知")
             );
         }
         for provider in response.data.providers {
             println!(
-                "provider {} capability={} available={} degraded={} reason={}",
+                "provider {}；capability={}；可用={}；已降级={}；原因={}",
                 provider.provider,
                 provider.capability,
                 provider.available,

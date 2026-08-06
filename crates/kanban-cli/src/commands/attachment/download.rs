@@ -17,7 +17,7 @@ pub(crate) fn run(ctx: &CliContext, args: &DownloadArgs) -> Result<(), CliFailur
     let downloaded = client.download_attachment(&task_id, &args.attachment_id)?;
     std::fs::write(&args.out, downloaded.content).map_err(|error| CliFailure {
         code: "storage",
-        message: format!("cannot write {}: {error}", args.out.display()),
+        message: format!("写入 {} 失败：{error}", args.out.display()),
         exit_code: 1,
     })?;
     if !ctx.json {

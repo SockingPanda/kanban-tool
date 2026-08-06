@@ -102,26 +102,20 @@ impl From<io::Error> for ConfigError {
 impl std::fmt::Display for ConfigError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Io { path, source } => write!(
-                formatter,
-                "failed to access config {}: {source}",
-                path.display()
-            ),
+            Self::Io { path, source } => {
+                write!(formatter, "访问配置 {} 失败：{source}", path.display())
+            }
             Self::Parse {
                 path,
                 field_path,
                 message,
             } => write!(
                 formatter,
-                "failed to parse config {} at {field_path}: {message}",
+                "解析配置 {} 的 {field_path} 失败：{message}",
                 path.display()
             ),
             Self::Serialize { path, message } => {
-                write!(
-                    formatter,
-                    "failed to serialize config {}: {message}",
-                    path.display()
-                )
+                write!(formatter, "序列化配置 {} 失败：{message}", path.display())
             }
         }
     }
@@ -329,7 +323,7 @@ pub(crate) fn write_active_board(board: &str) -> Result<ActiveBoardWrite, Config
     let board = non_empty_string(Some(board)).ok_or_else(|| ConfigError::Parse {
         path: PathBuf::from(".kb/config.toml"),
         field_path: "board".to_owned(),
-        message: "board must not be empty".to_owned(),
+        message: "board 不能为空".to_owned(),
     })?;
     let path = project_config_path_for_write().map_err(|source| ConfigError::Io {
         path: PathBuf::from(".kb/config.toml"),
@@ -381,7 +375,7 @@ pub(crate) fn atomic_write(path: &Path, content: &[u8]) -> io::Result<bool> {
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("refusing to replace symlink config path {}", path.display()),
+            format!("拒绝替换符号链接配置路径 {}", path.display()),
         ));
     }
     if let Ok(existing) = fs::read(path)

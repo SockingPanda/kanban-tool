@@ -7,7 +7,7 @@ use crate::{context::CliContext, error::CliFailure, output};
 #[derive(Debug, Args)]
 pub(crate) struct ShowArgs {
     pub(crate) task_ref: String,
-    /// Include canonical labels, dependencies, plan, steps, comments, runs and events.
+    /// 包含 canonical labels、dependencies、plan、steps、comments、runs 和 events。
     #[arg(long)]
     pub(crate) details: bool,
 }
@@ -23,7 +23,7 @@ pub(crate) fn run(
             output::print_json(&GetTaskDetailsResponse { data: detail });
         } else {
             println!(
-                "{} {} {} (labels: {}, dependencies: {}, steps: {}, comments: {}, runs: {}, events: {})",
+                "{} {} {}（labels：{}，dependencies：{}，steps：{}，comments：{}，runs：{}，events：{}）",
                 detail.task.task_ref,
                 detail.task.status.as_str(),
                 detail.task.title,

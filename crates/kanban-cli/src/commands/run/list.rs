@@ -6,7 +6,7 @@ use crate::{context::CliContext, error::CliFailure, output};
 
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs {
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     pub(crate) task_ref: String,
 }
 

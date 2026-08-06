@@ -35,7 +35,7 @@ pub(crate) fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure>
         });
     } else {
         println!(
-            "removed {} depends_on {} ({})",
+            "已移除 {} depends_on {} ({})",
             child.task_ref,
             parent.task_ref,
             dependencies.task.status.as_str()

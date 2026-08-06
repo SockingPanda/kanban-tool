@@ -204,7 +204,7 @@ fn handle_payload(kind: HandlerKind) -> Result<(), CliFailure> {
     let mut raw = String::new();
     io::stdin()
         .read_to_string(&mut raw)
-        .map_err(|error| io_failure("failed to read Codex hook payload", error))?;
+        .map_err(|error| io_failure("读取 Codex hook payload 失败", error))?;
     let Some(payload) = parse_hook_payload(&raw) else {
         return Ok(());
     };
@@ -240,7 +240,7 @@ fn hooks_config_path() -> Result<PathBuf, CliFailure> {
     }
     let home = env::var_os("HOME").ok_or_else(|| CliFailure {
         code: "invalid_input",
-        message: "HOME is not set; set CODEX_HOME for Codex hook management".to_owned(),
+        message: "未设置 HOME；请设置 CODEX_HOME 以管理 Codex hook".to_owned(),
         exit_code: 2,
     })?;
     Ok(PathBuf::from(home).join(".codex/hooks.json"))
@@ -250,21 +250,18 @@ fn read_hooks_config(path: &Path) -> Result<Value, CliFailure> {
     if !path.exists() {
         return Ok(json!({ "hooks": {} }));
     }
-    let text = fs::read_to_string(path)
-        .map_err(|error| io_failure("failed to read hooks config", error))?;
+    let text =
+        fs::read_to_string(path).map_err(|error| io_failure("读取 hooks 配置失败", error))?;
     if text.trim().is_empty() {
         return Ok(json!({ "hooks": {} }));
     }
     let value: Value = serde_json::from_str(&text).map_err(|error| CliFailure {
         code: "invalid_input",
-        message: format!("failed to parse {} as JSON: {error}", path.display()),
+        message: format!("解析 {} 的 JSON 失败：{error}", path.display()),
         exit_code: 2,
     })?;
     if !value.is_object() {
-        return Err(invalid(format!(
-            "{} must contain a JSON object",
-            path.display()
-        )));
+        return Err(invalid(format!("{} 必须包含 JSON 对象", path.display())));
     }
     Ok(value)
 }
@@ -279,7 +276,7 @@ fn write_hooks_config(path: &Path, value: &Value) -> Result<(), CliFailure> {
     content.push(b'\n');
     config::atomic_write(path, &content)
         .map(|_| ())
-        .map_err(|error| io_failure("failed to write hooks config", error))
+        .map_err(|error| io_failure("写入 hooks 配置失败", error))
 }
 
 fn install_managed_hooks(
@@ -293,7 +290,7 @@ fn install_managed_hooks(
         .or_insert_with(|| Value::Array(Vec::new()));
     let groups = post
         .as_array_mut()
-        .ok_or_else(|| invalid("hooks.PostToolUse must be an array"))?;
+        .ok_or_else(|| invalid("hooks.PostToolUse 必须是数组"))?;
     let hook_values = managed
         .iter()
         .map(|hook| {
@@ -344,13 +341,13 @@ fn remove_managed_hooks(value: &mut Value) -> Result<usize, CliFailure> {
 fn hooks_object_mut(value: &mut Value) -> Result<&mut Map<String, Value>, CliFailure> {
     let root = value
         .as_object_mut()
-        .ok_or_else(|| invalid("hooks config root must be a JSON object"))?;
+        .ok_or_else(|| invalid("hooks 配置根必须是 JSON 对象"))?;
     let hooks = root
         .entry("hooks")
         .or_insert_with(|| Value::Object(Map::new()));
     hooks
         .as_object_mut()
-        .ok_or_else(|| invalid("hooks config field `hooks` must be a JSON object"))
+        .ok_or_else(|| invalid("hooks 配置字段 `hooks` 必须是 JSON 对象"))
 }
 
 fn is_managed_hook(value: &Value) -> bool {
@@ -469,7 +466,7 @@ fn ensure_prompt_config_exists(path: &Path) -> Result<bool, CliFailure> {
     let mut content = content;
     content.push(b'\n');
     config::atomic_write(path, &content)
-        .map_err(|error| io_failure("failed to write Codex prompt config", error))
+        .map_err(|error| io_failure("写入 Codex prompt 配置失败", error))
 }
 
 fn default_prompt_config() -> Value {
@@ -544,12 +541,12 @@ fn inspect_prompt_config(path: &Path) -> CliHookPromptConfigStatus {
 
 fn prompt_bindings_from_config(value: &Value) -> Result<CliHookPromptBindings, String> {
     if value.get("version").and_then(Value::as_i64) != Some(1) {
-        return Err("codex hook prompt config version must be 1".to_owned());
+        return Err("codex hook prompt 配置版本必须为 1".to_owned());
     }
     let hooks = value
         .get("codex_hooks")
         .and_then(Value::as_object)
-        .ok_or_else(|| "codex_hooks must be an object".to_owned())?;
+        .ok_or_else(|| "codex_hooks 必须是对象".to_owned())?;
     let alias = |key: &str, default: &str| {
         let alias = hooks
             .get("bindings")
@@ -557,7 +554,7 @@ fn prompt_bindings_from_config(value: &Value) -> Result<CliHookPromptBindings, S
             .and_then(Value::as_str)
             .unwrap_or(default);
         if alias.trim().is_empty() {
-            Err(format!("codex_hooks.bindings.{key} must not be empty"))
+            Err(format!("codex_hooks.bindings.{key} 不能为空"))
         } else {
             Ok(alias.to_owned())
         }
@@ -578,9 +575,9 @@ fn validate_prompt_templates(
             .and_then(|hooks| hooks.get("prompts"))
             .and_then(|prompts| prompts.get(alias))
             .and_then(Value::as_str)
-            .ok_or_else(|| format!("codex_hooks.prompts.{alias} must be a string"))?;
+            .ok_or_else(|| format!("codex_hooks.prompts.{alias} 必须是字符串"))?;
         if template.trim().is_empty() {
-            return Err(format!("codex_hooks.prompts.{alias} must not be empty"));
+            return Err(format!("codex_hooks.prompts.{alias} 不能为空"));
         }
     }
     Ok(())
@@ -785,7 +782,7 @@ fn load_hook_prompt_template(kind: PromptKind) -> (String, Option<String>) {
             .and_then(Value::as_str)
             .filter(|template| !template.trim().is_empty())
             .map(str::to_owned)
-            .ok_or_else(|| format!("codex_hooks.prompts.{alias} must be a string"))
+            .ok_or_else(|| format!("codex_hooks.prompts.{alias} 必须是字符串"))
     });
     match binding {
         Ok(template) => (template, None),

@@ -17,7 +17,7 @@ pub(crate) fn run(ctx: &CliContext, args: &ListArgs) -> Result<(), CliFailure> {
     } else {
         for attachment in attachments {
             println!(
-                "{} task={} {} bytes {}",
+                "{} task={} {} 字节 {}",
                 attachment.id, attachment.task_id, attachment.size_bytes, attachment.filename
             );
         }

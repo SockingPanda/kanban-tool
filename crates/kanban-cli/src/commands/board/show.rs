@@ -16,10 +16,10 @@ pub(crate) fn run(ctx: &CliContext, args: &ShowArgs) -> Result<(), CliFailure> {
     } else {
         println!("{} {} {}", board.id, board.slug, board.name);
         if let Some(description) = board.description.as_deref() {
-            println!("description: {description}");
+            println!("描述：{description}");
         }
         if let Some(archived_at) = board.archived_at {
-            println!("archived_at: {archived_at}");
+            println!("归档时间：{archived_at}");
         }
     }
     Ok(())

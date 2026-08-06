@@ -6,13 +6,13 @@ use crate::{context::CliContext, error::CliFailure, output};
 #[derive(Debug, Subcommand)]
 #[command(arg_required_else_help = true)]
 pub(crate) enum IndexCommand {
-    /// Show search index status.
+    /// 查看搜索 index 状态。
     Status,
-    /// Diagnose search index consistency.
+    /// 诊断搜索 index 一致性。
     Doctor,
-    /// Rebuild the search index from canonical tasks.
+    /// 从 canonical 任务重建搜索 index。
     Rebuild,
-    /// Synchronize pending search projection work.
+    /// 同步待处理的搜索 projection 工作。
     Sync,
 }
 
@@ -40,7 +40,7 @@ fn show_status(
     } else {
         let status = response.data;
         println!(
-            "search backend={} derived_index={} stale={} last_event_id={:?} lag={:?}: {}",
+            "search backend={}；derived_index={}；stale={}；last_event_id={:?}；lag={:?}：{}",
             status.backend,
             status.derived_index,
             status.stale,

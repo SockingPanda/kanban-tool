@@ -1,4 +1,4 @@
-//! CLI adapter for the label semantics and ontology ledger.
+//! label semantics 与 ontology ledger 的 CLI adapter。
 
 use clap::{Args, Subcommand};
 use serde_json::{Value, json};
@@ -153,7 +153,7 @@ pub(crate) struct RecordArgs {
 fn parse_json(raw: &str) -> Result<Value, CliFailure> {
     serde_json::from_str(raw).map_err(|error| CliFailure {
         code: "invalid_input",
-        message: format!("invalid JSON payload: {error}"),
+        message: format!("JSON payload 无效：{error}"),
         exit_code: 2,
     })
 }

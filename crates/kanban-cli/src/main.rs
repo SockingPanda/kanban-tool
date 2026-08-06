@@ -18,12 +18,12 @@ use error::{CliFailure, feature_not_available};
 #[command(
     name = "kanban",
     version,
-    about = "Local Turso-backed Kanban work queue",
+    about = "基于本地 Turso 的 Kanban 工作队列",
     arg_required_else_help = true,
-    after_help = "All product commands call kanban serve; only `kanban serve` opens the database."
+    after_help = "所有产品命令都通过 kanban serve；只有 `kanban serve` 会打开数据库。"
 )]
 struct Cli {
-    /// Canonical localhost application host.
+    /// canonical localhost 应用 host。
     #[arg(
         long,
         global = true,
@@ -31,19 +31,19 @@ struct Cli {
         default_value = DEFAULT_SERVER_URL
     )]
     server_url: String,
-    /// Board slug or id used by board-scoped client commands.
+    /// board-scoped client 命令使用的看板 slug 或 ID。
     #[arg(long, global = true)]
     board: Option<String>,
-    /// Canonical Turso path used by `serve` and configuration inspection only.
+    /// 仅供 `serve` 和配置检查使用的 canonical Turso 路径。
     #[arg(long, global = true)]
     db: Option<std::path::PathBuf>,
-    /// Human-readable output locale; JSON keys and enums stay stable.
+    /// 人类可读输出的 locale；JSON key 和枚举保持稳定。
     #[arg(long, global = true)]
     locale: Option<String>,
-    /// Audit actor sent to the application host.
+    /// 发送给应用 host 的审计 actor。
     #[arg(long, global = true, env = "KANBAN_ACTOR")]
     actor: Option<String>,
-    /// Emit stable JSON envelopes.
+    /// 输出稳定的 JSON envelope。
     #[arg(long, global = true)]
     json: bool,
     #[command(subcommand)]
@@ -52,30 +52,30 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Start the only process allowed to open the Turso database.
+    /// 启动唯一允许打开 Turso 数据库的进程。
     Serve(server::ServeArgs),
-    /// Query boards through the localhost application host.
+    /// 通过 localhost 应用 host 查询看板。
     Board {
         #[command(subcommand)]
         command: commands::board::BoardCommand,
     },
-    /// Select and inspect the project-local active board without opening Turso.
+    /// 不打开 Turso，选择并查看项目本地 active board。
     Config {
         #[command(subcommand)]
         command: commands::config::ConfigCommand,
     },
-    /// Manage tasks through the canonical localhost host.
+    /// 通过 canonical localhost host 管理任务。
     Task {
         #[command(subcommand)]
         command: commands::task::TaskCommand,
     },
-    /// Manage board labels and task label bindings through the canonical host.
+    /// 通过 canonical host 管理看板 label 和任务 label 绑定。
     #[command(visible_alias = "labels", visible_alias = "ontology")]
     Label {
         #[command(subcommand)]
         command: commands::label::LabelCommand,
     },
-    /// Manage task comments through the canonical localhost host.
+    /// 通过 canonical localhost host 管理任务评论。
     Comment {
         #[command(subcommand)]
         command: commands::comment::CommentCommand,
@@ -85,31 +85,31 @@ enum Command {
         #[command(subcommand)]
         command: commands::context::ContextCommand,
     },
-    /// Manage file-backed task attachments through the canonical localhost host.
+    /// 通过 canonical localhost host 管理文件型任务附件。
     Attachment {
         #[command(subcommand)]
         command: commands::attachment::AttachmentCommand,
     },
-    /// Manage task dependencies through the canonical localhost host.
+    /// 通过 canonical localhost host 管理任务依赖。
     #[command(name = "dep", visible_alias = "dependency")]
     Dependency {
         #[command(subcommand)]
         command: commands::dependency::DependencyCommand,
     },
-    /// Inspect and maintain canonical graph entities.
+    /// 查看并维护 canonical graph entity。
     #[command(name = "entity", visible_alias = "entities")]
     Entity {
         #[command(subcommand)]
         command: commands::entities::EntityCommand,
     },
-    /// Query the bounded canonical task/entity graph.
+    /// 查询有界的 canonical task/entity graph。
     Graph {
         #[command(subcommand)]
         command: commands::graph::GraphCommand,
     },
-    /// List canonical task events through the localhost host.
+    /// 通过 localhost host 列出 canonical 任务事件。
     Events(commands::event::ListArgs),
-    /// List execution runs for a task through the canonical localhost host.
+    /// 通过 canonical localhost host 列出任务的执行 run。
     Runs(commands::run::ListArgs),
     /// 检查 canonical 数据库健康状态。
     Doctor,
@@ -130,38 +130,35 @@ enum Command {
     Vacuum,
     /// 管理 projection owner、generation 和 recovery。
     Maintenance(commands::maintenance::MaintenanceArgs),
-    /// Inspect one execution run through the canonical localhost host.
+    /// 通过 canonical localhost host 查看一个执行 run。
     Run {
         #[command(subcommand)]
         command: commands::run::RunCommand,
     },
-    /// Search tasks through the canonical localhost host.
+    /// 通过 canonical localhost host 搜索任务。
     Search(commands::search::SearchArgs),
-    /// Inspect and maintain the task search projection.
+    /// 查看并维护任务搜索 projection。
     Index {
         #[command(subcommand)]
         command: commands::index::IndexCommand,
     },
-    /// Record and review generic signals through the canonical host.
+    /// 通过 canonical host 记录并审核通用 signal。
     Signal {
         #[command(subcommand)]
         command: commands::signal::SignalCommand,
     },
-    /// Create the project `.kb/config.toml` selection file without opening Turso.
+    /// 创建项目 `.kb/config.toml` 选择文件，不打开 Turso。
     Init {
-        /// Idempotent compatibility flag; init never resets existing user settings.
-        #[arg(
-            long,
-            help = "Deprecated compatibility no-op; init is idempotent and never resets data"
-        )]
+        /// 幂等兼容 flag；init 从不重置已有用户设置。
+        #[arg(long, help = "已弃用的兼容空操作；init 幂等且从不重置数据")]
         force: bool,
     },
-    /// Generate shell completion scripts without touching configuration or Turso.
+    /// 生成 shell completion 脚本，不触碰配置或 Turso。
     Completions { shell: completion::Shell },
-    /// Hidden protocol used by generated Bash/Zsh dynamic completion helpers.
+    /// 供生成的 Bash/Zsh 动态 completion helper 使用的隐藏协议。
     #[command(name = "__complete", hide = true)]
     Complete(completion::CompleteArgs),
-    /// Install or inspect Codex lifecycle hooks.
+    /// 安装或查看 Codex 生命周期 hook。
     Hook {
         #[command(subcommand)]
         command: commands::hook::HookCommand,
@@ -171,7 +168,7 @@ enum Command {
         #[command(subcommand)]
         command: commands::vector::VectorCommand,
     },
-    /// Commands not yet migrated to the canonical host fail without touching storage.
+    /// 尚未迁移到 canonical host 的命令会失败，且不会触碰存储。
     #[command(external_subcommand)]
     FeatureNotAvailable(Vec<String>),
 }
@@ -245,7 +242,7 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
         | Command::Completions { .. }
         | Command::Complete(_) => unreachable!("handled before client command dispatch"),
         Command::FeatureNotAvailable(parts) => Err(feature_not_available(format!(
-            "command `{}` is not available on the single-host path yet",
+            "命令 `{}` 尚未在单 Host 路径上提供",
             parts.join(" ")
         ))),
     }

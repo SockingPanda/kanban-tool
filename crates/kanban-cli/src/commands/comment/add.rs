@@ -17,7 +17,7 @@ pub(crate) struct AddArgs {
     pub(crate) author_type: Option<CommentAuthorTypeArg>,
     #[arg(long)]
     pub(crate) agent_type: Option<String>,
-    /// JSON object stored as comment metadata.
+    /// 作为评论 metadata 存储的 JSON 对象。
     #[arg(long = "metadata-json")]
     pub(crate) metadata_json: Option<String>,
     #[arg(long)]
@@ -93,7 +93,7 @@ fn parse_metadata(
         .map(|metadata| {
             serde_json::from_str(metadata).map_err(|error| CliFailure {
                 code: "invalid_input",
-                message: format!("--metadata must be a JSON object: {error}"),
+                message: format!("--metadata 必须是 JSON 对象：{error}"),
                 exit_code: 2,
             })
         })

@@ -18,7 +18,7 @@ pub(crate) fn run(ctx: &CliContext, args: &RemoveArgs) -> Result<(), CliFailure>
             data: kanban_protocol::DeleteResult { deleted },
         });
     } else {
-        println!("{}", if deleted { "removed" } else { "not found" });
+        println!("{}", if deleted { "已移除" } else { "未找到" });
     }
     Ok(())
 }

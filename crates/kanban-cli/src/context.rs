@@ -2,11 +2,10 @@ use kanban_client::{ClientError, KanbanClient};
 
 use crate::{Cli, config, error::CliFailure};
 
-/// Runtime values shared by command handlers after clap has parsed the CLI.
+/// clap 解析 CLI 后由命令处理器共享的运行时值。
 ///
-/// Keeping this small context separate from the parser lets each operation
-/// module depend on the same client construction and output flags without
-/// depending on another operation module.
+/// 将这个小型上下文与 parser 分离后，各 operation module 可以共享 client 构造和输出 flag，
+/// 而无需依赖其它 operation module。
 #[derive(Debug, Clone)]
 pub(crate) struct CliContext {
     pub(crate) server_url: String,

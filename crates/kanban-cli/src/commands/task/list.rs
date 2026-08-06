@@ -70,7 +70,7 @@ fn list_tasks_query(args: &ListArgs) -> Result<ListTasksQuery, CliFailure> {
         .map(|value| {
             ApiTaskPriority::try_from(value).map_err(|value| CliFailure {
                 code: "invalid_input",
-                message: format!("priority must be between 0 and 3, got {value}"),
+                message: format!("priority 必须在 0 到 3 之间，实际为 {value}"),
                 exit_code: 2,
             })
         })
@@ -81,14 +81,14 @@ fn list_tasks_query(args: &ListArgs) -> Result<ListTasksQuery, CliFailure> {
         .map(|value| {
             TaskReadPlanFilter::from_str(value).map_err(|()| CliFailure {
                 code: "invalid_input",
-                message: format!("unsupported --plan-filter: {value}"),
+                message: format!("不支持的 --plan-filter：{value}"),
                 exit_code: 2,
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
     let sort = TaskReadSort::from_str(&args.sort).map_err(|()| CliFailure {
         code: "invalid_input",
-        message: format!("unsupported --sort: {}", args.sort),
+        message: format!("不支持的 --sort：{}", args.sort),
         exit_code: 2,
     })?;
     Ok(ListTasksQuery {
@@ -100,7 +100,7 @@ fn list_tasks_query(args: &ListArgs) -> Result<ListTasksQuery, CliFailure> {
             .map(|value| {
                 TaskReadLabel::new(value.clone()).ok_or_else(|| CliFailure {
                     code: "invalid_input",
-                    message: format!("invalid --label: {value}"),
+                    message: format!("--label 无效：{value}"),
                     exit_code: 2,
                 })
             })

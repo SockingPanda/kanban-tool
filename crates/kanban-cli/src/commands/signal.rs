@@ -16,27 +16,27 @@ use crate::{context::CliContext, error::CliFailure, output};
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum SignalCommand {
-    /// Record one generic signal from a JSON request body.
+    /// 根据 JSON 请求体记录一个通用 signal。
     Record(RecordArgs),
-    /// List signals on the current board.
+    /// 列出当前看板的 signal。
     List(ListArgs),
-    /// Show one signal by global id.
+    /// 按全局 ID 查看一个 signal。
     Show(ShowArgs),
-    /// List signals eligible for review.
+    /// 列出符合 review 条件的 signal。
     Review(ListReviewArgs),
-    /// Confirm one or more signals.
+    /// 确认一个或多个 signal。
     Confirm(LifecycleArgs),
-    /// Reject one or more signals.
+    /// 拒绝一个或多个 signal。
     Reject(LifecycleArgs),
-    /// Resolve one or more signals.
+    /// 解决一个或多个 signal。
     Resolve(LifecycleArgs),
-    /// Supersede one or more signals with another signal.
+    /// 使用另一个 signal 取代一个或多个 signal。
     Supersede(SupersedeArgs),
 }
 
 #[derive(Debug, Args)]
 pub(crate) struct RecordArgs {
-    /// JSON file, or '-' to read JSON from stdin.
+    /// JSON 文件；使用 `-` 从 stdin 读取 JSON。
     #[arg(long, default_value = "-")]
     pub(crate) input: String,
 }
@@ -241,15 +241,14 @@ fn read_record_request(path: &str) -> Result<RecordSignalRequest, CliFailure> {
         let mut content = String::new();
         std::io::stdin()
             .read_to_string(&mut content)
-            .map_err(|error| invalid_input(format!("failed to read signal input: {error}")))?;
+            .map_err(|error| invalid_input(format!("读取 signal 输入失败：{error}")))?;
         content
     } else {
-        fs::read_to_string(path).map_err(|error| {
-            invalid_input(format!("failed to read signal input {path}: {error}"))
-        })?
+        fs::read_to_string(path)
+            .map_err(|error| invalid_input(format!("读取 signal 输入 {path} 失败：{error}")))?
     };
     serde_json::from_str(&content)
-        .map_err(|error| invalid_input(format!("failed to parse signal input JSON: {error}")))
+        .map_err(|error| invalid_input(format!("解析 signal 输入 JSON 失败：{error}")))
 }
 
 fn signal_query(
@@ -275,7 +274,7 @@ fn cli_signal(signal: SignalWire) -> Result<CliSignal, CliFailure> {
         "rejected" => CliSignalStatus::Rejected,
         "superseded" => CliSignalStatus::Superseded,
         "resolved" => CliSignalStatus::Resolved,
-        value => return Err(invalid_input(format!("unknown signal status: {value}"))),
+        value => return Err(invalid_input(format!("未知的 signal status：{value}"))),
     };
     let observation = signal.observation;
     Ok(CliSignal {

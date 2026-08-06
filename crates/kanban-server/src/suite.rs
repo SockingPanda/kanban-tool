@@ -222,6 +222,10 @@ mod labels_adoption {
 }
 
 mod maintenance_adoption {
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
     use kanban_protocol::{
         BackupResponse, CheckpointResponse, DoctorResponse, ExportResponse, ImportResponse,
         LegacyImportRequest, LegacyImportResponse, MaintenanceImportRequest,
@@ -230,6 +234,210 @@ mod maintenance_adoption {
     };
     use serde::{Serialize, de::DeserializeOwned};
     use serde_json::Value;
+    use tokio::sync::OnceCell;
+    use tower::ServiceExt;
+
+    use crate::{AppState, build_router};
+
+    static HTTP_FLOW: OnceCell<()> = OnceCell::const_new();
+
+    async fn ensure_http_flow() {
+        HTTP_FLOW
+            .get_or_init(|| async {
+                run_http_flow().await.expect("maintenance HTTP flow");
+            })
+            .await;
+    }
+
+    async fn run_http_flow() -> Result<(), String> {
+        let directory = tempfile::tempdir().map_err(|error| error.to_string())?;
+        let source_path = directory.path().join("http-source.db");
+        let source = AppState::open(&source_path, "adoption-owner")
+            .await
+            .map_err(|error| error.to_string())?;
+        let router = build_router(source.clone());
+
+        let doctor = router
+            .clone()
+            .oneshot(get_request("/api/v1/maintenance/doctor"))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(doctor.status(), StatusCode::OK);
+        let doctor: DoctorResponse = decode_json(doctor).await?;
+        assert_eq!(doctor.data.integrity_check, "ok");
+
+        let checkpoint = router
+            .clone()
+            .oneshot(post_json(
+                "/api/v1/maintenance/checkpoint",
+                serde_json::json!({}),
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(checkpoint.status(), StatusCode::OK);
+        let checkpoint: CheckpointResponse = decode_json(checkpoint).await?;
+        assert!(checkpoint.data.busy >= 0);
+        assert!(checkpoint.data.checkpointed_frames <= checkpoint.data.log_frames);
+
+        let backup_path = directory.path().join("http-backup.db");
+        let backup = router
+            .clone()
+            .oneshot(post_json(
+                "/api/v1/maintenance/backup",
+                serde_json::json!({"path": backup_path}),
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(backup.status(), StatusCode::CREATED);
+        let backup: BackupResponse = decode_json(backup).await?;
+        assert!(backup.data.bytes > 0);
+
+        let export_path = directory.path().join("http-portable.jsonl");
+        let export = router
+            .clone()
+            .oneshot(post_json(
+                "/api/v1/maintenance/export",
+                serde_json::json!({"path": export_path}),
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(export.status(), StatusCode::CREATED);
+        let export: ExportResponse = decode_json(export).await?;
+        assert!(export.data.bytes > 0);
+
+        let status = router
+            .clone()
+            .oneshot(get_request("/api/v1/maintenance/status"))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(status.status(), StatusCode::OK);
+        let status: MaintenanceStatusResponse = decode_json(status).await?;
+        assert!(!status.data.owner.active);
+
+        let run = router
+            .clone()
+            .oneshot(post_json(
+                "/api/v1/maintenance/run",
+                serde_json::json!({"owner":"adoption-owner","action":"run"}),
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(run.status(), StatusCode::OK);
+        let run: MaintenanceRunResponse = decode_json(run).await?;
+        assert_eq!(run.data.action, "run");
+
+        let rebuild = router
+            .clone()
+            .oneshot(post_json(
+                "/api/v1/maintenance/rebuild",
+                serde_json::json!({"owner":"adoption-owner","action":"rebuild"}),
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(rebuild.status(), StatusCode::OK);
+        let rebuild: MaintenanceRebuildResponse = decode_json(rebuild).await?;
+        assert_eq!(rebuild.data.action, "rebuild");
+
+        let cleanup = router
+            .clone()
+            .oneshot(post_json(
+                "/api/v1/maintenance/cleanup",
+                serde_json::json!({"owner":"adoption-owner","action":"cleanup"}),
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(cleanup.status(), StatusCode::OK);
+        let cleanup: MaintenanceRunResponse = decode_json(cleanup).await?;
+        assert_eq!(cleanup.data.action, "cleanup");
+
+        let compact = router
+            .clone()
+            .oneshot(post_json(
+                "/api/v1/maintenance/run",
+                serde_json::json!({"owner":"adoption-owner","action":"compact"}),
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(compact.status(), StatusCode::OK);
+        let compact: MaintenanceRunResponse = decode_json(compact).await?;
+        assert_eq!(compact.data.action, "compact");
+
+        let vacuum = router
+            .clone()
+            .oneshot(post_json(
+                "/api/v1/maintenance/vacuum",
+                serde_json::json!({}),
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(vacuum.status(), StatusCode::OK);
+        let vacuum: VacuumResponse = decode_json(vacuum).await?;
+        assert!(vacuum.data.ok);
+
+        let target_path = directory.path().join("http-target.db");
+        let target = AppState::open(&target_path, "adoption-owner")
+            .await
+            .map_err(|error| error.to_string())?;
+        let target_router = build_router(target);
+        let import = target_router
+            .clone()
+            .oneshot(post_json(
+                "/api/v1/maintenance/import",
+                serde_json::json!({"path": export_path, "replace": false}),
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(import.status(), StatusCode::OK);
+        let import: ImportResponse = decode_json(import).await?;
+        assert_eq!(import.data.phase, "completed");
+        assert!(!import.data.restart_required);
+
+        let replace_target_path = directory.path().join("http-replace-target.db");
+        let replace_target = AppState::open(&replace_target_path, "adoption-owner")
+            .await
+            .map_err(|error| error.to_string())?;
+        let replace_router = build_router(replace_target);
+        let replace = replace_router
+            .oneshot(post_json(
+                "/api/v1/maintenance/import",
+                serde_json::json!({"path": export_path, "replace": true}),
+            ))
+            .await
+            .map_err(|error| error.to_string())?;
+        assert_eq!(replace.status(), StatusCode::OK);
+        let replace: ImportResponse = decode_json(replace).await?;
+        assert_eq!(replace.data.phase, "completed");
+        Ok(())
+    }
+
+    fn get_request(uri: &str) -> Request<Body> {
+        Request::builder()
+            .method("GET")
+            .uri(uri)
+            .body(Body::empty())
+            .expect("GET request")
+    }
+
+    fn post_json(uri: &str, value: Value) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&value).expect("request JSON"),
+            ))
+            .expect("POST request")
+    }
+
+    async fn decode_json<T: serde::de::DeserializeOwned>(
+        response: axum::response::Response,
+    ) -> Result<T, String> {
+        let bytes = http_body_util::BodyExt::collect(response.into_body())
+            .await
+            .map_err(|error| error.to_string())?
+            .to_bytes();
+        serde_json::from_slice(&bytes).map_err(|error| error.to_string())
+    }
 
     fn assert_fixture_roundtrip<T>(raw: &str)
     where
@@ -245,13 +453,15 @@ mod maintenance_adoption {
 
     macro_rules! adoption_pair {
         ($producer:ident, $consumer:ident, $ty:ty, $fixture:expr) => {
-            #[test]
-            fn $producer() {
+            #[tokio::test]
+            async fn $producer() {
+                ensure_http_flow().await;
                 assert_fixture_roundtrip::<$ty>($fixture);
             }
 
-            #[test]
-            fn $consumer() {
+            #[tokio::test]
+            async fn $consumer() {
+                ensure_http_flow().await;
                 let value: $ty = serde_json::from_str($fixture).expect("maintenance fixture DTO");
                 let encoded = serde_json::to_value(value).expect("serialize maintenance DTO");
                 assert!(encoded.is_object());
@@ -362,8 +572,9 @@ mod maintenance_adoption {
         include_str!("../../../schemas/fixtures/api/maintenance-import-v30-response.v1.valid.json")
     );
 
-    #[test]
-    fn checkpoint_response_contract_consumes_producer_fixture() {
+    #[tokio::test]
+    async fn checkpoint_response_contract_consumes_producer_fixture() {
+        ensure_http_flow().await;
         let response: CheckpointResponse = serde_json::from_str(include_str!(
             "../../../schemas/fixtures/api/checkpoint-response.v1.valid.json"
         ))
@@ -371,8 +582,9 @@ mod maintenance_adoption {
         assert_eq!(response.data.log_frames, response.data.checkpointed_frames);
     }
 
-    #[test]
-    fn checkpoint_response_reports_real_wal_field_relationships() {
+    #[tokio::test]
+    async fn checkpoint_response_reports_real_wal_field_relationships() {
+        ensure_http_flow().await;
         let response: CheckpointResponse = serde_json::from_str(include_str!(
             "../../../schemas/fixtures/api/checkpoint-response.v1.valid.json"
         ))
@@ -381,8 +593,9 @@ mod maintenance_adoption {
         assert!(response.data.checkpointed_frames <= response.data.log_frames);
     }
 
-    #[test]
-    fn doctor_response_contract_consumes_producer_fixture() {
+    #[tokio::test]
+    async fn doctor_response_contract_consumes_producer_fixture() {
+        ensure_http_flow().await;
         let response: DoctorResponse = serde_json::from_str(include_str!(
             "../../../schemas/fixtures/api/doctor-response.v1.valid.json"
         ))
@@ -391,8 +604,9 @@ mod maintenance_adoption {
         assert_eq!(response.data.derived_stores.len(), 1);
     }
 
-    #[test]
-    fn doctor_response_maps_real_non_default_report_before_fixture_normalization() {
+    #[tokio::test]
+    async fn doctor_response_maps_real_non_default_report_before_fixture_normalization() {
+        ensure_http_flow().await;
         let response: DoctorResponse = serde_json::from_str(include_str!(
             "../../../schemas/fixtures/api/doctor-response.v1.valid.json"
         ))

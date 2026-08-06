@@ -924,18 +924,24 @@ class DependencyIsolationGateTests(unittest.TestCase):
         finally:
             holder.cleanup()
 
-    def test_root_patch_and_replace_sections_are_rejected(self) -> None:
+    def test_root_patch_and_replace_sections_are_rejected_even_with_retired_paths(
+        self,
+    ) -> None:
         with (ROOT / "Cargo.toml").open("rb") as handle:
             baseline = tomllib.load(handle)
         with (ROOT / TOOL_MEMBER / "Cargo.toml").open("rb") as handle:
             tool = tomllib.load(handle)
 
+        retired_vendor_override = {
+            "crates-io": {
+                "oxrdfxml": {"path": "vendor/oxrdfxml-0.2.3"},
+                "sparesults": {"path": "vendor/sparesults-0.3.3"},
+            }
+        }
         for section in ("patch", "replace"):
             with self.subTest(section=section):
                 workspace = copy.deepcopy(baseline)
-                workspace[section] = {
-                    "crates-io": {"jsonschema": {"path": "/override/jsonschema"}}
-                }
+                workspace[section] = copy.deepcopy(retired_vendor_override)
                 with self.assertRaises(dependency_policy.DependencyPolicyError):
                     dependency_policy.audit_manifest_data(workspace, tool, ROOT)
 

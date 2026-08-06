@@ -151,12 +151,6 @@ CONTRACT_MANIFEST_TESTS = [
     {"name": "foundation", "path": "tests/foundation.rs"},
     {"name": "g0_metadata", "path": "tests/g0_metadata.rs"},
 ]
-APPROVED_ROOT_PATCH = {
-    "crates-io": {
-        "oxrdfxml": {"path": "vendor/oxrdfxml-0.2.3"},
-        "sparesults": {"path": "vendor/sparesults-0.3.3"},
-    }
-}
 TOOL_TARGETS = {
     ("xtask", ("lib",)): "xtask/src/lib.rs",
     ("xtask", ("bin",)): "xtask/src/main.rs",
@@ -234,26 +228,17 @@ def _phase_two_message(detail: str) -> str:
     )
 
 
-def _audit_root_patch(workspace_manifest: dict[str, Any], repo_root: Path) -> None:
-    """Allow only the explicitly approved temporary Oxigraph security patch."""
-    patch = workspace_manifest.get("patch")
-    if patch is None:
-        return
-    if patch != APPROVED_ROOT_PATCH:
-        raise DependencyPolicyError(_phase_two_message(
-            "root Cargo.toml [patch] 只能精确使用已批准的 Oxigraph security vendor override"
-        ))
-    versions = {"oxrdfxml": "0.2.3", "sparesults": "0.3.3"}
-    for package, declaration in patch["crates-io"].items():
-        target = repo_root / declaration["path"]
-        _assert_regular_repo_file(repo_root, target / "Cargo.toml", package)
-        with (target / "Cargo.toml").open("rb") as handle:
-            manifest = tomllib.load(handle)
-        metadata = manifest.get("package", {})
-        if metadata.get("name") != package or metadata.get("version") != versions[package]:
-            raise DependencyPolicyError(_phase_two_message(
-                f"approved patch package identity/version 错误: {package}"
-            ))
+def _audit_root_overrides(workspace_manifest: dict[str, Any]) -> None:
+    """拒绝 root Cargo.toml 的 patch/replace override。"""
+
+    if "patch" in workspace_manifest:
+        raise DependencyPolicyError(
+            _phase_two_message("root Cargo.toml 禁止声明 [patch] override")
+        )
+    if "replace" in workspace_manifest:
+        raise DependencyPolicyError(
+            _phase_two_message("root Cargo.toml 禁止声明 [replace] override")
+        )
 
 
 def _dependency_sections(manifest: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
@@ -1275,9 +1260,7 @@ def audit_manifest_data(
                 "workspace.default-members 必须精确为 canonical 产品集并排除 schema tool"
             )
         )
-    _audit_root_patch(workspace_manifest, repo_root)
-    if "replace" in workspace_manifest:
-        raise DependencyPolicyError(_phase_two_message("root Cargo.toml 禁止声明 [replace] override"))
+    _audit_root_overrides(workspace_manifest)
     workspace_dependencies = workspace.get("dependencies")
     if not isinstance(workspace_dependencies, dict):
         raise DependencyPolicyError("root Cargo.toml 缺少 [workspace.dependencies]")
@@ -1363,9 +1346,7 @@ def audit_contract_manifest_data(
     if not isinstance(workspace, dict):
         raise DependencyPolicyError("root Cargo.toml 缺少 [workspace]")
     _audit_workspace_dependency_policy(workspace_manifest, repo_root)
-    _audit_root_patch(workspace_manifest, repo_root)
-    if "replace" in workspace_manifest:
-        raise DependencyPolicyError(_phase_two_message("root Cargo.toml 禁止声明 [replace] override"))
+    _audit_root_overrides(workspace_manifest)
     workspace_dependencies = workspace.get("dependencies")
     if not isinstance(workspace_dependencies, dict):
         raise DependencyPolicyError("root Cargo.toml 缺少 [workspace.dependencies]")

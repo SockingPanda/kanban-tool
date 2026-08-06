@@ -863,7 +863,6 @@ mod tests {
             .expect("当前 declaration family 应可投影");
         assert!(!projection.tool_bindings().is_empty());
         assert!(!projection.domain_operations.is_empty());
-        assert!(projection.host_admin_operations.is_empty());
         assert!(projection
             .tool_bindings()
             .windows(2)

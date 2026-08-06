@@ -7,8 +7,9 @@ use kanban_protocol::{
     cli_labels::{
         CliLabelAtomIndexQueryOutput, CliLabelAtomIndexRebuildOutput,
         CliLabelAtomIndexStatusOutput, CliLabelAtomsExplainOutput, CliLabelAtomsListOutput,
-        CliLabelCreateOutput, CliLabelOntologyConfirmOutput, CliLabelOntologyRecordOutput,
-        CliLabelOntologyShowOutput, CliLabelProposalsListOutput, CliLabelProposalsShowOutput,
+        CliLabelCreateOutput, CliLabelOntologyConfirmOutput, CliLabelOntologyQualityOutput,
+        CliLabelOntologyRecordOutput, CliLabelOntologyShowOutput, CliLabelProposalsAcceptOutput,
+        CliLabelProposalsListOutput, CliLabelProposalsRejectOutput, CliLabelProposalsShowOutput,
         CliLabelProposeOutput, CliLabelSemanticsListOutput, CliLabelSemanticsShowOutput,
         CliLabelSemanticsUpsertOutput, CliLabelSuggestOutput,
     },
@@ -153,6 +154,48 @@ fn labels_semantics_atoms_and_proposals_flow_through_real_cli() {
     let shown: CliLabelProposalsShowOutput =
         host.json(&["label", "proposals", "show", proposal_id.as_str()]);
     assert_eq!(shown.data.id, proposal_id);
+
+    let accepted: CliLabelProposalsAcceptOutput = host.json(&[
+        "label",
+        "proposals",
+        "accept",
+        proposal_id.as_str(),
+        "--reason",
+        "adopted by CLI adoption test",
+    ]);
+    assert_eq!(accepted.data.id, proposal_id);
+    assert!(matches!(
+        accepted.data.status,
+        kanban_protocol::LabelProposalStatusWire::Accepted
+    ));
+
+    let second: CliLabelProposeOutput = host.json(&[
+        "label",
+        "propose",
+        "t_cli_label_adoption",
+        "--name",
+        "temporary-label",
+    ]);
+    let second_id = second
+        .data
+        .proposal
+        .as_ref()
+        .expect("second proposal should persist")
+        .id
+        .clone();
+    let rejected: CliLabelProposalsRejectOutput = host.json(&[
+        "label",
+        "proposals",
+        "reject",
+        second_id.as_str(),
+        "--reason",
+        "not needed",
+    ]);
+    assert_eq!(rejected.data.id, second_id);
+    assert!(matches!(
+        rejected.data.status,
+        kanban_protocol::LabelProposalStatusWire::Rejected
+    ));
 }
 
 #[test]
@@ -224,6 +267,13 @@ fn ontology_observation_signal_review_and_action_flow_through_real_cli() {
         "--include-all",
     ]);
     assert!(!review.data.is_empty());
+
+    let quality: CliLabelOntologyQualityOutput =
+        host.json(&["label", "ontology", "quality", "--sample-limit", "10"]);
+    assert_eq!(quality.data.board_id, "b_default");
+    assert_eq!(quality.data.denominator.observation_count, 1);
+    assert_eq!(quality.data.denominator.distinct_task_count, 1);
+
     let action_payload = format!(
         r#"{{
             "actor":{{"name":"cli-adoption","type":"user"}},

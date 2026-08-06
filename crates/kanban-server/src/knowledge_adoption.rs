@@ -39,6 +39,7 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 
 use crate::{router::build_router, state::AppState};
+use kanban_service::RelationUpsertCommand;
 
 macro_rules! fixture {
     ($ty:ty, $path:literal) => {{
@@ -52,11 +53,17 @@ macro_rules! fixture {
 }
 
 async fn test_router() -> (TempDir, Router) {
+    let (directory, _state, router) = test_router_with_state().await;
+    (directory, router)
+}
+
+async fn test_router_with_state() -> (TempDir, AppState, Router) {
     let directory = tempfile::tempdir().expect("temporary database directory");
     let state = AppState::open(directory.path().join("kanban.db"), "test")
         .await
         .expect("open state");
-    (directory, build_router(state))
+    let router = build_router(state.clone());
+    (directory, state, router)
 }
 
 async fn response_json<T: DeserializeOwned>(response: Response<Body>) -> T {
@@ -168,6 +175,36 @@ async fn create_assigned_task(router: &Router, board: &str, task_id: &str, title
     let _: CreateTaskResponse = response_json(response).await;
 }
 
+async fn create_dependent_task(router: &Router, board: &str, task_id: &str, parent_id: &str) {
+    let request = CreateTaskRequest {
+        task_id: Some(task_id.to_owned()),
+        idempotency_key: None,
+        title: "fixture graph child".to_owned(),
+        description: Some("relation witness".to_owned()),
+        status: Some(ApiCreateTaskStatus::Todo),
+        assignee: None,
+        priority: 3,
+        scheduled_at: None,
+        due_at: None,
+        max_retries: None,
+        metadata: None,
+        labels: Vec::new(),
+        depends_on: vec![parent_id.to_owned()],
+        actor: Some("fixture".to_owned()),
+    };
+    let response = router
+        .clone()
+        .oneshot(request_json(
+            Method::POST,
+            &format!("/api/v1/boards/{board}/tasks"),
+            &request,
+        ))
+        .await
+        .expect("create dependent task response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let _: CreateTaskResponse = response_json(response).await;
+}
+
 async fn create_board(router: &Router, slug: &str) {
     let request = CreateBoardRequest {
         slug: slug.to_owned(),
@@ -212,6 +249,23 @@ async fn labels_semantics_and_atoms_use_committed_fixtures_through_host() {
         "create-board-label-request.v1.valid.json"
     );
     let label = create_label(&router, "fixture", create_request).await;
+
+    let atom_path: BoardLabelPath = fixture!(BoardLabelPath, "list-label-atoms-path.v1.valid.json");
+    let response = router
+        .clone()
+        .oneshot(request_empty(
+            Method::GET,
+            &format!("/api/v1/boards/{}/labels/atoms", atom_path.board),
+        ))
+        .await
+        .expect("empty list atoms response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let actual: ListLabelAtomsResponse = response_json(response).await;
+    let expected_atoms: ListLabelAtomsResponse = fixture!(
+        ListLabelAtomsResponse,
+        "list-label-atoms-response.v1.valid.json"
+    );
+    assert_eq!(actual, expected_atoms);
 
     let board_path: BoardLabelPath =
         fixture!(BoardLabelPath, "list-label-semantics-path.v1.valid.json");
@@ -265,7 +319,6 @@ async fn labels_semantics_and_atoms_use_committed_fixtures_through_host() {
     assert_eq!(actual.data.applies_when, Vec::<String>::new());
     assert_eq!(actual.data.atoms.len(), 1);
 
-    let atom_path: BoardLabelPath = fixture!(BoardLabelPath, "list-label-atoms-path.v1.valid.json");
     let response = router
         .clone()
         .oneshot(request_empty(
@@ -276,13 +329,8 @@ async fn labels_semantics_and_atoms_use_committed_fixtures_through_host() {
         .expect("list atoms response");
     assert_eq!(response.status(), StatusCode::OK);
     let actual: ListLabelAtomsResponse = response_json(response).await;
-    let expected_atoms: ListLabelAtomsResponse = fixture!(
-        ListLabelAtomsResponse,
-        "list-label-atoms-response.v1.valid.json"
-    );
     assert_eq!(actual.data.len(), 1);
     assert_eq!(actual.data[0].label_id, label.data.id);
-    assert!(expected_atoms.data.is_empty());
 
     let response = router
         .oneshot(request_empty(
@@ -612,8 +660,8 @@ async fn ontology_ledger_routes_consume_observation_and_action_fixtures() {
         .oneshot(request_empty(
             Method::GET,
             &format!(
-                "/api/v1/boards/{}/label-ontology/signals?limit=100",
-                signal_path.board
+                "/api/v1/boards/{}/label-ontology/signals?limit={}",
+                signal_path.board, signal_query.limit
             ),
         ))
         .await
@@ -1149,8 +1197,35 @@ async fn vector_routes_consume_typed_projection_fixtures_and_real_degraded_queri
 
 #[tokio::test]
 async fn graph_routes_consume_query_and_projection_fixtures() {
-    let (_directory, router) = test_router().await;
-    let _task = create_task(&router, "default", "t_fixture", "fixture graph task").await;
+    let (_directory, state, router) = test_router_with_state().await;
+    let _parent = create_task(&router, "default", "t_dependency", "fixture graph parent").await;
+    create_dependent_task(&router, "default", "t_fixture", "t_dependency").await;
+
+    let expected_neighbors: GraphNeighborsResponse = fixture!(
+        GraphNeighborsResponse,
+        "graph-neighbors-response.v1.valid.json"
+    );
+    let expected_relation = expected_neighbors
+        .data
+        .first()
+        .expect("graph relation fixture");
+    state
+        .application()
+        .upsert_relation(RelationUpsertCommand {
+            subject_uri: expected_relation.subject_uri.clone(),
+            predicate: expected_relation.predicate.clone(),
+            object_uri: expected_relation.object_uri.clone(),
+            graph_uri: expected_relation.graph_uri.clone(),
+            board: Some("default".to_owned()),
+            authoritative_store: expected_relation.provenance.authoritative_store.clone(),
+            source_table: expected_relation.provenance.source_table.clone(),
+            source_id: expected_relation.provenance.source_id.clone(),
+            source_event_id: expected_relation.provenance.source_event_id,
+            metadata_json: serde_json::to_string(&expected_relation.metadata)
+                .expect("graph relation metadata JSON"),
+        })
+        .await
+        .expect("seed graph relation through application path");
 
     let status_query: BoardQuery = fixture!(BoardQuery, "graph-status-query.v1.valid.json");
     let response = router
@@ -1175,9 +1250,10 @@ async fn graph_routes_consume_query_and_projection_fixtures() {
         .oneshot(request_empty(
             Method::GET,
             &format!(
-                "/api/v1/graph/neighbors?board={}&entity_uri=kb%3A%2F%2Ftask%2Ft_fixture&predicate={}&limit={}",
-                neighbors_query.board,
-                neighbors_query.predicate.as_deref().unwrap_or("depends_on"),
+                "/api/v1/graph/neighbors?board={}&entity_uri={}&predicate={}&limit={}",
+                encode_component(&neighbors_query.board),
+                encode_component(&neighbors_query.entity_uri),
+                encode_component(neighbors_query.predicate.as_deref().unwrap_or("depends_on")),
                 neighbors_query.limit
             ),
         ))
@@ -1185,13 +1261,12 @@ async fn graph_routes_consume_query_and_projection_fixtures() {
         .expect("graph neighbors response");
     assert_eq!(response.status(), StatusCode::OK);
     let neighbors: GraphNeighborsResponse = response_json(response).await;
-    let expected_neighbors: GraphNeighborsResponse = fixture!(
-        GraphNeighborsResponse,
-        "graph-neighbors-response.v1.valid.json"
-    );
     assert_eq!(neighbors.meta.limit, neighbors_query.limit);
-    assert!(neighbors.data.is_empty());
-    assert_eq!(expected_neighbors.meta.limit, neighbors.meta.limit);
+    assert_eq!(neighbors.data.len(), expected_neighbors.data.len());
+    let mut normalized_neighbors = neighbors.clone();
+    normalized_neighbors.data[0].created_at = expected_neighbors.data[0].created_at;
+    normalized_neighbors.data[0].updated_at = expected_neighbors.data[0].updated_at;
+    assert_eq!(normalized_neighbors, expected_neighbors);
 
     let query: GraphQueryQuery = fixture!(GraphQueryQuery, "graph-query-query.v1.valid.json");
     let response = router
@@ -1209,11 +1284,11 @@ async fn graph_routes_consume_query_and_projection_fixtures() {
         .expect("graph query response");
     assert_eq!(response.status(), StatusCode::OK);
     let rows: kanban_protocol::cli_helpers::CliGraphQueryOutput = response_json(response).await;
-    let _expected_rows: kanban_protocol::cli_helpers::CliGraphQueryOutput = fixture!(
+    let expected_rows: kanban_protocol::cli_helpers::CliGraphQueryOutput = fixture!(
         kanban_protocol::cli_helpers::CliGraphQueryOutput,
         "graph-query-response.v1.valid.json"
     );
-    assert!(rows.data.is_empty());
+    assert_eq!(rows, expected_rows);
 
     let rebuild_query: BoardQuery = fixture!(BoardQuery, "graph-rebuild-query.v1.valid.json");
     let response = router

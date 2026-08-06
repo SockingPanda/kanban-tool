@@ -873,12 +873,8 @@ const API_GRAPH_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-status-query.v1.valid.json",
         "schemas/fixtures/api/graph-status-query.v1.invalid.json",
         crate::BoardQuery,
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        )
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
     header_contract!(
         "api.graph-status.headers",
@@ -906,12 +902,8 @@ const API_GRAPH_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-status-response.v1.valid.json",
         "schemas/fixtures/api/graph-status-response.v1.invalid.json",
         crate::GraphStatusResponse,
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        )
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
 ];
 
@@ -930,12 +922,8 @@ const API_GRAPH_NEIGHBORS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-neighbors-query.v1.valid.json",
         "schemas/fixtures/api/graph-neighbors-query.v1.invalid.json",
         crate::GraphNeighborsQuery,
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        )
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
     header_contract!(
         "api.graph-neighbors.headers",
@@ -963,12 +951,8 @@ const API_GRAPH_NEIGHBORS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-neighbors-response.v1.valid.json",
         "schemas/fixtures/api/graph-neighbors-response.v1.invalid.json",
         crate::GraphNeighborsResponse,
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        )
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
 ];
 
@@ -987,12 +971,8 @@ const API_GRAPH_QUERY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-query-query.v1.valid.json",
         "schemas/fixtures/api/graph-query-query.v1.invalid.json",
         crate::GraphQueryQuery,
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        )
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
     header_contract!(
         "api.graph-query.headers",
@@ -1020,12 +1000,8 @@ const API_GRAPH_QUERY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-query-response.v1.valid.json",
         "schemas/fixtures/api/graph-query-response.v1.invalid.json",
         crate::cli_helpers::CliGraphQueryOutput,
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        )
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
 ];
 
@@ -1044,12 +1020,8 @@ const API_GRAPH_REBUILD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-rebuild-query.v1.valid.json",
         "schemas/fixtures/api/graph-rebuild-query.v1.invalid.json",
         crate::BoardQuery,
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        )
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
     header_contract!(
         "api.graph-rebuild.headers",
@@ -1077,12 +1049,8 @@ const API_GRAPH_REBUILD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-rebuild-response.v1.valid.json",
         "schemas/fixtures/api/graph-rebuild-response.v1.invalid.json",
         crate::GraphMaintenanceResponse,
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        )
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
 ];
 
@@ -1101,12 +1069,8 @@ const API_GRAPH_SYNC_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-sync-query.v1.valid.json",
         "schemas/fixtures/api/graph-sync-query.v1.invalid.json",
         crate::BoardQuery,
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        )
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
     header_contract!(
         "api.graph-sync.headers",
@@ -1134,12 +1098,8 @@ const API_GRAPH_SYNC_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-sync-response.v1.valid.json",
         "schemas/fixtures/api/graph-sync-response.v1.invalid.json",
         crate::GraphMaintenanceResponse,
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
-        )
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
+        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
 ];
 
@@ -1158,12 +1118,8 @@ const API_LIST_ENTITIES_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-list-query.v1.valid.json",
         "schemas/fixtures/api/entity-list-query.v1.invalid.json",
         crate::EntityListQuery,
-        server_witness(
-            "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
-        )
+        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
+        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
     header_contract!(
         "api.entity-list.headers",
@@ -1191,12 +1147,8 @@ const API_LIST_ENTITIES_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-list-response.v1.valid.json",
         "schemas/fixtures/api/entity-list-response.v1.invalid.json",
         crate::EntityListResponse,
-        server_witness(
-            "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
-        )
+        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
+        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
 ];
 
@@ -1227,12 +1179,8 @@ const API_UPSERT_ENTITY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-upsert-request.v1.valid.json",
         "schemas/fixtures/api/entity-upsert-request.v1.invalid.json",
         crate::EntityUpsertRequest,
-        server_witness(
-            "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
-        )
+        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
+        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
     api_contract!(
         "api.entity-upsert.response",
@@ -1248,12 +1196,8 @@ const API_UPSERT_ENTITY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-upsert-response.v1.valid.json",
         "schemas/fixtures/api/entity-upsert-response.v1.invalid.json",
         crate::EntityResponse,
-        server_witness(
-            "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
-        )
+        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
+        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
 ];
 
@@ -1301,12 +1245,8 @@ const API_GET_ENTITY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-response.v1.valid.json",
         "schemas/fixtures/api/entity-response.v1.invalid.json",
         crate::EntityResponse,
-        server_witness(
-            "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
-        )
+        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
+        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
 ];
 

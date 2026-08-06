@@ -1936,6 +1936,9 @@ pub fn endpoint_catalog() -> &'static [EndpointDescriptor] {
                     crate::admin_catalog::endpoint_descriptor(endpoint.operation_id)
                 {
                     catalog.push(admin);
+                    if endpoint.operation_id == "api.health" {
+                        catalog.extend(board.iter().copied());
+                    }
                     continue;
                 }
                 if let Some(history) =

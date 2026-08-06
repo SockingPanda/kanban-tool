@@ -3431,6 +3431,23 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
             registry.push(*knowledge_root);
             continue;
         }
+        if root.contract_id == "api.health.response" {
+            let health = admin
+                .iter()
+                .find(|candidate| candidate.contract_id == root.contract_id)
+                .copied()
+                .unwrap_or(*root);
+            registry.push(health);
+            append_board_schema_root(&mut registry, &board, "api.list-boards.query");
+            append_board_schema_root(&mut registry, &board, "api.create-board.request");
+            append_board_schema_root(&mut registry, &board, "api.get-board.path");
+            append_board_schema_root(&mut registry, &board, "api.archive-board.path");
+            append_board_schema_root(&mut registry, &board, "api.list-boards.response");
+            append_board_schema_root(&mut registry, &board, "api.create-board.response");
+            append_board_schema_root(&mut registry, &board, "api.get-board.response");
+            append_board_schema_root(&mut registry, &board, "api.archive-board.response");
+            continue;
+        }
         if let Some(admin_root) = admin
             .iter()
             .find(|candidate| candidate.contract_id == root.contract_id)
@@ -3456,17 +3473,6 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
                 append_board_schema_root(&mut registry, &board, "cli.board-archive.output");
                 append_board_schema_root(&mut registry, &board, "cli.board-columns.output");
                 registry.push(*root);
-            }
-            "api.health.response" => {
-                registry.push(*root);
-                append_board_schema_root(&mut registry, &board, "api.list-boards.query");
-                append_board_schema_root(&mut registry, &board, "api.create-board.request");
-                append_board_schema_root(&mut registry, &board, "api.get-board.path");
-                append_board_schema_root(&mut registry, &board, "api.archive-board.path");
-                append_board_schema_root(&mut registry, &board, "api.list-boards.response");
-                append_board_schema_root(&mut registry, &board, "api.create-board.response");
-                append_board_schema_root(&mut registry, &board, "api.get-board.response");
-                append_board_schema_root(&mut registry, &board, "api.archive-board.response");
             }
             "api.list-attachments.path" => {
                 append_board_schema_root(&mut registry, &board, "api.list-board-columns.path");

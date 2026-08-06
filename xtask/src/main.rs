@@ -114,7 +114,7 @@ fn print_adopted_inventory() {
         .collect::<Vec<_>>();
     println!(
         "{}",
-        serde_json::to_string_pretty(&adopted).expect("operation inventory must serialize")
+        serde_json::to_string_pretty(&adopted).expect("operation inventory 必须可序列化")
     );
 }
 
@@ -340,7 +340,7 @@ fn invalid(message: impl Into<String>) -> xtask::ToolResult<()> {
 
 fn print_usage() {
     println!(
-        "Usage: xtask <schema generate|check|audit|witnesses|deps check|agents check> [--root PATH] [--require-closed]"
+        "用法：xtask <schema generate|check|audit|witnesses|deps check|agents check> [--root PATH] [--require-closed]"
     );
 }
 

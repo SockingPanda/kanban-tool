@@ -1,9 +1,10 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result, TaskStatus};
 use serde::{Deserialize, Serialize};
 
-use crate::{ApplicationService, ApplicationStore};
+use crate::KanbanService;
+use crate::store_operations::search::{
+    StoreSearchIndexStatus, StoreSearchMeta, StoreSearchQuery, StoreSearchResults,
+};
 
 pub const MAX_SEARCH_LIMIT: usize = 1_000;
 
@@ -105,32 +106,8 @@ pub struct SearchIndexStatus {
     pub message: String,
 }
 
-/// Search 与 projection maintenance 的共享 application port。
-pub trait SearchTasks: ApplicationStore {
-    fn search_tasks(
-        &self,
-        query: SearchQuery,
-    ) -> impl Future<Output = Result<SearchResults>> + Send;
-
-    fn search_index_status(
-        &self,
-        board: &str,
-    ) -> impl Future<Output = Result<SearchIndexStatus>> + Send;
-
-    fn rebuild_search_index(
-        &self,
-        board: &str,
-    ) -> impl Future<Output = Result<SearchIndexStatus>> + Send;
-
-    fn sync_search_index(
-        &self,
-        board: &str,
-    ) -> impl Future<Output = Result<SearchIndexStatus>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: SearchTasks,
     C: Clock,
 {
     pub async fn search_tasks(&self, query: SearchQuery) -> Result<SearchResults> {
@@ -138,22 +115,103 @@ where
         query
             .validate()
             .map_err(|error| KanbanError::InvalidInput(error.to_string()))?;
-        self.store.search_tasks(query).await
+        self.application
+            .store
+            .store
+            .search_tasks(StoreSearchQuery {
+                board: query.board,
+                q: query.q,
+                statuses: query.statuses,
+                labels: query.labels,
+                assignee: query.assignee,
+                include_archived: query.include_archived,
+                limit: query.limit,
+                offset: query.offset,
+            })
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(map_results)
     }
 
     pub async fn search_index_status(&self, board: &str) -> Result<SearchIndexStatus> {
         let board = normalize_board(board)?;
-        self.store.search_index_status(&board).await
+        self.application
+            .store
+            .store
+            .search_index_status(&board)
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(map_status)
     }
 
     pub async fn rebuild_search_index(&self, board: &str) -> Result<SearchIndexStatus> {
         let board = normalize_board(board)?;
-        self.store.rebuild_search_index(&board).await
+        self.application
+            .store
+            .store
+            .rebuild_search_index(&board)
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(map_status)
     }
 
     pub async fn sync_search_index(&self, board: &str) -> Result<SearchIndexStatus> {
         let board = normalize_board(board)?;
-        self.store.sync_search_index(&board).await
+        self.application
+            .store
+            .store
+            .sync_search_index(&board)
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(map_status)
+    }
+}
+
+fn map_results(value: StoreSearchResults) -> SearchResults {
+    let StoreSearchResults { hits, meta } = value;
+    SearchResults {
+        hits: hits
+            .into_iter()
+            .map(|hit| SearchHit {
+                task_id: hit.task_id,
+                seq: hit.seq,
+                score: hit.score,
+                snippet: hit.snippet,
+            })
+            .collect(),
+        meta: map_meta(meta),
+    }
+}
+
+fn map_meta(value: StoreSearchMeta) -> SearchMeta {
+    SearchMeta {
+        backend: value.backend,
+        stale: value.stale,
+        database_instance_id: value.database_instance_id,
+        protocol_version: value.protocol_version,
+        generation: value.generation,
+        resolved_board_id: value.resolved_board_id,
+        fallback_reason: value.fallback_reason,
+        index_version: value.index_version,
+        last_event_id: value.last_event_id,
+        index_lag_events: value.index_lag_events,
+    }
+}
+
+fn map_status(value: StoreSearchIndexStatus) -> SearchIndexStatus {
+    SearchIndexStatus {
+        backend: value.backend,
+        derived_index: value.derived_index,
+        stale: value.stale,
+        database_instance_id: value.database_instance_id,
+        protocol_version: value.protocol_version,
+        generation: value.generation,
+        resolved_board_id: value.resolved_board_id,
+        fallback_reason: value.fallback_reason,
+        index_version: value.index_version,
+        last_event_id: value.last_event_id,
+        index_lag_events: value.index_lag_events,
+        message: value.message,
     }
 }
 

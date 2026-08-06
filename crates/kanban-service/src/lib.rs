@@ -33,8 +33,8 @@ pub mod vector;
 #[cfg(feature = "legacy-sqlite-import")]
 pub mod legacy_import;
 
-// 下面重新导出 entity/relation/graph port，使每个 host adapter（包括 host-admin
-// maintenance）都使用同一个规范 application boundary。
+// 下面重新导出 entity/relation/graph DTO，使每个 host adapter（包括 host-admin
+// maintenance）都使用同一个规范 service boundary。
 
 pub use adapter::TursoApplicationStore;
 pub use dto::*;
@@ -43,24 +43,23 @@ pub use operations::LabelOntologyOperations;
 pub use operations::{
     AddTaskLabelsCommand, AddTaskLabelsRecord, ArchiveBoardCommand, ArchiveBoardRecord,
     ArchiveTaskCommand, BackupReportRecord, BoardTaskMapOptions, CheckpointReportRecord,
-    ContextBuild, ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence,
-    ContextItem, ContextPack, ContextPolicy, ContextProviderStatus, ContextSources,
-    CreateAttachmentCommand, CreateAttachmentRecord, CreateBoardCommand, CreateBoardLabelCommand,
-    CreateBoardRecord, DeleteAttachmentCommand, DoctorDerivedStoreRecord, DoctorIssueRecord,
-    DoctorReportRecord, EntityListOptions, EntityQuery, EntityUpsertCommand, EventListOptions,
-    EventListPage, EventRecord, ExportReportRecord, GraphNeighborsOptions, GraphQuery,
-    GraphQueryOptions, ImportReportRecord, LegacyImportOptionsRecord, LegacyImportResultRecord,
-    LegacyImportTableCountRecord, MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT,
-    MAX_SEARCH_LIMIT, MaintenanceOwnerRecord, MaintenanceQuery, MaintenanceRunRecord,
-    MaintenanceStatusRecord, ProjectionStatusOptions, ProjectionStatusRecord, RUN_LOG_TAIL_BYTES,
-    ReclaimTaskCommand, RelationDeleteCommand, RelationListOptions, RelationPredicateCommand,
-    RelationQuery, RelationUpsertCommand, RemoveTaskLabelCommand, ReopenTaskCommand, RunLogRecord,
-    SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults, SearchTasks,
-    SpecifyTaskCommand, TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord,
-    TaskNeighborhoodOptions, TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord,
-    UnblockTaskCommand, UpdateTaskCommand, VacuumReportRecord, VectorChunkQueryCommand,
-    VectorChunkResult, VectorConfigureCommand, VectorLabelAtomQueryCommand, VectorLabelAtomResult,
-    VectorStatus,
+    ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence, ContextItem,
+    ContextPack, ContextPolicy, ContextProviderStatus, ContextSources, CreateAttachmentCommand,
+    CreateAttachmentRecord, CreateBoardCommand, CreateBoardLabelCommand, CreateBoardRecord,
+    DeleteAttachmentCommand, DoctorDerivedStoreRecord, DoctorIssueRecord, DoctorReportRecord,
+    EntityListOptions, EntityUpsertCommand, EventListOptions, EventListPage, EventRecord,
+    ExportReportRecord, GraphNeighborsOptions, GraphQueryOptions, ImportReportRecord,
+    LegacyImportOptionsRecord, LegacyImportResultRecord, LegacyImportTableCountRecord,
+    MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT, MAX_SEARCH_LIMIT,
+    MaintenanceOwnerRecord, MaintenanceQuery, MaintenanceRunRecord, MaintenanceStatusRecord,
+    ProjectionStatusOptions, ProjectionStatusRecord, RUN_LOG_TAIL_BYTES, ReclaimTaskCommand,
+    RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationUpsertCommand,
+    RemoveTaskLabelCommand, ReopenTaskCommand, RunLogRecord, SearchHit, SearchIndexStatus,
+    SearchMeta, SearchQuery, SearchResults, SpecifyTaskCommand, TaskDetailOntologyRecord,
+    TaskDetailRead, TaskDetailRecord, TaskNeighborhoodOptions, TaskOntologySignalSummaryRecord,
+    TaskOntologySummaryRecord, UnblockTaskCommand, UpdateTaskCommand, VacuumReportRecord,
+    VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,
+    VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
 };
 pub use ports::ApplicationStore;
 pub use service::{ApplicationService, KanbanService};
@@ -93,16 +92,6 @@ pub use store_operations::{
     RelationPredicateInput, RelationUpsertInput, ReleaseTaskInput, RemoveTaskLabelInput,
     ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SpecifyTaskInput,
     StoreSignalListOptions, SubmitReviewTaskInput, UnblockTaskInput, UpsertLabelSemanticsInput,
-};
-
-pub use store_operations::search::{
-    StoreSearchHit, StoreSearchIndexStatus, StoreSearchMeta, StoreSearchQuery, StoreSearchResults,
-};
-
-pub use store_operations::{
-    StoreBoardTaskMapOptions, StoreEntityListOptions, StoreGraphNeighborsOptions,
-    StoreGraphQueryOptions, StoreProjectionStatusOptions, StoreRelationListOptions,
-    StoreTaskNeighborhoodOptions,
 };
 
 pub use vector::{

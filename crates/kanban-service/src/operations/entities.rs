@@ -1,8 +1,7 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result};
 
-use crate::{ApplicationService, ApplicationStore, EntityRecord};
+use crate::store_operations::StoreEntityListOptions;
+use crate::{EntityRecord, EntityUpsertInput, KanbanService};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct EntityListOptions {
@@ -25,21 +24,8 @@ pub struct EntityUpsertCommand {
     pub archived_at: Option<i64>,
 }
 
-pub trait EntityQuery: ApplicationStore {
-    fn list_entities(
-        &self,
-        options: EntityListOptions,
-    ) -> impl Future<Output = Result<Vec<EntityRecord>>> + Send;
-    fn get_entity(&self, uri: &str) -> impl Future<Output = Result<EntityRecord>> + Send;
-    fn upsert_entity(
-        &self,
-        command: EntityUpsertCommand,
-    ) -> impl Future<Output = Result<EntityRecord>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: EntityQuery,
     C: Clock,
 {
     pub async fn list_entities(&self, options: EntityListOptions) -> Result<Vec<EntityRecord>> {
@@ -57,7 +43,17 @@ where
                 "board cannot be empty".to_owned(),
             ));
         }
-        self.store.list_entities(options).await
+        self.application
+            .store
+            .store
+            .list_entities(StoreEntityListOptions {
+                board: options.board,
+                kind: options.kind,
+                limit: options.limit,
+            })
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(|entities| entities.into_iter().map(application_entity).collect())
     }
 
     pub async fn get_entity(&self, uri: &str) -> Result<EntityRecord> {
@@ -67,7 +63,13 @@ where
                 "entity uri must start with kb://".to_owned(),
             ));
         }
-        self.store.get_entity(uri).await
+        self.application
+            .store
+            .store
+            .get_entity(uri)
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(application_entity)
     }
 
     pub async fn upsert_entity(&self, command: EntityUpsertCommand) -> Result<EntityRecord> {
@@ -76,6 +78,40 @@ where
                 "entity uri and kind are required".to_owned(),
             ));
         }
-        self.store.upsert_entity(command).await
+        self.application
+            .store
+            .store
+            .upsert_entity(EntityUpsertInput {
+                uri: command.uri,
+                kind: command.kind,
+                source_table: command.source_table,
+                source_id: command.source_id,
+                board: command.board,
+                task_id: command.task_id,
+                title: command.title,
+                summary: command.summary,
+                content_hash: command.content_hash,
+                archived_at: command.archived_at,
+            })
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(application_entity)
+    }
+}
+
+fn application_entity(entity: crate::domain::EntityRecord) -> EntityRecord {
+    EntityRecord {
+        uri: entity.uri,
+        kind: entity.kind,
+        source_table: entity.source_table,
+        source_id: entity.source_id,
+        board_id: entity.board_id,
+        task_id: entity.task_id,
+        title: entity.title,
+        summary: entity.summary,
+        content_hash: entity.content_hash,
+        created_at: entity.created_at,
+        updated_at: entity.updated_at,
+        archived_at: entity.archived_at,
     }
 }

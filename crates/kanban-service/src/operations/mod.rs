@@ -29,15 +29,15 @@ pub use board::{ArchiveBoardCommand, ArchiveBoardRecord, CreateBoardCommand, Cre
 pub(crate) use comment::application_comment;
 pub use comment::{CreateCommentCommand, CreateCommentRecord};
 pub use context::{
-    ContextBuild, ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence,
-    ContextItem, ContextPack, ContextPolicy, ContextProviderStatus, ContextSources,
-    MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT,
+    ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence, ContextItem,
+    ContextPack, ContextPolicy, ContextProviderStatus, ContextSources, MAX_CONTEXT_BUDGET,
+    MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT,
 };
-pub use entities::{EntityListOptions, EntityQuery, EntityUpsertCommand};
+pub use entities::{EntityListOptions, EntityUpsertCommand};
 pub use event::*;
 pub use graph::{
-    BoardTaskMapOptions, GraphNeighborsOptions, GraphQuery, GraphQueryOptions,
-    ProjectionStatusOptions, TaskNeighborhoodOptions,
+    BoardTaskMapOptions, GraphNeighborsOptions, GraphQueryOptions, ProjectionStatusOptions,
+    TaskNeighborhoodOptions,
 };
 pub use labels::{
     AddTaskLabelsCommand, AddTaskLabelsRecord, CreateBoardLabelCommand, RemoveTaskLabelCommand,
@@ -45,14 +45,12 @@ pub use labels::{
 pub use maintenance::*;
 pub use ontology::LabelOntologyOperations;
 pub use relations::{
-    RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationQuery,
-    RelationUpsertCommand,
+    RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationUpsertCommand,
 };
 pub(crate) use run::application_run;
 pub use run::*;
 pub use search::{
     MAX_SEARCH_LIMIT, SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults,
-    SearchTasks,
 };
 pub use signal::*;
 pub use stats::*;

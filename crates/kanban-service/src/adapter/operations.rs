@@ -1,9 +1,4 @@
-mod context;
-mod entities;
-mod graph;
 mod maintenance;
 mod ontology;
-mod relations;
-mod search;
 mod signal;
 mod stats;

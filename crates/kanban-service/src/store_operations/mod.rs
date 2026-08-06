@@ -46,15 +46,15 @@ pub use steps::{
 pub(crate) use tasks::{CreateTaskInput, UpdateTaskInput};
 
 // 这些名称有意与 service root 上的 application DTO 保持区分。
-pub use entities::EntityListOptions as StoreEntityListOptions;
-pub use graph::{
+pub(crate) use entities::EntityListOptions as StoreEntityListOptions;
+pub(crate) use graph::{
     BoardTaskMapOptions as StoreBoardTaskMapOptions,
     GraphNeighborsOptions as StoreGraphNeighborsOptions,
     GraphQueryOptions as StoreGraphQueryOptions,
     ProjectionStatusOptions as StoreProjectionStatusOptions,
     TaskNeighborhoodOptions as StoreTaskNeighborhoodOptions,
 };
-pub use relations::RelationListOptions as StoreRelationListOptions;
+pub(crate) use relations::RelationListOptions as StoreRelationListOptions;
 pub(crate) use tasks::{
     TaskListOptions as StoreTaskListOptions, TaskListSort as StoreTaskListSort,
     TaskPlanFilter as StoreTaskPlanFilter,

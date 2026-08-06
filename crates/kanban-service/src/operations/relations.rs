@@ -1,8 +1,10 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result};
 
-use crate::{ApplicationService, ApplicationStore, RelationPredicateRecord, RelationRecord};
+use crate::store_operations::StoreRelationListOptions;
+use crate::{
+    KanbanService, RelationDeleteInput, RelationPredicateInput, RelationPredicateRecord,
+    RelationRecord, RelationUpsertInput,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RelationListOptions {
@@ -46,35 +48,18 @@ pub struct RelationDeleteCommand {
     pub board: Option<String>,
 }
 
-pub trait RelationQuery: ApplicationStore {
-    fn list_relation_predicates(
-        &self,
-    ) -> impl Future<Output = Result<Vec<RelationPredicateRecord>>> + Send;
-    fn upsert_relation_predicate(
-        &self,
-        command: RelationPredicateCommand,
-    ) -> impl Future<Output = Result<RelationPredicateRecord>> + Send;
-    fn list_relations(
-        &self,
-        options: RelationListOptions,
-    ) -> impl Future<Output = Result<Vec<RelationRecord>>> + Send;
-    fn upsert_relation(
-        &self,
-        command: RelationUpsertCommand,
-    ) -> impl Future<Output = Result<RelationRecord>> + Send;
-    fn delete_relation(
-        &self,
-        command: RelationDeleteCommand,
-    ) -> impl Future<Output = Result<bool>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: RelationQuery,
     C: Clock,
 {
     pub async fn list_relation_predicates(&self) -> Result<Vec<RelationPredicateRecord>> {
-        self.store.list_relation_predicates().await
+        self.application
+            .store
+            .store
+            .list_relation_predicates()
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(|predicates| predicates.into_iter().map(application_predicate).collect())
     }
 
     pub async fn upsert_relation_predicate(
@@ -86,7 +71,20 @@ where
                 "predicate name is required".to_owned(),
             ));
         }
-        self.store.upsert_relation_predicate(command).await
+        self.application
+            .store
+            .store
+            .upsert_relation_predicate(RelationPredicateInput {
+                name: command.name,
+                domain_kind: command.domain_kind,
+                range_kind: command.range_kind,
+                cardinality: command.cardinality,
+                authoritative_store: command.authoritative_store,
+                description: command.description,
+            })
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(application_predicate)
     }
 
     pub async fn list_relations(
@@ -98,7 +96,19 @@ where
                 "relation limit must be between 1 and 1000".to_owned(),
             ));
         }
-        self.store.list_relations(options).await
+        self.application
+            .store
+            .store
+            .list_relations(StoreRelationListOptions {
+                board: options.board,
+                subject_uri: options.subject_uri,
+                object_uri: options.object_uri,
+                predicate: options.predicate,
+                limit: options.limit,
+            })
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(|relations| relations.into_iter().map(application_relation).collect())
     }
 
     pub async fn upsert_relation(&self, command: RelationUpsertCommand) -> Result<RelationRecord> {
@@ -110,10 +120,70 @@ where
                 "relation subject, predicate and object are required".to_owned(),
             ));
         }
-        self.store.upsert_relation(command).await
+        self.application
+            .store
+            .store
+            .upsert_relation(RelationUpsertInput {
+                subject_uri: command.subject_uri,
+                predicate: command.predicate,
+                object_uri: command.object_uri,
+                graph_uri: command.graph_uri,
+                board: command.board,
+                authoritative_store: command.authoritative_store,
+                source_table: command.source_table,
+                source_id: command.source_id,
+                source_event_id: command.source_event_id,
+                metadata_json: command.metadata_json,
+            })
+            .await
+            .map_err(crate::adapter::store_error)
+            .map(application_relation)
     }
 
     pub async fn delete_relation(&self, command: RelationDeleteCommand) -> Result<bool> {
-        self.store.delete_relation(command).await
+        self.application
+            .store
+            .store
+            .delete_relation(RelationDeleteInput {
+                subject_uri: command.subject_uri,
+                predicate: command.predicate,
+                object_uri: command.object_uri,
+                graph_uri: command.graph_uri,
+                board: command.board,
+            })
+            .await
+            .map_err(crate::adapter::store_error)
+    }
+}
+
+fn application_predicate(
+    predicate: crate::domain::RelationPredicateRecord,
+) -> RelationPredicateRecord {
+    RelationPredicateRecord {
+        name: predicate.name,
+        domain_kind: predicate.domain_kind,
+        range_kind: predicate.range_kind,
+        cardinality: predicate.cardinality,
+        authoritative_store: predicate.authoritative_store,
+        description: predicate.description,
+        created_at: predicate.created_at,
+    }
+}
+
+pub(crate) fn application_relation(relation: crate::domain::RelationRecord) -> RelationRecord {
+    RelationRecord {
+        id: relation.id,
+        subject_uri: relation.subject_uri,
+        predicate: relation.predicate,
+        object_uri: relation.object_uri,
+        graph_uri: relation.graph_uri,
+        board_id: relation.board_id,
+        authoritative_store: relation.authoritative_store,
+        source_table: relation.source_table,
+        source_id: relation.source_id,
+        source_event_id: relation.source_event_id,
+        metadata_json: relation.metadata_json,
+        created_at: relation.created_at,
+        updated_at: relation.updated_at,
     }
 }

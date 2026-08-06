@@ -231,7 +231,6 @@ maintenance_witnesses!(
 macro_rules! api_contract {
     (
         $id:literal,
-        $slug:literal,
         $path:literal,
         $operation:literal,
         $operation_key:literal,

@@ -401,7 +401,7 @@
       "invalid_fixture": "schemas/fixtures/cli/task-step-add-output.v1.invalid.json",
       "path": "cli/task-step-add-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/task-step-add-output.v1.valid.json",
-      "sha256": "sha256:5f9eb7e01eec5bbd6733ad3e81a0ef58568359a29f06460b50d5c77c40995c22",
+      "sha256": "sha256:037e873999336c7c211e784725f7c2947cb245327cb0753dc9e7f8fc0fc4df94",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -411,7 +411,7 @@
       "invalid_fixture": "schemas/fixtures/cli/task-step-update-output.v1.invalid.json",
       "path": "cli/task-step-update-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/task-step-update-output.v1.valid.json",
-      "sha256": "sha256:3f714f9493ecc76c6d641e92af00b80f6ab4a6e83bc07fff3c5b54180140048e",
+      "sha256": "sha256:a82e03388b1c0f38d896669226cbdaf8dfce769da73c41b5649027b90bd1b224",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -541,7 +541,7 @@
       "invalid_fixture": "schemas/fixtures/cli/task-reclaim-output.v1.invalid.json",
       "path": "cli/task-reclaim-output.v1.schema.json",
       "schema_fixture": "schemas/fixtures/cli/task-reclaim-output.v1.valid.json",
-      "sha256": "sha256:42d0d5fdb822b9df7deece02d69e4d94b9a8630e7d8fc8d739050839fdb6a18d",
+      "sha256": "sha256:ba5590376c34fdf0b38d2a3f3b38eb4142a04042d83bb0ab94fa94149e950b8e",
       "strictness": "deny_unknown_fields"
     },
     {

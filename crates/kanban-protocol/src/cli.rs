@@ -637,23 +637,15 @@ pub type CliTaskUnblockOutput = DataEnvelope<ApiTask>;
 pub type CliTaskArchiveOutput = DataEnvelope<ApiTask>;
 pub type CliTaskClaimOutput = DataEnvelope<ApiClaim>;
 pub type CliTaskStartOutput = DataEnvelope<ApiClaim>;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
-pub struct CliTaskReclaimResult {
-    pub reclaimed: u64,
-}
-
-pub type CliTaskReclaimOutput = DataEnvelope<CliTaskReclaimResult>;
+pub type CliTaskReclaimOutput = DataEnvelope<ApiTask>;
 pub type CliCommentListOutput = DataEnvelope<Vec<ApiComment>>;
 pub type CliCommentAddOutput = DataEnvelope<ApiComment>;
 pub type CliAttachmentListOutput = DataEnvelope<Vec<ApiAttachment>>;
 pub type CliAttachmentAddOutput = DataEnvelope<ApiAttachment>;
 pub type CliAttachmentRemoveOutput = DataEnvelope<crate::DeleteResult>;
 pub type CliTaskStepListOutput = DataEnvelope<ApiTaskSteps>;
-pub type CliTaskStepAddOutput = DataEnvelope<ApiTaskStep>;
-pub type CliTaskStepUpdateOutput = DataEnvelope<ApiTaskStep>;
+pub type CliTaskStepAddOutput = DataEnvelope<ApiTaskSteps>;
+pub type CliTaskStepUpdateOutput = DataEnvelope<ApiTaskSteps>;
 pub type CliTaskStepDoneOutput = DataEnvelope<ApiTaskStep>;
 pub type CliTaskStepSkipOutput = DataEnvelope<ApiTaskStep>;
 pub type CliTaskStepReopenOutput = DataEnvelope<ApiTaskStep>;

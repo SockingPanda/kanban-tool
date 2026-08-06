@@ -243,7 +243,9 @@ def _check_leaf_features(
         raise DependencyOwnerPolicyError(
             f"{_package_name(owner)} -> {dependency_name} 必须是非 optional product dependency"
         )
-    if dependency.get("kind") != "normal":
+    # `cargo metadata` 用 JSON `null` 表示普通 dependency；部分测试夹具或旧
+    # Cargo 输出会显式写成 `normal`。两者都属于同一语义，其他 kind 必须拒绝。
+    if dependency.get("kind") not in (None, "normal"):
         raise DependencyOwnerPolicyError(
             f"{_package_name(owner)} -> {dependency_name} 必须是 normal dependency"
         )

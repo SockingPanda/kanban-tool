@@ -22,7 +22,7 @@ def _dependency(name: str, req: str, *, default: bool, features: list[str]) -> d
         "name": name,
         "source": GATE.CRATES_IO_SOURCE,
         "req": req,
-        "kind": "normal",
+        "kind": None,
         "rename": None,
         "optional": False,
         "uses_default_features": default,
@@ -154,6 +154,17 @@ class DependencyOwnerGateTests(unittest.TestCase):
             if package.get("name") == "kanban-service"
         )
         service["dependencies"][0]["features"] = []
+        with self.assertRaises(GATE.DependencyOwnerPolicyError):
+            GATE.audit_metadata(metadata, self.root)
+
+    def test_non_normal_dependency_kind_is_rejected(self) -> None:
+        metadata = _metadata()
+        service = next(
+            package
+            for package in metadata["packages"]
+            if package.get("name") == "kanban-service"
+        )
+        service["dependencies"][0]["kind"] = "dev"
         with self.assertRaises(GATE.DependencyOwnerPolicyError):
             GATE.audit_metadata(metadata, self.root)
 

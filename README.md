@@ -63,7 +63,7 @@ kanban vector status
 - **CLI**：普通命令通过 `kanban-client` 访问 localhost；`serve`、`init`、配置/board 选择、completion 和 Codex hook 是本地 shell 或 host 装配命令。
 - **MCP**：`kanban-mcp` 使用 stdio 和 `rmcp`。公开工具由
   `kanban-protocol::MCP_OPERATION_CATALOG`（`mcp_operation_catalog()`）机器可读目录固定，
-  共 102 个 tool，覆盖全部 101 个非 host-admin HTTP operation；
+  共 103 个 tool，覆盖全部 102 个非 host-admin HTTP operation；
   `MCP_HOST_ADMIN_OPERATION_IDS` 明确禁止 12 个 host-admin operation。所有 tool 都调用
   typed client，不启动 host、不直接写数据库。search/graph/vector 与 label atom-index 的
   domain `rebuild`/`sync` 不属于这 12 个 host-admin operation，仍由 catalog 覆盖。

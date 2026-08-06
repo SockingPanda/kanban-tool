@@ -12,9 +12,9 @@ use kanban_protocol::{
     CreateBoardResponse, CreateCommentResponse, CreateStepResponse, CreateTaskResponse,
     ErrorEnvelope, GetBoardResponse, GetRunLogResponse, GetRunResponse, GetTaskResponse,
     HealthResponse, ListBoardColumnsResponse, ListBoardsResponse, ListCommentsResponse,
-    ListDependenciesResponse, ListRunsResponse, ListStepsResponse, ListTasksResponse,
-    MarkExecutionPlanNotRequiredResponse, RemoveDependencyResponse, RemoveStepResponse,
-    StatsResponse, UpdateStepResponse, UpdateTaskResponse,
+    ListDependenciesResponse, ListRunsResponse, ListStepsResponse, ListTasksByStatusResponse,
+    ListTasksResponse, MarkExecutionPlanNotRequiredResponse, RemoveDependencyResponse,
+    RemoveStepResponse, StatsResponse, UpdateStepResponse, UpdateTaskResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -675,6 +675,43 @@ async fn suite_tasks_crud_and_reads_use_committed_fixtures_through_router() {
     assert_eq!(status, StatusCode::OK);
     let _: ListTasksResponse =
         assert_fixture(&body, "list-tasks-response.v1.valid.json", normalize_task);
+    let status_query = query_fixture(
+        "list-tasks-by-status-query.v1.valid.json",
+        &[
+            "status",
+            "priority",
+            "label",
+            "plan_filter",
+            "assignee",
+            "q",
+            "include_archived",
+            "limit",
+            "offset",
+            "sort",
+        ],
+    );
+    let (status, body) = response(
+        &list_router,
+        get_request(&format!(
+            "/api/v1/boards/other/tasks/by-status?{status_query}"
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let _: ListTasksByStatusResponse = serde_json::from_slice(&body).unwrap();
+    let (status, body) = response(
+        &list_router,
+        get_request(
+            "/api/v1/boards/other/tasks/by-status?status=ready&status=blocked&priority=3&limit=25&offset=0&sort=position",
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let _: ListTasksByStatusResponse = assert_fixture(
+        &body,
+        "list-tasks-by-status-response.v1.valid.json",
+        normalize_task,
+    );
 
     let get_task_id = fixture_field("get-task-path.v1.valid.json", "task_id");
     let query = query_fixture("get-task-query.v1.valid.json", &["include"]);

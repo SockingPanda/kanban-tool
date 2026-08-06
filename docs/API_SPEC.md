@@ -61,14 +61,17 @@ vector 或 label atom-index domain `rebuild`/`sync` 的调用。
 | Method | Path | 语义 |
 | --- | --- | --- |
 | `GET` | `/api/v1/boards/:board/tasks` | status/priority/plan/assignee/query/pagination/sort 过滤 |
+| `GET` | `/api/v1/boards/:board/tasks/by-status` | 按请求中的多个 `status` 返回独立窗口；每个窗口保留同一组 filters/sort/pagination 与 `total` |
 | `POST` | `/api/v1/boards/:board/tasks` | task create；支持 task/idempotency key、metadata、labels、depends_on |
 | `GET` | `/api/v1/tasks/:task_id` | task aggregate；`include=details` 可返回 ontology/labels/dependencies/steps/runs/event meta |
 | `PATCH` | `/api/v1/tasks/:task_id` | 只更新 service 允许的内容/排期/metadata 字段，不直接改 status |
 | `POST` | `/api/v1/tasks/:task_id/execution-plan/not-required` | 显式 plan gate |
 
 task list/search 默认排除 `archived`；所有 selector、board isolation、idempotency 和 dependency guard 由 service 处理。
-状态筛选属于 `/api/v1/boards/:board/tasks` 的 query contract；搜索按状态的只读结果使用
-`/api/v1/search/tasks/by-status`，两者不是第二套 task mutation path。
+`/api/v1/boards/:board/tasks` 是单页 canonical list，状态筛选属于同一 query contract；
+`/api/v1/boards/:board/tasks/by-status` 批量返回多个 status window，但每个窗口仍调用同一
+service list path。搜索按状态的只读结果使用 `/api/v1/search/tasks/by-status`；三者都不是
+第二套 task mutation path。
 
 ### Lifecycle
 
@@ -234,7 +237,7 @@ vector32 查询使用 host Ollama embedding provider；provider outage 返回 ty
 
 本文件按领域解释语义；逐项 exact method/path 以 `endpoint_catalog()` 及生成的
 `schemas/json-schema/draft-2020-12/surface-operations.json` 为准。`/api/v1/search/tasks/by-status`
-是当前搜索查询 surface，task board 列表本身仍通过 `/api/v1/boards/:board/tasks` 的 query
-完成状态筛选。
+是当前搜索查询 surface；task board 列表通过 `/api/v1/boards/:board/tasks` 的 query
+完成单页状态筛选，或通过 `/api/v1/boards/:board/tasks/by-status` 获取多个独立 status window。
 
 已有 server/service evidence 包括 task lifecycle、label round-trip、ontology action/revert、signal ledger、FTS capability、graph BFS/rebuild、vector fixture/degraded、context merge、maintenance import/replace 和 Desktop contract tests。完整 schema adoption、surface audit、full package、release 和 PR gate 不由本文档更新自动执行，结果见 parity ledger 的待验收清单。

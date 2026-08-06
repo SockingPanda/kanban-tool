@@ -84,7 +84,7 @@ projection/admin、独立 lifecycle leaf 和 task-read 旧路径不属于 active
 
 `kanban-mcp` 是 Rust stdio server。公开工具由
 `kanban-protocol::MCP_OPERATION_CATALOG`（`mcp_operation_catalog()`）机器可读目录固定，共
-102 个 tool，覆盖全部 101 个非 host-admin HTTP operation；
+103 个 tool，覆盖全部 102 个非 host-admin HTTP operation；
 `MCP_HOST_ADMIN_OPERATION_IDS` 明确禁止 12 个 host-admin operation。MCP 不启动 host、不打开
 数据库、不提供 migration/backup/vacuum/replace 管理命令；search/graph/vector 与 label
 atom-index 的 domain `rebuild`/`sync` 不属于这 12 个禁止项。
@@ -117,7 +117,9 @@ backup、export/import、checkpoint、vacuum、`/api/v1/maintenance/rebuild|clea
 
 `kanban-protocol` 是 DTO、event payload、错误 envelope、endpoint/surface catalog 和 JSON Schema 的权威来源。错误以稳定 `error.code` 表示，message 不属于机器契约；常见 code 包括 `invalid_input`、`not_found`、`conflict`、`idempotency_conflict`、`dependency_cycle`、`claim_conflict`、`claim_token_mismatch`、`invalid_transition`、`feature_not_available`、`server_unavailable` 和 `internal`。
 
-HTTP/API、CLI output、MCP tool schema 和 Desktop parser 必须引用同一 protocol DTO。schema adoption witness、surface audit 和完整测试尚未在本次文档任务中运行，不能因为 catalog 已有 `adopted` 条目就宣称所有 runtime gate 完成。
+HTTP/API、CLI output、MCP tool schema 和 Desktop parser 必须引用同一 protocol DTO。本次 by-status
+切片已运行 schema adoption witness 与 surface audit；这不替代完整 runtime/package gate，不能
+因为 catalog 已有 `adopted` 条目就宣称所有 runtime gate 完成。
 
 ## 7. 验收边界
 

@@ -39,7 +39,8 @@ use crate::{
     ListBoardsResponse, ListCommentsPath, ListCommentsResponse, ListDependenciesPath,
     ListDependenciesResponse, ListEventsResponse, ListRunsPath, ListRunsResponse,
     ListSignalsResponse, ListStepsPath, ListStepsResponse, ListTaskLabelsPath,
-    ListTaskLabelsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
+    ListTaskLabelsResponse, ListTasksByStatusPath, ListTasksByStatusQuery,
+    ListTasksByStatusResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
     MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
     ReclaimTaskPath, ReclaimTaskRequest, ReclaimTaskResponse, RecordSignalRequest,
@@ -1560,6 +1561,17 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         invalid_fixture: "schemas/fixtures/api/list-tasks-response.v1.invalid.json",
         generate: generate_for::<ListTasksResponse>,
     },
+    SchemaRoot {
+        id: "urn:kanban-tool:schema:api:list-tasks-by-status-response:v1",
+        artifact_path: "api/list-tasks-by-status-response.v1.schema.json",
+        title: "Kanban list tasks by status response v1",
+        contract_id: "api.list-tasks-by-status.response",
+        direction: ContractDirection::Serialize,
+        strictness: ContractStrictness::DenyUnknownFields,
+        valid_fixture: "schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json",
+        invalid_fixture: "schemas/fixtures/api/list-tasks-by-status-response.v1.invalid.json",
+        generate: generate_for::<ListTasksByStatusResponse>,
+    },
     request_schema_root!(
         "urn:kanban-tool:schema:api:create-task-path:v1",
         "api/create-task-path.v1.schema.json",
@@ -1606,6 +1618,24 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/api/list-tasks-query.v1.valid.json",
         "schemas/fixtures/api/list-tasks-query.v1.invalid.json",
         ListTasksQuery
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
+        "api/list-tasks-by-status-path.v1.schema.json",
+        "Kanban list tasks by status path v1",
+        "api.list-tasks-by-status.path",
+        "schemas/fixtures/api/list-tasks-by-status-path.v1.valid.json",
+        "schemas/fixtures/api/list-tasks-by-status-path.v1.invalid.json",
+        ListTasksByStatusPath
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:list-tasks-by-status-query:v1",
+        "api/list-tasks-by-status-query.v1.schema.json",
+        "Kanban list tasks by status query v1",
+        "api.list-tasks-by-status.query",
+        "schemas/fixtures/api/list-tasks-by-status-query.v1.valid.json",
+        "schemas/fixtures/api/list-tasks-by-status-query.v1.invalid.json",
+        ListTasksByStatusQuery
     ),
     request_schema_root!(
         "urn:kanban-tool:schema:api:list-runs-path:v1",

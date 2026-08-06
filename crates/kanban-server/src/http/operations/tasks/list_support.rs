@@ -1,16 +1,78 @@
 use crate::error::ApiError;
 use kanban_protocol::{
-    ApiTaskPriority, ApiTaskStatus, ListTasksQuery, MAX_TASK_READ_ASSIGNEE_CHARS,
-    MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS, MAX_TASK_READ_LIMIT,
-    MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES, MAX_TASK_READ_Q_CHARS,
-    MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS, MAX_TASK_READ_STATUSES, TaskReadLabel,
-    TaskReadPlanFilter, TaskReadSort,
+    ApiTaskPriority, ApiTaskStatus, ListTasksByStatusQuery, ListTasksQuery,
+    MAX_TASK_READ_ASSIGNEE_CHARS, MAX_TASK_READ_LABEL_CHARS, MAX_TASK_READ_LABELS,
+    MAX_TASK_READ_LIMIT, MAX_TASK_READ_PLAN_FILTERS, MAX_TASK_READ_PRIORITIES,
+    MAX_TASK_READ_Q_CHARS, MAX_TASK_READ_QUERY_BYTES, MAX_TASK_READ_QUERY_PAIRS,
+    MAX_TASK_READ_STATUSES, TaskReadLabel, TaskReadPlanFilter, TaskReadSort,
 };
 use kanban_service::{KanbanError, TaskStatus};
 use kanban_service::{
     TaskListSort as ApplicationTaskListSort, TaskPlanFilter as ApplicationTaskPlanFilter,
 };
 use std::{collections::BTreeSet, str::FromStr};
+
+pub(super) trait TaskReadQueryTarget: Default {
+    fn statuses(&mut self) -> &mut Vec<ApiTaskStatus>;
+    fn priorities(&mut self) -> &mut Vec<ApiTaskPriority>;
+    fn labels(&mut self) -> &mut Vec<TaskReadLabel>;
+    fn plan_filters(&mut self) -> &mut Vec<TaskReadPlanFilter>;
+    fn set_assignee(&mut self, value: Option<String>);
+    fn set_query(&mut self, value: Option<String>);
+    fn set_include_archived(&mut self, value: bool);
+    fn set_limit(&mut self, value: usize);
+    fn set_offset(&mut self, value: usize);
+    fn set_sort(&mut self, value: TaskReadSort);
+}
+
+macro_rules! impl_task_read_query_target {
+    ($query:ty) => {
+        impl TaskReadQueryTarget for $query {
+            fn statuses(&mut self) -> &mut Vec<ApiTaskStatus> {
+                &mut self.status
+            }
+
+            fn priorities(&mut self) -> &mut Vec<ApiTaskPriority> {
+                &mut self.priority
+            }
+
+            fn labels(&mut self) -> &mut Vec<TaskReadLabel> {
+                &mut self.label
+            }
+
+            fn plan_filters(&mut self) -> &mut Vec<TaskReadPlanFilter> {
+                &mut self.plan_filter
+            }
+
+            fn set_assignee(&mut self, value: Option<String>) {
+                self.assignee = value;
+            }
+
+            fn set_query(&mut self, value: Option<String>) {
+                self.q = value;
+            }
+
+            fn set_include_archived(&mut self, value: bool) {
+                self.include_archived = value;
+            }
+
+            fn set_limit(&mut self, value: usize) {
+                self.limit = value;
+            }
+
+            fn set_offset(&mut self, value: usize) {
+                self.offset = value;
+            }
+
+            fn set_sort(&mut self, value: TaskReadSort) {
+                self.sort = value;
+            }
+        }
+    };
+}
+
+impl_task_read_query_target!(ListTasksQuery);
+impl_task_read_query_target!(ListTasksByStatusQuery);
 
 pub(super) fn task_status(status: ApiTaskStatus) -> TaskStatus {
     match status {
@@ -62,7 +124,17 @@ pub(super) fn application_task_sort(sort: TaskReadSort) -> ApplicationTaskListSo
 }
 
 pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTasksQuery, ApiError> {
-    let mut query = ListTasksQuery::default();
+    parse_task_read_query(raw_query)
+}
+
+pub(super) fn parse_list_tasks_by_status_query(
+    raw_query: Option<&str>,
+) -> Result<ListTasksByStatusQuery, ApiError> {
+    parse_task_read_query(raw_query)
+}
+
+fn parse_task_read_query<T: TaskReadQueryTarget>(raw_query: Option<&str>) -> Result<T, ApiError> {
+    let mut query = T::default();
     let mut scalar_parameters = BTreeSet::new();
     let Some(raw_query) = raw_query else {
         return Ok(query);
@@ -92,7 +164,7 @@ pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTask
                 let status = ApiTaskStatus::from_str(value.trim()).map_err(|()| {
                     KanbanError::InvalidInput(format!("未知的 status filter：{value}"))
                 })?;
-                push_repeated(&mut query.status, status, "status", MAX_TASK_READ_STATUSES)?;
+                push_repeated(query.statuses(), status, "status", MAX_TASK_READ_STATUSES)?;
             }
             "priority" => {
                 let priority = value
@@ -104,7 +176,7 @@ pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTask
                         KanbanError::InvalidInput("priority 必须在 0 到 3 之间".to_owned())
                     })?;
                 push_repeated(
-                    &mut query.priority,
+                    query.priorities(),
                     priority,
                     "priority",
                     MAX_TASK_READ_PRIORITIES,
@@ -120,14 +192,14 @@ pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTask
                 let label = TaskReadLabel::new(value).ok_or_else(|| {
                     KanbanError::InvalidInput("label 必须包含非空白字符".to_owned())
                 })?;
-                push_repeated(&mut query.label, label, "label", MAX_TASK_READ_LABELS)?;
+                push_repeated(query.labels(), label, "label", MAX_TASK_READ_LABELS)?;
             }
             "plan_filter" => {
                 let filter = TaskReadPlanFilter::from_str(value.trim()).map_err(|()| {
                     KanbanError::InvalidInput(format!("未知的 plan_filter：{value}"))
                 })?;
                 push_repeated(
-                    &mut query.plan_filter,
+                    query.plan_filters(),
                     filter,
                     "plan_filter",
                     MAX_TASK_READ_PLAN_FILTERS,
@@ -135,45 +207,54 @@ pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTask
             }
             "assignee" => {
                 scalar(&mut scalar_parameters, "assignee")?;
-                query.assignee = bounded_optional(value, "assignee", MAX_TASK_READ_ASSIGNEE_CHARS)?;
+                query.set_assignee(bounded_optional(
+                    value,
+                    "assignee",
+                    MAX_TASK_READ_ASSIGNEE_CHARS,
+                )?);
             }
             "q" => {
                 scalar(&mut scalar_parameters, "q")?;
-                query.q = bounded_optional(value, "q", MAX_TASK_READ_Q_CHARS)?;
+                query.set_query(bounded_optional(value, "q", MAX_TASK_READ_Q_CHARS)?);
             }
             "include_archived" => {
                 scalar(&mut scalar_parameters, "include_archived")?;
-                query.include_archived = value.parse::<bool>().map_err(|_| {
+                query.set_include_archived(value.parse::<bool>().map_err(|_| {
                     KanbanError::InvalidInput(format!("include_archived 无效：{value}"))
-                })?;
+                })?);
             }
             "limit" => {
                 scalar(&mut scalar_parameters, "limit")?;
-                query.limit = value
+                let limit = value
                     .parse::<usize>()
                     .map_err(|_| KanbanError::InvalidInput(format!("limit 无效：{value}")))?;
-                if query.limit > MAX_TASK_READ_LIMIT {
+                if limit > MAX_TASK_READ_LIMIT {
                     return Err(KanbanError::InvalidInput(format!(
                         "limit 必须小于等于 {MAX_TASK_READ_LIMIT}"
                     ))
                     .into());
                 }
+                query.set_limit(limit);
             }
             "offset" => {
                 scalar(&mut scalar_parameters, "offset")?;
-                query.offset = value
+                let offset = value
                     .parse::<usize>()
                     .map_err(|_| KanbanError::InvalidInput(format!("offset 无效：{value}")))?;
-                if query.offset > i64::MAX as usize {
+                if offset > i64::MAX as usize {
                     return Err(
                         KanbanError::InvalidInput("offset 超过支持的范围".to_owned()).into(),
                     );
                 }
+                query.set_offset(offset);
             }
             "sort" => {
                 scalar(&mut scalar_parameters, "sort")?;
-                query.sort = TaskReadSort::from_str(value.trim())
-                    .map_err(|()| KanbanError::InvalidInput(format!("不支持的 sort：{value}")))?;
+                query.set_sort(
+                    TaskReadSort::from_str(value.trim()).map_err(|()| {
+                        KanbanError::InvalidInput(format!("不支持的 sort：{value}"))
+                    })?,
+                );
             }
             _ => {
                 return Err(KanbanError::InvalidInput(format!(
@@ -321,5 +402,20 @@ mod tests {
         );
         assert!(parse_list_tasks_query(Some("future=true")).is_err());
         assert!(parse_list_tasks_query(Some("q=%ZZ")).is_err());
+    }
+
+    #[test]
+    fn task_list_by_status_query_reuses_the_task_read_parser_contract() {
+        let query = parse_list_tasks_by_status_query(Some(
+            "status=todo&status=ready&label=%E7%8A%B6%E6%80%81%E3%80%80%E7%AA%97%E5%8F%A3&limit=50&sort=position",
+        ))
+        .unwrap();
+        assert_eq!(
+            query.status,
+            vec![ApiTaskStatus::Todo, ApiTaskStatus::Ready]
+        );
+        assert_eq!(query.label[0].as_str(), "状态　窗口");
+        assert_eq!(query.limit, 50);
+        assert_eq!(query.sort, TaskReadSort::Position);
     }
 }

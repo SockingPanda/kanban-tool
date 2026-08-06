@@ -205,6 +205,19 @@
   },
   {
     "contracts": [
+      "api.list-tasks-by-status.path",
+      "api.list-tasks-by-status.query",
+      "api.list-tasks-by-status.headers",
+      "api.list-tasks-by-status.response",
+      "api.error.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/tasks/by-status",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
       "api.create-task.path",
       "api.create-task.headers",
       "api.create-task.request",

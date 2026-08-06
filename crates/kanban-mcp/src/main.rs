@@ -62,7 +62,7 @@ mod tests {
         assert_eq!(names, catalog_names);
         validate_mcp_operation_catalog(mcp_operation_catalog())
             .expect("MCP catalog 只能绑定已存在的领域 endpoint");
-        assert_eq!(catalog_names.len(), 102);
+        assert_eq!(catalog_names.len(), 103);
     }
 
     #[test]

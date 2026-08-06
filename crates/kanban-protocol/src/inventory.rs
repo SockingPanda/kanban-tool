@@ -2534,6 +2534,28 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         HttpTransportLocation::Query,
         TASK_READ_QUERY_PARAMETERS
     ),
+    adopted_api_parameter_contract!(
+        "api.list-tasks-by-status.path",
+        "GET /api/v1/boards/:board/tasks/by-status path",
+        "GET /api/v1/boards/:board/tasks/by-status",
+        "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
+        "schemas/fixtures/api/list-tasks-by-status-path.v1.valid.json",
+        "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        HttpTransportLocation::Path,
+        TASK_READ_PATH_PARAMETERS
+    ),
+    adopted_api_parameter_contract!(
+        "api.list-tasks-by-status.query",
+        "GET /api/v1/boards/:board/tasks/by-status query",
+        "GET /api/v1/boards/:board/tasks/by-status",
+        "urn:kanban-tool:schema:api:list-tasks-by-status-query:v1",
+        "schemas/fixtures/api/list-tasks-by-status-query.v1.valid.json",
+        "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        HttpTransportLocation::Query,
+        TASK_READ_QUERY_PARAMETERS
+    ),
     OperationContract {
         id: "api.list-tasks.response",
         path: "GET /api/v1/boards/:board/tasks response",
@@ -2569,6 +2591,46 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         migration: MigrationState::Adopted,
         transport: ContractTransport::Http {
             operation_key: Some("GET /api/v1/boards/:board/tasks"),
+            location: HttpTransportLocation::Success,
+            parameters: &[],
+        },
+        binding: ContractBinding::ExactSurface,
+    },
+    OperationContract {
+        id: "api.list-tasks-by-status.response",
+        path: "GET /api/v1/boards/:board/tasks/by-status response",
+        surface: ContractSurface::Api,
+        operation: "GET /api/v1/boards/:board/tasks/by-status",
+        direction: ContractDirection::Serialize,
+        granularity: ContractGranularity::Exact,
+        strictness: ContractStrictness::DenyUnknownFields,
+        schema_id: Some("urn:kanban-tool:schema:api:list-tasks-by-status-response:v1"),
+        fixture: Some("schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json"),
+        adoption: Some(AdoptionEvidence {
+            producer_fixture: "schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json",
+            producer: AdoptionWitness {
+                operation: "GET /api/v1/boards/:board/tasks/by-status",
+                contract_id: "api.list-tasks-by-status.response",
+                surface: ContractSurface::Api,
+                direction: ContractDirection::Serialize,
+                package: "kanban-server",
+                test_target: "lib",
+                exact_test: "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+            },
+            consumer: AdoptionWitness {
+                operation: "GET /api/v1/boards/:board/tasks/by-status",
+                contract_id: "api.list-tasks-by-status.response",
+                surface: ContractSurface::Api,
+                direction: ContractDirection::Serialize,
+                package: "kanban-server",
+                test_target: "lib",
+                exact_test: "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+            },
+        }),
+        exclusion: None,
+        migration: MigrationState::Adopted,
+        transport: ContractTransport::Http {
+            operation_key: Some("GET /api/v1/boards/:board/tasks/by-status"),
             location: HttpTransportLocation::Success,
             parameters: &[],
         },
@@ -5342,6 +5404,9 @@ fn canonical_api_witness(contract: &OperationContract, consumer: bool) -> Option
         "api.list-tasks.path"
             | "api.list-tasks.query"
             | "api.list-tasks.response"
+            | "api.list-tasks-by-status.path"
+            | "api.list-tasks-by-status.query"
+            | "api.list-tasks-by-status.response"
             | "api.create-task.path"
             | "api.create-task.request"
             | "api.create-task.response"

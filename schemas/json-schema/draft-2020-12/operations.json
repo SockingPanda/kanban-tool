@@ -7417,6 +7417,134 @@
   {
     "adoption": {
       "consumer": {
+        "contract_id": "api.list-tasks-by-status.path",
+        "direction": "deserialize",
+        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        "operation": "GET /api/v1/boards/:board/tasks/by-status",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.list-tasks-by-status.path",
+        "direction": "deserialize",
+        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        "operation": "GET /api/v1/boards/:board/tasks/by-status",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/list-tasks-by-status-path.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-tasks-by-status-path.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-tasks-by-status.path",
+    "migration": "adopted",
+    "operation": "GET /api/v1/boards/:board/tasks/by-status",
+    "path": "GET /api/v1/boards/:board/tasks/by-status path",
+    "schema_id": "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "path",
+      "operation_key": "GET /api/v1/boards/:board/tasks/by-status",
+      "parameters": [
+        {
+          "cardinality": "required_one",
+          "name": "board"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.list-tasks-by-status.query",
+        "direction": "deserialize",
+        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        "operation": "GET /api/v1/boards/:board/tasks/by-status",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.list-tasks-by-status.query",
+        "direction": "deserialize",
+        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        "operation": "GET /api/v1/boards/:board/tasks/by-status",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/list-tasks-by-status-query.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-tasks-by-status-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-tasks-by-status.query",
+    "migration": "adopted",
+    "operation": "GET /api/v1/boards/:board/tasks/by-status",
+    "path": "GET /api/v1/boards/:board/tasks/by-status query",
+    "schema_id": "urn:kanban-tool:schema:api:list-tasks-by-status-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "GET /api/v1/boards/:board/tasks/by-status",
+      "parameters": [
+        {
+          "cardinality": "repeated_ordered",
+          "name": "status"
+        },
+        {
+          "cardinality": "repeated_ordered",
+          "name": "priority"
+        },
+        {
+          "cardinality": "repeated_ordered",
+          "name": "label"
+        },
+        {
+          "cardinality": "repeated_ordered",
+          "name": "plan_filter"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "assignee"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "q"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "include_archived"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "limit"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "offset"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "sort"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
         "contract_id": "api.list-tasks.response",
         "direction": "serialize",
         "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
@@ -7452,6 +7580,47 @@
       "kind": "http",
       "location": "success",
       "operation_key": "GET /api/v1/boards/:board/tasks",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.list-tasks-by-status.response",
+        "direction": "serialize",
+        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        "operation": "GET /api/v1/boards/:board/tasks/by-status",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.list-tasks-by-status.response",
+        "direction": "serialize",
+        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
+        "operation": "GET /api/v1/boards/:board/tasks/by-status",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-tasks-by-status.response",
+    "migration": "adopted",
+    "operation": "GET /api/v1/boards/:board/tasks/by-status",
+    "path": "GET /api/v1/boards/:board/tasks/by-status response",
+    "schema_id": "urn:kanban-tool:schema:api:list-tasks-by-status-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "GET /api/v1/boards/:board/tasks/by-status",
       "parameters": []
     }
   },
@@ -18007,6 +18176,52 @@
       "kind": "http",
       "location": "headers",
       "operation_key": "GET /api/v1/boards/:board/tasks",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.list-tasks-by-status.headers",
+        "direction": "deserialize",
+        "exact_test": "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
+        "operation": "GET /api/v1/boards/:board/tasks/by-status",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.list-tasks-by-status.headers",
+        "direction": "deserialize",
+        "exact_test": "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
+        "operation": "GET /api/v1/boards/:board/tasks/by-status",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.list-tasks-by-status.headers",
+    "migration": "adopted",
+    "operation": "GET /api/v1/boards/:board/tasks/by-status",
+    "path": "GET /api/v1/boards/:board/tasks/by-status headers",
+    "schema_id": "urn:kanban-tool:schema:api:list-tasks-by-status-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/boards/:board/tasks/by-status",
       "parameters": [
         {
           "cardinality": "optional_one",

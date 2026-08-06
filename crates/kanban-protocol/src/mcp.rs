@@ -175,6 +175,7 @@ pub const MCP_OPERATION_CATALOG: &[McpOperationDescriptor] = &[
     domain_tool!("task_label_list" => ["api.list-tasks", "api.list-task-labels"]),
     domain_tool!("task_label_remove" => ["api.list-tasks", "api.remove-task-label"]),
     domain_tool!("task_list" => ["api.list-tasks"]),
+    domain_tool!("task_list_by_status" => ["api.list-tasks-by-status"]),
     domain_tool!("task_neighborhood" => ["api.task-neighborhood"]),
     domain_tool!(
         "task_plan_not_required" => ["api.list-tasks", "api.mark-execution-plan-not-required"]
@@ -268,6 +269,27 @@ pub fn validate_mcp_operation_catalog(catalog: &[McpOperationDescriptor]) -> Res
         }
     }
 
+    let bound_operations = catalog
+        .iter()
+        .flat_map(|descriptor| descriptor.http_operations)
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let missing_operations = endpoint_catalog()
+        .iter()
+        .filter(|endpoint| {
+            endpoint.surface == ContractSurface::Api
+                && !MCP_HOST_ADMIN_OPERATION_IDS.contains(&endpoint.operation_id)
+        })
+        .map(|endpoint| endpoint.operation_id)
+        .filter(|operation_id| !bound_operations.contains(operation_id))
+        .collect::<Vec<_>>();
+    if !missing_operations.is_empty() {
+        return Err(format!(
+            "MCP catalog 缺少非 host-admin API operation：{}",
+            missing_operations.join(", ")
+        ));
+    }
+
     Ok(())
 }
 
@@ -278,7 +300,7 @@ mod tests {
     #[test]
     fn catalog_is_valid_and_has_unique_sorted_tool_names() {
         validate_mcp_operation_catalog(MCP_OPERATION_CATALOG).unwrap();
-        assert_eq!(MCP_OPERATION_CATALOG.len(), 102);
+        assert_eq!(MCP_OPERATION_CATALOG.len(), 103);
         let names = MCP_OPERATION_CATALOG
             .iter()
             .map(|descriptor| descriptor.tool_name)

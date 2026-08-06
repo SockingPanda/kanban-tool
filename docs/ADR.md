@@ -1095,7 +1095,8 @@ binding/granularity/location/direction/operation/surface 失败关闭。本 ADR 
 ### 决策
 
 `GET /api/v1/boards/:board/tasks` 使用唯一的 task-list path/query DTO；状态筛选通过同一
-query contract 表达，搜索按状态的只读结果由 `/api/v1/search/tasks/by-status` 负责。server
+query contract 表达，`GET /api/v1/boards/:board/tasks/by-status` 复用该 service list path
+为多个 status 返回独立窗口，搜索按状态的只读结果由 `/api/v1/search/tasks/by-status` 负责。server
 使用类型化 Axum extractor 从一次 raw URI 进入共享有序解析器；handler 只接收已绑定的
 request，不持有第二个 raw source。
 - Query 语法：只有 `status`、`priority`、`label`、`plan_filter` 是

@@ -351,6 +351,23 @@ const ENDPOINTS: &[EndpointDescriptor] = &[
         },
     },
     EndpointDescriptor {
+        operation_id: "api.list-tasks-by-status",
+        surface: ContractSurface::Api,
+        method: HttpMethod::Get,
+        path: "/api/v1/boards/:board/tasks/by-status",
+        migration: MigrationState::Adopted,
+        exclusion: None,
+        shared_components: &["api.error.response"],
+        obligations: EndpointObligations {
+            path: EndpointObligation::Contract("api.list-tasks-by-status.path"),
+            query: EndpointObligation::Contract("api.list-tasks-by-status.query"),
+            headers: EndpointObligation::Contract("api.list-tasks-by-status.headers"),
+            body: EndpointObligation::NotApplicable,
+            success: EndpointObligation::Contract("api.list-tasks-by-status.response"),
+            sse: EndpointObligation::NotApplicable,
+        },
+    },
+    EndpointDescriptor {
         operation_id: "api.create-task",
         surface: ContractSurface::Api,
         method: HttpMethod::Post,

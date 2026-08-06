@@ -34,7 +34,7 @@ rg -n 'MCP_OPERATION_CATALOG|MCP_HOST_ADMIN_OPERATION_IDS|mcp_operation_catalog'
 | baseline 域/事实 | 当前 owner | HTTP / CLI / MCP / Desktop | 迁移规则 | 实际测试证据（代表性） | 状态 / 剩余 |
 | --- | --- | --- | --- | --- | --- |
 | `boards`、`board_columns` | `kanban-service` board operations + Turso schema | `GET/POST /api/v1/boards`、board detail/archive/columns；`kanban board list/create/show/archive/columns`；`board_list/create/show/archive`；Desktop board/list/settings | 保留 board identity、columns、archive guard；board 归档不改 task status，拒绝 active running work | `board_routes_cover_create_duplicate_archive_and_active_only_get`；`board_queries_use_the_initialized_host_database`；CLI board contract tests | `implemented-evidence`; 需跑完整 surface/adoption gate |
-| `tasks`、plan、steps、dependencies | service task/step/dependency operations + state machine | `/boards/:board/tasks`、`/tasks/:id`、`/steps`、`/dependencies`；CLI `task`/`dep`；MCP task/step/dependency tools；Desktop board/list/detail | 保留 global ID、board seq、plan gate、same-board FK、cycle guard、idempotency；状态只走显式 command | `list_tasks_*`；`claim_task_*`；`step_create_and_list_use_application_path_and_entity_local_idempotency`；`dependency_create_and_list_use_the_shared_application_path`；CLI task/board/maintenance contract tests | `implemented-evidence`; 完整 cross-surface gate pending |
+| `tasks`、plan、steps、dependencies | service task/step/dependency operations + state machine | `/boards/:board/tasks`、`/boards/:board/tasks/by-status`、`/tasks/:id`、`/steps`、`/dependencies`；CLI `task`/`dep`；MCP task/step/dependency tools（含 `task_list_by_status`）；Desktop board/list/detail | 保留 global ID、board seq、plan gate、same-board FK、cycle guard、idempotency；状态只走显式 command；by-status 每个窗口复用 canonical list filters/sort/pagination | `suite_tasks_crud_and_reads_use_committed_fixtures_through_router`；`list_tasks_*`；`claim_task_*`；`step_create_and_list_use_application_path_and_entity_local_idempotency`；`dependency_create_and_list_use_the_shared_application_path`；CLI task/board/maintenance contract tests | `implemented-evidence`; 完整 cross-surface gate pending |
 | `task_runs`、logs | service lifecycle/run read operations | `/tasks/:id/runs`、`/runs/:id`、`/runs/:id/log`；`kanban runs/run show/run logs`；MCP run tools；Desktop Runs/detail | run 只能由 claim 创建；固定 256 KiB log snapshot；lifecycle 和 run/event 同事务；不引入独立 run mutation | `run_list_uses_application_path_and_preserves_run_contract`；`run_show_reads_the_run_created_by_the_canonical_claim_path`；`run_log_route_uses_the_application_and_returns_contract_shape` | `implemented-evidence`; bounded log + package gate pending |
 | `task_comments`、decision metadata、signal backlink | service comment/signal transaction | `/tasks/:id/comments`、`/boards/:board/signals`；`kanban comment`/`signal`；MCP comment/signal；Desktop detail/Signals | comment idempotency 归 task；signal record/backlink/event 同事务；保留 unknown metadata JSON | server comment/signal tests；`signal_tools_are_independently_locatable`；Desktop comments/signals contract tests | `implemented-evidence`; full adoption witness pending |
 | `task_attachments`、staging | service attachment + host filesystem root | `/tasks/:id/attachments` list/create/download/delete；CLI/MCP attachment；Desktop TaskAttachmentsPanel | metadata 进 Turso；content 先 staging+fsync+SHA，再原子 publish；删除移 `.trash/`，事务失败恢复；portable/v30 由 journal 关联 | attachment server/desktop contract tests；service attachment/path guard capability test | `implemented-evidence`; v30 end-to-end gate pending |
@@ -65,7 +65,7 @@ rg -n 'MCP_OPERATION_CATALOG|MCP_HOST_ADMIN_OPERATION_IDS|mcp_operation_catalog'
 
 `kanban-server/src/http/operations` 当前覆盖 board/task/lifecycle/steps/comments/attachments/dependencies/entities/graph/search/context/labels/ontology/signals/runs/events/stats/maintenance；`crates/kanban-server/src/vector.rs` 注册 vector 路径。`kanban-client` 的 operations 与 server route 对应，失败映射统一 protocol error。
 
-实际 evidence：server route tests、vector fixture producer/consumer tests、`kanban-protocol` endpoint catalog/schema tests。剩余 gate 是运行 `just schema-surface-audit`、`just schema-adoption-witness` 与受影响 package/full tests，不能从 route inventory 数量推断完成。
+实际 evidence：server route tests、vector fixture producer/consumer tests、`kanban-protocol` endpoint catalog/schema tests；本次 by-status 切片另已运行 `just schema-surface-audit` 与 `just schema-adoption-witness`。剩余 gate 是完整 package/full tests，不能从 route inventory 数量推断完成。
 
 ### CLI
 
@@ -76,7 +76,7 @@ rg -n 'MCP_OPERATION_CATALOG|MCP_HOST_ADMIN_OPERATION_IDS|mcp_operation_catalog'
 ### MCP
 
 baseline 没有 MCP；当前 `kanban-protocol::MCP_OPERATION_CATALOG` 是唯一 machine-readable
-source，共 102 个 tool，覆盖全部 101 个非 host-admin HTTP operation。`MCP_HOST_ADMIN_OPERATION_IDS`
+source，共 103 个 tool，覆盖全部 102 个非 host-admin HTTP operation。`MCP_HOST_ADMIN_OPERATION_IDS`
 明确禁止 12 个 host-admin operation；search/graph/vector 与 label atom-index 的 domain
 `rebuild`/`sync` 不在禁止项内。MCP 只调用 `KanbanClient`，不启动 host、不提供
 migration/backup/vacuum/replace。
@@ -119,12 +119,12 @@ portable path 导出/导入 canonical facts，`replace=true` 在 host 独占窗�
 | `just diff-check` | 文档空白/冲突检查 | 已运行，exit 0 |
 | `just spec-bundle-generate` + 独立 bundle commit | 从 source docs 生成 `KANBAN_SPEC_BUNDLE.md` | 已生成；bundle 仍需独立提交并复核 diff |
 | `just spec-bundle-check` | bundle 与 source docs 一致 | 已运行，5 项测试与 source check 均通过 |
-| `just schema-check` | protocol schema/catalog 一致性 | 已运行，562 roots、0 未闭合项；不等于 runtime/full gate |
+| `just schema-check` | protocol schema/catalog 一致性 | 已运行，566 roots、0 未闭合项；不等于 runtime/full gate |
 | `just schema-docs` | spec bundle、schema marker、fixture 映射 | 已运行，14 项 marker 测试通过；不因 bundle 生成成功自动通过 runtime gate |
-| `just schema-surface-audit` | 实际 HTTP/CLI/MCP surface 与 catalog 对齐 | 未运行，不标 green |
-| `just schema-adoption-witness` | exact producer/consumer witness | 未运行，不标 green |
+| `just schema-surface-audit` | 实际 HTTP/CLI/MCP surface 与 catalog 对齐 | 已运行，server route 与 CLI leaf 对齐 |
+| `just schema-adoption-witness` | exact producer/consumer witness | 已运行，566 contracts / 1132 mappings |
 | final HEAD / full gate | 集成后的最终 revision 与完整 runtime/full 证据 | pending；本账本不预先宣称通过 |
-| 受影响 Rust/CLI/MCP/Desktop package tests | 纵向行为和 UI contract | 本文记录已有测试名；未跑的 package/full 结果保持未知 |
+| 受影响 Rust/CLI/MCP/Desktop package tests | 纵向行为和 UI contract | protocol/server/client/mcp 与 Desktop web 已运行；CLI/full package 仍待运行 |
 | release/package/PR | 发布/外部协调 | 明确不在本任务范围 |
 
 本 ledger 的最终状态必须在上述 gates 实际执行后更新；未运行的 gate 永远保持 `pending-gate`/`unknown`，不能用文档或生成物替代测试证据。

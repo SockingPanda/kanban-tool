@@ -105,7 +105,7 @@ domain `rebuild`/`sync` 不属于 host-admin surface。
 
 `kanban-server/src/http/operations` 当前合并 boards、tasks、steps、comments、attachments、dependencies、entities、graph、search、context、labels、ontology、signals、runs、events、stats、maintenance 和 vector routers；`/health`、`/api/v1/stream/events` 也由 host 提供。真实 route 与 `kanban-protocol::endpoint_catalog()` 必须同步，但 catalog/adoption descriptor 不能替代 actual route test。
 
-CLI domain 命令、MCP protocol machine-readable catalog（102 个 tool，覆盖 101 个非
+CLI domain 命令、MCP protocol machine-readable catalog（103 个 tool，覆盖 102 个非
 host-admin HTTP operation）和 Desktop 十个导航视图都通过 typed client 接入；catalog 明确
 拒绝 12 个 host-admin operation。Desktop Tauri command 不持有 Turso；claim token 仅在会话
 状态中保存。维护操作显示 host 返回的 phase、degraded 和 `restart_required`，不凭 UI 状态

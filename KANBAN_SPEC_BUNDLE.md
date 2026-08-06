@@ -85,7 +85,7 @@ kanban vector status
 - **CLI**：普通命令通过 `kanban-client` 访问 localhost；`serve`、`init`、配置/board 选择、completion 和 Codex hook 是本地 shell 或 host 装配命令。
 - **MCP**：`kanban-mcp` 使用 stdio 和 `rmcp`。公开工具由
   `kanban-protocol::MCP_OPERATION_CATALOG`（`mcp_operation_catalog()`）机器可读目录固定，
-  共 102 个 tool，覆盖全部 101 个非 host-admin HTTP operation；
+  共 103 个 tool，覆盖全部 102 个非 host-admin HTTP operation；
   `MCP_HOST_ADMIN_OPERATION_IDS` 明确禁止 12 个 host-admin operation。所有 tool 都调用
   typed client，不启动 host、不直接写数据库。search/graph/vector 与 label atom-index 的
   domain `rebuild`/`sync` 不属于这 12 个 host-admin operation，仍由 catalog 覆盖。
@@ -240,7 +240,7 @@ projection/admin、独立 lifecycle leaf 和 task-read 旧路径不属于 active
 
 `kanban-mcp` 是 Rust stdio server。公开工具由
 `kanban-protocol::MCP_OPERATION_CATALOG`（`mcp_operation_catalog()`）机器可读目录固定，共
-102 个 tool，覆盖全部 101 个非 host-admin HTTP operation；
+103 个 tool，覆盖全部 102 个非 host-admin HTTP operation；
 `MCP_HOST_ADMIN_OPERATION_IDS` 明确禁止 12 个 host-admin operation。MCP 不启动 host、不打开
 数据库、不提供 migration/backup/vacuum/replace 管理命令；search/graph/vector 与 label
 atom-index 的 domain `rebuild`/`sync` 不属于这 12 个禁止项。
@@ -273,7 +273,9 @@ backup、export/import、checkpoint、vacuum、`/api/v1/maintenance/rebuild|clea
 
 `kanban-protocol` 是 DTO、event payload、错误 envelope、endpoint/surface catalog 和 JSON Schema 的权威来源。错误以稳定 `error.code` 表示，message 不属于机器契约；常见 code 包括 `invalid_input`、`not_found`、`conflict`、`idempotency_conflict`、`dependency_cycle`、`claim_conflict`、`claim_token_mismatch`、`invalid_transition`、`feature_not_available`、`server_unavailable` 和 `internal`。
 
-HTTP/API、CLI output、MCP tool schema 和 Desktop parser 必须引用同一 protocol DTO。schema adoption witness、surface audit 和完整测试尚未在本次文档任务中运行，不能因为 catalog 已有 `adopted` 条目就宣称所有 runtime gate 完成。
+HTTP/API、CLI output、MCP tool schema 和 Desktop parser 必须引用同一 protocol DTO。本次 by-status
+切片已运行 schema adoption witness 与 surface audit；这不替代完整 runtime/package gate，不能
+因为 catalog 已有 `adopted` 条目就宣称所有 runtime gate 完成。
 
 ## 7. 验收边界
 
@@ -401,7 +403,7 @@ domain `rebuild`/`sync` 不属于 host-admin surface。
 
 `kanban-server/src/http/operations` 当前合并 boards、tasks、steps、comments、attachments、dependencies、entities、graph、search、context、labels、ontology、signals、runs、events、stats、maintenance 和 vector routers；`/health`、`/api/v1/stream/events` 也由 host 提供。真实 route 与 `kanban-protocol::endpoint_catalog()` 必须同步，但 catalog/adoption descriptor 不能替代 actual route test。
 
-CLI domain 命令、MCP protocol machine-readable catalog（102 个 tool，覆盖 101 个非
+CLI domain 命令、MCP protocol machine-readable catalog（103 个 tool，覆盖 102 个非
 host-admin HTTP operation）和 Desktop 十个导航视图都通过 typed client 接入；catalog 明确
 拒绝 12 个 host-admin operation。Desktop Tauri command 不持有 Turso；claim token 仅在会话
 状态中保存。维护操作显示 host 返回的 phase、degraded 和 `restart_required`，不凭 UI 状态
@@ -956,14 +958,17 @@ vector 或 label atom-index domain `rebuild`/`sync` 的调用。
 | Method | Path | 语义 |
 | --- | --- | --- |
 | `GET` | `/api/v1/boards/:board/tasks` | status/priority/plan/assignee/query/pagination/sort 过滤 |
+| `GET` | `/api/v1/boards/:board/tasks/by-status` | 按请求中的多个 `status` 返回独立窗口；每个窗口保留同一组 filters/sort/pagination 与 `total` |
 | `POST` | `/api/v1/boards/:board/tasks` | task create；支持 task/idempotency key、metadata、labels、depends_on |
 | `GET` | `/api/v1/tasks/:task_id` | task aggregate；`include=details` 可返回 ontology/labels/dependencies/steps/runs/event meta |
 | `PATCH` | `/api/v1/tasks/:task_id` | 只更新 service 允许的内容/排期/metadata 字段，不直接改 status |
 | `POST` | `/api/v1/tasks/:task_id/execution-plan/not-required` | 显式 plan gate |
 
 task list/search 默认排除 `archived`；所有 selector、board isolation、idempotency 和 dependency guard 由 service 处理。
-状态筛选属于 `/api/v1/boards/:board/tasks` 的 query contract；搜索按状态的只读结果使用
-`/api/v1/search/tasks/by-status`，两者不是第二套 task mutation path。
+`/api/v1/boards/:board/tasks` 是单页 canonical list，状态筛选属于同一 query contract；
+`/api/v1/boards/:board/tasks/by-status` 批量返回多个 status window，但每个窗口仍调用同一
+service list path。搜索按状态的只读结果使用 `/api/v1/search/tasks/by-status`；三者都不是
+第二套 task mutation path。
 
 ### Lifecycle
 
@@ -1129,8 +1134,8 @@ vector32 查询使用 host Ollama embedding provider；provider outage 返回 ty
 
 本文件按领域解释语义；逐项 exact method/path 以 `endpoint_catalog()` 及生成的
 `schemas/json-schema/draft-2020-12/surface-operations.json` 为准。`/api/v1/search/tasks/by-status`
-是当前搜索查询 surface，task board 列表本身仍通过 `/api/v1/boards/:board/tasks` 的 query
-完成状态筛选。
+是当前搜索查询 surface；task board 列表通过 `/api/v1/boards/:board/tasks` 的 query
+完成单页状态筛选，或通过 `/api/v1/boards/:board/tasks/by-status` 获取多个独立 status window。
 
 已有 server/service evidence 包括 task lifecycle、label round-trip、ontology action/revert、signal ledger、FTS capability、graph BFS/rebuild、vector fixture/degraded、context merge、maintenance import/replace 和 Desktop contract tests。完整 schema adoption、surface audit、full package、release 和 PR gate 不由本文档更新自动执行，结果见 parity ledger 的待验收清单。
 
@@ -1177,8 +1182,8 @@ canonical Turso
 
 - API：health、boards（含 columns）、tasks/lifecycle（含 specify）、steps、comments、attachments、dependencies、entities（含 upsert）、graph（含 neighborhood/map）、search/context（含 index rebuild/sync）、labels/ontology、signals、runs/events、maintenance 和 vector；
 - CLI：board/config/task/label/comment/context/attachment/dep/entity/graph/search/index/signal/vector、run/event、host-admin、hook/init/completion；原始 bytes 下载、completion、hook stdin/stdout、serve daemon 等非 JSON 输出保持 `excluded`。canonical leaf 以 Clap `get_name()` 为准，visible alias 不重复登记；
-- MCP：`kanban-protocol::MCP_OPERATION_CATALOG` 的 machine-readable catalog，共 102 个
-  tool，覆盖全部 101 个非 host-admin HTTP operation；`MCP_HOST_ADMIN_OPERATION_IDS` 明确
+- MCP：`kanban-protocol::MCP_OPERATION_CATALOG` 的 machine-readable catalog，共 103 个
+  tool，覆盖全部 102 个非 host-admin HTTP operation；`MCP_HOST_ADMIN_OPERATION_IDS` 明确
   禁止 12 个 host-admin operation。search/graph/vector 与 label atom-index 的 domain
   `rebuild`/`sync` 仍属于允许的 MCP surface；
 - JSONL/metadata/config：portable import/export、decision/signal/ontology metadata、project config。
@@ -2353,7 +2358,8 @@ binding/granularity/location/direction/operation/surface 失败关闭。本 ADR 
 ### 决策
 
 `GET /api/v1/boards/:board/tasks` 使用唯一的 task-list path/query DTO；状态筛选通过同一
-query contract 表达，搜索按状态的只读结果由 `/api/v1/search/tasks/by-status` 负责。server
+query contract 表达，`GET /api/v1/boards/:board/tasks/by-status` 复用该 service list path
+为多个 status 返回独立窗口，搜索按状态的只读结果由 `/api/v1/search/tasks/by-status` 负责。server
 使用类型化 Axum extractor 从一次 raw URI 进入共享有序解析器；handler 只接收已绑定的
 request，不持有第二个 raw source。
 - Query 语法：只有 `status`、`priority`、`label`、`plan_filter` 是

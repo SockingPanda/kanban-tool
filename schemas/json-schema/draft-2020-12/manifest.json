@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:0f9248fcc9cba39ced7590d41ed96e470ed4724fd0f0d2a40765fbe3f924319a"
+    "sha256": "sha256:7721aecb11a257ca17e5a5e6380db2f449b1c2b58ab64e7bdc3d7d63b8578cb3"
   },
   "roots": [
     {
@@ -1935,6 +1935,16 @@
       "strictness": "deny_unknown_fields"
     },
     {
+      "contract_id": "api.list-tasks-by-status.response",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:api:list-tasks-by-status-response:v1",
+      "invalid_fixture": "schemas/fixtures/api/list-tasks-by-status-response.v1.invalid.json",
+      "path": "api/list-tasks-by-status-response.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json",
+      "sha256": "sha256:106eaedbf3efe5f8c51ce12535647d94854be7f5f73fd9575e2240a366a215a9",
+      "strictness": "deny_unknown_fields"
+    },
+    {
       "contract_id": "api.create-task.path",
       "direction": "deserialize",
       "id": "urn:kanban-tool:schema:api:create-task-path:v1",
@@ -1982,6 +1992,26 @@
       "path": "api/list-tasks-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-tasks-query.v1.valid.json",
       "sha256": "sha256:fffbe11442cbdf93c318020ba7aabac27e7aa0f4eceb67fe4a88520a3c49b712",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.list-tasks-by-status.path",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
+      "invalid_fixture": "schemas/fixtures/api/list-tasks-by-status-path.v1.invalid.json",
+      "path": "api/list-tasks-by-status-path.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/list-tasks-by-status-path.v1.valid.json",
+      "sha256": "sha256:089d040337c1a96a292191d2b4ce249a4683a59cd774da1a7b919293d4aa30c4",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "api.list-tasks-by-status.query",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:list-tasks-by-status-query:v1",
+      "invalid_fixture": "schemas/fixtures/api/list-tasks-by-status-query.v1.invalid.json",
+      "path": "api/list-tasks-by-status-query.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/list-tasks-by-status-query.v1.valid.json",
+      "sha256": "sha256:ecdb91cad46dd7ae0dd73d19b9308f3c89d194fdc8f8bb9af889970698fc9c22",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -4675,6 +4705,16 @@
       "strictness": "deny_unknown_fields"
     },
     {
+      "contract_id": "api.list-tasks-by-status.headers",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:api:list-tasks-by-status-headers:v1",
+      "invalid_fixture": "schemas/fixtures/api/headers/locale-headers.v1.invalid.json",
+      "path": "api/list-tasks-by-status-headers.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+      "sha256": "sha256:b79b9fdfc8abb6607b22afb62d347f74d8cf0ffab2c0fadc24b99953d3ce7a84",
+      "strictness": "deny_unknown_fields"
+    },
+    {
       "contract_id": "api.create-task.headers",
       "direction": "deserialize",
       "id": "urn:kanban-tool:schema:api:create-task-headers:v1",
@@ -5628,6 +5668,6 @@
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "surface_catalog": {
     "path": "surface-operations.json",
-    "sha256": "sha256:bcd2e285030b7b506552381ab05c8af9fc53c1014988ec6b273bdfbfcd4ebca9"
+    "sha256": "sha256:75cf6e9fdeaa3f37b19065b2c9ed2437bc268155d635ecdae7aa98bea77f6840"
   }
 }

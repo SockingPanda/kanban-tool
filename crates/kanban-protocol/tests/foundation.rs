@@ -299,7 +299,7 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
         .filter(|endpoint| endpoint.operation_id != "sse.stream-events")
         .collect::<Vec<_>>();
     // 当前 catalog 同时包含完整领域、维护、graph 与 vector 的 JSON endpoint。
-    assert_eq!(endpoints.len(), 113);
+    assert_eq!(endpoints.len(), 114);
 
     for endpoint in endpoints {
         let EndpointObligation::Contract(expected_id) = endpoint.obligations.headers else {
@@ -683,7 +683,7 @@ fn foundation_registry_contains_generated_roots() {
         .filter(|id| id.contains(":api:") && id.ends_with("-headers:v1"))
         .copied()
         .collect::<BTreeSet<_>>();
-    assert_eq!(header_roots.len(), 113);
+    assert_eq!(header_roots.len(), 114);
     actual.retain(|id| !header_roots.contains(id));
     let mut expected = BTreeSet::from([
         "urn:kanban-tool:schema:api:accept-label-proposal-body:v1",
@@ -848,6 +848,9 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:list-tasks-path:v1",
         "urn:kanban-tool:schema:api:list-tasks-query:v1",
         "urn:kanban-tool:schema:api:list-tasks-response:v1",
+        "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
+        "urn:kanban-tool:schema:api:list-tasks-by-status-query:v1",
+        "urn:kanban-tool:schema:api:list-tasks-by-status-response:v1",
         "urn:kanban-tool:schema:api:mark-execution-plan-not-required-path:v1",
         "urn:kanban-tool:schema:api:mark-execution-plan-not-required-request:v1",
         "urn:kanban-tool:schema:api:mark-execution-plan-not-required-response:v1",
@@ -1065,8 +1068,8 @@ fn endpoint_descriptor_catalog_is_complete_and_explicit() {
     let endpoints = endpoint_catalog();
     assert_eq!(
         endpoints.len(),
-        114,
-        "113 JSON API + 1 SSE 必须全部有 descriptor"
+        115,
+        "114 JSON API + 1 SSE 必须全部有 descriptor"
     );
     assert_eq!(
         endpoints
@@ -1593,7 +1596,10 @@ fn b1_c1_task_read_schema_and_runtime_budgets_are_exact() {
     assert_eq!(kanban_protocol::MAX_TASK_READ_LIMIT, 1_000);
 
     let artifacts = generated_artifacts();
-    for artifact in ["api/list-tasks-query.v1.schema.json"] {
+    for artifact in [
+        "api/list-tasks-query.v1.schema.json",
+        "api/list-tasks-by-status-query.v1.schema.json",
+    ] {
         let schema: serde_json::Value =
             serde_json::from_slice(artifacts.get(artifact).expect("task-read schema artifact"))
                 .expect("valid generated schema");
@@ -1823,7 +1829,7 @@ fn current_train_freeze_requires_closed_authority() {
             EndpointObligation::Excluded { .. } => excluded += 1,
         }
     }
-    assert_eq!((contract, todo, not_applicable, excluded), (389, 0, 294, 1));
+    assert_eq!((contract, todo, not_applicable, excluded), (393, 0, 296, 1));
     let unfinished_contracts = operation_inventory()
         .iter()
         .filter(|contract| {

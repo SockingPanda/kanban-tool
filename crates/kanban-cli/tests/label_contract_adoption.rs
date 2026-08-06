@@ -1,402 +1,334 @@
-use kanban_protocol::cli_labels::{
-    CliLabelAddOutput, CliLabelAtomIndexQueryOutput, CliLabelAtomIndexRebuildOutput,
-    CliLabelAtomIndexStatusOutput, CliLabelAtomsExplainOutput, CliLabelAtomsListOutput,
-    CliLabelBootstrapOutput, CliLabelCreateOutput, CliLabelDeleteOutput, CliLabelListOutput,
-    CliLabelOntologyApplyAtomOutput, CliLabelOntologyConfirmOutput, CliLabelOntologyListOutput,
-    CliLabelOntologyQualityOutput, CliLabelOntologyRecordOutput, CliLabelOntologyRejectOutput,
-    CliLabelOntologyResolveOutput, CliLabelOntologyRevertOutput, CliLabelOntologyReviewOutput,
-    CliLabelOntologyShowOutput, CliLabelOntologySupersedeOutput, CliLabelOntologyValidateOutput,
-    CliLabelProposalsAcceptOutput, CliLabelProposalsListOutput, CliLabelProposalsRejectOutput,
-    CliLabelProposalsShowOutput, CliLabelProposeOutput, CliLabelRemoveOutput,
-    CliLabelSemanticsDeleteOutput, CliLabelSemanticsListOutput, CliLabelSemanticsShowOutput,
-    CliLabelSemanticsUpsertOutput, CliLabelSuggestOutput,
+//! 通过真实 `kanban` 子进程和 localhost host 验证 label/ontology CLI surface。
+
+mod knowledge_support;
+
+use kanban_protocol::{
+    CliTaskCreateOutput,
+    cli_labels::{
+        CliLabelAtomIndexQueryOutput, CliLabelAtomIndexRebuildOutput,
+        CliLabelAtomIndexStatusOutput, CliLabelAtomsExplainOutput, CliLabelAtomsListOutput,
+        CliLabelCreateOutput, CliLabelOntologyConfirmOutput, CliLabelOntologyRecordOutput,
+        CliLabelOntologyShowOutput, CliLabelProposalsListOutput, CliLabelProposalsShowOutput,
+        CliLabelProposeOutput, CliLabelSemanticsListOutput, CliLabelSemanticsShowOutput,
+        CliLabelSemanticsUpsertOutput, CliLabelSuggestOutput,
+    },
 };
-use serde::{Serialize, de::DeserializeOwned};
-use serde_json::Value;
-use std::{fs, path::PathBuf};
 
-fn fixture(name: &str) -> Value {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../schemas/fixtures/cli")
-        .join(format!("{name}-output.v1.valid.json"));
-    serde_json::from_str(
-        &fs::read_to_string(&path)
-            .unwrap_or_else(|error| panic!("read {}: {error}", path.display())),
-    )
-    .unwrap_or_else(|error| panic!("parse {}: {error}", path.display()))
+use knowledge_support::Host;
+
+#[test]
+fn labels_semantics_atoms_and_proposals_flow_through_real_cli() {
+    let host = Host::new();
+    let task: CliTaskCreateOutput = host.json(&[
+        "task",
+        "create",
+        "CLI ontology task",
+        "--task-id",
+        "t_cli_label_adoption",
+        "--status",
+        "todo",
+    ]);
+    assert_eq!(task.data.id, "t_cli_label_adoption");
+
+    let label: CliLabelCreateOutput =
+        host.json(&["label", "create", "backend-api", "--color", "#123456"]);
+    assert_eq!(label.data.name, "backend-api");
+    assert_eq!(label.data.color.as_deref(), Some("#123456"));
+
+    let semantics_payload = r#"{
+        "description":"Backend HTTP integration work",
+        "applies_when":["localhost API","HTTP route"],
+        "excludes_when":["desktop-only"],
+        "positive_examples":["add a route"],
+        "negative_examples":["change a color"]
+    }"#;
+    let semantics: CliLabelSemanticsUpsertOutput = host.json(&[
+        "label",
+        "semantics",
+        "upsert",
+        label.data.name.as_str(),
+        "--payload",
+        semantics_payload,
+    ]);
+    assert_eq!(semantics.data.label_name, "backend-api");
+    assert_eq!(
+        semantics.data.description.as_deref(),
+        Some("Backend HTTP integration work")
+    );
+    assert_eq!(semantics.data.applies_when, ["localhost API", "HTTP route"]);
+    assert!(!semantics.data.semantics_hash.is_empty());
+
+    let listed: CliLabelSemanticsListOutput = host.json(&["label", "semantics", "list"]);
+    assert!(
+        listed
+            .data
+            .iter()
+            .any(|item| item.label_id == label.data.id)
+    );
+    let shown: CliLabelSemanticsShowOutput =
+        host.json(&["label", "semantics", "show", label.data.name.as_str()]);
+    assert_eq!(shown.data.semantics_hash, semantics.data.semantics_hash);
+
+    let atoms: CliLabelAtomsListOutput = host.json(&["label", "atoms", "list"]);
+    assert!(
+        atoms
+            .data
+            .iter()
+            .any(|atom| atom.label_id == label.data.id && atom.text == "localhost API")
+    );
+    let atom = atoms
+        .data
+        .iter()
+        .find(|atom| atom.label_id == label.data.id && atom.text == "localhost API")
+        .expect("semantics should produce a label atom");
+    let explained: CliLabelAtomsExplainOutput =
+        host.json(&["label", "atoms", "explain", atom.id.as_str()]);
+    assert_eq!(explained.data.query, atom.id);
+    assert_eq!(
+        explained.data.atom.as_ref().map(|value| value.id.as_str()),
+        Some(atom.id.as_str())
+    );
+
+    let index_status: CliLabelAtomIndexStatusOutput = host.json(&["label", "atom-index", "status"]);
+    assert!(!index_status.data.backend.is_empty());
+    let rebuilt: CliLabelAtomIndexRebuildOutput = host.json(&["label", "atom-index", "rebuild"]);
+    assert_eq!(rebuilt.data.backend, index_status.data.backend);
+    let index_query: CliLabelAtomIndexQueryOutput = host.json(&[
+        "label",
+        "atom-index",
+        "query",
+        "--q",
+        "localhost",
+        "--limit",
+        "5",
+    ]);
+    assert!(index_query.data.iter().any(|hit| hit.atom_id == atom.id));
+
+    let suggestions: CliLabelSuggestOutput =
+        host.json(&["label", "suggest", "t_cli_label_adoption"]);
+    assert_eq!(suggestions.data.task_id, "t_cli_label_adoption");
+    assert!(
+        suggestions.data.degraded,
+        "the test host has no embedding provider; the CLI must preserve degraded state"
+    );
+    assert!(
+        suggestions
+            .data
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic == "vector_provider_unavailable")
+    );
+
+    let proposal_payload = r#"{
+        "description":"A proposed deployment label",
+        "applies_when":["release pipeline"],
+        "positive_examples":["deploy service"]
+    }"#;
+    let attempted: CliLabelProposeOutput = host.json(&[
+        "label",
+        "propose",
+        "t_cli_label_adoption",
+        "--name",
+        "deployment",
+        "--payload",
+        proposal_payload,
+    ]);
+    assert!(attempted.data.degraded);
+    let proposal = attempted
+        .data
+        .proposal
+        .as_ref()
+        .expect("explicit proposal name should persist a proposal");
+    assert_eq!(proposal.name, "deployment");
+    let proposal_id = proposal.id.clone();
+
+    let proposals: CliLabelProposalsListOutput = host.json(&[
+        "label",
+        "proposals",
+        "list",
+        "--task-ref",
+        "t_cli_label_adoption",
+    ]);
+    assert!(proposals.data.iter().any(|item| item.id == proposal_id));
+    let shown: CliLabelProposalsShowOutput =
+        host.json(&["label", "proposals", "show", proposal_id.as_str()]);
+    assert_eq!(shown.data.id, proposal_id);
 }
 
-fn assert_json_equivalent(actual: &Value, expected: &Value) {
-    match (actual, expected) {
-        (Value::Number(actual), Value::Number(expected)) => {
-            assert_eq!(
-                actual.as_f64(),
-                expected.as_f64(),
-                "numeric fixture value differs: {actual} != {expected}"
-            );
-        }
-        (Value::Array(actual), Value::Array(expected)) => {
-            assert_eq!(actual.len(), expected.len(), "array length differs");
-            for (actual, expected) in actual.iter().zip(expected) {
-                assert_json_equivalent(actual, expected);
-            }
-        }
-        (Value::Object(actual), Value::Object(expected)) => {
-            assert_eq!(
-                actual.keys().collect::<Vec<_>>(),
-                expected.keys().collect::<Vec<_>>()
-            );
-            for (key, actual) in actual {
-                assert_json_equivalent(actual, &expected[key]);
-            }
-        }
-        (actual, expected) => assert_eq!(actual, expected),
+#[test]
+fn ontology_observation_signal_review_and_action_flow_through_real_cli() {
+    let host = Host::new();
+    let task: CliTaskCreateOutput = host.json(&[
+        "task",
+        "create",
+        "Ontology signal task",
+        "--task-id",
+        "t_cli_ontology_signal",
+        "--status",
+        "todo",
+    ]);
+    assert_eq!(task.data.id, "t_cli_ontology_signal");
+    let _: CliLabelCreateOutput = host.json(&["label", "create", "ontology-target"]);
+
+    let observation_payload = r#"{
+        "actor":{"name":"cli-adoption","type":"user"},
+        "agent_candidates":[],
+        "suggestion_snapshot":{},
+        "final_decision":{},
+        "signals":[{
+            "kind":"vocabulary_gap",
+            "target_label_ref":"ontology-target",
+            "related_labels":[],
+            "proposed_action":"observe",
+            "candidate_atom":null,
+            "proposed_label_name":"release-train",
+            "proposal":{},
+            "agent_selected":false,
+            "suggest_state":"candidate",
+            "suggest_score":0.3,
+            "suggest_rank":1,
+            "final_selected":false,
+            "rationale":"CLI ontology adoption evidence",
+            "confidence":0.7,
+            "signal_key":"cli-adoption-vocabulary-gap"
+        }]
+    }"#;
+    let observation: CliLabelOntologyRecordOutput = host.json(&[
+        "label",
+        "ontology",
+        "record",
+        "t_cli_ontology_signal",
+        "--payload",
+        observation_payload,
+    ]);
+    assert_eq!(observation.data.task_id, "t_cli_ontology_signal");
+    assert_eq!(observation.data.signals.len(), 1);
+    let signal_id = observation.data.signals[0].id.clone();
+
+    let signals: kanban_protocol::MetadataEnvelope<
+        Vec<kanban_protocol::LabelOntologySignalWire>,
+        kanban_protocol::SignalFilterMeta,
+    > = host.json(&["label", "ontology", "signals", "--include-all"]);
+    assert!(signals.data.iter().any(|signal| signal.id == signal_id));
+    let detail: CliLabelOntologyShowOutput =
+        host.json(&["label", "ontology", "show", signal_id.as_str()]);
+    assert_eq!(detail.data.signal.id, signal_id);
+    assert_eq!(detail.data.observation.id, observation.data.id);
+
+    let review: kanban_protocol::ReviewLabelOntologyResponse = host.json(&[
+        "label",
+        "ontology",
+        "review",
+        "--group-by",
+        "label",
+        "--include-all",
+    ]);
+    assert!(!review.data.is_empty());
+    let action_payload = format!(
+        r#"{{
+            "actor":{{"name":"cli-adoption","type":"user"}},
+            "signal_ids":["{signal_id}"],
+            "reason":"confirm ontology observation"
+        }}"#
+    );
+    let action: CliLabelOntologyConfirmOutput = host.json(&[
+        "label",
+        "ontology",
+        "confirm",
+        "--payload",
+        action_payload.as_str(),
+    ]);
+    assert!(matches!(
+        action.data.action_type,
+        kanban_protocol::LabelOntologyActionTypeWire::Confirm
+    ));
+    assert!(action.data.signal_ids.iter().any(|id| id == &signal_id));
+
+    let closed: CliLabelOntologyShowOutput =
+        host.json(&["label", "ontology", "show", signal_id.as_str()]);
+    assert_eq!(closed.data.signal.status, "confirmed");
+}
+
+#[test]
+fn generic_signals_record_review_and_confirm_flow_through_real_cli() {
+    let host = Host::new();
+    let task: CliTaskCreateOutput = host.json(&[
+        "task",
+        "create",
+        "Generic signal task",
+        "--task-id",
+        "t_cli_generic_signal",
+        "--status",
+        "todo",
+    ]);
+    assert_eq!(task.data.id, "t_cli_generic_signal");
+
+    let request = format!(
+        r#"{{
+        "kind":"cli_adoption",
+        "title":"CLI adoption signal",
+        "summary":"recorded through stdin",
+        "severity":"warning",
+        "task_ref":"{}",
+        "actor":"cli-adoption",
+        "agent_type":"test",
+        "source":"cli-adoption",
+        "dedupe_key":"cli-adoption-signal-1",
+        "evidence":{{"command":"kanban signal record"}}
+    }}"#,
+        task.data.task_ref
+    );
+    let recorded: kanban_protocol::cli_operator::CliSignalRecordOutput = host
+        .run_with_stdin(&["signal", "record"], &request)
+        .pipe_json();
+    assert_eq!(recorded.data.signal.kind, "cli_adoption");
+    assert_eq!(
+        recorded.data.signal.observation.task_id.as_deref(),
+        Some("t_cli_generic_signal")
+    );
+    assert!(
+        recorded
+            .data
+            .signal
+            .observation
+            .task_ref_snapshot
+            .as_deref()
+            .is_some_and(|task_ref| task_ref.starts_with("default#"))
+    );
+    let signal_id = recorded.data.signal.id.clone();
+
+    let review: kanban_protocol::cli_operator::CliSignalReviewOutput =
+        host.json(&["signal", "review"]);
+    assert!(review.data.iter().any(|signal| signal.id == signal_id));
+    let shown: kanban_protocol::cli_operator::CliSignalShowOutput =
+        host.json(&["signal", "show", signal_id.as_str()]);
+    assert_eq!(shown.data.id, signal_id);
+
+    let confirmed: kanban_protocol::cli_operator::CliSignalConfirmOutput = host.json(&[
+        "signal",
+        "confirm",
+        signal_id.as_str(),
+        "--reason",
+        "verified",
+    ]);
+    assert_eq!(confirmed.data.len(), 1);
+    assert!(matches!(
+        confirmed.data[0].status,
+        kanban_protocol::cli_operator::CliSignalStatus::Confirmed
+    ));
+}
+
+trait OutputJson {
+    fn pipe_json<T: serde::de::DeserializeOwned>(self) -> T;
+}
+
+impl OutputJson for std::process::Output {
+    fn pipe_json<T: serde::de::DeserializeOwned>(self) -> T {
+        serde_json::from_slice(&self.stdout).unwrap_or_else(|error| {
+            panic!(
+                "CLI output is not valid typed JSON: {error}; stdout={}",
+                String::from_utf8_lossy(&self.stdout)
+            )
+        })
     }
-}
-
-fn assert_producer<T>(name: &str)
-where
-    T: DeserializeOwned + Serialize,
-{
-    let expected = fixture(name);
-    let value: T = serde_json::from_value(expected.clone()).expect("fixture output DTO");
-    let actual = serde_json::to_value(value).expect("serialize output DTO");
-    assert_json_equivalent(&actual, &expected);
-}
-
-fn assert_consumer<T>(name: &str)
-where
-    T: DeserializeOwned,
-{
-    let _: T = serde_json::from_value(fixture(name)).expect("public CLI contract output");
-}
-
-#[test]
-fn producer_label_add_matches_exact_fixture() {
-    assert_producer::<CliLabelAddOutput>("label-add");
-}
-
-#[test]
-fn label_add_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelAddOutput>("label-add");
-}
-
-#[test]
-fn producer_label_atom_index_query_matches_exact_fixture() {
-    assert_producer::<CliLabelAtomIndexQueryOutput>("label-atom-index-query");
-}
-
-#[test]
-fn label_atom_index_query_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelAtomIndexQueryOutput>("label-atom-index-query");
-}
-
-#[test]
-fn producer_label_atom_index_rebuild_matches_exact_fixture() {
-    assert_producer::<CliLabelAtomIndexRebuildOutput>("label-atom-index-rebuild");
-}
-
-#[test]
-fn label_atom_index_rebuild_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelAtomIndexRebuildOutput>("label-atom-index-rebuild");
-}
-
-#[test]
-fn producer_label_atom_index_status_matches_exact_fixture() {
-    assert_producer::<CliLabelAtomIndexStatusOutput>("label-atom-index-status");
-}
-
-#[test]
-fn label_atom_index_status_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelAtomIndexStatusOutput>("label-atom-index-status");
-}
-
-#[test]
-fn producer_label_atoms_explain_matches_exact_fixture() {
-    assert_producer::<CliLabelAtomsExplainOutput>("label-atoms-explain");
-}
-
-#[test]
-fn label_atoms_explain_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelAtomsExplainOutput>("label-atoms-explain");
-}
-
-#[test]
-fn producer_label_atoms_list_matches_exact_fixture() {
-    assert_producer::<CliLabelAtomsListOutput>("label-atoms-list");
-}
-
-#[test]
-fn label_atoms_list_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelAtomsListOutput>("label-atoms-list");
-}
-
-#[test]
-fn producer_label_bootstrap_matches_exact_fixture() {
-    assert_producer::<CliLabelBootstrapOutput>("label-bootstrap");
-}
-
-#[test]
-fn label_bootstrap_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelBootstrapOutput>("label-bootstrap");
-}
-
-#[test]
-fn producer_label_create_matches_exact_fixture() {
-    assert_producer::<CliLabelCreateOutput>("label-create");
-}
-
-#[test]
-fn label_create_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelCreateOutput>("label-create");
-}
-
-#[test]
-fn producer_label_delete_matches_exact_fixture() {
-    assert_producer::<CliLabelDeleteOutput>("label-delete");
-}
-
-#[test]
-fn label_delete_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelDeleteOutput>("label-delete");
-}
-
-#[test]
-fn producer_label_list_matches_exact_fixture() {
-    assert_producer::<CliLabelListOutput>("label-list");
-}
-
-#[test]
-fn label_list_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelListOutput>("label-list");
-}
-
-#[test]
-fn producer_label_ontology_apply_atom_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyApplyAtomOutput>("label-ontology-apply-atom");
-}
-
-#[test]
-fn label_ontology_apply_atom_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyApplyAtomOutput>("label-ontology-apply-atom");
-}
-
-#[test]
-fn producer_label_ontology_confirm_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyConfirmOutput>("label-ontology-confirm");
-}
-
-#[test]
-fn label_ontology_confirm_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyConfirmOutput>("label-ontology-confirm");
-}
-
-#[test]
-fn producer_label_ontology_list_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyListOutput>("label-ontology-list");
-}
-
-#[test]
-fn label_ontology_list_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyListOutput>("label-ontology-list");
-}
-
-#[test]
-fn producer_label_ontology_quality_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyQualityOutput>("label-ontology-quality");
-}
-
-#[test]
-fn label_ontology_quality_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyQualityOutput>("label-ontology-quality");
-}
-
-#[test]
-fn producer_label_ontology_record_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyRecordOutput>("label-ontology-record");
-}
-
-#[test]
-fn label_ontology_record_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyRecordOutput>("label-ontology-record");
-}
-
-#[test]
-fn producer_label_ontology_reject_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyRejectOutput>("label-ontology-reject");
-}
-
-#[test]
-fn label_ontology_reject_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyRejectOutput>("label-ontology-reject");
-}
-
-#[test]
-fn producer_label_ontology_resolve_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyResolveOutput>("label-ontology-resolve");
-}
-
-#[test]
-fn label_ontology_resolve_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyResolveOutput>("label-ontology-resolve");
-}
-
-#[test]
-fn producer_label_ontology_revert_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyRevertOutput>("label-ontology-revert");
-}
-
-#[test]
-fn label_ontology_revert_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyRevertOutput>("label-ontology-revert");
-}
-
-#[test]
-fn producer_label_ontology_review_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyReviewOutput>("label-ontology-review");
-}
-
-#[test]
-fn label_ontology_review_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyReviewOutput>("label-ontology-review");
-}
-
-#[test]
-fn producer_label_ontology_show_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyShowOutput>("label-ontology-show");
-}
-
-#[test]
-fn label_ontology_show_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyShowOutput>("label-ontology-show");
-}
-
-#[test]
-fn producer_label_ontology_supersede_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologySupersedeOutput>("label-ontology-supersede");
-}
-
-#[test]
-fn label_ontology_supersede_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologySupersedeOutput>("label-ontology-supersede");
-}
-
-#[test]
-fn producer_label_ontology_validate_matches_exact_fixture() {
-    assert_producer::<CliLabelOntologyValidateOutput>("label-ontology-validate");
-}
-
-#[test]
-fn label_ontology_validate_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelOntologyValidateOutput>("label-ontology-validate");
-}
-
-#[test]
-fn producer_label_proposals_accept_matches_exact_fixture() {
-    assert_producer::<CliLabelProposalsAcceptOutput>("label-proposals-accept");
-}
-
-#[test]
-fn label_proposals_accept_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelProposalsAcceptOutput>("label-proposals-accept");
-}
-
-#[test]
-fn producer_label_proposals_list_matches_exact_fixture() {
-    assert_producer::<CliLabelProposalsListOutput>("label-proposals-list");
-}
-
-#[test]
-fn label_proposals_list_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelProposalsListOutput>("label-proposals-list");
-}
-
-#[test]
-fn producer_label_proposals_reject_matches_exact_fixture() {
-    assert_producer::<CliLabelProposalsRejectOutput>("label-proposals-reject");
-}
-
-#[test]
-fn label_proposals_reject_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelProposalsRejectOutput>("label-proposals-reject");
-}
-
-#[test]
-fn producer_label_proposals_show_matches_exact_fixture() {
-    assert_producer::<CliLabelProposalsShowOutput>("label-proposals-show");
-}
-
-#[test]
-fn label_proposals_show_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelProposalsShowOutput>("label-proposals-show");
-}
-
-#[test]
-fn producer_label_propose_matches_exact_fixture() {
-    assert_producer::<CliLabelProposeOutput>("label-propose");
-}
-
-#[test]
-fn label_propose_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelProposeOutput>("label-propose");
-}
-
-#[test]
-fn producer_label_remove_matches_exact_fixture() {
-    assert_producer::<CliLabelRemoveOutput>("label-remove");
-}
-
-#[test]
-fn label_remove_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelRemoveOutput>("label-remove");
-}
-
-#[test]
-fn producer_label_semantics_delete_matches_exact_fixture() {
-    assert_producer::<CliLabelSemanticsDeleteOutput>("label-semantics-delete");
-}
-
-#[test]
-fn label_semantics_delete_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelSemanticsDeleteOutput>("label-semantics-delete");
-}
-
-#[test]
-fn producer_label_semantics_list_matches_exact_fixture() {
-    assert_producer::<CliLabelSemanticsListOutput>("label-semantics-list");
-}
-
-#[test]
-fn label_semantics_list_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelSemanticsListOutput>("label-semantics-list");
-}
-
-#[test]
-fn producer_label_semantics_show_matches_exact_fixture() {
-    assert_producer::<CliLabelSemanticsShowOutput>("label-semantics-show");
-}
-
-#[test]
-fn label_semantics_show_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelSemanticsShowOutput>("label-semantics-show");
-}
-
-#[test]
-fn producer_label_semantics_upsert_matches_exact_fixture() {
-    assert_producer::<CliLabelSemanticsUpsertOutput>("label-semantics-upsert");
-}
-
-#[test]
-fn label_semantics_upsert_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelSemanticsUpsertOutput>("label-semantics-upsert");
-}
-
-#[test]
-fn producer_label_suggest_matches_exact_fixture() {
-    assert_producer::<CliLabelSuggestOutput>("label-suggest");
-}
-
-#[test]
-fn label_suggest_output_fixture_is_consumed_by_public_contract() {
-    assert_consumer::<CliLabelSuggestOutput>("label-suggest");
 }

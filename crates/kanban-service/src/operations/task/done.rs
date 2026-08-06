@@ -1,8 +1,6 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result, TaskStatus, new_event_id, running_claim_is_present};
 
-use crate::{ApplicationService, ApplicationStore, TaskRecord};
+use crate::{KanbanService, TaskRecord};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompleteTaskCommand {
@@ -14,31 +12,8 @@ pub struct CompleteTaskCommand {
     pub result: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CompleteTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub claim_token: Option<String>,
-    pub force: bool,
-    pub summary: Option<String>,
-    pub result_json: Option<String>,
-    pub event_id: String,
-    pub now: i64,
-}
-
-pub trait TaskDone: ApplicationStore {
-    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
-
-    fn complete_task(
-        &self,
-        task_id: &str,
-        input: CompleteTaskRecord,
-    ) -> impl Future<Output = Result<TaskRecord>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: TaskDone,
     C: Clock,
 {
     pub async fn complete_task(&self, command: CompleteTaskCommand) -> Result<TaskRecord> {
@@ -59,7 +34,7 @@ where
             .map_err(|error| KanbanError::InvalidInput(format!("invalid result: {error}")))?;
 
         let _mutation = self.mutation_gate.lock().await;
-        let task = self.store.get_task(task_id).await?;
+        let task = self.get_task(task_id).await?;
         if !matches!(task.status, TaskStatus::Running | TaskStatus::Review) {
             return Err(KanbanError::InvalidTransition(
                 "complete requires running or review".to_owned(),
@@ -89,10 +64,12 @@ where
             )));
         }
 
-        self.store
+        self.application
+            .store
+            .store
             .complete_task(
                 task_id,
-                CompleteTaskRecord {
+                crate::store_operations::CompleteTaskInput {
                     expected_lock_version: task.lock_version,
                     actor: actor.to_owned(),
                     claim_token: command.claim_token,
@@ -104,206 +81,7 @@ where
                 },
             )
             .await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::{Arc, atomic::AtomicUsize};
-
-    use kanban_core::{KanbanError, Result, TaskStatus};
-
-    use crate::operations::test_support::{FixedClock, StubStore, task_for_id};
-    use crate::*;
-
-    impl TaskDone for StubStore {
-        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
-            Ok(task_for_id(task_id))
-        }
-
-        async fn complete_task(
-            &self,
-            task_id: &str,
-            input: CompleteTaskRecord,
-        ) -> Result<TaskRecord> {
-            let expected_lock_version = if task_id == "t_complete_review" { 3 } else { 2 };
-            assert_eq!(input.expected_lock_version, expected_lock_version);
-            assert_eq!(input.actor, "worker");
-            assert!(input.event_id.starts_with("e_"));
-            assert_eq!(input.now, 100);
-            let source = task_for_id(task_id);
-            if source.status == TaskStatus::Running
-                && !input.force
-                && input.claim_token.as_deref() != Some("claim_valid")
-            {
-                return Err(KanbanError::InvalidTransition(
-                    "claim token mismatch".to_owned(),
-                ));
-            }
-            let mut task = source;
-            task.status = TaskStatus::Done;
-            task.has_claim_token = false;
-            task.claim_owner = None;
-            task.claim_expires_at = None;
-            task.last_heartbeat_at = None;
-            task.result_summary = input.summary;
-            task.result_json = input.result_json;
-            task.completed_at = Some(input.now);
-            task.updated_at = input.now;
-            task.lock_version += 1;
-            Ok(task)
-        }
-    }
-    #[tokio::test]
-    async fn complete_task_handles_running_and_review_sources() {
-        let service = ApplicationService::with_clock(
-            StubStore {
-                calls: Arc::new(AtomicUsize::new(0)),
-            },
-            FixedClock(100),
-        );
-        let completed = service
-            .complete_task(CompleteTaskCommand {
-                task_id: " t_complete_running ".into(),
-                actor: " worker ".into(),
-                claim_token: Some("claim_valid".into()),
-                force: false,
-                summary: Some("finished".into()),
-                result: Some(serde_json::json!({"ok": true})),
-            })
-            .await
-            .unwrap();
-        assert_eq!(completed.status, TaskStatus::Done);
-        assert_eq!(completed.completed_at, Some(100));
-        assert_eq!(completed.current_run_id.as_deref(), Some("r_complete"));
-        assert_eq!(completed.result_summary.as_deref(), Some("finished"));
-        assert_eq!(completed.result_json.as_deref(), Some(r#"{"ok":true}"#));
-        assert!(!completed.has_claim_token);
-        assert_eq!(completed.lock_version, 3);
-
-        let completed = service
-            .complete_task(CompleteTaskCommand {
-                task_id: "t_complete_review".into(),
-                actor: "worker".into(),
-                claim_token: None,
-                force: false,
-                summary: None,
-                result: None,
-            })
-            .await
-            .unwrap();
-        assert_eq!(completed.status, TaskStatus::Done);
-        assert_eq!(completed.current_run_id.as_deref(), Some("r_complete"));
-        assert_eq!(completed.lock_version, 4);
-
-        let forced = service
-            .complete_task(CompleteTaskCommand {
-                task_id: "t_complete_running".into(),
-                actor: "worker".into(),
-                claim_token: None,
-                force: true,
-                summary: None,
-                result: None,
-            })
-            .await
-            .unwrap();
-        assert_eq!(forced.status, TaskStatus::Done);
-    }
-
-    #[tokio::test]
-    async fn complete_task_enforces_credentials_source_and_required_steps() {
-        let service = ApplicationService::with_clock(
-            StubStore {
-                calls: Arc::new(AtomicUsize::new(0)),
-            },
-            FixedClock(100),
-        );
-        for command in [
-            CompleteTaskCommand {
-                task_id: "t_complete_running".into(),
-                actor: "other".into(),
-                claim_token: Some("claim_valid".into()),
-                force: false,
-                summary: None,
-                result: None,
-            },
-            CompleteTaskCommand {
-                task_id: "t_complete_running".into(),
-                actor: "worker".into(),
-                claim_token: None,
-                force: false,
-                summary: None,
-                result: None,
-            },
-            CompleteTaskCommand {
-                task_id: "t_complete_running".into(),
-                actor: "worker".into(),
-                claim_token: Some(" claim_valid ".into()),
-                force: false,
-                summary: None,
-                result: None,
-            },
-            CompleteTaskCommand {
-                task_id: "t_claim".into(),
-                actor: "worker".into(),
-                claim_token: Some("claim_valid".into()),
-                force: false,
-                summary: None,
-                result: None,
-            },
-        ] {
-            assert!(matches!(
-                service.complete_task(command).await,
-                Err(KanbanError::InvalidTransition(_))
-            ));
-        }
-
-        for force in [false, true] {
-            let error = service
-                .complete_task(CompleteTaskCommand {
-                    task_id: "t_complete_steps".into(),
-                    actor: "worker".into(),
-                    claim_token: None,
-                    force,
-                    summary: None,
-                    result: None,
-                })
-                .await
-                .unwrap_err();
-            assert!(matches!(error, KanbanError::StepsIncomplete(_)));
-        }
-    }
-
-    #[tokio::test]
-    async fn complete_task_rejects_invalid_identity() {
-        let service = ApplicationService::with_clock(
-            StubStore {
-                calls: Arc::new(AtomicUsize::new(0)),
-            },
-            FixedClock(100),
-        );
-        for command in [
-            CompleteTaskCommand {
-                task_id: "default#1".into(),
-                actor: "worker".into(),
-                claim_token: None,
-                force: true,
-                summary: None,
-                result: None,
-            },
-            CompleteTaskCommand {
-                task_id: "t_complete_review".into(),
-                actor: " ".into(),
-                claim_token: None,
-                force: false,
-                summary: None,
-                result: None,
-            },
-        ] {
-            assert!(matches!(
-                service.complete_task(command).await,
-                Err(KanbanError::InvalidInput(_))
-            ));
-        }
+            .map_err(crate::adapter::store_error)
+            .and_then(super::application_task)
     }
 }

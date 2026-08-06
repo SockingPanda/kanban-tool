@@ -1,8 +1,6 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result, TaskStatus, new_event_id};
 
-use crate::{ApplicationService, ApplicationStore, TaskRecord};
+use crate::{KanbanService, TaskRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveTaskCommand {
@@ -11,28 +9,8 @@ pub struct ArchiveTaskCommand {
     pub force: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ArchiveTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub force: bool,
-    pub event_id: String,
-    pub now: i64,
-}
-
-pub trait TaskArchive: ApplicationStore {
-    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
-
-    fn archive_task(
-        &self,
-        task_id: &str,
-        input: ArchiveTaskRecord,
-    ) -> impl Future<Output = Result<TaskRecord>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: TaskArchive,
     C: Clock,
 {
     pub async fn archive_task(&self, command: ArchiveTaskCommand) -> Result<TaskRecord> {
@@ -47,7 +25,7 @@ where
             return Err(KanbanError::InvalidInput("actor 不能为空".to_owned()));
         }
         let _mutation = self.mutation_gate.lock().await;
-        let task = self.store.get_task(task_id).await?;
+        let task = self.get_task(task_id).await?;
         if task.status == TaskStatus::Running && !command.force {
             return Err(KanbanError::InvalidTransition(
                 "归档 running 任务必须设置 force".to_owned(),
@@ -63,10 +41,12 @@ where
                     .saturating_sub(task.completed_required_step_count)
             )));
         }
-        self.store
+        self.application
+            .store
+            .store
             .archive_task(
                 task_id,
-                ArchiveTaskRecord {
+                crate::store_operations::ArchiveTaskInput {
                     expected_lock_version: task.lock_version,
                     actor: actor.to_owned(),
                     force: command.force,
@@ -75,5 +55,7 @@ where
                 },
             )
             .await
+            .map_err(crate::adapter::store_error)
+            .and_then(super::application_task)
     }
 }

@@ -62,10 +62,8 @@ pub use stats::*;
 pub use step::{StepComplete, StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate};
 pub(crate) use task::application_task;
 pub use task::{
-    TaskArchive, TaskBlock, TaskClaim, TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord,
-    TaskDone, TaskHeartbeat, TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord,
-    TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskReclaimExplicit, TaskRelease, TaskReopen,
-    TaskReview, TaskSpecify, TaskUnblock,
+    TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskOntologySignalSummaryRecord,
+    TaskOntologySummaryRecord,
 };
 pub use vector::{
     VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,
@@ -82,14 +80,11 @@ pub use step::{
     SkipStepRecord, UpdateStepCommand, UpdateStepRecord,
 };
 pub use task::{
-    ArchiveTaskCommand, ArchiveTaskRecord, BlockTaskCommand, BlockTaskRecord, ClaimTaskCommand,
-    ClaimTaskRecord, CompleteTaskCommand, CompleteTaskRecord, CreateTaskCommand,
-    HeartbeatTaskCommand, HeartbeatTaskRecord, MarkExecutionPlanNotRequiredCommand,
-    MarkExecutionPlanNotRequiredRecord, PromoteTaskCommand, PromoteTaskRecord,
-    ReclaimExpiredTaskRecord, ReclaimTaskCommand, ReclaimTaskRecord, ReleaseTaskCommand,
-    ReleaseTaskRecord, ReopenTaskCommand, ReopenTaskRecord, SpecifyTaskCommand, SpecifyTaskRecord,
-    SubmitReviewTaskCommand, SubmitReviewTaskRecord, TaskListOptions, TaskListPage, TaskListSort,
-    TaskPlanFilter, UnblockTaskCommand, UnblockTaskRecord, UpdateTaskCommand,
+    ArchiveTaskCommand, BlockTaskCommand, ClaimTaskCommand, CompleteTaskCommand, CreateTaskCommand,
+    HeartbeatTaskCommand, MarkExecutionPlanNotRequiredCommand, PromoteTaskCommand,
+    ReclaimTaskCommand, ReleaseTaskCommand, ReopenTaskCommand, SpecifyTaskCommand,
+    SubmitReviewTaskCommand, TaskListOptions, TaskListPage, TaskListSort, TaskPlanFilter,
+    UnblockTaskCommand, UpdateTaskCommand,
 };
 
 #[cfg(test)]

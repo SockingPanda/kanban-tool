@@ -1,8 +1,6 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result, TaskStatus, new_event_id};
 
-use crate::{ApplicationService, ApplicationStore, TaskRecord};
+use crate::{KanbanService, TaskRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpecifyTaskCommand {
@@ -12,29 +10,8 @@ pub struct SpecifyTaskCommand {
     pub scheduled_at: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpecifyTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub description: Option<String>,
-    pub scheduled_at: Option<i64>,
-    pub event_id: String,
-    pub now: i64,
-}
-
-pub trait TaskSpecify: ApplicationStore {
-    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
-
-    fn specify_task(
-        &self,
-        task_id: &str,
-        input: SpecifyTaskRecord,
-    ) -> impl Future<Output = Result<TaskRecord>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: TaskSpecify,
     C: Clock,
 {
     pub async fn specify_task(&self, command: SpecifyTaskCommand) -> Result<TaskRecord> {
@@ -56,16 +33,18 @@ where
             return Err(KanbanError::InvalidInput("description 不能为空".to_owned()));
         }
         let _mutation = self.mutation_gate.lock().await;
-        let task = self.store.get_task(task_id).await?;
+        let task = self.get_task(task_id).await?;
         if task.status != TaskStatus::Triage {
             return Err(KanbanError::InvalidTransition(
                 "只能 specify triage 任务".to_owned(),
             ));
         }
-        self.store
+        self.application
+            .store
+            .store
             .specify_task(
                 task_id,
-                SpecifyTaskRecord {
+                crate::store_operations::SpecifyTaskInput {
                     expected_lock_version: task.lock_version,
                     actor: actor.to_owned(),
                     description: command
@@ -77,5 +56,7 @@ where
                 },
             )
             .await
+            .map_err(crate::adapter::store_error)
+            .and_then(super::application_task)
     }
 }

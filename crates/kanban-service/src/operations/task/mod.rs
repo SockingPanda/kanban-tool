@@ -17,36 +17,31 @@ mod specify;
 mod unblock;
 mod update;
 
-pub use archive::{ArchiveTaskCommand, ArchiveTaskRecord, TaskArchive};
-pub use block::{BlockTaskCommand, BlockTaskRecord, TaskBlock};
-pub use claim::{ClaimTaskCommand, ClaimTaskRecord, TaskClaim};
+pub use archive::ArchiveTaskCommand;
+pub use block::BlockTaskCommand;
+pub use claim::ClaimTaskCommand;
 pub use create::CreateTaskCommand;
 pub use details::{
     TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskOntologySignalSummaryRecord,
     TaskOntologySummaryRecord,
 };
-pub use done::{CompleteTaskCommand, CompleteTaskRecord, TaskDone};
-pub use heartbeat::{HeartbeatTaskCommand, HeartbeatTaskRecord, TaskHeartbeat};
+pub use done::CompleteTaskCommand;
+pub use heartbeat::HeartbeatTaskCommand;
 pub use list::{TaskListOptions, TaskListPage, TaskListSort, TaskPlanFilter};
-pub use plan_not_required::{
-    MarkExecutionPlanNotRequiredCommand, MarkExecutionPlanNotRequiredRecord, TaskPlanNotRequired,
-};
-pub use promote::{PromoteTaskCommand, PromoteTaskRecord, TaskPromote};
-pub use reclaim::{
-    ReclaimExpiredTaskRecord, ReclaimTaskCommand, ReclaimTaskRecord, TaskReclaim,
-    TaskReclaimExplicit,
-};
-pub use release::{ReleaseTaskCommand, ReleaseTaskRecord, TaskRelease};
-pub use reopen::{ReopenTaskCommand, ReopenTaskRecord, TaskReopen};
-pub use review::{SubmitReviewTaskCommand, SubmitReviewTaskRecord, TaskReview};
-pub use specify::{SpecifyTaskCommand, SpecifyTaskRecord, TaskSpecify};
-pub use unblock::{TaskUnblock, UnblockTaskCommand, UnblockTaskRecord};
+pub use plan_not_required::MarkExecutionPlanNotRequiredCommand;
+pub use promote::PromoteTaskCommand;
+pub use reclaim::ReclaimTaskCommand;
+pub use release::ReleaseTaskCommand;
+pub use reopen::ReopenTaskCommand;
+pub use review::SubmitReviewTaskCommand;
+pub use specify::SpecifyTaskCommand;
+pub use unblock::UnblockTaskCommand;
 pub use update::UpdateTaskCommand;
 
 /// 将 Turso 的任务 row 转为 application DTO。
 ///
-/// row 类型只存在于 service 内；所有 task operation 和仍保留的 lifecycle adapter
-/// 都通过这个 helper 共享同一套状态与执行计划校验。
+/// row 类型只存在于 service 内；所有 task operation 通过这个 helper 共享同一套状态与
+/// 执行计划校验。
 pub(crate) fn application_task(
     task: crate::domain::TaskRecord,
 ) -> crate::Result<crate::TaskRecord> {

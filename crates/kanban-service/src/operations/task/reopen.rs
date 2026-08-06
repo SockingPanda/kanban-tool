@@ -1,8 +1,6 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result, TaskStatus, new_event_id};
 
-use crate::{ApplicationService, ApplicationStore, TaskRecord};
+use crate::{KanbanService, TaskRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReopenTaskCommand {
@@ -11,28 +9,8 @@ pub struct ReopenTaskCommand {
     pub reason: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReopenTaskRecord {
-    pub expected_lock_version: i64,
-    pub actor: String,
-    pub reason: String,
-    pub event_id: String,
-    pub now: i64,
-}
-
-pub trait TaskReopen: ApplicationStore {
-    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
-
-    fn reopen_task(
-        &self,
-        task_id: &str,
-        input: ReopenTaskRecord,
-    ) -> impl Future<Output = Result<TaskRecord>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: TaskReopen,
     C: Clock,
 {
     pub async fn reopen_task(&self, command: ReopenTaskCommand) -> Result<TaskRecord> {
@@ -53,16 +31,18 @@ where
             ));
         }
         let _mutation = self.mutation_gate.lock().await;
-        let task = self.store.get_task(task_id).await?;
+        let task = self.get_task(task_id).await?;
         if task.status != TaskStatus::Done {
             return Err(KanbanError::InvalidTransition(
                 "只能 reopen done 任务".to_owned(),
             ));
         }
-        self.store
+        self.application
+            .store
+            .store
             .reopen_task(
                 task_id,
-                ReopenTaskRecord {
+                crate::store_operations::ReopenTaskInput {
                     expected_lock_version: task.lock_version,
                     actor: actor.to_owned(),
                     reason: reason.to_owned(),
@@ -71,5 +51,7 @@ where
                 },
             )
             .await
+            .map_err(crate::adapter::store_error)
+            .and_then(super::application_task)
     }
 }

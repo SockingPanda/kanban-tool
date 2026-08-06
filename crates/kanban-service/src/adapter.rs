@@ -273,7 +273,9 @@ pub(crate) fn application_add_task_labels(
     })
 }
 
-fn application_execution_plan(plan: StoreExecutionPlan) -> Result<ApplicationExecutionPlan> {
+pub(crate) fn application_execution_plan(
+    plan: StoreExecutionPlan,
+) -> Result<ApplicationExecutionPlan> {
     let state = match plan.state.as_str() {
         "unplanned" => ExecutionPlanState::Unplanned,
         "planned" => ExecutionPlanState::Planned,

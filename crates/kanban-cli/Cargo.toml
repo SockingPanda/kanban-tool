@@ -51,3 +51,19 @@ path = "tests/task_contract_adoption.rs"
 [[test]]
 name = "cli_config_contract_adoption"
 path = "tests/config_contract_adoption.rs"
+
+[[test]]
+name = "cli_queue_adoption"
+path = "tests/cli_queue_adoption.rs"
+
+[[test]]
+name = "cli_lifecycle_adoption"
+path = "tests/cli_lifecycle_adoption.rs"
+
+[[test]]
+name = "cli_steps_dependencies_adoption"
+path = "tests/cli_steps_dependencies_adoption.rs"
+
+[[test]]
+name = "cli_history_adoption"
+path = "tests/cli_history_adoption.rs"

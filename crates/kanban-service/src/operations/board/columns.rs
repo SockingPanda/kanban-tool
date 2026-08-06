@@ -1,47 +1,32 @@
-use std::future::Future;
-
 use kanban_core::{Clock, Result};
 
-use crate::{ApplicationService, ApplicationStore, BoardColumnRecord};
+use crate::{BoardColumnRecord, KanbanService};
 
-pub trait BoardColumns: ApplicationStore {
-    fn list_board_columns(
-        &self,
-        board: &str,
-    ) -> impl Future<Output = Result<Vec<BoardColumnRecord>>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: BoardColumns,
     C: Clock,
 {
     pub async fn list_board_columns(&self, board: &str) -> Result<Vec<BoardColumnRecord>> {
-        self.store.list_board_columns(board).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use kanban_core::Result;
-
-    use crate::operations::test_support::StubStore;
-    use crate::*;
-
-    impl BoardColumns for StubStore {
-        async fn list_board_columns(&self, board: &str) -> Result<Vec<BoardColumnRecord>> {
-            assert_eq!(board, "default");
-            Ok(vec![BoardColumnRecord {
-                id: "col_default_todo".into(),
-                board_id: "b_default".into(),
-                status: kanban_core::TaskStatus::Todo,
-                title: "Todo".into(),
-                position: 20,
-                hidden: false,
-                wip_limit: None,
-                created_at: 1,
-                updated_at: 1,
-            }])
-        }
+        self.application
+            .store
+            .store
+            .list_board_columns(board)
+            .await
+            .map_err(crate::adapter::store_error)?
+            .into_iter()
+            .map(|column| {
+                Ok(BoardColumnRecord {
+                    id: column.id,
+                    board_id: column.board_id,
+                    status: column.status.parse()?,
+                    title: column.title,
+                    position: column.position,
+                    hidden: column.hidden,
+                    wip_limit: column.wip_limit,
+                    created_at: column.created_at,
+                    updated_at: column.updated_at,
+                })
+            })
+            .collect()
     }
 }

@@ -157,7 +157,7 @@ impl TursoApplicationStore {
 
 impl ApplicationStore for TursoApplicationStore {}
 
-fn store_error(error: StoreError) -> KanbanError {
+pub(crate) fn store_error(error: StoreError) -> KanbanError {
     match error {
         StoreError::BoardNotFound(selector) => KanbanError::NotFound(format!("看板 {selector}")),
         StoreError::TaskNotFound(task_id) => KanbanError::NotFound(format!("task {task_id}")),

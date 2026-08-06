@@ -1,8 +1,6 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result, new_board_id, new_event_id};
 
-use crate::{ApplicationService, ApplicationStore, BoardRecord};
+use crate::{BoardRecord, KanbanService};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateBoardCommand {
@@ -23,16 +21,8 @@ pub struct CreateBoardRecord {
     pub created_at: i64,
 }
 
-pub trait BoardCreate: ApplicationStore {
-    fn create_board(
-        &self,
-        input: CreateBoardRecord,
-    ) -> impl Future<Output = Result<BoardRecord>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: BoardCreate,
     C: Clock,
 {
     pub async fn create_board(&self, command: CreateBoardCommand) -> Result<BoardRecord> {
@@ -56,8 +46,10 @@ where
         }
 
         let _mutation = self.mutation_gate.lock().await;
-        self.store
-            .create_board(CreateBoardRecord {
+        self.application
+            .store
+            .store
+            .create_board(crate::CreateBoardInput {
                 id: new_board_id(),
                 slug,
                 name,
@@ -67,5 +59,7 @@ where
                 created_at: self.clock.now_ms(),
             })
             .await
+            .map(super::application_board)
+            .map_err(crate::adapter::store_error)
     }
 }

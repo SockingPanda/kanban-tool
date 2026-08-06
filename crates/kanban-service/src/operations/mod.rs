@@ -24,15 +24,9 @@ mod step;
 mod task;
 mod vector;
 
-pub use attachment::{
-    AttachmentCreate, AttachmentDelete, AttachmentList, AttachmentRead, CreateAttachmentCommand,
-    CreateAttachmentRecord, DeleteAttachmentCommand,
-};
-pub use board::{
-    ArchiveBoardCommand, ArchiveBoardRecord, BoardArchive, BoardColumns, BoardCreate, BoardGet,
-    BoardList, CreateBoardCommand, CreateBoardRecord,
-};
-pub use comment::{CommentCreate, CommentList};
+pub use attachment::{CreateAttachmentCommand, CreateAttachmentRecord, DeleteAttachmentCommand};
+pub use board::{ArchiveBoardCommand, ArchiveBoardRecord, CreateBoardCommand, CreateBoardRecord};
+pub use comment::{CreateCommentCommand, CreateCommentRecord};
 pub use context::{
     ContextBuild, ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence,
     ContextItem, ContextPack, ContextPolicy, ContextProviderStatus, ContextSources,
@@ -75,7 +69,6 @@ pub use vector::{
     VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
 };
 
-pub use comment::{CreateCommentCommand, CreateCommentRecord};
 pub use dependency::{
     AddDependencyCommand, AddDependencyRecord, AddDependencyResult, RemoveDependencyCommand,
     RemoveDependencyResult,

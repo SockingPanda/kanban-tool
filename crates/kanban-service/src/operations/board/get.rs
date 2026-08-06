@@ -1,16 +1,9 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result};
 
-use crate::{ApplicationService, ApplicationStore, BoardRecord};
+use crate::{BoardRecord, KanbanService};
 
-pub trait BoardGet: ApplicationStore {
-    fn get_board(&self, selector: &str) -> impl Future<Output = Result<BoardRecord>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: BoardGet,
     C: Clock,
 {
     pub async fn get_board(&self, selector: &str) -> Result<BoardRecord> {
@@ -18,6 +11,12 @@ where
         if selector.is_empty() {
             return Err(KanbanError::InvalidInput("看板不能为空".to_owned()));
         }
-        self.store.get_board(selector).await
+        self.application
+            .store
+            .store
+            .get_board(selector)
+            .await
+            .map(super::application_board)
+            .map_err(crate::adapter::store_error)
     }
 }

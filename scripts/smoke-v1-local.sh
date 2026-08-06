@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TMPDIR="$(mktemp -d)"
+SMOKE_DIR="$(mktemp -d)"
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
 HOST_PID=""
 SERVER_URL=""
@@ -33,7 +33,7 @@ cleanup_host() {
 
 cleanup() {
   cleanup_host
-  rm -rf "$TMPDIR"
+  rm -rf "$SMOKE_DIR"
 }
 trap cleanup EXIT
 
@@ -64,7 +64,7 @@ wait_for_health() {
   while (( SECONDS < deadline )); do
     if ! kill -0 "$host_pid" >/dev/null 2>&1; then
       echo "错误：kanban serve 在健康检查前退出；日志如下：" >&2
-      sed -n '1,240p' "$TMPDIR/serve.log" >&2 || true
+      sed -n '1,240p' "$SMOKE_DIR/serve.log" >&2 || true
       return 1
     fi
     if python3 - "$port" "$expected_db" <<'PY'
@@ -96,7 +96,7 @@ PY
   done
 
   echo "错误：kanban serve 未能在预期时间内健康监听 127.0.0.1:$port；日志如下：" >&2
-  sed -n '1,240p' "$TMPDIR/serve.log" >&2 || true
+  sed -n '1,240p' "$SMOKE_DIR/serve.log" >&2 || true
   return 1
 }
 
@@ -113,12 +113,12 @@ start_host() {
 
   cleanup_host
   (
-    cd "$TMPDIR"
+    cd "$SMOKE_DIR"
     exec env -u KANBAN_DB -u KB_DB -u KANBAN_SERVER_URL \
       "$KANBAN_BIN" \
       --db "$db_path" --actor smoke-host serve \
       --host 127.0.0.1 --port "$port" "${dispatcher_args[@]}"
-  ) >"$TMPDIR/serve.log" 2>&1 &
+  ) >"$SMOKE_DIR/serve.log" 2>&1 &
   HOST_PID=$!
   wait_for_health "$HOST_PID" "$port" "$db_path"
 }
@@ -126,15 +126,15 @@ start_host() {
 kb() {
   # 所有产品命令都显式指向当前 host；不提供 --db，也清除可能触发本地配置的环境变量。
   (
-    cd "$TMPDIR"
+    cd "$SMOKE_DIR"
     env -u KANBAN_DB -u KB_DB -u KANBAN_SERVER_URL -u KB_BOARD \
-      XDG_CONFIG_HOME="$TMPDIR/xdg-config" XDG_DATA_HOME="$TMPDIR/xdg-data" \
+      XDG_CONFIG_HOME="$SMOKE_DIR/xdg-config" XDG_DATA_HOME="$SMOKE_DIR/xdg-data" \
       "$KANBAN_BIN" \
       --server-url "$SERVER_URL" --board default --actor smoke --json "$@"
   )
 }
 
-cat >"$TMPDIR/dispatcher.toml" <<EOF
+cat >"$SMOKE_DIR/dispatcher.toml" <<EOF
 board = "default"
 command = "printf 'smoke log\\n'"
 poll_interval_ms = 20
@@ -145,7 +145,8 @@ on_failure = "blocked"
 log_dir = "logs"
 EOF
 
-start_host "$TMPDIR/kb.db" "$TMPDIR/dispatcher.toml"
+# `dispatch` 语义由 canonical host 的 dispatcher profile 提供，只会原子 claim `ready`。
+start_host "$SMOKE_DIR/kb.db" "$SMOKE_DIR/dispatcher.toml"
 
 kb init >/dev/null
 kb board list >/dev/null
@@ -178,18 +179,18 @@ assert "smoke log" in payload["data"]["content"]
 
 # dispatcher 完成后释放其持续轮询；维护操作由同一 canonical DB 的无 dispatcher host 执行。
 cleanup_host
-start_host "$TMPDIR/kb.db"
+start_host "$SMOKE_DIR/kb.db"
 kb stats >/dev/null
 kb doctor >/dev/null
 kb checkpoint >/dev/null
 kb vacuum >/dev/null
-kb backup --path "$TMPDIR/backup.sqlite" >/dev/null
-kb export --path "$TMPDIR/board.jsonl" >/dev/null
+kb backup --path "$SMOKE_DIR/backup.sqlite" >/dev/null
+kb export --path "$SMOKE_DIR/board.jsonl" >/dev/null
 
 # portable import 需要新的空 canonical host；先停止旧 host，再切换数据库并由新 host 导入。
 cleanup_host
-start_host "$TMPDIR/imported.db"
-import_json="$(kb import --path "$TMPDIR/board.jsonl")"
+start_host "$SMOKE_DIR/imported.db"
+import_json="$(kb import --path "$SMOKE_DIR/board.jsonl")"
 printf '%s' "$import_json" | python3 -c '
 import json,sys
 report=json.load(sys.stdin)["data"]

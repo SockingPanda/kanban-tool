@@ -6,6 +6,8 @@ mod state;
 pub(crate) mod vector;
 
 #[cfg(test)]
+mod knowledge_adoption;
+#[cfg(test)]
 mod suite;
 
 pub use dispatcher::{DispatcherConfig, ShutdownSignal};

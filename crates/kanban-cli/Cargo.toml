@@ -67,3 +67,11 @@ path = "tests/cli_steps_dependencies_adoption.rs"
 [[test]]
 name = "cli_history_adoption"
 path = "tests/cli_history_adoption.rs"
+
+[[test]]
+name = "cli_admin_adoption"
+path = "tests/cli_admin_adoption.rs"
+
+[[test]]
+name = "cli_knowledge_adoption"
+path = "tests/cli_knowledge_adoption.rs"

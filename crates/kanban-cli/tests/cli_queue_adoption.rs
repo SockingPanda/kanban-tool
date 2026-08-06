@@ -169,8 +169,8 @@ fn queue_cli_reports_server_unavailable_with_stable_hint() {
     let message = value["error"]["message"]
         .as_str()
         .expect("server unavailable message");
-    assert!(message.contains("server unavailable"));
-    assert!(message.contains("server URL"));
+    assert!(message.contains("服务端不可用"));
+    assert!(message.contains("服务端 URL"));
     assert!(message.contains("kanban serve"));
     assert!(!output.stderr.is_empty() || output.status.code() == Some(9));
 }

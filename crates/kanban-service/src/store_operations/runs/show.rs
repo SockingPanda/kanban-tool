@@ -1,7 +1,7 @@
 use crate::{db::TursoStore, domain::TaskRunRecord, error::StoreError};
 
 impl TursoStore {
-    /// Return one run by its global id without mutating canonical state.
+    /// 按全局 id 返回一个 run，且不修改规范状态。
     pub async fn get_run(&self, run_id: &str) -> Result<TaskRunRecord, StoreError> {
         let run_id = run_id.trim();
         if !run_id.starts_with("r_") || run_id.len() <= 2 {

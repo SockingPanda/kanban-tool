@@ -99,9 +99,8 @@ impl TursoStore {
         entity_from_row(row)
     }
 
-    /// Insert or update one canonical entity without replacing its relation
-    /// facts.  The `(source_table, source_id)` uniqueness guard is preserved by
-    /// the database and is surfaced as an entity conflict.
+    /// 插入或更新一个规范实体，但不替换其 relation fact。数据库保留
+    /// `(source_table, source_id)` 唯一性保护，并将冲突报告为 entity conflict。
     pub async fn upsert_entity(
         &self,
         input: EntityUpsertInput,

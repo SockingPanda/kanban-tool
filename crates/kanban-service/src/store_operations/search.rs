@@ -1,4 +1,4 @@
-//! Turso-native task search and host-local FTS projection maintenance.
+//! Turso-native task search 与 host-local FTS projection maintenance。
 
 use kanban_core::TaskStatus;
 use sha2::{Digest, Sha256};

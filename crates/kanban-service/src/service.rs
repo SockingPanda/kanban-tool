@@ -5,8 +5,7 @@ use tokio::sync::Mutex;
 
 use crate::ApplicationStore;
 
-/// The canonical command/query entry point shared by the HTTP handlers and the
-/// in-process dispatcher.
+/// HTTP handler 与进程内 dispatcher 共享的规范 command/query 入口。
 #[derive(Debug, Clone)]
 pub struct ApplicationService<S, C = SystemClock> {
     pub(crate) store: S,

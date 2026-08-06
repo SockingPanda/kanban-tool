@@ -19,10 +19,9 @@ pub struct UpdateStepInput {
 }
 
 impl TursoStore {
-    /// Update editable execution-plan fields without changing the step status
-    /// or parent task status. Parent lock-version CAS and the step/event write
-    /// share one immediate transaction so stale callers cannot overwrite a
-    /// concurrent plan mutation and an event conflict rolls everything back.
+    /// 更新可编辑的 execution-plan 字段，但不改变 step status 或父任务 status。父任务
+    /// lock-version CAS 与 step/event 写入共享同一个 immediate transaction，因此过期调用方
+    /// 无法覆盖并发的计划变更，事件冲突也会让全部操作回滚。
     pub async fn update_step(
         &self,
         task_id: &str,

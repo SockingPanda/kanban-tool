@@ -48,7 +48,7 @@ where
         self.claim_task_inner(command, None).await
     }
 
-    /// Claim a task for the in-process dispatcher and atomically attach its run log path.
+    /// 为进程内 dispatcher 认领任务，并原子附加其运行日志路径。
     pub async fn claim_task_with_run_log_dir(
         &self,
         command: ClaimTaskCommand,

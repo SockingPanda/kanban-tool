@@ -286,7 +286,7 @@ impl TursoStore {
         ))
     }
 
-    /// Reads all canonical semantics in board update order.
+    /// 按看板更新时间顺序读取全部规范 semantics。
     pub async fn list_label_semantics(
         &self,
         board: &str,

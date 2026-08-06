@@ -1,8 +1,8 @@
-//! Application operations grouped by domain.
+//! 按领域分组的 application operation。
 //!
-//! Each operation module extends [`ApplicationService`] with one cohesive
-//! command or query. Shared service state remains in the service core.
-// Signal ledger operations are shared by all adapters.
+//! 每个 operation 模块都向 [`ApplicationService`] 添加一个内聚的 command 或 query。
+//! 共享 service 状态仍保留在 service core 中。
+// Signal ledger operation 由所有 adapter 共享。
 
 mod attachment;
 mod board;

@@ -54,10 +54,8 @@ pub(crate) async fn dependency_path_exists(
     start_task_id: &str,
     target_task_id: &str,
 ) -> Result<bool, StoreError> {
-    // Turso 0.7.x does not implement recursive CTEs. Walk the direct edge
-    // relation inside the same immediate transaction instead; the transaction
-    // still gives the traversal a stable view and keeps the subsequent insert
-    // atomic with the cycle check.
+    // Turso 0.7.x 不支持递归 CTE。因此改为在同一个 immediate transaction 中遍历直接
+    // 边关系；事务仍为遍历提供稳定视图，并让后续插入与环检查保持原子。
     let mut frontier = vec![start_task_id.to_owned()];
     let mut visited = HashSet::from([start_task_id.to_owned()]);
     while let Some(parent_task_id) = frontier.pop() {

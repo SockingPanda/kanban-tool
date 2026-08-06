@@ -5,10 +5,10 @@ use crate::{
     shared::{first_row, run_from_row},
 };
 
-/// Canonical projection used by every run query.
+/// 所有 run query 使用的规范 projection。
 pub(crate) const RUN_SELECT: &str = "SELECT id, board_id, task_id, status, worker_profile, worker_pid, claim_token, claim_owner, claim_expires_at, started_at, last_heartbeat_at, finished_at, exit_code, summary, error, log_path, metadata_json FROM task_runs";
 
-/// Load one run by its global id while preserving the store's typed not-found error.
+/// 按全局 id 加载一个 run，同时保留 store 的 typed not-found error。
 #[allow(dead_code)]
 pub(super) async fn load_run(
     store: &TursoStore,

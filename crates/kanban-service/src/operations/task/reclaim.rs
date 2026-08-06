@@ -160,7 +160,7 @@ where
     S: TaskReclaim,
     C: Clock,
 {
-    /// Reclaim only expired running leases for the in-process dispatcher.
+    /// 仅为进程内 dispatcher 回收已过期的 running lease。
     pub async fn reclaim_expired(&self, board: &str, actor: &str) -> Result<usize> {
         let board = board.trim();
         if board.is_empty() {

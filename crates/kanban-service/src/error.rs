@@ -53,54 +53,52 @@ pub enum StoreError {
 impl Display for StoreError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Turso(error) => write!(formatter, "turso error: {error}"),
-            Self::InvalidPath => write!(formatter, "database path must be valid non-empty UTF-8"),
-            Self::InvalidInput(message) => write!(formatter, "invalid task input: {message}"),
+            Self::Turso(error) => write!(formatter, "turso 错误：{error}"),
+            Self::InvalidPath => write!(formatter, "数据库路径必须是有效且非空的 UTF-8"),
+            Self::InvalidInput(message) => write!(formatter, "任务输入无效：{message}"),
             Self::InvalidTransition(message) => {
-                write!(formatter, "invalid task transition: {message}")
+                write!(formatter, "任务状态转换无效：{message}")
             }
-            Self::StepsIncomplete(message) => write!(formatter, "steps incomplete: {message}"),
-            Self::ClaimConflict(message) => write!(formatter, "claim conflict: {message}"),
+            Self::StepsIncomplete(message) => write!(formatter, "步骤未完成：{message}"),
+            Self::ClaimConflict(message) => write!(formatter, "认领冲突：{message}"),
             Self::ClaimTokenMismatch => write!(formatter, "claim token mismatch"),
             Self::InvalidStoredValue { field } => {
-                write!(formatter, "invalid stored value for {field}")
+                write!(formatter, "存储值无效：{field}")
             }
-            Self::BoardNotFound(selector) => write!(formatter, "board not found: {selector}"),
-            Self::TaskNotFound(task_id) => write!(formatter, "task not found: {task_id}"),
-            Self::LabelNotFound(label) => write!(formatter, "label not found: {label}"),
-            Self::RunNotFound(run_id) => write!(formatter, "run not found: {run_id}"),
-            Self::StepNotFound(step_id) => write!(formatter, "step not found: {step_id}"),
+            Self::BoardNotFound(selector) => write!(formatter, "看板不存在：{selector}"),
+            Self::TaskNotFound(task_id) => write!(formatter, "任务不存在：{task_id}"),
+            Self::LabelNotFound(label) => write!(formatter, "标签不存在：{label}"),
+            Self::RunNotFound(run_id) => write!(formatter, "运行记录不存在：{run_id}"),
+            Self::StepNotFound(step_id) => write!(formatter, "步骤不存在：{step_id}"),
             Self::AttachmentNotFound(attachment_id) => {
-                write!(formatter, "attachment not found: {attachment_id}")
+                write!(formatter, "附件不存在：{attachment_id}")
             }
             Self::AttachmentFileMissing(path) => {
-                write!(formatter, "attachment file missing: {path}")
+                write!(formatter, "附件文件缺失：{path}")
             }
-            Self::AttachmentConflict(message) => {
-                write!(formatter, "attachment conflict: {message}")
-            }
+            Self::AttachmentConflict(message) => write!(formatter, "附件冲突：{message}"),
             Self::AttachmentIntegrity(message) => {
-                write!(formatter, "attachment integrity failure: {message}")
+                write!(formatter, "附件完整性校验失败：{message}")
             }
-            Self::AttachmentIo(message) => write!(formatter, "attachment I/O error: {message}"),
-            Self::SignalNotFound(signal_id) => write!(formatter, "signal not found: {signal_id}"),
-            Self::EntityNotFound(uri) => write!(formatter, "entity not found: {uri}"),
+            Self::AttachmentIo(message) => write!(formatter, "附件 I/O 错误：{message}"),
+            Self::SignalNotFound(signal_id) => write!(formatter, "信号不存在：{signal_id}"),
+            Self::EntityNotFound(uri) => write!(formatter, "实体不存在：{uri}"),
             Self::PredicateNotFound(name) => {
-                write!(formatter, "relation predicate not found: {name}")
+                write!(formatter, "关系谓词不存在：{name}")
             }
-            Self::RelationNotFound(id) => write!(formatter, "relation not found: {id}"),
-            Self::EntityConflict(message) => write!(formatter, "entity conflict: {message}"),
-            Self::RelationConflict(message) => write!(formatter, "relation conflict: {message}"),
-            Self::DependencyCycle(message) => write!(formatter, "dependency cycle: {message}"),
-            Self::TaskConflict(task_id) => write!(formatter, "task id already exists: {task_id}"),
-            Self::SignalConflict(message) => write!(formatter, "signal conflict: {message}"),
+            Self::RelationNotFound(id) => write!(formatter, "关系不存在：{id}"),
+            Self::EntityConflict(message) => write!(formatter, "实体冲突：{message}"),
+            Self::RelationConflict(message) => write!(formatter, "关系冲突：{message}"),
+            Self::DependencyCycle(message) => write!(formatter, "依赖环：{message}"),
+            Self::TaskConflict(task_id) => write!(formatter, "任务 id 已存在：{task_id}"),
+            Self::SignalConflict(message) => write!(formatter, "信号冲突：{message}"),
             Self::SignalIdempotencyConflict {
                 board_id,
                 key,
                 existing_signal_id,
             } => write!(
                 formatter,
-                "signal idempotency conflict for board {board_id}, key {key}, existing signal {existing_signal_id}"
+                "信号幂等冲突：board {board_id}、key {key}、已有 signal {existing_signal_id}"
             ),
             Self::IdempotencyConflict {
                 board_id,
@@ -108,7 +106,7 @@ impl Display for StoreError {
                 existing_task_id,
             } => write!(
                 formatter,
-                "idempotency conflict for board {board_id}, key {key}, existing task {existing_task_id}"
+                "幂等冲突：board {board_id}、key {key}、已有 task {existing_task_id}"
             ),
             Self::SchemaMismatch(message) => write!(formatter, "schema 不匹配: {message}"),
             Self::BackupRequired(message) => write!(formatter, "需要备份: {message}"),

@@ -1,10 +1,9 @@
 use crate::{db::TursoStore, domain::TaskRunRecord, error::StoreError};
 
 impl TursoStore {
-    /// Return the canonical run record used by the server to serve its log.
+    /// 返回 server 提供日志时使用的规范 run record。
     ///
-    /// The store deliberately does not inspect or open `log_path`; that is a
-    /// server-side concern after the run has been loaded through this query.
+    /// store 有意不检查或打开 `log_path`；通过此 query 加载 run 后，这属于 server 侧职责。
     pub async fn get_run_log_source(&self, run_id: &str) -> Result<TaskRunRecord, StoreError> {
         let run_id = run_id.trim();
         if !run_id.starts_with("r_") || run_id.len() <= 2 {

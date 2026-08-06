@@ -27,7 +27,7 @@ pub struct CreateTaskCommand {
     pub actor: String,
 }
 
-/// Canonicalized input passed from the application service to persistence.
+/// application service 传给持久化层的规范化输入。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateTaskRecord {
     pub id: String,
@@ -71,9 +71,8 @@ where
             },
             self.clock.now_ms(),
         )?;
-        // Every new task starts with an unplanned execution plan. A candidate
-        // ready task therefore remains todo until a plan is supplied or
-        // explicitly marked not required.
+        // 每个新任务都从 unplanned execution plan 开始。因此，候选状态为 ready 的任务
+        // 会保持 todo，直到提供计划或显式标记为 not_required。
         let status = if candidate == TaskStatus::Ready {
             TaskStatus::Todo
         } else {

@@ -22,10 +22,9 @@ pub struct CreateStepCommand {
     pub actor: String,
 }
 
-/// Canonicalized step mutation passed from the application service to the
-/// Turso store. The expected task facts keep the transaction CAS-guarded even
-/// if another caller changes the parent between the application read and the
-/// store mutation.
+/// application service 传给 Turso store 的规范化 step mutation。预期任务事实让事务
+/// 始终受 CAS 保护，即使另一个调用方在 application read 与 store mutation 之间修改了
+/// 父任务也不会失守。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateStepRecord {
     pub id: String,

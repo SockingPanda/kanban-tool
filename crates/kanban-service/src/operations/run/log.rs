@@ -4,10 +4,10 @@ use kanban_core::{Clock, KanbanError, Result};
 
 use crate::{ApplicationService, ApplicationStore};
 
-/// Maximum bytes exposed by the future run-log reader.
+/// 未来 run-log reader 暴露的最大字节数。
 ///
-/// The canonical contract deliberately has no tail query; readers always use
-/// this bounded suffix when the operation is implemented.
+/// 规范 contract 有意不提供 tail query；实现该 operation 后，reader 始终使用这个有
+/// 界限的后缀。
 pub const RUN_LOG_TAIL_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,4 +1,4 @@
-//! Host-owned doctor/checkpoint/backup/import/compaction primitives.
+//! host 所有的 doctor/checkpoint/backup/import/compaction 基础能力。
 //!
 //! 所有方法只在 `kanban-server` 的 canonical Turso owner 内调用。portable JSONL
 //! 只包含 canonical facts；projection、FTS、vector 和 graph 表属于可重建派生物。
@@ -82,7 +82,7 @@ const PORTABLE_REPLACE_DELETE_TABLES: &[&str] = &[
     "boards",
 ];
 
-/// 诊断所依赖的 schema/identity 表清单；它们不属于 portable business facts。
+/// 诊断所依赖的 schema/identity 表清单；它们不属于 portable business fact。
 #[allow(dead_code)]
 const SCHEMA_TABLES: &[&str] = &[
     "boards",
@@ -2424,8 +2424,8 @@ fn cleanup_staged_database(path: &Path) {
 }
 
 async fn canonical_record_count(connection: &Connection) -> Result<i64, StoreError> {
-    // `initialize()` seeds the default board/columns and relation predicates. They are
-    // host bootstrap metadata, not imported facts, so a fresh target must remain importable.
+    // `initialize()` 会写入默认 board/columns 和 relation predicates。它们是 host
+    // bootstrap metadata，而不是导入事实，因此全新的目标必须仍可导入。
     let mut total = 0;
     for table in PORTABLE_TABLES
         .iter()

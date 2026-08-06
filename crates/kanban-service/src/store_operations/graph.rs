@@ -90,8 +90,7 @@ struct TaskGraphData {
 }
 
 impl TursoStore {
-    /// Read canonical relation facts.  The query is intentionally scoped by
-    /// the subject entity's board and never follows a derived graph store.
+    /// 读取规范 relation fact。查询有意限定在主体实体所属看板内，绝不跟随派生 graph store。
     pub async fn graph_neighbors(
         &self,
         options: GraphNeighborsOptions,
@@ -104,8 +103,7 @@ impl TursoStore {
                 "graph board is required".to_owned(),
             ));
         }
-        // Resolve and verify the entity before listing facts.  A relation row
-        // alone is not enough to grant access to another board.
+        // 在列出事实前先解析并校验实体。仅凭 relation row 不足以授予访问另一个看板的权限。
         let entity = self.get_entity(&options.entity_uri).await?;
         let board_id = self.resolve_board(board).await?;
         if entity.board_id.as_deref() != Some(board_id.as_str()) {
@@ -150,17 +148,15 @@ impl TursoStore {
         })
     }
 
-    /// Rebuild the graph maintenance state from canonical tasks, entities and
-    /// relations.  The task/board entity rows and `belongs_to_board` facts are
-    /// deterministic derived facts; the projection state is the only mutable
-    /// maintenance marker published by this operation.
+    /// 根据规范 task、entity 和 relation 重建 graph maintenance state。task/board entity
+    /// row 与 `belongs_to_board` fact 是确定性的派生事实；projection state 是此 operation
+    /// 发布的唯一可变维护标记。
     pub async fn graph_rebuild(&self, board: &str) -> Result<GraphMaintenanceRecord, StoreError> {
         self.graph_maintenance(board, "rebuild").await
     }
 
-    /// Validate canonical graph facts and consume pending relation jobs.  This
-    /// path does not fabricate a projection update: it reports the validated
-    /// counts and the generation/fingerprint that were actually published.
+    /// 校验规范 graph fact 并消费待处理 relation job。此路径不会伪造 projection 更新：
+    /// 它报告已校验的计数，以及实际发布的 generation/fingerprint。
     pub async fn graph_sync(&self, board: &str) -> Result<GraphMaintenanceRecord, StoreError> {
         self.graph_maintenance(board, "sync").await
     }
@@ -371,10 +367,9 @@ impl TursoStore {
         })
     }
 
-    /// The old Oxigraph query surface is kept as a deterministic, read-only
-    /// relation query.  It accepts a SPARQL-shaped string for compatibility,
-    /// but evaluates only canonical relation facts and never executes SQL or a
-    /// recursive query supplied by a caller.
+    /// 旧 Oxigraph query surface 作为确定性的只读 relation query 保留。为兼容性它接受
+    /// SPARQL 形状的字符串，但只计算规范 relation fact，绝不执行 SQL 或调用方提供的
+    /// 递归查询。
     pub async fn graph_query(
         &self,
         options: GraphQueryOptions,
@@ -1065,9 +1060,8 @@ async fn graph_data_for_board(
             blocking: required,
         });
     }
-    // Relation facts are the canonical graph surface.  Native dependency and
-    // step tables above are retained as compatibility facts during migration;
-    // deduplication makes the transition deterministic.
+    // Relation fact 是规范 graph surface。上面的 native dependency 和 step 表在迁移期间
+    // 作为兼容事实保留；去重使过渡保持确定性。
     let mut relation_rows = connection
         .query(
             "SELECT r.id, r.subject_uri, r.predicate, r.object_uri, r.graph_uri, r.board_id, r.authoritative_store, r.source_table, r.source_id, r.source_event_id, r.metadata_json, r.created_at, r.updated_at FROM entity_relations r JOIN entities s ON s.uri = r.subject_uri WHERE s.board_id = :board_id AND r.board_id = :board_id ORDER BY r.id ASC",

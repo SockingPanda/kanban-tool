@@ -73,8 +73,7 @@ async fn graph_reads_canonical_relations_with_cycle_safe_bounded_bfs() {
     assert_eq!(neighbors.len(), 1);
     assert_eq!(neighbors[0].object_uri, "kb://task/t_graph_b");
 
-    // Add the reverse fact deliberately: BFS must terminate on a cyclic fact
-    // graph and remain bounded by the requested depth and node limit.
+    // 有意添加反向事实：BFS 必须在循环事实图上终止，并受请求的深度和节点上限约束。
     store
         .upsert_relation(RelationUpsertInput {
             subject_uri: "kb://task/t_graph_c".to_owned(),

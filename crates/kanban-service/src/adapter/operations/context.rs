@@ -1,8 +1,7 @@
-//! Context pack provider adapter for the canonical Turso host.
+//! 规范 Turso host 的 Context pack provider adapter。
 //!
-//! The application service owns merge, ranking, budgets and board isolation.
-//! This adapter only translates Turso/host provider records into source
-//! candidates and preserves degraded provider diagnostics.
+//! application service 负责合并、排序、预算和看板隔离。此 adapter 只把 Turso/host
+//! provider record 转换为 source candidate，并保留 provider 降级诊断信息。
 
 use crate::{
     ContextBuild, ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence,

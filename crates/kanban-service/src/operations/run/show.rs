@@ -4,7 +4,7 @@ use kanban_core::{Clock, KanbanError, Result};
 
 use crate::{ApplicationService, ApplicationStore, RunRecord};
 
-/// Storage capability required by the `run.show` query.
+/// `run.show` query 所需的 storage capability。
 pub trait RunShow: ApplicationStore {
     fn get_run(&self, run_id: &str) -> impl Future<Output = Result<RunRecord>> + Send;
 }
@@ -14,10 +14,9 @@ where
     S: RunShow,
     C: Clock,
 {
-    /// Return one run by its canonical global id.
+    /// 按规范全局 id 返回一个 run。
     ///
-    /// Selectors such as `default#1` are deliberately rejected here; this
-    /// operation only accepts the canonical `r_...` id.
+    /// 这里会有意拒绝 `default#1` 等 selector；该 operation 只接受规范的 `r_...` id。
     pub async fn get_run(&self, run_id: &str) -> Result<RunRecord> {
         let run_id = run_id.trim();
         if !run_id.starts_with("r_") || run_id.len() <= 2 {

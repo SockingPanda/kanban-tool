@@ -562,8 +562,8 @@ fn publish_file(final_path: &Path, content: &[u8], id: &str) -> Result<(), Store
         let _ = fs::remove_file(&temp);
         return Err(StoreError::AttachmentIo(error.to_string()));
     }
-    // Hard-linking the staged inode is atomic and refuses to replace an
-    // existing destination, so a stale file can never be silently clobbered.
+    // 对 staging inode 建立 hard link 是原子的，并且拒绝替换已有目标，因此过期文件
+    // 永远不会被静默覆盖。
     if let Err(error) = fs::hard_link(&temp, final_path) {
         let _ = fs::remove_file(&temp);
         return Err(StoreError::AttachmentIo(error.to_string()));

@@ -58,9 +58,8 @@ async fn read_run_log_file(
         )));
     }
 
-    // Open the canonical target and take a metadata snapshot from the opened
-    // handle before seeking. This bounds the read to a suffix without loading
-    // the complete log into memory.
+    // 打开规范 target，并在 seek 前从已打开的 handle 获取 metadata 快照。这样可以
+    // 将读取限制在后缀范围内，而不必把完整日志载入内存。
     let mut file = File::open(&candidate)
         .await
         .map_err(|error| map_file_error(&candidate, error))?;

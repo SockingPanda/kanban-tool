@@ -125,9 +125,8 @@ pub struct ContextPack {
     pub truncation_reason: Option<String>,
 }
 
-/// Context retrieval is a read-only application capability.  Implementations
-/// may use canonical facts and rebuildable providers, but must never mutate
-/// those facts while satisfying the request.
+/// Context retrieval 是只读的 application capability。实现可以使用规范事实和可重建
+/// provider，但在满足请求时绝不能修改这些事实。
 pub trait ContextBuild: ApplicationStore {
     fn context_sources(
         &self,
@@ -224,9 +223,8 @@ fn merge_context_sources(
             .as_deref()
             .is_some_and(|board| board != sources.board_id)
         {
-            // Providers are untrusted projections from the point of view of
-            // board isolation.  A mismatched candidate is dropped silently;
-            // the provider status/diagnostic remains auditable.
+            // 从看板隔离角度看，provider 是不可信的 projection。看板不匹配的 candidate
+            // 会静默丢弃；provider 状态和诊断仍可审计。
             return;
         }
         let key = candidate.entity_uri.clone();
@@ -280,9 +278,8 @@ fn merge_context_sources(
         item.rank = index + 1;
     }
 
-    // A provider can signal degradation without requiring a hard failure.  A
-    // diagnostic is bounded at the adapter boundary; keep only stable codes
-    // here so clients can branch without parsing messages.
+    // provider 可以报告降级而不触发硬失败。诊断在 adapter 边界受限；此处只保留稳定
+    // code，让 client 可以分支处理而不必解析消息。
     for provider in &sources.providers {
         if provider.degraded {
             push_unique(&mut degraded, format!("{}_degraded", provider.provider));

@@ -4,7 +4,7 @@ use kanban_core::{Clock, KanbanError, Result};
 
 use crate::{ApplicationService, ApplicationStore, RunRecord};
 
-/// Persistence capability for the run history query.
+/// run history query 所需的持久化 capability。
 pub trait RunList: ApplicationStore {
     fn list_runs(&self, task_id: &str) -> impl Future<Output = Result<Vec<RunRecord>>> + Send;
 }

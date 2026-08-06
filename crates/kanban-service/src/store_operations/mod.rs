@@ -47,8 +47,7 @@ pub use steps::{
 };
 pub use tasks::{CreateTaskInput, UpdateTaskInput};
 
-// Names that intentionally remain distinct from application DTOs at the
-// service root.
+// 这些名称有意与 service root 上的 application DTO 保持区分。
 pub use entities::EntityListOptions as StoreEntityListOptions;
 pub use graph::{
     BoardTaskMapOptions as StoreBoardTaskMapOptions,

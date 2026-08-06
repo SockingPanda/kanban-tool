@@ -397,8 +397,8 @@ pub struct BoardTaskMapRecord {
     pub meta: TaskGraphMetaRecord,
 }
 
-// Compatibility facade for callers that historically imported all DTOs from
-// `kanban_service::dto`. Definitions now live next to their operation.
+// 兼容 facade：历史调用方会从 `kanban_service::dto` 导入全部 DTO。定义现在与
+// 对应 operation 放在一起。
 pub use crate::operations::{
     AddDependencyCommand, AddDependencyRecord, AddDependencyResult, ArchiveBoardCommand,
     ArchiveBoardRecord, ArchiveTaskCommand, ArchiveTaskRecord, BlockTaskCommand, BlockTaskRecord,

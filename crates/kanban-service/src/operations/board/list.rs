@@ -17,8 +17,8 @@ where
     C: Clock,
 {
     pub async fn health(&self) -> Result<ApplicationHealth> {
-        // A real store query proves that the initialized canonical database is
-        // still reachable without exposing a raw connection to the handler.
+        // 真实的 store query 可以证明已初始化的规范数据库仍可访问，同时不会向 handler
+        // 暴露原始连接。
         self.store.list_boards(true).await?;
         Ok(ApplicationHealth { ok: true })
     }

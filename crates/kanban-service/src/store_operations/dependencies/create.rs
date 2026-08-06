@@ -20,10 +20,8 @@ pub struct AddDependencyRecord {
     pub dependencies: DependencySnapshotRecord,
 }
 impl TursoStore {
-    /// Add one parent -> child dependency and return the post-mutation
-    /// snapshot. The edge, optional child recomputation and event are guarded
-    /// by one immediate transaction so a stale caller cannot observe a
-    /// partially-applied dependency.
+    /// 添加一条 parent -> child 依赖并返回 mutation 后的快照。边、可选的子任务重算和
+    /// 事件由同一个 immediate transaction 保护，避免过期调用方看到只应用了一半的依赖。
     pub async fn add_dependency(
         &self,
         child_task_id: &str,

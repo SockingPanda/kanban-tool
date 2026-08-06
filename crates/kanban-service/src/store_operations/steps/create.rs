@@ -24,10 +24,9 @@ pub struct CreateStepInput {
     pub target_status: String,
 }
 impl TursoStore {
-    /// Create one execution-plan step and apply the associated plan/status
-    /// changes in a single immediate transaction. The application service
-    /// supplies the expected parent facts; this method re-reads them and
-    /// refuses stale writes before touching any canonical row.
+    /// 创建一个 execution-plan step，并在同一个 immediate transaction 中应用关联的
+    /// plan/status 变更。application service 提供预期的父任务事实；此方法会重新读取它们，
+    /// 在接触任何规范行前拒绝过期写入。
     pub async fn create_step(
         &self,
         task_id: &str,

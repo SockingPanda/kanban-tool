@@ -17,9 +17,8 @@ pub struct RemoveDependencyRecord {
     pub dependencies: DependencySnapshotRecord,
 }
 impl TursoStore {
-    /// Remove one parent -> child dependency and return the post-mutation
-    /// snapshot. The edge delete and its event are guarded by one immediate
-    /// transaction; a missing edge is a successful no-op with no event.
+    /// 移除一条 parent -> child 依赖并返回 mutation 后的快照。边删除及其事件由同一个
+    /// immediate transaction 保护；边不存在时成功空操作且不产生事件。
     pub async fn remove_dependency(
         &self,
         child_task_id: &str,

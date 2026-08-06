@@ -1,8 +1,7 @@
-//! Shared application-service and canonical Turso boundary for every kanban-tool adapter.
+//! 所有 kanban-tool adapter 共享的 application service 与规范 Turso 边界。
 //!
-//! The HTTP host constructs one [`ApplicationService`] over the canonical
-//! store. CLI, MCP and Desktop never construct this service and never receive a
-//! storage handle; they reach it through the localhost API.
+//! HTTP host 在规范 store 之上构造一个 [`ApplicationService`]。CLI、MCP 和 Desktop
+//! 从不构造此 service，也不会接收 storage handle；它们通过 localhost API 访问。
 
 mod adapter;
 mod db;
@@ -26,8 +25,8 @@ pub mod vector;
 #[cfg(feature = "legacy-sqlite-import")]
 pub mod legacy_import;
 
-// Entity/relation/graph ports are re-exported below so every host adapter uses
-// the same canonical application boundary, including host-admin maintenance.
+// 下面重新导出 entity/relation/graph port，使每个 host adapter（包括 host-admin
+// maintenance）都使用同一个规范 application boundary。
 
 pub use adapter::TursoApplicationStore;
 pub use dto::*;
@@ -65,12 +64,12 @@ pub use operations::{
 pub use ports::ApplicationStore;
 pub use service::ApplicationService;
 
-/// Host-facing service store alias kept explicit so adapters do not depend on
-/// persistence row models or the old standalone store crate.
+/// 明确保留的 host-facing service store 别名，使 adapter 不依赖持久化 row model
+/// 或旧的独立 store crate。
 pub type ServiceStore = TursoApplicationStore;
 
-// Canonical persistence entry points.  Store row models stay private so the
-// service DTO boundary cannot accidentally expose a second application model.
+// 规范持久化入口。Store row model 保持私有，避免 service DTO 边界意外暴露第二套
+// application model。
 pub use db::{CapabilityRecord, TursoStore, UpgradeBackupHook, UpgradeBackupRequest};
 pub use error::StoreError;
 
@@ -80,8 +79,8 @@ pub use maintenance::{
     StoreMaintenanceRun, StoreMaintenanceStatus, StoreProjectionStatus, StoreVacuumReport,
 };
 
-// Inputs are explicit aliases at the service boundary.  Records and options
-// that collide with application DTOs remain internal to `store_operations`.
+// 输入在 service 边界显式使用别名。与 application DTO 重名的 record 和 option
+// 保持在 `store_operations` 内部。
 pub use store_operations::{
     AddDependencyInput, AddDependencyRecord as StoreAddDependencyRecord, AddTaskLabelsInput,
     AddTaskLabelsRecord as StoreAddTaskLabelsRecord, ArchiveBoardInput, ArchiveTaskInput,

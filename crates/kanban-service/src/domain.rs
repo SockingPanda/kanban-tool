@@ -274,9 +274,9 @@ pub struct TaskListPage {
     pub total: usize,
 }
 
-// Ontology records are intentionally kept as store-owned values.  JSON fields
-// remain opaque here; the application/contract adapters validate their shape
-// at the transport boundary while Turso enforces `json_valid` and board FKs.
+// Ontology 记录有意保持为 store 所有的值。这里不解释 JSON 字段；由
+// application/contract adapter 在传输边界校验其结构，同时由 Turso 强制执行
+// `json_valid` 和看板外键约束。
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelSemanticsRecord {
     pub label_id: String,
@@ -308,9 +308,8 @@ pub struct LabelAtomRecord {
     pub updated_at: i64,
 }
 
-/// Canonical knowledge-substrate entity.  This record is a fact row; graph
-/// projections must be rebuildable from it and must never become the owner of
-/// the task state.
+/// 规范知识基底实体。此记录是事实行；graph projection 必须能够由它重建，
+/// 且绝不能成为任务状态的所有者。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntityRecord {
     pub uri: String,
@@ -643,11 +642,10 @@ pub struct GraphStatusRecord {
     pub projection: ProjectionStateRecord,
 }
 
-/// Evidence returned by a host-admin graph maintenance operation.
+/// host-admin graph maintenance operation 返回的证据。
 ///
-/// The task/entity/relation tables remain canonical.  A maintenance call only
-/// rebuilds or validates the derived graph state and publishes the resulting
-/// generation/fingerprint in `projection_state`.
+/// task/entity/relation 表仍是规范事实。维护调用只重建或校验派生 graph 状态，
+/// 并在 `projection_state` 中发布实际生成的 generation/fingerprint。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GraphMaintenanceRecord {
     pub mode: String,

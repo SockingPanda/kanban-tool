@@ -5,9 +5,9 @@ use turso::Connection;
 pub(crate) use crate::domain::{TaskExecutionPlanRecord, TaskRecord};
 pub(crate) use crate::shared::{Value, first_row, integer_value, optional_text_value, text_value};
 pub(crate) use crate::store_operations::{
-    CompleteStepInput, CreateStepInput, CreateTaskInput, RemoveStepInput, ReopenStepInput,
-    SkipStepInput, StoreTaskListOptions as TaskListOptions, StoreTaskListSort as TaskListSort,
-    StoreTaskPlanFilter as TaskPlanFilter, UpdateStepInput, UpdateTaskInput,
+    CreateStepInput, CreateTaskInput, StoreTaskListOptions as TaskListOptions,
+    StoreTaskListSort as TaskListSort, StoreTaskPlanFilter as TaskPlanFilter, UpdateStepInput,
+    UpdateTaskInput,
 };
 pub(crate) use crate::{
     AddDependencyInput, ArchiveTaskInput, BlockTaskInput, ClaimTaskInput, CompleteTaskInput,

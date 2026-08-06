@@ -1,6 +1,6 @@
+use super::CreateStepInput;
 use crate::{
-    CreateStepInput, domain::TaskStepRecord, error::StoreError,
-    store_operations::shared::validate_task_id,
+    domain::TaskStepRecord, error::StoreError, store_operations::shared::validate_task_id,
 };
 
 pub(crate) fn validate_create_step_input(

@@ -1,4 +1,5 @@
-use crate::{UpdateStepInput, error::StoreError, store_operations::shared::validate_task_id};
+use super::UpdateStepInput;
+use crate::{error::StoreError, store_operations::shared::validate_task_id};
 
 pub(crate) fn validate_update_step_input(
     task_id: &str,

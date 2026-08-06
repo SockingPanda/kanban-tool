@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use crate::store_operations::{CompleteStepInput, ReopenStepInput, SkipStepInput};
     use crate::test_support::*;
-    use crate::{CompleteStepInput, ReopenStepInput, SkipStepInput};
 
     #[tokio::test]
     async fn resolve_step_lifecycle_persists_resolution_fields_and_events_atomically() {

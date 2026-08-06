@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::RemoveStepInput;
+    use crate::store_operations::RemoveStepInput;
     use crate::test_support::*;
 
     #[tokio::test]

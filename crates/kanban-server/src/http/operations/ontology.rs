@@ -8,7 +8,13 @@ use axum::{
     routing::{get, post},
 };
 use kanban_service::KanbanError;
+use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
+
+use kanban_protocol::{
+    DataEnvelope,
+    cli_labels::{CliLabelOntologyQuality, CliLabelOntologyQualityOutput},
+};
 
 use crate::{error::ApiError, state::AppState};
 
@@ -16,6 +22,42 @@ use crate::{error::ApiError, state::AppState};
 /// canonical record first and therefore do not pretend that they belong to
 /// the default board.
 const GLOBAL_RECORD_SCOPE: &str = "__global_record__";
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LabelOntologyQualityRecordTransport {
+    board_id: String,
+    denominator_json: String,
+    disagreement_json: String,
+    rates_json: String,
+    precision_recall_json: String,
+    warnings_json: String,
+}
+
+fn quality_component<T: DeserializeOwned>(field: &str, raw: &str) -> Result<T, ApiError> {
+    serde_json::from_str(raw).map_err(|error| {
+        ApiError(KanbanError::Storage(format!(
+            "label ontology quality {field} 无法解码：{error}"
+        )))
+    })
+}
+
+fn quality_output(value: Value) -> Result<CliLabelOntologyQualityOutput, ApiError> {
+    let raw: LabelOntologyQualityRecordTransport =
+        serde_json::from_value(value).map_err(|error| {
+            ApiError(KanbanError::Storage(format!(
+                "label ontology quality record 无法解码：{error}"
+            )))
+        })?;
+    Ok(DataEnvelope::new(CliLabelOntologyQuality {
+        board_id: raw.board_id,
+        denominator: quality_component("denominator_json", &raw.denominator_json)?,
+        disagreement: quality_component("disagreement_json", &raw.disagreement_json)?,
+        rates: quality_component("rates_json", &raw.rates_json)?,
+        precision_recall: quality_component("precision_recall_json", &raw.precision_recall_json)?,
+        warnings: quality_component("warnings_json", &raw.warnings_json)?,
+    }))
+}
 
 fn board_path(board: String) -> String {
     board
@@ -463,14 +505,17 @@ pub(crate) async fn review_signals(
             .get("sample_limit")
             .and_then(|value| value.parse::<usize>().ok())
             .unwrap_or(20);
-        let Json(value) = run(
-            State(state),
-            "quality",
-            &board,
-            json!({"sample_limit": sample_limit}),
-        )
-        .await?;
-        return Ok(Json(json!({"data": value})));
+        let value = state
+            .application()
+            .label_ontology("quality", &board, json!({"sample_limit": sample_limit}))
+            .await?;
+        let quality = quality_output(value)?;
+        let quality = serde_json::to_value(quality).map_err(|error| {
+            ApiError(KanbanError::Storage(format!(
+                "label ontology quality 无法编码：{error}"
+            )))
+        })?;
+        return Ok(Json(quality));
     }
     let group_by = query
         .get("group_by")
@@ -695,4 +740,40 @@ pub(super) fn router() -> Router<AppState> {
             "/api/v1/label-proposals/:proposal_id/reject",
             post(reject_proposal),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::http::operations::test_support::*;
+    use kanban_protocol::cli_labels::CliLabelOntologyQualityOutput;
+
+    #[tokio::test]
+    async fn quality_route_returns_typed_cli_contract() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let response = build_router(state)
+            .oneshot(
+                Request::builder()
+                    .uri(
+                        "/api/v1/boards/default/label-ontology/review?quality=true&sample_limit=10",
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(status, StatusCode::OK);
+        let quality: CliLabelOntologyQualityOutput = serde_json::from_slice(&body).unwrap();
+        assert_eq!(quality.data.board_id, "b_default");
+        assert_eq!(
+            quality.data.denominator.source,
+            "label_ontology_observations"
+        );
+        assert_eq!(quality.data.denominator.observation_count, 0);
+    }
 }

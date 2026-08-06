@@ -1973,6 +1973,11 @@ pub fn endpoint_catalog() -> &'static [EndpointDescriptor] {
                         ) {
                             catalog.push(board_proposals);
                         }
+                        if let Some(delete_board_label) =
+                            crate::labels_catalog::endpoint_descriptor("api.delete-board-label")
+                        {
+                            catalog.push(delete_board_label);
+                        }
                     }
                     continue;
                 }

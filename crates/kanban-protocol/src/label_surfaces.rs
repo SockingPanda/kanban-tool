@@ -151,6 +151,12 @@ wire!(
     }
 );
 wire!(
+    pub struct DeleteBoardLabelPath {
+        pub board: String,
+        pub label_id: String,
+    }
+);
+wire!(
     pub struct LabelSemanticsPath {
         pub board: String,
         pub label_id: String,
@@ -271,6 +277,13 @@ wire!(
     pub struct DeleteLabelSemanticsQuery {
         pub expected_semantics_hash: String,
         pub reason: String,
+    }
+);
+wire!(
+    pub struct DeleteBoardLabelQuery {
+        #[serde(default, skip_serializing_if = "is_false")]
+        #[cfg_attr(feature = "schema", schemars(extend("default" = false)))]
+        pub force: bool,
     }
 );
 wire!(
@@ -1206,6 +1219,16 @@ wire!(
 
 pub type ListBoardLabelsResponse = crate::DataEnvelope<Vec<crate::ApiLabel>>;
 pub type CreateBoardLabelResponse = crate::DataEnvelope<crate::ApiLabel>;
+wire!(
+    pub struct DeleteBoardLabelResult {
+        pub label: crate::ApiLabel,
+        pub forced: bool,
+        pub removed_task_bindings: i64,
+        pub removed_semantics: bool,
+        pub removed_atoms: i64,
+    }
+);
+pub type DeleteBoardLabelResponse = crate::DataEnvelope<DeleteBoardLabelResult>;
 pub type ListLabelSemanticsResponse = crate::DataEnvelope<Vec<LabelSemanticsWire>>;
 pub type GetLabelSemanticsResponse = crate::DataEnvelope<LabelSemanticsWire>;
 pub type UpsertLabelSemanticsResponse = crate::DataEnvelope<LabelSemanticsWire>;

@@ -16,6 +16,16 @@ const BOARD_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
     name: "board",
     cardinality: Some(WireParameterCardinality::RequiredOne),
 }];
+const DELETE_BOARD_LABEL_PATH_PARAMETERS: &[WireParameter] = &[
+    WireParameter {
+        name: "board",
+        cardinality: Some(WireParameterCardinality::RequiredOne),
+    },
+    WireParameter {
+        name: "label_id",
+        cardinality: Some(WireParameterCardinality::RequiredOne),
+    },
+];
 const BOARD_LABEL_PROPOSALS_QUERY_PARAMETERS: &[WireParameter] = &[WireParameter {
     name: "status",
     cardinality: Some(WireParameterCardinality::OptionalOne),
@@ -79,6 +89,11 @@ const LABEL_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
     exact_test: "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
+};
+const LABEL_DELETE_WITNESS: AdoptionLocator = AdoptionLocator {
+    package: "kanban-server",
+    test_target: "lib",
+    exact_test: "suite::labels_adoption::delete_board_label_response_fixture_is_produced_by_real_router",
 };
 const SIGNAL_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
@@ -556,6 +571,73 @@ const API_CREATE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         ),
         label_adoption!(
             "suite::labels_adoption::create_board_label_response_fixture_is_consumed_by_contract_root"
+        ),
+    ),
+];
+
+const API_DELETE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
+    path_contract!(
+        "api.delete-board-label.path",
+        "DELETE /api/v1/boards/:board/labels/:label_id",
+        "delete-board-label-path",
+        "Delete Board Label Path v1",
+        DELETE_BOARD_LABEL_PATH_PARAMETERS,
+        crate::DeleteBoardLabelPath,
+        LABEL_DELETE_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::delete_board_label_path_dto_serializes_to_committed_fixture"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::delete_board_label_path_fixture_is_consumed_by_real_router"
+        ),
+    ),
+    api_contract!(
+        "api.delete-board-label.query",
+        "DELETE /api/v1/boards/:board/labels/:label_id query",
+        "DELETE /api/v1/boards/:board/labels/:label_id",
+        ContractDirection::Deserialize,
+        HttpTransportLocation::Query,
+        &[WireParameter {
+            name: "force",
+            cardinality: Some(WireParameterCardinality::OptionalOne),
+        }],
+        "delete-board-label-query",
+        "Delete Board Label Query v1",
+        crate::DeleteBoardLabelQuery,
+        LABEL_DELETE_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::delete_board_label_query_dto_serializes_to_committed_fixture"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::delete_board_label_query_fixture_is_consumed_by_real_router"
+        ),
+    ),
+    header_contract!(
+        "delete-board-label",
+        "DELETE /api/v1/boards/:board/labels/:label_id",
+        ApiHeaderProfile::LocaleActor,
+        "locale-actor-headers",
+        crate::headers::LocaleActorHeaders
+    ),
+    response_contract!(
+        "api.delete-board-label.response",
+        "DELETE /api/v1/boards/:board/labels/:label_id",
+        "success",
+        "delete-board-label-response",
+        "Delete Board Label Response v1",
+        crate::DeleteBoardLabelResponse,
+        LABEL_DELETE_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::delete_board_label_response_fixture_is_produced_by_real_router"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::delete_board_label_response_fixture_is_consumed_by_contract_root"
         ),
     ),
 ];
@@ -1630,6 +1712,19 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
     .with_header_profile(ApiHeaderProfile::LocaleJson)
     .with_mcp_policy(policy!("label_create", ["api.create-board-label"])),
     OperationDeclaration::new(
+        "api.delete-board-label",
+        ContractSurface::Api,
+        Some(HttpMethod::Delete),
+        Some("/api/v1/boards/:board/labels/:label_id"),
+        "DELETE /api/v1/boards/:board/labels/:label_id",
+        "DELETE /api/v1/boards/:board/labels/:label_id",
+        MigrationState::Adopted,
+        API_DELETE_BOARD_LABEL_CONTRACTS,
+    )
+    .with_shared_components(&["api.error.response"])
+    .with_header_profile(ApiHeaderProfile::LocaleActor)
+    .with_mcp_policy(policy!("label_delete", ["api.delete-board-label"])),
+    OperationDeclaration::new(
         "api.list-label-semantics",
         ContractSurface::Api,
         Some(HttpMethod::Get),
@@ -2128,8 +2223,8 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), count);
-        assert_eq!(LABEL_OPERATIONS.len(), 37);
-        assert_eq!(contracts.len(), 136);
+        assert_eq!(LABEL_OPERATIONS.len(), 38);
+        assert_eq!(contracts.len(), 140);
         assert!(
             LABEL_OPERATIONS
                 .iter()

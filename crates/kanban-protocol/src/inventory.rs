@@ -4969,6 +4969,21 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
                     &labels,
                     "api.list-board-label-proposals.response",
                 );
+                append_labels_contract(
+                    &mut inventory,
+                    &labels,
+                    "api.delete-board-label.path",
+                );
+                append_labels_contract(
+                    &mut inventory,
+                    &labels,
+                    "api.delete-board-label.query",
+                );
+                append_labels_contract(
+                    &mut inventory,
+                    &labels,
+                    "api.delete-board-label.response",
+                );
             }
             continue;
         }
@@ -4984,6 +4999,9 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
             .find(|candidate| candidate.id == contract.id)
         {
             inventory.push(*cli_labels_contract);
+            if contract.id == "cli.label-create.output" {
+                append_cli_labels_contract(&mut inventory, &cli_labels, "cli.label-delete.output");
+            }
             continue;
         }
         if contract.id == "api.doctor.response" {
@@ -5068,6 +5086,20 @@ fn append_labels_contract(
             .find(|contract| contract.id == id)
             .copied()
             .unwrap_or_else(|| panic!("missing labels catalog contract: {id}")),
+    );
+}
+
+fn append_cli_labels_contract(
+    inventory: &mut Vec<OperationContract>,
+    cli_labels: &[OperationContract],
+    id: &str,
+) {
+    inventory.push(
+        cli_labels
+            .iter()
+            .find(|contract| contract.id == id)
+            .copied()
+            .unwrap_or_else(|| panic!("missing CLI labels catalog contract: {id}")),
     );
 }
 
@@ -5433,6 +5465,9 @@ fn canonical_api_witness(contract: &OperationContract, consumer: bool) -> Option
         || id == "api.add-task-label.response"
         || id == "api.remove-task-label.path"
         || id == "api.remove-task-label.response"
+        || id == "api.delete-board-label.path"
+        || id == "api.delete-board-label.query"
+        || id == "api.delete-board-label.response"
     {
         return None;
     }

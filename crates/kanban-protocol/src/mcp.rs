@@ -477,6 +477,7 @@ pub const MCP_OPERATION_CATALOG: &[McpOperationDescriptor] = &[
     domain_tool!("label_atom_index_status" => ["api.label-atom-index-status"]),
     domain_tool!("label_atoms_list" => ["api.list-label-atoms"]),
     domain_tool!("label_create" => ["api.create-board-label"]),
+    domain_tool!("label_delete" => ["api.delete-board-label"]),
     domain_tool!("label_list" => ["api.list-board-labels"]),
     domain_tool!("label_ontology_action" => ["api.create-label-ontology-action"]),
     domain_tool!("label_ontology_apply_atom" => ["api.apply-label-ontology-atom"]),
@@ -657,7 +658,7 @@ mod tests {
     #[test]
     fn catalog_is_valid_and_has_unique_sorted_tool_names() {
         validate_mcp_operation_catalog(MCP_OPERATION_CATALOG).unwrap();
-        assert_eq!(MCP_OPERATION_CATALOG.len(), 103);
+        assert_eq!(MCP_OPERATION_CATALOG.len(), 104);
         let names = MCP_OPERATION_CATALOG
             .iter()
             .map(|descriptor| descriptor.tool_name)

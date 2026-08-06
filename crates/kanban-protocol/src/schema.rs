@@ -3440,6 +3440,21 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
                     &labels,
                     "api.list-board-label-proposals.response",
                 );
+                append_labels_schema_root(
+                    &mut registry,
+                    &labels,
+                    "api.delete-board-label.path",
+                );
+                append_labels_schema_root(
+                    &mut registry,
+                    &labels,
+                    "api.delete-board-label.query",
+                );
+                append_labels_schema_root(
+                    &mut registry,
+                    &labels,
+                    "api.delete-board-label.response",
+                );
             }
             continue;
         }
@@ -3455,6 +3470,13 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
             .find(|candidate| candidate.contract_id == root.contract_id)
         {
             registry.push(*cli_labels_root);
+            if root.contract_id == "cli.label-create.output" {
+                append_cli_labels_schema_root(
+                    &mut registry,
+                    &cli_labels,
+                    "cli.label-delete.output",
+                );
+            }
             continue;
         }
         if root.contract_id == "api.health.response" {
@@ -3541,6 +3563,19 @@ fn append_labels_schema_root(
             .iter()
             .find(|root| root.contract_id == contract_id)
             .unwrap_or_else(|| panic!("missing labels schema root: {contract_id}")),
+    );
+}
+
+fn append_cli_labels_schema_root(
+    registry: &mut Vec<SchemaRoot>,
+    cli_labels: &[SchemaRoot],
+    contract_id: &str,
+) {
+    registry.push(
+        *cli_labels
+            .iter()
+            .find(|root| root.contract_id == contract_id)
+            .unwrap_or_else(|| panic!("missing CLI labels schema root: {contract_id}")),
     );
 }
 

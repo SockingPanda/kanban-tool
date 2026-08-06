@@ -32,5 +32,6 @@ tracing.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true
+rusqlite = { workspace = true, features = ["bundled"] }
 tempfile.workspace = true
 tower = { workspace = true, features = ["util"] }

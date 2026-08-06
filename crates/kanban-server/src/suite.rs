@@ -221,6 +221,8 @@ mod labels_adoption {
     }
 }
 
+mod portable_adoption;
+
 mod maintenance_adoption {
     use axum::{
         body::Body,

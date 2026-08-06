@@ -2837,6 +2837,7 @@ dependencies = [
  "http-body-util",
  "kanban-protocol",
  "kanban-service",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

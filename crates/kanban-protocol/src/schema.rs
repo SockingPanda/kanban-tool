@@ -29,10 +29,9 @@ pub fn schema_registry() -> &'static [SchemaRoot] {
     static REGISTRY: std::sync::OnceLock<Vec<SchemaRoot>> = std::sync::OnceLock::new();
     REGISTRY
         .get_or_init(|| {
-            let mut registry = crate::CatalogProjection::new(
-                crate::operation_catalog::operation_catalog(),
-            )
-            .schemas();
+            let mut registry =
+                crate::CatalogProjection::new(crate::operation_catalog::operation_catalog())
+                    .schemas();
             let source_ids = registry
                 .iter()
                 .map(|root| root.contract_id)
@@ -43,10 +42,7 @@ pub fn schema_registry() -> &'static [SchemaRoot] {
                 }
             }
             registry.extend(crate::admin_catalog::template_schema_roots());
-            reorder_schema_roots(
-                &mut registry,
-                crate::board_catalog::HISTORICAL_SCHEMA_ORDER,
-            );
+            reorder_schema_roots(&mut registry, crate::board_catalog::HISTORICAL_SCHEMA_ORDER);
             registry
         })
         .as_slice()

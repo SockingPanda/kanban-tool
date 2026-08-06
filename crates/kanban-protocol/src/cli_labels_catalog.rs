@@ -475,7 +475,7 @@ mod tests {
     #[test]
     fn cli_labels_source_preserves_contiguous_surface_order() {
         let operations = operation_declarations();
-        assert_eq!(operations.len(), 45);
+        assert_eq!(operations.len(), 46);
         assert_eq!(
             operations.first().map(|operation| operation.key),
             Some("label add")
@@ -484,10 +484,10 @@ mod tests {
             operations.last().map(|operation| operation.key),
             Some("signal supersede")
         );
-        assert_eq!(operations[36].operation_id, "cli.serve");
-        assert_eq!(operations[36].migration, MigrationState::Excluded);
+        assert_eq!(operations[37].operation_id, "cli.serve");
+        assert_eq!(operations[37].migration, MigrationState::Excluded);
         assert_eq!(
-            operations[36].exclusion,
+            operations[37].exclusion,
             Some("daemon lifecycle 不产生有限 JSON document；运行诊断固定写 stderr")
         );
     }
@@ -495,7 +495,7 @@ mod tests {
     #[test]
     fn cli_labels_source_has_unique_contracts_and_projects_legacy_rows_once() {
         let contracts = operation_contracts();
-        assert_eq!(contracts.len(), 44);
+        assert_eq!(contracts.len(), 45);
         let mut ids = contracts
             .iter()
             .map(|contract| contract.id)

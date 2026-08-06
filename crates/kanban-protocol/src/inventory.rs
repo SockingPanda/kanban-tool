@@ -128,13 +128,15 @@ pub fn operation_inventory() -> &'static [OperationContract] {
     static INVENTORY: std::sync::OnceLock<Vec<OperationContract>> = std::sync::OnceLock::new();
     INVENTORY
         .get_or_init(|| {
-            let mut inventory = crate::CatalogProjection::new(
-                crate::operation_catalog::operation_catalog(),
-            )
-            .contracts();
+            let mut inventory =
+                crate::CatalogProjection::new(crate::operation_catalog::operation_catalog())
+                    .contracts();
             inventory.extend(crate::metadata_config_catalog::shared_component_contracts());
             inventory.extend(crate::admin_catalog::template_contracts());
-            reorder_contracts(&mut inventory, crate::board_catalog::HISTORICAL_CONTRACT_ORDER);
+            reorder_contracts(
+                &mut inventory,
+                crate::board_catalog::HISTORICAL_CONTRACT_ORDER,
+            );
             inventory
         })
         .as_slice()

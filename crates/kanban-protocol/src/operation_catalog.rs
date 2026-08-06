@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn migrated_domain_source_is_exposed_without_legacy_duplication() {
-        assert_eq!(operation_catalog().len(), 274);
+        assert_eq!(operation_catalog().len(), 276);
         assert_eq!(
             operation_catalog()
                 .iter()

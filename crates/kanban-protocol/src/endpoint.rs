@@ -172,10 +172,9 @@ pub fn endpoint_catalog() -> &'static [EndpointDescriptor] {
     static CATALOG: std::sync::OnceLock<Vec<EndpointDescriptor>> = std::sync::OnceLock::new();
     CATALOG
         .get_or_init(|| {
-            let mut catalog = crate::CatalogProjection::new(
-                crate::operation_catalog::operation_catalog(),
-            )
-            .endpoints();
+            let mut catalog =
+                crate::CatalogProjection::new(crate::operation_catalog::operation_catalog())
+                    .endpoints();
             catalog.sort_by_key(|endpoint| {
                 CANONICAL_OPERATION_ORDER
                     .iter()

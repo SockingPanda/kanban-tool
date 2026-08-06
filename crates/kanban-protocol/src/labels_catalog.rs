@@ -2282,8 +2282,8 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), count);
-        assert_eq!(LABEL_OPERATIONS.len(), 38);
-        assert_eq!(contracts.len(), 140);
+        assert_eq!(LABEL_OPERATIONS.len(), 39);
+        assert_eq!(contracts.len(), 144);
         assert!(
             LABEL_OPERATIONS
                 .iter()

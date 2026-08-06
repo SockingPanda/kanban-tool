@@ -12,15 +12,17 @@ pub struct SurfaceOperation {
 }
 
 fn non_transport_operations() -> Vec<SurfaceOperation> {
-    let mut operations = crate::CatalogProjection::new(
-        crate::operation_catalog::operation_catalog(),
-    )
-    .surfaces()
-    .into_iter()
-    .filter(|operation| {
-        !matches!(operation.surface, ContractSurface::Api | ContractSurface::Sse)
-    })
-    .collect::<Vec<_>>();
+    let mut operations =
+        crate::CatalogProjection::new(crate::operation_catalog::operation_catalog())
+            .surfaces()
+            .into_iter()
+            .filter(|operation| {
+                !matches!(
+                    operation.surface,
+                    ContractSurface::Api | ContractSurface::Sse
+                )
+            })
+            .collect::<Vec<_>>();
     operations.push(SurfaceOperation {
         key: "POST /api/v1/maintenance/{operation}".to_owned(),
         surface: ContractSurface::Api,

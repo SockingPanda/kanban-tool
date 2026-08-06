@@ -300,7 +300,7 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
         .filter(|endpoint| endpoint.operation_id != "sse.stream-events")
         .collect::<Vec<_>>();
     // 当前 catalog 同时包含完整领域、维护、graph 与 vector 的 JSON endpoint。
-    assert_eq!(endpoints.len(), 115);
+    assert_eq!(endpoints.len(), 117);
 
     for endpoint in endpoints {
         let EndpointObligation::Contract(expected_id) = endpoint.obligations.headers else {
@@ -363,6 +363,7 @@ fn b7_header_profiles_fail_closed_over_actor_and_body_cardinality() {
         "api.archive-board",
         "api.archive-task",
         "api.block-task",
+        "api.bootstrap-task-label",
         "api.claim-task",
         "api.complete-step",
         "api.complete-task",
@@ -372,6 +373,7 @@ fn b7_header_profiles_fail_closed_over_actor_and_body_cardinality() {
         "api.create-step",
         "api.create-task",
         "api.delete-attachment",
+        "api.delete-board-label",
         "api.delete-label-semantics",
         "api.heartbeat-task",
         "api.mark-execution-plan-not-required",
@@ -684,7 +686,7 @@ fn foundation_registry_contains_generated_roots() {
         .filter(|id| id.contains(":api:") && id.ends_with("-headers:v1"))
         .copied()
         .collect::<BTreeSet<_>>();
-    assert_eq!(header_roots.len(), 115);
+    assert_eq!(header_roots.len(), 117);
     actual.retain(|id| !header_roots.contains(id));
     let mut expected = BTreeSet::from([
         "urn:kanban-tool:schema:api:accept-label-proposal-body:v1",
@@ -708,6 +710,9 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:block-task-path:v1",
         "urn:kanban-tool:schema:api:block-task-request:v1",
         "urn:kanban-tool:schema:api:block-task-response:v1",
+        "urn:kanban-tool:schema:api:bootstrap-task-label-path:v1",
+        "urn:kanban-tool:schema:api:bootstrap-task-label-request:v1",
+        "urn:kanban-tool:schema:api:bootstrap-task-label-response:v1",
         "urn:kanban-tool:schema:api:board-task-map-path:v1",
         "urn:kanban-tool:schema:api:board-task-map-query:v1",
         "urn:kanban-tool:schema:api:board-task-map-response:v1",
@@ -758,6 +763,9 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:create-task-path:v1",
         "urn:kanban-tool:schema:api:delete-attachment-path:v1",
         "urn:kanban-tool:schema:api:delete-attachment-response:v1",
+        "urn:kanban-tool:schema:api:delete-board-label-path:v1",
+        "urn:kanban-tool:schema:api:delete-board-label-query:v1",
+        "urn:kanban-tool:schema:api:delete-board-label-response:v1",
         "urn:kanban-tool:schema:api:download-attachment-path:v1",
         "urn:kanban-tool:schema:api:download-attachment-response:v1",
         "urn:kanban-tool:schema:api:create-task-request:v1",
@@ -1072,8 +1080,8 @@ fn endpoint_descriptor_catalog_is_complete_and_explicit() {
     let endpoints = endpoint_catalog();
     assert_eq!(
         endpoints.len(),
-        116,
-        "115 JSON API + 1 SSE 必须全部有 descriptor"
+        118,
+        "117 JSON API + 1 SSE 必须全部有 descriptor"
     );
     assert_eq!(
         endpoints
@@ -1833,7 +1841,7 @@ fn current_train_freeze_requires_closed_authority() {
             EndpointObligation::Excluded { .. } => excluded += 1,
         }
     }
-    assert_eq!((contract, todo, not_applicable, excluded), (397, 0, 298, 1));
+    assert_eq!((contract, todo, not_applicable, excluded), (405, 0, 302, 1));
     let unfinished_contracts = operation_inventory()
         .iter()
         .filter(|contract| {

@@ -59,7 +59,6 @@ pub use search::{
 };
 pub use signal::*;
 pub use stats::*;
-pub use step::{StepComplete, StepCreate, StepList, StepRemove, StepReopen, StepSkip, StepUpdate};
 pub(crate) use task::application_task;
 pub use task::{
     TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskOntologySignalSummaryRecord,
@@ -75,9 +74,8 @@ pub use dependency::{
     RemoveDependencyResult,
 };
 pub use step::{
-    CompleteStepCommand, CompleteStepRecord, CreateStepCommand, CreateStepRecord,
-    RemoveStepCommand, RemoveStepRecord, ReopenStepCommand, ReopenStepRecord, SkipStepCommand,
-    SkipStepRecord, UpdateStepCommand, UpdateStepRecord,
+    CompleteStepCommand, CreateStepCommand, RemoveStepCommand, ReopenStepCommand, SkipStepCommand,
+    UpdateStepCommand,
 };
 pub use task::{
     ArchiveTaskCommand, BlockTaskCommand, ClaimTaskCommand, CompleteTaskCommand, CreateTaskCommand,

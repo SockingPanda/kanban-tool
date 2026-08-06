@@ -56,12 +56,11 @@ pub use operations::{
     RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationQuery,
     RelationUpsertCommand, RemoveTaskLabelCommand, RemoveTaskLabelRecord, ReopenTaskCommand,
     RunLogRecord, SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults,
-    SearchTasks, SpecifyTaskCommand, StepComplete, StepCreate, StepList, StepRemove, StepReopen,
-    StepSkip, StepUpdate, TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskLabelAdd,
-    TaskLabelList, TaskLabelRemove, TaskNeighborhoodOptions, TaskOntologySignalSummaryRecord,
-    TaskOntologySummaryRecord, UnblockTaskCommand, UpdateTaskCommand, VacuumReportRecord,
-    VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,
-    VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
+    SearchTasks, SpecifyTaskCommand, TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord,
+    TaskLabelAdd, TaskLabelList, TaskLabelRemove, TaskNeighborhoodOptions,
+    TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord, UnblockTaskCommand,
+    UpdateTaskCommand, VacuumReportRecord, VectorChunkQueryCommand, VectorChunkResult,
+    VectorConfigureCommand, VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
 };
 pub use ports::ApplicationStore;
 pub use service::{ApplicationService, KanbanService};
@@ -86,18 +85,17 @@ pub use maintenance::{
 pub use store_operations::{
     AddDependencyInput, AddDependencyRecord as StoreAddDependencyRecord, AddTaskLabelsInput,
     AddTaskLabelsRecord as StoreAddTaskLabelsRecord, ArchiveBoardInput, ArchiveTaskInput,
-    BlockTaskInput, ClaimTaskInput, ClaimTaskRecord as StoreClaimTaskRecord, CompleteStepInput,
-    CompleteTaskInput, CreateAttachmentInput, CreateBoardInput, CreateCommentInput,
-    CreateLabelInput, CreateSignalInput, CreateStepInput, EntityUpsertInput, HeartbeatTaskInput,
-    LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
-    MarkExecutionPlanNotRequiredInput, OntologyActionInput, OntologyActorInput,
-    OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
-    PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput, RelationDeleteInput,
-    RelationPredicateInput, RelationUpsertInput, ReleaseTaskInput, RemoveDependencyInput,
-    RemoveDependencyRecord as StoreRemoveDependencyRecord, RemoveStepInput, RemoveTaskLabelInput,
-    ReopenStepInput, ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SkipStepInput,
+    BlockTaskInput, ClaimTaskInput, ClaimTaskRecord as StoreClaimTaskRecord, CompleteTaskInput,
+    CreateAttachmentInput, CreateBoardInput, CreateCommentInput, CreateLabelInput,
+    CreateSignalInput, EntityUpsertInput, HeartbeatTaskInput, LabelProposalDecisionInput,
+    LabelProposalInput, LabelSuggestionOptions, MarkExecutionPlanNotRequiredInput,
+    OntologyActionInput, OntologyActorInput, OntologyApplyAtomInput, OntologyObservationInput,
+    OntologyRevertInput, OntologyValidateInput, PromoteTaskInput, ReclaimExpiredTaskInput,
+    ReclaimTaskInput, RelationDeleteInput, RelationPredicateInput, RelationUpsertInput,
+    ReleaseTaskInput, RemoveDependencyInput, RemoveDependencyRecord as StoreRemoveDependencyRecord,
+    RemoveTaskLabelInput, ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput,
     SpecifyTaskInput, StoreSignalListOptions, SubmitReviewTaskInput, UnblockTaskInput,
-    UpdateStepInput, UpsertLabelSemanticsInput,
+    UpsertLabelSemanticsInput,
 };
 
 pub use store_operations::search::{

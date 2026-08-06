@@ -354,7 +354,7 @@ pub(crate) fn application_signal_result(
     })
 }
 
-fn application_step(step: crate::domain::TaskStepRecord) -> Result<ApplicationStep> {
+pub(crate) fn application_step(step: crate::domain::TaskStepRecord) -> Result<ApplicationStep> {
     Ok(ApplicationStep {
         id: step.id,
         parent_task_id: step.parent_task_id,

@@ -1,16 +1,9 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result};
 
-use crate::{ApplicationService, ApplicationStore, TaskStepsRecord};
+use crate::{KanbanService, TaskStepsRecord};
 
-pub trait StepList: ApplicationStore {
-    fn list_steps(&self, task_id: &str) -> impl Future<Output = Result<TaskStepsRecord>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: StepList,
     C: Clock,
 {
     pub async fn list_steps(&self, task_id: &str) -> Result<TaskStepsRecord> {
@@ -20,22 +13,13 @@ where
                 "task_id must be a global t_... id".to_owned(),
             ));
         }
-        self.store.list_steps(task_id).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use kanban_core::{KanbanError, Result};
-
-    use crate::operations::test_support::StubStore;
-    use crate::*;
-
-    impl StepList for StubStore {
-        async fn list_steps(&self, _task_id: &str) -> Result<TaskStepsRecord> {
-            Err(KanbanError::FeatureNotAvailable(
-                "step stub is not configured".to_owned(),
-            ))
-        }
+        let steps = self
+            .application
+            .store
+            .store
+            .list_steps(task_id)
+            .await
+            .map_err(crate::adapter::store_error)?;
+        super::application_steps(steps)
     }
 }

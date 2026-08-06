@@ -1,5 +1,6 @@
 //! 面向 label semantics 与 ontology surface 的 typed localhost 客户端。
 
+use kanban_protocol::{ListBoardLabelProposalsResponse, ListTaskLabelProposalsResponse};
 use serde_json::{Value, json};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
@@ -152,15 +153,46 @@ impl KanbanClient {
         task_id: Option<&str>,
         status: Option<&str>,
     ) -> Result<Value, ClientError> {
-        let task_id = task_id.unwrap_or("_");
-        let mut path = format!(
-            "/api/v1/tasks/{}/label-proposals?board={}",
-            encode_path_segment(task_id),
-            query_value(board)
-        );
-        if let Some(status) = status {
-            path.push_str(&format!("&status={}", query_value(status)));
+        if let Some(task_id) = task_id {
+            let response = self.list_task_label_proposals(board, task_id, status)?;
+            serde_json::to_value(response)
+                .map_err(|error| ClientError::InvalidResponse(error.to_string()))
+        } else {
+            let response = self.list_board_label_proposals(board, status)?;
+            serde_json::to_value(response)
+                .map_err(|error| ClientError::InvalidResponse(error.to_string()))
         }
+    }
+
+    pub fn list_task_label_proposals(
+        &self,
+        board: &str,
+        task_id: &str,
+        status: Option<&str>,
+    ) -> Result<ListTaskLabelProposalsResponse, ClientError> {
+        let path = proposals_path(
+            &format!(
+                "/api/v1/tasks/{}/label-proposals?board={}",
+                encode_path_segment(task_id),
+                query_value(board)
+            ),
+            status,
+        );
+        self.get(&path)
+    }
+
+    pub fn list_board_label_proposals(
+        &self,
+        board: &str,
+        status: Option<&str>,
+    ) -> Result<ListBoardLabelProposalsResponse, ClientError> {
+        let path = proposals_path(
+            &format!(
+                "/api/v1/boards/{}/label-proposals",
+                encode_path_segment(board)
+            ),
+            status,
+        );
         self.get(&path)
     }
 
@@ -346,5 +378,42 @@ impl KanbanClient {
 
     fn put_json(&self, path: &str, body: &Value) -> Result<Value, ClientError> {
         self.put(path, body)
+    }
+}
+
+fn proposals_path(base: &str, status: Option<&str>) -> String {
+    status.map_or_else(
+        || base.to_owned(),
+        |status| {
+            let separator = if base.contains('?') { '&' } else { '?' };
+            format!("{base}{separator}status={}", query_value(status))
+        },
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::proposals_path;
+
+    #[test]
+    fn proposal_list_paths_keep_task_and_board_scopes_distinct() {
+        assert_eq!(
+            proposals_path(
+                "/api/v1/tasks/t_task/label-proposals?board=team%2Fone",
+                Some("proposed"),
+            ),
+            "/api/v1/tasks/t_task/label-proposals?board=team%2Fone&status=proposed"
+        );
+        assert_eq!(
+            proposals_path(
+                "/api/v1/boards/team%2Fone/label-proposals",
+                Some("accepted"),
+            ),
+            "/api/v1/boards/team%2Fone/label-proposals?status=accepted"
+        );
+        assert_eq!(
+            proposals_path("/api/v1/boards/team%2Fone/label-proposals", None),
+            "/api/v1/boards/team%2Fone/label-proposals"
+        );
     }
 }

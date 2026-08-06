@@ -12,7 +12,8 @@ use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
 use kanban_protocol::{
-    DataEnvelope,
+    DataEnvelope, ListBoardLabelProposalsPath, ListBoardLabelProposalsQuery,
+    ListBoardLabelProposalsResponse,
     cli_labels::{CliLabelOntologyQuality, CliLabelOntologyQualityOutput},
 };
 
@@ -442,6 +443,27 @@ pub(crate) async fn list_proposals_for_task(
     Ok(Json(json!({"data": value})))
 }
 
+pub(crate) async fn list_proposals_for_board(
+    State(state): State<AppState>,
+    Path(ListBoardLabelProposalsPath { board }): Path<ListBoardLabelProposalsPath>,
+    query: Result<Query<ListBoardLabelProposalsQuery>, axum::extract::rejection::QueryRejection>,
+) -> Result<Json<ListBoardLabelProposalsResponse>, ApiError> {
+    let Query(query) =
+        query.map_err(|error| KanbanError::InvalidInput(format!("查询参数无效：{error}")))?;
+    let mut input = serde_json::Map::new();
+    if let Some(status) = query.status {
+        let status = serde_json::to_value(status).map_err(|error| {
+            KanbanError::InvalidInput(format!("label proposal status 无法编码：{error}"))
+        })?;
+        input.insert("status".to_owned(), status);
+    }
+    let Json(value) = run(State(state), "list_proposals", &board, Value::Object(input)).await?;
+    let proposals = serde_json::from_value(value).map_err(|error| {
+        KanbanError::Storage(format!("label proposals response 无法解码：{error}"))
+    })?;
+    Ok(Json(DataEnvelope::new(proposals)))
+}
+
 pub(crate) async fn propose_for_task(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
@@ -743,6 +765,13 @@ pub(super) fn router() -> Router<AppState> {
         )
         .route(
             crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/label-proposals",
+            ),
+            get(list_proposals_for_board),
+        )
+        .route(
+            crate::http::operations::registered_path(
                 kanban_protocol::HttpMethod::Post,
                 "/api/v1/tasks/:task_id/label-ontology/observations",
             ),
@@ -824,7 +853,30 @@ pub(super) fn router() -> Router<AppState> {
 mod tests {
     use super::*;
     use crate::http::operations::test_support::*;
-    use kanban_protocol::cli_labels::CliLabelOntologyQualityOutput;
+    use kanban_protocol::{
+        ListBoardLabelProposalsResponse, cli_labels::CliLabelOntologyQualityOutput,
+    };
+
+    #[tokio::test]
+    async fn board_proposal_list_uses_the_board_scoped_service_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let response = build_router(state)
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/boards/default/label-proposals?status=proposed")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let proposals: ListBoardLabelProposalsResponse = serde_json::from_slice(&body).unwrap();
+        assert!(proposals.data.is_empty());
+    }
 
     #[tokio::test]
     async fn quality_route_returns_typed_cli_contract() {

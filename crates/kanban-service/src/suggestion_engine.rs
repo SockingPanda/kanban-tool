@@ -73,7 +73,7 @@ pub(crate) struct SelectedLabel {
 pub(crate) struct SolverConfig {
     pub max_candidates: usize,
     pub max_selected_labels: usize,
-    /// 每轮 residual 检索时保留的 polarity-specific top hits。
+    /// 每轮 residual 检索时按 polarity 分组保留的 top hits。
     pub retrieval_limit: usize,
     pub min_candidate_score: f32,
     pub min_evidence_score: f32,

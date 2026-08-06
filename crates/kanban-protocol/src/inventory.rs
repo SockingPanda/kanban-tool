@@ -4861,6 +4861,7 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             inventory.extend(crate::headers::header_operation_contracts());
             inventory.extend(attachment_api_contracts());
             converge_history_catalog_contracts(&mut inventory);
+            converge_labels_catalog_contracts(&mut inventory);
             inventory.extend(attachment_cli_contracts());
             inventory.extend(maintenance_operation_contracts());
             converge_adoption_witnesses(&mut inventory);
@@ -4878,11 +4879,21 @@ fn converge_history_catalog_contracts(inventory: &mut [OperationContract]) {
     }
 }
 
+fn converge_labels_catalog_contracts(inventory: &mut [OperationContract]) {
+    let labels = crate::labels_catalog::operation_contracts();
+    for contract in inventory {
+        if let Some(source) = labels.iter().find(|candidate| candidate.id == contract.id) {
+            *contract = *source;
+        }
+    }
+}
+
 fn hybrid_static_inventory() -> Vec<OperationContract> {
     let board = crate::board_catalog::operation_contracts();
     let dependency = crate::dependency_catalog::operation_contracts();
     let step = crate::step_catalog::operation_contracts();
     let task = crate::task_catalog::operation_contracts();
+    let labels = crate::labels_catalog::operation_contracts();
     let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 55);
 
     for contract in OPERATION_INVENTORY {
@@ -4904,6 +4915,10 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
         }
         if let Some(task_contract) = task.iter().find(|candidate| candidate.id == contract.id) {
             inventory.push(*task_contract);
+            continue;
+        }
+        if let Some(labels_contract) = labels.iter().find(|candidate| candidate.id == contract.id) {
+            inventory.push(*labels_contract);
             continue;
         }
         match contract.id {

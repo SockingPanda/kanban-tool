@@ -33,15 +33,7 @@ const LOCALE_ACTOR_JSON_PARAMETERS: &[WireParameter] =
 const LOCALE_ACTOR_OPTIONAL_JSON_PARAMETERS: &[WireParameter] =
     &[ACCEPT_LANGUAGE, ACTOR, OPTIONAL_CONTENT_TYPE];
 
-const ACTOR_OPERATIONS: &[&str] = &[
-    "api.accept-label-proposal",
-    "api.add-task-label",
-    "api.delete-label-semantics",
-    "api.propose-task-label",
-    "api.remove-task-label",
-    "api.reject-label-proposal",
-    "api.upsert-label-semantics",
-];
+const ACTOR_OPERATIONS: &[&str] = &[];
 
 const OPTIONAL_JSON_BODY_OPERATIONS: &[&str] = &[
     "api.accept-label-proposal",
@@ -102,6 +94,7 @@ pub fn api_header_contract_specs() -> Vec<ApiHeaderContractSpec> {
                         })
                         .or_else(|| crate::step_catalog::header_profile(endpoint.operation_id))
                         .or_else(|| crate::task_catalog::header_profile(endpoint.operation_id))
+                        .or_else(|| crate::labels_catalog::header_profile(endpoint.operation_id))
                         .unwrap_or_else(|| header_profile(endpoint)),
                 })
             }
@@ -130,6 +123,9 @@ pub(crate) fn header_operation_contracts() -> Vec<OperationContract> {
                 return contract;
             }
             if let Some(contract) = crate::task_catalog::header_contract(spec.endpoint.operation_id) {
+                return contract;
+            }
+            if let Some(contract) = crate::labels_catalog::header_contract(spec.endpoint.operation_id) {
                 return contract;
             }
             let operation = leak(format!(

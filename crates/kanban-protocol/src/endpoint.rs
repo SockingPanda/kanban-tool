@@ -1947,6 +1947,12 @@ pub fn endpoint_catalog() -> &'static [EndpointDescriptor] {
                     catalog.push(task);
                     continue;
                 }
+                if let Some(labels) =
+                    crate::labels_catalog::endpoint_descriptor(endpoint.operation_id)
+                {
+                    catalog.push(labels);
+                    continue;
+                }
                 catalog.push(*endpoint);
                 if endpoint.operation_id == "api.health" {
                     catalog.extend(board.iter().copied());

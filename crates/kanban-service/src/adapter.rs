@@ -18,6 +18,7 @@ use crate::{
         DependencySnapshotRecord as StoreDependencySnapshot,
         TaskExecutionPlanRecord as StoreExecutionPlan,
     },
+    operations::application_task,
 };
 use kanban_core::{KanbanError, Result};
 

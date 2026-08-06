@@ -198,6 +198,7 @@ fn store_task_sort(sort: TaskListSort) -> crate::store_operations::StoreTaskList
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use kanban_core::{KanbanError, TaskStatus};
 
     #[test]

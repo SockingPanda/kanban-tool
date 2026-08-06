@@ -1,5 +1,5 @@
+use super::CreateTaskInput;
 use crate::{
-    CreateTaskInput,
     domain::TaskRecord,
     error::StoreError,
     shared::{first_row, text_value},

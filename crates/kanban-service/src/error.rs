@@ -30,7 +30,6 @@ pub(crate) enum StoreError {
     SignalNotFound(String),
     EntityNotFound(String),
     PredicateNotFound(String),
-    RelationNotFound(String),
     EntityConflict(String),
     RelationConflict(String),
     DependencyCycle(String),
@@ -48,6 +47,7 @@ pub(crate) enum StoreError {
     },
     SchemaMismatch(String),
     BackupRequired(String),
+    #[cfg(feature = "legacy-sqlite-import")]
     LegacyImport(String),
     MaintenanceBusy(String),
 }
@@ -88,7 +88,6 @@ impl Display for StoreError {
             Self::PredicateNotFound(name) => {
                 write!(formatter, "关系谓词不存在：{name}")
             }
-            Self::RelationNotFound(id) => write!(formatter, "关系不存在：{id}"),
             Self::EntityConflict(message) => write!(formatter, "实体冲突：{message}"),
             Self::RelationConflict(message) => write!(formatter, "关系冲突：{message}"),
             Self::DependencyCycle(message) => write!(formatter, "依赖环：{message}"),
@@ -112,6 +111,7 @@ impl Display for StoreError {
             ),
             Self::SchemaMismatch(message) => write!(formatter, "schema 不匹配: {message}"),
             Self::BackupRequired(message) => write!(formatter, "需要备份: {message}"),
+            #[cfg(feature = "legacy-sqlite-import")]
             Self::LegacyImport(message) => write!(formatter, "旧 SQLite 导入失败: {message}"),
             Self::MaintenanceBusy(message) => write!(formatter, "维护租约忙: {message}"),
         }
@@ -150,7 +150,6 @@ pub(crate) fn store_error(error: StoreError) -> KanbanError {
         StoreError::PredicateNotFound(name) => {
             KanbanError::NotFound(format!("relation predicate {name}"))
         }
-        StoreError::RelationNotFound(id) => KanbanError::NotFound(format!("relation {id}")),
         StoreError::EntityConflict(message) | StoreError::RelationConflict(message) => {
             KanbanError::Conflict(message)
         }
@@ -187,6 +186,7 @@ pub(crate) fn store_error(error: StoreError) -> KanbanError {
         )),
         StoreError::MaintenanceBusy(message) => KanbanError::Conflict(message),
         StoreError::BackupRequired(message) => KanbanError::Conflict(message),
+        #[cfg(feature = "legacy-sqlite-import")]
         StoreError::LegacyImport(message) => {
             KanbanError::Storage(format!("legacy sqlite import failed: {message}"))
         }

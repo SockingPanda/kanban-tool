@@ -451,6 +451,49 @@ async fn label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal(
     assert_eq!(shown.data.id, proposal.id);
     assert_eq!(shown.data.name, expected_shown.data.name);
 
+    let mut reject_request = request.clone();
+    reject_request
+        .proposal
+        .as_mut()
+        .expect("reject proposal")
+        .name = "reject fixture".to_owned();
+    let response = router
+        .clone()
+        .oneshot(request_json(
+            Method::POST,
+            &format!("/api/v1/tasks/{}/label-proposals", task_path.task_id),
+            &reject_request,
+        ))
+        .await
+        .expect("reject proposal create response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let reject_created: ProposeTaskLabelResponse = response_json(response).await;
+    let reject_proposal = reject_created.data.proposal.expect("reject proposal");
+    let mut reject_path: ProposalPath =
+        fixture!(ProposalPath, "reject-label-proposal-path.v1.valid.json");
+    reject_path.proposal_id = reject_proposal.id.clone();
+    let reject_body: LabelProposalDecisionRequest = fixture!(
+        LabelProposalDecisionRequest,
+        "reject-label-proposal-body.v1.valid.json"
+    );
+    let response = router
+        .clone()
+        .oneshot(request_json(
+            Method::POST,
+            &format!("/api/v1/label-proposals/{}/reject", reject_path.proposal_id),
+            &reject_body,
+        ))
+        .await
+        .expect("proposal reject response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let rejected: kanban_protocol::LabelProposalDecisionResponse = response_json(response).await;
+    let expected_rejected: kanban_protocol::LabelProposalDecisionResponse = fixture!(
+        kanban_protocol::LabelProposalDecisionResponse,
+        "reject-label-proposal-response.v1.valid.json"
+    );
+    assert_eq!(rejected.data.id, reject_proposal.id);
+    assert_eq!(rejected.data.status, expected_rejected.data.status);
+
     let decision: LabelProposalDecisionRequest = fixture!(
         LabelProposalDecisionRequest,
         "accept-label-proposal-body.v1.valid.json"

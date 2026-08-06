@@ -1687,119 +1687,116 @@ fn b1_c1_task_read_contracts_are_endpoint_specific_and_exact() {
         ("sort", OPTIONAL),
     ];
 
-    for (operation_id, path_contract_id, query_contract_id, response_contract_id, operation_key) in
-        [(
-            "api.list-tasks",
-            "api.list-tasks.path",
-            "api.list-tasks.query",
-            "api.list-tasks.response",
-            "GET /api/v1/boards/:board/tasks",
-        )]
-    {
-        let endpoint = endpoint_descriptor(operation_id).expect("task-read endpoint descriptor");
-        assert_eq!(endpoint.migration, MigrationState::Adopted);
-        assert_eq!(
-            endpoint.obligations.path,
-            EndpointObligation::Contract(path_contract_id)
-        );
-        assert_eq!(
-            endpoint.obligations.query,
-            EndpointObligation::Contract(query_contract_id)
-        );
-        assert_eq!(
-            endpoint.obligations.headers,
-            EndpointObligation::Contract(Box::leak(
-                format!("{operation_id}.headers").into_boxed_str()
-            ))
-        );
-        assert_eq!(endpoint.obligations.body, EndpointObligation::NotApplicable);
-        assert_eq!(
-            endpoint.obligations.success,
-            EndpointObligation::Contract(response_contract_id)
-        );
+    let (operation_id, path_contract_id, query_contract_id, response_contract_id, operation_key) = (
+        "api.list-tasks",
+        "api.list-tasks.path",
+        "api.list-tasks.query",
+        "api.list-tasks.response",
+        "GET /api/v1/boards/:board/tasks",
+    );
+    let endpoint = endpoint_descriptor(operation_id).expect("缺少 task-read endpoint descriptor");
+    assert_eq!(endpoint.migration, MigrationState::Adopted);
+    assert_eq!(
+        endpoint.obligations.path,
+        EndpointObligation::Contract(path_contract_id)
+    );
+    assert_eq!(
+        endpoint.obligations.query,
+        EndpointObligation::Contract(query_contract_id)
+    );
+    assert_eq!(
+        endpoint.obligations.headers,
+        EndpointObligation::Contract(Box::leak(
+            format!("{operation_id}.headers").into_boxed_str()
+        ))
+    );
+    assert_eq!(endpoint.obligations.body, EndpointObligation::NotApplicable);
+    assert_eq!(
+        endpoint.obligations.success,
+        EndpointObligation::Contract(response_contract_id)
+    );
 
-        let path_contract = operation_inventory()
-            .iter()
-            .find(|contract| contract.id == path_contract_id)
-            .expect("endpoint-specific path contract");
-        assert_eq!(path_contract.migration, MigrationState::Adopted);
-        assert_eq!(path_contract.granularity, ContractGranularity::Exact);
-        assert_eq!(path_contract.binding, ContractBinding::ExactSurface);
-        let ContractTransport::Http {
-            operation_key: actual_operation,
-            location,
-            parameters,
-        } = path_contract.transport
-        else {
-            panic!("task-read path contract must declare HTTP transport");
-        };
-        assert_eq!(actual_operation, Some(operation_key));
-        assert_eq!(location, HttpTransportLocation::Path);
-        assert_eq!(
-            parameters,
-            &[WireParameter {
-                name: "board",
-                cardinality: Some(WireParameterCardinality::RequiredOne),
-            }]
-        );
+    let path_contract = operation_inventory()
+        .iter()
+        .find(|contract| contract.id == path_contract_id)
+        .expect("缺少 endpoint-specific path contract");
+    assert_eq!(path_contract.migration, MigrationState::Adopted);
+    assert_eq!(path_contract.granularity, ContractGranularity::Exact);
+    assert_eq!(path_contract.binding, ContractBinding::ExactSurface);
+    let ContractTransport::Http {
+        operation_key: actual_operation,
+        location,
+        parameters,
+    } = path_contract.transport
+    else {
+        panic!("task-read path contract 必须声明 HTTP transport");
+    };
+    assert_eq!(actual_operation, Some(operation_key));
+    assert_eq!(location, HttpTransportLocation::Path);
+    assert_eq!(
+        parameters,
+        &[WireParameter {
+            name: "board",
+            cardinality: Some(WireParameterCardinality::RequiredOne),
+        }]
+    );
 
-        let query_contract = operation_inventory()
+    let query_contract = operation_inventory()
+        .iter()
+        .find(|contract| contract.id == query_contract_id)
+        .expect("缺少 endpoint-specific query contract");
+    assert_eq!(query_contract.migration, MigrationState::Adopted);
+    assert_eq!(query_contract.granularity, ContractGranularity::Exact);
+    assert_eq!(query_contract.binding, ContractBinding::ExactSurface);
+    let ContractTransport::Http {
+        operation_key: actual_operation,
+        location,
+        parameters,
+    } = query_contract.transport
+    else {
+        panic!("task-read query contract 必须声明 HTTP transport");
+    };
+    assert_eq!(actual_operation, Some(operation_key));
+    assert_eq!(location, HttpTransportLocation::Query);
+    assert_eq!(
+        parameters
             .iter()
-            .find(|contract| contract.id == query_contract_id)
-            .expect("endpoint-specific query contract");
-        assert_eq!(query_contract.migration, MigrationState::Adopted);
-        assert_eq!(query_contract.granularity, ContractGranularity::Exact);
-        assert_eq!(query_contract.binding, ContractBinding::ExactSurface);
-        let ContractTransport::Http {
-            operation_key: actual_operation,
-            location,
-            parameters,
-        } = query_contract.transport
-        else {
-            panic!("task-read query contract must declare HTTP transport");
-        };
-        assert_eq!(actual_operation, Some(operation_key));
-        assert_eq!(location, HttpTransportLocation::Query);
-        assert_eq!(
-            parameters
-                .iter()
-                .map(|parameter| {
-                    (
-                        parameter.name,
-                        parameter.cardinality.expect("explicit cardinality"),
-                    )
-                })
-                .collect::<Vec<_>>(),
-            expected_query_parameters
-        );
+            .map(|parameter| {
+                (
+                    parameter.name,
+                    parameter.cardinality.expect("缺少显式 cardinality"),
+                )
+            })
+            .collect::<Vec<_>>(),
+        expected_query_parameters
+    );
 
-        let response_contract = operation_inventory()
-            .iter()
-            .find(|contract| contract.id == response_contract_id)
-            .expect("endpoint-specific exact success response contract");
-        assert_eq!(response_contract.migration, MigrationState::Adopted);
-        assert_eq!(response_contract.direction, ContractDirection::Serialize);
-        assert_eq!(response_contract.granularity, ContractGranularity::Exact);
-        assert_eq!(response_contract.binding, ContractBinding::ExactSurface);
-        assert_eq!(
-            response_contract.strictness,
-            kanban_protocol::ContractStrictness::DenyUnknownFields
-        );
-        assert!(response_contract.schema_id.is_some());
-        assert!(response_contract.fixture.is_some());
-        assert!(response_contract.adoption.is_some());
-        let ContractTransport::Http {
-            operation_key: actual_operation,
-            location,
-            parameters,
-        } = response_contract.transport
-        else {
-            panic!("task-read response contract must declare HTTP transport");
-        };
-        assert_eq!(actual_operation, Some(operation_key));
-        assert_eq!(location, HttpTransportLocation::Success);
-        assert!(parameters.is_empty());
-    }
+    let response_contract = operation_inventory()
+        .iter()
+        .find(|contract| contract.id == response_contract_id)
+        .expect("缺少 endpoint-specific exact success response contract");
+    assert_eq!(response_contract.migration, MigrationState::Adopted);
+    assert_eq!(response_contract.direction, ContractDirection::Serialize);
+    assert_eq!(response_contract.granularity, ContractGranularity::Exact);
+    assert_eq!(response_contract.binding, ContractBinding::ExactSurface);
+    assert_eq!(
+        response_contract.strictness,
+        kanban_protocol::ContractStrictness::DenyUnknownFields
+    );
+    assert!(response_contract.schema_id.is_some());
+    assert!(response_contract.fixture.is_some());
+    assert!(response_contract.adoption.is_some());
+    let ContractTransport::Http {
+        operation_key: actual_operation,
+        location,
+        parameters,
+    } = response_contract.transport
+    else {
+        panic!("task-read response contract 必须声明 HTTP transport");
+    };
+    assert_eq!(actual_operation, Some(operation_key));
+    assert_eq!(location, HttpTransportLocation::Success);
+    assert!(parameters.is_empty());
 }
 
 #[test]

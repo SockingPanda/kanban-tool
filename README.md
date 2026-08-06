@@ -82,11 +82,10 @@ specify、unblock、reopen、reclaim 和 archive 都是显式 service command，
 - [`kanban-service` 迁移与导入](crates/kanban-service/docs/migration.md)
 - [`kanban-service` 维护](crates/kanban-service/docs/maintenance.md)
 - [`kanban-protocol` schema/wire 契约](crates/kanban-protocol/docs/schema.md)
-- [全功能 parity ledger](docs/migration/turso-full-feature-parity.md)
 - [CLI](crates/kanban-cli/README.md)、[HTTP host](crates/kanban-server/README.md)、[MCP](crates/kanban-mcp/README.md)、[Desktop](apps/desktop/README.md)
 
-文档变更至少运行 `just docs-check` 与 `just diff-check`。未运行的 schema/adoption/full/release gate
-以 parity ledger 的 `pending-gate`/`unknown` 为准；文档更新不会替代这些证据。
+文档变更至少运行 `just docs-check` 与 `just diff-check`。精确 gate 结果属于当前任务或 CI 证据，
+长期指南不记录易过期的执行状态；文档更新也不会替代验证。
 
 ## 范围
 

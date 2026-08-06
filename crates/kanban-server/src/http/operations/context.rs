@@ -17,8 +17,8 @@ pub(crate) async fn build_context(
     Path(BuildContextPath { task_id }): Path<BuildContextPath>,
     query: Result<Query<BuildContextQuery>, QueryRejection>,
 ) -> Result<Json<BuildContextResponse>, ApiError> {
-    let Query(query) = query
-        .map_err(|error| KanbanError::InvalidInput(format!("invalid context query: {error}")))?;
+    let Query(query) =
+        query.map_err(|error| KanbanError::InvalidInput(format!("context query 无效：{error}")))?;
     let budget = query.budget.unwrap_or(query.max_items);
     let has_explicit_selector =
         query.task.is_some() || query.reference.is_some() || query.query.is_some();

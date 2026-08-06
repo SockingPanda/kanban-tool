@@ -18,7 +18,7 @@ pub(crate) async fn update_step(
     body: Result<Json<UpdateStepRequest>, JsonRejection>,
 ) -> Result<Json<UpdateStepResponse>, ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let steps = state
         .application()

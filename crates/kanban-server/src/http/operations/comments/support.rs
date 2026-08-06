@@ -7,7 +7,7 @@ use kanban_service::{
 
 pub(crate) fn api_comment(comment: kanban_service::CommentRecord) -> Result<ApiComment, ApiError> {
     let metadata = serde_json::from_str(&comment.metadata_json).map_err(|error| {
-        KanbanError::Storage(format!("stored comment metadata is invalid JSON: {error}"))
+        KanbanError::Storage(format!("存储的 comment metadata 不是有效 JSON：{error}"))
     })?;
     Ok(ApiComment {
         id: comment.id,

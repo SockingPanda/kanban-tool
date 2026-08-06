@@ -7,13 +7,13 @@ pub(crate) fn api_signal(signal: SignalRecord) -> Result<SignalWire, ApiError> {
     let evidence: serde_json::Value = serde_json::from_str(&signal.observation.evidence_json)
         .map_err(|error| {
             KanbanError::Storage(format!(
-                "stored signal evidence is invalid JSON for {}: {error}",
+                "存储的 signal evidence 对 {} 不是有效 JSON：{error}",
                 signal.id
             ))
         })?;
     let evidence = evidence.as_object().cloned().ok_or_else(|| {
         ApiError(KanbanError::Storage(format!(
-            "stored signal evidence is not a JSON object for {}",
+            "存储的 signal evidence 对 {} 不是 JSON 对象",
             signal.id
         )))
     })?;
@@ -58,6 +58,6 @@ pub(crate) fn parse_status(value: &str) -> Result<SignalStatus, ApiError> {
         "rejected" => Ok(SignalStatus::Rejected),
         "superseded" => Ok(SignalStatus::Superseded),
         "resolved" => Ok(SignalStatus::Resolved),
-        other => Err(KanbanError::InvalidInput(format!("invalid signal status: {other}")).into()),
+        other => Err(KanbanError::InvalidInput(format!("signal status 无效：{other}")).into()),
     }
 }

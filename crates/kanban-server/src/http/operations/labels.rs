@@ -34,7 +34,7 @@ pub(crate) async fn create_board_label(
     body: Result<Json<CreateBoardLabelRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<CreateBoardLabelResponse>), ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let label = state
         .application()
         .create_board_label(CreateBoardLabelCommand {
@@ -68,7 +68,7 @@ pub(crate) async fn add_task_labels(
     body: Result<Json<AddTaskLabelRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<AddTaskLabelResponse>), ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let names = body
         .label_names()
         .map_err(|error| KanbanError::InvalidInput(error.to_owned()))?;

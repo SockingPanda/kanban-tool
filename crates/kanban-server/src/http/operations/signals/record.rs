@@ -20,7 +20,7 @@ pub(crate) async fn record_signal(
     body: Result<Json<RecordSignalRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<RecordSignalResponse>), ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let evidence = body.evidence.unwrap_or_default().0;
     let result = state

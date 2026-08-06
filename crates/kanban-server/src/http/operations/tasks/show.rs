@@ -23,17 +23,16 @@ pub(crate) async fn get_task(
     query: Result<Query<GetTaskQuery>, QueryRejection>,
 ) -> Result<Response, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     if let Some(include) = query.include.as_deref() {
         let includes = include.split(',').map(str::trim).collect::<Vec<_>>();
         if let Some(unsupported) = includes
             .iter()
             .find(|part| !part.is_empty() && !matches!(**part, "details" | "ontology"))
         {
-            return Err(KanbanError::InvalidInput(format!(
-                "unsupported task include: {unsupported}"
-            ))
-            .into());
+            return Err(
+                KanbanError::InvalidInput(format!("不支持的 task include：{unsupported}")).into(),
+            );
         }
         if includes
             .iter()

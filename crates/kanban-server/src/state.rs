@@ -18,7 +18,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Open and initialize the canonical Turso database owned by this host.
+    /// 打开并初始化此 host 所有的 canonical Turso 数据库。
     pub async fn open(
         db_path: impl Into<PathBuf>,
         default_actor: impl Into<String>,
@@ -26,7 +26,7 @@ impl AppState {
         Self::open_with_run_log_root(db_path, default_actor, None).await
     }
 
-    /// Open the canonical database and optionally configure the trusted run-log root.
+    /// 打开 canonical 数据库，并可选配置受信任的 run-log root。
     pub async fn open_with_run_log_root(
         db_path: impl Into<PathBuf>,
         default_actor: impl Into<String>,
@@ -76,10 +76,7 @@ impl AppState {
 
 async fn ensure_parent_directory(db_path: &Path) -> Result<()> {
     let parent = db_path.parent().ok_or_else(|| {
-        KanbanError::InvalidInput(format!(
-            "database path has no parent directory: {}",
-            db_path.display()
-        ))
+        KanbanError::InvalidInput(format!("数据库路径没有父目录：{}", db_path.display()))
     })?;
     tokio::fs::create_dir_all(parent)
         .await
@@ -97,10 +94,7 @@ async fn ensure_run_log_root(path: &Path) -> Result<PathBuf> {
 
 async fn ensure_attachment_root(db_path: &Path) -> Result<PathBuf> {
     let parent = db_path.parent().ok_or_else(|| {
-        KanbanError::InvalidInput(format!(
-            "database path has no parent directory: {}",
-            db_path.display()
-        ))
+        KanbanError::InvalidInput(format!("数据库路径没有父目录：{}", db_path.display()))
     })?;
     let root = parent.join("attachments");
     tokio::fs::create_dir_all(&root)

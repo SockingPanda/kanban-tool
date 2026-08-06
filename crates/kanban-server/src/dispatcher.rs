@@ -78,15 +78,15 @@ enum FailurePolicy {
 }
 
 impl DispatcherConfig {
-    /// Load, validate, and prepare a strict single-worker dispatcher profile.
+    /// 加载、校验并准备严格的单 worker dispatcher profile。
     ///
-    /// This is intentionally called before the host opens its database.
+    /// 有意在 host 打开数据库之前调用。
     pub async fn load(profile_path: &Path) -> Result<Self> {
         let profile_path = tokio::fs::canonicalize(profile_path)
             .await
             .map_err(|error| {
                 KanbanError::InvalidInput(format!(
-                    "cannot resolve dispatcher profile {}: {error}",
+                    "无法解析 dispatcher profile {}：{error}",
                     profile_path.display()
                 ))
             })?;
@@ -94,58 +94,58 @@ impl DispatcherConfig {
             .await
             .map_err(|error| {
                 KanbanError::InvalidInput(format!(
-                    "cannot read dispatcher profile {}: {error}",
+                    "无法读取 dispatcher profile {}：{error}",
                     profile_path.display()
                 ))
             })?;
         let profile: DispatcherProfile = toml::from_str(&source).map_err(|error| {
             KanbanError::InvalidInput(format!(
-                "invalid dispatcher profile {}: {error}",
+                "dispatcher profile {} 无效：{error}",
                 profile_path.display()
             ))
         })?;
         let board = profile.board.trim().to_owned();
         if board.is_empty() {
             return Err(KanbanError::InvalidInput(
-                "dispatcher board is required".to_owned(),
+                "dispatcher 必须提供 board".to_owned(),
             ));
         }
         let command = profile.command.trim().to_owned();
         if command.is_empty() {
             return Err(KanbanError::InvalidInput(
-                "dispatcher command is required".to_owned(),
+                "dispatcher 必须提供 command".to_owned(),
             ));
         }
         if profile.poll_interval_ms == 0 {
             return Err(KanbanError::InvalidInput(
-                "dispatcher poll_interval_ms must be positive".to_owned(),
+                "dispatcher poll_interval_ms 必须为正数".to_owned(),
             ));
         }
         if profile.claim_ttl_ms <= 0 {
             return Err(KanbanError::InvalidInput(
-                "dispatcher claim_ttl_ms must be positive".to_owned(),
+                "dispatcher claim_ttl_ms 必须为正数".to_owned(),
             ));
         }
         if profile.heartbeat_interval_ms <= 0 {
             return Err(KanbanError::InvalidInput(
-                "dispatcher heartbeat_interval_ms must be positive".to_owned(),
+                "dispatcher heartbeat_interval_ms 必须为正数".to_owned(),
             ));
         }
         if profile.heartbeat_interval_ms >= profile.claim_ttl_ms {
             return Err(KanbanError::InvalidInput(
-                "dispatcher heartbeat_interval_ms must be less than claim_ttl_ms".to_owned(),
+                "dispatcher heartbeat_interval_ms 必须小于 claim_ttl_ms".to_owned(),
             ));
         }
         let profile_dir = profile_path.parent().ok_or_else(|| {
             KanbanError::InvalidInput(format!(
-                "dispatcher profile has no parent directory: {}",
+                "dispatcher profile 没有父目录：{}",
                 profile_path.display()
             ))
         })?;
         let configured_log_dir = profile.log_dir.unwrap_or_else(|| PathBuf::from("runs"));
         if configured_log_dir.as_os_str().is_empty() {
             return Err(KanbanError::InvalidInput(
-                "dispatcher log_dir is required".to_owned(),
+                "dispatcher 必须提供 log_dir".to_owned(),
             ));
         }
         let log_dir = if configured_log_dir.is_absolute() {
@@ -155,13 +155,13 @@ impl DispatcherConfig {
         };
         tokio::fs::create_dir_all(&log_dir).await.map_err(|error| {
             KanbanError::Storage(format!(
-                "cannot create dispatcher log directory {}: {error}",
+                "无法创建 dispatcher 日志目录 {}：{error}",
                 log_dir.display()
             ))
         })?;
         let log_dir = tokio::fs::canonicalize(&log_dir).await.map_err(|error| {
             KanbanError::Storage(format!(
-                "cannot resolve dispatcher log directory {}: {error}",
+                "无法解析 dispatcher 日志目录 {}：{error}",
                 log_dir.display()
             ))
         })?;
@@ -173,9 +173,7 @@ impl DispatcherConfig {
             claim_ttl_ms: profile.claim_ttl_ms,
             heartbeat_interval: Duration::from_millis(
                 u64::try_from(profile.heartbeat_interval_ms).map_err(|_| {
-                    KanbanError::InvalidInput(
-                        "dispatcher heartbeat_interval_ms is too large".to_owned(),
-                    )
+                    KanbanError::InvalidInput("dispatcher heartbeat_interval_ms 过大".to_owned())
                 })?,
             ),
             on_success: profile.on_success,
@@ -209,7 +207,7 @@ pub(crate) async fn run_dispatcher(
             .vector_worker_tick("vector-worker")
             .await
         {
-            warn!(error = %error, "vector projection worker tick failed; canonical task queue continues");
+            warn!(error = %error, "vector projection worker tick 失败；canonical 任务队列继续运行");
         }
 
         let reclaimed = state
@@ -217,7 +215,7 @@ pub(crate) async fn run_dispatcher(
             .reclaim_expired(&config.board, DISPATCHER_ACTOR)
             .await?;
         if reclaimed > 0 {
-            info!(reclaimed, "dispatcher reclaimed expired task leases");
+            info!(reclaimed, "dispatcher 已回收过期任务 lease");
         }
         let Some(claim) = claim_next_ready(state.application(), &config).await? else {
             tokio::select! {
@@ -234,7 +232,7 @@ pub(crate) async fn run_dispatcher(
         info!(
             task_id = %claim.task.id,
             run_id = %claim.run.id,
-            "dispatcher claimed task"
+            "dispatcher 已 claim 任务"
         );
         run_claim(state.application(), &config, addr, &claim, &mut shutdown).await?;
     }
@@ -295,9 +293,10 @@ async fn run_claim(
     claim: &ClaimRecord,
     shutdown: &mut watch::Receiver<ShutdownSignal>,
 ) -> Result<()> {
-    let log_path = claim.run.log_path.as_deref().ok_or_else(|| {
-        KanbanError::Storage("dispatcher claim did not return a run log path".to_owned())
-    })?;
+    let log_path =
+        claim.run.log_path.as_deref().ok_or_else(|| {
+            KanbanError::Storage("dispatcher claim 未返回 run 日志路径".to_owned())
+        })?;
     let (stdout, stderr) = match open_log(Path::new(log_path)) {
         Ok(files) => files,
         Err(error) => {
@@ -376,7 +375,7 @@ async fn wait_for_worker(
         tokio::select! {
             status = child.wait() => {
                 return status.map_err(|error| {
-                    KanbanError::Storage(format!("dispatcher worker wait failed: {error}"))
+                    KanbanError::Storage(format!("等待 dispatcher worker 失败：{error}"))
                 });
             }
             _ = heartbeat.tick() => {
@@ -386,7 +385,7 @@ async fn wait_for_worker(
                         actor: DISPATCHER_ACTOR.to_owned(),
                         claim_token: claim.claim_token.clone(),
                         ttl_ms: config.claim_ttl_ms,
-                        note: Some("dispatcher worker heartbeat".to_owned()),
+                        note: Some("dispatcher worker 心跳".to_owned()),
                     })
                     .await
                 {
@@ -407,10 +406,10 @@ async fn wait_for_worker(
                     let _ = child.kill().await;
                     let _ = child.wait().await;
                     return Err(KanbanError::Storage(
-                        "dispatcher worker was force-stopped".to_owned(),
+                        "dispatcher worker 被强制停止".to_owned(),
                     ));
                 }
-                // Graceful shutdown deliberately leaves the active worker running.
+                // graceful shutdown 会有意让 active worker 继续运行。
             }
         }
     }
@@ -426,7 +425,7 @@ async fn finish_spawn_failure(
         task_id = %claim.task.id,
         run_id = %claim.run.id,
         error = detail,
-        "dispatcher could not start worker"
+        "dispatcher 无法启动 worker"
     );
     match config.on_failure {
         FailurePolicy::Blocked => {
@@ -434,7 +433,7 @@ async fn finish_spawn_failure(
                 .block_task(BlockTaskCommand {
                     task_id: claim.task.id.clone(),
                     actor: DISPATCHER_ACTOR.to_owned(),
-                    reason: format!("dispatcher could not start worker: {detail}"),
+                    reason: format!("dispatcher 无法启动 worker：{detail}"),
                     claim_token: Some(claim.claim_token.clone()),
                     force: false,
                 })
@@ -469,7 +468,7 @@ async fn finish_worker(
                         actor: DISPATCHER_ACTOR.to_owned(),
                         claim_token: Some(claim.claim_token.clone()),
                         force: false,
-                        summary: Some(format!("dispatcher worker completed with {status_text}")),
+                        summary: Some(format!("dispatcher worker 已完成，状态为 {status_text}")),
                         result: Some(serde_json::json!({
                             "exit_code": status.code(),
                             "success": true,
@@ -484,7 +483,7 @@ async fn finish_worker(
                         actor: DISPATCHER_ACTOR.to_owned(),
                         claim_token: Some(claim.claim_token.clone()),
                         force: false,
-                        summary: Some(format!("dispatcher worker completed with {status_text}")),
+                        summary: Some(format!("dispatcher worker 已完成，状态为 {status_text}")),
                     })
                     .await?;
             }
@@ -496,7 +495,7 @@ async fn finish_worker(
                     .block_task(BlockTaskCommand {
                         task_id: claim.task.id.clone(),
                         actor: DISPATCHER_ACTOR.to_owned(),
-                        reason: format!("dispatcher worker failed with {status_text}"),
+                        reason: format!("dispatcher worker 失败，状态为 {status_text}"),
                         claim_token: Some(claim.claim_token.clone()),
                         force: false,
                     })
@@ -517,7 +516,7 @@ async fn finish_worker(
         task_id = %claim.task.id,
         run_id = %claim.run.id,
         status = %status_text,
-        "dispatcher finished worker"
+        "dispatcher worker 已结束"
     );
     Ok(())
 }

@@ -21,7 +21,7 @@ pub(crate) async fn mark_execution_plan_not_required(
     body: Result<Json<MarkExecutionPlanNotRequiredRequest>, JsonRejection>,
 ) -> Result<Json<MarkExecutionPlanNotRequiredResponse>, ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let plan = state
         .application()

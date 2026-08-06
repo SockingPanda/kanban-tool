@@ -15,7 +15,7 @@ pub(crate) async fn stats(
     query: Result<Query<BoardQuery>, QueryRejection>,
 ) -> Result<Json<StatsResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let value = state.application().get_stats(&query.board).await?;
     Ok(Json(DataEnvelope::new(QueueStats {
         board_id: value.board_id,

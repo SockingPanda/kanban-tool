@@ -31,7 +31,7 @@ pub(crate) async fn graph_status(
     query: Result<Query<BoardQuery>, QueryRejection>,
 ) -> Result<Json<GraphStatusResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let status = state.application().graph_status(&query.board).await?;
     Ok(Json(DataEnvelope::new(GraphStatus {
         backend: status.backend,
@@ -45,7 +45,7 @@ pub(crate) async fn graph_neighbors(
     query: Result<Query<GraphNeighborsQuery>, QueryRejection>,
 ) -> Result<Json<GraphNeighborsResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let relations = state
         .application()
         .graph_neighbors(GraphNeighborsOptions {
@@ -67,7 +67,7 @@ pub(crate) async fn graph_query(
     query: Result<Query<GraphQueryQuery>, QueryRejection>,
 ) -> Result<Json<CliGraphQueryOutput>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let rows = state
         .application()
         .graph_query(GraphQueryOptions {
@@ -96,7 +96,7 @@ pub(crate) async fn graph_rebuild(
     query: Result<Query<BoardQuery>, QueryRejection>,
 ) -> Result<Json<GraphMaintenanceResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let maintenance = state.application().graph_rebuild(&query.board).await?;
     Ok(Json(DataEnvelope::new(api_graph_maintenance(maintenance))))
 }
@@ -106,7 +106,7 @@ pub(crate) async fn graph_sync(
     query: Result<Query<BoardQuery>, QueryRejection>,
 ) -> Result<Json<GraphMaintenanceResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let maintenance = state.application().graph_sync(&query.board).await?;
     Ok(Json(DataEnvelope::new(api_graph_maintenance(maintenance))))
 }
@@ -117,7 +117,7 @@ pub(crate) async fn task_neighborhood(
     query: Result<Query<TaskNeighborhoodQuery>, QueryRejection>,
 ) -> Result<Json<TaskNeighborhoodResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let graph = state
         .application()
         .task_neighborhood(
@@ -138,7 +138,7 @@ pub(crate) async fn board_task_map(
     query: Result<Query<BoardTaskMapQuery>, QueryRejection>,
 ) -> Result<Json<BoardTaskMapResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let graph = state
         .application()
         .board_task_map(
@@ -158,7 +158,7 @@ pub(crate) async fn board_task_map(
 
 fn api_relation(relation: RelationRecord) -> Result<ApiRelation, ApiError> {
     let metadata = serde_json::from_str(&relation.metadata_json).map_err(|error| {
-        KanbanError::Storage(format!("stored relation metadata is invalid JSON: {error}"))
+        KanbanError::Storage(format!("存储的 relation metadata 不是有效 JSON：{error}"))
     })?;
     Ok(ApiRelation {
         subject_uri: relation.subject_uri,

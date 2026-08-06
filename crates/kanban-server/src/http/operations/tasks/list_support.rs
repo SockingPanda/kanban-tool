@@ -72,14 +72,14 @@ pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTask
     }
     if raw_query.len() > MAX_TASK_READ_QUERY_BYTES {
         return Err(KanbanError::InvalidInput(format!(
-            "task-read raw query exceeds {MAX_TASK_READ_QUERY_BYTES} bytes"
+            "task-read raw query 超过 {MAX_TASK_READ_QUERY_BYTES} 字节"
         ))
         .into());
     }
     let pairs = raw_query.split('&').collect::<Vec<_>>();
     if pairs.len() > MAX_TASK_READ_QUERY_PAIRS {
         return Err(KanbanError::InvalidInput(format!(
-            "task-read query exceeds {MAX_TASK_READ_QUERY_PAIRS} parameter pairs"
+            "task-read query 超过 {MAX_TASK_READ_QUERY_PAIRS} 个参数对"
         ))
         .into());
     }
@@ -90,7 +90,7 @@ pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTask
         match key.as_str() {
             "status" => {
                 let status = ApiTaskStatus::from_str(value.trim()).map_err(|()| {
-                    KanbanError::InvalidInput(format!("unknown status filter: {value}"))
+                    KanbanError::InvalidInput(format!("未知的 status filter：{value}"))
                 })?;
                 push_repeated(&mut query.status, status, "status", MAX_TASK_READ_STATUSES)?;
             }
@@ -101,7 +101,7 @@ pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTask
                     .ok()
                     .and_then(|value| ApiTaskPriority::try_from(value).ok())
                     .ok_or_else(|| {
-                        KanbanError::InvalidInput("priority must be between 0 and 3".to_owned())
+                        KanbanError::InvalidInput("priority 必须在 0 到 3 之间".to_owned())
                     })?;
                 push_repeated(
                     &mut query.priority,
@@ -113,20 +113,18 @@ pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTask
             "label" => {
                 if value.chars().count() > MAX_TASK_READ_LABEL_CHARS {
                     return Err(KanbanError::InvalidInput(format!(
-                        "label exceeds {MAX_TASK_READ_LABEL_CHARS} characters"
+                        "label 超过 {MAX_TASK_READ_LABEL_CHARS} 个字符"
                     ))
                     .into());
                 }
                 let label = TaskReadLabel::new(value).ok_or_else(|| {
-                    KanbanError::InvalidInput(
-                        "label must contain a non-whitespace character".to_owned(),
-                    )
+                    KanbanError::InvalidInput("label 必须包含非空白字符".to_owned())
                 })?;
                 push_repeated(&mut query.label, label, "label", MAX_TASK_READ_LABELS)?;
             }
             "plan_filter" => {
                 let filter = TaskReadPlanFilter::from_str(value.trim()).map_err(|()| {
-                    KanbanError::InvalidInput(format!("unknown plan_filter: {value}"))
+                    KanbanError::InvalidInput(format!("未知的 plan_filter：{value}"))
                 })?;
                 push_repeated(
                     &mut query.plan_filter,
@@ -146,17 +144,17 @@ pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTask
             "include_archived" => {
                 scalar(&mut scalar_parameters, "include_archived")?;
                 query.include_archived = value.parse::<bool>().map_err(|_| {
-                    KanbanError::InvalidInput(format!("invalid include_archived: {value}"))
+                    KanbanError::InvalidInput(format!("include_archived 无效：{value}"))
                 })?;
             }
             "limit" => {
                 scalar(&mut scalar_parameters, "limit")?;
                 query.limit = value
                     .parse::<usize>()
-                    .map_err(|_| KanbanError::InvalidInput(format!("invalid limit: {value}")))?;
+                    .map_err(|_| KanbanError::InvalidInput(format!("limit 无效：{value}")))?;
                 if query.limit > MAX_TASK_READ_LIMIT {
                     return Err(KanbanError::InvalidInput(format!(
-                        "limit must be <= {MAX_TASK_READ_LIMIT}"
+                        "limit 必须小于等于 {MAX_TASK_READ_LIMIT}"
                     ))
                     .into());
                 }
@@ -165,23 +163,21 @@ pub(super) fn parse_list_tasks_query(raw_query: Option<&str>) -> Result<ListTask
                 scalar(&mut scalar_parameters, "offset")?;
                 query.offset = value
                     .parse::<usize>()
-                    .map_err(|_| KanbanError::InvalidInput(format!("invalid offset: {value}")))?;
+                    .map_err(|_| KanbanError::InvalidInput(format!("offset 无效：{value}")))?;
                 if query.offset > i64::MAX as usize {
-                    return Err(KanbanError::InvalidInput(
-                        "offset exceeds the supported range".to_owned(),
-                    )
-                    .into());
+                    return Err(
+                        KanbanError::InvalidInput("offset 超过支持的范围".to_owned()).into(),
+                    );
                 }
             }
             "sort" => {
                 scalar(&mut scalar_parameters, "sort")?;
-                query.sort = TaskReadSort::from_str(value.trim()).map_err(|()| {
-                    KanbanError::InvalidInput(format!("unsupported sort: {value}"))
-                })?;
+                query.sort = TaskReadSort::from_str(value.trim())
+                    .map_err(|()| KanbanError::InvalidInput(format!("不支持的 sort：{value}")))?;
             }
             _ => {
                 return Err(KanbanError::InvalidInput(format!(
-                    "unknown task-read query parameter: {key}"
+                    "未知的 task-read query parameter：{key}"
                 ))
                 .into());
             }
@@ -205,13 +201,17 @@ pub(super) fn decode_query_component(encoded: &str) -> Result<String, ApiError> 
                     .get(index + 1)
                     .and_then(|byte| hex_value(*byte))
                     .ok_or_else(|| {
-                        KanbanError::InvalidInput("malformed percent-encoding in query".to_owned())
+                        KanbanError::InvalidInput(
+                            "query 中包含格式错误的 percent-encoding".to_owned(),
+                        )
                     })?;
                 let low = bytes
                     .get(index + 2)
                     .and_then(|byte| hex_value(*byte))
                     .ok_or_else(|| {
-                        KanbanError::InvalidInput("malformed percent-encoding in query".to_owned())
+                        KanbanError::InvalidInput(
+                            "query 中包含格式错误的 percent-encoding".to_owned(),
+                        )
                     })?;
                 decoded.push((high << 4) | low);
                 index += 3;
@@ -223,7 +223,7 @@ pub(super) fn decode_query_component(encoded: &str) -> Result<String, ApiError> 
         }
     }
     String::from_utf8(decoded)
-        .map_err(|_| KanbanError::InvalidInput("query is not valid UTF-8".to_owned()).into())
+        .map_err(|_| KanbanError::InvalidInput("query 不是有效的 UTF-8".to_owned()).into())
 }
 
 pub(super) const fn hex_value(byte: u8) -> Option<u8> {
@@ -242,7 +242,7 @@ pub(super) fn scalar(
     if seen.insert(name) {
         Ok(())
     } else {
-        Err(KanbanError::InvalidInput(format!("duplicate scalar query parameter: {name}")).into())
+        Err(KanbanError::InvalidInput(format!("重复的 scalar query parameter：{name}")).into())
     }
 }
 
@@ -254,15 +254,12 @@ fn push_repeated<T: PartialEq>(
 ) -> Result<(), ApiError> {
     if values.len() >= maximum {
         return Err(KanbanError::InvalidInput(format!(
-            "too many {name} query parameters: maximum is {maximum}"
+            "{name} query parameter 过多：最多 {maximum} 个"
         ))
         .into());
     }
     if values.contains(&value) {
-        return Err(KanbanError::InvalidInput(format!(
-            "duplicate repeated query parameter value: {name}"
-        ))
-        .into());
+        return Err(KanbanError::InvalidInput(format!("重复的 query parameter 值：{name}")).into());
     }
     values.push(value);
     Ok(())
@@ -278,10 +275,9 @@ pub(super) fn bounded_optional(
         return Ok(None);
     }
     if value.chars().count() > maximum_chars {
-        return Err(KanbanError::InvalidInput(format!(
-            "{name} exceeds {maximum_chars} characters"
-        ))
-        .into());
+        return Err(
+            KanbanError::InvalidInput(format!("{name} 超过 {maximum_chars} 个字符")).into(),
+        );
     }
     Ok(Some(value.to_owned()))
 }
@@ -321,7 +317,7 @@ mod tests {
                 .unwrap_err()
                 .0
                 .to_string()
-                .contains("duplicate")
+                .contains("重复")
         );
         assert!(parse_list_tasks_query(Some("future=true")).is_err());
         assert!(parse_list_tasks_query(Some("q=%ZZ")).is_err());

@@ -134,9 +134,8 @@ fn normalize_task(value: &mut Value) {
 
 fn normalize_unblock(value: &mut Value) {
     normalize_task(value);
-    // The unblock response fixture belongs to a different lifecycle seed than
-    // the block response fixture; retain the status transition assertion while
-    // ignoring those seed-specific fields.
+    // unblock 响应 fixture 属于与 block 响应 fixture 不同的生命周期 seed；保留状态转换断言，
+    // 忽略这些 seed 专属字段。
     normalize_keys(
         value,
         &[
@@ -152,9 +151,8 @@ fn normalize_unblock(value: &mut Value) {
 
 fn normalize_update_task(value: &mut Value) {
     normalize_task(value);
-    // The current update projection clears a nullable description and does not
-    // rehydrate labels; both differ from the older response fixture while the
-    // compare-and-set and metadata fields remain contract-compatible.
+    // 当前 update projection 会清除可空 description，且不会重新填充 labels；这两点与旧响应
+    // fixture 不同，但 compare-and-set 和 metadata 字段仍与契约兼容。
     normalize_keys(value, &["description", "status", "labels"]);
 }
 
@@ -581,11 +579,11 @@ async fn suite_tasks_crud_and_reads_use_committed_fixtures_through_router() {
     .await;
 
     let mut create_body = fixture("create-task-request.v1.valid.json");
-    // committed request fixtures intentionally omit the optional client id;
-    // fixing it keeps the path fixture stable while preserving every request field.
+    // committed request fixture 有意省略可选 client ID；补齐它可以保持 path fixture 稳定，
+    // 同时保留所有 request 字段。
     create_body["task_id"] = Value::String("t_fixture".to_owned());
-    // canonical creation accepts global task IDs; the fixture's human ref is
-    // resolved to the seeded parent before entering the router.
+    // canonical 创建接受全局任务 ID；fixture 的人类 reference 会在进入 router 前解析到
+    // seeded parent。
     create_body["depends_on"] = serde_json::json!(["t_parent"]);
     let (status, body) = response(
         &router,
@@ -601,9 +599,8 @@ async fn suite_tasks_crud_and_reads_use_committed_fixtures_through_router() {
     let _: CreateTaskResponse =
         assert_fixture(&body, "create-task-response.v1.valid.json", normalize_task);
 
-    // The committed query fixture is sent exactly through the parser. Its two
-    // plan filters are intentionally conjunctive and therefore select no rows;
-    // the response fixture is exercised by a semantically satisfiable query below.
+    // committed query fixture 会原样通过 parser。它的两个 plan filter 有意采用合取关系，
+    // 因此不会选中任何行；下面使用语义上可满足的 query 来执行 response fixture。
     let list_board = fixture_field("list-tasks-path.v1.valid.json", "board");
     create_board(&router, &list_board, "Fixture List", None).await;
     let query = query_fixture(
@@ -687,8 +684,8 @@ async fn suite_tasks_crud_and_reads_use_committed_fixtures_through_router() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    // include=ontology selects the explicit detail aggregate. This assertion
-    // proves the committed query reached the host without treating JSON as a DTO-only roundtrip.
+    // include=ontology 选择显式 detail aggregate。该断言证明 committed query 已到达 host，
+    // 而不是只做 JSON 到 DTO 的往返。
     let details: Value = serde_json::from_slice(&body).unwrap();
     assert!(details["data"]["task"]["id"].is_string());
 
@@ -697,13 +694,13 @@ async fn suite_tasks_crud_and_reads_use_committed_fixtures_through_router() {
     let shown: GetTaskResponse = serde_json::from_slice(&body).unwrap();
     assert_eq!(shown.data.id, "t_fixture");
     assert_eq!(shown.data.title, "Contract child");
-    // `get_task_global` intentionally returns the canonical task row; label
-    // projections are attached by list/create surfaces and are checked there.
+    // `get_task_global` 有意返回 canonical task row；label projection 由 list/create surface
+    // 附加，并在那里检查。
 
     let path_task = fixture_field("update-task-path.v1.valid.json", "task_id");
     let mut update_body = fixture("update-task-request.v1.valid.json");
-    // The create fixture attaches a dependency, which legitimately advances
-    // lock_version before this compare-and-set update.
+    // create fixture 会附加 dependency，因此在本次 compare-and-set update 前正常推进
+    // lock_version。
     update_body["expected_lock_version"] = Value::Number(shown.data.lock_version.into());
     let (status, body) = response(
         &router,
@@ -1038,7 +1035,7 @@ async fn suite_task_lifecycle_adoption_uses_committed_requests_and_typed_respons
     let _: kanban_protocol::PromoteTaskResponse =
         assert_fixture(&body, "promote-task-response.v1.valid.json", normalize_task);
 
-    // claim (the fixture predates the board slug selected by this isolated setup).
+    // claim（fixture 早于此隔离 setup 选择的 board slug）。
     let (_directory, router) = test_router().await;
     create_board(&router, "transitions-project", "Transitions", None).await;
     seed_lifecycle_task(
@@ -1165,8 +1162,8 @@ async fn suite_task_lifecycle_adoption_uses_committed_requests_and_typed_respons
     .await;
     mark_plan_not_required(&router, "t_fixture").await;
     let mut block = fixture("block-task-request.v1.valid.json");
-    // The committed response fixture uses the canonical status reason
-    // "fixture block"; align the request so the real transition echoes it.
+    // committed response fixture 使用 canonical status reason "fixture block"；调整 request，
+    // 使真实转换返回相同原因。
     block["reason"] = Value::String("fixture block".to_owned());
     let (status, body) = response(
         &router,
@@ -1192,7 +1189,7 @@ async fn suite_task_lifecycle_adoption_uses_committed_requests_and_typed_respons
         normalize_unblock,
     );
 
-    // submit-review and complete are separate states because both consume a running claim.
+    // submit-review 和 complete 是两个独立状态，因为二者都会消耗 running claim。
     let (_directory, router) = test_router().await;
     create_board(&router, "lifecycle-project", "Lifecycle", None).await;
     seed_lifecycle_task(
@@ -1248,8 +1245,8 @@ async fn suite_task_lifecycle_adoption_uses_committed_requests_and_typed_respons
     promote(&router, "t_fixture").await;
     let _claim = claim_with_fixture(&router, "t_fixture").await;
     let mut complete = fixture("complete-task-request.v1.valid.json");
-    // The response fixture stores the canonical result projection (`ok` only),
-    // while the request fixture also carries illustrative `details`.
+    // response fixture 只存储 canonical result projection（仅 `ok`），而 request fixture
+    // 还携带说明性的 `details`。
     complete["result"] = serde_json::json!({"ok": true});
     let (status, body) = response(
         &router,
@@ -1591,8 +1588,8 @@ async fn suite_runs_and_logs_adoption_uses_real_router_paths_and_fixtures() {
     promote(&router, "t_fixture").await;
     let first_claim = claim_with_fixture(&router, "t_fixture").await;
     let mut complete = fixture("complete-task-request.v1.valid.json");
-    // The run response fixture models a null run summary; retain its request
-    // shape while omitting the illustrative task summary for this run slice.
+    // run response fixture 将 run summary 建模为 null；保留其 request shape，但在此 run slice
+    // 中省略说明性的 task summary。
     complete["summary"] = Value::Null;
     let (status, _) = response(
         &router,

@@ -12,9 +12,7 @@ pub(crate) fn api_task_step(step: kanban_service::StepRecord) -> Result<ApiTaskS
         "done" => ApiStepStatus::Done,
         "skipped" => ApiStepStatus::Skipped,
         other => {
-            return Err(
-                KanbanError::Storage(format!("stored step status is invalid: {other}")).into(),
-            );
+            return Err(KanbanError::Storage(format!("存储的 step status 无效：{other}")).into());
         }
     };
     Ok(ApiTaskStep {
@@ -38,10 +36,10 @@ pub(crate) fn api_task_step(step: kanban_service::StepRecord) -> Result<ApiTaskS
 
 pub(crate) fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
     let priority = ApiTaskPriority::try_from(task.priority).map_err(|priority| {
-        KanbanError::Storage(format!("stored task priority is outside 0..=3: {priority}"))
+        KanbanError::Storage(format!("存储的 task priority 超出 0..=3：{priority}"))
     })?;
     let metadata = serde_json::from_str(&task.metadata_json).map_err(|error| {
-        KanbanError::Storage(format!("stored task metadata is invalid JSON: {error}"))
+        KanbanError::Storage(format!("存储的 task metadata 不是有效 JSON：{error}"))
     })?;
     let result = task
         .result_json
@@ -49,7 +47,7 @@ pub(crate) fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
         .map(serde_json::from_str)
         .transpose()
         .map_err(|error| {
-            KanbanError::Storage(format!("stored task result is invalid JSON: {error}"))
+            KanbanError::Storage(format!("存储的 task result 不是有效 JSON：{error}"))
         })?;
     Ok(ApiTask {
         id: task.id,

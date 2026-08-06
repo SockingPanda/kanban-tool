@@ -21,12 +21,12 @@ pub(crate) async fn create_comment(
     body: Result<Json<CreateCommentRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<CreateCommentResponse>), ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.author.as_deref(), &headers, state.default_actor())?;
     let metadata = body.metadata.unwrap_or_else(|| serde_json::json!({}));
     let metadata = metadata.as_object().cloned().ok_or_else(|| {
         ApiError(KanbanError::InvalidInput(
-            "metadata must be a JSON object".to_owned(),
+            "metadata 必须是 JSON 对象".to_owned(),
         ))
     })?;
     let comment = state

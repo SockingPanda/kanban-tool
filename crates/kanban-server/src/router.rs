@@ -40,7 +40,7 @@ where
     if !addr.ip().is_loopback() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "kanban serve only accepts a loopback address",
+            "kanban serve 只接受 loopback 地址",
         ));
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -58,7 +58,7 @@ pub async fn serve_with_dispatcher_shutdown(
     if !addr.ip().is_loopback() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "kanban serve only accepts a loopback address",
+            "kanban serve 只接受 loopback 地址",
         ));
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -125,10 +125,7 @@ async fn wait_for_force(shutdown: &mut watch::Receiver<ShutdownSignal>) {
 }
 
 fn force_shutdown_error() -> std::io::Error {
-    std::io::Error::new(
-        std::io::ErrorKind::Interrupted,
-        "kanban serve was force-stopped",
-    )
+    std::io::Error::new(std::io::ErrorKind::Interrupted, "kanban serve 被强制停止")
 }
 
 fn desktop_cors_layer() -> CorsLayer {

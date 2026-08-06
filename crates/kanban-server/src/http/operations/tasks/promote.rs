@@ -18,7 +18,7 @@ pub(crate) async fn promote_task(
     body: Result<Json<PromoteTaskRequest>, JsonRejection>,
 ) -> Result<Json<PromoteTaskResponse>, ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let task = state
         .application()

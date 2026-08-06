@@ -17,7 +17,7 @@ pub(crate) async fn list_events(
     query: Result<Query<ListEventsQuery>, QueryRejection>,
 ) -> Result<Json<ListEventsResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let page = state
         .application()
         .list_events(
@@ -45,14 +45,14 @@ pub(crate) async fn list_events(
 pub(crate) fn api_event(event: EventRecord) -> Result<StreamEventData, ApiError> {
     let payload_value: Value = serde_json::from_str(&event.payload_json).map_err(|error| {
         KanbanError::Storage(format!(
-            "stored event payload is invalid JSON for {}: {error}",
+            "存储的 event payload 对 {} 不是有效 JSON：{error}",
             event.event_id
         ))
     })?;
     let payload =
         EventPayload::from_kind_and_value(&event.kind, payload_value).map_err(|error| {
             KanbanError::Storage(format!(
-                "stored event payload is invalid for {}: {error}",
+                "存储的 event payload 对 {} 无效：{error}",
                 event.kind
             ))
         })?;

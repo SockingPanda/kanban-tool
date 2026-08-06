@@ -1,4 +1,4 @@
-//! Label semantics/ontology HTTP surface.
+//! label semantics/ontology HTTP surface。
 
 use std::collections::HashMap;
 
@@ -18,9 +18,8 @@ use kanban_protocol::{
 
 use crate::{error::ApiError, state::AppState};
 
-/// IDs for signals and proposals are globally unique; these reads resolve the
-/// canonical record first and therefore do not pretend that they belong to
-/// the default board.
+/// signal 和 proposal 的 ID 全局唯一；这些读取会先解析 canonical record，
+/// 因此不会假定它们属于 default board。
 const GLOBAL_RECORD_SCOPE: &str = "__global_record__";
 
 #[derive(Debug, Deserialize)]
@@ -399,7 +398,7 @@ async fn resolve_task_board(
         && requested_board != task.board_slug
     {
         return Err(ApiError(KanbanError::InvalidInput(format!(
-            "task {task_ref} does not belong to board {requested_board}"
+            "task {task_ref} 不属于 board {requested_board}"
         ))));
     }
     Ok(task.board_id)

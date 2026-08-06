@@ -17,7 +17,7 @@ pub(crate) async fn list_entities(
     query: Result<Query<EntityListQuery>, QueryRejection>,
 ) -> Result<Json<CliEntityListOutput>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let entities = state
         .application()
         .list_entities(EntityListOptions {

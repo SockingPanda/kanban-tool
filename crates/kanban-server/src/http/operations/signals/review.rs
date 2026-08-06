@@ -56,7 +56,7 @@ async fn review(
     lifecycle: SignalLifecycle,
 ) -> Result<Json<DataEnvelope<Vec<SignalWire>>>, ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let result = state
         .application()

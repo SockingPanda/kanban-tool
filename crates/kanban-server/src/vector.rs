@@ -37,7 +37,7 @@ async fn status(
     query: Result<Query<VectorStatusQuery>, QueryRejection>,
 ) -> Result<Json<VectorStatusResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| invalid(format!("invalid vector status query: {error}")))?;
+        query.map_err(|error| invalid(format!("vector status query 无效：{error}")))?;
     let board_id = state
         .vector_store()
         .vector_board_id(&query.board)
@@ -56,7 +56,7 @@ async fn configure(
     body: Result<Json<VectorConfigureRequest>, JsonRejection>,
 ) -> Result<Json<VectorConfigureResponse>, ApiError> {
     let Json(body) =
-        body.map_err(|error| invalid(format!("invalid vector configure body: {error}")))?;
+        body.map_err(|error| invalid(format!("vector configure body 无效：{error}")))?;
     let config = VectorConfig {
         provider: body.provider.clone(),
         endpoint: body.endpoint.clone(),
@@ -75,8 +75,7 @@ async fn rebuild(
     State(state): State<AppState>,
     body: Result<Json<VectorProjectionRequest>, JsonRejection>,
 ) -> Result<Json<VectorProjectionResponse>, ApiError> {
-    let Json(body) =
-        body.map_err(|error| invalid(format!("invalid vector rebuild body: {error}")))?;
+    let Json(body) = body.map_err(|error| invalid(format!("vector rebuild body 无效：{error}")))?;
     let board_id = enqueue_board_tasks(state.vector_store(), &body.board, true).await?;
     let value = state
         .vector_store()
@@ -90,7 +89,7 @@ async fn sync(
     State(state): State<AppState>,
     body: Result<Json<VectorProjectionRequest>, JsonRejection>,
 ) -> Result<Json<VectorProjectionResponse>, ApiError> {
-    let Json(body) = body.map_err(|error| invalid(format!("invalid vector sync body: {error}")))?;
+    let Json(body) = body.map_err(|error| invalid(format!("vector sync body 无效：{error}")))?;
     let board_id = enqueue_board_tasks(state.vector_store(), &body.board, false).await?;
     let value = state
         .vector_store()
@@ -104,7 +103,7 @@ async fn query_chunks(
     State(state): State<AppState>,
     query: Result<Query<VectorQuery>, QueryRejection>,
 ) -> Result<Json<VectorQueryChunksResponse>, ApiError> {
-    let Query(query) = query.map_err(|error| invalid(format!("invalid vector query: {error}")))?;
+    let Query(query) = query.map_err(|error| invalid(format!("vector query 无效：{error}")))?;
     validate_query(&query)?;
     let (config, embedding) = embed_query(state.vector_store(), &query.q).await?;
     if let Some(model) = query.embedding_model.as_deref()
@@ -143,7 +142,7 @@ async fn query_label_atoms(
     query: Result<Query<VectorQuery>, QueryRejection>,
 ) -> Result<Json<VectorQueryLabelAtomsResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| invalid(format!("invalid vector label query: {error}")))?;
+        query.map_err(|error| invalid(format!("vector label query 无效：{error}")))?;
     validate_query(&query)?;
     let (config, embedding) = embed_query(state.vector_store(), &query.q).await?;
     if let Some(model) = query.embedding_model.as_deref()

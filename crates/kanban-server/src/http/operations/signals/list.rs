@@ -14,8 +14,8 @@ pub(crate) async fn list_signals(
     Path(BoardLabelPath { board }): Path<BoardLabelPath>,
     query: Result<Query<SignalQuery>, QueryRejection>,
 ) -> Result<Json<kanban_protocol::ListSignalsResponse>, ApiError> {
-    let Query(query) = query
-        .map_err(|error| KanbanError::InvalidInput(format!("invalid signal query: {error}")))?;
+    let Query(query) =
+        query.map_err(|error| KanbanError::InvalidInput(format!("signal query 无效：{error}")))?;
     let signals = state
         .application()
         .list_signals(&board, signal_options(&query)?)
@@ -37,8 +37,8 @@ pub(crate) async fn review_signals(
     Path(BoardLabelPath { board }): Path<BoardLabelPath>,
     query: Result<Query<SignalQuery>, QueryRejection>,
 ) -> Result<Json<kanban_protocol::ReviewSignalsResponse>, ApiError> {
-    let Query(mut query) = query
-        .map_err(|error| KanbanError::InvalidInput(format!("invalid signal query: {error}")))?;
+    let Query(mut query) =
+        query.map_err(|error| KanbanError::InvalidInput(format!("signal query 无效：{error}")))?;
     query.include_all = false;
     if query.status.is_empty() {
         query.status = vec!["open".to_owned(), "confirmed".to_owned()];

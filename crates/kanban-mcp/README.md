@@ -8,5 +8,5 @@
 
 MCP 的 domain tool 覆盖任务、labels/ontology/proposals、signals、search、graph、vector、context、
 附件、steps、dependencies、runs/events 和 boards；`label_proposals_list` 同时绑定 task-scoped 与
-board-wide proposal read operation。是否已通过完整 adoption/full gate 以实际测试和 parity ledger 为准，
+board-wide proposal read operation。契约完整性由 protocol catalog、MCP integration tests 和 CI 验证，
 不能由 catalog 条目数量推断。

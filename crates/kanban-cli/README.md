@@ -11,8 +11,7 @@ hook 外，命令都通过 `kanban-client` 请求 host；CLI 不直接打开数�
 
 完整领域面还包括 `label`/`labels`/`ontology`、`search`/`index`、`graph`、`vector`、`context`、
 signals、attachments、runs/events 和 host-admin maintenance。`kanban label proposals list` 的
-`--task-ref` 是可选的：提供时按任务列出 proposal；省略时请求当前 board 的
-`GET /api/v1/boards/:board/label-proposals`，`--status` 可继续过滤。
+`--task-ref` 是可选的：提供时按任务列出 proposal；省略时按当前 board 查询，`--status` 可继续过滤。
 
 完整命令、flags、alias 和退出码以 Clap 生成的 `kanban --help`、子命令 help 和 protocol DTO 为准。
 README 只说明工作流和 host-admin 边界，不复制 command tree。

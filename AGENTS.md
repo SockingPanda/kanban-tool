@@ -24,7 +24,7 @@
 - `kanban-core`：领域 ID、枚举、状态机、纯校验和领域错误；不依赖内部 crate、HTTP 或 Turso。
 - `kanban-service`：application service、Turso schema/migration、repository、事务、projection、
   provider 和只读 importer；是唯一直接依赖 `turso` 的 canonical persistence owner。
-- `kanban-server`：唯一 host、Axum routes、数据库装配和 dispatcher。
+- `kanban-server`：唯一 host、进程生命周期、路径准备、Axum routes 和 dispatcher；Turso 打开、初始化、迁移与持久化由 `kanban-service` 负责。
 - `kanban-protocol`：当前 active wire DTO、error、schema 和 surface catalog；不承载数据库 row 或 store 规则。
 - `kanban-client`：typed localhost HTTP client；CLI、MCP 和 Desktop 不直连数据库。
 - `kanban-cli`、`kanban-mcp`、`apps/desktop/src-tauri`：薄入口或 shell；`xtask` 仅作离线检查工具。

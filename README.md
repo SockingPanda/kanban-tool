@@ -55,8 +55,8 @@ kanban task promote default#1
   和可选 `legacy-sqlite-import` v30 importer。
 
 label proposal 同时支持 task scope 和 board scope。CLI 不带 `--task-ref` 的
-`kanban label proposals list` 走 board-wide 查询；HTTP 对应
-`GET /api/v1/boards/:board/label-proposals`，可用 `status` query 过滤。
+`kanban label proposals list` 按当前 board 查询，可用 `--status` 过滤；精确 transport
+contract 见 [`kanban-protocol` schema](crates/kanban-protocol/docs/schema.md)。
 
 FTS、vector、graph、context 和 projection state 都是可重建派生数据，不能反向写 canonical facts。
 
@@ -84,13 +84,10 @@ specify、unblock、reopen、reclaim 和 archive 都是显式 service command，
 - [`kanban-protocol` schema/wire 契约](crates/kanban-protocol/docs/schema.md)
 - [CLI](crates/kanban-cli/README.md)、[HTTP host](crates/kanban-server/README.md)、[MCP](crates/kanban-mcp/README.md)、[Desktop](apps/desktop/README.md)
 
-文档变更至少运行 `just docs-check` 与 `just diff-check`。精确 gate 结果属于当前任务或 CI 证据，
-长期指南不记录易过期的执行状态；文档更新也不会替代验证。
-
 ## 范围
 
 产品面向本机 loopback 和单一用户，不提供 SaaS、多租户、RBAC、公网访问、云同步、第二 canonical
-backend 或第二 mutation path。旧 sidecar 只在历史迁移证据中保留，不是当前 runtime owner。
+backend 或第二 mutation path。
 
 ## 许可证
 

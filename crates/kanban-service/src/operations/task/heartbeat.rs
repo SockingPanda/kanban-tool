@@ -56,9 +56,7 @@ where
         let claim_expires_at = now.checked_add(command.ttl_ms).ok_or_else(|| {
             KanbanError::InvalidInput("ttl_ms produces an invalid claim expiry".to_owned())
         })?;
-        self.application
-            .store
-            .store
+        self.store
             .heartbeat_task(
                 task_id,
                 crate::store_operations::HeartbeatTaskInput {
@@ -72,7 +70,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 }

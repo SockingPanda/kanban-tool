@@ -34,9 +34,7 @@ where
         let expected_lock_version = command
             .expected_lock_version
             .unwrap_or(current.lock_version);
-        self.application
-            .store
-            .store
+        self.store
             .update_task(
                 task_id,
                 crate::store_operations::UpdateTaskInput {
@@ -59,7 +57,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 }
@@ -132,9 +130,18 @@ fn normalize_metadata(metadata: Option<Option<serde_json::Value>>) -> Result<Opt
 
 #[cfg(test)]
 mod tests {
-    use kanban_core::KanbanError;
+    use kanban_core::{Clock, KanbanError};
 
     use super::{UpdateTaskCommand, normalize_metadata, validate_update_task};
+
+    #[derive(Clone, Copy)]
+    struct FixedClock(i64);
+
+    impl Clock for FixedClock {
+        fn now_ms(&self) -> i64 {
+            self.0
+        }
+    }
 
     fn command() -> UpdateTaskCommand {
         UpdateTaskCommand {
@@ -176,10 +183,7 @@ mod tests {
     async fn concrete_task_crud_covers_idempotency_isolation_filters_and_cas() {
         let (_directory, store, _path) = crate::test_support::store("task-crud-service").await;
         store.initialize().await.expect("initialize");
-        let service = crate::KanbanService::with_clock(
-            crate::TursoApplicationStore::new(store),
-            crate::operations::test_support::FixedClock(100),
-        );
+        let service = crate::KanbanService::with_clock(store, FixedClock(100));
         let secondary = service
             .create_board(crate::CreateBoardCommand {
                 slug: "secondary".into(),

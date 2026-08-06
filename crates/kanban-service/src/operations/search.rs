@@ -115,9 +115,7 @@ where
         query
             .validate()
             .map_err(|error| KanbanError::InvalidInput(error.to_string()))?;
-        self.application
-            .store
-            .store
+        self.store
             .search_tasks(StoreSearchQuery {
                 board: query.board,
                 q: query.q,
@@ -129,40 +127,34 @@ where
                 offset: query.offset,
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(map_results)
     }
 
     pub async fn search_index_status(&self, board: &str) -> Result<SearchIndexStatus> {
         let board = normalize_board(board)?;
-        self.application
-            .store
-            .store
+        self.store
             .search_index_status(&board)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(map_status)
     }
 
     pub async fn rebuild_search_index(&self, board: &str) -> Result<SearchIndexStatus> {
         let board = normalize_board(board)?;
-        self.application
-            .store
-            .store
+        self.store
             .rebuild_search_index(&board)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(map_status)
     }
 
     pub async fn sync_search_index(&self, board: &str) -> Result<SearchIndexStatus> {
         let board = normalize_board(board)?;
-        self.application
-            .store
-            .store
+        self.store
             .sync_search_index(&board)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(map_status)
     }
 }

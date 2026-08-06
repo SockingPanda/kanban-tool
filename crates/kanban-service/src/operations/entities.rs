@@ -43,16 +43,14 @@ where
                 "board cannot be empty".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .list_entities(StoreEntityListOptions {
                 board: options.board,
                 kind: options.kind,
                 limit: options.limit,
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(|entities| entities.into_iter().map(application_entity).collect())
     }
 
@@ -63,12 +61,10 @@ where
                 "entity uri must start with kb://".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .get_entity(uri)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(application_entity)
     }
 
@@ -78,9 +74,7 @@ where
                 "entity uri and kind are required".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .upsert_entity(EntityUpsertInput {
                 uri: command.uri,
                 kind: command.kind,
@@ -94,7 +88,7 @@ where
                 archived_at: command.archived_at,
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(application_entity)
     }
 }

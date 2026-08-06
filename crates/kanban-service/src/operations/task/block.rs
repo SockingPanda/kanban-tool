@@ -64,9 +64,7 @@ where
             }
         }
 
-        self.application
-            .store
-            .store
+        self.store
             .block_task(
                 task_id,
                 crate::store_operations::BlockTaskInput {
@@ -80,7 +78,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 }

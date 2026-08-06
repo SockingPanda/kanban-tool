@@ -7,12 +7,10 @@ where
     C: Clock,
 {
     pub async fn list_board_columns(&self, board: &str) -> Result<Vec<BoardColumnRecord>> {
-        self.application
-            .store
-            .store
+        self.store
             .list_board_columns(board)
             .await
-            .map_err(crate::adapter::store_error)?
+            .map_err(crate::error::store_error)?
             .into_iter()
             .map(|column| {
                 Ok(BoardColumnRecord {

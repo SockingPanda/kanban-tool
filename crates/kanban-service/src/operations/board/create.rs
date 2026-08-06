@@ -46,9 +46,7 @@ where
         }
 
         let _mutation = self.mutation_gate.lock().await;
-        self.application
-            .store
-            .store
+        self.store
             .create_board(crate::CreateBoardInput {
                 id: new_board_id(),
                 slug,
@@ -60,6 +58,6 @@ where
             })
             .await
             .map(super::application_board)
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
     }
 }

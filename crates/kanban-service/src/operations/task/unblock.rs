@@ -30,9 +30,7 @@ where
                 "只能 unblock blocked 任务".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .unblock_task(
                 task_id,
                 crate::store_operations::UnblockTaskInput {
@@ -43,7 +41,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 }

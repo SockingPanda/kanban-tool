@@ -53,12 +53,10 @@ where
     C: Clock,
 {
     pub async fn list_relation_predicates(&self) -> Result<Vec<RelationPredicateRecord>> {
-        self.application
-            .store
-            .store
+        self.store
             .list_relation_predicates()
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(|predicates| predicates.into_iter().map(application_predicate).collect())
     }
 
@@ -71,9 +69,7 @@ where
                 "predicate name is required".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .upsert_relation_predicate(RelationPredicateInput {
                 name: command.name,
                 domain_kind: command.domain_kind,
@@ -83,7 +79,7 @@ where
                 description: command.description,
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(application_predicate)
     }
 
@@ -96,9 +92,7 @@ where
                 "relation limit must be between 1 and 1000".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .list_relations(StoreRelationListOptions {
                 board: options.board,
                 subject_uri: options.subject_uri,
@@ -107,7 +101,7 @@ where
                 limit: options.limit,
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(|relations| relations.into_iter().map(application_relation).collect())
     }
 
@@ -120,9 +114,7 @@ where
                 "relation subject, predicate and object are required".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .upsert_relation(RelationUpsertInput {
                 subject_uri: command.subject_uri,
                 predicate: command.predicate,
@@ -136,14 +128,12 @@ where
                 metadata_json: command.metadata_json,
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(application_relation)
     }
 
     pub async fn delete_relation(&self, command: RelationDeleteCommand) -> Result<bool> {
-        self.application
-            .store
-            .store
+        self.store
             .delete_relation(RelationDeleteInput {
                 subject_uri: command.subject_uri,
                 predicate: command.predicate,
@@ -152,7 +142,7 @@ where
                 board: command.board,
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
     }
 }
 

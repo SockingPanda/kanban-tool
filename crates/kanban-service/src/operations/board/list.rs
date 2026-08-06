@@ -14,12 +14,10 @@ where
     }
 
     pub async fn list_boards(&self, include_archived: bool) -> Result<Vec<BoardRecord>> {
-        self.application
-            .store
-            .store
+        self.store
             .list_boards(include_archived)
             .await
             .map(|boards| boards.into_iter().map(super::application_board).collect())
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
     }
 }

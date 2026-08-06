@@ -87,9 +87,7 @@ where
                 "reclaim target status 不是可重算的 active 状态".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .reclaim_task(
                 task_id,
                 crate::store_operations::ReclaimTaskInput {
@@ -104,7 +102,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 
@@ -121,12 +119,10 @@ where
         let _mutation = self.mutation_gate.lock().await;
         let now = self.clock.now_ms();
         let expired = self
-            .application
-            .store
             .store
             .list_expired_claims(board, now)
             .await
-            .map_err(crate::adapter::store_error)?
+            .map_err(crate::error::store_error)?
             .into_iter()
             .map(super::application_task)
             .collect::<Result<Vec<_>>>()?;
@@ -158,8 +154,6 @@ where
                 "claim expired"
             };
             let result = self
-                .application
-                .store
                 .store
                 .reclaim_expired_task(
                     &task.id,
@@ -174,7 +168,7 @@ where
                     },
                 )
                 .await
-                .map_err(crate::adapter::store_error)?;
+                .map_err(crate::error::store_error)?;
             if result.is_some() {
                 reclaimed += 1;
             }

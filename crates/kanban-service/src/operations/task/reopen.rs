@@ -37,9 +37,7 @@ where
                 "只能 reopen done 任务".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .reopen_task(
                 task_id,
                 crate::store_operations::ReopenTaskInput {
@@ -51,7 +49,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 }

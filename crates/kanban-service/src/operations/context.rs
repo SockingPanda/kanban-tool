@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use kanban_core::{Clock, KanbanError, Result};
 
+use crate::KanbanService;
 use crate::store_operations::StoreTaskNeighborhoodOptions;
 use crate::store_operations::search::{StoreSearchQuery, StoreSearchResults};
-use crate::{KanbanService, TursoApplicationStore};
 
 /// 上下文构建的边界，防止一次请求无限扫描 canonical 数据或派生索引。
 pub const MAX_CONTEXT_LIMIT: usize = 1_000;
@@ -138,12 +138,11 @@ where
     }
 
     async fn context_sources(&self, options: ContextBuildOptions) -> Result<ContextSources> {
-        let application_store = &self.application.store;
-        let store = &application_store.store;
-        let board_id = application_store
+        let store = &self.store;
+        let board_id = store
             .vector_board_id(&options.board)
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
 
         let initial_query = options
             .query
@@ -303,7 +302,7 @@ async fn search(
         })
         .await
         .map(Some)
-        .map_err(crate::adapter::store_error)
+        .map_err(crate::error::store_error)
 }
 
 async fn resolve_subject(
@@ -320,7 +319,7 @@ async fn resolve_subject(
         let value = store
             .get_task_global(task)
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         return ensure_board(value, board_id);
     }
     let selector = options.reference.as_deref().or(options.task.as_deref());
@@ -342,7 +341,7 @@ async fn resolve_subject(
     let value = store
         .get_task_global(&hit.task_id)
         .await
-        .map_err(crate::adapter::store_error)?;
+        .map_err(crate::error::store_error)?;
     ensure_board(value, board_id)
 }
 
@@ -384,7 +383,7 @@ async fn lexical_candidates(
         let Ok(task) = store
             .get_task_global(&hit.task_id)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
         else {
             continue;
         };
@@ -541,7 +540,7 @@ fn graph_provider_from_status(
 }
 
 async fn vector_candidates(
-    store: &TursoApplicationStore,
+    store: &crate::db::TursoStore,
     query: &str,
     board_id: &str,
     limit: usize,
@@ -570,10 +569,9 @@ async fn vector_candidates(
         }
     };
     if store
-        .store
         .vector_config()
         .await
-        .map_err(crate::adapter::store_error)?
+        .map_err(crate::error::store_error)?
         .is_none()
     {
         push_unique(degraded, "vector_disabled");

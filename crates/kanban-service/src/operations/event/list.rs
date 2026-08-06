@@ -58,8 +58,6 @@ where
         }
         options.limit = options.limit.min(MAX_EVENT_LIST_LIMIT);
         let page = self
-            .application
-            .store
             .store
             .list_events(
                 board,
@@ -68,7 +66,7 @@ where
                 options.limit,
             )
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         Ok(EventListPage {
             events: page.events.into_iter().map(application_event).collect(),
             next_after: page.next_after,

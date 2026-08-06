@@ -1,5 +1,4 @@
 use std::{
-    ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -7,23 +6,19 @@ use std::{
 use kanban_core::{Clock, SystemClock};
 use tokio::sync::Mutex;
 
-use crate::{ApplicationStore, KanbanError, Result, TursoApplicationStore};
+use crate::{KanbanError, Result, db::TursoStore};
 
-/// HTTP handler 与进程内 dispatcher 共享的规范 command/query 入口。
-#[derive(Debug, Clone)]
-pub struct ApplicationService<S, C = SystemClock> {
-    pub(crate) store: S,
-    pub(crate) clock: C,
-    pub(crate) mutation_gate: Arc<Mutex<()>>,
-}
-
-/// host-facing 的规范 service。
+/// HTTP handler 与进程内 dispatcher 共享的规范 service 入口。
 ///
-/// 当前仍以 [`ApplicationService`] 承载尚未完成扁平化的 operation。这个兼容核心只在
-/// service crate 内装配；后续领域迁移完成后会逐步删除 generic store abstraction。
+/// `TursoStore` 是唯一的 canonical persistence handle；运行日志、附件根目录、时钟和
+/// mutation gate 都属于同一个 service 生命周期，避免 host 再创建第二层兼容包装。
 #[derive(Clone)]
 pub struct KanbanService<C = SystemClock> {
-    pub(crate) application: ApplicationService<TursoApplicationStore, C>,
+    pub(crate) store: TursoStore,
+    pub(crate) run_log_root: Option<Arc<PathBuf>>,
+    pub(crate) attachment_root: Option<Arc<PathBuf>>,
+    pub(crate) clock: C,
+    pub(crate) mutation_gate: Arc<Mutex<()>>,
 }
 
 impl KanbanService<SystemClock> {
@@ -33,15 +28,29 @@ impl KanbanService<SystemClock> {
         run_log_root: Option<Arc<PathBuf>>,
         attachment_root: Arc<PathBuf>,
     ) -> Result<Self> {
-        let store = TursoApplicationStore::open_with_roots(db_path, run_log_root, attachment_root)
+        let store = TursoStore::open(db_path)
             .await
             .map_err(|error| KanbanError::Storage(error.to_string()))?;
-        Ok(Self::new(store))
+        store
+            .initialize()
+            .await
+            .map_err(|error| KanbanError::Storage(error.to_string()))?;
+        Ok(Self {
+            store,
+            run_log_root,
+            attachment_root: Some(attachment_root),
+            clock: SystemClock,
+            mutation_gate: Arc::new(Mutex::new(())),
+        })
     }
 
-    pub fn new(store: TursoApplicationStore) -> Self {
+    pub fn new(store: TursoStore) -> Self {
         Self {
-            application: ApplicationService::new(store),
+            store,
+            run_log_root: None,
+            attachment_root: None,
+            clock: SystemClock,
+            mutation_gate: Arc::new(Mutex::new(())),
         }
     }
 }
@@ -50,43 +59,12 @@ impl<C> KanbanService<C>
 where
     C: Clock,
 {
-    /// 为 application service 保留可测试的 Clock seam。
-    pub fn with_clock(store: TursoApplicationStore, clock: C) -> Self {
-        Self {
-            application: ApplicationService::with_clock(store, clock),
-        }
-    }
-}
-
-impl<C> Deref for KanbanService<C> {
-    type Target = ApplicationService<TursoApplicationStore, C>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.application
-    }
-}
-
-impl<S> ApplicationService<S, SystemClock>
-where
-    S: ApplicationStore,
-{
-    pub fn new(store: S) -> Self {
+    /// 为 service 保留可测试的 Clock seam。
+    pub fn with_clock(store: TursoStore, clock: C) -> Self {
         Self {
             store,
-            clock: SystemClock,
-            mutation_gate: Arc::new(Mutex::new(())),
-        }
-    }
-}
-
-impl<S, C> ApplicationService<S, C>
-where
-    S: ApplicationStore,
-    C: Clock,
-{
-    pub fn with_clock(store: S, clock: C) -> Self {
-        Self {
-            store,
+            run_log_root: None,
+            attachment_root: None,
             clock,
             mutation_gate: Arc::new(Mutex::new(())),
         }

@@ -8,7 +8,7 @@ use kanban_core::{Clock, KanbanError, Result};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-use crate::adapter::store_error;
+use crate::error::store_error;
 use crate::{
     KanbanService, LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
     OntologyActionInput, OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput,
@@ -123,7 +123,7 @@ where
         board: &str,
         value: Value,
     ) -> Result<Value> {
-        let store = &self.application.store.store;
+        let store = &self.store;
         let result = match operation {
             "list_semantics" => json!(
                 store

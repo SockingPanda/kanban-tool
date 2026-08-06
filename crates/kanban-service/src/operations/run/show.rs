@@ -16,12 +16,10 @@ where
                 "run_id must be a global r_... id".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .get_run(run_id)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_run)
     }
 }

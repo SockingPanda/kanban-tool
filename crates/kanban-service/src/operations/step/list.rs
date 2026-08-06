@@ -14,12 +14,10 @@ where
             ));
         }
         let steps = self
-            .application
-            .store
             .store
             .list_steps(task_id)
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         super::application_steps(steps)
     }
 }

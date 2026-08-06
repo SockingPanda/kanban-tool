@@ -13,12 +13,10 @@ where
                 "task_id must be a global t_... id".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .list_comments(task_id)
             .await
-            .map_err(crate::adapter::store_error)?
+            .map_err(crate::error::store_error)?
             .into_iter()
             .map(super::application_comment)
             .collect()

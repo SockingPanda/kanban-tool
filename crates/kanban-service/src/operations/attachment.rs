@@ -71,12 +71,10 @@ where
             ));
         }
         let _mutation = self.mutation_gate.lock().await;
-        let root = self.application.store.attachment_root().ok_or_else(|| {
+        let root = self.attachment_root.as_deref().ok_or_else(|| {
             KanbanError::Storage("attachment root is not configured for this host".to_owned())
         })?;
-        self.application
-            .store
-            .store
+        self.store
             .create_attachment(
                 &task_id,
                 crate::CreateAttachmentInput {
@@ -96,7 +94,7 @@ where
                 root,
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(application_attachment)
     }
 }
@@ -106,12 +104,10 @@ where
     C: Clock,
 {
     pub async fn list_attachments(&self, task_id: &str) -> Result<Vec<AttachmentRecord>> {
-        self.application
-            .store
-            .store
+        self.store
             .list_attachments(&canonical_task_id(task_id)?)
             .await
-            .map_err(crate::adapter::store_error)?
+            .map_err(crate::error::store_error)?
             .into_iter()
             .map(application_attachment)
             .collect()
@@ -133,16 +129,14 @@ where
                 "attachment id must start with a_".to_owned(),
             ));
         }
-        let root = self.application.store.attachment_root().ok_or_else(|| {
+        let root = self.attachment_root.as_deref().ok_or_else(|| {
             KanbanError::Storage("attachment root is not configured for this host".to_owned())
         })?;
         let (record, content) = self
-            .application
-            .store
             .store
             .read_attachment(&task_id, attachment_id.trim(), root)
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         Ok(AttachmentContentRecord {
             attachment: application_attachment(record)?,
             content,
@@ -169,12 +163,10 @@ where
             ));
         }
         let _mutation = self.mutation_gate.lock().await;
-        let root = self.application.store.attachment_root().ok_or_else(|| {
+        let root = self.attachment_root.as_deref().ok_or_else(|| {
             KanbanError::Storage("attachment root is not configured for this host".to_owned())
         })?;
-        self.application
-            .store
-            .store
+        self.store
             .delete_attachment(
                 &task_id,
                 attachment_id,
@@ -184,7 +176,7 @@ where
                 self.clock.now_ms(),
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
     }
 }
 

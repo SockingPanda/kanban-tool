@@ -103,12 +103,10 @@ where
             offset: options.offset,
         };
         let page = self
-            .application
-            .store
             .store
             .list_tasks(&board, store_options)
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         Ok(TaskListPage {
             tasks: page
                 .tasks

@@ -8,12 +8,10 @@ where
 {
     pub async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
         let task_id = validate_task_id(task_id)?;
-        self.application
-            .store
-            .store
+        self.store
             .get_task_global(task_id)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 }

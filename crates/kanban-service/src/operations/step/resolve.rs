@@ -42,9 +42,7 @@ where
         let _mutation = self.mutation_gate.lock().await;
         let parent = self.get_task(&task_id).await?;
         ensure_parent_can_change_steps(&parent)?;
-        self.application
-            .store
-            .store
+        self.store
             .complete_step(
                 &task_id,
                 &step_id,
@@ -57,7 +55,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         self.list_steps(&task_id).await
     }
 }
@@ -76,9 +74,7 @@ where
         let _mutation = self.mutation_gate.lock().await;
         let parent = self.get_task(&task_id).await?;
         ensure_parent_can_change_steps(&parent)?;
-        self.application
-            .store
-            .store
+        self.store
             .skip_step(
                 &task_id,
                 &step_id,
@@ -91,7 +87,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         self.list_steps(&task_id).await
     }
 }
@@ -110,9 +106,7 @@ where
         let _mutation = self.mutation_gate.lock().await;
         let parent = self.get_task(&task_id).await?;
         ensure_parent_can_change_steps(&parent)?;
-        self.application
-            .store
-            .store
+        self.store
             .reopen_step(
                 &task_id,
                 &step_id,
@@ -125,7 +119,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         self.list_steps(&task_id).await
     }
 }

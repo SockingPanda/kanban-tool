@@ -71,9 +71,7 @@ where
                 _ => format!("cannot release to {}", target.as_str()),
             }));
         }
-        self.application
-            .store
-            .store
+        self.store
             .release_task(
                 task_id,
                 crate::store_operations::ReleaseTaskInput {
@@ -85,7 +83,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 }

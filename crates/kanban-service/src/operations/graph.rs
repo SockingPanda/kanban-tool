@@ -66,9 +66,7 @@ where
                 "graph limit must be between 1 and 1000".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .graph_neighbors(StoreGraphNeighborsOptions {
                 board: options.board,
                 entity_uri: options.entity_uri,
@@ -76,7 +74,7 @@ where
                 limit: options.limit,
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(|relations| {
                 relations
                     .into_iter()
@@ -89,12 +87,10 @@ where
         if board.trim().is_empty() {
             return Err(KanbanError::InvalidInput("board is required".to_owned()));
         }
-        self.application
-            .store
-            .store
+        self.store
             .graph_status(board.trim())
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(application_graph_status)
     }
 
@@ -102,12 +98,10 @@ where
         if board.trim().is_empty() {
             return Err(KanbanError::InvalidInput("board is required".to_owned()));
         }
-        self.application
-            .store
-            .store
+        self.store
             .graph_rebuild(board.trim())
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(application_graph_maintenance)
     }
 
@@ -115,12 +109,10 @@ where
         if board.trim().is_empty() {
             return Err(KanbanError::InvalidInput("board is required".to_owned()));
         }
-        self.application
-            .store
-            .store
+        self.store
             .graph_sync(board.trim())
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(application_graph_maintenance)
     }
 
@@ -128,15 +120,13 @@ where
         &self,
         options: ProjectionStatusOptions,
     ) -> Result<ProjectionStateRecord> {
-        self.application
-            .store
-            .store
+        self.store
             .projection_status(StoreProjectionStatusOptions {
                 board: options.board,
                 projection: options.projection,
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(application_projection_state)
     }
 
@@ -154,16 +144,14 @@ where
                 "graph limit must be between 1 and 1000".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .graph_query(StoreGraphQueryOptions {
                 board: options.board,
                 query: options.query,
                 limit: options.limit,
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(|rows| {
                 rows.into_iter()
                     .map(|row| GraphQueryRowRecord {
@@ -190,9 +178,7 @@ where
                 "task id must start with t_".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .task_neighborhood(
                 task_id.trim(),
                 StoreTaskNeighborhoodOptions {
@@ -202,7 +188,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(application_task_neighborhood)
     }
 
@@ -214,9 +200,7 @@ where
         if board.trim().is_empty() {
             return Err(KanbanError::InvalidInput("board is required".to_owned()));
         }
-        self.application
-            .store
-            .store
+        self.store
             .board_task_map(
                 board.trim(),
                 StoreBoardTaskMapOptions {
@@ -229,7 +213,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(application_board_task_map)
     }
 }

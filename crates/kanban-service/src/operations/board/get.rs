@@ -11,12 +11,10 @@ where
         if selector.is_empty() {
             return Err(KanbanError::InvalidInput("看板不能为空".to_owned()));
         }
-        self.application
-            .store
-            .store
+        self.store
             .get_board(selector)
             .await
             .map(super::application_board)
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
     }
 }

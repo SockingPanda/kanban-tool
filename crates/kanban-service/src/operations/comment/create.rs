@@ -88,9 +88,7 @@ where
             .map(|agent_type| agent_type.trim().to_owned())
             .filter(|agent_type| !agent_type.is_empty());
         let _mutation = self.mutation_gate.lock().await;
-        self.application
-            .store
-            .store
+        self.store
             .create_comment(
                 task_id,
                 crate::CreateCommentInput {
@@ -107,7 +105,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_comment)
     }
 }

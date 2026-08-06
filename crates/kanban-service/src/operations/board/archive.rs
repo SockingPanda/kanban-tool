@@ -30,9 +30,7 @@ where
         }
 
         let _mutation = self.mutation_gate.lock().await;
-        self.application
-            .store
-            .store
+        self.store
             .archive_board(
                 &board,
                 crate::ArchiveBoardInput {
@@ -43,6 +41,6 @@ where
             )
             .await
             .map(super::application_board)
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
     }
 }

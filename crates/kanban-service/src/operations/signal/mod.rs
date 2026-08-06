@@ -164,9 +164,7 @@ where
         let evidence_json = serde_json::to_string(&command.evidence)
             .map_err(|error| KanbanError::InvalidInput(format!("invalid evidence: {error}")))?;
         let _mutation = self.mutation_gate.lock().await;
-        self.application
-            .store
-            .store
+        self.store
             .record_signal(CreateSignalInput {
                 id: new_typed_id("sig"),
                 observation_id: new_typed_id("obs"),
@@ -189,7 +187,7 @@ where
                 created_at: self.clock.now_ms(),
             })
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(application_signal_result)
     }
 
@@ -200,9 +198,7 @@ where
     ) -> Result<Vec<SignalRecord>> {
         let board = normalize_required(board, "board")?;
         validate_list_options(&options)?;
-        self.application
-            .store
-            .store
+        self.store
             .list_signals(
                 &board,
                 StoreSignalListOptions {
@@ -218,7 +214,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)?
+            .map_err(crate::error::store_error)?
             .into_iter()
             .map(application_signal)
             .collect()
@@ -266,9 +262,7 @@ where
             SignalLifecycle::Resolve => SignalLifecycleInput::Resolve,
             SignalLifecycle::Supersede => SignalLifecycleInput::Supersede,
         };
-        self.application
-            .store
-            .store
+        self.store
             .review_signals(ReviewSignalsInput {
                 board: command.board.map(|board| board.trim().to_owned()),
                 signal_ids: command.signal_ids,
@@ -280,7 +274,7 @@ where
                 now: self.clock.now_ms(),
             })
             .await
-            .map_err(crate::adapter::store_error)?
+            .map_err(crate::error::store_error)?
             .into_iter()
             .map(application_signal)
             .collect()
@@ -293,12 +287,10 @@ where
                 "signal id must start with sig_".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .get_signal(&signal_id)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(application_signal)
     }
 }

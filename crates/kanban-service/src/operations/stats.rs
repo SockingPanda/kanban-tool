@@ -53,12 +53,10 @@ where
                 "generated_at must be non-negative".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .get_stats(board, generated_at)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(application_stats)
     }
 }
@@ -123,18 +121,23 @@ fn application_blocked_reason(
 
 #[cfg(test)]
 mod tests {
-    use kanban_core::KanbanError;
+    use kanban_core::{Clock, KanbanError};
 
-    use crate::operations::test_support::FixedClock;
     use crate::*;
+
+    #[derive(Clone, Copy)]
+    struct FixedClock(i64);
+
+    impl Clock for FixedClock {
+        fn now_ms(&self) -> i64 {
+            self.0
+        }
+    }
 
     async fn service(name: &str) -> (tempfile::TempDir, KanbanService<FixedClock>) {
         let (directory, store, _path) = crate::test_support::store(name).await;
         store.initialize().await.expect("initialize");
-        (
-            directory,
-            KanbanService::with_clock(TursoApplicationStore::new(store), FixedClock(100)),
-        )
+        (directory, KanbanService::with_clock(store, FixedClock(100)))
     }
 
     #[tokio::test]

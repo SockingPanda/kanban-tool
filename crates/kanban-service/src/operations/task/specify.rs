@@ -39,9 +39,7 @@ where
                 "只能 specify triage 任务".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .specify_task(
                 task_id,
                 crate::store_operations::SpecifyTaskInput {
@@ -56,7 +54,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 }

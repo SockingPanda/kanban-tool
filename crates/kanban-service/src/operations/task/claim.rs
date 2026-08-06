@@ -96,8 +96,6 @@ where
             })
             .transpose()?;
         let claim = self
-            .application
-            .store
             .store
             .claim_task(
                 task_id,
@@ -115,7 +113,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         application_claim(claim)
     }
 }

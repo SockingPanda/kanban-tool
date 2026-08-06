@@ -34,15 +34,13 @@ where
         }
 
         let run = self
-            .application
-            .store
             .store
             .get_run_log_source(run_id)
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
 
         read_run_log_file(
-            self.application.store.run_log_root(),
+            self.run_log_root.as_deref(),
             &run.id,
             run.log_path.as_deref(),
             RUN_LOG_TAIL_BYTES,

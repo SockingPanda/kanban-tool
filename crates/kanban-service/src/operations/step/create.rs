@@ -106,9 +106,7 @@ where
         } else {
             parent.status
         };
-        self.application
-            .store
-            .store
+        self.store
             .create_step(
                 task_id,
                 crate::store_operations::CreateStepInput {
@@ -131,7 +129,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         self.list_steps(task_id).await
     }
 }

@@ -36,9 +36,7 @@ where
             .map_err(|error| KanbanError::InvalidInput(format!("invalid metadata: {error}")))?;
         let board = command.board.trim().to_owned();
         let _mutation = self.mutation_gate.lock().await;
-        self.application
-            .store
-            .store
+        self.store
             .create_task(
                 &board,
                 crate::store_operations::CreateTaskInput {
@@ -69,7 +67,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 }

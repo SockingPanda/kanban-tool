@@ -61,7 +61,7 @@ mod tests {
             .collect();
         assert_eq!(names, catalog_names);
         validate_mcp_operation_catalog(mcp_operation_catalog())
-            .expect("MCP catalog must bind only existing domain endpoints");
+            .expect("MCP catalog 只能绑定已存在的领域 endpoint");
         assert_eq!(catalog_names.len(), 102);
     }
 
@@ -74,7 +74,7 @@ mod tests {
         for operation_id in MCP_HOST_ADMIN_OPERATION_IDS {
             assert!(
                 !bound_operations.contains(operation_id),
-                "host-admin operation unexpectedly bound by MCP catalog: {operation_id}"
+                "MCP catalog 意外绑定了 host-admin operation：{operation_id}"
             );
         }
 
@@ -96,7 +96,7 @@ mod tests {
         ] {
             assert!(
                 names.iter().all(|name| !name.contains(forbidden)),
-                "host-admin tool unexpectedly exposed: {forbidden}"
+                "MCP 意外暴露了 host-admin tool：{forbidden}"
             );
         }
     }

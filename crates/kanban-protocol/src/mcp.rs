@@ -31,7 +31,7 @@ pub enum McpOperationInvariant {
     CanonicalHostOnly,
     /// mutation/query 都走共享 application service 与 typed HTTP client。
     SharedApplicationService,
-    /// MCP 不暴露 host-admin、migration、database replace 或 derived maintenance。
+    /// MCP 不暴露 host-admin、migration 或 database replace。
     NoHostAdminSurface,
 }
 
@@ -251,7 +251,8 @@ pub fn validate_mcp_operation_catalog(catalog: &[McpOperationDescriptor]) -> Res
                     descriptor.tool_name, operation_id
                 ));
             }
-            let endpoint = crate::endpoint_descriptor(operation_id).expect("endpoint id checked");
+            let endpoint =
+                crate::endpoint_descriptor(operation_id).expect("endpoint ID 已验证存在");
             if endpoint.surface != ContractSurface::Api {
                 return Err(format!(
                     "MCP tool {} 只能绑定 API endpoint，实际为 {:?}：{}",
@@ -312,7 +313,7 @@ mod tests {
         }];
         assert!(
             validate_mcp_operation_catalog(&missing)
-                .expect_err("missing endpoint must fail")
+                .expect_err("缺失 endpoint 时必须失败")
                 .contains("api.not-real")
         );
 
@@ -324,7 +325,7 @@ mod tests {
         }];
         assert!(
             validate_mcp_operation_catalog(&host_admin)
-                .expect_err("host-admin endpoint must fail")
+                .expect_err("绑定 host-admin endpoint 时必须失败")
                 .contains("host-admin")
         );
     }

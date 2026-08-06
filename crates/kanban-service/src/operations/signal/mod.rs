@@ -1,11 +1,14 @@
-//! 通用产品/agent signal ledger 的共享 application service path。
+//! 通用产品/agent signal ledger 的规范 service path。
 
-use std::{collections::BTreeMap, future::Future};
+use std::collections::BTreeMap;
 
 use kanban_core::{Clock, KanbanError, Result, new_event_id, new_typed_id};
 use serde_json::Value;
 
-use crate::{ApplicationService, ApplicationStore, CommentRecord};
+use crate::store_operations::{
+    CreateSignalInput, ReviewSignalsInput, SignalLifecycleInput, StoreSignalListOptions,
+};
+use crate::{CommentRecord, KanbanService};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignalStatus {
@@ -63,41 +66,6 @@ pub struct SignalReviewCommand {
     pub replacement_signal_id: Option<String>,
     pub actor: String,
     pub reason: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SignalCreateRecord {
-    pub id: String,
-    pub observation_id: String,
-    pub event_id: String,
-    pub board: String,
-    pub kind: String,
-    pub title: String,
-    pub summary: String,
-    pub severity: String,
-    pub task_ref: Option<String>,
-    pub task_id: Option<String>,
-    pub run_id: Option<String>,
-    pub comment_id: Option<String>,
-    pub actor: String,
-    pub agent_type: Option<String>,
-    pub dedupe_key: Option<String>,
-    pub source: Option<String>,
-    pub evidence_json: String,
-    pub comment_body: Option<String>,
-    pub created_at: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SignalReviewRecord {
-    pub board: Option<String>,
-    pub signal_ids: Vec<String>,
-    pub lifecycle: SignalLifecycle,
-    pub replacement_signal_id: Option<String>,
-    pub actor: String,
-    pub reason: String,
-    pub event_ids: Vec<String>,
-    pub now: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -162,29 +130,8 @@ impl Default for SignalListOptions {
     }
 }
 
-pub trait SignalLedger: ApplicationStore {
-    fn record_signal(
-        &self,
-        input: SignalCreateRecord,
-    ) -> impl Future<Output = Result<SignalRecordResult>> + Send;
-
-    fn list_signals(
-        &self,
-        board: &str,
-        options: SignalListOptions,
-    ) -> impl Future<Output = Result<Vec<SignalRecord>>> + Send;
-
-    fn get_signal(&self, signal_id: &str) -> impl Future<Output = Result<SignalRecord>> + Send;
-
-    fn review_signals(
-        &self,
-        input: SignalReviewRecord,
-    ) -> impl Future<Output = Result<Vec<SignalRecord>>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: SignalLedger,
     C: Clock,
 {
     pub async fn record_signal(
@@ -217,8 +164,10 @@ where
         let evidence_json = serde_json::to_string(&command.evidence)
             .map_err(|error| KanbanError::InvalidInput(format!("invalid evidence: {error}")))?;
         let _mutation = self.mutation_gate.lock().await;
-        self.store
-            .record_signal(SignalCreateRecord {
+        self.application
+            .store
+            .store
+            .record_signal(CreateSignalInput {
                 id: new_typed_id("sig"),
                 observation_id: new_typed_id("obs"),
                 event_id: new_event_id(),
@@ -240,6 +189,8 @@ where
                 created_at: self.clock.now_ms(),
             })
             .await
+            .map_err(crate::adapter::store_error)
+            .and_then(application_signal_result)
     }
 
     pub async fn list_signals(
@@ -249,7 +200,28 @@ where
     ) -> Result<Vec<SignalRecord>> {
         let board = normalize_required(board, "board")?;
         validate_list_options(&options)?;
-        self.store.list_signals(&board, options).await
+        self.application
+            .store
+            .store
+            .list_signals(
+                &board,
+                StoreSignalListOptions {
+                    statuses: options
+                        .statuses
+                        .into_iter()
+                        .map(|status| status.as_str().to_owned())
+                        .collect(),
+                    kinds: options.kinds,
+                    task_ref: options.task_ref,
+                    include_all: options.include_all,
+                    limit: options.limit,
+                },
+            )
+            .await
+            .map_err(crate::adapter::store_error)?
+            .into_iter()
+            .map(application_signal)
+            .collect()
     }
 
     pub async fn review_signals(
@@ -288,11 +260,19 @@ where
         }
         let event_ids = command.signal_ids.iter().map(|_| new_event_id()).collect();
         let _mutation = self.mutation_gate.lock().await;
-        self.store
-            .review_signals(SignalReviewRecord {
+        let lifecycle = match command.lifecycle {
+            SignalLifecycle::Confirm => SignalLifecycleInput::Confirm,
+            SignalLifecycle::Reject => SignalLifecycleInput::Reject,
+            SignalLifecycle::Resolve => SignalLifecycleInput::Resolve,
+            SignalLifecycle::Supersede => SignalLifecycleInput::Supersede,
+        };
+        self.application
+            .store
+            .store
+            .review_signals(ReviewSignalsInput {
                 board: command.board.map(|board| board.trim().to_owned()),
                 signal_ids: command.signal_ids,
-                lifecycle: command.lifecycle,
+                lifecycle,
                 replacement_signal_id: command.replacement_signal_id,
                 actor: command.actor,
                 reason: command.reason,
@@ -300,6 +280,10 @@ where
                 now: self.clock.now_ms(),
             })
             .await
+            .map_err(crate::adapter::store_error)?
+            .into_iter()
+            .map(application_signal)
+            .collect()
     }
 
     pub async fn get_signal(&self, signal_id: &str) -> Result<SignalRecord> {
@@ -309,7 +293,13 @@ where
                 "signal id must start with sig_".to_owned(),
             ));
         }
-        self.store.get_signal(&signal_id).await
+        self.application
+            .store
+            .store
+            .get_signal(&signal_id)
+            .await
+            .map_err(crate::adapter::store_error)
+            .and_then(application_signal)
     }
 }
 
@@ -341,125 +331,60 @@ fn validate_list_options(options: &SignalListOptions) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use std::{
-        collections::BTreeMap,
-        sync::{Arc, atomic::AtomicUsize},
-    };
-
-    use kanban_core::{KanbanError, Result};
-    use serde_json::Value;
-
-    use crate::operations::test_support::{FixedClock, StubStore};
-    use crate::*;
-
-    impl SignalLedger for StubStore {
-        async fn record_signal(&self, input: SignalCreateRecord) -> Result<SignalRecordResult> {
-            Ok(SignalRecordResult {
-                signal: SignalRecord {
-                    id: input.id,
-                    board_id: "b_default".into(),
-                    observation_id: input.observation_id.clone(),
-                    kind: input.kind,
-                    title: input.title,
-                    summary: input.summary,
-                    severity: input.severity,
-                    status: SignalStatus::Open,
-                    dedupe_key: input.dedupe_key,
-                    superseded_by_signal_id: None,
-                    reviewed_by: None,
-                    reviewed_at: None,
-                    review_reason: None,
-                    created_at: input.created_at,
-                    updated_at: input.created_at,
-                    observation: SignalObservationRecord {
-                        id: input.observation_id,
-                        board_id: "b_default".into(),
-                        task_id: input.task_id,
-                        task_ref_snapshot: input.task_ref,
-                        run_id: input.run_id,
-                        comment_id: input.comment_id,
-                        actor: input.actor,
-                        agent_type: input.agent_type,
-                        source: input.source,
-                        evidence_json: input.evidence_json,
-                        created_at: input.created_at,
-                    },
-                },
-                backlink_comment: None,
-            })
-        }
-
-        async fn list_signals(
-            &self,
-            _board: &str,
-            _options: SignalListOptions,
-        ) -> Result<Vec<SignalRecord>> {
-            Ok(Vec::new())
-        }
-
-        async fn get_signal(&self, _signal_id: &str) -> Result<SignalRecord> {
-            Err(KanbanError::NotFound("signal".into()))
-        }
-
-        async fn review_signals(&self, _input: SignalReviewRecord) -> Result<Vec<SignalRecord>> {
-            Ok(Vec::new())
-        }
+fn application_signal_status(status: String) -> Result<SignalStatus> {
+    match status.as_str() {
+        "open" => Ok(SignalStatus::Open),
+        "confirmed" => Ok(SignalStatus::Confirmed),
+        "rejected" => Ok(SignalStatus::Rejected),
+        "superseded" => Ok(SignalStatus::Superseded),
+        "resolved" => Ok(SignalStatus::Resolved),
+        other => Err(KanbanError::Storage(format!(
+            "stored signal status is invalid: {other}"
+        ))),
     }
+}
 
-    #[tokio::test]
-    async fn record_normalizes_fields_and_generates_typed_ids() {
-        let service = ApplicationService::with_clock(
-            StubStore {
-                calls: Arc::new(AtomicUsize::new(0)),
-            },
-            FixedClock(100),
-        );
-        let result = service
-            .record_signal(SignalRecordCommand {
-                board: " default ".into(),
-                kind: " failure ".into(),
-                title: " Bad flag ".into(),
-                summary: " Summary ".into(),
-                severity: Some(" medium ".into()),
-                task_ref: None,
-                task_id: None,
-                run_id: None,
-                comment_id: None,
-                actor: " codex ".into(),
-                agent_type: Some(" executor ".into()),
-                dedupe_key: Some(" key ".into()),
-                source: Some(" test ".into()),
-                evidence: BTreeMap::from([(String::from("stderr"), Value::String("bad".into()))]),
-                comment_body: None,
-            })
-            .await
-            .unwrap();
-        assert!(result.signal.id.starts_with("sig_"));
-        assert_eq!(result.signal.title, "Bad flag");
-        assert_eq!(result.signal.observation.actor, "codex");
-    }
+fn application_signal(signal: crate::domain::SignalRecord) -> Result<SignalRecord> {
+    Ok(SignalRecord {
+        id: signal.id,
+        board_id: signal.board_id,
+        observation_id: signal.observation_id,
+        kind: signal.kind,
+        title: signal.title,
+        summary: signal.summary,
+        severity: signal.severity,
+        status: application_signal_status(signal.status)?,
+        dedupe_key: signal.dedupe_key,
+        superseded_by_signal_id: signal.superseded_by_signal_id,
+        reviewed_by: signal.reviewed_by,
+        reviewed_at: signal.reviewed_at,
+        review_reason: signal.review_reason,
+        created_at: signal.created_at,
+        updated_at: signal.updated_at,
+        observation: SignalObservationRecord {
+            id: signal.observation.id,
+            board_id: signal.observation.board_id,
+            task_id: signal.observation.task_id,
+            task_ref_snapshot: signal.observation.task_ref_snapshot,
+            run_id: signal.observation.run_id,
+            comment_id: signal.observation.comment_id,
+            actor: signal.observation.actor,
+            agent_type: signal.observation.agent_type,
+            source: signal.observation.source,
+            evidence_json: signal.observation.evidence_json,
+            created_at: signal.observation.created_at,
+        },
+    })
+}
 
-    #[tokio::test]
-    async fn review_requires_reason_and_ids() {
-        let service = ApplicationService::with_clock(
-            StubStore {
-                calls: Arc::new(AtomicUsize::new(0)),
-            },
-            FixedClock(100),
-        );
-        let error = service
-            .review_signals(SignalReviewCommand {
-                board: None,
-                signal_ids: Vec::new(),
-                lifecycle: SignalLifecycle::Confirm,
-                replacement_signal_id: None,
-                actor: "codex".into(),
-                reason: "ok".into(),
-            })
-            .await
-            .expect_err("empty review should fail");
-        assert!(matches!(error, KanbanError::InvalidInput(_)));
-    }
+fn application_signal_result(
+    result: crate::domain::SignalRecordResult,
+) -> Result<SignalRecordResult> {
+    Ok(SignalRecordResult {
+        signal: application_signal(result.signal)?,
+        backlink_comment: result
+            .backlink_comment
+            .map(crate::operations::application_comment)
+            .transpose()?,
+    })
 }

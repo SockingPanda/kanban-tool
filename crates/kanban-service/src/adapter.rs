@@ -7,9 +7,7 @@ use crate::{
     ApplicationStore, DependencyEdgeRecord as ApplicationDependencyEdge,
     DependencySnapshotRecord as ApplicationDependencySnapshot,
     ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
-    LabelRecord as ApplicationLabel, SignalObservationRecord as ApplicationSignalObservation,
-    SignalRecord as ApplicationSignal, SignalRecordResult as ApplicationSignalResult,
-    SignalStatus as ApplicationSignalStatus, StepRecord as ApplicationStep,
+    LabelRecord as ApplicationLabel, StepRecord as ApplicationStep,
 };
 use crate::{
     StoreError, TursoStore,
@@ -279,64 +277,6 @@ pub(crate) fn application_execution_plan(
         reason: plan.reason,
         updated_by: plan.updated_by,
         updated_at: plan.updated_at,
-    })
-}
-
-pub(crate) fn application_signal_status(status: String) -> Result<ApplicationSignalStatus> {
-    match status.as_str() {
-        "open" => Ok(ApplicationSignalStatus::Open),
-        "confirmed" => Ok(ApplicationSignalStatus::Confirmed),
-        "rejected" => Ok(ApplicationSignalStatus::Rejected),
-        "superseded" => Ok(ApplicationSignalStatus::Superseded),
-        "resolved" => Ok(ApplicationSignalStatus::Resolved),
-        other => Err(KanbanError::Storage(format!(
-            "stored signal status is invalid: {other}"
-        ))),
-    }
-}
-
-pub(crate) fn application_signal(signal: crate::domain::SignalRecord) -> Result<ApplicationSignal> {
-    Ok(ApplicationSignal {
-        id: signal.id,
-        board_id: signal.board_id,
-        observation_id: signal.observation_id,
-        kind: signal.kind,
-        title: signal.title,
-        summary: signal.summary,
-        severity: signal.severity,
-        status: application_signal_status(signal.status)?,
-        dedupe_key: signal.dedupe_key,
-        superseded_by_signal_id: signal.superseded_by_signal_id,
-        reviewed_by: signal.reviewed_by,
-        reviewed_at: signal.reviewed_at,
-        review_reason: signal.review_reason,
-        created_at: signal.created_at,
-        updated_at: signal.updated_at,
-        observation: ApplicationSignalObservation {
-            id: signal.observation.id,
-            board_id: signal.observation.board_id,
-            task_id: signal.observation.task_id,
-            task_ref_snapshot: signal.observation.task_ref_snapshot,
-            run_id: signal.observation.run_id,
-            comment_id: signal.observation.comment_id,
-            actor: signal.observation.actor,
-            agent_type: signal.observation.agent_type,
-            source: signal.observation.source,
-            evidence_json: signal.observation.evidence_json,
-            created_at: signal.observation.created_at,
-        },
-    })
-}
-
-pub(crate) fn application_signal_result(
-    result: crate::domain::SignalRecordResult,
-) -> Result<ApplicationSignalResult> {
-    Ok(ApplicationSignalResult {
-        signal: application_signal(result.signal)?,
-        backlink_comment: result
-            .backlink_comment
-            .map(crate::operations::application_comment)
-            .transpose()?,
     })
 }
 

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentDesktopLocale, type DesktopLocale } from "@/i18n"
 import { ApiError } from "./errors"
+import { normalizeApiBaseUrl } from "../loopback-url"
 import { parseJsonEnvelope } from "./parsers"
 import { parseTaskReadErrorEnvelope } from "./operations/task/parsers"
 import type { RequestOptions, RuntimeConfig } from "./types"
@@ -28,12 +29,6 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
     actor: import.meta.env.VITE_KB_ACTOR ?? WEB_DEV_DEFAULT_ACTOR,
     board: import.meta.env.VITE_KB_BOARD ?? (usingWebDevDefault ? WEB_DEV_DEFAULT_BOARD : "default"),
   }
-}
-
-function normalizeApiBaseUrl(value: string | undefined) {
-  const trimmed = value?.trim()
-  if (!trimmed) return ""
-  return trimmed.length > 1 ? trimmed.replace(/\/+$/, "") : trimmed
 }
 
 export class ApiTransport {

@@ -3,12 +3,12 @@ use std::{
     sync::Arc,
 };
 
-pub(crate) use kanban_service::HostApplicationService;
+pub(crate) use kanban_service::KanbanService;
 use kanban_service::{KanbanError, Result};
 
 #[derive(Clone)]
 pub struct AppState {
-    application: HostApplicationService,
+    application: KanbanService,
     db_path: Arc<PathBuf>,
     attachment_root: Arc<PathBuf>,
     default_actor: Arc<str>,
@@ -36,12 +36,8 @@ impl AppState {
             None => None,
         };
         let attachment_root = Arc::new(ensure_attachment_root(&db_path).await?);
-        let application = HostApplicationService::open_with_roots(
-            &db_path,
-            run_log_root,
-            attachment_root.clone(),
-        )
-        .await?;
+        let application =
+            KanbanService::open_with_roots(&db_path, run_log_root, attachment_root.clone()).await?;
         Ok(Self {
             application,
             db_path: Arc::new(db_path),
@@ -50,7 +46,7 @@ impl AppState {
         })
     }
 
-    pub(crate) fn application(&self) -> &HostApplicationService {
+    pub(crate) fn application(&self) -> &KanbanService {
         &self.application
     }
 

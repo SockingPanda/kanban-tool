@@ -18,7 +18,7 @@ use tokio::{
 };
 use tracing::{info, warn};
 
-use crate::state::{AppState, HostApplicationService};
+use crate::state::{AppState, KanbanService};
 
 const DISPATCHER_ACTOR: &str = "dispatcher";
 const DISPATCHER_WORKER_PROFILE: &str = "dispatcher";
@@ -239,7 +239,7 @@ pub(crate) async fn run_dispatcher(
 }
 
 async fn claim_next_ready(
-    application: &HostApplicationService,
+    application: &KanbanService,
     config: &DispatcherConfig,
 ) -> Result<Option<ClaimRecord>> {
     let page = application
@@ -287,7 +287,7 @@ async fn claim_next_ready(
 }
 
 async fn run_claim(
-    application: &HostApplicationService,
+    application: &KanbanService,
     config: &DispatcherConfig,
     addr: SocketAddr,
     claim: &ClaimRecord,
@@ -362,7 +362,7 @@ fn isolate_worker_from_dispatcher_interrupts(command: &mut Command) {
 fn isolate_worker_from_dispatcher_interrupts(_command: &mut Command) {}
 
 async fn wait_for_worker(
-    application: &HostApplicationService,
+    application: &KanbanService,
     config: &DispatcherConfig,
     claim: &ClaimRecord,
     child: &mut Child,
@@ -416,7 +416,7 @@ async fn wait_for_worker(
 }
 
 async fn finish_spawn_failure(
-    application: &HostApplicationService,
+    application: &KanbanService,
     config: &DispatcherConfig,
     claim: &ClaimRecord,
     detail: &str,
@@ -453,7 +453,7 @@ async fn finish_spawn_failure(
 }
 
 async fn finish_worker(
-    application: &HostApplicationService,
+    application: &KanbanService,
     config: &DispatcherConfig,
     claim: &ClaimRecord,
     status: ExitStatus,
@@ -798,7 +798,7 @@ on_success = "blocked"
         assert_eq!(ready.current_run_id, None);
     }
 
-    async fn dispatcher_claim(application: &HostApplicationService, task_id: &str) -> ClaimRecord {
+    async fn dispatcher_claim(application: &KanbanService, task_id: &str) -> ClaimRecord {
         application
             .claim_task(ClaimTaskCommand {
                 task_id: task_id.to_owned(),
@@ -831,7 +831,7 @@ on_success = "blocked"
             .expect("worker exit status")
     }
 
-    async fn create_ready_task(application: &HostApplicationService, task_id: &str, priority: i64) {
+    async fn create_ready_task(application: &KanbanService, task_id: &str, priority: i64) {
         application
             .create_task(CreateTaskCommand {
                 task_id: task_id.to_owned(),
@@ -869,11 +869,7 @@ on_success = "blocked"
             .expect("promote task");
     }
 
-    async fn wait_for_status(
-        application: &HostApplicationService,
-        task_id: &str,
-        expected: TaskStatus,
-    ) {
+    async fn wait_for_status(application: &KanbanService, task_id: &str, expected: TaskStatus) {
         tokio::time::timeout(Duration::from_secs(3), async {
             loop {
                 let status = application

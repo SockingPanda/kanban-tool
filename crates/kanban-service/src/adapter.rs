@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    AddTaskLabelsRecord as ApplicationAddTaskLabelsRecord, ApplicationService, ApplicationStore,
+    AddTaskLabelsRecord as ApplicationAddTaskLabelsRecord, ApplicationStore,
     CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
     CommentRecord as ApplicationComment, DependencyEdgeRecord as ApplicationDependencyEdge,
     DependencySnapshotRecord as ApplicationDependencySnapshot,
@@ -31,9 +31,9 @@ mod operations;
 
 #[derive(Clone)]
 pub struct TursoApplicationStore {
-    store: TursoStore,
-    run_log_root: Option<Arc<PathBuf>>,
-    attachment_root: Option<Arc<PathBuf>>,
+    pub(crate) store: TursoStore,
+    pub(crate) run_log_root: Option<Arc<PathBuf>>,
+    pub(crate) attachment_root: Option<Arc<PathBuf>>,
 }
 
 impl TursoApplicationStore {
@@ -152,20 +152,6 @@ impl TursoApplicationStore {
 
     pub(crate) async fn vector_worker_tick(&self, owner: &str) -> StoreResult<usize> {
         crate::vector::worker_tick(self.store.clone(), owner).await
-    }
-}
-
-impl ApplicationService<TursoApplicationStore> {
-    /// 在 service boundary 内打开并初始化 host 唯一拥有的 Turso 数据库。
-    pub async fn open_with_roots(
-        db_path: impl AsRef<Path>,
-        run_log_root: Option<Arc<PathBuf>>,
-        attachment_root: Arc<PathBuf>,
-    ) -> Result<Self> {
-        let store = TursoApplicationStore::open_with_roots(db_path, run_log_root, attachment_root)
-            .await
-            .map_err(|error| KanbanError::Storage(error.to_string()))?;
-        Ok(Self::new(store))
     }
 }
 

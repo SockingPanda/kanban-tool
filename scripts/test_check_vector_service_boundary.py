@@ -30,7 +30,7 @@ class VectorServiceBoundaryGateTests(unittest.TestCase):
         self._write(GATE.SERVICE_API, service_methods)
         self._write(
             GATE.SERVER_FILES[0],
-            "pub struct AppState { application: HostApplicationService }",
+            "pub struct AppState { application: KanbanService }",
         )
         self._write(
             GATE.SERVER_FILES[1],

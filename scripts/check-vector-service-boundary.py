@@ -20,7 +20,7 @@ SERVER_FILES = (
 )
 SERVICE_API = Path("crates/kanban-service/src/operations/vector.rs")
 FORBIDDEN_SERVER_SYMBOLS = re.compile(
-    r"\b(?:TursoApplicationStore|TursoStore|StoreError|VectorConfig|"
+    r"\b(?:ApplicationService|TursoApplicationStore|TursoStore|StoreError|"
     r"VectorStatusRecord|VectorChunkHitRecord|VectorLabelAtomHitRecord|"
     r"ProjectionJobRecord)\b|\bvector_store\b"
 )
@@ -76,8 +76,8 @@ def check_boundary(root: Path = ROOT) -> list[str]:
         state_source = state_path.read_text(encoding="utf-8")
     except OSError:
         state_source = ""
-    if "application: HostApplicationService" not in state_source:
-        failures.append(f"{SERVER_FILES[0]}: AppState 必须只持有 HostApplicationService")
+    if "application: KanbanService" not in state_source:
+        failures.append(f"{SERVER_FILES[0]}: AppState 必须只持有 KanbanService")
 
     vector_source = (root / SERVER_FILES[1]).read_text(encoding="utf-8")
     dispatcher_source = (root / SERVER_FILES[2]).read_text(encoding="utf-8")

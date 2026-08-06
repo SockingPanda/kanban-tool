@@ -965,18 +965,25 @@ task list/search 默认排除 `archived`；所有 selector、board isolation、i
 
 | Method | Path | 语义 |
 | --- | --- | --- |
-| `GET/POST` | `/api/v1/tasks/:task_id/steps` | list/create execution steps |
-| `PATCH/DELETE` | `/api/v1/tasks/:task_id/steps/:step_id` | update/remove step |
-| `POST` | `/api/v1/tasks/:task_id/steps/:step_id/{done,skip,reopen}` | step lifecycle |
-| `GET/POST` | `/api/v1/tasks/:task_id/dependencies` | list/add same-board parent edge |
+| `GET` | `/api/v1/tasks/:task_id/steps` | list execution steps |
+| `POST` | `/api/v1/tasks/:task_id/steps` | create execution step |
+| `PATCH` | `/api/v1/tasks/:task_id/steps/:step_id` | update step |
+| `DELETE` | `/api/v1/tasks/:task_id/steps/:step_id` | remove step |
+| `POST` | `/api/v1/tasks/:task_id/steps/:step_id/done` | mark step done |
+| `POST` | `/api/v1/tasks/:task_id/steps/:step_id/skip` | skip step |
+| `POST` | `/api/v1/tasks/:task_id/steps/:step_id/reopen` | reopen step |
+| `GET` | `/api/v1/tasks/:task_id/dependencies` | list same-board parent edges |
+| `POST` | `/api/v1/tasks/:task_id/dependencies` | add same-board parent edge |
 | `DELETE` | `/api/v1/tasks/:child_task_id/dependencies/:parent_task_id` | remove edge；cycle/FK 在 service 拒绝 |
 
 ## 5. Comments、attachments、runs、events
 
 | Method | Path | 语义 |
 | --- | --- | --- |
-| `GET/POST` | `/api/v1/tasks/:task_id/comments` | note/decision/signal comment；task-local idempotency |
-| `GET/POST` | `/api/v1/tasks/:task_id/attachments` | metadata + staged file publish；checksum/path guard |
+| `GET` | `/api/v1/tasks/:task_id/comments` | list note/decision/signal comments |
+| `POST` | `/api/v1/tasks/:task_id/comments` | create comment；task-local idempotency |
+| `GET` | `/api/v1/tasks/:task_id/attachments` | list attachment metadata |
+| `POST` | `/api/v1/tasks/:task_id/attachments` | staged file publish；checksum/path guard |
 | `GET` | `/api/v1/tasks/:task_id/attachments/:attachment_id` | 重新校验 size/SHA 后下载 raw bytes |
 | `DELETE` | `/api/v1/tasks/:task_id/attachments/:attachment_id` | `.trash/` reversible delete + event |
 | `GET` | `/api/v1/tasks/:task_id/runs` | task runs |
@@ -993,8 +1000,10 @@ run 没有独立 create/update API；claim 创建 run，后续 lifecycle 同事�
 
 | Method | Path | 语义 |
 | --- | --- | --- |
-| `GET/POST` | `/api/v1/boards/:board/labels` | board label list/create |
-| `GET/POST` | `/api/v1/tasks/:task_id/labels` | task label list/add |
+| `GET` | `/api/v1/boards/:board/labels` | board label list |
+| `POST` | `/api/v1/boards/:board/labels` | board label create |
+| `GET` | `/api/v1/tasks/:task_id/labels` | task label list |
+| `POST` | `/api/v1/tasks/:task_id/labels` | task label add |
 | `DELETE` | `/api/v1/tasks/:task_id/labels/:label_id` | task label remove |
 
 ### Ontology/atom/proposal
@@ -1032,10 +1041,14 @@ run 没有独立 create/update API；claim 创建 run，后续 lifecycle 同事�
 ### Generic signals
 
 ```text
-GET/POST /api/v1/boards/:board/signals
-GET      /api/v1/boards/:board/signals/review
-POST     /api/v1/boards/:board/signals/{confirm,reject,resolve,supersede}
-GET      /api/v1/signals/:signal_id
+GET  /api/v1/boards/:board/signals
+POST /api/v1/boards/:board/signals
+GET  /api/v1/boards/:board/signals/review
+POST /api/v1/boards/:board/signals/confirm
+POST /api/v1/boards/:board/signals/reject
+POST /api/v1/boards/:board/signals/resolve
+POST /api/v1/boards/:board/signals/supersede
+GET  /api/v1/signals/:signal_id
 ```
 
 record、backlink comment、review transition 和 `signal.reviewed` event 在同一事务提交。
@@ -1057,15 +1070,16 @@ POST /api/v1/search/index/sync
 ### Graph/entity
 
 ```text
-GET/PUT /api/v1/entities
-GET     /api/v1/entities/:uri
-GET     /api/v1/graph/status
-GET     /api/v1/graph/neighbors
-GET     /api/v1/graph/query
-POST    /api/v1/graph/rebuild
-POST    /api/v1/graph/sync
-GET     /api/v1/tasks/:task_id/neighborhood
-GET     /api/v1/boards/:board/task-map
+GET  /api/v1/entities
+PUT  /api/v1/entities
+GET  /api/v1/entities/:uri
+GET  /api/v1/graph/status
+GET  /api/v1/graph/neighbors
+GET  /api/v1/graph/query
+POST /api/v1/graph/rebuild
+POST /api/v1/graph/sync
+GET  /api/v1/tasks/:task_id/neighborhood
+GET  /api/v1/boards/:board/task-map
 ```
 
 `PUT /api/v1/entities` 是 entity upsert；graph query 使用 canonical `entities`/relations 的

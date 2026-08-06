@@ -25,7 +25,7 @@
 - `kanban-server`：唯一 host、Axum routes、数据库装配、dispatcher 和 transport boundary。
 - `kanban-protocol`：当前 active wire DTO/error/schema；不承载数据库 row 或 server/store 规则。
 - `kanban-client`：typed localhost HTTP client；CLI、MCP 和 Desktop 不直连数据库。
-- `kanban-cli`、`kanban-mcp`、`apps/desktop/src-tauri`：各自入口或 shell，保持薄 adapter；`xtask` 仅作离线工具。
+- `kanban-cli`、`kanban-mcp`、`apps/desktop/src-tauri`（package `kanban-desktop`）：各自入口或 shell，保持薄 adapter；`xtask` 仅作离线工具。
 - 依赖方向和第三方依赖规则见 `$style`；架构事实以 `docs/ARCHITECTURE.md` 为准。
 
 ## 4. 任务边界与停止

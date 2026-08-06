@@ -42,7 +42,7 @@ check-core:
         -p kanban-mcp
 
 check-full:
-    just check-core
+    scripts/cargo-build-lock.sh -- cargo check --workspace --tests
 
 test *args:
     just test-core "$@"
@@ -76,7 +76,7 @@ test-core *args:
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@"; fi
 
 test-full *args:
-    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --exclude kanban-desktop --exclude xtask --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude xtask "$@"; fi
+    if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --workspace --no-fail-fast "$@"; else scripts/cargo-build-lock.sh -- cargo test --workspace "$@"; fi
 
 clippy-core *args:
     scripts/cargo-build-lock.sh -- cargo clippy --all-targets \
@@ -84,13 +84,19 @@ clippy-core *args:
         -p kanban-client -p kanban-server -p kanban-cli -p kanban-mcp "$@" -- -D warnings
 
 clippy-full *args:
-    just clippy-core "$@"
+    scripts/cargo-build-lock.sh -- cargo clippy --workspace --all-targets "$@" -- -D warnings
 
 rust-full:
     just fmt-full
     just check-full
     just test-full
     just clippy-full
+
+deps-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- deps check
+
+agents-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- agents check
 
 web-test:
     pnpm --dir apps/desktop test
@@ -180,6 +186,18 @@ schema-docs:
     just spec-bundle-check
     python3 -B scripts/test_schema_docs_markers.py
     python3 -B scripts/schema_docs_markers.py --root .
+
+# CI 的完整编排只组合真实 recipes；日常窄 gate 仍保持 core 与单包范围。
+ci-full:
+    just rust-full
+    just desktop-check
+    just web-build
+    just schema-contract
+    just deps-check
+    just agents-check
+    just audit
+    just smoke
+    just diff-check
 
 schema-fmt:
     cargo fmt -p kanban-protocol -p xtask -- --check

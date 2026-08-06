@@ -87,11 +87,14 @@ just clippy
 依赖审计门禁：
 
 ```bash
+just deps-check
 just audit
 ```
 
-`just audit` 会运行 `cargo deny check` 和 `cargo audit -D warnings`。这些命令不会写入共用
-Cargo target 目录，因此不经过 `scripts/cargo-build-lock.sh`，而是直接运行。
+`just deps-check` 通过 `cargo metadata` 锁定 `turso`/`axum`/`ureq`/`rmcp`/`tauri` 的唯一
+owner、workspace version/source 和 leaf feature；同时保留 schema tooling 与 single-host
+检查。`just audit` 会运行 `cargo deny check` 和 `cargo audit -D warnings`。这些命令不会写入
+共用 Cargo target 目录，因此不经过 `scripts/cargo-build-lock.sh`，而是直接运行。
 
 单个包：
 
@@ -109,12 +112,22 @@ just rust-full
 
 `just affected-plan` 或 `just affected-json` 在 workspace manifest、lockfile、toolchain 和
 其他验证边界文件变化时会输出 `full_gate_recommended: true` 以及当前的
-`full_gate_commands`（`just rust-full`）。这是可审计的人工复核建议，不会自动执行
+`full_gate_commands`（`just ci-full`）。这是可审计的人工复核建议，不会自动执行
 package/release 流程。
 
 `rust-full` 是当前 `justfile` 中的完整 Rust recipe，展开为 `fmt-full`、`check-full`、
-`test-full` 和 `clippy-full`；它仍不包含 Desktop 与 `xtask`。需要单包验证时，使用当前真实
-的 `check-p`、`test-p` 和 `clippy-p`；不要为当前 `justfile` 未定义的路径创建额外 recipe。
+`test-full` 和 `clippy-full`，覆盖 active 产品 Rust crate、Desktop Tauri Rust 与 `xtask`。
+需要单包验证时，使用当前真实的 `check-p`、`test-p` 和 `clippy-p`；不要为当前 `justfile`
+未定义的路径创建额外 recipe。
+
+完整仓库 gate：
+
+```bash
+just ci-full
+```
+
+`ci-full` 在 `rust-full` 之后继续运行 `desktop-check`/`web-build`、`schema-contract`、
+`deps-check`、`agents-check`、`audit`、`smoke` 与 `diff-check`，因此是 CI 的唯一完整编排入口。
 
 当前 Desktop 与打包相关的真实 recipes 包括：
 

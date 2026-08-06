@@ -255,9 +255,10 @@ WORKSPACE_RUST_FAST_PATTERNS = {
     ".config/nextest.toml",
 }
 
-# `just rust-full` 是当前仓库的完整 Rust 验证入口。它只表达人工复核建议，
+# `just ci-full` 是当前仓库的完整验证入口，覆盖 Rust workspace、Desktop
+# Rust/前端、schema/docs、依赖和现有 smoke gate。它只表达人工复核建议，
 # 不把 package/release 流程自动加入 affected 计划。
-FULL_GATE_COMMANDS: tuple[Command, ...] = (["just", "rust-full"],)
+FULL_GATE_COMMANDS: tuple[Command, ...] = (["just", "ci-full"],)
 
 
 def run_git(args: list[str]) -> list[str]:
@@ -347,7 +348,7 @@ def build_plan(base: str, paths: list[str]) -> Plan:
     notes: list[str] = []
     if full_gate_recommended:
         notes.append(
-            "建议按需人工运行当前完整 Rust 验证 `just rust-full`；"
+            "建议按需人工运行当前完整仓库验证 `just ci-full`；"
             "affected 计划不自动执行 package/release。"
         )
     if not paths:

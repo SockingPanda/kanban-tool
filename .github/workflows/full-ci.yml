@@ -12,71 +12,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  rust-default:
-    name: Rust default workspace
-    runs-on: ubuntu-latest
+  full:
+    name: Full repository gate
+    runs-on: ubuntu-22.04
     env:
       # CI 无需调试符号，给完整工作区冷构建留出磁盘空间。
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
-      # 受限 runner 上的内置 LLD 会崩溃；三阶段统一使用系统 linker，避免重复指纹。
+      # 受限 runner 上的内置 LLD 会崩溃；所有 Rust recipes 统一使用系统 linker。
       RUSTFLAGS: "-C linker-features=-lld"
+      CARGO_BUILD_JOBS: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install protobuf compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-      - name: Install nextest
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-      - name: Format
-        run: cargo fmt --check
-      - name: Check workspace
-        run: cargo check --workspace --exclude kanban-desktop --tests
-      - name: Test workspace
-        run: cargo nextest run --workspace --exclude kanban-desktop --no-fail-fast
-        env:
-          # 避免多个大型测试二进制在受限 runner 上同时链接。
-          CARGO_BUILD_JOBS: "1"
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets --exclude kanban-desktop -- -D warnings
-
-  desktop:
-    name: Desktop build and Tauri
-    runs-on: ubuntu-22.04
-    env:
-      KANBAN_CARGO_TARGET_ROOT: ${{ github.workspace }}/target
-    defaults:
-      run:
-        working-directory: apps/desktop
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Install Linux webkit dependencies
+      - name: Install Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
             build-essential \
             curl \
-            wget \
             file \
-            libxdo-dev \
-            libssl-dev \
             libayatana-appindicator3-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
             librsvg2-dev \
             patchelf \
-            protobuf-compiler
-        working-directory: .
-      - name: Install Rust
+            protobuf-compiler \
+            wget
+      - name: Install Rust and gate tools
         uses: dtolnay/rust-toolchain@stable
+      - name: Install just and Rust gate tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just@1.57.0,cargo-nextest,cargo-deny,cargo-audit
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
       - name: Setup pnpm
@@ -89,77 +58,7 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Typecheck
-        run: pnpm typecheck
-      - name: Test
-        run: pnpm test
-      - name: Prepare Tauri sidecars
-        run: |
-          bash scripts/prepare-desktop-helper-binaries.sh
-          bash scripts/test-desktop-helper-sidecars.sh
-        working-directory: .
-      - name: Build Tauri app
-        run: pnpm tauri build
-
-  smoke:
-    name: Smoke
-    runs-on: ubuntu-latest
-    env:
-      KANBAN_CARGO_TARGET_ROOT: ${{ github.workspace }}/target
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-      - name: Run V1 smoke script
-        if: ${{ hashFiles('scripts/smoke-v1-local.sh') != '' }}
-        run: bash scripts/smoke-v1-local.sh
-      - name: No smoke script
-        if: ${{ hashFiles('scripts/smoke-v1-local.sh') == '' }}
-        run: echo "No smoke script found"
-
-  dependency-audit:
-    name: Dependency audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install audit tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just@1.57.0,cargo-deny,cargo-audit
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-      - name: Audit dependencies
-        run: just audit
-
-  full-ci-result:
-    name: Full CI result
-    needs:
-      - rust-default
-      - desktop
-      - smoke
-      - dependency-audit
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check required jobs
-        run: |
-          for result in \
-            '${{ needs.rust-default.result }}' \
-            '${{ needs.desktop.result }}' \
-            '${{ needs.smoke.result }}' \
-            '${{ needs.dependency-audit.result }}'
-          do
-            case "$result" in
-              success) ;;
-              *) echo "A full CI job finished with result: $result"; exit 1 ;;
-            esac
-          done
-          echo "Full CI passed"
+      - name: Install Desktop dependencies
+        run: pnpm --dir apps/desktop install --frozen-lockfile
+      - name: Run canonical full recipe
+        run: just ci-full

@@ -119,10 +119,16 @@ fn print_adopted_inventory() {
 }
 
 fn run_deps_check(root: &Path) -> xtask::ToolResult<()> {
+    run_checked(root, "python3", ["-B", "scripts/test_dependency_owners.py"])?;
     run_checked(
         root,
         "python3",
         ["-B", "scripts/schema_dependency_policy.py"],
+    )?;
+    run_checked(
+        root,
+        "python3",
+        ["-B", "scripts/check-dependency-owners.py"],
     )?;
     run_checked(
         root,
@@ -140,17 +146,103 @@ fn run_deps_check(root: &Path) -> xtask::ToolResult<()> {
 fn run_agents_check(root: &Path) -> xtask::ToolResult<()> {
     let agents = root.join("AGENTS.md");
     ensure_regular_file(&agents, "根 AGENTS.md")?;
-    let line_count = fs::read_to_string(&agents)?.lines().count();
-    if !(80..=120).contains(&line_count) {
-        return Err(std::io::Error::other(format!(
-            "根 AGENTS.md 行数必须在 80..=120 内，实际为 {line_count}"
-        ))
-        .into());
-    }
+    let text = fs::read_to_string(&agents)?;
+    check_agents_document_contract(root, &text)?;
     check_skill_packages(root)?;
     check_active_maps(root)?;
     println!("ok: AGENTS.md、技能包结构和 active recipe/package map 已通过");
     Ok(())
+}
+
+const REQUIRED_AGENT_SECTIONS: &[&str] = &[
+    "## 1. 产品边界",
+    "## 2. 稳定不变量",
+    "## 3. 工作区地图",
+    "## 4. 任务边界与停止",
+    "## 5. 技能路由",
+    "## 6. 文档地图",
+    "## 7. 验证边界",
+    "## 8. 语言与 Git 边界",
+    "## 9. 维护",
+];
+
+const REQUIRED_SKILL_ROUTES: &[&str] = &["$style", "$prose", "$docs", "$check", "$commit"];
+
+const REQUIRED_WORKSPACE_MAP: &[&str] = &[
+    "kanban-core",
+    "kanban-service",
+    "kanban-protocol",
+    "kanban-client",
+    "kanban-server",
+    "kanban-cli",
+    "kanban-mcp",
+    "apps/desktop/src-tauri",
+    "kanban-desktop",
+    "xtask",
+];
+
+const REQUIRED_DOCUMENT_LINKS: &[&str] = &[
+    "docs/SPEC.md",
+    "docs/ARCHITECTURE.md",
+    "docs/STATE_MACHINE.md",
+    "docs/DATA_MODEL.md",
+    "docs/API_SPEC.md",
+    "docs/CLI_SPEC.md",
+    "docs/SCHEMA_CONTRACTS.md",
+    "docs/DESKTOP_LAYOUT_SMOKE.md",
+];
+
+fn check_agents_document_contract(root: &Path, text: &str) -> xtask::ToolResult<()> {
+    for heading in REQUIRED_AGENT_SECTIONS {
+        if !text.lines().any(|line| line.trim() == *heading) {
+            return Err(
+                std::io::Error::other(format!("根 AGENTS.md 缺少必要 section: {heading}")).into(),
+            );
+        }
+    }
+    let skill_section = section_body(text, "## 5. 技能路由")?;
+    for route in REQUIRED_SKILL_ROUTES {
+        if !section_contains_bullet(skill_section, route) {
+            return Err(
+                std::io::Error::other(format!("根 AGENTS.md 缺少技能路由: {route}")).into(),
+            );
+        }
+    }
+    let workspace_section = section_body(text, "## 3. 工作区地图")?;
+    for package in REQUIRED_WORKSPACE_MAP {
+        if !section_contains_bullet(workspace_section, package) {
+            return Err(std::io::Error::other(format!(
+                "根 AGENTS.md 工作区地图缺少 active package/path: {package}"
+            ))
+            .into());
+        }
+    }
+    let document_section = section_body(text, "## 6. 文档地图")?;
+    for link in REQUIRED_DOCUMENT_LINKS {
+        if !section_contains_bullet(document_section, link) {
+            return Err(std::io::Error::other(format!(
+                "根 AGENTS.md 文档地图缺少 canonical link: {link}"
+            ))
+            .into());
+        }
+        if root.join("Cargo.toml").is_file() {
+            ensure_regular_file(&root.join(link), "AGENTS.md canonical 文档链接")?;
+        }
+    }
+    Ok(())
+}
+
+fn section_body<'a>(text: &'a str, heading: &str) -> xtask::ToolResult<&'a str> {
+    let (_, body) = text.split_once(heading).ok_or_else(|| {
+        std::io::Error::other(format!("根 AGENTS.md 缺少必要 section: {heading}"))
+    })?;
+    Ok(body.split_once("\n## ").map_or(body, |(body, _)| body))
+}
+
+fn section_contains_bullet(section: &str, needle: &str) -> bool {
+    section
+        .lines()
+        .any(|line| line.trim_start().starts_with("- ") && line.contains(needle))
 }
 
 fn check_skill_packages(root: &Path) -> xtask::ToolResult<()> {
@@ -252,6 +344,8 @@ fn check_active_maps(root: &Path) -> xtask::ToolResult<()> {
         "justfile",
         "scripts/affected-validation.py",
         "scripts/schema_dependency_policy.py",
+        "scripts/check-dependency-owners.py",
+        "scripts/test_dependency_owners.py",
         "scripts/test-schema-cargo-tree.sh",
         "scripts/test_schema_recipe_witness.py",
     ];
@@ -381,6 +475,12 @@ mod tests {
         .expect("openai contract should be writable");
     }
 
+    fn write_agents(root: &Path) {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../AGENTS.md");
+        let text = fs::read_to_string(source).expect("canonical AGENTS should be readable");
+        fs::write(root.join("AGENTS.md"), text).expect("AGENTS should be writable");
+    }
+
     #[test]
     fn skill_contract_requires_chinese_headings_and_exact_name() {
         assert!(
@@ -409,17 +509,45 @@ mod tests {
     #[test]
     fn agents_check_is_fail_closed_for_skill_layout_and_openai_contract() {
         let root = temp_root("agents");
-        fs::write(
-            root.join("AGENTS.md"),
-            (0..80).map(|_| "line\n").collect::<String>(),
-        )
-        .expect("root AGENTS should be writable");
-        assert!(run_agents_check(&root).is_err());
+        write_agents(&root);
 
         for skill in ["prose", "docs", "check", "commit", "style"] {
             write_skill(&root, skill);
         }
         assert!(run_agents_check(&root).is_ok());
+
+        let agents_path = root.join("AGENTS.md");
+        let canonical = fs::read_to_string(&agents_path).expect("AGENTS should be readable");
+        fs::write(
+            &agents_path,
+            format!("{canonical}\n{}", "extra\n".repeat(200)),
+        )
+        .expect("long AGENTS should be writable");
+        assert!(run_agents_check(&root).is_ok());
+
+        fs::write(
+            &agents_path,
+            canonical.replace("## 5. 技能路由", "## 5. missing"),
+        )
+        .expect("missing section should be writable");
+        assert!(run_agents_check(&root).is_err());
+
+        fs::write(
+            &agents_path,
+            canonical.replace(
+                "- `$style`：Rust、Cargo、模块组织、依赖边界、错误和测试位置。",
+                "- style：Rust、Cargo、模块组织、依赖边界、错误和测试位置。",
+            ),
+        )
+        .expect("missing skill route should be writable");
+        assert!(run_agents_check(&root).is_err());
+
+        fs::write(
+            &agents_path,
+            canonical.replace("kanban-service", "retired-service"),
+        )
+        .expect("missing workspace map entry should be writable");
+        assert!(run_agents_check(&root).is_err());
 
         write_skill(&root, "extra");
         assert!(run_agents_check(&root).is_err());

@@ -125,7 +125,7 @@ def _check_helpers(root: Path, _: bool) -> list[Event]:
 
 
 def _check_full(root: Path, nextest: bool) -> list[Event]:
-    return _nested(root, "check-core", _check_core(root, nextest))
+    return _locked(root, "check", "--workspace", "--tests")
 
 
 def _test_core(root: Path, nextest: bool) -> list[Event]:
@@ -138,19 +138,13 @@ def _test_helpers(root: Path, nextest: bool) -> list[Event]:
 
 def _test_full(root: Path, nextest: bool) -> list[Event]:
     probe = _cargo(root, "nextest", "--version")
-    excludes = (
-        "--workspace",
-        "--exclude",
-        "kanban-desktop",
-        "--exclude",
-        TOOL_PACKAGE,
-    )
+    packages = ("--workspace",)
     if nextest:
         return [
             *probe,
-            *_locked(root, "nextest", "run", *excludes, "--no-fail-fast"),
+            *_locked(root, "nextest", "run", *packages, "--no-fail-fast"),
         ]
-    return [*probe, *_locked(root, "test", *excludes)]
+    return [*probe, *_locked(root, "test", *packages)]
 
 
 def _clippy_core(root: Path, _: bool) -> list[Event]:
@@ -178,7 +172,15 @@ def _clippy_helpers(root: Path, _: bool) -> list[Event]:
 
 
 def _clippy_full(root: Path, nextest: bool) -> list[Event]:
-    return _nested(root, "clippy-core", _clippy_core(root, nextest))
+    return _locked(
+        root,
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings",
+    )
 
 
 def _rust_fast(root: Path, nextest: bool) -> list[Event]:
@@ -432,7 +434,9 @@ CASES: tuple[tuple[str, tuple[str, ...], ExpectedBuilder, bool], ...] = (
     ("schema", ("audit",), _schema_audit, True),
     ("schema", ("witnesses",), _schema_witnesses, True),
     ("deps", ("check",), _deps_check, True),
+    ("deps-check", (), _deps_check, True),
     ("agents", ("check",), _agents_check, True),
+    ("agents-check", (), _agents_check, True),
     ("schema-generate", (), _schema_generate, True),
     ("schema-check", (), _schema_check, True),
     ("spec-bundle-generate", (), _spec_bundle_generate, False),
@@ -464,17 +468,20 @@ PROTECTED_RECIPE_AST_SHA256 = {
     "fmt-full": "3d0813fde4f1443bfeb349dd3dc049ca74b29e875877eab08106fb765ed58069",
     "check": "cddd49fe5e50b59502f0a2a54cfd4e2acb4bb9b891f4de0c056e78f52e0783a7",
     "check-core": "8865c211856ebfb503191c5fcbf86c66cffe3a7de0113f14479fde6a229ea29c",
-    "check-full": "d9c6422d7e92bb1ffa11bc2337072444304948070cf35c79e4ffc5340e32bd92",
+    "check-full": "d72ce3ddc00dd5e94f67d73a2044a502340a741fc745eb97fa36466cba1237be",
     "test": "d136c26efda43f4482000099f4917c98ba3407f2072d58ee7a6ffefebba798db",
     "test-p": "16d14ffcf302b2f745a4b4a0724a96e5a38b600870d58f36c344e185595a6b00",
     "check-p": "afb9f318d2aa509feed7efd372318cbd4c2993742a26f078c6f740349400e33e",
     "rust-fast": "9a013d3f1005dc4c21c44e1fc21e8d05dc36c9de73e79470021e4f62ac2801c9",
     "test-core": "c83ddaa0a72849fb1f3fde115be2eaae6c6f5298b3991b408b354b0794bab2a9",
-    "test-full": "85fb187f2cafa975a8ec17ff2df582475331b7669301e6693936b6420d10f219",
+    "test-full": "da781f23d6be1185b200ca7da5c8ef7b57ed494060d721274bba64eab8f2d357",
     "clippy": "e487d817f0f09efb21d91eaa4e9793f05cb2883723cc59758c2eaa4314384010",
     "clippy-core": "594b1222f3c71ad47d25b8f05ce2aab6fefff8498858ba7efbb8d6f947afc49a",
-    "clippy-full": "bbed85a04f195152be482141830dc9309e369ee7c4a12de75798a448b1917ef9",
+    "clippy-full": "8ee7ac143b1500694a9d0bc14ea8c8805e7c667cf0e96104db2261f49f465646",
     "rust-full": "05bd1a7769cf8d0ebde0582f37444132adfafd19ae8ff0682b1a8c45307b5288",
+    "deps-check": "7824b938b43d31ee949e73de09cc16fd79c7f879971f7c46c0af9a62bd7f3e4a",
+    "agents-check": "e7b40d27ccebd5b11109cf65f982ae2eaf8c4cb3be6bf3703828b27f901990db",
+    "ci-full": "818403d9e593045933ffc30111c8a1288eb69a83e3ff5ce90ffbbcc8e435cdfb",
     "feature-p": "90a48cdda4600c6cffd88614a139b22584936690af300aaec2a2e60bdc3fec09",
     "spec-bundle-generate": "4ad6e58b6600690d8a85c9d5472efe999b8c356f2eeafc86978edd4ccbe24fa9",
     "spec-bundle-check": "deb622cf88b3dff62e5abbeaa87996cd5cc05cf83a9175c51376110f3f337bcb",
@@ -494,7 +501,7 @@ PROTECTED_RECIPE_AST_SHA256 = {
     "schema-contract": "ed06e96e1e35471abc034bc873ef57835114ea58d3530d2b4b1c1e32fc4dbdaa",
     "schema-audit-closed": "fd7d65dbe4d9d19c2c92c26107ca33083fd61eb03ddca39e2c80a5ccbe2b87e5",
 }
-AST_ONLY_RECIPE_NAMES = {"check-p", "test-p"}
+AST_ONLY_RECIPE_NAMES = {"check-p", "test-p", "ci-full"}
 PROTECTED_JUST_GLOBALS_SHA256 = (
     "76483961d7be530d64e46198b2e15a495d851df2051ccdccf4afa1a5f2dafe2b"
 )
@@ -1530,16 +1537,16 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
 
     def test_commented_nested_call_cannot_spoof_execution(self) -> None:
         self.assert_mutation_rejected(
-            "check-full:\n    just check-core\n",
-            "check-full:\n    # just check-core\n",
+            "check-full:\n    scripts/cargo-build-lock.sh -- cargo check --workspace --tests\n",
+            "check-full:\n    # cargo check --workspace --tests\n",
             "check-full",
             _check_full,
         )
 
     def test_echoed_nested_call_cannot_spoof_execution(self) -> None:
         self.assert_mutation_rejected(
-            "check-full:\n    just check-core\n",
-            "check-full:\n    echo just check-core\n",
+            "check-full:\n    scripts/cargo-build-lock.sh -- cargo check --workspace --tests\n",
+            "check-full:\n    echo cargo check --workspace --tests\n",
             "check-full",
             _check_full,
         )
@@ -1555,8 +1562,8 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
 
     def test_test_full_fallback_package_cannot_drift(self) -> None:
         self.assert_mutation_rejected(
-            "else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude xtask",
-            "else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-desktop --exclude kanban-protocol",
+            "else scripts/cargo-build-lock.sh -- cargo test --workspace \"$@\"",
+            "else scripts/cargo-build-lock.sh -- cargo test --workspace --exclude kanban-protocol \"$@\"",
             "test-full",
             _test_full,
             nextest=False,
@@ -1742,8 +1749,8 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
             "check-full: schema-tool\n",
         )
         self.assert_mutation_rejected(
-            "check-full:\n",
-            "check-full: schema-tool\n",
+            "check-full:\n    scripts/cargo-build-lock.sh -- cargo check --workspace --tests\n",
+            "check-full: schema-tool\n    scripts/cargo-build-lock.sh -- cargo check --workspace --tests\n",
             "check-full",
             _check_full,
         )
@@ -1751,8 +1758,8 @@ class SchemaRecipeWitnessTests(unittest.TestCase):
     def test_absolute_just_bypass_is_rejected(self) -> None:
         assert REAL_JUST is not None
         self.assert_mutation_rejected(
-            "check-full:\n    just check-core\n",
-            f"check-full:\n    {REAL_JUST} check-core\n",
+            "check-full:\n    scripts/cargo-build-lock.sh -- cargo check --workspace --tests\n",
+            f"check-full:\n    {REAL_JUST} check --workspace --tests\n",
             "check-full",
             _check_full,
         )

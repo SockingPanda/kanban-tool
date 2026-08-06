@@ -474,17 +474,17 @@ impl TursoStore {
             .as_ref()
             .map(|value| value.atoms.clone())
             .unwrap_or_default();
-        let new_atoms = build_atoms(
-            &label_id,
-            &board_id,
-            &label_name,
-            &description,
-            &applies_when,
-            &excludes_when,
-            &positive_examples,
-            &negative_examples,
+        let new_atoms = build_atoms(AtomBuildInput {
+            label_id: &label_id,
+            board_id: &board_id,
+            label_name: &label_name,
+            description: &description,
+            applies: &applies_when,
+            excludes: &excludes_when,
+            positive: &positive_examples,
+            negative: &negative_examples,
             now,
-        );
+        });
         let after_hash = semantics_hash(
             &label_id,
             &label_name,
@@ -557,24 +557,25 @@ impl TursoStore {
         mark_index_dirty(&transaction, &board_id, now).await?;
         let action_id = insert_action(
             &transaction,
-            &board_id,
-            "update_semantics",
-            input.reason.as_deref().unwrap_or("update label semantics"),
-            &input.actor,
-            &input.source_signal_ids,
-            Some(&label_id),
-            None,
-            None,
-            None,
-            None,
-            current_hash,
-            Some(&after_hash),
-            &json!({"before": before_json, "after": after_json}),
-            "not_required",
-            "{}",
-            now,
-            &input.actor,
-            None,
+            ActionInsertInput {
+                board_id: &board_id,
+                action_type: "update_semantics",
+                reason: input.reason.as_deref().unwrap_or("update label semantics"),
+                signal_ids: &input.source_signal_ids,
+                target_label_id: Some(&label_id),
+                result_label_id: None,
+                result_atom_id: None,
+                result_atom_content_hash: None,
+                result_proposal_id: None,
+                before_hash: current_hash,
+                after_hash: Some(&after_hash),
+                change_json: &json!({"before": before_json, "after": after_json}),
+                validation_status: "not_required",
+                validation_json: "{}",
+                now,
+                created_by: &input.actor,
+                agent_type: None,
+            },
         )
         .await?;
         for atom in &old_atoms {
@@ -653,24 +654,25 @@ impl TursoStore {
         mark_index_dirty(&transaction, &board_id, now).await?;
         let action_id = insert_action(
             &transaction,
-            &board_id,
-            "update_semantics",
-            reason,
-            actor,
-            &[],
-            Some(&current.label_id),
-            None,
-            None,
-            None,
-            None,
-            Some(&current.semantics_hash),
-            None,
-            &json!({"before": semantics_snapshot_json(Some(&current), &current.label_id, &current.label_name, &current.semantics_hash), "after": null}),
-            "not_required",
-            "{}",
-            now,
-            actor,
-            None,
+            ActionInsertInput {
+                board_id: &board_id,
+                action_type: "update_semantics",
+                reason,
+                signal_ids: &[],
+                target_label_id: Some(&current.label_id),
+                result_label_id: None,
+                result_atom_id: None,
+                result_atom_content_hash: None,
+                result_proposal_id: None,
+                before_hash: Some(&current.semantics_hash),
+                after_hash: None,
+                change_json: &json!({"before": semantics_snapshot_json(Some(&current), &current.label_id, &current.label_name, &current.semantics_hash), "after": null}),
+                validation_status: "not_required",
+                validation_json: "{}",
+                now,
+                created_by: actor,
+                agent_type: None,
+            },
         )
         .await?;
         for atom in &current.atoms {
@@ -1092,24 +1094,25 @@ impl TursoStore {
             .await?;
         let _action_id = insert_action(
             &transaction,
-            &board_id,
-            "create_label_proposal",
-            "create label proposal",
-            &input.actor,
-            &input.source_signal_ids,
-            None,
-            None,
-            None,
-            None,
-            Some(&proposal_id),
-            None,
-            None,
-            &json!({"proposal_id": proposal_id, "name": name}),
-            "not_required",
-            "{}",
-            now,
-            &input.actor,
-            None,
+            ActionInsertInput {
+                board_id: &board_id,
+                action_type: "create_label_proposal",
+                reason: "create label proposal",
+                signal_ids: &input.source_signal_ids,
+                target_label_id: None,
+                result_label_id: None,
+                result_atom_id: None,
+                result_atom_content_hash: None,
+                result_proposal_id: Some(&proposal_id),
+                before_hash: None,
+                after_hash: None,
+                change_json: &json!({"proposal_id": proposal_id, "name": name}),
+                validation_status: "not_required",
+                validation_json: "{}",
+                now,
+                created_by: &input.actor,
+                agent_type: None,
+            },
         )
         .await?;
         transaction.commit().await?;
@@ -1215,24 +1218,25 @@ impl TursoStore {
             .await?;
         let _action_id = insert_action(
             &transaction,
-            &proposal.board_id,
-            if input.accept { "confirm" } else { "reject" },
-            input.reason.as_deref().unwrap_or("proposal decision"),
-            &input.actor,
-            &input.source_signal_ids,
-            None,
-            None,
-            None,
-            None,
-            Some(&proposal.id),
-            None,
-            None,
-            &json!({"proposal_id": proposal.id, "status": status}),
-            "not_required",
-            "{}",
-            now,
-            &input.actor,
-            None,
+            ActionInsertInput {
+                board_id: &proposal.board_id,
+                action_type: if input.accept { "confirm" } else { "reject" },
+                reason: input.reason.as_deref().unwrap_or("proposal decision"),
+                signal_ids: &input.source_signal_ids,
+                target_label_id: None,
+                result_label_id: None,
+                result_atom_id: None,
+                result_atom_content_hash: None,
+                result_proposal_id: Some(&proposal.id),
+                before_hash: None,
+                after_hash: None,
+                change_json: &json!({"proposal_id": proposal.id, "status": status}),
+                validation_status: "not_required",
+                validation_json: "{}",
+                now,
+                created_by: &input.actor,
+                agent_type: None,
+            },
         )
         .await?;
         transaction.commit().await?;
@@ -1356,12 +1360,11 @@ impl TursoStore {
         board: &str,
         statuses: &[String],
         kinds: &[String],
-        task_ref: Option<&str>,
-        target_label_ref: Option<&str>,
-        proposed_label_name: Option<&str>,
+        label_filters: (Option<&str>, Option<&str>, Option<&str>),
         include_all: bool,
         limit: usize,
     ) -> Result<Vec<LabelOntologySignalRecord>, StoreError> {
+        let (task_ref, target_label_ref, proposed_label_name) = label_filters;
         let board_id = self.ontology_board_id(board).await?;
         let task_id = match task_ref {
             Some(value) => Some(self.ontology_task(&board_id, value).await?.0),
@@ -1473,9 +1476,7 @@ impl TursoStore {
                 board,
                 &[],
                 &[],
-                None,
-                None,
-                None,
+                (None, None, None),
                 include_all,
                 MAX_LIST_LIMIT as usize,
             )
@@ -1590,24 +1591,25 @@ impl TursoStore {
         let validation_json = json_string_or_object(&input.validation_json)?.to_string();
         let action_id = insert_action(
             &transaction,
-            &board_id,
-            &input.action_type,
-            &input.reason,
-            &input.actor.name,
-            &input.signal_ids,
-            target_label_id.as_deref(),
-            result_label_id.as_deref(),
-            input.result_atom_id.as_deref(),
-            input.result_atom_content_hash.as_deref(),
-            input.result_proposal_id.as_deref(),
-            input.canonical_before_hash.as_deref(),
-            input.canonical_after_hash.as_deref(),
-            &change_json,
-            input.validation_status.as_deref().unwrap_or("not_required"),
-            &validation_json,
-            now,
-            &input.actor.name,
-            input.actor.agent_type.as_deref(),
+            ActionInsertInput {
+                board_id: &board_id,
+                action_type: &input.action_type,
+                reason: &input.reason,
+                signal_ids: &input.signal_ids,
+                target_label_id: target_label_id.as_deref(),
+                result_label_id: result_label_id.as_deref(),
+                result_atom_id: input.result_atom_id.as_deref(),
+                result_atom_content_hash: input.result_atom_content_hash.as_deref(),
+                result_proposal_id: input.result_proposal_id.as_deref(),
+                before_hash: input.canonical_before_hash.as_deref(),
+                after_hash: input.canonical_after_hash.as_deref(),
+                change_json: &change_json,
+                validation_status: input.validation_status.as_deref().unwrap_or("not_required"),
+                validation_json: &validation_json,
+                now,
+                created_by: &input.actor.name,
+                agent_type: input.actor.agent_type.as_deref(),
+            },
         )
         .await?;
         transaction.commit().await?;
@@ -1666,17 +1668,17 @@ impl TursoStore {
                 ));
             }
         }
-        let atoms = build_atoms(
-            &label_id,
-            &board_id,
-            &label_name,
-            &description,
-            &applies,
-            &excludes,
-            &positive,
-            &negative,
+        let atoms = build_atoms(AtomBuildInput {
+            label_id: &label_id,
+            board_id: &board_id,
+            label_name: &label_name,
+            description: &description,
+            applies: &applies,
+            excludes: &excludes,
+            positive: &positive,
+            negative: &negative,
             now,
-        );
+        });
         let atom = atoms
             .iter()
             .find(|value| {
@@ -1757,34 +1759,35 @@ impl TursoStore {
         }
         let action_id = insert_action(
             &transaction,
-            &board_id,
-            action_type,
-            &input.reason,
-            &input.actor.name,
-            &input.signal_ids,
-            Some(&label_id),
-            None,
-            Some(&atom.id),
-            Some(&atom.content_hash),
-            None,
-            before_hash.as_deref(),
-            Some(&after_hash),
-            &json!({
-                "label": {"id": label_id, "name": label_name},
-                "added_atom": {"id": atom.id, "content_hash": atom.content_hash, "polarity": atom.polarity, "kind": atom.kind, "text": atom.text},
-                "changed": changed,
-                "canonical_changed": changed,
-                "provenance_only": !changed,
-                "requested_action_type": if input.polarity == "positive" { "add_positive_atom" } else { "add_negative_atom" },
-                "before": before_snapshot,
-                "after": after_snapshot,
-                "retarget_override": null,
-            }),
-            validation_status,
-            "{}",
-            now,
-            &input.actor.name,
-            input.actor.agent_type.as_deref(),
+            ActionInsertInput {
+                board_id: &board_id,
+                action_type,
+                reason: &input.reason,
+                signal_ids: &input.signal_ids,
+                target_label_id: Some(&label_id),
+                result_label_id: None,
+                result_atom_id: Some(&atom.id),
+                result_atom_content_hash: Some(&atom.content_hash),
+                result_proposal_id: None,
+                before_hash: before_hash.as_deref(),
+                after_hash: Some(&after_hash),
+                change_json: &json!({
+                    "label": {"id": label_id, "name": label_name},
+                    "added_atom": {"id": atom.id, "content_hash": atom.content_hash, "polarity": atom.polarity, "kind": atom.kind, "text": atom.text},
+                    "changed": changed,
+                    "canonical_changed": changed,
+                    "provenance_only": !changed,
+                    "requested_action_type": if input.polarity == "positive" { "add_positive_atom" } else { "add_negative_atom" },
+                    "before": before_snapshot,
+                    "after": after_snapshot,
+                    "retarget_override": null,
+                }),
+                validation_status,
+                validation_json: "{}",
+                now,
+                created_by: &input.actor.name,
+                agent_type: input.actor.agent_type.as_deref(),
+            },
         )
         .await?;
         if changed {
@@ -1871,17 +1874,17 @@ impl TursoStore {
             .map(|value| value.label_name.clone())
             .unwrap_or_else(|| label_id.clone());
         let description_ref = new_description.clone();
-        let atoms = build_atoms(
-            &label_id,
-            &board_id,
-            &label_name,
-            &description_ref,
-            &applies,
-            &excludes,
-            &positive,
-            &negative,
+        let atoms = build_atoms(AtomBuildInput {
+            label_id: &label_id,
+            board_id: &board_id,
+            label_name: &label_name,
+            description: &description_ref,
+            applies: &applies,
+            excludes: &excludes,
+            positive: &positive,
+            negative: &negative,
             now,
-        );
+        });
         let after_hash = if snapshot.is_null() {
             None
         } else {
@@ -1963,41 +1966,42 @@ impl TursoStore {
         let removed_atoms = old_hashes.difference(&new_hashes).count();
         let action_id = insert_action(
             &tx,
-            &board_id,
-            "revert_ontology_mutation",
-            &input.reason,
-            &input.actor.name,
-            &target.signal_ids,
-            Some(&label_id),
-            None,
-            None,
-            None,
-            None,
-            before_hash.as_deref(),
-            after_hash.as_deref(),
-            &json!({
-                "reverted_action_id": target.id,
-                "reverted_action_type": target.action_type,
-                "label": {"id": label_id, "name": label_name},
-                "expected_current_hash": input.expected_current_hash,
-                "reverted_canonical_before_hash": target.canonical_before_hash,
-                "reverted_canonical_after_hash": target.canonical_after_hash,
-                "before_revert": before_snapshot,
-                "after_revert": after_snapshot,
-                "atom_effect_counts": {"added": added_atoms, "removed": removed_atoms},
-                "legacy_warning": JsonValue::Null,
-                "index_dirty": true,
-            }),
-            "pending",
-            &json!({
-                "state": "pending_revert_validation",
-                "reverted_action_id": target.id,
-                "reverted_action_type": target.action_type,
-            })
-            .to_string(),
-            now,
-            &input.actor.name,
-            input.actor.agent_type.as_deref(),
+            ActionInsertInput {
+                board_id: &board_id,
+                action_type: "revert_ontology_mutation",
+                reason: &input.reason,
+                signal_ids: &target.signal_ids,
+                target_label_id: Some(&label_id),
+                result_label_id: None,
+                result_atom_id: None,
+                result_atom_content_hash: None,
+                result_proposal_id: None,
+                before_hash: before_hash.as_deref(),
+                after_hash: after_hash.as_deref(),
+                change_json: &json!({
+                    "reverted_action_id": target.id,
+                    "reverted_action_type": target.action_type,
+                    "label": {"id": label_id, "name": label_name},
+                    "expected_current_hash": input.expected_current_hash,
+                    "reverted_canonical_before_hash": target.canonical_before_hash,
+                    "reverted_canonical_after_hash": target.canonical_after_hash,
+                    "before_revert": before_snapshot,
+                    "after_revert": after_snapshot,
+                    "atom_effect_counts": {"added": added_atoms, "removed": removed_atoms},
+                    "legacy_warning": JsonValue::Null,
+                    "index_dirty": true,
+                }),
+                validation_status: "pending",
+                validation_json: &json!({
+                    "state": "pending_revert_validation",
+                    "reverted_action_id": target.id,
+                    "reverted_action_type": target.action_type,
+                })
+                .to_string(),
+                now,
+                created_by: &input.actor.name,
+                agent_type: input.actor.agent_type.as_deref(),
+            },
         )
         .await?;
         for atom in &old_atoms {
@@ -2031,24 +2035,25 @@ impl TursoStore {
         tx.execute("UPDATE label_ontology_actions SET validation_status=:status,validation_json=:validation,validation_requirement=CASE WHEN :status='not_required' THEN 'none' ELSE 'required' END WHERE id=:id AND board_id=:board",[(":status",input.validation_status.as_str()),(":validation",json_object_or_default(&input.validation_json)?.to_string().as_str()),(":id",input.parent_action_id.as_str()),(":board",board_id.as_str())]).await?;
         let action_id = insert_action(
             &tx,
-            &board_id,
-            "validate",
-            &input.reason,
-            &input.actor.name,
-            &input.signal_ids,
-            parent.target_label_id.as_deref(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            &json!({"parent_action_id":parent.id,"validation_status":input.validation_status}),
-            &input.validation_status,
-            &input.validation_json,
-            now,
-            &input.actor.name,
-            input.actor.agent_type.as_deref(),
+            ActionInsertInput {
+                board_id: &board_id,
+                action_type: "validate",
+                reason: &input.reason,
+                signal_ids: &input.signal_ids,
+                target_label_id: parent.target_label_id.as_deref(),
+                result_label_id: None,
+                result_atom_id: None,
+                result_atom_content_hash: None,
+                result_proposal_id: None,
+                before_hash: None,
+                after_hash: None,
+                change_json: &json!({"parent_action_id":parent.id,"validation_status":input.validation_status}),
+                validation_status: &input.validation_status,
+                validation_json: &input.validation_json,
+                now,
+                created_by: &input.actor.name,
+                agent_type: input.actor.agent_type.as_deref(),
+            },
         )
         .await?;
         tx.commit().await?;
@@ -2406,17 +2411,30 @@ fn semantics_snapshot_json(
 ) -> JsonValue {
     current.map(|v|json!({"label_id":v.label_id,"label_name":v.label_name,"description":v.description,"applies_when":v.applies_when,"excludes_when":v.excludes_when,"positive_examples":v.positive_examples,"negative_examples":v.negative_examples,"semantics_hash":hash})).unwrap_or_else(||json!({"label_id":label_id,"label_name":label_name,"description":null,"applies_when":[],"excludes_when":[],"positive_examples":[],"negative_examples":[],"semantics_hash":hash}))
 }
-fn build_atoms(
-    label_id: &str,
-    board_id: &str,
-    label_name: &str,
-    description: &Option<String>,
-    applies: &[String],
-    excludes: &[String],
-    positive: &[String],
-    negative: &[String],
+struct AtomBuildInput<'a> {
+    label_id: &'a str,
+    board_id: &'a str,
+    label_name: &'a str,
+    description: &'a Option<String>,
+    applies: &'a [String],
+    excludes: &'a [String],
+    positive: &'a [String],
+    negative: &'a [String],
     now: i64,
-) -> Vec<LabelAtomRecord> {
+}
+
+fn build_atoms(input: AtomBuildInput<'_>) -> Vec<LabelAtomRecord> {
+    let AtomBuildInput {
+        label_id,
+        board_id,
+        label_name,
+        description,
+        applies,
+        excludes,
+        positive,
+        negative,
+        now,
+    } = input;
     let mut atoms = Vec::new();
     let mut ordinal = 0_i64;
     let mut add = |polarity: &str, kind: &str, text: &str| {
@@ -2585,27 +2603,49 @@ async fn mark_index_dirty(
     Ok(())
 }
 
+struct ActionInsertInput<'a> {
+    board_id: &'a str,
+    action_type: &'a str,
+    reason: &'a str,
+    signal_ids: &'a [String],
+    target_label_id: Option<&'a str>,
+    result_label_id: Option<&'a str>,
+    result_atom_id: Option<&'a str>,
+    result_atom_content_hash: Option<&'a str>,
+    result_proposal_id: Option<&'a str>,
+    before_hash: Option<&'a str>,
+    after_hash: Option<&'a str>,
+    change_json: &'a JsonValue,
+    validation_status: &'a str,
+    validation_json: &'a str,
+    now: i64,
+    created_by: &'a str,
+    agent_type: Option<&'a str>,
+}
+
 async fn insert_action(
     transaction: &turso::transaction::Transaction<'_>,
-    board_id: &str,
-    action_type: &str,
-    reason: &str,
-    _actor: &str,
-    signal_ids: &[String],
-    target_label_id: Option<&str>,
-    result_label_id: Option<&str>,
-    result_atom_id: Option<&str>,
-    result_atom_content_hash: Option<&str>,
-    result_proposal_id: Option<&str>,
-    before_hash: Option<&str>,
-    after_hash: Option<&str>,
-    change_json: &JsonValue,
-    validation_status: &str,
-    validation_json: &str,
-    now: i64,
-    created_by: &str,
-    agent_type: Option<&str>,
+    input: ActionInsertInput<'_>,
 ) -> Result<String, StoreError> {
+    let ActionInsertInput {
+        board_id,
+        action_type,
+        reason,
+        signal_ids,
+        target_label_id,
+        result_label_id,
+        result_atom_id,
+        result_atom_content_hash,
+        result_proposal_id,
+        before_hash,
+        after_hash,
+        change_json,
+        validation_status,
+        validation_json,
+        now,
+        created_by,
+        agent_type,
+    } = input;
     let action_id = format!("loa_{}", ulid::Ulid::new());
     let actor_type = if agent_type.is_some() {
         "agent"

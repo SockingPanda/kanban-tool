@@ -495,12 +495,14 @@ impl TursoStore {
                         journal.id.clone(),
                         snapshot.header.record_count,
                         jobs,
-                        "completed",
-                        false,
-                        None,
-                        target_fingerprint_before,
-                        None,
-                        Vec::new(),
+                        ImportReportDetails {
+                            phase: "completed",
+                            restart_required: false,
+                            staged_database_path: None,
+                            target_fingerprint_before,
+                            staged_fingerprint: None,
+                            publish_preconditions: Vec::new(),
+                        },
                     ));
                 }
                 "failed" => {}
@@ -524,8 +526,7 @@ impl TursoStore {
                     &manifest,
                     &snapshot_fingerprint,
                     &mut connection,
-                    journal.as_ref(),
-                    &target_fingerprint_before,
+                    (journal.as_ref(), &target_fingerprint_before),
                 )
                 .await;
         }
@@ -563,18 +564,16 @@ impl TursoStore {
                 &snapshot_fingerprint,
                 "prepared",
                 &manifest,
-                None,
-                Some(&target_fingerprint_before),
+                (None, Some(&target_fingerprint_before)),
             )
             .await?;
             let prepared = self
                 .prepare_replacement(
                     &snapshot,
                     in_path,
-                    &journal_id,
                     &snapshot_fingerprint,
                     &manifest,
-                    &staged_path,
+                    (&journal_id, staged_path.as_path()),
                     &target_fingerprint_before,
                 )
                 .await;
@@ -635,8 +634,7 @@ impl TursoStore {
             &snapshot_fingerprint,
             "prepared",
             &manifest,
-            None,
-            Some(&target_fingerprint_before),
+            (None, Some(&target_fingerprint_before)),
         )
         .await?;
         let imported_records =
@@ -666,12 +664,14 @@ impl TursoStore {
             journal_id,
             imported_records,
             jobs,
-            "completed",
-            false,
-            None,
-            target_fingerprint_before,
-            None,
-            Vec::new(),
+            ImportReportDetails {
+                phase: "completed",
+                restart_required: false,
+                staged_database_path: None,
+                target_fingerprint_before,
+                staged_fingerprint: None,
+                publish_preconditions: Vec::new(),
+            },
         ))
     }
 
@@ -684,9 +684,9 @@ impl TursoStore {
         manifest: &str,
         snapshot_fingerprint: &str,
         connection: &mut Connection,
-        journal: Option<&PortableJournal>,
-        target_fingerprint_before: &str,
+        import_state: (Option<&PortableJournal>, &str),
     ) -> Result<StoreImportReport, StoreError> {
+        let (journal, target_fingerprint_before) = import_state;
         let journal_id = journal
             .map(|journal| journal.id.clone())
             .unwrap_or_else(|| deterministic_journal_id(snapshot_fingerprint));
@@ -727,12 +727,14 @@ impl TursoStore {
                 journal.id.clone(),
                 snapshot.header.record_count,
                 jobs,
-                "completed",
-                false,
-                None,
-                target_fingerprint_before.to_owned(),
-                None,
-                Vec::new(),
+                ImportReportDetails {
+                    phase: "completed",
+                    restart_required: false,
+                    staged_database_path: None,
+                    target_fingerprint_before: target_fingerprint_before.to_owned(),
+                    staged_fingerprint: None,
+                    publish_preconditions: Vec::new(),
+                },
             ));
         }
 
@@ -744,8 +746,7 @@ impl TursoStore {
                 snapshot_fingerprint,
                 "prepared",
                 manifest,
-                None,
-                Some(target_fingerprint_before),
+                (None, Some(target_fingerprint_before)),
             )
             .await?;
         }
@@ -816,12 +817,14 @@ impl TursoStore {
             journal_id,
             imported_records,
             jobs,
-            "completed",
-            false,
-            None,
-            target_fingerprint_before.to_owned(),
-            None,
-            Vec::new(),
+            ImportReportDetails {
+                phase: "completed",
+                restart_required: false,
+                staged_database_path: None,
+                target_fingerprint_before: target_fingerprint_before.to_owned(),
+                staged_fingerprint: None,
+                publish_preconditions: Vec::new(),
+            },
         ))
     }
 
@@ -845,12 +848,12 @@ impl TursoStore {
         &self,
         snapshot: &PortableSnapshot,
         in_path: &Path,
-        journal_id: &str,
         snapshot_fingerprint: &str,
         manifest: &str,
-        staged_path: &Path,
+        staging: (&str, &Path),
         target_fingerprint_before: &str,
     ) -> Result<(String, u64), StoreError> {
+        let (journal_id, staged_path) = staging;
         let staged = TursoStore::open(staged_path).await?;
         staged.initialize().await?;
         let mut staged_connection = staged.connection().await?;
@@ -861,8 +864,7 @@ impl TursoStore {
             snapshot_fingerprint,
             "staged",
             manifest,
-            Some(staged_path),
-            Some(target_fingerprint_before),
+            (Some(staged_path), Some(target_fingerprint_before)),
         )
         .await?;
         import_records_into_connection(&mut staged_connection, snapshot).await?;
@@ -2125,6 +2127,15 @@ struct PortableJournal {
     previous_identity_json: Option<String>,
 }
 
+struct ImportReportDetails<'a> {
+    phase: &'a str,
+    restart_required: bool,
+    staged_database_path: Option<PathBuf>,
+    target_fingerprint_before: String,
+    staged_fingerprint: Option<String>,
+    publish_preconditions: Vec<String>,
+}
+
 async fn find_portable_journal(
     connection: &Connection,
     snapshot_fingerprint: &str,
@@ -2175,9 +2186,9 @@ async fn insert_import_journal(
     snapshot_fingerprint: &str,
     phase: &str,
     manifest: &str,
-    staged_database_path: Option<&Path>,
-    target_fingerprint_before: Option<&str>,
+    staging: (Option<&Path>, Option<&str>),
 ) -> Result<(), StoreError> {
+    let (staged_database_path, target_fingerprint_before) = staging;
     let previous_identity = target_fingerprint_before
         .map(|fingerprint| serde_json::json!({"target_fingerprint": fingerprint}).to_string());
     connection
@@ -2346,13 +2357,16 @@ fn import_report(
     journal_id: String,
     imported_records: u64,
     rebuild_jobs_enqueued: u64,
-    phase: &str,
-    restart_required: bool,
-    staged_database_path: Option<PathBuf>,
-    target_fingerprint_before: String,
-    staged_fingerprint: Option<String>,
-    publish_preconditions: Vec<String>,
+    details: ImportReportDetails<'_>,
 ) -> StoreImportReport {
+    let ImportReportDetails {
+        phase,
+        restart_required,
+        staged_database_path,
+        target_fingerprint_before,
+        staged_fingerprint,
+        publish_preconditions,
+    } = details;
     StoreImportReport {
         in_path: in_path.display().to_string(),
         source_fingerprint: header.source_fingerprint.clone(),
@@ -2384,20 +2398,22 @@ fn prepared_import_report(
         journal_id,
         header.record_count,
         rebuild_jobs_enqueued,
-        "validated",
-        true,
-        Some(staged_database_path),
-        target_fingerprint_before,
-        Some(staged_fingerprint),
-        vec![
-            "停止 kanban serve/dispatcher，获得 host lifecycle 独占".to_owned(),
-            "校验 canonical path 与 target_fingerprint_before 一致".to_owned(),
-            "同文件系统原子发布 staged_database_path 到 canonical path".to_owned(),
-            "重新打开 TursoStore，校验 integrity/schema/counts 并将 journal 标为 completed"
-                .to_owned(),
-            "attachments_mode=metadata_only：二进制附件需独立 staging/publish，不在本 JSONL 中静默迁移"
-                .to_owned(),
-        ],
+        ImportReportDetails {
+            phase: "validated",
+            restart_required: true,
+            staged_database_path: Some(staged_database_path),
+            target_fingerprint_before,
+            staged_fingerprint: Some(staged_fingerprint),
+            publish_preconditions: vec![
+                "停止 kanban serve/dispatcher，获得 host lifecycle 独占".to_owned(),
+                "校验 canonical path 与 target_fingerprint_before 一致".to_owned(),
+                "同文件系统原子发布 staged_database_path 到 canonical path".to_owned(),
+                "重新打开 TursoStore，校验 integrity/schema/counts 并将 journal 标为 completed"
+                    .to_owned(),
+                "attachments_mode=metadata_only：二进制附件需独立 staging/publish，不在本 JSONL 中静默迁移"
+                    .to_owned(),
+            ],
+        },
     )
 }
 

@@ -243,9 +243,7 @@ impl LabelOntologyOperations for TursoApplicationStore {
                             board,
                             &statuses,
                             &kinds,
-                            task_ref.as_deref(),
-                            target.as_deref(),
-                            proposed.as_deref(),
+                            (task_ref.as_deref(), target.as_deref(), proposed.as_deref()),
                             include_all,
                             limit
                         )

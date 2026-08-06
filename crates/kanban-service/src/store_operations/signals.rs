@@ -174,20 +174,22 @@ impl TursoStore {
 
         insert_event_tx(
             &mut transaction,
-            &board_id,
-            task_id.as_deref(),
-            input.run_id.as_deref(),
-            "signal.recorded",
-            &input.actor,
-            &serde_json::json!({
-                "signal_id": input.id,
-                "observation_id": input.observation_id,
-                "kind": input.kind,
-                "status": "open"
-            })
-            .to_string(),
-            input.created_at,
-            &input.event_id,
+            EventInsertInput {
+                board_id: &board_id,
+                task_id: task_id.as_deref(),
+                run_id: input.run_id.as_deref(),
+                kind: "signal.recorded",
+                actor: &input.actor,
+                payload_json: &serde_json::json!({
+                    "signal_id": input.id,
+                    "observation_id": input.observation_id,
+                    "kind": input.kind,
+                    "status": "open"
+                })
+                .to_string(),
+                created_at: input.created_at,
+                event_id: &input.event_id,
+            },
         )
         .await?;
 
@@ -352,19 +354,21 @@ impl TursoStore {
                 .await?;
             insert_event_tx(
                 &mut transaction,
-                &board_id,
-                signal.observation.task_id.as_deref(),
-                signal.observation.run_id.as_deref(),
-                "signal.reviewed",
-                &input.actor,
-                &serde_json::json!({
-                    "signal_id": signal.id,
-                    "status": target,
-                    "reason": input.reason
-                })
-                .to_string(),
-                input.now,
-                &input.event_ids[index],
+                EventInsertInput {
+                    board_id: &board_id,
+                    task_id: signal.observation.task_id.as_deref(),
+                    run_id: signal.observation.run_id.as_deref(),
+                    kind: "signal.reviewed",
+                    actor: &input.actor,
+                    payload_json: &serde_json::json!({
+                        "signal_id": signal.id,
+                        "status": target,
+                        "reason": input.reason
+                    })
+                    .to_string(),
+                    created_at: input.now,
+                    event_id: &input.event_ids[index],
+                },
             )
             .await?;
         }
@@ -756,20 +760,22 @@ async fn insert_signal_comment_tx(
     let event_id = kanban_core::new_event_id();
     insert_event_tx(
         transaction,
-        board_id,
-        Some(task_id),
-        input.run_id.as_deref(),
-        "task.comment.created",
-        &input.actor,
-        &serde_json::json!({
-            "comment_id": id,
-            "kind": "signal",
-            "author_type": "agent",
-            "agent_type": input.agent_type
-        })
-        .to_string(),
-        input.created_at,
-        &event_id,
+        EventInsertInput {
+            board_id,
+            task_id: Some(task_id),
+            run_id: input.run_id.as_deref(),
+            kind: "task.comment.created",
+            actor: &input.actor,
+            payload_json: &serde_json::json!({
+                "comment_id": id,
+                "kind": "signal",
+                "author_type": "agent",
+                "agent_type": input.agent_type
+            })
+            .to_string(),
+            created_at: input.created_at,
+            event_id: &event_id,
+        },
     )
     .await?;
     Ok(CommentRecord {
@@ -787,17 +793,31 @@ async fn insert_signal_comment_tx(
     })
 }
 
+struct EventInsertInput<'a> {
+    board_id: &'a str,
+    task_id: Option<&'a str>,
+    run_id: Option<&'a str>,
+    kind: &'a str,
+    actor: &'a str,
+    payload_json: &'a str,
+    created_at: i64,
+    event_id: &'a str,
+}
+
 async fn insert_event_tx(
     transaction: &mut turso::transaction::Transaction<'_>,
-    board_id: &str,
-    task_id: Option<&str>,
-    run_id: Option<&str>,
-    kind: &str,
-    actor: &str,
-    payload_json: &str,
-    created_at: i64,
-    event_id: &str,
+    input: EventInsertInput<'_>,
 ) -> Result<(), StoreError> {
+    let EventInsertInput {
+        board_id,
+        task_id,
+        run_id,
+        kind,
+        actor,
+        payload_json,
+        created_at,
+        event_id,
+    } = input;
     transaction
         .execute(
             "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, :task_id, :run_id, :kind, :actor, :payload_json, :created_at)",

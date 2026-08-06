@@ -29,6 +29,18 @@ pub struct ReopenStepInput {
     pub expected_lock_version: i64,
 }
 
+struct StepResolution<'a> {
+    task_id: &'a str,
+    step_id: &'a str,
+    note: &'a str,
+    actor: &'a str,
+    event_id: &'a str,
+    status: &'a str,
+    event_kind: &'a str,
+    updated_at: i64,
+    expected_lock_version: i64,
+}
+
 impl TursoStore {
     pub async fn complete_step(
         &self,
@@ -45,17 +57,17 @@ impl TursoStore {
             input.updated_at,
             input.expected_lock_version,
         )?;
-        self.resolve_step(
+        self.resolve_step(StepResolution {
             task_id,
             step_id,
-            input.note,
-            input.actor,
-            input.event_id,
-            "done",
-            "task.step.done",
-            input.updated_at,
-            input.expected_lock_version,
-        )
+            note: &input.note,
+            actor: &input.actor,
+            event_id: &input.event_id,
+            status: "done",
+            event_kind: "task.step.done",
+            updated_at: input.updated_at,
+            expected_lock_version: input.expected_lock_version,
+        })
         .await
     }
 
@@ -74,17 +86,17 @@ impl TursoStore {
             input.updated_at,
             input.expected_lock_version,
         )?;
-        self.resolve_step(
+        self.resolve_step(StepResolution {
             task_id,
             step_id,
-            input.reason,
-            input.actor,
-            input.event_id,
-            "skipped",
-            "task.step.skipped",
-            input.updated_at,
-            input.expected_lock_version,
-        )
+            note: &input.reason,
+            actor: &input.actor,
+            event_id: &input.event_id,
+            status: "skipped",
+            event_kind: "task.step.skipped",
+            updated_at: input.updated_at,
+            expected_lock_version: input.expected_lock_version,
+        })
         .await
     }
 
@@ -103,32 +115,32 @@ impl TursoStore {
             input.updated_at,
             input.expected_lock_version,
         )?;
-        self.resolve_step(
+        self.resolve_step(StepResolution {
             task_id,
             step_id,
-            input.reason,
-            input.actor,
-            input.event_id,
-            "todo",
-            "task.step.reopened",
-            input.updated_at,
-            input.expected_lock_version,
-        )
+            note: &input.reason,
+            actor: &input.actor,
+            event_id: &input.event_id,
+            status: "todo",
+            event_kind: "task.step.reopened",
+            updated_at: input.updated_at,
+            expected_lock_version: input.expected_lock_version,
+        })
         .await
     }
 
-    async fn resolve_step(
-        &self,
-        task_id: &str,
-        step_id: &str,
-        note: String,
-        actor: String,
-        event_id: String,
-        status: &str,
-        event_kind: &str,
-        updated_at: i64,
-        expected_lock_version: i64,
-    ) -> Result<TaskStepRecord, StoreError> {
+    async fn resolve_step(&self, input: StepResolution<'_>) -> Result<TaskStepRecord, StoreError> {
+        let StepResolution {
+            task_id,
+            step_id,
+            note,
+            actor,
+            event_id,
+            status,
+            event_kind,
+            updated_at,
+            expected_lock_version,
+        } = input;
         let task_id = task_id.trim();
         let step_id = step_id.trim();
         let actor = actor.trim();

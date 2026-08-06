@@ -1,6 +1,7 @@
 mod add;
 mod bootstrap;
 mod create;
+mod delete;
 mod list;
 pub(crate) mod ontology;
 mod remove;
@@ -15,6 +16,8 @@ pub(crate) enum LabelCommand {
     List(list::ListArgs),
     /// 创建看板 label；若同名则返回已有 label。
     Create(create::CreateArgs),
+    /// 删除看板 label identity；存在任务绑定时需显式 `--force`。
+    Delete(delete::DeleteArgs),
     /// 将一个或多个 label 绑定到任务。
     Add(add::AddArgs),
     /// 从任务上下文创建首个 label semantics 并绑定任务。
@@ -59,6 +62,7 @@ pub(crate) fn run(ctx: &CliContext, command: &LabelCommand) -> Result<(), CliFai
     match command {
         LabelCommand::List(args) => list::run(ctx, args),
         LabelCommand::Create(args) => create::run(ctx, args),
+        LabelCommand::Delete(args) => delete::run(ctx, args),
         LabelCommand::Add(args) => add::run(ctx, args),
         LabelCommand::Bootstrap(args) => bootstrap::run(ctx, args),
         LabelCommand::Remove(args) => remove::run(ctx, args),

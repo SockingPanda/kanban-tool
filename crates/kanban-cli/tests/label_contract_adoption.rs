@@ -7,15 +7,28 @@ use kanban_protocol::{
     cli_labels::{
         CliLabelAtomIndexQueryOutput, CliLabelAtomIndexRebuildOutput,
         CliLabelAtomIndexStatusOutput, CliLabelAtomsExplainOutput, CliLabelAtomsListOutput,
-        CliLabelBootstrapOutput, CliLabelCreateOutput, CliLabelOntologyConfirmOutput,
-        CliLabelOntologyQualityOutput, CliLabelOntologyRecordOutput, CliLabelOntologyShowOutput,
-        CliLabelProposalsAcceptOutput, CliLabelProposalsListOutput, CliLabelProposalsRejectOutput,
-        CliLabelProposalsShowOutput, CliLabelProposeOutput, CliLabelSemanticsListOutput,
-        CliLabelSemanticsShowOutput, CliLabelSemanticsUpsertOutput, CliLabelSuggestOutput,
+        CliLabelBootstrapOutput, CliLabelCreateOutput, CliLabelDeleteOutput,
+        CliLabelOntologyConfirmOutput, CliLabelOntologyQualityOutput, CliLabelOntologyRecordOutput,
+        CliLabelOntologyShowOutput, CliLabelProposalsAcceptOutput, CliLabelProposalsListOutput,
+        CliLabelProposalsRejectOutput, CliLabelProposalsShowOutput, CliLabelProposeOutput,
+        CliLabelSemanticsListOutput, CliLabelSemanticsShowOutput, CliLabelSemanticsUpsertOutput,
+        CliLabelSuggestOutput,
     },
 };
 
 use knowledge_support::Host;
+
+#[test]
+fn label_delete_flow_through_real_cli() {
+    let host = Host::new();
+    let label: CliLabelCreateOutput = host.json(&["label", "create", "temporary-delete"]);
+    let deleted: CliLabelDeleteOutput = host.json(&["label", "delete", label.data.name.as_str()]);
+    assert_eq!(deleted.data.label.id, label.data.id);
+    assert!(!deleted.data.forced);
+    assert_eq!(deleted.data.removed_task_bindings, 0);
+    assert!(!deleted.data.removed_semantics);
+    assert_eq!(deleted.data.removed_atoms, 0);
+}
 
 #[test]
 fn labels_semantics_atoms_and_proposals_flow_through_real_cli() {

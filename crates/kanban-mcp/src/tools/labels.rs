@@ -1,7 +1,8 @@
 use kanban_protocol::{
     AddTaskLabelRequest, AddTaskLabelResponse, BootstrapTaskLabelRequest,
     BootstrapTaskLabelResponse, CreateBoardLabelRequest, CreateBoardLabelResponse,
-    ListBoardLabelsResponse, ListTaskLabelsResponse, RemoveTaskLabelResponse,
+    DeleteBoardLabelResponse, ListBoardLabelsResponse, ListTaskLabelsResponse,
+    RemoveTaskLabelResponse,
 };
 use rmcp::{
     ErrorData as McpError,
@@ -26,6 +27,17 @@ struct LabelCreateArgs {
     board: Option<String>,
     name: String,
     color: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct LabelDeleteArgs {
+    /// Board slug 或 ID。默认使用 KB_BOARD/default。
+    board: Option<String>,
+    /// Label ID 或完全匹配的 label name。
+    label_id: String,
+    #[serde(default)]
+    force: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -117,6 +129,23 @@ impl KanbanMcp {
         })
         .await?;
         Ok(Json(CreateBoardLabelResponse { data: label }))
+    }
+
+    #[tool(
+        name = "label_delete",
+        description = "通过 canonical application service 删除 board label identity"
+    )]
+    async fn label_delete(
+        &self,
+        Parameters(args): Parameters<LabelDeleteArgs>,
+    ) -> Result<Json<DeleteBoardLabelResponse>, McpError> {
+        let board = self.board(args.board);
+        let label_id = args.label_id;
+        let force = args.force;
+        let client = self.client.clone();
+        let result =
+            call_client(move || client.delete_board_label(&board, &label_id, force)).await?;
+        Ok(Json(DeleteBoardLabelResponse { data: result }))
     }
 
     #[tool(
@@ -219,6 +248,7 @@ mod tests {
             names,
             vec![
                 "label_create",
+                "label_delete",
                 "label_list",
                 "task_label_add",
                 "task_label_bootstrap",

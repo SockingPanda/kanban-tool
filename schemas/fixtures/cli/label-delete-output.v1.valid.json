@@ -1,0 +1,16 @@
+{
+  "data": {
+    "label": {
+      "id": "l_FIXTURE_1",
+      "board_id": "b_FIXTURE_1",
+      "name": "backend",
+      "color": "blue",
+      "created_at": 100,
+      "updated_at": 100
+    },
+    "forced": true,
+    "removed_task_bindings": 1,
+    "removed_semantics": false,
+    "removed_atoms": 0
+  }
+}

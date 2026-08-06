@@ -10,7 +10,7 @@ use std::{collections::BTreeMap, fmt};
 use serde::Serialize;
 
 use crate::{
-    contract_catalog::McpExposure, endpoint_catalog, ContractSurface, OperationDeclaration,
+    ContractSurface, OperationDeclaration, contract_catalog::McpExposure, endpoint_catalog,
 };
 
 /// MCP tool 的能力分类。
@@ -41,26 +41,6 @@ const DOMAIN_INVARIANTS: &[McpOperationInvariant] = &[
     McpOperationInvariant::CanonicalHostOnly,
     McpOperationInvariant::SharedApplicationService,
     McpOperationInvariant::NoHostAdminSurface,
-];
-
-/// MCP 明确禁止绑定的 host-admin HTTP operation。
-///
-/// 领域 projection 的 `label atom-index/rebuild`、search/graph/vector configure/rebuild/sync
-/// 都是现有 domain capability，因而不在这里列为 host-admin；数据库、迁移、portable
-/// replace 和通用 maintenance 则始终由 host/CLI/Desktop 管理，不得新增 MCP tool。
-pub const MCP_HOST_ADMIN_OPERATION_IDS: &[&str] = &[
-    "api.health",
-    "api.doctor",
-    "api.checkpoint",
-    "api.maintenance-backup",
-    "api.maintenance-export",
-    "api.maintenance-import",
-    "api.maintenance-vacuum",
-    "api.maintenance-status",
-    "api.maintenance-run",
-    "api.maintenance-rebuild",
-    "api.maintenance-cleanup",
-    "api.maintenance-import-v30",
 ];
 
 /// declaration source 投影时的冲突。
@@ -345,7 +325,9 @@ pub fn validate_mcp_policy_projection(projection: &McpPolicyProjection) -> Resul
 
     for (index, binding) in projection.tool_bindings.iter().enumerate() {
         if binding.tool_name.is_empty() {
-            return Err(format!("MCP projection 第 {index} 项缺少 canonical tool name"));
+            return Err(format!(
+                "MCP projection 第 {index} 项缺少 canonical tool name"
+            ));
         }
         if let Some(first_index) = tool_names.insert(binding.tool_name, index) {
             return Err(format!(
@@ -430,144 +412,66 @@ pub struct McpOperationDescriptor {
     pub invariants: &'static [McpOperationInvariant],
 }
 
-macro_rules! domain_tool {
-    ($tool:literal => [$($operation:literal),+ $(,)?]) => {
-        McpOperationDescriptor {
-            tool_name: $tool,
-            http_operations: &[$($operation),+],
-            class: McpOperationClass::Domain,
-            invariants: DOMAIN_INVARIANTS,
-        }
-    };
+fn canonical_mcp_policy_projection() -> McpPolicyProjection {
+    let mut projection = project_mcp_policy(crate::operation_catalog::operation_catalog())
+        .expect("canonical MCP operation declaration policy must project");
+    projection
+        .tool_bindings
+        .sort_by_key(|binding| binding.tool_name);
+    projection
 }
 
-/// 当前 MCP domain tool 的唯一 machine-readable catalog。
-///
-/// 顺序与 rmcp `ToolRouter::list_all()` 的 canonical name 顺序一致，便于 adapter exact
-/// test 在新增、删除或重命名时立即失败。
-pub const MCP_OPERATION_CATALOG: &[McpOperationDescriptor] = &[
-    domain_tool!("attachment_create" => ["api.list-tasks", "api.create-attachment"]),
-    domain_tool!("attachment_download" => ["api.list-tasks", "api.download-attachment"]),
-    domain_tool!("attachment_list" => ["api.list-tasks", "api.list-attachments"]),
-    domain_tool!("attachment_remove" => ["api.list-tasks", "api.delete-attachment"]),
-    domain_tool!("board_archive" => ["api.archive-board"]),
-    domain_tool!("board_columns" => ["api.list-board-columns"]),
-    domain_tool!("board_create" => ["api.create-board"]),
-    domain_tool!("board_list" => ["api.list-boards"]),
-    domain_tool!("board_show" => ["api.get-board"]),
-    domain_tool!("board_task_map" => ["api.board-task-map"]),
-    domain_tool!("comment_create" => ["api.list-tasks", "api.create-comment"]),
-    domain_tool!("comment_list" => ["api.list-tasks", "api.list-comments"]),
-    domain_tool!("context_build" => ["api.build-context"]),
-    domain_tool!("dependency_create" => ["api.list-tasks", "api.add-dependency"]),
-    domain_tool!("dependency_list" => ["api.list-tasks", "api.list-dependencies"]),
-    domain_tool!("dependency_remove" => ["api.list-tasks", "api.remove-dependency"]),
-    domain_tool!("entity_list" => ["api.list-entities"]),
-    domain_tool!("entity_show" => ["api.get-entity"]),
-    domain_tool!("entity_upsert" => ["api.upsert-entity"]),
-    domain_tool!("event_list" => ["api.list-tasks", "api.list-events"]),
-    domain_tool!("graph_neighbors" => ["api.graph-neighbors"]),
-    domain_tool!("graph_query" => ["api.graph-query"]),
-    domain_tool!("graph_rebuild" => ["api.graph-rebuild"]),
-    domain_tool!("graph_status" => ["api.graph-status"]),
-    domain_tool!("graph_sync" => ["api.graph-sync"]),
-    domain_tool!("label_atom_explain" => ["api.explain-label-atom"]),
-    domain_tool!("label_atom_index_query" => ["api.query-label-atom-index"]),
-    domain_tool!("label_atom_index_rebuild" => ["api.rebuild-label-atom-index"]),
-    domain_tool!("label_atom_index_status" => ["api.label-atom-index-status"]),
-    domain_tool!("label_atoms_list" => ["api.list-label-atoms"]),
-    domain_tool!("label_create" => ["api.create-board-label"]),
-    domain_tool!("label_delete" => ["api.delete-board-label"]),
-    domain_tool!("label_list" => ["api.list-board-labels"]),
-    domain_tool!("label_ontology_action" => ["api.create-label-ontology-action"]),
-    domain_tool!("label_ontology_apply_atom" => ["api.apply-label-ontology-atom"]),
-    domain_tool!("label_ontology_observe" => ["api.record-label-ontology-observation"]),
-    domain_tool!("label_ontology_quality" => ["api.review-label-ontology"]),
-    domain_tool!("label_ontology_revert" => ["api.revert-label-ontology-mutation"]),
-    domain_tool!("label_ontology_review" => ["api.review-label-ontology"]),
-    domain_tool!("label_ontology_signal_show" => ["api.get-label-ontology-signal"]),
-    domain_tool!("label_ontology_signals" => ["api.list-label-ontology-signals"]),
-    domain_tool!("label_ontology_validate" => ["api.validate-label-ontology-action"]),
-    domain_tool!("label_proposal_accept" => ["api.accept-label-proposal"]),
-    domain_tool!("label_proposal_reject" => ["api.reject-label-proposal"]),
-    domain_tool!("label_proposal_show" => ["api.get-label-proposal"]),
-    domain_tool!("label_proposals_list" => ["api.list-task-label-proposals", "api.list-board-label-proposals"]),
-    domain_tool!("label_propose" => ["api.propose-task-label"]),
-    domain_tool!("label_semantics_delete" => ["api.delete-label-semantics"]),
-    domain_tool!("label_semantics_list" => ["api.list-label-semantics"]),
-    domain_tool!("label_semantics_show" => ["api.get-label-semantics"]),
-    domain_tool!("label_semantics_upsert" => ["api.upsert-label-semantics"]),
-    domain_tool!("label_suggest" => ["api.suggest-task-labels"]),
-    domain_tool!("run_list" => ["api.list-tasks", "api.list-runs"]),
-    domain_tool!("run_log" => ["api.get-run-log"]),
-    domain_tool!("run_show" => ["api.get-run"]),
-    domain_tool!("search_index_rebuild" => ["api.rebuild-search-index"]),
-    domain_tool!("search_index_sync" => ["api.sync-search-index"]),
-    domain_tool!("search_status" => ["api.search-status"]),
-    domain_tool!("search_tasks" => ["api.search-tasks"]),
-    domain_tool!("search_tasks_by_status" => ["api.search-tasks-by-status"]),
-    domain_tool!("signal_confirm" => ["api.confirm-signals"]),
-    domain_tool!("signal_list" => ["api.list-signals"]),
-    domain_tool!("signal_record" => ["api.record-signal"]),
-    domain_tool!("signal_reject" => ["api.reject-signals"]),
-    domain_tool!("signal_resolve" => ["api.resolve-signals"]),
-    domain_tool!("signal_review" => ["api.review-signals"]),
-    domain_tool!("signal_show" => ["api.get-signal"]),
-    domain_tool!("signal_supersede" => ["api.supersede-signals"]),
-    domain_tool!("stats" => ["api.get-stats"]),
-    domain_tool!("step_create" => ["api.list-tasks", "api.create-step"]),
-    domain_tool!("step_done" => ["api.list-tasks", "api.list-steps", "api.complete-step"]),
-    domain_tool!("step_list" => ["api.list-tasks", "api.list-steps"]),
-    domain_tool!("step_remove" => ["api.list-tasks", "api.list-steps", "api.remove-step"]),
-    domain_tool!("step_reopen" => ["api.list-tasks", "api.list-steps", "api.reopen-step"]),
-    domain_tool!("step_skip" => ["api.list-tasks", "api.list-steps", "api.skip-step"]),
-    domain_tool!("step_update" => ["api.list-tasks", "api.list-steps", "api.update-step"]),
-    domain_tool!("task_archive" => ["api.list-tasks", "api.archive-task"]),
-    domain_tool!("task_block" => ["api.list-tasks", "api.block-task"]),
-    domain_tool!("task_claim" => ["api.list-tasks", "api.claim-task"]),
-    domain_tool!("task_create" => ["api.create-task"]),
-    domain_tool!("task_done" => ["api.list-tasks", "api.complete-task"]),
-    domain_tool!("task_heartbeat" => ["api.list-tasks", "api.heartbeat-task"]),
-    domain_tool!("task_label_add" => ["api.list-tasks", "api.add-task-label"]),
-    domain_tool!("task_label_list" => ["api.list-tasks", "api.list-task-labels"]),
-    domain_tool!("task_label_remove" => ["api.list-tasks", "api.remove-task-label"]),
-    domain_tool!("task_list" => ["api.list-tasks"]),
-    domain_tool!("task_list_by_status" => ["api.list-tasks-by-status"]),
-    domain_tool!("task_neighborhood" => ["api.task-neighborhood"]),
-    domain_tool!(
-        "task_plan_not_required" => ["api.list-tasks", "api.mark-execution-plan-not-required"]
-    ),
-    domain_tool!("task_promote" => ["api.list-tasks", "api.promote-task"]),
-    domain_tool!("task_reclaim" => ["api.list-tasks", "api.reclaim-task"]),
-    domain_tool!("task_release" => ["api.list-tasks", "api.release-task"]),
-    domain_tool!("task_reopen" => ["api.list-tasks", "api.reopen-task"]),
-    domain_tool!("task_review" => ["api.list-tasks", "api.submit-review-task"]),
-    domain_tool!("task_show" => ["api.list-tasks", "api.get-task"]),
-    domain_tool!("task_specify" => ["api.list-tasks", "api.specify-task"]),
-    domain_tool!("task_unblock" => ["api.list-tasks", "api.unblock-task"]),
-    domain_tool!("task_update" => ["api.list-tasks", "api.update-task"]),
-    domain_tool!("vector_configure" => ["api.vector-configure"]),
-    domain_tool!("vector_query_chunks" => ["api.vector-query-chunks"]),
-    domain_tool!("vector_query_label_atoms" => ["api.vector-query-label-atoms"]),
-    domain_tool!("vector_rebuild" => ["api.vector-rebuild"]),
-    domain_tool!("vector_status" => ["api.vector-status"]),
-    domain_tool!("vector_sync" => ["api.vector-sync"]),
-];
+/// 返回由 declaration policy 投影出的 host-admin operation IDs。
+pub fn mcp_host_admin_operation_ids() -> &'static [&'static str] {
+    static IDS: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+    IDS.get_or_init(|| canonical_mcp_policy_projection().host_admin_operations)
+        .as_slice()
+}
 
-/// 返回 canonical MCP operation catalog。
+/// 返回由 declaration policy 投影出的 canonical MCP domain tool catalog。
 pub fn mcp_operation_catalog() -> &'static [McpOperationDescriptor] {
-    MCP_OPERATION_CATALOG
+    static CATALOG: std::sync::OnceLock<Vec<McpOperationDescriptor>> = std::sync::OnceLock::new();
+    CATALOG
+        .get_or_init(|| {
+            canonical_mcp_policy_projection()
+                .tool_bindings
+                .into_iter()
+                .map(|binding| {
+                    let http_operations: &'static [&'static str] =
+                        Box::leak(binding.http_operations.into_boxed_slice());
+                    let invariants: &'static [McpOperationInvariant] =
+                        Box::leak(binding.invariants.into_boxed_slice());
+                    McpOperationDescriptor {
+                        tool_name: binding.tool_name,
+                        http_operations,
+                        class: binding.class,
+                        invariants,
+                    }
+                })
+                .collect()
+        })
+        .as_slice()
 }
 
 /// 按 canonical tool name 查找 MCP operation descriptor。
 pub fn mcp_operation_descriptor(tool_name: &str) -> Option<&'static McpOperationDescriptor> {
-    MCP_OPERATION_CATALOG
+    mcp_operation_catalog()
         .iter()
         .find(|descriptor| descriptor.tool_name == tool_name)
 }
 
-/// 验证 MCP catalog 的唯一性、endpoint 存在性和 host-admin 隔离。
+/// 验证 declaration policy projection，并保留 descriptor catalog 的兼容校验入口。
 pub fn validate_mcp_operation_catalog(catalog: &[McpOperationDescriptor]) -> Result<(), String> {
+    let projection = canonical_mcp_policy_projection();
+    validate_mcp_policy_projection(&projection)?;
+    if std::ptr::eq(catalog, mcp_operation_catalog()) {
+        return Ok(());
+    }
+
+    validate_descriptor_catalog(catalog)
+}
+
+fn validate_descriptor_catalog(catalog: &[McpOperationDescriptor]) -> Result<(), String> {
     let endpoint_ids = endpoint_catalog()
         .iter()
         .map(|endpoint| endpoint.operation_id)
@@ -617,7 +521,7 @@ pub fn validate_mcp_operation_catalog(catalog: &[McpOperationDescriptor]) -> Res
                     descriptor.tool_name, endpoint.surface, operation_id
                 ));
             }
-            if MCP_HOST_ADMIN_OPERATION_IDS.contains(operation_id) {
+            if mcp_host_admin_operation_ids().contains(operation_id) {
                 return Err(format!(
                     "MCP tool {} 绑定了禁止的 host-admin operation：{}",
                     descriptor.tool_name, operation_id
@@ -635,7 +539,7 @@ pub fn validate_mcp_operation_catalog(catalog: &[McpOperationDescriptor]) -> Res
         .iter()
         .filter(|endpoint| {
             endpoint.surface == ContractSurface::Api
-                && !MCP_HOST_ADMIN_OPERATION_IDS.contains(&endpoint.operation_id)
+                && !mcp_host_admin_operation_ids().contains(&endpoint.operation_id)
         })
         .map(|endpoint| endpoint.operation_id)
         .filter(|operation_id| !bound_operations.contains(operation_id))
@@ -657,9 +561,9 @@ mod tests {
 
     #[test]
     fn catalog_is_valid_and_has_unique_sorted_tool_names() {
-        validate_mcp_operation_catalog(MCP_OPERATION_CATALOG).unwrap();
-        assert_eq!(MCP_OPERATION_CATALOG.len(), 104);
-        let names = MCP_OPERATION_CATALOG
+        validate_mcp_operation_catalog(mcp_operation_catalog()).unwrap();
+        assert_eq!(mcp_operation_catalog().len(), 105);
+        let names = mcp_operation_catalog()
             .iter()
             .map(|descriptor| descriptor.tool_name)
             .collect::<Vec<_>>();
@@ -670,10 +574,10 @@ mod tests {
 
     #[test]
     fn host_admin_operations_are_never_bound() {
-        for descriptor in MCP_OPERATION_CATALOG {
+        for descriptor in mcp_operation_catalog() {
             assert_eq!(descriptor.class, McpOperationClass::Domain);
             for operation_id in descriptor.http_operations {
-                assert!(!MCP_HOST_ADMIN_OPERATION_IDS.contains(operation_id));
+                assert!(!mcp_host_admin_operation_ids().contains(operation_id));
             }
         }
     }
@@ -949,9 +853,11 @@ mod tests {
             .expect("当前 declaration family 应可投影");
         assert!(!projection.tool_bindings().is_empty());
         assert!(!projection.domain_operations.is_empty());
-        assert!(projection
-            .tool_bindings()
-            .windows(2)
-            .all(|window| window[0].tool_name != window[1].tool_name));
+        assert!(
+            projection
+                .tool_bindings()
+                .windows(2)
+                .all(|window| window[0].tool_name != window[1].tool_name)
+        );
     }
 }

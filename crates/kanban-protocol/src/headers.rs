@@ -1,12 +1,7 @@
 #[cfg(feature = "schema")]
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    AdoptionEvidence, AdoptionWitness, ContractBinding, ContractDirection, ContractGranularity,
-    ContractStrictness, ContractSurface, ContractTransport, EndpointDescriptor, EndpointObligation,
-    HttpMethod, HttpTransportLocation, MigrationState, OperationContract, WireParameter,
-    WireParameterCardinality, endpoint_catalog,
-};
+use crate::{EndpointDescriptor, WireParameter, WireParameterCardinality, endpoint_catalog};
 
 const ACCEPT_LANGUAGE: WireParameter = WireParameter {
     name: "Accept-Language",
@@ -32,14 +27,6 @@ const LOCALE_ACTOR_JSON_PARAMETERS: &[WireParameter] =
     &[ACCEPT_LANGUAGE, ACTOR, REQUIRED_CONTENT_TYPE];
 const LOCALE_ACTOR_OPTIONAL_JSON_PARAMETERS: &[WireParameter] =
     &[ACCEPT_LANGUAGE, ACTOR, OPTIONAL_CONTENT_TYPE];
-
-const ACTOR_OPERATIONS: &[&str] = &[];
-
-const OPTIONAL_JSON_BODY_OPERATIONS: &[&str] = &[
-    "api.accept-label-proposal",
-    "api.propose-task-label",
-    "api.reject-label-proposal",
-];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ApiHeaderProfile {
@@ -80,168 +67,25 @@ pub struct ApiHeaderContractSpec {
 }
 
 pub fn api_header_contract_specs() -> Vec<ApiHeaderContractSpec> {
-    endpoint_catalog()
+    crate::operation_catalog::operation_catalog()
         .iter()
-        .filter_map(|endpoint| match endpoint.obligations.headers {
-            EndpointObligation::Contract(contract_id) if contract_id.ends_with(".headers") => {
-                Some(ApiHeaderContractSpec {
-                    contract_id,
-                    endpoint,
-                    profile: crate::board_catalog::header_profile(endpoint.operation_id)
-                        .or_else(|| crate::history_catalog::header_profile(endpoint.operation_id))
-                        .or_else(|| {
-                            crate::dependency_catalog::header_profile(endpoint.operation_id)
-                        })
-                        .or_else(|| crate::step_catalog::header_profile(endpoint.operation_id))
-                        .or_else(|| crate::task_catalog::header_profile(endpoint.operation_id))
-                        .or_else(|| crate::labels_catalog::header_profile(endpoint.operation_id))
-                        .or_else(|| crate::knowledge_catalog::header_profile(endpoint.operation_id))
-                        .or_else(|| crate::admin_catalog::header_profile(endpoint.operation_id))
-                        .unwrap_or_else(|| header_profile(endpoint)),
-                })
-            }
-            _ => None,
+        .filter(|operation| operation.surface == crate::ContractSurface::Api)
+        .filter_map(|operation| {
+            let contract_id = operation
+                .contracts
+                .iter()
+                .find(|contract| contract.location == Some(crate::HttpTransportLocation::Headers))
+                .map(|contract| contract.id)?;
+            let endpoint = endpoint_catalog()
+                .iter()
+                .find(|endpoint| endpoint.operation_id == operation.operation_id)?;
+            Some(ApiHeaderContractSpec {
+                contract_id,
+                endpoint,
+                profile: operation.header_profile?,
+            })
         })
         .collect()
-}
-
-pub(crate) fn header_operation_contracts() -> Vec<OperationContract> {
-    api_header_contract_specs()
-        .into_iter()
-        .map(|spec| {
-            if let Some(contract) = crate::board_catalog::header_contract(spec.endpoint.operation_id)
-            {
-                return contract;
-            }
-            if let Some(contract) = crate::history_catalog::header_contract(spec.endpoint.operation_id) {
-                return contract;
-            }
-            if let Some(contract) =
-                crate::dependency_catalog::header_contract(spec.endpoint.operation_id)
-            {
-                return contract;
-            }
-            if let Some(contract) = crate::step_catalog::header_contract(spec.endpoint.operation_id) {
-                return contract;
-            }
-            if let Some(contract) = crate::task_catalog::header_contract(spec.endpoint.operation_id) {
-                return contract;
-            }
-            if let Some(contract) = crate::labels_catalog::header_contract(spec.endpoint.operation_id) {
-                return contract;
-            }
-            if let Some(contract) =
-                crate::knowledge_catalog::header_contract(spec.endpoint.operation_id)
-            {
-                return contract;
-            }
-            if let Some(contract) = crate::admin_catalog::header_contract(spec.endpoint.operation_id) {
-                return contract;
-            }
-            let operation = leak(format!(
-                "{} {}",
-                method_name(spec.endpoint.method),
-                spec.endpoint.path
-            ));
-            let fixture = fixture_path(spec.profile, true);
-            OperationContract {
-                id: spec.contract_id,
-                path: leak(format!("{operation} headers")),
-                surface: ContractSurface::Api,
-                operation,
-                direction: ContractDirection::Deserialize,
-                granularity: ContractGranularity::Exact,
-                strictness: ContractStrictness::DenyUnknownFields,
-                schema_id: Some(schema_id(spec.endpoint.operation_id)),
-                fixture: Some(fixture),
-                adoption: Some(AdoptionEvidence {
-                    producer_fixture: fixture,
-                    producer: AdoptionWitness {
-                        operation,
-                        contract_id: spec.contract_id,
-                        surface: ContractSurface::Api,
-                        direction: ContractDirection::Deserialize,
-                        package: "kanban-server",
-                        test_target: "all",
-                        exact_test: "suite::header_adoption::exact_header_profile_fixtures_are_produced",
-                    },
-                    consumer: AdoptionWitness {
-                        operation,
-                        contract_id: spec.contract_id,
-                        surface: ContractSurface::Api,
-                        direction: ContractDirection::Deserialize,
-                        package: "kanban-server",
-                        test_target: "all",
-                        exact_test: "suite::header_adoption::exact_header_profiles_are_consumed_by_real_router",
-                    },
-                }),
-                exclusion: None,
-                migration: MigrationState::Adopted,
-                transport: ContractTransport::Http {
-                    operation_key: Some(operation),
-                    location: HttpTransportLocation::Headers,
-                    parameters: spec.profile.parameters(),
-                },
-                binding: ContractBinding::ExactSurface,
-            }
-        })
-        .collect()
-}
-
-pub(crate) fn schema_id(operation_id: &str) -> &'static str {
-    leak(format!(
-        "urn:kanban-tool:schema:api:{}-headers:v1",
-        operation_id.trim_start_matches("api.")
-    ))
-}
-
-#[cfg(feature = "schema")]
-pub(crate) fn artifact_path(operation_id: &str) -> &'static str {
-    leak(format!(
-        "api/{}-headers.v1.schema.json",
-        operation_id.trim_start_matches("api.")
-    ))
-}
-
-pub(crate) fn fixture_path(profile: ApiHeaderProfile, valid: bool) -> &'static str {
-    leak(format!(
-        "schemas/fixtures/api/headers/{}.v1.{}.json",
-        profile.fixture_stem(),
-        if valid { "valid" } else { "invalid" }
-    ))
-}
-
-fn method_name(method: HttpMethod) -> &'static str {
-    match method {
-        HttpMethod::Get => "GET",
-        HttpMethod::Post => "POST",
-        HttpMethod::Put => "PUT",
-        HttpMethod::Patch => "PATCH",
-        HttpMethod::Delete => "DELETE",
-    }
-}
-
-fn leak(value: String) -> &'static str {
-    Box::leak(value.into_boxed_str())
-}
-
-fn header_profile(endpoint: &EndpointDescriptor) -> ApiHeaderProfile {
-    let actor = ACTOR_OPERATIONS.contains(&endpoint.operation_id);
-    let body = matches!(endpoint.obligations.body, EndpointObligation::Contract(_));
-    let optional_body = OPTIONAL_JSON_BODY_OPERATIONS.contains(&endpoint.operation_id);
-    assert!(
-        !optional_body || actor,
-        "optional JSON endpoint must declare actor header semantics: {}",
-        endpoint.operation_id
-    );
-    match (actor, body, optional_body) {
-        (false, false, _) => ApiHeaderProfile::Locale,
-        (true, false, _) => ApiHeaderProfile::LocaleActor,
-        (false, true, false) => ApiHeaderProfile::LocaleJson,
-        (true, true, false) => ApiHeaderProfile::LocaleActorJson,
-        (false, true, true) => unreachable!("optional body actor invariant checked above"),
-        (true, true, true) => ApiHeaderProfile::LocaleActorOptionalJson,
-    }
 }
 
 #[cfg(feature = "schema")]

@@ -20,15 +20,15 @@ assert_fails() {
   "$@" >/dev/null 2>&1
   local status=$?
   set -e
-  [[ "$status" -ne 0 ]] || fail "$label unexpectedly succeeded"
+  [[ "$status" -ne 0 ]] || fail "$label 意外成功"
 }
 
 assert_file_equals() {
   local path="$1" expected="$2" label="$3"
   [[ -f "$path" && ! -L "$path" ]] ||
-    fail "$label is missing or unsafe: $path"
+    fail "$label 缺失或不安全：$path"
   [[ "$(cat "$path")" == "$expected" ]] ||
-    fail "$label content changed: $path"
+    fail "$label 内容发生变化：$path"
 }
 
 make_fixture() {
@@ -187,7 +187,7 @@ run_package() {
   local output="$1"
   local lock_path="$FIXTURE_TARGET/.build.lock"
   shift
-  [[ "${1:-}" == "env" ]] || fail "package test runner requires env command"
+  [[ "${1:-}" == "env" ]] || fail "package test runner 需要 env 命令"
   shift
   (
     exec 3>"$lock_path"
@@ -259,14 +259,14 @@ assert_legacy_package_with_space_target_succeeds() {
   assert_file_equals "$deb" "fake deb payload" "legacy CLI package"
   [[ -z "$(find "$(dirname "$deb")" -maxdepth 1 \
     -name '.kanban-cli-deb.*' -print -quit)" ]] ||
-    fail "successful package retained a private output stage"
+    fail "成功的 package 仍保留 private output stage"
 
   printf 'old regular package\n' > "$deb"
   run_package "$output" env
   assert_file_equals "$deb" "fake deb payload" \
-    "atomically replaced legacy CLI package"
+    "原子替换的 legacy CLI package"
   [[ "$(stat -c '%h' "$deb")" == "1" ]] ||
-    fail "atomically replaced package is multiply linked"
+    fail "原子替换的 package 存在多个硬链接"
 }
 
 assert_physical_source_root_rejects_in_tree_target() {
@@ -289,9 +289,9 @@ assert_physical_source_root_rejects_in_tree_target() {
   status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "symlink invocation accepted a physical target inside the source tree"
+    fail "symlink invocation 接受了 source tree 内的 physical target"
   [[ ! -e "$physical_target/release/kanban" ]] ||
-    fail "in-source target rejection occurred after build output mutation"
+    fail "in-source target 拒绝发生在 build output 修改之后"
 }
 
 assert_symlinked_safe_path_is_rejected() {
@@ -304,9 +304,9 @@ assert_symlinked_safe_path_is_rejected() {
   status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "package accepted a symlinked release-safe-path helper"
+    fail "package 接受了 symlinked release-safe-path helper"
   [[ ! -e "$(expected_deb)" ]] ||
-    fail "symlinked helper rejection published a package"
+    fail "拒绝 symlinked helper 后仍发布了 package"
 }
 
 assert_symlinked_target_root_is_rejected() {
@@ -320,9 +320,9 @@ assert_symlinked_target_root_is_rejected() {
   status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "package accepted a symlinked Cargo target root"
+    fail "package 接受了 symlinked Cargo target root"
   [[ ! -e "$physical_target/release" ]] ||
-    fail "symlinked target root rejection mutated the physical target"
+    fail "拒绝 symlinked target root 时修改了 physical target"
 }
 
 assert_unlocked_nonexistent_space_target_succeeds() {
@@ -330,18 +330,18 @@ assert_unlocked_nonexistent_space_target_succeeds() {
   FIXTURE_TARGET="$FIXTURE/nonexistent target root"
   use_real_build_lock
   [[ ! -e "$FIXTURE_TARGET" ]] ||
-    fail "unlocked success fixture target unexpectedly exists"
+    fail "unlocked success fixture target 意外存在"
 
   run_package_unlocked "$output" env
   assert_file_equals "$(expected_deb)" "fake deb payload" \
     "unlocked CLI package"
   [[ -f "$FIXTURE_TARGET/.build.lock" &&
     ! -L "$FIXTURE_TARGET/.build.lock" ]] ||
-    fail "real lock entry did not create its expected build lock"
+    fail "real lock entry 未创建预期 build lock"
 
   run_package_unlocked "$output" env
   assert_file_equals "$(expected_deb)" "fake deb payload" \
-    "unlocked CLI package with existing regular build lock"
+    "已有 regular build lock 的 unlocked CLI package"
 }
 
 assert_unlocked_leaf_symlink_is_rejected_before_lock() {
@@ -358,13 +358,13 @@ assert_unlocked_leaf_symlink_is_rejected_before_lock() {
   local status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "unlocked package accepted a symlinked Cargo target leaf"
+    fail "unlocked package 接受了 symlinked Cargo target leaf"
   [[ -L "$FIXTURE_TARGET" ]] ||
-    fail "unlocked package replaced the symlinked Cargo target leaf"
+    fail "unlocked package 替换了 symlinked Cargo target leaf"
   assert_file_equals "$outside/sentinel" "outside leaf sentinel" \
     "outside leaf target sentinel"
   [[ ! -e "$outside/.build.lock" && ! -e "$outside/release" ]] ||
-    fail "leaf symlink rejection occurred after real lock target mutation"
+    fail "leaf symlink 拒绝发生在真实 lock target 修改之后"
 }
 
 assert_unlocked_parent_symlink_is_rejected_before_lock() {
@@ -383,13 +383,13 @@ assert_unlocked_parent_symlink_is_rejected_before_lock() {
   local status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "unlocked package accepted a symlinked Cargo target parent"
+    fail "unlocked package 接受了 symlinked Cargo target parent"
   [[ -L "$linked_parent" ]] ||
-    fail "unlocked package replaced the symlinked Cargo target parent"
+    fail "unlocked package 替换了 symlinked Cargo target parent"
   assert_file_equals "$outside_target/sentinel" "outside parent sentinel" \
     "outside parent target sentinel"
   [[ ! -e "$outside_target/.build.lock" && ! -e "$outside_target/release" ]] ||
-    fail "parent symlink rejection occurred after real lock target mutation"
+    fail "parent symlink 拒绝发生在真实 lock target 修改之后"
 }
 
 assert_unlocked_in_source_target_is_rejected_before_lock() {
@@ -397,18 +397,18 @@ assert_unlocked_in_source_target_is_rejected_before_lock() {
   use_real_build_lock
   FIXTURE_TARGET="$FIXTURE_REPO/unsafe target root"
   [[ ! -e "$FIXTURE_TARGET" ]] ||
-    fail "unlocked in-source fixture target unexpectedly exists"
+    fail "unlocked in-source fixture target 意外存在"
 
   set +e
   run_package_unlocked "$output" env
   local status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "unlocked package accepted a Cargo target inside the source tree"
+    fail "unlocked package 接受了 source tree 内的 Cargo target"
   assert_file_equals "$FIXTURE_REPO/README.md" "# package safety fixture" \
     "source tree sentinel"
   [[ ! -e "$FIXTURE_TARGET" ]] ||
-    fail "in-source target rejection occurred after real lock target mutation"
+    fail "in-source target 拒绝发生在真实 lock target 修改之后"
 }
 
 assert_unlocked_parent_traversal_is_rejected_before_lock() {
@@ -424,12 +424,12 @@ assert_unlocked_parent_traversal_is_rejected_before_lock() {
   local status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "unlocked package accepted parent traversal in the Cargo target"
+    fail "unlocked package 接受了 Cargo target 中的 parent traversal"
   assert_file_equals "$FIXTURE/traversal-sentinel" \
     "parent traversal sentinel" "parent traversal sentinel"
   [[ ! -e "$missing_parent" && ! -e "$normalized_target/.build.lock" &&
     ! -e "$normalized_target/release" ]] ||
-    fail "parent traversal rejection occurred after real lock target mutation"
+    fail "parent traversal 拒绝发生在真实 lock target 修改之后"
 }
 
 assert_unlocked_double_slash_source_target_is_rejected_before_lock() {
@@ -444,12 +444,12 @@ assert_unlocked_double_slash_source_target_is_rejected_before_lock() {
   local status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "unlocked package accepted a double-slash source-tree Cargo target"
+    fail "unlocked package 接受了 double-slash source-tree Cargo target"
   assert_file_equals "$FIXTURE_REPO/README.md" "# package safety fixture" \
     "double-slash source tree sentinel"
   [[ ! -e "$physical_target/.build.lock" &&
     ! -e "$physical_target/release" && ! -e "$physical_target" ]] ||
-    fail "double-slash source target rejection occurred after real lock mutation"
+    fail "double-slash source target 拒绝发生在真实 lock 修改之后"
 }
 
 assert_unlocked_unsafe_build_lock_is_rejected_before_open() {
@@ -467,7 +467,7 @@ assert_unlocked_unsafe_build_lock_is_rejected_before_open() {
       ln "$sentinel" "$lock_path"
       ;;
     *)
-      fail "unknown unsafe build lock fixture: $kind"
+      fail "未知 unsafe build lock fixture：$kind"
       ;;
   esac
 
@@ -476,23 +476,23 @@ assert_unlocked_unsafe_build_lock_is_rejected_before_open() {
   local status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "unlocked package accepted an unsafe $kind build lock"
+    fail "unlocked package 接受了不安全的 $kind build lock"
   assert_file_equals "$sentinel" "outside build lock sentinel" \
     "outside $kind build lock sentinel"
   case "$kind" in
     symlink)
       [[ -L "$lock_path" && "$(readlink "$lock_path")" == "$sentinel" ]] ||
-        fail "symlinked build lock changed before rejection"
+        fail "symlinked build lock 在拒绝前发生变化"
       ;;
     hardlink)
       assert_file_equals "$lock_path" "outside build lock sentinel" \
         "hardlinked build lock"
       [[ "$(stat -c '%h' "$sentinel")" == "2" ]] ||
-        fail "hardlinked build lock link count changed before rejection"
+        fail "hardlinked build lock 的 link count 在拒绝前发生变化"
       ;;
   esac
   [[ ! -e "$FIXTURE_TARGET/release" ]] ||
-    fail "unsafe $kind build lock rejection occurred after release mutation"
+    fail "unsafe $kind build lock 拒绝发生在 release 修改之后"
 }
 
 assert_target_layout_entry_is_rejected() {
@@ -515,7 +515,7 @@ assert_target_layout_entry_is_rejected() {
       ln -s "$outside" "$entry"
       ;;
     *)
-      fail "unknown target layout entry: $kind"
+      fail "未知 target layout entry：$kind"
       ;;
   esac
 
@@ -524,13 +524,13 @@ assert_target_layout_entry_is_rejected() {
   local status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "package accepted a symlinked Cargo release entry: $kind"
+    fail "package 接受了 symlinked Cargo release entry：$kind"
   [[ -L "$entry" ]] ||
-    fail "symlinked Cargo release entry was replaced: $entry"
+    fail "symlinked Cargo release entry 被替换：$entry"
   assert_file_equals "$outside/sentinel" "external target sentinel" \
     "external target sentinel ($kind)"
   [[ ! -e "$FIXTURE_TARGET/release/kanban" ]] ||
-    fail "symlinked Cargo release entry failure occurred after binary mutation: $kind"
+    fail "symlinked Cargo release entry 拒绝发生在 binary 修改之后：$kind"
 }
 
 assert_target_layout_nonregular_root_is_rejected() {
@@ -550,7 +550,7 @@ assert_target_layout_nonregular_root_is_rejected() {
       printf 'not a Cargo directory\n' > "$entry"
       ;;
     *)
-      fail "unknown target layout entry: $kind"
+      fail "未知 target layout entry：$kind"
       ;;
   esac
 
@@ -559,11 +559,11 @@ assert_target_layout_nonregular_root_is_rejected() {
   local status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "package accepted a non-directory Cargo release entry: $kind"
+    fail "package 接受了 non-directory Cargo release entry：$kind"
   [[ -f "$entry" ]] ||
-    fail "non-directory Cargo release entry was replaced: $entry"
+    fail "non-directory Cargo release entry 被替换：$entry"
   [[ ! -e "$FIXTURE_TARGET/release/kanban" ]] ||
-    fail "non-directory Cargo release entry failure occurred after binary mutation: $kind"
+    fail "non-directory Cargo release entry 拒绝发生在 binary 修改之后：$kind"
 }
 
 assert_existing_destination_is_preserved() {
@@ -595,7 +595,7 @@ assert_existing_destination_is_preserved() {
       ln -s "$outside" "$(dirname "$deb")"
       ;;
     *)
-      fail "unknown destination fixture: $kind"
+      fail "未知 destination fixture：$kind"
       ;;
   esac
 
@@ -604,17 +604,17 @@ assert_existing_destination_is_preserved() {
   status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "package overwrote an existing $kind destination"
+    fail "package 覆盖了现有的 $kind destination"
   case "$kind" in
     hardlink)
       assert_file_equals "$sentinel" "hardlink sentinel" "hardlink sentinel"
       assert_file_equals "$deb" "hardlink sentinel" "hardlinked destination"
       [[ "$(stat -c '%h' "$sentinel")" == "2" ]] ||
-        fail "hardlinked destination link count changed"
+        fail "hardlinked destination 的 link count 发生变化"
       ;;
     symlink)
       [[ -L "$deb" && "$(readlink "$deb")" == "$sentinel" ]] ||
-        fail "symlink destination changed"
+        fail "symlink destination 发生变化"
       assert_file_equals "$sentinel" "symlink sentinel" "symlink sentinel"
       ;;
     nonregular)
@@ -623,7 +623,7 @@ assert_existing_destination_is_preserved() {
       ;;
     parent-symlink)
       [[ -L "$(dirname "$deb")" ]] ||
-        fail "symlinked output parent changed"
+        fail "symlinked output parent 发生变化"
       assert_file_equals "$outside/sentinel" "outside sentinel" \
         "outside output sentinel"
       ;;
@@ -643,9 +643,9 @@ assert_pre_observation_temp_replacement_is_not_adopted() {
   status=$?
   set -e
   [[ "$status" -eq 0 ]] ||
-    fail "identity-bound temp fixture failed unexpectedly: status=$status"
+    fail "identity-bound temp fixture 意外失败：status=$status"
   [[ ! -e "$called" ]] ||
-    fail "package used an unbound mktemp directory"
+    fail "package 使用了未绑定的 mktemp directory"
 }
 
 assert_replaced_stage_is_retained_on_failure() {
@@ -658,16 +658,16 @@ assert_replaced_stage_is_retained_on_failure() {
   status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "replaced output stage fixture unexpectedly succeeded"
+    fail "replaced output stage fixture 意外成功"
   local stage
   stage="$(
     find "$(dirname "$(expected_deb)")" -maxdepth 1 \
       -name '.kanban-cli-deb.*' -type d -print -quit
   )"
-  [[ -n "$stage" ]] || fail "replacement output stage was deleted"
+  [[ -n "$stage" ]] || fail "replacement output stage 被删除"
   assert_file_equals "$stage/sentinel" "unknown stage replacement" \
     "replacement output stage"
-  [[ -d "$detached" ]] || fail "owned output stage was not detached by fixture"
+  [[ -d "$detached" ]] || fail "fixture 未分离 owned output stage"
 }
 
 assert_signal_cleanup_preserves_replaced_temp() {
@@ -680,18 +680,18 @@ assert_signal_cleanup_preserves_replaced_temp() {
   status=$?
   set -e
   [[ "$status" -ne 0 ]] ||
-    fail "signal failure fixture unexpectedly succeeded"
+    fail "signal failure fixture 意外成功"
   local replacement
   replacement="$(
     find "$FIXTURE_TEMP_PARENT" -maxdepth 1 \
       -name '.kanban-cli-package.*' -type d -print -quit
   )"
   [[ -n "$replacement" ]] ||
-    fail "signal cleanup deleted the replacement package temp directory"
+    fail "signal cleanup 删除了 replacement package temp directory"
   assert_file_equals "$replacement/sentinel" "unknown temp replacement" \
     "replacement package temp"
   [[ -d "$detached/deb-root" ]] ||
-    fail "signal fixture did not retain the detached owned package temp"
+    fail "signal fixture 未保留 detached owned package temp"
 }
 
 make_fixture legacy
@@ -754,4 +754,4 @@ make_fixture signal-temp
 assert_signal_cleanup_preserves_replaced_temp
 
 
-echo "ok: CLI package paths, private stages, and cleanup identities are safe"
+echo "ok: CLI package paths、private stages 和 cleanup identities 安全"

@@ -21,7 +21,7 @@ CONTRACT_MANIFEST = Path("crates/kanban-protocol/Cargo.toml")
 
 
 class WitnessGateError(RuntimeError):
-    """adoption witness 无法被执行时返回。"""
+    """无法执行 `adoption witness` 时抛出的错误。"""
 
 
 def package_record(metadata: dict[str, Any], package: str) -> dict[str, Any]:
@@ -104,7 +104,7 @@ def require_runtime_dependency(
     package: str,
     repo_root: Path | None = None,
 ) -> tuple[str, Path]:
-    """要求 adopter 通过 normal dependency 引用当前 workspace kanban-protocol。"""
+    """要求 adopter 通过 `normal dependency` 引用当前 workspace `kanban-protocol`。"""
 
     if package == SCHEMA_TOOL_PACKAGE:
         raise WitnessGateError(
@@ -240,7 +240,7 @@ def require_test_target(
 
 
 def require_exact_test(list_output: str, exact_test: str) -> None:
-    """要求 libtest `--exact --list` 精确返回一个 test。"""
+    """要求 libtest 的 `--exact --list` 精确返回一个 test。"""
 
     expected = f"{exact_test}: test"
     matches = [line.strip() for line in list_output.splitlines() if line.strip() == expected]
@@ -251,7 +251,7 @@ def require_exact_test(list_output: str, exact_test: str) -> None:
 
 
 def require_executed_test(run_output: str, exact_test: str) -> None:
-    """要求精确 locator 真实执行且通过一个 test。"""
+    """要求精确 locator 真实执行并通过一个 test。"""
 
     executed = any(
         line.strip().startswith(f"test {exact_test} ... ok")
@@ -477,7 +477,7 @@ def execute_unique_witnesses(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--root", type=Path, default=REPO_ROOT, help="repository root")
+    parser.add_argument("--root", type=Path, default=REPO_ROOT, help="仓库根目录")
     return parser.parse_args()
 
 
@@ -512,8 +512,8 @@ def main() -> int:
             f"test_target={locator[1]} exact_test={locator[2]}"
         )
     print(
-        f"ok: {len(contracts)} 个 adopted contract 的 {len(witnesses)} 个 mapping "
-        f"由 {len({locator for _, _, locator in witnesses})} 个 unique locator 执行"
+        f"ok: {len(contracts)} 个 adopted contract 的 {len(witnesses)} 个映射 "
+        f"由 {len({locator for _, _, locator in witnesses})} 个唯一 locator 执行"
     )
     return 0
 

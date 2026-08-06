@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plan and run validation commands for files affected by the current diff."""
+"""为当前 diff 受影响的文件规划并运行验证命令。"""
 
 from __future__ import annotations
 
@@ -338,10 +338,10 @@ def build_plan(base: str, paths: list[str]) -> Plan:
     notes: list[str] = []
     if full_gate_recommended:
         notes.append(
-            "`just release` remains the authoritative release gate for release-sensitive diffs."
+            "`just release` 仍是 release-sensitive diff 的权威发布检查。"
         )
     if not paths:
-        notes.append("No base, staged, working tree, or untracked file changes detected.")
+        notes.append("未检测到 base、staged、working tree 或 untracked 文件变更。")
 
     return {
         "base": base,
@@ -399,7 +399,7 @@ def execute(plan: Plan) -> int:
         if completed.returncode != 0:
             if is_allowed_empty_test_result(command, completed.returncode):
                 print(
-                    f"ok: {' '.join(command)} has no tests; check/clippy remain required",
+                    f"ok: {' '.join(command)} 没有 tests；仍需执行 check/clippy",
                     flush=True,
                 )
                 continue
@@ -607,19 +607,19 @@ def self_test() -> None:
         classes = set(plan["classifications"])
         missing_classes = expected_classes - classes
         if missing_classes:
-            raise AssertionError(f"{name}: missing classifications {missing_classes}")
+            raise AssertionError(f"{name}: 缺少分类 {missing_classes}")
         commands = plan["commands"]
         for command in expected_commands:
             if command not in commands:
-                raise AssertionError(f"{name}: missing command {command}; got {commands}")
+                raise AssertionError(f"{name}: 缺少命令 {command}；实际为 {commands}")
         if plan["full_gate_recommended"] is not expected_full_gate:
             raise AssertionError(
-                f"{name}: full_gate_recommended expected {expected_full_gate}, "
-                f"got {plan['full_gate_recommended']}"
+                f"{name}: full_gate_recommended 预期为 {expected_full_gate}，"
+                f"实际为 {plan['full_gate_recommended']}"
             )
 
     if is_allowed_empty_test_result(["just", "test-p", "kanban-client"], 4):
-        raise AssertionError("packages outside the explicit allowlist must reject exit 4")
+        raise AssertionError("显式 allowlist 之外的 package 必须拒绝退出码 4")
 
     root = Path(__file__).resolve().parents[1]
     with (root / "Cargo.toml").open("rb") as manifest_file:
@@ -644,41 +644,41 @@ def self_test() -> None:
         plan = build_plan("main", [path])
         if "schema-contract" not in plan["classifications"]:
             raise AssertionError(
-                f"schema manifest routing missing classification: {path}"
+                f"schema manifest 路由缺少分类: {path}"
             )
         if ["just", "schema-contract"] not in plan["commands"]:
             raise AssertionError(
-                f"schema manifest routing missing command: {path}; got {plan['commands']}"
+                f"schema manifest 路由缺少命令: {path}；实际为 {plan['commands']}"
             )
 
     for path in SPEC_BUNDLE_SOURCE_PATHS:
         plan = build_plan("main", [path])
         if "schema-docs" not in plan["classifications"]:
             raise AssertionError(
-                f"SPEC bundle source missing schema-docs classification: {path}"
+                f"SPEC bundle source 缺少 schema-docs 分类: {path}"
             )
         if ["just", "schema-docs"] not in plan["commands"]:
             raise AssertionError(
-                f"SPEC bundle source missing schema-docs command: {path}; "
-                f"got {plan['commands']}"
+                f"SPEC bundle source 缺少 schema-docs 命令: {path}；"
+                f"实际为 {plan['commands']}"
             )
 
     duplicate_plan = build_plan("main", ["crates/kanban-cli/src/main.rs", "crates/kanban-cli/tests/task.rs"])
     command_keys = [tuple(command) for command in duplicate_plan["commands"]]
     if len(command_keys) != len(set(command_keys)):
-        raise AssertionError(f"duplicate commands in plan: {duplicate_plan['commands']}")
+        raise AssertionError(f"计划中存在重复命令: {duplicate_plan['commands']}")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", default="main", help="base ref for committed branch diff")
+    parser.add_argument("--base", default="main", help="已提交分支 diff 使用的 base ref")
     parser.add_argument(
         "--mode",
         choices=("plan", "json", "run"),
         default="plan",
-        help="print a human plan, print JSON, or execute the planned commands",
+        help="打印人类可读计划、打印 JSON，或执行计划中的命令",
     )
-    parser.add_argument("--self-test", action="store_true", help="run script self-tests")
+    parser.add_argument("--self-test", action="store_true", help="运行脚本 self-test")
     return parser.parse_args()
 
 
@@ -686,7 +686,7 @@ def main() -> int:
     args = parse_args()
     if args.self_test:
         self_test()
-        print("affected-validation self-test passed")
+        print("affected-validation self-test 已通过")
         return 0
 
     base = args.base.removeprefix("base=")

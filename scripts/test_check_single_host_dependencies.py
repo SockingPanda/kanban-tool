@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused regression tests for the single-host dependency gate."""
+"""single-host dependency gate 的聚焦回归测试。"""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ database = { package = "kanban-service", path = "../kanban-service" }
 
         failures = GATE.check_workspace(self.root)
 
-        self.assertTrue(any("only kanban-server may depend on kanban-service" in failure for failure in failures))
+        self.assertTrue(any("只有 kanban-server 可以依赖 kanban-service" in failure for failure in failures))
 
     def test_path_service_dependency_is_resolved_from_target_manifest(self) -> None:
         self._write(
@@ -97,7 +97,7 @@ database = { path = "../kanban-service" }
 
         failures = GATE.check_workspace(self.root)
 
-        self.assertTrue(any("only kanban-server may depend on kanban-service" in failure for failure in failures))
+        self.assertTrue(any("只有 kanban-server 可以依赖 kanban-service" in failure for failure in failures))
 
     def test_target_specific_dev_dependency_is_checked(self) -> None:
         self._write(

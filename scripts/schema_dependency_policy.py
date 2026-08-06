@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""校验 Phase 1 schema tooling 的声明、resolved identity 与产品隔离。"""
+"""校验 Phase 1 schema tooling 的声明、resolved 标识与产品隔离。"""
 
 from __future__ import annotations
 
@@ -272,7 +272,7 @@ def _dependency_sections(manifest: dict[str, Any]) -> list[tuple[str, dict[str, 
 def _audit_workspace_dependency_policy(
     workspace_manifest: dict[str, Any], repo_root: Path = ROOT
 ) -> None:
-    """锁定 root identity 与 active leaf 的 feature ownership。"""
+    """锁定 root 标识与 active leaf 的 feature ownership。"""
 
     workspace = workspace_manifest.get("workspace")
     if not isinstance(workspace, dict):
@@ -918,7 +918,7 @@ def _audit_tool_resolve_closure(
 
 
 def audit_metadata(metadata: dict[str, Any], repo_root: Path = ROOT) -> set[str]:
-    """锁定 schema leaf tool 的声明、resolved identity 与 crates.io 闭包。"""
+    """锁定 schema leaf tool 的声明、resolved 标识与 crates.io 闭包。"""
 
     workspace = _workspace_packages(metadata)
     package_by_id = _package_records_by_id(metadata)
@@ -1585,7 +1585,7 @@ def main() -> int:
     except DependencyPolicyError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
-    print("ok: Phase 1 schema tooling 声明、resolved identity 与产品隔离已锁定")
+    print("ok: Phase 1 schema tooling 声明、resolved 标识与产品隔离已锁定")
     return 0
 
 

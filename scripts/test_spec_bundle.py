@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for the deterministic SPEC bundle synchronizer."""
+"""确定性 SPEC bundle 同步器的回归测试。"""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ class SpecBundleTests(unittest.TestCase):
         source = self.root / "docs/SPEC.md"
         source.write_text("changed source\n", encoding="utf-8")
 
-        with self.assertRaisesRegex(spec_bundle.BundleDrift, "out of date"):
+        with self.assertRaisesRegex(spec_bundle.BundleDrift, "已过期"):
             spec_bundle.check_bundle(self.root)
 
         spec_bundle.write_bundle(self.root)
@@ -87,7 +87,7 @@ class SpecBundleTests(unittest.TestCase):
     def test_missing_source_fails_closed(self) -> None:
         (self.root / "docs/API_SPEC.md").unlink()
 
-        with self.assertRaisesRegex(spec_bundle.BundleError, "missing bundle source"):
+        with self.assertRaisesRegex(spec_bundle.BundleError, "缺少 bundle source"):
             spec_bundle.render_bundle(self.root)
 
     def test_failed_atomic_replace_removes_temporary_file(self) -> None:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate or check the deterministic KANBAN_SPEC_BUNDLE.md snapshot."""
+"""生成或检查确定性的 KANBAN_SPEC_BUNDLE.md 同步快照。"""
 
 from __future__ import annotations
 
@@ -34,11 +34,11 @@ AUTHORITY_NOTE = (
 
 
 class BundleError(RuntimeError):
-    """The bundle could not be rendered or validated."""
+    """无法渲染或校验 bundle。"""
 
 
 class BundleDrift(BundleError):
-    """The committed bundle differs from its canonical source documents."""
+    """已提交 bundle 与 canonical source documents 不一致。"""
 
 
 _INLINE_LINK_DESTINATION = re.compile(
@@ -50,7 +50,7 @@ _URI_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 def _read_source(root: Path, relative_path: str) -> str:
     path = root / relative_path
     if not path.is_file():
-        raise BundleError(f"missing bundle source: {relative_path}")
+        raise BundleError(f"缺少 bundle source: {relative_path}")
     return path.read_text(encoding="utf-8").rstrip("\n")
 
 
@@ -112,11 +112,11 @@ def check_bundle(root: Path) -> None:
     expected = render_bundle(root)
     path = root / BUNDLE_PATH
     if not path.is_file():
-        raise BundleDrift(f"{BUNDLE_PATH} is out of date: file is missing")
+        raise BundleDrift(f"{BUNDLE_PATH} 已过期：缺少文件")
     actual = path.read_text(encoding="utf-8")
     if actual != expected:
         raise BundleDrift(
-            f"{BUNDLE_PATH} is out of date; run `just spec-bundle-generate`"
+            f"{BUNDLE_PATH} 已过期；请运行 `just spec-bundle-generate`"
         )
 
 
@@ -157,12 +157,12 @@ def main() -> int:
     try:
         if args.write:
             write_bundle(root)
-            print(f"updated {BUNDLE_PATH}")
+            print(f"已更新 {BUNDLE_PATH}")
         else:
             check_bundle(root)
-            print(f"checked {BUNDLE_PATH}")
+            print(f"已检查 {BUNDLE_PATH}")
     except BundleError as error:
-        print(f"spec bundle error: {error}")
+        print(f"spec bundle 错误：{error}")
         return 1
     return 0
 

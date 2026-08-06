@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""用真实 just 与 fake executables 锁定产品/schema recipe 的执行调用图。"""
+"""用真实 just 与 fake executable 锁定产品/schema recipe 的执行调用图。"""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ ExpectedBuilder = Callable[[Path, bool], list[Event]]
 
 
 class RecipeWitnessError(RuntimeError):
-    """recipe 实际执行序列偏离 canonical 调用图。"""
+    """recipe 实际执行序列偏离 canonical 调用图时抛出的错误。"""
 
 
 def _event(root: Path, kind: str, argv: list[str]) -> Event:
@@ -1118,7 +1118,7 @@ def verify_case(
         expected = expected_builder(root, nextest)
         if events != expected:
             raise RecipeWitnessError(
-                f"{recipe} execution trace 漂移 (nextest={nextest}):\n"
+                f"{recipe} 执行 trace 漂移 (nextest={nextest}):\n"
                 f"expected={json.dumps(expected, ensure_ascii=False, indent=2)}\n"
                 f"actual={json.dumps(events, ensure_ascii=False, indent=2)}\n"
                 f"stdout={completed.stdout!r}; stderr={completed.stderr!r}"

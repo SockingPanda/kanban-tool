@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for public JSON documentation markers."""
+"""公共 JSON 文档标记的回归测试。"""
 
 from __future__ import annotations
 

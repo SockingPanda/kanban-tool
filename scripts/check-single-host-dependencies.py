@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Enforce the canonical single-host database dependency boundary.
+"""强制执行 canonical single-host 数据库依赖边界。
 
-The gate intentionally reads Cargo manifests instead of grepping source text.
-That keeps comments, documentation, and unrelated package names from changing
-the result while still covering normal, dev, build, and target-specific
-dependencies.
+该 gate 有意读取 Cargo manifest，而不是 grep 源码文本。这样注释、文档和
+无关 package 名称不会改变结果，同时仍能覆盖 normal、dev、build 以及
+target-specific dependency。
 """
 
 from __future__ import annotations
@@ -19,9 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SERVICE_PACKAGE = "kanban-service"
 SERVER_PACKAGE = "kanban-server"
 LEGACY_PACKAGES = {"kanban-sqlite", "kanban-local"}
-# ``rusqlite`` remains forbidden for the retired backend, but the host-owned
-# legacy import feature is an explicit, optional exception in
-# ``kanban-service``.
+# ``rusqlite`` 对 retired backend 仍然禁止，但 host-owned legacy import
+# feature 是 ``kanban-service`` 中显式的 optional exception。
 FORBIDDEN_LEGACY = LEGACY_PACKAGES | {"rusqlite"}
 LEGACY_IMPORT_FEATURE = "legacy-sqlite-import"
 
@@ -36,7 +34,7 @@ TEST_SUPPORT_MANIFESTS = (Path("crates/kanban-test-support/Cargo.toml"),)
 
 
 def dependency_tables(manifest: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
-    """Yield every package dependency table Cargo can use for a target."""
+    """枚举 Cargo 可为 target 使用的全部 package dependency table。"""
 
     for table_name in ("dependencies", "dev-dependencies", "build-dependencies"):
         table = manifest.get(table_name)
@@ -63,12 +61,12 @@ def dependency_package(
     manifest_path: Path | None = None,
     workspace_dependencies: dict[str, str] | None = None,
 ) -> str:
-    """Resolve a Cargo dependency alias from parsed manifest metadata.
+    """从已解析的 manifest metadata 中解析 Cargo dependency alias。
 
-    Besides the explicit ``package =`` form, resolve local path dependencies
-    and ``workspace = true`` aliases through their target Cargo.toml.  This
-    prevents a forbidden package from hiding behind an innocuous dependency
-    key such as ``store = { path = ... }`` or ``db = { workspace = true }``.
+    除显式 ``package =`` 形式外，还要通过目标 Cargo.toml 解析 local path
+    dependency 和 ``workspace = true`` alias。这样可避免被禁止的 package
+    藏在看似无害的 dependency key 后面，例如 ``store = { path = ... }`` 或
+    ``db = { workspace = true }``。
     """
 
     if not isinstance(value, dict):
@@ -115,7 +113,7 @@ def allows_store_legacy_import(
     alias: str,
     value: Any,
 ) -> bool:
-    """Allow only the optional rusqlite dependency owned by the store importer."""
+    """只允许 store importer 所有的 optional rusqlite dependency。"""
 
     if package != SERVICE_PACKAGE or alias != "rusqlite" or table_name != "dependencies":
         return False
@@ -129,15 +127,15 @@ def allows_store_legacy_import(
 def workspace_member_paths(
     root: Path, workspace_manifest: dict[str, Any]
 ) -> tuple[list[Path], list[str]]:
-    """Resolve ``workspace.members`` using Cargo's literal/glob path shape."""
+    """按 Cargo 的 literal/glob path 形状解析 ``workspace.members``。"""
 
     workspace = workspace_manifest.get("workspace")
     if not isinstance(workspace, dict):
-        return [], ["workspace table is missing"]
+        return [], ["缺少 workspace table"]
 
     members = workspace.get("members")
     if not isinstance(members, list):
-        return [], ["workspace.members is missing"]
+        return [], ["缺少 workspace.members"]
 
     root_resolved = root.resolve()
     paths: list[Path] = []
@@ -145,13 +143,13 @@ def workspace_member_paths(
     seen: set[Path] = set()
     for member in members:
         if not isinstance(member, str):
-            failures.append(f"workspace.members contains non-string entry {member!r}")
+            failures.append(f"workspace.members 包含非字符串项 {member!r}")
             continue
 
         has_glob = any(character in member for character in "*?[")
         candidates = sorted(root.glob(member)) if has_glob else [root / member]
         if not candidates:
-            failures.append(f"workspace member pattern does not match a package: {member}")
+            failures.append(f"workspace member pattern 未匹配 package: {member}")
             continue
 
         for candidate in candidates:
@@ -160,10 +158,10 @@ def workspace_member_paths(
             )
             resolved = manifest_path.resolve()
             if not resolved.is_relative_to(root_resolved):
-                failures.append(f"workspace member escapes repository root: {member}")
+                failures.append(f"workspace member 越出 repository root: {member}")
                 continue
             if not manifest_path.is_file():
-                failures.append(f"workspace member has no Cargo.toml: {member}")
+                failures.append(f"workspace member 缺少 Cargo.toml: {member}")
                 continue
             if resolved not in seen:
                 paths.append(manifest_path)
@@ -176,12 +174,12 @@ def _read_manifest(path: Path, failures: list[str]) -> dict[str, Any] | None:
     try:
         return tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as error:
-        failures.append(f"{path}: cannot parse Cargo.toml: {error}")
+        failures.append(f"{path}: 无法解析 Cargo.toml: {error}")
         return None
 
 
 def _is_test_support_manifest(path: Path, manifest: dict[str, Any]) -> bool:
-    """Identify non-member test support packages without scanning source text."""
+    """不扫描源码文本，识别非 member 的 test support package。"""
 
     name = package_name(manifest)
     if name == "kanban-test-support" or (name and name.endswith("-test-support")):
@@ -199,10 +197,9 @@ def _collect_test_support_paths(
     seen = set(active_paths)
 
     candidates = [root / relative for relative in TEST_SUPPORT_MANIFESTS]
-    # Keep discovery narrow and Cargo-manifest based.  This catches an
-    # explicitly named fixture package moved under crates (or under tests)
-    # without traversing vendored manifests or treating arbitrary source text
-    # as a dependency.
+    # 保持发现范围窄且以 Cargo manifest 为依据。这样可捕获移动到 crates
+    #（或 tests）下的显式命名 fixture package，而不会遍历 vendored manifest
+    # 或把任意源码文本当作 dependency。
     candidates.extend(
         path
         for path in sorted(root.rglob("Cargo.toml"))
@@ -222,7 +219,7 @@ def _collect_test_support_paths(
 
 
 def check_workspace(root: Path = ROOT) -> list[str]:
-    """Return deterministic gate failures for ``root`` without printing."""
+    """返回 ``root`` 的确定性 gate failures，但不打印结果。"""
 
     root = root.resolve()
     failures: list[str] = []
@@ -244,14 +241,14 @@ def check_workspace(root: Path = ROOT) -> list[str]:
             continue
         name = package_name(manifest)
         if name is None:
-            failures.append(f"{manifest_path}: package.name is missing")
+            failures.append(f"{manifest_path}: 缺少 package.name")
             continue
         package_names.add(name)
         manifests.append((manifest_path, manifest, name))
 
         if name in FORBIDDEN_LEGACY:
             failures.append(
-                f"{manifest_path.relative_to(root)}: legacy package {name} cannot be an active workspace member"
+                f"{manifest_path.relative_to(root)}: legacy package {name} 不能作为 active workspace member"
             )
 
     for manifest_path in _collect_test_support_paths(root, active_paths, failures):
@@ -260,7 +257,7 @@ def check_workspace(root: Path = ROOT) -> list[str]:
             continue
         name = package_name(manifest)
         if name is None:
-            failures.append(f"{manifest_path}: package.name is missing")
+            failures.append(f"{manifest_path}: 缺少 package.name")
             continue
         manifests.append((manifest_path, manifest, name))
 
@@ -278,7 +275,7 @@ def check_workspace(root: Path = ROOT) -> list[str]:
             workspace_dependency_packages[alias] = dependency
             if dependency in FORBIDDEN_LEGACY and dependency != "rusqlite":
                 failures.append(
-                    f"Cargo.toml [workspace.dependencies]: legacy dependency {dependency} is retired"
+                    f"Cargo.toml [workspace.dependencies]: legacy dependency {dependency} 已 retired"
                 )
 
     for manifest_path, manifest, name in manifests:
@@ -296,20 +293,20 @@ def check_workspace(root: Path = ROOT) -> list[str]:
                     name, manifest, table_name, alias, value
                 ):
                     failures.append(
-                        f"{location}: active package {name} depends on legacy {dependency}"
+                        f"{location}: active package {name} 依赖 legacy {dependency}"
                     )
                 if dependency == "turso" and name != SERVICE_PACKAGE:
                     failures.append(
-                        f"{location}: only {SERVICE_PACKAGE} may depend directly on turso"
+                        f"{location}: 只有 {SERVICE_PACKAGE} 可以直接依赖 turso"
                     )
                 if dependency == SERVICE_PACKAGE and name != SERVER_PACKAGE:
                     failures.append(
-                        f"{location}: only {SERVER_PACKAGE} may depend on {SERVICE_PACKAGE}"
+                        f"{location}: 只有 {SERVER_PACKAGE} 可以依赖 {SERVICE_PACKAGE}"
                     )
 
     missing = sorted(REQUIRED_ACTIVE_PACKAGES - package_names)
     if missing:
-        failures.append(f"required active packages are missing: {', '.join(missing)}")
+        failures.append(f"缺少 required active packages: {', '.join(missing)}")
 
     return failures
 
@@ -317,14 +314,14 @@ def check_workspace(root: Path = ROOT) -> list[str]:
 def main(root: Path = ROOT) -> int:
     failures = check_workspace(root)
     if failures:
-        print("single-host dependency gate failed:", file=sys.stderr)
+        print("single-host dependency gate 失败:", file=sys.stderr)
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
 
     print(
-        "single-host dependency gate passed: only kanban-server reaches kanban-service, "
-        "and only kanban-service reaches turso"
+        "single-host dependency gate 通过：只有 kanban-server 可达 kanban-service，"
+        "且只有 kanban-service 可达 turso"
     )
     return 0
 

@@ -30,7 +30,7 @@ wait_for_file() {
     sleep 0.02
   done
 
-  fail "timed out waiting for $label"
+  fail "等待 $label 超时"
 }
 
 wait_for_grep() {
@@ -46,7 +46,7 @@ wait_for_grep() {
     sleep 0.02
   done
 
-  fail "timed out waiting for $label"
+  fail "等待 $label 超时"
 }
 
 expected_target_dir() {
@@ -58,12 +58,12 @@ assert_exact_shared_target_dir() {
   local target_root="$1"
   local actual="$2"
 
-  [[ "$actual" == "$target_root" ]] || fail "expected exact shared CARGO_TARGET_DIR $target_root, got $actual"
+  [[ "$actual" == "$target_root" ]] || fail "预期共享 CARGO_TARGET_DIR 恰为 $target_root，实际为 $actual"
 }
 
 assert_failure() {
   if "$@" >/dev/null 2>&1; then
-    fail "expected failure but command succeeded: $*"
+    fail "预期命令失败，但实际成功：$*"
   fi
 }
 
@@ -79,7 +79,7 @@ assert_process_exits() {
     sleep 0.02
   done
 
-  fail "$label still running after interruption: pid $pid"
+  fail "中断后 $label 仍在运行：pid $pid"
 }
 
 assert_no_bare_target_writing_cargo() {
@@ -97,11 +97,11 @@ assert_no_bare_target_writing_cargo() {
       [[ "$line" =~ ^[[:space:]]*# ]] && continue
       if [[ "$line" =~ (^|[^[:alnum:]_/.-])cargo[[:space:]]+(build|check|clippy|test|run|nextest[[:space:]]+run) ]]; then
         if [[ "$line" != *cargo-build-lock.sh* && "$line" != *'"$LOCK"'* ]]; then
-          fail "bare target-writing cargo command in ${file#$ROOT/}:$line_number: $line"
+          fail "${file#$ROOT/}:$line_number 存在未通过 wrapper 写 target 的 cargo 命令：$line"
         fi
       fi
       if [[ "$line" == *"$REMOVED_FLAG"* || "$line" == *"$REMOVED_ENV"* || "$line" == *"$REMOVED_HELPER"* ]]; then
-        fail "removed target split contract in ${file#$ROOT/}:$line_number: $line"
+        fail "${file#$ROOT/}:$line_number 仍存在已移除的 target split contract：$line"
       fi
     done < "$file"
   done
@@ -128,7 +128,7 @@ assert_signal_status() {
   wait "$pid"
   status=$?
   set -e
-  [[ "$status" -eq "$expected_status" ]] || fail "expected $signal wrapper status $expected_status, got $status"
+  [[ "$status" -eq "$expected_status" ]] || fail "预期 $signal wrapper 状态为 $expected_status，实际为 $status"
 }
 
 assert_package_help_output_path() {
@@ -136,25 +136,25 @@ assert_package_help_output_path() {
 
   help_output="$("$ROOT/scripts/package-cli-linux.sh" --help)"
   [[ "$help_output" == *'scripts/cargo-build-lock.sh --print-target-dir'* ]] || {
-    fail "package help does not document the wrapper target-dir output path"
+    fail "package help 未说明 wrapper target-dir 输出路径"
   }
   [[ "$help_output" != *"$REMOVED_HELPER.sh"* ]] || {
-    fail "package help still documents the removed target helper"
+    fail "package help 仍说明已移除的 target helper"
   }
   [[ "$help_output" != *'$ROOT'* ]] || {
-    fail "package help should not print a literal \$ROOT placeholder"
+    fail "package help 不应打印字面量 \$ROOT 占位符"
   }
   [[ "$help_output" != *'$('* ]] || {
-    fail "package help should describe the target-dir probe without shell substitution syntax"
+    fail "package help 应在不使用 shell substitution 语法的情况下说明 target-dir probe"
   }
   [[ "$help_output" == *'release/bundle/cli/deb/*.deb'* ]] || {
-    fail "package help does not document the CLI deb relative output path"
+    fail "package help 未说明 CLI deb 相对输出路径"
   }
 }
 
 assert_debian_control_directory_mode() {
   rg -F 'install -d -m 0755 "$control_dir"' "$ROOT/scripts/package-cli-linux.sh" >/dev/null ||
-    fail "CLI package must create DEBIAN control directory with a dpkg-deb compatible mode"
+    fail "CLI package 必须以 dpkg-deb 兼容模式创建 DEBIAN control directory"
 }
 
 assert_nextest_junit_stays_under_shared_target() {
@@ -162,11 +162,11 @@ assert_nextest_junit_stays_under_shared_target() {
 
   configured_path="$(sed -n 's/^[[:space:]]*path[[:space:]]*=[[:space:]]*"\([^"]*\)"[[:space:]]*$/\1/p' "$ROOT/.config/nextest.toml")"
   [[ "$configured_path" == "junit.xml" ]] ||
-    fail "nextest junit path must be relative to its shared target profile directory, got: $configured_path"
+    fail "nextest junit path 必须相对 shared target profile directory，实际为：$configured_path"
   rg -F 'COMMAND=(cargo nextest run --config-file "$config_path" --target-dir "$target_dir"' "$LOCK_SCRIPT" >/dev/null ||
-    fail "shared-target wrapper must pass its generated config and exact target dir to cargo nextest run"
+    fail "shared-target wrapper 必须向 cargo nextest run 传递生成的 config 和精确 target dir"
   rg -F "printf '[store]\\ndir = \"%s\"\\n\\n'" "$LOCK_SCRIPT" >/dev/null ||
-    fail "shared-target wrapper must override nextest store.dir"
+    fail "shared-target wrapper 必须覆盖 nextest store.dir"
 }
 
 assert_target_dir_probe_call_sites_quote_paths() {
@@ -186,10 +186,10 @@ assert_target_dir_probe_call_sites_quote_paths() {
       line_number=$((line_number + 1))
       case "$line" in
         *'$($LOCK --print-target-dir)'*)
-          fail "unquoted target-dir probe in ${file#$ROOT/}:$line_number: $line"
+          fail "${file#$ROOT/}:$line_number 的 target-dir probe 未加引号：$line"
           ;;
         *'$($ROOT/scripts/cargo-build-lock.sh --print-target-dir)'*)
-          fail "unquoted ROOT target-dir probe in ${file#$ROOT/}:$line_number: $line"
+          fail "${file#$ROOT/}:$line_number 的 ROOT target-dir probe 未加引号：$line"
           ;;
       esac
     done < "$file"
@@ -216,7 +216,7 @@ assert_target_dir_probe_handles_space_paths() {
   ' _ "$space_lock")"
 
   [[ "$actual" == "$expected/release" ]] || {
-    fail "quoted target-dir probe failed with spaces: expected $expected/release, got $actual"
+    fail "带空格的加引号 target-dir probe 失败：预期 $expected/release，实际为 $actual"
   }
 }
 
@@ -250,12 +250,12 @@ assert_distinct_worktrees_share_target_and_lock() {
   KANBAN_CARGO_TARGET_ROOT="$shared_root" "$lock_b" -- bash -c 'touch "$1"' _ "$second_done" 2>"$second_stderr" &
   second_pid=$!
   wait_for_grep "正在等待其他构建/测试释放" "$second_stderr" "cross-worktree lock wait"
-  [[ ! -e "$second_done" ]] || fail "second worktree bypassed the shared lock"
+  [[ ! -e "$second_done" ]] || fail "第二个 worktree 绕过了共享 lock"
 
   touch "$release_first"
   wait "$first_pid"
   wait "$second_pid"
-  [[ -e "$second_done" ]] || fail "second worktree did not run after the shared lock was released"
+  [[ -e "$second_done" ]] || fail "共享 lock 释放后第二个 worktree 未运行"
 }
 
 assert_package_lock_marker_is_wrapper_owned() {
@@ -297,7 +297,7 @@ if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
   exec "$@"
 fi
 [[ -z "${KANBAN_PACKAGE_BUILD_LOCK_HELD:-}" ]] || {
-  echo "error: package forged its own build-lock marker" >&2
+  echo "error: package 伪造了自己的 build-lock marker" >&2
   exit 97
 }
 touch "$PACKAGE_WRAPPER_MARKER"
@@ -333,8 +333,8 @@ EOF
   status=$?
   set -e
 
-  [[ "$status" -eq 86 ]] || fail "expected package child to reach fake cargo with status 86, got $status"
-  [[ -e "$wrapper_marker" ]] || fail "package did not enter the build-lock wrapper without a forged marker"
+  [[ "$status" -eq 86 ]] || fail "预期 package child 以状态 86 到达 fake cargo，实际为 $status"
+  [[ -e "$wrapper_marker" ]] || fail "没有伪造 marker 时 package 未进入 build-lock wrapper"
 }
 
 assert_package_waits_for_shared_build_lock() (
@@ -392,7 +392,7 @@ EOF
   package_pid=$!
 
   wait_for_grep "正在等待其他构建/测试释放" "$package_stderr" "package lock wait"
-  [[ ! -e "$cargo_marker" ]] || fail "package entered Cargo while the shared build lock was occupied"
+  [[ ! -e "$cargo_marker" ]] || fail "共享 build lock 被占用时 package 仍进入 Cargo"
 
   touch "$release_holder"
   wait "$holder_pid"
@@ -402,8 +402,8 @@ EOF
   status=$?
   set -e
   package_pid=""
-  [[ "$status" -eq 86 ]] || fail "expected package to resume into fake cargo with status 86, got $status"
-  [[ -e "$cargo_marker" ]] || fail "package did not resume after the shared build lock was released"
+  [[ "$status" -eq 86 ]] || fail "预期 package 以状态 86 恢复到 fake cargo，实际为 $status"
+  [[ -e "$cargo_marker" ]] || fail "共享 build lock 释放后 package 未恢复"
   trap - EXIT
 )
 
@@ -531,20 +531,20 @@ EOF
   after="$(sha256sum "$repo/Cargo.lock")"
 
   [[ "$before" == "$after" ]] ||
-    fail "stale-lock cli-package let its first Cargo query mutate Cargo.lock"
+    fail "stale-lock cli-package 让第一次 Cargo 查询修改了 Cargo.lock"
   [[ "$status" -eq 101 ]] ||
-    fail "expected stale-lock cli-package to fail closed with status 101, got $status"
-  [[ -f "$trace" ]] || fail "stale-lock cli-package did not reach its first Cargo query"
+    fail "预期 stale-lock cli-package 以状态 101 fail closed，实际为 $status"
+  [[ -f "$trace" ]] || fail "stale-lock cli-package 未到达第一次 Cargo 查询"
   [[ "$(wc -l < "$trace")" -eq 1 ]] ||
-    fail "stale-lock cli-package reached Cargo after its first locked query"
+    fail "stale-lock cli-package 在第一次 locked 查询后仍到达 Cargo"
   first_call="$(head -n 1 "$trace")"
   [[ " $first_call " == *' --locked '* ]] ||
-    fail "cli-package first Cargo query was not locked: $first_call"
-  [[ ! -e "$metadata_marker" ]] || fail "stale-lock cli-package reached cargo metadata"
-  [[ ! -e "$invalidation_marker" ]] || fail "stale-lock cli-package invalidated build artifacts"
-  [[ ! -e "$build_marker" ]] || fail "stale-lock cli-package reached cargo build"
-  [[ ! -e "$provenance_marker" ]] || fail "stale-lock cli-package reached dep-info verification"
-  [[ ! -e "$package_marker" ]] || fail "stale-lock cli-package reached Debian assembly"
+    fail "cli-package 第一次 Cargo 查询未使用 locked：$first_call"
+  [[ ! -e "$metadata_marker" ]] || fail "stale-lock cli-package 到达 cargo metadata"
+  [[ ! -e "$invalidation_marker" ]] || fail "stale-lock cli-package 使 build artifacts 失效"
+  [[ ! -e "$build_marker" ]] || fail "stale-lock cli-package 到达 cargo build"
+  [[ ! -e "$provenance_marker" ]] || fail "stale-lock cli-package 到达 dep-info verification"
+  [[ ! -e "$package_marker" ]] || fail "stale-lock cli-package 到达 Debian assembly"
 }
 
 assert_package_source_provenance_is_current_and_non_mutating() {
@@ -563,7 +563,7 @@ assert_package_source_provenance_is_current_and_non_mutating() {
   before="$(sha256sum "$stale_dep_info")"
   assert_failure "$ROOT/scripts/package-source-provenance.sh" --verify-dep-info "$source_b" "$stale_dep_info"
   after="$(sha256sum "$stale_dep_info")"
-  [[ "$before" == "$after" ]] || fail "stale provenance rejection mutated the dep-info artifact"
+  [[ "$before" == "$after" ]] || fail "拒绝 stale provenance 时修改了 dep-info artifact"
   "$ROOT/scripts/package-source-provenance.sh" --verify-dep-info "$source_a" "$stale_dep_info"
 
   misleading_target="$TMPDIR/misleading-target.d"
@@ -614,14 +614,14 @@ EOF
     "feature-p kanban-protocol schema"; do
     before="$(sha256sum "$repo/Cargo.lock")"
     set +e
-    # shellcheck disable=SC2086 # recipe intentionally carries positional args
+    # shellcheck disable=SC2086：recipe 有意携带 positional args
     PATH="$repo/bin:$PATH" just --justfile "$repo/justfile" \
       --working-directory "$repo" $recipe >/dev/null 2>&1
     status=$?
     set -e
-    [[ "$status" -ne 0 ]] || fail "stale lock $recipe unexpectedly succeeded"
+    [[ "$status" -ne 0 ]] || fail "stale lock $recipe 意外成功"
     after="$(sha256sum "$repo/Cargo.lock")"
-    [[ "$before" == "$after" ]] || fail "stale lock $recipe mutated Cargo.lock"
+    [[ "$before" == "$after" ]] || fail "stale lock $recipe 修改了 Cargo.lock"
   done
 }
 
@@ -686,7 +686,7 @@ assert_resource_limit_defaults() {
     [[ "${RUST_TEST_THREADS:-}" == "2" ]]
     touch "$1"
   ' _ "$nested_marker"
-  [[ -e "$nested_marker" ]] || fail "nested resource limit command did not run"
+  [[ -e "$nested_marker" ]] || fail "nested resource limit command 未运行"
 }
 
 assert_dev_profile_disables_incremental_without_test_override() {
@@ -703,16 +703,16 @@ profiles = manifest.get("profile", {})
 dev = profiles.get("dev")
 if not isinstance(dev, dict) or dev.get("incremental") is not False:
     raise SystemExit(
-        "root Cargo.toml must set [profile.dev].incremental = false"
+        "root Cargo.toml 必须设置 [profile.dev].incremental = false"
     )
 if "test" in profiles:
     raise SystemExit(
-        "root Cargo.toml must not override [profile.test]; Cargo test inherits [profile.dev]"
+        "root Cargo.toml 不得覆盖 [profile.test]；Cargo test 继承 [profile.dev]"
     )
 PY
 }
 
-[[ ! -e "$ROOT/scripts/$REMOVED_HELPER.sh" ]] || fail "removed target helper still exists"
+[[ ! -e "$ROOT/scripts/$REMOVED_HELPER.sh" ]] || fail "已移除的 target helper 仍存在"
 
 expected_target="$(expected_target_dir "$TARGET_ROOT")"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT/" "$LOCK_SCRIPT" -- bash -c '
@@ -725,7 +725,7 @@ home_dir="$TMPDIR/home"
 home_target="$home_dir/.cache/kanban-tool/cargo-target"
 mkdir -p "$home_dir"
 default_expected_target="$(env -u KANBAN_CARGO_TARGET_ROOT -u CARGO_TARGET_DIR HOME="$home_dir" "$LOCK_SCRIPT" --print-target-dir)"
-[[ "$default_expected_target" == "$home_target" ]] || fail "default target root must be portable under HOME"
+[[ "$default_expected_target" == "$home_target" ]] || fail "默认 target root 必须可在 HOME 下移植"
 home_expected_target="$(HOME="$home_dir" KANBAN_CARGO_TARGET_ROOT='$HOME/.cache/kanban-tool/cargo-target' "$LOCK_SCRIPT" --print-target-dir)"
 env HOME="$home_dir"   KANBAN_CARGO_TARGET_ROOT='$HOME/.cache/kanban-tool/cargo-target'   "$LOCK_SCRIPT" -- bash -c '[[ "$CARGO_TARGET_DIR" == "$1" ]]' _ "$home_expected_target"
 assert_exact_shared_target_dir "$home_target" "$home_expected_target"
@@ -764,19 +764,19 @@ KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
 second_pid=$!
 
 wait_for_grep "正在等待其他构建/测试释放" "$wait_stderr" "lock wait message"
-[[ ! -e "$second_done" ]] || fail "second command ran before first lock holder finished"
+[[ ! -e "$second_done" ]] || fail "第一个 lock holder 完成前第二个命令已运行"
 
 touch "$release"
 wait "$first_pid"
 wait "$second_pid"
-[[ -e "$first_done" ]] || fail "first command did not finish"
-[[ -e "$second_done" ]] || fail "second command did not finish"
+[[ -e "$first_done" ]] || fail "第一个命令未完成"
+[[ -e "$second_done" ]] || fail "第二个命令未完成"
 
 set +e
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c 'exit 42'
 failure_status=$?
 set -e
-[[ "$failure_status" -eq 42 ]] || fail "expected wrapped command status 42, got $failure_status"
+[[ "$failure_status" -eq 42 ]] || fail "预期 wrapped command 状态为 42，实际为 $failure_status"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- true
 
 assert_signal_status INT 130
@@ -805,7 +805,7 @@ set +e
 wait "$interrupted_pid"
 interrupted_status=$?
 set -e
-[[ "$interrupted_status" -eq 143 ]] || fail "expected interrupted wrapper status 143, got $interrupted_status"
+[[ "$interrupted_status" -eq 143 ]] || fail "预期 interrupted wrapper 状态为 143，实际为 $interrupted_status"
 assert_process_exits "$descendant_pid" "long-lived descendant"
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- true
 
@@ -816,7 +816,7 @@ KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- "$LOCK_SCRIPT" -- bash
   setsid "$1" --verify-inherited-lock
   touch "$2"
 ' _ "$LOCK_SCRIPT" "$outer_lock_marker"
-[[ -e "$outer_lock_marker" ]] || fail "nested lock-held command did not run"
+[[ -e "$outer_lock_marker" ]] || fail "nested lock-held command 未运行"
 
 assert_inherited_lock_proof_edges() {
   local closed_marker="$TMPDIR/closed-proof.marker"
@@ -824,25 +824,25 @@ assert_inherited_lock_proof_edges() {
   local mismatch_marker="$TMPDIR/mismatch-proof.marker"
   local spoof_bin="$TMPDIR/lock-proof-path-spoof-bin"
 
-  # A marker and exact target without the inherited descriptor must fail
-  # before the verifier creates the target or lock file.
+  # 没有 inherited descriptor 的 marker 和精确 target 必须在 verifier 创建
+  # target 或 lock file 之前失败。
   local spoof_target="$TMPDIR/proof-spoof-target"
   assert_failure env \
     KANBAN_CARGO_TARGET_ROOT="$spoof_target" \
     CARGO_TARGET_DIR="$spoof_target" \
     KANBAN_CARGO_BUILD_LOCK_HELD=1 \
     "$LOCK_SCRIPT" --verify-inherited-lock
-  [[ ! -e "$spoof_target" ]] || fail "spoofed lock proof created target state"
+  [[ ! -e "$spoof_target" ]] || fail "spoofed lock proof 创建了 target state"
 
-  # The verifier contract is lexical as well as physical: a trailing-slash
-  # alias for CARGO_TARGET_DIR is not an inherited canonical target proof.
+  # verifier contract 同时约束 lexical 和 physical 形态：CARGO_TARGET_DIR 的
+  # trailing-slash alias 不是 inherited canonical target proof。
   assert_failure env KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
     "$LOCK_SCRIPT" -- bash -c '
       CARGO_TARGET_DIR="$CARGO_TARGET_DIR/" "$1" --verify-inherited-lock
     ' _ "$LOCK_SCRIPT"
 
-  # PATH cannot replace the trusted lock verifier primitives.  A fake flock
-  # and stat that always report success must not bless an unlocked descriptor.
+  # PATH 不能替换受信任的 lock verifier primitive。即使 fake flock 和 stat
+  # 总是报告成功，也不得为未加锁的 descriptor 背书。
   mkdir -p "$spoof_bin"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$spoof_bin/flock"
   printf '#!/usr/bin/env bash\nif [[ "${1:-}" == "-Lc" ]]; then printf "0:0:1:regular regular file\\n"; else exit 0; fi\n' >"$spoof_bin/stat"
@@ -877,9 +877,9 @@ assert_inherited_lock_proof_edges() {
     fi
     touch "$mismatch_marker"
   ' _ "$LOCK_SCRIPT" "$closed_marker" "$reopened_marker" "$mismatch_marker"
-  [[ -e "$closed_marker" ]] || fail "closed inherited lock descriptor was not rejected"
-  [[ -e "$reopened_marker" ]] || fail "reopened inherited lock descriptor was not rejected"
-  [[ -e "$mismatch_marker" ]] || fail "mismatched inherited lock descriptor was not rejected"
+  [[ -e "$closed_marker" ]] || fail "closed inherited lock descriptor 未被拒绝"
+  [[ -e "$reopened_marker" ]] || fail "reopened inherited lock descriptor 未被拒绝"
+  [[ -e "$mismatch_marker" ]] || fail "mismatched inherited lock descriptor 未被拒绝"
 }
 
 assert_inherited_lock_post_flock_identity_race() {
@@ -913,9 +913,9 @@ assert_inherited_lock_post_flock_identity_race() {
   : > "$continuation"
   wait "$verifier_pid"
   status="$(cat "$status_file")"
-  [[ "$status" -ne 0 ]] || fail "inherited lock path replacement was accepted after flock"
+  [[ "$status" -ne 0 ]] || fail "flock 后接受了 inherited lock path replacement"
   [[ "$(cat "$race_target/.build.lock")" == "replacement" ]] ||
-    fail "inherited lock race did not preserve replacement path"
+    fail "inherited lock race 未保留 replacement path"
 }
 
 assert_inherited_lock_post_flock_symlink_race() {
@@ -950,9 +950,9 @@ assert_inherited_lock_post_flock_symlink_race() {
   wait "$verifier_pid"
   status="$(cat "$status_file")"
   [[ "$status" -ne 0 ]] ||
-    fail "inherited lock symlink replacement was accepted after flock"
+    fail "flock 后接受了 inherited lock symlink replacement"
   [[ -L "$race_target/.build.lock" ]] ||
-    fail "inherited lock symlink race did not preserve the replacement"
+    fail "inherited lock symlink race 未保留 replacement"
 }
 
 assert_fresh_lock_path_safety() {
@@ -972,22 +972,22 @@ assert_fresh_lock_path_safety() {
   assert_failure env KANBAN_CARGO_TARGET_ROOT="$symlink_target" \
     "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$child"
   [[ "$(cat "$sentinel")" == "sentinel-preserved" ]] ||
-    fail "fresh symlink lock acquisition modified the sentinel"
-  [[ ! -e "$child" ]] || fail "fresh symlink lock acquisition ran the child"
+    fail "fresh symlink lock acquisition 修改了 sentinel"
+  [[ ! -e "$child" ]] || fail "fresh symlink lock acquisition 运行了 child"
 
   child="$TMPDIR/fresh-hardlink-child"
   ln "$sentinel" "$hardlink_target/.build.lock"
   assert_failure env KANBAN_CARGO_TARGET_ROOT="$hardlink_target" \
     "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$child"
   [[ "$(cat "$sentinel")" == "sentinel-preserved" ]] ||
-    fail "fresh hardlink lock acquisition modified the sentinel"
-  [[ ! -e "$child" ]] || fail "fresh hardlink lock acquisition ran the child"
+    fail "fresh hardlink lock acquisition 修改了 sentinel"
+  [[ ! -e "$child" ]] || fail "fresh hardlink lock acquisition 运行了 child"
 
   child="$TMPDIR/fresh-special-child"
   mkfifo "$special_target/.build.lock"
   assert_failure timeout 3 env KANBAN_CARGO_TARGET_ROOT="$special_target" \
     "$LOCK_SCRIPT" -- bash -c 'touch "$1"' _ "$child"
-  [[ ! -e "$child" ]] || fail "fresh special-file lock acquisition ran the child"
+  [[ ! -e "$child" ]] || fail "fresh special-file lock acquisition 运行了 child"
 
   mkdir -p "$race_target"
   race_ready="$TMPDIR/fresh-race-ready"
@@ -1012,10 +1012,10 @@ assert_fresh_lock_path_safety() {
   status=$?
   set -e
   wait "$holder_pid"
-  [[ "$status" -ne 0 ]] || fail "fresh lock path race ran the child"
-  [[ ! -e "$race_child" ]] || fail "fresh lock path race ran the child"
+  [[ "$status" -ne 0 ]] || fail "fresh lock path race 运行了 child"
+  [[ ! -e "$race_child" ]] || fail "fresh lock path race 运行了 child"
   [[ "$(cat "$sentinel")" == "sentinel-preserved" ]] ||
-    fail "fresh lock path race modified the sentinel"
+    fail "fresh lock path race 修改了 sentinel"
 }
 
 assert_inherited_lock_proof_edges
@@ -1047,7 +1047,7 @@ assert_target_tools_safe_path_gate_order() {
   done
 
   [[ "$safe_path_count" -eq 1 ]] ||
-    fail "target-tools recipe must invoke standalone release safe-path tests exactly once"
+    fail "target-tools recipe 必须恰好调用一次 standalone release safe-path tests"
 }
 
 assert_target_tools_safe_path_gate_order
@@ -1067,4 +1067,4 @@ assert_package_help_output_path
 assert_debian_control_directory_mode
 assert_nextest_junit_stays_under_shared_target
 
-echo "cargo target root and build lock tests passed"
+echo "cargo target root 和 build lock tests 已通过"

@@ -48,7 +48,7 @@ lock_resource_environment_is_internal() {
 require_inherited_lock_if_marked() {
   if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]] &&
     ! lock_environment_is_internal; then
-    echo "error: release package requires an inherited Cargo build lock proof" >&2
+    echo "error: release package 必须拥有 inherited Cargo build lock proof" >&2
     exit 1
   fi
 }
@@ -57,17 +57,17 @@ usage() {
   cat <<'EOF'
 Usage: scripts/package-cli-linux.sh [OPTIONS]
 
-Build the standalone Linux CLI package for kanban.
+构建 kanban 的 standalone Linux CLI package。
 
 Options:
-  --format <deb>               Package format to build. Default: deb.
-  --features <features>        Pass a comma-separated feature list to cargo.
-  --all-features               Pass --all-features to cargo.
-  --no-default-features        Pass --no-default-features to cargo.
-  -h, --help                   Show this help.
+  --format <deb>               要构建的 package format。默认值：deb。
+  --features <features>        将逗号分隔的 feature list 传给 cargo。
+  --all-features               将 --all-features 传给 cargo。
+  --no-default-features        将 --no-default-features 传给 cargo。
+  -h, --help                   显示此帮助。
 
 Outputs:
-  Under the target directory printed by scripts/cargo-build-lock.sh --print-target-dir:
+  在 scripts/cargo-build-lock.sh --print-target-dir 打印的 target directory 下：
   release/bundle/cli/deb/*.deb
 EOF
 }
@@ -84,7 +84,7 @@ reject_release_build_environment() {
       CARGO_HOME|CARGO_BUILD_RUSTC|CARGO_BUILD_RUSTC_WRAPPER|CARGO_BUILD_RUSTDOC|\
       CC|CXX|AR|CFLAGS|CXXFLAGS|CPPFLAGS|LDFLAGS|PKG_CONFIG_PATH|PKG_CONFIG_LIBDIR)
         if [[ "${!name+x}" == "x" ]]; then
-          echo "error: release package refuses build-affecting environment override: $name" >&2
+          echo "error: release package 拒绝会影响构建的 environment override: $name" >&2
           exit 1
         fi
         ;;
@@ -92,7 +92,7 @@ reject_release_build_environment() {
         if [[ "$name" != "CARGO_TARGET_DIR" ]] ||
           ! lock_environment_is_internal; then
           if [[ "${!name+x}" == "x" ]]; then
-            echo "error: release package refuses build-affecting environment override: $name" >&2
+            echo "error: release package 拒绝会影响构建的 environment override: $name" >&2
             exit 1
           fi
         fi
@@ -100,7 +100,7 @@ reject_release_build_environment() {
       CARGO_BUILD_JOBS|NEXTEST_TEST_THREADS|RUST_TEST_THREADS)
         if ! lock_environment_is_internal; then
           if [[ "${!name+x}" == "x" ]]; then
-            echo "error: release package refuses build-affecting environment override: $name" >&2
+            echo "error: release package 拒绝会影响构建的 environment override: $name" >&2
             exit 1
           fi
         fi
@@ -110,7 +110,7 @@ reject_release_build_environment() {
       CARGO_BUILD_*|CARGO_HTTP_*|CARGO_NET_*|CARGO_PROFILE_*|CARGO_REGISTRIES_*|\
       CARGO_SOURCE_*|RUSTUP_*|CC_*|CXX_*|PKG_CONFIG_*)
         if [[ "${!name+x}" == "x" ]]; then
-          echo "error: release package refuses build-affecting environment override: $name" >&2
+          echo "error: release package 拒绝会影响构建的 environment override: $name" >&2
           exit 1
         fi
         ;;
@@ -121,12 +121,12 @@ reject_release_build_environment() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --format)
-      [[ $# -ge 2 ]] || { echo "error: --format requires a value" >&2; exit 2; }
-      [[ "$2" == "deb" ]] || { echo "error: only --format deb is supported" >&2; exit 2; }
+      [[ $# -ge 2 ]] || { echo "error: --format 需要一个值" >&2; exit 2; }
+      [[ "$2" == "deb" ]] || { echo "error: 仅支持 --format deb" >&2; exit 2; }
       shift 2
       ;;
     --features)
-      [[ $# -ge 2 ]] || { echo "error: --features requires a value" >&2; exit 2; }
+      [[ $# -ge 2 ]] || { echo "error: --features 需要一个值" >&2; exit 2; }
       BUILD_ARGS+=(--features "$2")
       shift 2
       ;;
@@ -143,7 +143,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "error: unknown option: $1" >&2
+      echo "error: 未知选项：$1" >&2
       usage >&2
       exit 2
       ;;
@@ -168,25 +168,24 @@ lexical_target = pathlib.PurePath(raw_target)
 
 if not lexical_target.is_absolute():
     raise SystemExit(
-        f"error: Cargo target root must be absolute before lock handoff: {raw_target}"
+        f"error: Cargo target root 在 lock handoff 前必须是绝对路径：{raw_target}"
     )
 if lexical_target.anchor != os.path.sep or raw_target.startswith("//"):
     raise SystemExit(
-        "error: Cargo target root must use exactly one leading slash: "
+        "error: Cargo target root 必须恰好使用一个前导斜杠："
         f"{raw_target}"
     )
 if ".." in lexical_target.parts:
     raise SystemExit(
-        f"error: Cargo target root must not contain parent traversal: {raw_target}"
+        f"error: Cargo target root 不得包含 parent traversal：{raw_target}"
     )
 
 normalized_target = pathlib.Path(os.path.normpath(raw_target))
 if normalized_target == pathlib.Path(normalized_target.anchor):
-    raise SystemExit("error: Cargo target root must not be a filesystem root")
+    raise SystemExit("error: Cargo target root 不得是 filesystem root")
 
-# Walk only the existing prefix.  Missing suffixes are valid because the lock
-# wrapper creates the target after this read-only gate; every existing
-# component must already be a no-follow directory.
+# 只遍历已存在的前缀。缺失的后缀是允许的，因为 lock wrapper 会在这个只读
+# gate 之后创建 target；每个已存在的组件都必须是 no-follow directory。
 current = pathlib.Path(lexical_target.anchor)
 for component in lexical_target.parts[1:]:
     current /= component
@@ -196,15 +195,15 @@ for component in lexical_target.parts[1:]:
         break
     except OSError as error:
         raise SystemExit(
-            f"error: cannot inspect Cargo target root safely: {current}: {error}"
+            f"error: 无法安全检查 Cargo target root：{current}: {error}"
         )
     if stat.S_ISLNK(metadata.st_mode):
         raise SystemExit(
-            f"error: Cargo target root contains a symlink component: {current}"
+            f"error: Cargo target root 包含 symlink component：{current}"
         )
     if not stat.S_ISDIR(metadata.st_mode):
         raise SystemExit(
-            f"error: Cargo target root contains a non-directory component: {current}"
+            f"error: Cargo target root 包含 non-directory component：{current}"
         )
 
 lock_path = normalized_target / ".build.lock"
@@ -214,27 +213,27 @@ except FileNotFoundError:
     pass
 except OSError as error:
     raise SystemExit(
-        f"error: cannot inspect Cargo build lock safely: {lock_path}: {error}"
+        f"error: 无法安全检查 Cargo build lock：{lock_path}: {error}"
     )
 else:
     if not stat.S_ISREG(lock_metadata.st_mode):
         raise SystemExit(
-            f"error: Cargo build lock is not a no-follow regular file: {lock_path}"
+            f"error: Cargo build lock 不是 no-follow regular file：{lock_path}"
         )
     if lock_metadata.st_nlink != 1:
         raise SystemExit(
-            f"error: Cargo build lock must be single-linked: {lock_path}"
+            f"error: Cargo build lock 必须是 single-linked：{lock_path}"
         )
 
 try:
     common = os.path.commonpath((os.fspath(source_root), os.fspath(normalized_target)))
 except ValueError as error:
     raise SystemExit(
-        f"error: Cargo target root is not comparable with the source root: {raw_target}"
+        f"error: Cargo target root 无法与 source root 比较：{raw_target}"
     ) from error
 if common == os.fspath(source_root):
     raise SystemExit(
-        "error: CLI package refuses a Cargo target root inside the source tree"
+        "error: CLI package 拒绝位于 source tree 内的 Cargo target root"
     )
 PY
 }
@@ -245,14 +244,14 @@ if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" != "1" ]]; then
   exec "$LOCK" -- "$0" "${ORIGINAL_ARGS[@]}"
 fi
 
-command -v cargo >/dev/null 2>&1 || { echo "error: cargo is required" >&2; exit 1; }
+command -v cargo >/dev/null 2>&1 || { echo "error: 需要 cargo" >&2; exit 1; }
 TARGET_ROOT="$("$LOCK" --print-target-dir)"
 [[ "$TARGET_ROOT" == /* && -d "$TARGET_ROOT" ]] || {
-  echo "error: Cargo target root must be an existing absolute directory" >&2
+  echo "error: Cargo target root 必须是已存在的绝对 directory" >&2
   exit 1
 }
 [[ -f "$SAFE_PATH" && ! -L "$SAFE_PATH" && -x "$SAFE_PATH" ]] || {
-  echo "error: release safe-path helper is missing or unsafe: $SAFE_PATH" >&2
+  echo "error: release safe-path helper 缺失或不安全：$SAFE_PATH" >&2
   exit 1
 }
 read -r TARGET_ROOT_DEV TARGET_ROOT_INO < <(
@@ -263,7 +262,7 @@ python3 "$SAFE_PATH" dir-identity --root "$TARGET_ROOT" --path "$TARGET_ROOT" \
   --expected-dev "$TARGET_ROOT_DEV" --expected-ino "$TARGET_ROOT_INO" >/dev/null
 case "$TARGET_ROOT/" in
   "$ROOT/"*)
-    echo "error: CLI package refuses a Cargo target root inside the source tree" >&2
+    echo "error: CLI package 拒绝位于 source tree 内的 Cargo target root" >&2
     exit 1
     ;;
 esac
@@ -272,15 +271,14 @@ BIN_PATH="$TARGET_DIR/$BIN_NAME"
 BUNDLE_DIR="$TARGET_DIR/bundle/cli"
 
 validate_target_layout() {
-  # Validate the complete existing release tree before any invalidation or
-  # Cargo write.  This rejects symlink/non-regular entries at every depth,
-  # including package fingerprint/build/dependency children that the
-  # provenance invalidator may otherwise remove or Cargo may overwrite.
+  # 在任何 invalidation 或 Cargo 写入前校验完整的现有 release tree。这样可在
+  # 每一层拒绝 symlink/non-regular entry，包括 provenance invalidator 可能删除
+  # 或 Cargo 可能覆盖的 package fingerprint/build/dependency 子项。
   if [[ -e "$TARGET_DIR" || -L "$TARGET_DIR" ]]; then
     local entry
     while IFS= read -r -d '' entry; do
       if [[ -L "$entry" ]]; then
-        echo "error: Cargo release tree contains a symlink: $entry" >&2
+        echo "error: Cargo release tree 包含 symlink：$entry" >&2
         return 1
       fi
       if [[ -d "$entry" ]]; then
@@ -290,15 +288,14 @@ validate_target_layout() {
         python3 "$SAFE_PATH" validate-file \
           --root "$TARGET_ROOT" --path "$entry"
       else
-        echo "error: Cargo release tree contains a non-regular entry: $entry" >&2
+        echo "error: Cargo release tree 包含 non-regular entry：$entry" >&2
         return 1
       fi
     done < <(find -P "$TARGET_DIR" -print0)
   fi
 
-  # Check the directory roots that invalidation and Cargo will mutate before
-  # creating any missing sibling.  This prevents a later file/symlink in the
-  # list from being discovered only after an earlier ensure-dir mutation.
+  # 在创建缺失的 sibling 前检查 invalidation 和 Cargo 将要修改的 directory
+  # root。这样列表后面的 file/symlink 不会等到前面的 ensure-dir 修改后才被发现。
   local directory
   for directory in "$TARGET_DIR" \
     "$TARGET_DIR/.fingerprint" "$TARGET_DIR/build" "$TARGET_DIR/deps"; do
@@ -308,9 +305,9 @@ validate_target_layout() {
     fi
   done
 
-  # Cargo and the provenance invalidator both require these directories.  The
-  # no-follow preflight above covers existing entries; ensure-dir then creates
-  # only missing directories through the same dirfd-anchored primitive.
+  # Cargo 和 provenance invalidator 都需要这些 directory。上面的 no-follow
+  # preflight 已覆盖现有 entry；ensure-dir 随后通过同一个 dirfd-anchored
+  # primitive 只创建缺失 directory。
   for directory in "$TARGET_DIR" \
     "$TARGET_DIR/.fingerprint" "$TARGET_DIR/build" "$TARGET_DIR/deps"; do
     python3 "$SAFE_PATH" ensure-dir \
@@ -322,7 +319,7 @@ validate_target_layout
 
 TMPDIR_PARENT="${TMPDIR:-/tmp}"
 [[ "$TMPDIR_PARENT" == /* && -d "$TMPDIR_PARENT" ]] || {
-  echo "error: package temp parent must be an existing absolute directory" >&2
+  echo "error: package temp parent 必须是已存在的绝对 directory" >&2
   exit 1
 }
 python3 "$SAFE_PATH" dir-identity --root "$TMPDIR_PARENT" \
@@ -334,7 +331,7 @@ mapfile -t TMPDIR_IDENTITY < <(
     --parent "$TMPDIR_PARENT" --prefix ".kanban-cli-package." --print-identity
 )
 [[ "${#TMPDIR_IDENTITY[@]}" -eq 3 ]] || {
-  echo "error: private CLI package temp returned an invalid identity token" >&2
+  echo "error: private CLI package temp 返回了无效 identity token" >&2
   exit 1
 }
 TMPDIR="${TMPDIR_IDENTITY[0]}"
@@ -349,12 +346,12 @@ cleanup() {
     python3 "$SAFE_PATH" remove-tree --root "$TARGET_ROOT" \
       --path "$OUTPUT_STAGE" --expected-dev "$OUTPUT_STAGE_IDENTITY_DEV" \
       --expected-ino "$OUTPUT_STAGE_IDENTITY_INO" ||
-      printf 'warning: retained unverified CLI output stage: %s\n' "$OUTPUT_STAGE" >&2
+      printf 'warning: 保留未验证的 CLI output stage：%s\n' "$OUTPUT_STAGE" >&2
   fi
   python3 "$SAFE_PATH" remove-tree --root "$TMPDIR_PARENT" \
     --path "$TMPDIR" --expected-dev "$TMPDIR_IDENTITY_DEV" \
     --expected-ino "$TMPDIR_IDENTITY_INO" ||
-    printf 'warning: retained unverified CLI package temp tree: %s\n' "$TMPDIR" >&2
+    printf 'warning: 保留未验证的 CLI package temp tree：%s\n' "$TMPDIR" >&2
 }
 trap cleanup EXIT
 trap 'exit 129' HUP
@@ -372,7 +369,7 @@ deb_arch() {
     armv7*|arm) echo "armhf" ;;
     i686|i586) echo "i386" ;;
     *)
-      echo "error: unsupported Debian architecture for target triple: $TARGET_TRIPLE" >&2
+      echo "error: target triple 的 Debian architecture 不受支持：$TARGET_TRIPLE" >&2
       exit 1
       ;;
   esac
@@ -397,7 +394,7 @@ build_binary() {
     cd "$ROOT"
     "$LOCK" -- "cargo" build --locked -p kanban-cli --release "${BUILD_ARGS[@]}"
   )
-  [[ -x "$BIN_PATH" ]] || { echo "error: expected binary not found: $BIN_PATH" >&2; exit 1; }
+  [[ -x "$BIN_PATH" ]] || { echo "error: 未找到预期 binary：$BIN_PATH" >&2; exit 1; }
 
   "$PROVENANCE" --verify-dep-info "$ROOT" "$TARGET_DIR/$BIN_NAME.d"
 }
@@ -407,7 +404,7 @@ deb_depends() {
   local dep_workspace output depends
 
   if ! command -v dpkg-shlibdeps >/dev/null 2>&1; then
-    echo "warning: dpkg-shlibdeps not found; using conservative Debian runtime dependencies" >&2
+    echo "warning: 未找到 dpkg-shlibdeps；使用保守的 Debian runtime dependencies" >&2
     echo "libc6, libgcc-s1"
     return
   fi
@@ -426,20 +423,20 @@ EOF
     cd "$dep_workspace"
     dpkg-shlibdeps -O "-S$package_root" "${shlib_inputs[@]}"
   )" || {
-    echo "error: dpkg-shlibdeps failed to generate shared-library dependencies" >&2
+    echo "error: dpkg-shlibdeps 生成 shared-library dependencies 失败" >&2
     exit 1
   }
 
   depends="$(printf '%s\n' "$output" | sed -n 's/^shlibs:Depends=//p')"
   [[ -n "$depends" ]] || {
-    echo "error: dpkg-shlibdeps returned no shlibs:Depends value" >&2
+    echo "error: dpkg-shlibdeps 未返回 shlibs:Depends 值" >&2
     exit 1
   }
   echo "$depends"
 }
 
 build_deb() {
-  command -v dpkg-deb >/dev/null 2>&1 || { echo "error: dpkg-deb is required for --format deb" >&2; exit 1; }
+  command -v dpkg-deb >/dev/null 2>&1 || { echo "error: --format deb 需要 dpkg-deb" >&2; exit 1; }
 
   local arch package_root control_dir out_dir out_file staged_dir staged_file
   local installed_size depends
@@ -476,7 +473,7 @@ EOF
       --parent "$out_dir" --prefix ".kanban-cli-deb." --print-identity
   )
   [[ "${#stage_identity[@]}" -eq 3 ]] || {
-    echo "error: private CLI output stage returned an invalid identity token" >&2
+    echo "error: private CLI output stage 返回了无效 identity token" >&2
     exit 1
   }
   staged_dir="${stage_identity[0]}"
@@ -487,8 +484,8 @@ EOF
   dpkg-deb --root-owner-group --build "$package_root" "$staged_file"
   python3 "$SAFE_PATH" validate-file --root "$TARGET_ROOT" --path "$staged_file"
 
-  # Revalidate the creation token immediately before publication; do not
-  # resample a replacement directory as a new baseline.
+  # 在发布前立即重新校验 creation token；不要把 replacement directory
+  # 重新采样为新的 baseline。
   python3 "$SAFE_PATH" dir-identity --root "$TARGET_ROOT" --path "$OUTPUT_STAGE" \
     --expected-dev "$OUTPUT_STAGE_IDENTITY_DEV" \
     --expected-ino "$OUTPUT_STAGE_IDENTITY_INO" >/dev/null

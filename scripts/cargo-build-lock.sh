@@ -171,10 +171,9 @@ lock_proof_is_valid() {
   inherited_identity="$(/usr/bin/stat -Lc '%d:%i:%h:%F' -- "/proc/self/fd/$lock_fd" 2>/dev/null)" || return 1
   [[ "$inherited_identity" == "$expected_identity:1:regular "* ]] || return 1
 
-  # `flock -n <fd>` operates on the inherited open file description.  It is
-  # successful for the lock owner and atomically acquires the same canonical
-  # lock if a caller supplied an otherwise-unlocked descriptor; either way the
-  # proof leaves this process holding the exclusive lock for its lifetime.
+  # `flock -n <fd>` 作用于继承的 open file description。锁持有者会成功；
+  # 如果调用方提供了尚未加锁的 descriptor，它也会原子地获取同一个 canonical
+  # lock；无论哪种情况，该 proof 都会让本进程在整个生命周期持有 exclusive lock。
   if [[ "${KANBAN_CARGO_BUILD_LOCK_TEST_PAUSE_BEFORE_FLOCK:-0}" == "1" ]]; then
     local pause_marker="${KANBAN_CARGO_BUILD_LOCK_TEST_PAUSE_MARKER:-}"
     local pause_continue="${KANBAN_CARGO_BUILD_LOCK_TEST_CONTINUE:-}"
@@ -188,8 +187,8 @@ lock_proof_is_valid() {
   status=$?
   [[ "$status" -eq 0 ]] || return "$status"
 
-  # Re-check the absolute path without following it: a symlink to the
-  # original inode must not be accepted after the descriptor was flocked.
+  # 不跟随 symlink 重新检查绝对路径：descriptor 完成 flock 后，不得接受
+  # 指向原始 inode 的 symlink。
   [[ -f "$expected_lock" && ! -L "$expected_lock" ]] || return 1
   metadata="$(/usr/bin/stat -c '%d:%i:%h:%F' -- "$expected_lock" 2>/dev/null)" || return 1
   [[ "$metadata" == *":1:regular "* ]] || return 1

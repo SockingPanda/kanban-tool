@@ -203,7 +203,7 @@ pub(crate) async fn run_dispatcher(
         }
 
         if let Err(error) = state
-            .vector_store()
+            .application()
             .vector_worker_tick("vector-worker")
             .await
         {

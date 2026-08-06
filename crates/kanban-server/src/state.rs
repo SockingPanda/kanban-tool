@@ -3,15 +3,12 @@ use std::{
     sync::Arc,
 };
 
-use kanban_service::{ApplicationService, TursoApplicationStore};
+pub(crate) use kanban_service::HostApplicationService;
 use kanban_service::{KanbanError, Result};
-
-pub(crate) type HostApplicationService = ApplicationService<TursoApplicationStore>;
 
 #[derive(Clone)]
 pub struct AppState {
     application: HostApplicationService,
-    vector_store: TursoApplicationStore,
     db_path: Arc<PathBuf>,
     attachment_root: Arc<PathBuf>,
     default_actor: Arc<str>,
@@ -39,14 +36,14 @@ impl AppState {
             None => None,
         };
         let attachment_root = Arc::new(ensure_attachment_root(&db_path).await?);
-        let application_store =
-            TursoApplicationStore::open_with_roots(&db_path, run_log_root, attachment_root.clone())
-                .await
-                .map_err(|error| KanbanError::Storage(error.to_string()))?;
-        let vector_store = application_store.clone();
+        let application = HostApplicationService::open_with_roots(
+            &db_path,
+            run_log_root,
+            attachment_root.clone(),
+        )
+        .await?;
         Ok(Self {
-            application: ApplicationService::new(application_store),
-            vector_store,
+            application,
             db_path: Arc::new(db_path),
             attachment_root,
             default_actor: Arc::from(default_actor.into()),
@@ -55,10 +52,6 @@ impl AppState {
 
     pub(crate) fn application(&self) -> &HostApplicationService {
         &self.application
-    }
-
-    pub(crate) fn vector_store(&self) -> &TursoApplicationStore {
-        &self.vector_store
     }
 
     pub fn db_path(&self) -> &Path {

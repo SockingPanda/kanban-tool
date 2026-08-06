@@ -22,6 +22,7 @@ mod signal;
 mod stats;
 mod step;
 mod task;
+mod vector;
 
 pub use attachment::{
     AttachmentCreate, AttachmentDelete, AttachmentList, AttachmentRead, CreateAttachmentCommand,
@@ -68,6 +69,10 @@ pub use task::{
     TaskDetailRecord, TaskDone, TaskHeartbeat, TaskList, TaskOntologySignalSummaryRecord,
     TaskOntologySummaryRecord, TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskReclaimExplicit,
     TaskRelease, TaskReopen, TaskReview, TaskShow, TaskSpecify, TaskUnblock, TaskUpdate,
+};
+pub use vector::{
+    VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,
+    VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
 };
 
 pub use comment::{CreateCommentCommand, CreateCommentRecord};

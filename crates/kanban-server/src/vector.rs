@@ -14,11 +14,13 @@ use axum::{
 use kanban_protocol::{
     DataEnvelope, VectorChunkResult, VectorConfigureRequest, VectorConfigureResponse,
     VectorLabelAtomResult, VectorProjectionRequest, VectorProjectionResponse, VectorQuery,
-    VectorQueryChunksResponse, VectorQueryLabelAtomsResponse, VectorStatus, VectorStatusQuery,
-    VectorStatusResponse,
+    VectorQueryChunksResponse, VectorQueryLabelAtomsResponse, VectorStatus as VectorStatusProtocol,
+    VectorStatusQuery, VectorStatusResponse,
 };
-use kanban_service::KanbanError;
-use kanban_service::{StoreError, TursoApplicationStore, VectorConfig, VectorStatusRecord};
+use kanban_service::{
+    KanbanError, VectorChunkQueryCommand, VectorConfigureCommand, VectorLabelAtomQueryCommand,
+    VectorStatus as ServiceVectorStatus,
+};
 
 use crate::{error::ApiError, state::AppState};
 
@@ -74,16 +76,7 @@ async fn status(
 ) -> Result<Json<VectorStatusResponse>, ApiError> {
     let Query(query) =
         query.map_err(|error| invalid(format!("vector status query 无效：{error}")))?;
-    let board_id = state
-        .vector_store()
-        .vector_board_id(&query.board)
-        .await
-        .map_err(store_error)?;
-    let value = state
-        .vector_store()
-        .vector_status(Some(&board_id))
-        .await
-        .map_err(store_error)?;
+    let value = state.application().vector_status(&query.board).await?;
     Ok(Json(DataEnvelope::new(vector_status(value))))
 }
 
@@ -93,17 +86,13 @@ async fn configure(
 ) -> Result<Json<VectorConfigureResponse>, ApiError> {
     let Json(body) =
         body.map_err(|error| invalid(format!("vector configure body 无效：{error}")))?;
-    let config = VectorConfig {
+    let command = VectorConfigureCommand {
         provider: body.provider.clone(),
         endpoint: body.endpoint.clone(),
         model: body.model.clone(),
         dimensions: body.dimensions,
     };
-    state
-        .vector_store()
-        .configure_vector(&config)
-        .await
-        .map_err(store_error)?;
+    state.application().configure_vector(command).await?;
     Ok(Json(DataEnvelope::new(body)))
 }
 
@@ -112,12 +101,7 @@ async fn rebuild(
     body: Result<Json<VectorProjectionRequest>, JsonRejection>,
 ) -> Result<Json<VectorProjectionResponse>, ApiError> {
     let Json(body) = body.map_err(|error| invalid(format!("vector rebuild body 无效：{error}")))?;
-    let board_id = enqueue_board_tasks(state.vector_store(), &body.board, true).await?;
-    let value = state
-        .vector_store()
-        .vector_status(Some(&board_id))
-        .await
-        .map_err(store_error)?;
+    let value = state.application().rebuild_vector(&body.board).await?;
     Ok(Json(DataEnvelope::new(vector_status(value))))
 }
 
@@ -126,12 +110,7 @@ async fn sync(
     body: Result<Json<VectorProjectionRequest>, JsonRejection>,
 ) -> Result<Json<VectorProjectionResponse>, ApiError> {
     let Json(body) = body.map_err(|error| invalid(format!("vector sync body 无效：{error}")))?;
-    let board_id = enqueue_board_tasks(state.vector_store(), &body.board, false).await?;
-    let value = state
-        .vector_store()
-        .vector_status(Some(&board_id))
-        .await
-        .map_err(store_error)?;
+    let value = state.application().sync_vector(&body.board).await?;
     Ok(Json(DataEnvelope::new(vector_status(value))))
 }
 
@@ -140,23 +119,15 @@ async fn query_chunks(
     query: Result<Query<VectorQuery>, QueryRejection>,
 ) -> Result<Json<VectorQueryChunksResponse>, ApiError> {
     let Query(query) = query.map_err(|error| invalid(format!("vector query 无效：{error}")))?;
-    validate_query(&query)?;
-    let (config, embedding) = embed_query(state.vector_store(), &query.q).await?;
-    if let Some(model) = query.embedding_model.as_deref()
-        && model != config.model
-    {
-        return Err(invalid("embedding model 与当前 vector 配置不一致"));
-    }
-    let board_id = state
-        .vector_store()
-        .vector_board_id(&query.board)
-        .await
-        .map_err(store_error)?;
     let hits = state
-        .vector_store()
-        .query_vector_chunks(&board_id, &embedding, &config.model, query.limit)
-        .await
-        .map_err(store_error)?;
+        .application()
+        .query_vector_chunks(VectorChunkQueryCommand {
+            board: query.board,
+            q: query.q,
+            embedding_model: query.embedding_model,
+            limit: query.limit,
+        })
+        .await?;
     Ok(Json(DataEnvelope::new(
         hits.into_iter()
             .map(|hit| VectorChunkResult {
@@ -179,30 +150,17 @@ async fn query_label_atoms(
 ) -> Result<Json<VectorQueryLabelAtomsResponse>, ApiError> {
     let Query(query) =
         query.map_err(|error| invalid(format!("vector label query 无效：{error}")))?;
-    validate_query(&query)?;
-    let (config, embedding) = embed_query(state.vector_store(), &query.q).await?;
-    if let Some(model) = query.embedding_model.as_deref()
-        && model != config.model
-    {
-        return Err(invalid("embedding model 与当前 vector 配置不一致"));
-    }
-    let board_id = state
-        .vector_store()
-        .vector_board_id(&query.board)
-        .await
-        .map_err(store_error)?;
     let hits = state
-        .vector_store()
-        .query_vector_label_atoms(
-            Some(&board_id),
-            &embedding,
-            &config.model,
-            query.polarity.as_deref(),
-            query.limit,
-            query.include_vector,
-        )
-        .await
-        .map_err(store_error)?;
+        .application()
+        .query_vector_label_atoms(VectorLabelAtomQueryCommand {
+            board: query.board,
+            q: query.q,
+            embedding_model: query.embedding_model,
+            polarity: query.polarity,
+            limit: query.limit,
+            include_vector: query.include_vector,
+        })
+        .await?;
     Ok(Json(DataEnvelope::new(
         hits.into_iter()
             .map(|hit| VectorLabelAtomResult {
@@ -223,72 +181,8 @@ async fn query_label_atoms(
     )))
 }
 
-async fn enqueue_board_tasks(
-    store: &TursoApplicationStore,
-    board: &str,
-    rebuild: bool,
-) -> Result<String, ApiError> {
-    let board_id = store.vector_board_id(board).await.map_err(store_error)?;
-    let ids = store.vector_task_ids(board).await.map_err(store_error)?;
-    for task_id in ids {
-        let uri = format!("kb://task/{task_id}");
-        let payload = format!(r#"{{"task_id":"{task_id}"}}"#);
-        store
-            .enqueue_vector_job(
-                Some(&board_id),
-                None,
-                "vector_tasks",
-                &uri,
-                if rebuild { "rebuild" } else { "upsert" },
-                &payload,
-            )
-            .await
-            .map_err(store_error)?;
-    }
-    let atom_ids = store
-        .vector_label_atom_ids(board)
-        .await
-        .map_err(store_error)?;
-    for atom_id in atom_ids {
-        let uri = format!("kb://label-atom/{atom_id}");
-        let payload = format!(r#"{{"atom_id":"{atom_id}"}}"#);
-        store
-            .enqueue_vector_job(
-                Some(&board_id),
-                None,
-                "vector_label_atoms",
-                &uri,
-                if rebuild { "rebuild" } else { "upsert" },
-                &payload,
-            )
-            .await
-            .map_err(store_error)?;
-    }
-    Ok(board_id)
-}
-
-fn validate_query(query: &VectorQuery) -> Result<(), ApiError> {
-    if query.board.trim().is_empty() || query.q.trim().is_empty() {
-        return Err(invalid("vector query 需要 board 和非空 q"));
-    }
-    if query.q.len() > 64 * 1024 {
-        return Err(invalid("vector query q 超过大小上限"));
-    }
-    if query.limit == 0 || query.limit > 64 {
-        return Err(invalid("vector query limit 必须在 1..=64 内"));
-    }
-    Ok(())
-}
-
-async fn embed_query(
-    store: &TursoApplicationStore,
-    text: &str,
-) -> Result<(VectorConfig, Vec<f32>), ApiError> {
-    store.embed_query(text).await.map_err(store_error)
-}
-
-fn vector_status(value: VectorStatusRecord) -> VectorStatus {
-    VectorStatus {
+fn vector_status(value: ServiceVectorStatus) -> VectorStatusProtocol {
+    VectorStatusProtocol {
         backend: value.backend,
         enabled: value.enabled,
         message: value.message,
@@ -296,13 +190,6 @@ fn vector_status(value: VectorStatusRecord) -> VectorStatus {
         dirty: value.dirty,
         board_dirty: value.board_dirty,
         generation: value.generation,
-    }
-}
-
-fn store_error(error: StoreError) -> ApiError {
-    match error {
-        StoreError::InvalidInput(message) => invalid(message),
-        other => ApiError(KanbanError::Storage(other.to_string())),
     }
 }
 

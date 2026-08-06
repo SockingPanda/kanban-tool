@@ -316,7 +316,7 @@ kanban-service / canonical Turso
 
 只有 `kanban serve`（`kanban-server` host）可以打开、初始化、迁移、备份、替换和关闭 Turso。默认绑定 `127.0.0.1:8721`，默认数据库为 `~/.local/share/kb/kanban.db`。普通 CLI、MCP、Desktop 只构造 typed localhost client；host 不可用时返回 `server_unavailable`，不会创建备用数据库。
 
-`kanban-service` 是唯一直接持有 Turso connection、schema/migration、repository、transaction 和 provider 的产品 crate。server 负责 host 生命周期、HTTP/SSE、路由合并、dispatcher 和 projection worker 装配，但不直接解释 row 或状态机。所有 adapter 都不能提交 SQL。
+`kanban-service` 是唯一直接持有 Turso connection、schema/migration、repository、transaction 和 provider 的产品 crate。server 负责 host 生命周期、HTTP/SSE、路由合并、dispatcher 和 projection worker 装配，但不直接解释 row 或状态机。所有 adapter 都不能提交 SQL；Vector 的 status/query/configure/rebuild/sync/enqueue 以及 embedding/provider coordination 统一由 `ApplicationService` 的 service API 编排。
 
 同一 host 内的 operation 可以按需获取 connection；不启用 `multiprocess_wal`，canonical 文件不允许由其他产品入口或第二进程直开。`PRAGMA foreign_keys = ON`、复合 FK、CHECK、唯一约束、CAS、board isolation 和 service transaction 共同形成边界。
 
@@ -365,6 +365,8 @@ adapter input
 
 `kanban-service` 同时提供实体/关系写入、board-scoped BFS、bounded context merge、label atom index、projection generation/fingerprint、Ollama outage degraded 和重建。派生状态只写 `projection_jobs`/`projection_state`/retrieval 表，不反向改变 canonical facts。
 
+Vector service API 返回独立的 command/result DTO。`kanban-server` 的 router 与 dispatcher 只持有 `HostApplicationService`，不得导入 `TursoApplicationStore`、`TursoStore`、`StoreError` 或 projection row record；provider 调用和查询 embedding 也不能在 host adapter 中重新编排。
+
 ## 4. Turso schema 与派生能力
 
 schema family 为 `kanban.turso`，v1/v2 lineage 与 exact shape 由 `schema.rs`、`migration.rs` 和 schema identity 校验。v2 包含 queue/history、labels/ontology/signals、entities/relations、retrieval、projection、import journal 和 attachment staging；字段、约束、fingerprint 见 [`DATA_MODEL.md`](docs/DATA_MODEL.md)。
@@ -405,7 +407,7 @@ host-admin HTTP operation）和 Desktop 十个导航视图都通过 typed client
 状态中保存。维护操作显示 host 返回的 phase、degraded 和 `restart_required`，不凭 UI 状态
 推断 canonical 成功。
 
-dispatcher 只有传入 `--dispatcher-profile` 才启动，轮询 `ready`、复用 claim/heartbeat/finish、优雅停止等待当前 worker；projection worker 与 host 共用 lifecycle/maintenance lease，按 job generation 处理 FTS/vector/relations/context。两类 worker 都不打开第二数据库、不维护第二状态机、不直接改 adapter DTO。
+dispatcher 只有传入 `--dispatcher-profile` 才启动，轮询 `ready`、复用 claim/heartbeat/finish、优雅停止等待当前 worker；projection worker 与 host 共用 lifecycle/maintenance lease，按 job generation 处理 FTS/vector/relations/context，并通过共享 `ApplicationService::vector_worker_tick` 协调 Vector provider。两类 worker 都不打开第二数据库、不维护第二状态机、不直接改 adapter DTO。
 
 ## 7. 证据与停止边界
 

@@ -66,9 +66,14 @@ pub use operations::{
     TaskOntologySummaryRecord, TaskPlanNotRequired, TaskPromote, TaskReclaim, TaskReclaimExplicit,
     TaskRelease, TaskReopen, TaskReview, TaskShow, TaskSpecify, TaskUnblock, TaskUpdate,
     UnblockTaskCommand, UnblockTaskRecord, UpdateTaskCommand, UpdateTaskRecord, VacuumReportRecord,
+    VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,
+    VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
 };
 pub use ports::ApplicationStore;
 pub use service::ApplicationService;
+
+/// host 使用的具体 application service 类型；持久化 store 只在 service crate 内装配。
+pub type HostApplicationService = ApplicationService<TursoApplicationStore>;
 
 /// 明确保留的 host-facing service store 别名，使 adapter 不依赖持久化 row model
 /// 或旧的独立 store crate。

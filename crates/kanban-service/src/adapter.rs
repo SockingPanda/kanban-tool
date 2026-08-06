@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    AddTaskLabelsRecord as ApplicationAddTaskLabelsRecord, ApplicationStore,
+    AddTaskLabelsRecord as ApplicationAddTaskLabelsRecord, ApplicationService, ApplicationStore,
     CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
     CommentRecord as ApplicationComment, DependencyEdgeRecord as ApplicationDependencyEdge,
     DependencySnapshotRecord as ApplicationDependencySnapshot,
@@ -88,33 +88,44 @@ impl TursoApplicationStore {
     }
 
     /// 读取 vector board selector 的 canonical id。
-    pub async fn vector_board_id(&self, board: &str) -> StoreResult<String> {
+    pub(crate) async fn vector_board_id(&self, board: &str) -> StoreResult<String> {
         self.store.vector_board_id(board).await
     }
 
-    pub async fn vector_status(
+    pub(crate) async fn vector_status(
         &self,
         board_id: Option<&str>,
     ) -> StoreResult<crate::VectorStatusRecord> {
         self.store.vector_status(board_id).await
     }
 
-    pub async fn configure_vector(
+    pub(crate) async fn configure_vector(
         &self,
         config: &crate::VectorConfig,
     ) -> StoreResult<crate::VectorStatusRecord> {
         self.store.configure_vector(config).await
     }
 
-    pub async fn vector_task_ids(&self, board: &str) -> StoreResult<Vec<String>> {
+    /// 为 board 的 canonical task/label atom 事实补齐 vector projection jobs。
+    pub(crate) async fn enqueue_vector_projection_jobs(
+        &self,
+        board_selector: &str,
+        rebuild: bool,
+    ) -> StoreResult<u64> {
+        self.store
+            .enqueue_vector_projection_jobs(board_selector, rebuild)
+            .await
+    }
+
+    pub(crate) async fn vector_task_ids(&self, board: &str) -> StoreResult<Vec<String>> {
         self.store.vector_task_ids(board).await
     }
 
-    pub async fn vector_label_atom_ids(&self, board: &str) -> StoreResult<Vec<String>> {
+    pub(crate) async fn vector_label_atom_ids(&self, board: &str) -> StoreResult<Vec<String>> {
         self.store.vector_label_atom_ids(board).await
     }
 
-    pub async fn enqueue_vector_job(
+    pub(crate) async fn enqueue_vector_job(
         &self,
         board_id: Option<&str>,
         source_event_id: Option<i64>,
@@ -135,7 +146,7 @@ impl TursoApplicationStore {
             .await
     }
 
-    pub async fn query_vector_chunks(
+    pub(crate) async fn query_vector_chunks(
         &self,
         board_id: &str,
         embedding: &[f32],
@@ -147,7 +158,7 @@ impl TursoApplicationStore {
             .await
     }
 
-    pub async fn query_vector_label_atoms(
+    pub(crate) async fn query_vector_label_atoms(
         &self,
         board_id: Option<&str>,
         embedding: &[f32],
@@ -161,12 +172,29 @@ impl TursoApplicationStore {
             .await
     }
 
-    pub async fn embed_query(&self, text: &str) -> StoreResult<(crate::VectorConfig, Vec<f32>)> {
+    pub(crate) async fn embed_query(
+        &self,
+        text: &str,
+    ) -> StoreResult<(crate::VectorConfig, Vec<f32>)> {
         crate::vector::embed_query(&self.store, text).await
     }
 
-    pub async fn vector_worker_tick(&self, owner: &str) -> StoreResult<usize> {
+    pub(crate) async fn vector_worker_tick(&self, owner: &str) -> StoreResult<usize> {
         crate::vector::worker_tick(self.store.clone(), owner).await
+    }
+}
+
+impl ApplicationService<TursoApplicationStore> {
+    /// 在 service boundary 内打开并初始化 host 唯一拥有的 Turso 数据库。
+    pub async fn open_with_roots(
+        db_path: impl AsRef<Path>,
+        run_log_root: Option<Arc<PathBuf>>,
+        attachment_root: Arc<PathBuf>,
+    ) -> Result<Self> {
+        let store = TursoApplicationStore::open_with_roots(db_path, run_log_root, attachment_root)
+            .await
+            .map_err(|error| KanbanError::Storage(error.to_string()))?;
+        Ok(Self::new(store))
     }
 }
 

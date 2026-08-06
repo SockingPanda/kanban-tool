@@ -134,7 +134,19 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             .contracts();
             inventory.extend(crate::metadata_config_catalog::shared_component_contracts());
             inventory.extend(crate::admin_catalog::template_contracts());
+            reorder_contracts(&mut inventory, crate::board_catalog::HISTORICAL_CONTRACT_ORDER);
             inventory
         })
         .as_slice()
+}
+
+fn reorder_contracts(inventory: &mut Vec<OperationContract>, order: &[&str]) {
+    let mut ordered = Vec::with_capacity(inventory.len());
+    for id in order {
+        if let Some(index) = inventory.iter().position(|contract| contract.id == *id) {
+            ordered.push(inventory.remove(index));
+        }
+    }
+    ordered.append(inventory);
+    *inventory = ordered;
 }

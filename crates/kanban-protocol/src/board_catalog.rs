@@ -607,6 +607,60 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
     ),
 ];
 
+/// 保留既有生成 artifact 所需的 board contract key 顺序；不承载 contract 事实。
+pub const HISTORICAL_CONTRACT_ORDER: &[&str] = &[
+    "cli.board-list.output",
+    "cli.board-create.output",
+    "cli.board-show.output",
+    "cli.board-use.output",
+    "cli.board-current.output",
+    "cli.board-archive.output",
+    "cli.board-columns.output",
+    "api.list-board-columns.path",
+    "api.list-board-columns.response",
+    "api.doctor.response",
+    "api.error.response",
+    "api.list-boards.query",
+    "api.create-board.request",
+    "api.get-board.path",
+    "api.archive-board.path",
+    "api.list-boards.response",
+    "api.create-board.response",
+    "api.get-board.response",
+    "api.archive-board.response",
+    "api.archive-task.request",
+    "api.archive-board.request",
+    "api.add-dependency.request",
+];
+
+/// Schema artifact 的历史 key 顺序；仅保存顺序，不重复 schema 或 contract 事实。
+pub const HISTORICAL_SCHEMA_ORDER: &[&str] = &[
+    "cli.board-list.output",
+    "cli.board-create.output",
+    "cli.board-show.output",
+    "cli.board-use.output",
+    "cli.board-current.output",
+    "cli.board-archive.output",
+    "cli.board-columns.output",
+    "cli.task-list.output",
+    "api.health.response",
+    "api.list-boards.query",
+    "api.create-board.request",
+    "api.get-board.path",
+    "api.archive-board.path",
+    "api.list-boards.response",
+    "api.create-board.response",
+    "api.get-board.response",
+    "api.archive-board.response",
+    "api.archive-task.request",
+    "api.archive-board.request",
+    "api.add-dependency.request",
+    "api.get-run-log.response",
+    "api.list-board-columns.path",
+    "api.list-board-columns.response",
+    "api.list-attachments.path",
+];
+
 /// Boards family 的 declaration source。
 pub const fn operation_declarations() -> &'static [OperationDeclaration] {
     BOARD_OPERATIONS

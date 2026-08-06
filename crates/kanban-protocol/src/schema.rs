@@ -43,9 +43,27 @@ pub fn schema_registry() -> &'static [SchemaRoot] {
                 }
             }
             registry.extend(crate::admin_catalog::template_schema_roots());
+            reorder_schema_roots(
+                &mut registry,
+                crate::board_catalog::HISTORICAL_SCHEMA_ORDER,
+            );
             registry
         })
         .as_slice()
+}
+
+fn reorder_schema_roots(registry: &mut Vec<SchemaRoot>, order: &[&str]) {
+    let mut ordered = Vec::with_capacity(registry.len());
+    for contract_id in order {
+        if let Some(index) = registry
+            .iter()
+            .position(|root| root.contract_id == *contract_id)
+        {
+            ordered.push(registry.remove(index));
+        }
+    }
+    ordered.append(registry);
+    *registry = ordered;
 }
 
 pub fn generated_artifacts() -> BTreeMap<String, Vec<u8>> {

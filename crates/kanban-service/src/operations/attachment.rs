@@ -1,8 +1,6 @@
-use std::future::Future;
-
 use kanban_core::{Clock, KanbanError, Result, new_event_id, new_typed_id};
 
-use crate::{ApplicationService, ApplicationStore, AttachmentContentRecord, AttachmentRecord};
+use crate::{AttachmentContentRecord, AttachmentRecord, KanbanService};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateAttachmentCommand {
@@ -36,39 +34,8 @@ pub struct DeleteAttachmentCommand {
     pub actor: String,
 }
 
-pub trait AttachmentCreate: ApplicationStore {
-    fn create_attachment(
-        &self,
-        task_id: &str,
-        input: CreateAttachmentRecord,
-    ) -> impl Future<Output = Result<AttachmentRecord>> + Send;
-}
-
-pub trait AttachmentList: ApplicationStore {
-    fn list_attachments(
-        &self,
-        task_id: &str,
-    ) -> impl Future<Output = Result<Vec<AttachmentRecord>>> + Send;
-}
-
-pub trait AttachmentRead: ApplicationStore {
-    fn read_attachment(
-        &self,
-        task_id: &str,
-        attachment_id: &str,
-    ) -> impl Future<Output = Result<AttachmentContentRecord>> + Send;
-}
-
-pub trait AttachmentDelete: ApplicationStore {
-    fn delete_attachment(
-        &self,
-        command: DeleteAttachmentCommand,
-    ) -> impl Future<Output = Result<bool>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: AttachmentCreate,
     C: Clock,
 {
     pub async fn create_attachment(
@@ -104,10 +71,15 @@ where
             ));
         }
         let _mutation = self.mutation_gate.lock().await;
-        self.store
+        let root = self.application.store.attachment_root().ok_or_else(|| {
+            KanbanError::Storage("attachment root is not configured for this host".to_owned())
+        })?;
+        self.application
+            .store
+            .store
             .create_attachment(
                 &task_id,
-                CreateAttachmentRecord {
+                crate::CreateAttachmentInput {
                     id,
                     filename: filename.to_owned(),
                     rel_path: command.rel_path,
@@ -121,26 +93,33 @@ where
                     event_id: new_event_id(),
                     created_at: self.clock.now_ms(),
                 },
+                root,
             )
             .await
+            .map_err(crate::adapter::store_error)
+            .and_then(application_attachment)
     }
 }
 
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: AttachmentList,
     C: Clock,
 {
     pub async fn list_attachments(&self, task_id: &str) -> Result<Vec<AttachmentRecord>> {
-        self.store
+        self.application
+            .store
+            .store
             .list_attachments(&canonical_task_id(task_id)?)
             .await
+            .map_err(crate::adapter::store_error)?
+            .into_iter()
+            .map(application_attachment)
+            .collect()
     }
 }
 
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: AttachmentRead,
     C: Clock,
 {
     pub async fn read_attachment(
@@ -154,15 +133,25 @@ where
                 "attachment id must start with a_".to_owned(),
             ));
         }
-        self.store
-            .read_attachment(&task_id, attachment_id.trim())
+        let root = self.application.store.attachment_root().ok_or_else(|| {
+            KanbanError::Storage("attachment root is not configured for this host".to_owned())
+        })?;
+        let (record, content) = self
+            .application
+            .store
+            .store
+            .read_attachment(&task_id, attachment_id.trim(), root)
             .await
+            .map_err(crate::adapter::store_error)?;
+        Ok(AttachmentContentRecord {
+            attachment: application_attachment(record)?,
+            content,
+        })
     }
 }
 
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: AttachmentDelete,
     C: Clock,
 {
     pub async fn delete_attachment(&self, command: DeleteAttachmentCommand) -> Result<bool> {
@@ -180,14 +169,38 @@ where
             ));
         }
         let _mutation = self.mutation_gate.lock().await;
-        self.store
-            .delete_attachment(DeleteAttachmentCommand {
-                task_id,
-                attachment_id: attachment_id.to_owned(),
-                actor: actor.to_owned(),
-            })
+        let root = self.application.store.attachment_root().ok_or_else(|| {
+            KanbanError::Storage("attachment root is not configured for this host".to_owned())
+        })?;
+        self.application
+            .store
+            .store
+            .delete_attachment(
+                &task_id,
+                attachment_id,
+                root,
+                actor,
+                &new_event_id(),
+                self.clock.now_ms(),
+            )
             .await
+            .map_err(crate::adapter::store_error)
     }
+}
+
+fn application_attachment(attachment: crate::domain::AttachmentRecord) -> Result<AttachmentRecord> {
+    Ok(AttachmentRecord {
+        id: attachment.id,
+        board_id: attachment.board_id,
+        task_id: attachment.task_id,
+        filename: attachment.filename,
+        rel_path: attachment.rel_path,
+        content_type: attachment.content_type,
+        size_bytes: attachment.size_bytes,
+        sha256: attachment.sha256,
+        created_by: attachment.created_by,
+        created_at: attachment.created_at,
+    })
 }
 
 fn canonical_task_id(value: &str) -> Result<String> {

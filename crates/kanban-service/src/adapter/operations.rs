@@ -1,4 +1,3 @@
-mod attachment;
 mod context;
 mod dependency;
 mod entities;

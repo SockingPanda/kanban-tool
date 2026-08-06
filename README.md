@@ -61,7 +61,12 @@ kanban vector status
 ## 入口和功能面
 
 - **CLI**：普通命令通过 `kanban-client` 访问 localhost；`serve`、`init`、配置/board 选择、completion 和 Codex hook 是本地 shell 或 host 装配命令。
-- **MCP**：`kanban-mcp` 使用 stdio 和 `rmcp`，当前工具清单由 `crates/kanban-mcp/src/main.rs` 的稳定 inventory 测试锁定；所有 tool 都调用 typed client，不启动 host、不直接写数据库。
+- **MCP**：`kanban-mcp` 使用 stdio 和 `rmcp`。公开工具由
+  `kanban-protocol::MCP_OPERATION_CATALOG`（`mcp_operation_catalog()`）机器可读目录固定，
+  共 102 个 tool，覆盖全部 101 个非 host-admin HTTP operation；
+  `MCP_HOST_ADMIN_OPERATION_IDS` 明确禁止 12 个 host-admin operation。所有 tool 都调用
+  typed client，不启动 host、不直接写数据库。search/graph/vector 与 label atom-index 的
+  domain `rebuild`/`sync` 不属于这 12 个 host-admin operation，仍由 catalog 覆盖。
 - **Desktop**：Tauri/React shell 通过 typed HTTP 使用 `board`、`list`、`map`、`events`、`runs`、`signals`、`ontology`、`maintenance`、`health`、`settings` 十个导航视图；task detail、attachments、steps、comments、dependencies、context 和 maintenance 继续复用同一 host。
 
 CLI 的 canonical leaf 和 HTTP 的 method/path 由 `kanban-protocol` 的
@@ -79,7 +84,7 @@ neighborhood/map，以及 search index 的 status/doctor/rebuild/sync；完整�
 | search | Turso FTS `task_search_fts`；未 ready/stale 时由 service 回退 canonical SQL |
 | graph | `entities`、`relation_predicates`、`entity_relations` canonical；service 执行有深度上限、环检测和 board isolation 的 BFS |
 | vector/context | Turso `vector32`、host 内 Ollama provider 和 bounded context merge；provider 不可用时返回 degraded diagnostics |
-| maintenance/migration | host-owned doctor、checkpoint、backup、portable import/export、vacuum、projection rebuild/cleanup，以及可选 `legacy-sqlite-import` v30 importer |
+| maintenance/migration | host-owned doctor、checkpoint、backup、portable import/export、vacuum、`/api/v1/maintenance/rebuild`、`/api/v1/maintenance/cleanup`，以及可选 `legacy-sqlite-import` v30 importer |
 
 FTS、vector、graph、context 和 projection 均可从 canonical facts 删除后重建，不能反向改变业务事实。
 

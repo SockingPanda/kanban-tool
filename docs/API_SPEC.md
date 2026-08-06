@@ -50,7 +50,9 @@ host 未启动或 URL 不可达时，client 返回稳定的 `server_unavailable`
 | `POST` | `/api/v1/maintenance/rebuild` | projection rebuild |
 | `POST` | `/api/v1/maintenance/cleanup` | 仅清理可重建派生内容 |
 
-`projection_maintenance_owner` 保护并发；portable import 只写 canonical facts，提交后 enqueue FTS/vector/graph rebuild。MCP 不提供这些 host-admin mutations。
+`projection_maintenance_owner` 保护并发；portable import 只写 canonical facts，提交后 enqueue
+FTS/vector/graph rebuild。MCP 不提供这些 host-admin mutations；这不限制 MCP 对 search/graph/
+vector 或 label atom-index domain `rebuild`/`sync` 的调用。
 
 ## 4. Boards、tasks、plans、steps、dependencies
 

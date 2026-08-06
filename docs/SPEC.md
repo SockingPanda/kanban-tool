@@ -82,7 +82,12 @@ projection/admin、独立 lifecycle leaf 和 task-read 旧路径不属于 active
 
 ### 4.3 MCP
 
-`kanban-mcp` 是 Rust stdio server，当前 89 个 tool 的排序由 `crates/kanban-mcp/src/main.rs::tool_inventory_is_stable` 锁定，覆盖任务生命周期、labels/ontology/signals、graph/context/search/vector、comments/steps/dependencies、attachments、runs/events 和 boards。MCP 不启动 host、不打开数据库、不提供 migration/backup/vacuum/replace 管理命令。
+`kanban-mcp` 是 Rust stdio server。公开工具由
+`kanban-protocol::MCP_OPERATION_CATALOG`（`mcp_operation_catalog()`）机器可读目录固定，共
+102 个 tool，覆盖全部 101 个非 host-admin HTTP operation；
+`MCP_HOST_ADMIN_OPERATION_IDS` 明确禁止 12 个 host-admin operation。MCP 不启动 host、不打开
+数据库、不提供 migration/backup/vacuum/replace 管理命令；search/graph/vector 与 label
+atom-index 的 domain `rebuild`/`sync` 不属于这 12 个禁止项。
 
 ### 4.4 Desktop
 
@@ -104,7 +109,9 @@ schema family 为 `kanban.turso`，当前 lineage 为 v1/v2：queue/history、la
 1. **Turso v1 → v2 原地升级**：host 校验 family、exact shape、constraints、foreign keys 和 board isolation；创建 verified sibling backup 后运行事务 migration，失败 rollback，重复启动幂等。
 2. **portable/legacy 导入**：portable JSONL 只写 canonical facts，按 `import_journal` 记录 fingerprint/staging/phase，提交后入队 derived rebuild；`import-v30` 只读 legacy SQLite v30，attachment 先 staging、checksum/board isolation preflight，显式 feature 未启用则 fail-closed。
 
-backup、export/import、checkpoint、vacuum、projection rebuild/cleanup 和数据库替换都由 host 管理；MCP 不承载这些命令。
+backup、export/import、checkpoint、vacuum、`/api/v1/maintenance/rebuild|cleanup` 和数据库
+替换都由 host 管理；这里的 maintenance operation 不应与 MCP 可调用的 search/graph/vector
+或 label atom-index domain `rebuild`/`sync` 混同。MCP 不承载前述 host-admin 命令。
 
 ## 6. 契约和错误
 

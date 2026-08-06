@@ -1,6 +1,9 @@
 # Turso 全功能 parity ledger
 
-本账本以 `6ea277583e51ea010aa6739a53091337676b4cff` 为功能基线（下文简称 baseline），以当前工作树 `fbfc4dc3` 为实现快照。它回答四个问题：baseline 每个领域现在由谁拥有、HTTP/CLI/MCP/Desktop 通过什么入口、数据/语义如何迁移、哪些测试已经存在以及最终 gates 还缺什么。
+本账本以 `6ea277583e51ea010aa6739a53091337676b4cff` 为功能基线（下文简称 baseline），以当前主线
+基线 `5834e04c` 为本轮实现快照；source-doc 收敛后的最终 HEAD 与 full gates 仍待集成，保持
+`pending`。它回答四个问题：baseline 每个领域现在由谁拥有、HTTP/CLI/MCP/Desktop 通过什么入口、
+数据/语义如何迁移、哪些测试已经存在以及最终 gates 还缺什么。
 
 本账本不把 catalog、孤立文件或一次未运行的命令标为 green。状态含义：
 
@@ -13,7 +16,7 @@
 
 ## 0. 快照与证据口径
 
-baseline 的 machine source 是 `6ea277` 中的 migration、`crates/kanban-contract`、CLI args、Desktop navigation 和 helper/backend crates；当前 source 是 `Cargo.toml`、`crates/kanban-service/src/schema.rs`、`crates/kanban-server/src/http/operations/**`、`crates/kanban-client/src/**`、`crates/kanban-cli/src/main.rs`、`crates/kanban-mcp/src/main.rs`、`apps/desktop/src` 和 `crates/kanban-protocol` catalog。
+baseline 的 machine source 是 `6ea277` 中的 migration、`crates/kanban-contract`、CLI args、Desktop navigation 和 helper/backend crates；当前 source 是 `Cargo.toml`、`crates/kanban-service/src/schema.rs`、`crates/kanban-server/src/http/operations/**`、`crates/kanban-client/src/**`、`crates/kanban-cli/src/main.rs`、`crates/kanban-protocol/src/mcp.rs` 的 MCP catalog、`crates/kanban-mcp/src/main.rs` 的 adapter 对齐测试、`apps/desktop/src` 和 `crates/kanban-protocol` catalog。
 
 可复核命令：
 
@@ -21,7 +24,7 @@ baseline 的 machine source 是 `6ea277` 中的 migration、`crates/kanban-contr
 git show 6ea277583e51ea010aa6739a53091337676b4cff:migrations/001_initial.sql
 git show 6ea277583e51ea010aa6739a53091337676b4cff:apps/desktop/src/features/navigation/view-types.ts
 rg -n '\.route\(' crates/kanban-server/src/http/operations crates/kanban-server/src/vector.rs
-rg -n '#\[tool\(|name = "' crates/kanban-mcp/src
+rg -n 'MCP_OPERATION_CATALOG|MCP_HOST_ADMIN_OPERATION_IDS|mcp_operation_catalog' crates/kanban-protocol/src/mcp.rs crates/kanban-mcp/src/main.rs
 ```
 
 当前 active workspace 明确是七个产品 Rust crate（`kanban-core`、`kanban-service`、`kanban-protocol`、`kanban-client`、`kanban-server`、`kanban-cli`、`kanban-mcp`）、Desktop Tauri package 和私有 `xtask`。旧的 11 个 backend/helper sidecar 不再是 workspace/runtime 成员；它们只在 baseline source map、历史 release/projection 文档或迁移 fixture 中作为证据保留。
@@ -44,7 +47,7 @@ rg -n '#\[tool\(|name = "' crates/kanban-mcp/src
 | vector task chunks / label atoms | Turso `vector32` + host Ollama provider | `/vector/status/configure/rebuild/sync/query-*`；CLI vector；MCP read-only vector；Desktop context/ontology typed API | 导入只保留 canonical source；embedding/model/dimension/fingerprint 作为 derived metadata；provider outage 设 degraded 并保留 job | `vector32_roundtrip_dimension_and_cosine_are_real_turso_capabilities`；`vector_routes_use_typed_envelopes_and_degraded_query_error`；vector fixture producer/consumer tests；MCP vector inventory | `implemented-evidence`; Ollama integration/adoption/full gate pending |
 | graph/BFS/task map | service bounded BFS over canonical relations | `/graph/status/neighbors/query/rebuild/sync`、`/tasks/:id/neighborhood`、`/boards/:board/task-map`；CLI graph；MCP graph；Desktop Map | BFS depth/cycle/dedup/board isolation；graph projection 删除后 rebuild；不恢复 Oxigraph/helper protocol | `graph_status_and_task_map_routes_are_adopted`；`graph_maintenance_routes_publish_generation_and_counts`；Desktop TaskGraph tests | `implemented-evidence`; full repair/rebuild gate pending |
 | context pack | service context merge + FTS/BFS/vector adapters | `/tasks/:id/context`；CLI `context build`；MCP `context_build`；Desktop typed `KanbanApi.buildContext` | subject/reference/query selector；budget/depth/lexical/graph/vector limit；按 provenance 去重；provider degraded 保留可用部分 | `context_merge_is_stable_deduplicated_and_ranked`；`context_merge_enforces_budget_and_board_isolation`；server context route tests；CLI/MCP context contract tests | `implemented-evidence`; Desktop UI adoption/full gate pending |
-| projection state/jobs/maintenance owner | service host projection worker + maintenance lease | `/maintenance/status/run/rebuild/cleanup`、doctor/checkpoint/backup/export/import/vacuum；CLI host-admin；Desktop Maintenance/Health；MCP 不提供 | job generation/fingerprint/lease/retry/degraded；derived 可删可 rebuild；cleanup 不得删 canonical | `maintenance_status_and_run_release_owner_lease`；`maintenance_rebuild_executes_search_graph_and_leaves_unavailable_vector_pending`；`maintenance_cleanup_does_not_delete_canonical_facts`；`maintenance_lease_competition_is_fail_closed` | `implemented-evidence`; final maintenance/full gate pending |
+| projection state/jobs/maintenance owner | service host projection worker + maintenance lease | `/maintenance/status/run/rebuild/cleanup`、doctor/checkpoint/backup/export/import/vacuum；CLI host-admin；Desktop Maintenance/Health；MCP 不提供 host-admin maintenance | job generation/fingerprint/lease/retry/degraded；derived 可删可 rebuild；cleanup 不得删 canonical；domain search/graph/vector/atom-index `rebuild`/`sync` 仍走各自 operation | `maintenance_status_and_run_release_owner_lease`；`maintenance_rebuild_executes_search_graph_and_leaves_unavailable_vector_pending`；`maintenance_cleanup_does_not_delete_canonical_facts`；`maintenance_lease_competition_is_fail_closed` | `implemented-evidence`; final maintenance/full gate pending |
 | schema/migration metadata | service schema/migration | host startup + maintenance doctor；CLI/HTTP/Desktop host-admin | v1→v2 exact shape + verified sibling backup + transaction rollback；portable JSONL 与 legacy SQLite v30 走独立 journal/fingerprint | `fresh_database_records_full_turso_lineage`；`current_v1_fixture_is_adopted_and_upgraded`；`unknown_same_number_schema_is_rejected_without_adoption`；`migration_failure_rolls_back_schema_and_ledger_changes`；portable replace/rollback tests | `implemented-evidence`; v30 feature gate/adoption pending |
 
 ## 2. Lifecycle parity
@@ -72,9 +75,16 @@ rg -n '#\[tool\(|name = "' crates/kanban-mcp/src
 
 ### MCP
 
-baseline 没有 MCP；当前 `KanbanMcp::tool_router()` 的稳定 inventory 有 89 个 tool，涵盖 board/task/lifecycle/step/comment/attachment/dependency/event/run/search/context/label/ontology/signal/graph/vector。MCP 只调用 `KanbanClient`，不启动 host、不提供 migration/backup/vacuum/replace。
+baseline 没有 MCP；当前 `kanban-protocol::MCP_OPERATION_CATALOG` 是唯一 machine-readable
+source，共 102 个 tool，覆盖全部 101 个非 host-admin HTTP operation。`MCP_HOST_ADMIN_OPERATION_IDS`
+明确禁止 12 个 host-admin operation；search/graph/vector 与 label atom-index 的 domain
+`rebuild`/`sync` 不在禁止项内。MCP 只调用 `KanbanClient`，不启动 host、不提供
+migration/backup/vacuum/replace。
 
-实际 evidence：`tool_inventory_is_stable`、各 family 的 independent locatability tests、protocol tool schema。剩余 gate 是 MCP package/adoption witness 的实际执行与 Desktop/MCP cross-surface acceptance。
+实际 evidence：protocol `catalog_is_valid_and_has_unique_sorted_tool_names`、
+`host_admin_operations_are_never_bound`，以及 `kanban-mcp` 的 `tool_inventory_is_stable`、各
+family independent locatability tests 和 protocol tool schema。剩余 gate 是 MCP
+package/adoption witness 的实际执行与 Desktop/MCP cross-surface acceptance。
 
 ### Desktop
 
@@ -113,6 +123,7 @@ portable path 导出/导入 canonical facts，`replace=true` 在 host 独占窗�
 | `just schema-docs` | spec bundle、schema marker、fixture 映射 | 已运行，14 项 marker 测试通过；不因 bundle 生成成功自动通过 runtime gate |
 | `just schema-surface-audit` | 实际 HTTP/CLI/MCP surface 与 catalog 对齐 | 未运行，不标 green |
 | `just schema-adoption-witness` | exact producer/consumer witness | 未运行，不标 green |
+| final HEAD / full gate | 集成后的最终 revision 与完整 runtime/full 证据 | pending；本账本不预先宣称通过 |
 | 受影响 Rust/CLI/MCP/Desktop package tests | 纵向行为和 UI contract | 本文记录已有测试名；未跑的 package/full 结果保持未知 |
 | release/package/PR | 发布/外部协调 | 明确不在本任务范围 |
 

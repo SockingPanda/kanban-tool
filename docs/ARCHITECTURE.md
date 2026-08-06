@@ -94,13 +94,20 @@ canonical mutation 写 facts、event 和 `projection_jobs`；FTS、vector、rela
 1. **Turso v1 → v2 原地升级**：host 先检查 schema family、table/column/index/trigger/constraint、foreign keys 和 board isolation，创建 verified sibling backup，然后在事务内升级；失败 rollback，重复启动幂等。
 2. **portable/legacy 导入**：portable JSONL 只导入 canonical facts，`import_journal` 记录 fingerprint、staging 和 phase，提交后 enqueue derived rebuild；`import-v30` 只读 legacy SQLite v30，attachment 先做 schema/计数/checksum/board preflight，在显式 `legacy-sqlite-import` feature 下由 service 执行，默认构建 fail-closed。
 
-backup、export/import、checkpoint、vacuum、maintenance/rebuild/cleanup 和 database replace 都是 host-admin operation。CLI、HTTP、Desktop 管理入口复用 host；MCP 只承载领域 query/mutation，不承载数据库替换或迁移管理。
+backup、export/import、checkpoint、vacuum、`/api/v1/maintenance/rebuild|cleanup` 和 database
+replace 都是 host-admin operation。CLI、HTTP、Desktop 管理入口复用 host；MCP 只承载领域
+query/mutation，不承载数据库替换或迁移管理。search/graph/vector 与 label atom-index 的
+domain `rebuild`/`sync` 不属于 host-admin surface。
 
 ## 6. Surface 与 worker
 
 `kanban-server/src/http/operations` 当前合并 boards、tasks、steps、comments、attachments、dependencies、entities、graph、search、context、labels、ontology、signals、runs、events、stats、maintenance 和 vector routers；`/health`、`/api/v1/stream/events` 也由 host 提供。真实 route 与 `kanban-protocol::endpoint_catalog()` 必须同步，但 catalog/adoption descriptor 不能替代 actual route test。
 
-CLI domain 命令、MCP 89-tool inventory 和 Desktop 十个导航视图都通过 typed client 接入。Desktop Tauri command 不持有 Turso；claim token 仅在会话状态中保存。维护操作显示 host 返回的 phase、degraded 和 `restart_required`，不凭 UI 状态推断 canonical 成功。
+CLI domain 命令、MCP protocol machine-readable catalog（102 个 tool，覆盖 101 个非
+host-admin HTTP operation）和 Desktop 十个导航视图都通过 typed client 接入；catalog 明确
+拒绝 12 个 host-admin operation。Desktop Tauri command 不持有 Turso；claim token 仅在会话
+状态中保存。维护操作显示 host 返回的 phase、degraded 和 `restart_required`，不凭 UI 状态
+推断 canonical 成功。
 
 dispatcher 只有传入 `--dispatcher-profile` 才启动，轮询 `ready`、复用 claim/heartbeat/finish、优雅停止等待当前 worker；projection worker 与 host 共用 lifecycle/maintenance lease，按 job generation 处理 FTS/vector/relations/context。两类 worker 都不打开第二数据库、不维护第二状态机、不直接改 adapter DTO。
 

@@ -1,6 +1,9 @@
 # Codex Cloud 环境
 
-本页记录 `kanban-tool` 在 Codex Cloud 中使用的前端 / 后端验证环境。它只用于云端开发、测试、lint 和 PR 差异检查，不是产品部署方案，也不改变本项目仅使用 SQLite、本地单用户、localhost Web 的架构边界。dispatcher 只是仓库内暂时保留的实验性能力，不属于公开支持或云端部署路径。
+本页记录 `kanban-tool` 在 Codex Cloud 中使用的前端 / 后端验证环境。它只用于云端开发、测试、lint
+和差异检查，不是产品部署方案。产品仍是本地优先、单机单用户；`kanban serve` 是唯一 host 和
+canonical Turso owner，CLI、MCP、Desktop 与 dispatcher 只能通过 typed localhost HTTP/SSE 使用它。
+Cloud 不能替代 host，也不改变这一边界。
 
 官方边界：
 
@@ -65,7 +68,8 @@ CODEX_CLOUD_PREWARM_DESKTOP=0
 just affected base=main
 ```
 
-日常 Rust 后端、CLI、SQLite 和服务器 API 验证覆盖当前核心 workspace crate：
+日常 Rust、CLI、protocol、MCP 和服务器 API 验证覆盖当前 active workspace 的核心 crate；当前没有
+需要单独验证的外部 backend lane：
 
 ```bash
 just rust-fast
@@ -97,7 +101,7 @@ just test-p kanban-cli
 just clippy-p kanban-cli
 ```
 
-完整 Rust 验证：
+跨 workspace 的 Rust 验证：
 
 ```bash
 just rust-full
@@ -108,14 +112,38 @@ just rust-full
 `full_gate_commands`（`just rust-full`）。这是可审计的人工复核建议，不会自动执行
 package/release 流程。
 
-桌面前端与 Tauri 检查：
+`rust-full` 是当前 `justfile` 中的完整 Rust recipe，展开为 `fmt-full`、`check-full`、
+`test-full` 和 `clippy-full`；它仍不包含 Desktop 与 `xtask`。需要单包验证时，使用当前真实
+的 `check-p`、`test-p` 和 `clippy-p`；不要为当前 `justfile` 未定义的路径创建额外 recipe。
+
+当前 Desktop 与打包相关的真实 recipes 包括：
 
 ```bash
 just web-typecheck
 just web-test
 just web-build
 just desktop-check
+just cli-package
+just desktop-package
+just cli-package-layout
+just desktop-package-layout
+just desktop-package-config
 ```
+
+`desktop-package`、`cli-package` 和 layout/config 检查是否执行，取决于本次改动的实际影响；
+它们不等于部署或发布完成。
+
+跨 workspace Rust recipe 的等价核心步骤（只在需要逐项证据时使用）：
+
+```bash
+just fmt-full
+just check-full
+just test-full
+just clippy-full
+```
+
+`docs/release/*.md` 顶部均标为“历史归档”，只保留 baseline/provenance 证据；本页不把历史
+release 文档或其中的旧 wrapper 当作当前 Cloud recipe、runtime 或完成证明。
 
 ## 提示词模板
 
@@ -132,8 +160,10 @@ Cloud 验证任务可使用下面的提示词：
 仅涉及后端时：
 
 ```text
-按照 AGENTS.md 验证当前分支的后端、CLI 和 SQLite 行为。
-日常核心验证运行 `just rust-fast`；如果影响依赖较重的辅助 crate，则运行 `just rust-full`。`just test` 和 `just clippy` 默认只覆盖核心范围；辅助 crate 需要显式覆盖时，使用 `just test-full` 和 `just clippy-full`。
+按照 AGENTS.md 验证当前分支的 Turso host、后端、CLI 和 MCP 行为。
+日常核心验证运行 `just rust-fast`；跨 workspace 时运行 `just rust-full`。`just test` 和
+`just clippy` 默认覆盖核心范围；需要显式扩大范围时，使用 `just test-full` 和
+`just clippy-full`。
 只修复当前分支导致的失败，并报告命令证据。
 ```
 
@@ -150,8 +180,8 @@ Cloud 验证任务可使用下面的提示词：
 
 Codex Cloud 可以节省本机 CPU、内存和编译时间，但必须明确以下边界：
 
-- 它看不到开发机上的本地 SQLite 数据库、localhost 服务或其他仅存在于开发机的进程与会话。
-- 它不是 `kanban serve`、实验性 dispatcher 或 Desktop 的部署目标。
+- 它看不到开发机上的本地 Turso 数据库、localhost 服务或其他仅存在于开发机的进程与会话。
+- 它不是 `kanban serve`、同进程 dispatcher 或 Desktop 的部署目标。
 - 它不得引入云同步、远程 worker、多用户、RBAC、组织、邀请或 SaaS 假设。
 - 只有 Linux 系统依赖齐全时，才能在 Cloud 中打包 Tauri；实际桌面托盘 / 窗口行为在相关改动中仍需本地人工验证。
 - 除非任务明确需要当前外部信息，否则 agent 联网权限应保持关闭。
@@ -160,9 +190,6 @@ Codex Cloud 可以节省本机 CPU、内存和编译时间，但必须明确以�
 
 如果 `just` 命令试图写入不存在的本地路径，请确认环境设置或 `~/.bashrc` 中的
 `KANBAN_CARGO_TARGET_ROOT` 与 `CARGO_TARGET_DIR` 被设为完全相同的路径。
-
-如果 `just check` 在 `lance-encoding` 中因 `google/protobuf/empty.proto: File not found`
-失败，请重新运行维护脚本或重置环境缓存，确保安装 `protobuf-compiler` 和 `libprotobuf-dev`。
 
 如果 `desktop-package` 因缺少 `webkit2gtk` 失败，请重置环境缓存，并以
 `CODEX_CLOUD_INSTALL_TAURI_DEPS=1` 重新运行安装脚本。

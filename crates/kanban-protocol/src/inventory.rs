@@ -4857,7 +4857,7 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             let mut inventory = hybrid_static_inventory();
             adopt_phase5_api_contracts(&mut inventory);
             adopt_protocol_contracts(&mut inventory);
-            inventory.extend(portable_operation_contracts());
+            inventory.extend(crate::portable_operation_contracts());
             inventory.extend(crate::headers::header_operation_contracts());
             inventory.extend(attachment_api_contracts());
             converge_history_catalog_contracts(&mut inventory);
@@ -6510,67 +6510,4 @@ fn protocol_adoption_spec(id: &str) -> Option<ProtocolAdoptionSpec> {
         _ => return None,
     };
     Some(spec)
-}
-
-fn portable_operation_contracts() -> Vec<OperationContract> {
-    crate::portable_contract_catalog()
-        .iter()
-        .flat_map(|descriptor| {
-            [
-                portable_operation_contract(
-                    descriptor.operation_key,
-                    &descriptor.input,
-                    ContractDirection::Deserialize,
-                ),
-                portable_operation_contract(
-                    descriptor.operation_key,
-                    &descriptor.output,
-                    ContractDirection::Serialize,
-                ),
-            ]
-        })
-        .collect()
-}
-
-fn portable_operation_contract(
-    operation: &'static str,
-    side: &'static crate::PortableContractSide,
-    direction: ContractDirection,
-) -> OperationContract {
-    OperationContract {
-        id: side.contract_id,
-        path: operation,
-        surface: ContractSurface::Jsonl,
-        operation,
-        direction,
-        granularity: ContractGranularity::Exact,
-        strictness: ContractStrictness::DenyUnknownFields,
-        schema_id: Some(side.schema_id),
-        fixture: Some(side.fixture),
-        adoption: Some(AdoptionEvidence {
-            producer_fixture: side.fixture,
-            producer: AdoptionWitness {
-                operation,
-                contract_id: side.contract_id,
-                surface: ContractSurface::Jsonl,
-                direction,
-                package: "kanban-server",
-                test_target: side.test_target,
-                exact_test: side.producer_test,
-            },
-            consumer: AdoptionWitness {
-                operation,
-                contract_id: side.contract_id,
-                surface: ContractSurface::Jsonl,
-                direction,
-                package: "kanban-server",
-                test_target: side.test_target,
-                exact_test: side.consumer_test,
-            },
-        }),
-        exclusion: None,
-        migration: MigrationState::Adopted,
-        transport: ContractTransport::NoTransport,
-        binding: ContractBinding::ExactSurface,
-    }
 }

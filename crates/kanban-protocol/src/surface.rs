@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::{ContractSurface, MigrationState, endpoint_catalog, portable_contract_catalog};
+use crate::{ContractSurface, MigrationState, endpoint_catalog};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SurfaceOperation {
@@ -338,17 +338,7 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "config.selected-worker-profile.input"
         ),
     ];
-    operations.extend(
-        portable_contract_catalog()
-            .iter()
-            .map(|descriptor| SurfaceOperation {
-                key: descriptor.operation_key.to_owned(),
-                surface: ContractSurface::Jsonl,
-                contracts: vec![descriptor.input.contract_id, descriptor.output.contract_id],
-                migration: MigrationState::Adopted,
-                exclusion: None,
-            }),
-    );
+    operations.extend(crate::portable::surface_catalog());
     operations
 }
 

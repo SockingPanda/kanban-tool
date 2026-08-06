@@ -101,7 +101,8 @@ pub fn operation_catalog() -> &'static [OperationDeclaration] {
                 + crate::history_catalog::operation_declarations().len()
                 + crate::labels_catalog::operation_declarations().len()
                 + crate::knowledge_catalog::operation_declarations().len()
-                + crate::admin_catalog::operation_declarations().len(),
+                + crate::admin_catalog::operation_declarations().len()
+                + crate::portable::operation_declarations().len(),
         );
         declarations.extend_from_slice(crate::board_catalog::operation_declarations());
         declarations.extend_from_slice(crate::task_catalog::operation_declarations());
@@ -111,6 +112,7 @@ pub fn operation_catalog() -> &'static [OperationDeclaration] {
         declarations.extend_from_slice(crate::labels_catalog::operation_declarations());
         declarations.extend_from_slice(crate::knowledge_catalog::operation_declarations());
         declarations.extend_from_slice(crate::admin_catalog::operation_declarations());
+        declarations.extend_from_slice(crate::portable::operation_declarations());
         declarations
     })
     .as_slice()
@@ -275,7 +277,7 @@ mod tests {
 
     #[test]
     fn migrated_domain_source_is_exposed_without_legacy_duplication() {
-        assert_eq!(operation_catalog().len(), 120);
+        assert_eq!(operation_catalog().len(), 141);
         assert_eq!(
             operation_catalog()
                 .iter()
@@ -316,6 +318,11 @@ mod tests {
                 )
                 .chain(
                     crate::admin_catalog::operation_declarations()
+                        .iter()
+                        .map(|operation| operation.operation_id),
+                )
+                .chain(
+                    crate::portable::operation_declarations()
                         .iter()
                         .map(|operation| operation.operation_id),
                 )

@@ -169,7 +169,8 @@ pub use operation_catalog::{
 };
 pub use portable::{
     PortableContractDescriptor, PortableContractLane, PortableContractSide,
-    portable_contract_catalog,
+    operation_declarations as portable_operation_declarations, portable_contract_catalog,
+    portable_operation_contracts,
 };
 pub use protocols::*;
 pub use runs::{

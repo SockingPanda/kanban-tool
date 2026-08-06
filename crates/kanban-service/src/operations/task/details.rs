@@ -4,9 +4,8 @@ use kanban_core::{Clock, KanbanError, Result};
 use serde_json::{Value, json};
 
 use crate::{
-    ApplicationService, ApplicationStore, CommentList, CommentRecord, DependencyList,
-    DependencySnapshotRecord, EventList, EventListOptions, EventRecord, LabelOntologyOperations,
-    RunList, RunRecord, StepList, StepRecord, TaskRecord,
+    CommentRecord, DependencySnapshotRecord, EventListOptions, EventRecord, KanbanService,
+    RunRecord, StepRecord, TaskRecord,
 };
 
 /// task show 的可选聚合读取结果。各集合均来自 canonical host，adapter 不负责拼接业务语义。
@@ -82,23 +81,16 @@ pub struct TaskOntologySignalSummaryRecord {
 }
 
 /// 由 application service 聚合 task 的 canonical 相关记录。
-pub trait TaskDetailRead: ApplicationStore {
+pub trait TaskDetailRead {
     fn get_task_detail_parts(
         &self,
         task_id: &str,
     ) -> impl Future<Output = Result<TaskDetailRecord>> + Send;
 }
 
-impl<S> TaskDetailRead for S
+impl<C> TaskDetailRead for KanbanService<C>
 where
-    S: ApplicationStore
-        + crate::TaskShow
-        + DependencyList
-        + StepList
-        + CommentList
-        + RunList
-        + EventList
-        + LabelOntologyOperations,
+    C: Clock,
 {
     async fn get_task_detail_parts(&self, task_id: &str) -> Result<TaskDetailRecord> {
         let task = self.get_task(task_id).await?;
@@ -139,14 +131,14 @@ where
     }
 }
 
-async fn ontology_summary<S>(
-    store: &S,
+async fn ontology_summary<C>(
+    store: &KanbanService<C>,
     board: &str,
     task_id: &str,
     task_ref: &str,
 ) -> TaskDetailOntologyRecord
 where
-    S: ApplicationStore + LabelOntologyOperations,
+    C: Clock,
 {
     let signals = store
         .label_ontology(
@@ -355,9 +347,8 @@ fn signal_status_priority(status: &str) -> u8 {
     }
 }
 
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: TaskDetailRead,
     C: Clock,
 {
     pub async fn get_task_details(&self, task_id: &str) -> Result<TaskDetailRecord> {
@@ -367,6 +358,6 @@ where
                 "task_id must be a global t_... id".to_owned(),
             ));
         }
-        self.store.get_task_detail_parts(task_id).await
+        self.get_task_detail_parts(task_id).await
     }
 }

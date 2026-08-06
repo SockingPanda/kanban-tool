@@ -29,7 +29,8 @@ pub use attachment::{
     CreateAttachmentRecord, DeleteAttachmentCommand,
 };
 pub use board::{ArchiveBoardCommand, ArchiveBoardRecord, CreateBoardCommand, CreateBoardRecord};
-pub use comment::{CommentCreate, CommentList, CreateCommentCommand, CreateCommentRecord};
+pub(crate) use comment::application_comment;
+pub use comment::{CreateCommentCommand, CreateCommentRecord};
 pub use context::{
     ContextBuild, ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence,
     ContextItem, ContextPack, ContextPolicy, ContextProviderStatus, ContextSources,
@@ -53,6 +54,7 @@ pub use relations::{
     RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationQuery,
     RelationUpsertCommand,
 };
+pub(crate) use run::application_run;
 pub use run::*;
 pub use search::{
     MAX_SEARCH_LIMIT, SearchHit, SearchIndexStatus, SearchMeta, SearchQuery, SearchResults,

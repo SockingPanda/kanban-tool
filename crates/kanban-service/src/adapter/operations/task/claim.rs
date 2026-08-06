@@ -5,7 +5,8 @@ use crate::{
 use crate::{ClaimTaskInput as StoreClaimTask, StoreClaimTaskRecord as StoreClaim};
 use kanban_core::Result;
 
-use crate::adapter::{TursoApplicationStore, application_run, application_task, store_error};
+use crate::adapter::{TursoApplicationStore, application_task, store_error};
+use crate::operations::application_run;
 
 impl TaskClaim for TursoApplicationStore {
     async fn get_task(&self, task_id: &str) -> Result<ApplicationTask> {

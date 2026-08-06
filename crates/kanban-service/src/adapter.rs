@@ -5,12 +5,10 @@ use std::{
 
 use crate::{
     AddTaskLabelsRecord as ApplicationAddTaskLabelsRecord, ApplicationStore,
-    CommentAuthorType as ApplicationCommentAuthorType, CommentKind as ApplicationCommentKind,
-    CommentRecord as ApplicationComment, DependencyEdgeRecord as ApplicationDependencyEdge,
+    DependencyEdgeRecord as ApplicationDependencyEdge,
     DependencySnapshotRecord as ApplicationDependencySnapshot,
     ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
-    LabelRecord as ApplicationLabel, RunRecord as ApplicationRun,
-    RunStatus as ApplicationRunStatus, SignalObservationRecord as ApplicationSignalObservation,
+    LabelRecord as ApplicationLabel, SignalObservationRecord as ApplicationSignalObservation,
     SignalRecord as ApplicationSignal, SignalRecordResult as ApplicationSignalResult,
     SignalStatus as ApplicationSignalStatus, StepRecord as ApplicationStep,
     TaskRecord as ApplicationTask,
@@ -20,7 +18,6 @@ use crate::{
     domain::{
         DependencySnapshotRecord as StoreDependencySnapshot,
         TaskExecutionPlanRecord as StoreExecutionPlan, TaskRecord as StoreTask,
-        TaskRunRecord as StoreRun,
     },
 };
 use kanban_core::{KanbanError, Result, TaskStatus};
@@ -350,73 +347,6 @@ fn application_execution_plan(plan: StoreExecutionPlan) -> Result<ApplicationExe
     })
 }
 
-pub(crate) fn application_run(run: StoreRun) -> Result<ApplicationRun> {
-    let status = match run.status.as_str() {
-        "running" => ApplicationRunStatus::Running,
-        "succeeded" => ApplicationRunStatus::Succeeded,
-        "failed" => ApplicationRunStatus::Failed,
-        "canceled" => ApplicationRunStatus::Canceled,
-        "expired" => ApplicationRunStatus::Expired,
-        other => {
-            return Err(KanbanError::Storage(format!(
-                "stored run status is invalid: {other}"
-            )));
-        }
-    };
-    Ok(ApplicationRun {
-        id: run.id,
-        board_id: run.board_id,
-        task_id: run.task_id,
-        status,
-        worker_profile: run.worker_profile,
-        worker_pid: run.worker_pid,
-        claim_owner: run.claim_owner,
-        claim_expires_at: run.claim_expires_at,
-        started_at: run.started_at,
-        last_heartbeat_at: run.last_heartbeat_at,
-        finished_at: run.finished_at,
-        exit_code: run.exit_code,
-        summary: run.summary,
-        error: run.error,
-        log_path: run.log_path,
-        metadata_json: run.metadata_json,
-    })
-}
-
-fn application_comment(comment: crate::domain::CommentRecord) -> Result<ApplicationComment> {
-    let author_type = match comment.author_type.as_str() {
-        "user" => ApplicationCommentAuthorType::User,
-        "agent" => ApplicationCommentAuthorType::Agent,
-        other => {
-            return Err(KanbanError::Storage(format!(
-                "stored comment author_type is invalid: {other}"
-            )));
-        }
-    };
-    let kind = match comment.kind.as_str() {
-        "note" => ApplicationCommentKind::Note,
-        "decision" => ApplicationCommentKind::Decision,
-        "signal" => ApplicationCommentKind::Signal,
-        other => {
-            return Err(KanbanError::Storage(format!(
-                "stored comment kind is invalid: {other}"
-            )));
-        }
-    };
-    Ok(ApplicationComment {
-        id: comment.id,
-        board_id: comment.board_id,
-        task_id: comment.task_id,
-        author: comment.author,
-        author_type,
-        agent_type: comment.agent_type,
-        body: comment.body,
-        kind,
-        metadata_json: comment.metadata_json,
-        created_at: comment.created_at,
-    })
-}
-
 pub(crate) fn application_signal_status(status: String) -> Result<ApplicationSignalStatus> {
     match status.as_str() {
         "open" => Ok(ApplicationSignalStatus::Open),
@@ -470,7 +400,7 @@ pub(crate) fn application_signal_result(
         signal: application_signal(result.signal)?,
         backlink_comment: result
             .backlink_comment
-            .map(application_comment)
+            .map(crate::operations::application_comment)
             .transpose()?,
     })
 }

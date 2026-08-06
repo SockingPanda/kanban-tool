@@ -171,6 +171,16 @@ pub(crate) async fn bootstrap_task_label(
             positive_examples: body.positive_examples,
             negative_examples: body.negative_examples,
             actor,
+            verify: body.verify,
+            min_verify_score: body.min_verify_score,
+            vector_config: body
+                .vector_config
+                .map(|config| kanban_service::VectorConfig {
+                    provider: config.provider,
+                    endpoint: config.endpoint,
+                    model: config.model,
+                    dimensions: config.dimensions,
+                }),
         })
         .await?;
     Ok((
@@ -179,9 +189,23 @@ pub(crate) async fn bootstrap_task_label(
             data: kanban_protocol::BootstrapTaskLabelData {
                 task: api_task(record.task)?,
                 semantics: api_semantics(record.semantics),
+                verification: record.verification.map(api_verification),
             },
         }),
     ))
+}
+
+fn api_verification(
+    value: kanban_service::BootstrapTaskLabelVerification,
+) -> kanban_protocol::BootstrapTaskLabelVerification {
+    kanban_protocol::BootstrapTaskLabelVerification {
+        label_name: value.label_name,
+        score: value.score,
+        source: value.source,
+        min_score: value.min_score,
+        degraded: value.degraded,
+        diagnostics: value.diagnostics,
+    }
 }
 
 pub(super) fn router() -> Router<AppState> {

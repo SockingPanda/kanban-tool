@@ -3,8 +3,9 @@ use std::collections::HashSet;
 use kanban_core::{Clock, KanbanError, Result, new_event_id, new_typed_id};
 
 use crate::{
-    AddTaskLabelsInput, BootstrapTaskLabelInput, DeleteBoardLabelInput, KanbanService,
-    LabelAtomRecord, LabelRecord, LabelSemanticsRecord, TaskRecord,
+    AddTaskLabelsInput, BootstrapTaskLabelInput, BootstrapTaskLabelVerification,
+    DeleteBoardLabelInput, KanbanService, LabelAtomRecord, LabelRecord, LabelSemanticsRecord,
+    TaskRecord, VectorConfig,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,7 +53,7 @@ pub struct DeleteBoardLabelRecord {
     pub removed_atoms: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BootstrapTaskLabelCommand {
     pub task_id: String,
     pub name: String,
@@ -62,12 +63,16 @@ pub struct BootstrapTaskLabelCommand {
     pub positive_examples: Vec<String>,
     pub negative_examples: Vec<String>,
     pub actor: String,
+    pub verify: bool,
+    pub min_verify_score: f32,
+    pub vector_config: Option<VectorConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BootstrapTaskLabelRecord {
     pub task: TaskRecord,
     pub semantics: LabelSemanticsRecord,
+    pub verification: Option<BootstrapTaskLabelVerification>,
 }
 
 impl<C> KanbanService<C>
@@ -221,6 +226,88 @@ where
     ) -> Result<BootstrapTaskLabelRecord> {
         let task_id = global_task_id(&command.task_id)?;
         let actor = required_trimmed(&command.actor, "actor is required")?;
+        let verify = command.verify || command.vector_config.is_some();
+        if verify && !(0.0..=1.0).contains(&command.min_verify_score) {
+            return Err(KanbanError::InvalidInput(
+                "min_verify_score 必须在 0 到 1 之间".to_owned(),
+            ));
+        }
+        let verification_snapshot = if verify {
+            let task = self
+                .store
+                .get_task_global(task_id)
+                .await
+                .map_err(crate::error::store_error)?;
+            let ontology_digest = self
+                .store
+                .bootstrap_ontology_digest(&task.board_id)
+                .await
+                .map_err(crate::error::store_error)?;
+            let task_suggest_digest = crate::store_operations::bootstrap_task_suggest_digest(
+                &task.title,
+                task.description.as_deref(),
+            );
+            let label_state_digest = self
+                .store
+                .bootstrap_label_state_digest(&task.board_id, &command.name)
+                .await
+                .map_err(crate::error::store_error)?;
+            Some((
+                task.lock_version,
+                task_suggest_digest,
+                label_state_digest,
+                ontology_digest,
+            ))
+        } else {
+            None
+        };
+        // provider 调用在 gate 外执行；canonical transaction 仍由 gate 串行化，并在
+        // store 内以 task/label/ontology 快照做最后一次 CAS。
+        let verification = if verify {
+            let config = match command.vector_config.clone() {
+                Some(config) => config,
+                None => self
+                    .store
+                    .vector_config()
+                    .await
+                    .map_err(crate::error::store_error)?
+                    .ok_or_else(|| {
+                        KanbanError::InvalidInput(
+                            "label bootstrap verification 需要已配置的 vector provider；请传入 vector config，或先配置 vector"
+                                .to_owned(),
+                        )
+                    })?,
+            };
+            Some(
+                crate::vector::verify_bootstrap_task_label(
+                    &self.store,
+                    task_id,
+                    &BootstrapTaskLabelInput {
+                        label_id: "l_bootstrap_verify".to_owned(),
+                        event_id: "evt_bootstrap_verify".to_owned(),
+                        name: command.name.clone(),
+                        description: command.description.clone(),
+                        applies_when: command.applies_when.clone(),
+                        excludes_when: command.excludes_when.clone(),
+                        positive_examples: command.positive_examples.clone(),
+                        negative_examples: command.negative_examples.clone(),
+                        actor: actor.to_owned(),
+                        now: self.clock.now_ms(),
+                        expected_task_lock_version: None,
+                        expected_task_suggest_digest: None,
+                        expected_label_state_digest: None,
+                        expected_ontology_digest: None,
+                        verification_context: None,
+                    },
+                    &config,
+                    command.min_verify_score,
+                )
+                .await
+                .map_err(crate::error::store_error)?,
+            )
+        } else {
+            None
+        };
         let _mutation = self.mutation_gate.lock().await;
         let record = self
             .store
@@ -237,6 +324,22 @@ where
                     negative_examples: command.negative_examples,
                     actor: actor.to_owned(),
                     now: self.clock.now_ms(),
+                    expected_task_lock_version: verification_snapshot
+                        .as_ref()
+                        .map(|(lock_version, _, _, _)| *lock_version),
+                    expected_task_suggest_digest: verification_snapshot
+                        .as_ref()
+                        .map(|(_, digest, _, _)| digest.clone()),
+                    expected_label_state_digest: verification_snapshot
+                        .as_ref()
+                        .map(|(_, _, digest, _)| digest.clone()),
+                    expected_ontology_digest: verification_snapshot
+                        .as_ref()
+                        .map(|(_, _, _, digest)| digest.clone()),
+                    verification_context: verification
+                        .as_ref()
+                        .map(verification_context_json)
+                        .transpose()?,
                 },
             )
             .await
@@ -244,6 +347,7 @@ where
         Ok(BootstrapTaskLabelRecord {
             task: super::application_task(record.task)?,
             semantics: application_semantics(record.semantics),
+            verification,
         })
     }
 }
@@ -256,6 +360,20 @@ fn global_task_id(value: &str) -> Result<&str> {
         ));
     }
     Ok(value)
+}
+
+fn verification_context_json(value: &BootstrapTaskLabelVerification) -> Result<String> {
+    serde_json::to_string(&serde_json::json!({
+        "bootstrap_verification": {
+            "label_name": &value.label_name,
+            "score": value.score,
+            "source": &value.source,
+            "min_score": value.min_score,
+            "degraded": value.degraded,
+            "diagnostics": &value.diagnostics,
+        }
+    }))
+    .map_err(|error| KanbanError::InvalidInput(format!("verification context 无效：{error}")))
 }
 
 pub(crate) fn application_label(label: crate::domain::LabelRecord) -> LabelRecord {

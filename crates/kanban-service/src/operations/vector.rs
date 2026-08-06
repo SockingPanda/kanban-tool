@@ -304,10 +304,17 @@ fn vector_store_error(error: crate::StoreError) -> KanbanError {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
     use super::{
         KanbanService, VectorChunkQueryCommand, VectorConfigureCommand, VectorLabelAtomQueryCommand,
     };
-    use crate::TursoStore;
+    use crate::{
+        BootstrapTaskLabelCommand, TursoStore, VectorConfig,
+        test_support::{count_rows, create_input},
+    };
 
     async fn service() -> (tempfile::TempDir, KanbanService) {
         let directory = tempfile::tempdir().expect("temporary database directory");
@@ -379,5 +386,382 @@ mod tests {
             .await
             .expect_err("empty query");
         assert!(error.to_string().contains("非空 q"));
+    }
+
+    fn mock_ollama() -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("mock Ollama listener");
+        let port = listener.local_addr().expect("mock Ollama address").port();
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("mock Ollama connection");
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 1024];
+            let header_end = loop {
+                let read = stream.read(&mut chunk).expect("read mock request");
+                if read == 0 {
+                    return;
+                }
+                request.extend_from_slice(&chunk[..read]);
+                if let Some(end) = request.windows(4).position(|window| window == b"\r\n\r\n") {
+                    break end + 4;
+                }
+            };
+            let headers = String::from_utf8_lossy(&request[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| line.strip_prefix("Content-Length: "))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or_default();
+            while request.len() < header_end + content_length {
+                let read = stream.read(&mut chunk).expect("read mock body");
+                if read == 0 {
+                    return;
+                }
+                request.extend_from_slice(&chunk[..read]);
+            }
+            let body: serde_json::Value =
+                serde_json::from_slice(&request[header_end..header_end + content_length])
+                    .expect("mock Ollama JSON");
+            let dimensions = body
+                .get("dimensions")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(4) as usize;
+            let values = body
+                .get("input")
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let embeddings = values
+                .into_iter()
+                .map(|value| {
+                    let text = value.as_str().unwrap_or_default();
+                    let mut vector = vec![0.0_f32; dimensions];
+                    if text.contains("unrelated-bootstrap") {
+                        if dimensions > 1 {
+                            vector[1] = 1.0;
+                        }
+                        vector[0] = 0.2;
+                    } else if text.contains("matching-bootstrap") {
+                        vector[0] = 1.0;
+                    } else if dimensions > 1 {
+                        vector[1] = 1.0;
+                    } else {
+                        vector[0] = 1.0;
+                    }
+                    vector
+                })
+                .collect::<Vec<_>>();
+            let payload = serde_json::json!({"embeddings": embeddings}).to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                payload.len(),
+                payload
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("write mock response");
+        });
+        (format!("http://127.0.0.1:{port}"), handle)
+    }
+
+    fn bootstrap_command(
+        task_id: &str,
+        endpoint: String,
+        description: &str,
+    ) -> BootstrapTaskLabelCommand {
+        BootstrapTaskLabelCommand {
+            task_id: task_id.to_owned(),
+            name: "database".to_owned(),
+            description: Some(description.to_owned()),
+            applies_when: vec!["migration evidence".to_owned()],
+            excludes_when: Vec::new(),
+            positive_examples: vec!["new table migration".to_owned()],
+            negative_examples: Vec::new(),
+            actor: "tester".to_owned(),
+            verify: true,
+            min_verify_score: 0.50,
+            vector_config: Some(VectorConfig {
+                provider: "ollama".to_owned(),
+                endpoint,
+                model: "mock-bootstrap".to_owned(),
+                dimensions: 4,
+            }),
+        }
+    }
+
+    async fn bootstrap_canonical_counts(
+        store: &TursoStore,
+    ) -> (i64, i64, i64, i64, i64, i64, i64, Option<i64>) {
+        let connection = store.connection().await.expect("connection");
+        let labels = count_rows(&connection, "labels").await;
+        let semantics = count_rows(&connection, "label_semantics").await;
+        let atoms = count_rows(&connection, "label_atoms").await;
+        let task_labels = count_rows(&connection, "task_labels").await;
+        let actions = count_rows(&connection, "label_ontology_actions").await;
+        let effects = count_rows(&connection, "label_ontology_action_atom_effects").await;
+        let events = count_rows(&connection, "task_events").await;
+        let mut rows = connection
+            .query(
+                "SELECT dirty FROM label_atom_index_boards WHERE store_name='vector_label_atoms' AND board_id='b_default' LIMIT 1",
+                (),
+            )
+            .await
+            .expect("index state");
+        let dirty = rows.next().await.expect("index state row").map(|row| {
+            crate::shared::integer_value(row.get_value(0).expect("dirty"), "dirty")
+                .expect("dirty integer")
+        });
+        (
+            labels,
+            semantics,
+            atoms,
+            task_labels,
+            actions,
+            effects,
+            events,
+            dirty,
+        )
+    }
+
+    #[tokio::test]
+    async fn bootstrap_verification_is_staged_before_canonical_write() {
+        let (_directory, store) = {
+            let directory = tempfile::tempdir().expect("temp directory");
+            let store = TursoStore::open(directory.path().join("bootstrap-verify.db"))
+                .await
+                .expect("open store");
+            store.initialize().await.expect("initialize store");
+            (directory, store)
+        };
+        store
+            .create_task(
+                "default",
+                create_input(
+                    "t_bootstrap_verify",
+                    Some("bootstrap-verify"),
+                    "matching-bootstrap target",
+                ),
+            )
+            .await
+            .expect("create task");
+        let (endpoint, handle) = mock_ollama();
+        let service = KanbanService::new(store.clone());
+        let before = bootstrap_canonical_counts(&store).await;
+        let result = service
+            .bootstrap_task_label(bootstrap_command(
+                "t_bootstrap_verify",
+                endpoint,
+                "matching-bootstrap database persistence",
+            ))
+            .await
+            .expect("verification should pass");
+        handle.join().expect("mock Ollama thread");
+        let verification = result.verification.expect("verification result");
+        assert!(verification.score >= 0.50);
+        assert_eq!(result.task.labels.len(), 1);
+        assert_eq!(
+            service
+                .list_board_labels("default")
+                .await
+                .expect("labels")
+                .len(),
+            1
+        );
+        let after = bootstrap_canonical_counts(&store).await;
+        assert_eq!(after.0, before.0 + 1);
+        assert_eq!(after.1, before.1 + 1);
+        assert!(after.2 > before.2);
+        assert_eq!(after.3, before.3 + 1);
+        assert_eq!(after.4, before.4 + 1);
+        assert_eq!(after.5, before.5 + (after.2 - before.2));
+        assert_eq!(after.6, before.6 + 2);
+        assert_eq!(after.7, Some(1));
+        let action = store
+            .connection()
+            .await
+            .expect("connection")
+            .query(
+                "SELECT change_json FROM label_ontology_actions WHERE action_type='bootstrap_label' ORDER BY created_at DESC LIMIT 1",
+                (),
+            )
+            .await
+            .expect("action query")
+            .next()
+            .await
+            .expect("action row")
+            .expect("bootstrap action");
+        let change_json =
+            crate::shared::text_value(action.get_value(0).expect("change json"), "change_json")
+                .expect("change text");
+        assert!(change_json.contains("bootstrap_verification"));
+    }
+
+    #[tokio::test]
+    async fn bootstrap_verification_threshold_failure_leaves_no_canonical_rows() {
+        let (_directory, store) = {
+            let directory = tempfile::tempdir().expect("temp directory");
+            let store = TursoStore::open(directory.path().join("bootstrap-verify-fail.db"))
+                .await
+                .expect("open store");
+            store.initialize().await.expect("initialize store");
+            (directory, store)
+        };
+        store
+            .create_task(
+                "default",
+                create_input(
+                    "t_bootstrap_verify_fail",
+                    Some("bootstrap-verify-fail"),
+                    "matching-bootstrap target",
+                ),
+            )
+            .await
+            .expect("create task");
+        let (endpoint, handle) = mock_ollama();
+        let service = KanbanService::new(store.clone());
+        let before = bootstrap_canonical_counts(&store).await;
+        let mut command = bootstrap_command(
+            "t_bootstrap_verify_fail",
+            endpoint,
+            "unrelated-bootstrap database persistence",
+        );
+        command.applies_when = vec!["unrelated-bootstrap evidence".to_owned()];
+        command.positive_examples = vec!["unrelated-bootstrap migration".to_owned()];
+        let error = service
+            .bootstrap_task_label(command)
+            .await
+            .expect_err("verification threshold should fail");
+        handle.join().expect("mock Ollama thread");
+        assert!(error.to_string().contains("below min_verify_score"));
+        assert!(
+            service
+                .list_board_labels("default")
+                .await
+                .expect("labels")
+                .is_empty()
+        );
+        assert_eq!(bootstrap_canonical_counts(&store).await, before);
+        assert!(
+            service
+                .store
+                .list_label_semantics("default")
+                .await
+                .expect("semantics")
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_verification_no_target_leaves_no_canonical_rows() {
+        let (_directory, store) = {
+            let directory = tempfile::tempdir().expect("temp directory");
+            let store = TursoStore::open(directory.path().join("bootstrap-verify-no-target.db"))
+                .await
+                .expect("open store");
+            store.initialize().await.expect("initialize store");
+            (directory, store)
+        };
+        store
+            .create_task(
+                "default",
+                create_input(
+                    "t_bootstrap_verify_no_target",
+                    Some("bootstrap-verify-no-target"),
+                    "matching-bootstrap target",
+                ),
+            )
+            .await
+            .expect("create task");
+        let (endpoint, handle) = mock_ollama();
+        let service = KanbanService::new(store.clone());
+        let before = bootstrap_canonical_counts(&store).await;
+        let mut command = bootstrap_command(
+            "t_bootstrap_verify_no_target",
+            endpoint,
+            "no-target-bootstrap database persistence",
+        );
+        command.applies_when = vec!["no-target-bootstrap evidence".to_owned()];
+        command.positive_examples = vec!["no-target-bootstrap migration".to_owned()];
+        let error = service
+            .bootstrap_task_label(command)
+            .await
+            .expect_err("verification without a returned target should fail");
+        handle.join().expect("mock Ollama thread");
+        assert!(
+            error
+                .to_string()
+                .contains("was not returned by label suggest")
+        );
+        assert!(
+            service
+                .list_board_labels("default")
+                .await
+                .expect("labels")
+                .is_empty()
+        );
+        assert_eq!(bootstrap_canonical_counts(&store).await, before);
+    }
+
+    #[tokio::test]
+    async fn bootstrap_verification_provider_and_missing_task_fail_without_writes() {
+        let (_directory, store) = {
+            let directory = tempfile::tempdir().expect("temp directory");
+            let store = TursoStore::open(directory.path().join("bootstrap-verify-provider.db"))
+                .await
+                .expect("open store");
+            store.initialize().await.expect("initialize store");
+            (directory, store)
+        };
+        store
+            .create_task(
+                "default",
+                create_input(
+                    "t_bootstrap_verify_provider",
+                    Some("bootstrap-verify-provider"),
+                    "provider failure target",
+                ),
+            )
+            .await
+            .expect("create task");
+        let service = KanbanService::new(store.clone());
+        let before = bootstrap_canonical_counts(&store).await;
+        let provider_error = service
+            .bootstrap_task_label(bootstrap_command(
+                "t_bootstrap_verify_provider",
+                "http://127.0.0.1:1".to_owned(),
+                "provider failure semantics",
+            ))
+            .await
+            .expect_err("provider failure should reject bootstrap");
+        assert!(
+            provider_error
+                .to_string()
+                .contains("label bootstrap verification")
+        );
+        assert!(
+            service
+                .list_board_labels("default")
+                .await
+                .expect("labels")
+                .is_empty()
+        );
+        assert_eq!(bootstrap_canonical_counts(&store).await, before);
+
+        let missing_task = service
+            .bootstrap_task_label(bootstrap_command(
+                "t_bootstrap_verify_missing",
+                "http://127.0.0.1:1".to_owned(),
+                "missing task semantics",
+            ))
+            .await
+            .expect_err("missing task should reject bootstrap");
+        assert!(missing_task.to_string().contains("task"));
+        assert!(
+            service
+                .list_board_labels("default")
+                .await
+                .expect("labels")
+                .is_empty()
+        );
+        assert_eq!(bootstrap_canonical_counts(&store).await, before);
     }
 }

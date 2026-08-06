@@ -5,7 +5,7 @@ use crate::{db::TursoStore, domain::*, error::StoreError, shared::*};
 use serde_json::json;
 
 use super::ontology::{
-    ActionInsertInput, AtomBuildInput, build_atoms, insert_action, insert_atom_effect,
+    ActionInsertInput, AtomBuildInput, build_atoms, fnv_hash, insert_action, insert_atom_effect,
     mark_index_dirty, semantics_hash, semantics_snapshot_json,
 };
 
@@ -71,6 +71,16 @@ pub(crate) struct BootstrapTaskLabelInput {
     pub negative_examples: Vec<String>,
     pub actor: String,
     pub now: i64,
+    /// staged verification 的 task 乐观锁快照；普通 bootstrap 不设置。
+    pub expected_task_lock_version: Option<i64>,
+    /// staged verification 的 task query 文本快照；普通 bootstrap 不设置。
+    pub expected_task_suggest_digest: Option<String>,
+    /// staged verification 的目标 label state 快照；普通 bootstrap 不设置。
+    pub expected_label_state_digest: Option<String>,
+    /// staged verification 的 board ontology 快照；普通 bootstrap 不设置。
+    pub expected_ontology_digest: Option<String>,
+    /// 成功 verification 写入 ontology action 的 context JSON；普通 bootstrap 不设置。
+    pub verification_context: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -94,6 +104,74 @@ impl TursoStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
         let board_id = active_task_board_id_in_transaction(&transaction, task_id).await?;
+        if let Some(expected_lock_version) = input.expected_task_lock_version {
+            let row = first_row(
+                transaction
+                    .query(
+                        "SELECT lock_version FROM tasks WHERE id=:task_id AND board_id=:board LIMIT 1",
+                        [(
+                            ":task_id",
+                            task_id,
+                        ), (":board", board_id.as_str())],
+                    )
+                    .await?,
+            )
+            .await?;
+            let current_lock_version = integer_value(row.get_value(0)?, "tasks.lock_version")?;
+            if current_lock_version != expected_lock_version {
+                return Err(StoreError::InvalidInput(
+                    "label bootstrap verification conflict：task 在提交前发生变化（hash mismatch）"
+                        .to_owned(),
+                ));
+            }
+        }
+        if let Some(expected_task_digest) = input.expected_task_suggest_digest.as_deref() {
+            let row = first_row(
+                transaction
+                    .query(
+                        "SELECT title,description FROM tasks WHERE id=:task_id AND board_id=:board LIMIT 1",
+                        [(
+                            ":task_id",
+                            task_id,
+                        ), (":board", board_id.as_str())],
+                    )
+                    .await?,
+            )
+            .await?;
+            let title = text_value(row.get_value(0)?, "tasks.title")?;
+            let description = optional_text_value(row.get_value(1)?, "tasks.description")?;
+            let current_task_digest = bootstrap_task_suggest_digest(&title, description.as_deref());
+            if current_task_digest != expected_task_digest {
+                return Err(StoreError::InvalidInput(
+                    "label bootstrap verification conflict：task query 在提交前发生变化（hash mismatch）"
+                        .to_owned(),
+                ));
+            }
+        }
+        if let Some(expected_label_digest) = input.expected_label_state_digest.as_deref() {
+            let current_label_digest = bootstrap_label_state_digest_in_transaction(
+                &transaction,
+                &board_id,
+                input.name.trim(),
+            )
+            .await?;
+            if current_label_digest != expected_label_digest {
+                return Err(StoreError::InvalidInput(
+                    "label bootstrap verification conflict：目标 label state 在提交前发生变化（hash mismatch）"
+                        .to_owned(),
+                ));
+            }
+        }
+        if let Some(expected_digest) = input.expected_ontology_digest.as_deref() {
+            let current_digest =
+                bootstrap_ontology_digest_in_transaction(&transaction, &board_id).await?;
+            if current_digest != expected_digest {
+                return Err(StoreError::InvalidInput(
+                    "label bootstrap verification conflict：ontology 在提交前发生变化（hash mismatch）"
+                        .to_owned(),
+                ));
+            }
+        }
         let name = input.name.trim();
         let label = match label_by_name_in_transaction(&transaction, &board_id, name).await? {
             Some(label) => {
@@ -199,6 +277,31 @@ impl TursoStore {
                 .await?;
         }
         mark_index_dirty(&transaction, &board_id, input.now).await?;
+        let mut change = json!({
+            "before": semantics_snapshot_json(None, &label.id, &label.name, ""),
+            "after": {
+                "label_id": label.id,
+                "label_name": label.name,
+                "description": description,
+                "applies_when": applies_when,
+                "excludes_when": excludes_when,
+                "positive_examples": positive_examples,
+                "negative_examples": negative_examples,
+                "semantics_hash": after_hash,
+            },
+        });
+        if let Some(context_json) = input.verification_context.as_deref() {
+            let context: serde_json::Value =
+                serde_json::from_str(context_json).map_err(|error| {
+                    StoreError::InvalidInput(format!("verification_context 无效：{error}"))
+                })?;
+            if !context.is_object() {
+                return Err(StoreError::InvalidInput(
+                    "verification_context 必须是 JSON object".to_owned(),
+                ));
+            }
+            change["context"] = context;
+        }
         let action_id = insert_action(
             &transaction,
             ActionInsertInput {
@@ -213,19 +316,7 @@ impl TursoStore {
                 result_proposal_id: None,
                 before_hash: None,
                 after_hash: Some(&after_hash),
-                change_json: &json!({
-                    "before": semantics_snapshot_json(None, &label.id, &label.name, ""),
-                    "after": {
-                        "label_id": label.id,
-                        "label_name": label.name,
-                        "description": description,
-                        "applies_when": applies_when,
-                        "excludes_when": excludes_when,
-                        "positive_examples": positive_examples,
-                        "negative_examples": negative_examples,
-                        "semantics_hash": after_hash,
-                    },
-                }),
+                change_json: &change,
                 validation_status: "not_required",
                 validation_json: "{}",
                 now: input.now,
@@ -289,6 +380,27 @@ impl TursoStore {
         transaction.commit().await?;
         let semantics = self.get_label_semantics(&board_id, &label.id).await?;
         Ok(BootstrapTaskLabelStoreRecord { task, semantics })
+    }
+
+    /// 返回 board 当前 labels/semantics/atoms 的稳定快照，用于 staged bootstrap 的 CAS。
+    pub async fn bootstrap_ontology_digest(
+        &self,
+        board_selector: &str,
+    ) -> Result<String, StoreError> {
+        let connection = self.connection().await?;
+        let board_id = active_board_id(&connection, board_selector).await?;
+        bootstrap_ontology_digest_on_connection(&connection, &board_id).await
+    }
+
+    /// 返回目标 label 当前身份/semantics 的稳定快照，用于 staged bootstrap 的 CAS。
+    pub async fn bootstrap_label_state_digest(
+        &self,
+        board_selector: &str,
+        label_name: &str,
+    ) -> Result<String, StoreError> {
+        let connection = self.connection().await?;
+        let board_id = active_board_id(&connection, board_selector).await?;
+        bootstrap_label_state_digest_on_connection(&connection, &board_id, label_name.trim()).await
     }
 
     pub async fn list_board_labels(
@@ -696,6 +808,14 @@ async fn count_label_references(
     integer_value(row.get_value(0)?, "label reference count")
 }
 
+pub(crate) fn bootstrap_task_suggest_digest(title: &str, description: Option<&str>) -> String {
+    let text = match description.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(description) => format!("{}\n\n{}", title.trim(), description),
+        None => title.trim().to_owned(),
+    };
+    fnv_hash(&text)
+}
+
 async fn active_board_id(
     connection: &Connection,
     board_selector: &str,
@@ -734,6 +854,179 @@ async fn active_board_id_in_transaction(
         other => StoreError::Turso(other),
     })?;
     text_value(row.get_value(0)?, "boards.id")
+}
+
+async fn bootstrap_ontology_digest_on_connection(
+    connection: &Connection,
+    board_id: &str,
+) -> Result<String, StoreError> {
+    let mut snapshot = String::new();
+    let mut rows = connection
+        .query(
+            "SELECT id,name,color,created_at,updated_at FROM labels WHERE board_id=:board ORDER BY id",
+            [(":board", board_id)],
+        )
+        .await?;
+    while let Some(row) = rows.next().await? {
+        append_digest_row(&mut snapshot, &row, 5)?;
+    }
+    let mut rows = connection
+        .query(
+            "SELECT s.label_id,l.name,s.description,s.applies_when,s.excludes_when,s.positive_examples,s.negative_examples,s.created_at,s.updated_at FROM label_semantics s JOIN labels l ON l.id=s.label_id AND l.board_id=s.board_id WHERE s.board_id=:board ORDER BY s.label_id",
+            [(":board", board_id)],
+        )
+        .await?;
+    while let Some(row) = rows.next().await? {
+        append_digest_row(&mut snapshot, &row, 9)?;
+    }
+    let mut rows = connection
+        .query(
+            "SELECT a.id,a.label_id,l.name,a.polarity,a.kind,a.text,a.ordinal,a.content_hash,a.created_at,a.updated_at FROM label_atoms a JOIN labels l ON l.id=a.label_id AND l.board_id=a.board_id WHERE a.board_id=:board ORDER BY a.label_id,a.ordinal,a.id",
+            [(":board", board_id)],
+        )
+        .await?;
+    while let Some(row) = rows.next().await? {
+        append_digest_row(&mut snapshot, &row, 10)?;
+    }
+    Ok(fnv_hash(&snapshot))
+}
+
+async fn bootstrap_ontology_digest_in_transaction(
+    transaction: &Transaction<'_>,
+    board_id: &str,
+) -> Result<String, StoreError> {
+    let mut snapshot = String::new();
+    let mut rows = transaction
+        .query(
+            "SELECT id,name,color,created_at,updated_at FROM labels WHERE board_id=:board ORDER BY id",
+            [(":board", board_id)],
+        )
+        .await?;
+    while let Some(row) = rows.next().await? {
+        append_digest_row(&mut snapshot, &row, 5)?;
+    }
+    let mut rows = transaction
+        .query(
+            "SELECT s.label_id,l.name,s.description,s.applies_when,s.excludes_when,s.positive_examples,s.negative_examples,s.created_at,s.updated_at FROM label_semantics s JOIN labels l ON l.id=s.label_id AND l.board_id=s.board_id WHERE s.board_id=:board ORDER BY s.label_id",
+            [(":board", board_id)],
+        )
+        .await?;
+    while let Some(row) = rows.next().await? {
+        append_digest_row(&mut snapshot, &row, 9)?;
+    }
+    let mut rows = transaction
+        .query(
+            "SELECT a.id,a.label_id,l.name,a.polarity,a.kind,a.text,a.ordinal,a.content_hash,a.created_at,a.updated_at FROM label_atoms a JOIN labels l ON l.id=a.label_id AND l.board_id=a.board_id WHERE a.board_id=:board ORDER BY a.label_id,a.ordinal,a.id",
+            [(":board", board_id)],
+        )
+        .await?;
+    while let Some(row) = rows.next().await? {
+        append_digest_row(&mut snapshot, &row, 10)?;
+    }
+    Ok(fnv_hash(&snapshot))
+}
+
+async fn bootstrap_label_state_digest_on_connection(
+    connection: &Connection,
+    board_id: &str,
+    label_name: &str,
+) -> Result<String, StoreError> {
+    if label_name.is_empty() {
+        return Err(StoreError::InvalidInput(
+            "label name is required".to_owned(),
+        ));
+    }
+    let label = match first_row(
+        connection
+            .query(
+                "SELECT id,name,color,updated_at FROM labels WHERE board_id=:board AND name=:name LIMIT 1",
+                [(":board", board_id), (":name", label_name)],
+            )
+            .await?,
+    )
+    .await {
+        Ok(row) => row,
+        Err(turso::Error::QueryReturnedNoRows) => {
+            return Ok(fnv_hash(&format!("missing\u{1f}{label_name}")));
+        }
+        Err(error) => return Err(StoreError::Turso(error)),
+    };
+    let label_id = text_value(label.get_value(0)?, "labels.id")?;
+    let mut snapshot = String::from("present\u{1f}");
+    append_digest_row(&mut snapshot, &label, 4)?;
+    let semantics = first_row(
+        connection
+            .query(
+                "SELECT description,applies_when,excludes_when,positive_examples,negative_examples,updated_at FROM label_semantics WHERE board_id=:board AND label_id=:label LIMIT 1",
+                [(":board", board_id), (":label", label_id.as_str())],
+            )
+            .await?,
+    )
+    .await;
+    match semantics {
+        Ok(row) => append_digest_row(&mut snapshot, &row, 6)?,
+        Err(turso::Error::QueryReturnedNoRows) => snapshot.push_str("semantics:none\u{1f}"),
+        Err(error) => return Err(StoreError::Turso(error)),
+    }
+    Ok(fnv_hash(&snapshot))
+}
+
+async fn bootstrap_label_state_digest_in_transaction(
+    transaction: &Transaction<'_>,
+    board_id: &str,
+    label_name: &str,
+) -> Result<String, StoreError> {
+    if label_name.is_empty() {
+        return Err(StoreError::InvalidInput(
+            "label name is required".to_owned(),
+        ));
+    }
+    let label = match first_row(
+        transaction
+            .query(
+                "SELECT id,name,color,updated_at FROM labels WHERE board_id=:board AND name=:name LIMIT 1",
+                [(":board", board_id), (":name", label_name)],
+            )
+            .await?,
+    )
+    .await {
+        Ok(row) => row,
+        Err(turso::Error::QueryReturnedNoRows) => {
+            return Ok(fnv_hash(&format!("missing\u{1f}{label_name}")));
+        }
+        Err(error) => return Err(StoreError::Turso(error)),
+    };
+    let label_id = text_value(label.get_value(0)?, "labels.id")?;
+    let mut snapshot = String::from("present\u{1f}");
+    append_digest_row(&mut snapshot, &label, 4)?;
+    let semantics = first_row(
+        transaction
+            .query(
+                "SELECT description,applies_when,excludes_when,positive_examples,negative_examples,updated_at FROM label_semantics WHERE board_id=:board AND label_id=:label LIMIT 1",
+                [(":board", board_id), (":label", label_id.as_str())],
+            )
+            .await?,
+    )
+    .await;
+    match semantics {
+        Ok(row) => append_digest_row(&mut snapshot, &row, 6)?,
+        Err(turso::Error::QueryReturnedNoRows) => snapshot.push_str("semantics:none\u{1f}"),
+        Err(error) => return Err(StoreError::Turso(error)),
+    }
+    Ok(fnv_hash(&snapshot))
+}
+
+fn append_digest_row(
+    snapshot: &mut String,
+    row: &Row,
+    column_count: usize,
+) -> Result<(), StoreError> {
+    snapshot.push('|');
+    for index in 0..column_count {
+        snapshot.push_str(&format!("{:?}", row.get_value(index)?));
+        snapshot.push('\u{1f}');
+    }
+    Ok(())
 }
 
 async fn active_task_board_id(
@@ -1314,6 +1607,11 @@ mod tests {
                     negative_examples: vec![" tests fail ".to_owned()],
                     actor: "label-test".to_owned(),
                     now: 100,
+                    expected_task_lock_version: None,
+                    expected_task_suggest_digest: None,
+                    expected_label_state_digest: None,
+                    expected_ontology_digest: None,
+                    verification_context: None,
                 },
             )
             .await
@@ -1362,12 +1660,134 @@ mod tests {
                     negative_examples: Vec::new(),
                     actor: "label-test".to_owned(),
                     now: 101,
+                    expected_task_lock_version: None,
+                    expected_task_suggest_digest: None,
+                    expected_label_state_digest: None,
+                    expected_ontology_digest: None,
+                    verification_context: None,
                 },
             )
             .await
             .expect_err("bootstrap must not replace existing semantics");
         assert!(
             matches!(replacement, StoreError::InvalidInput(message) if message.contains("would replace existing semantics"))
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_expected_snapshots_reject_changed_task_and_ontology() {
+        let (_directory, store, _path) = store("labels-bootstrap-cas").await;
+        store.initialize().await.expect("initialize");
+        store
+            .create_task(
+                "default",
+                create_input(
+                    "t_labels_bootstrap_cas",
+                    Some("labels-bootstrap-cas"),
+                    "Bootstrap",
+                ),
+            )
+            .await
+            .expect("create task");
+
+        let before_task = store
+            .get_task_global("t_labels_bootstrap_cas")
+            .await
+            .expect("task snapshot");
+        let before_digest = store
+            .bootstrap_ontology_digest("default")
+            .await
+            .expect("ontology snapshot");
+        let before_task_digest =
+            bootstrap_task_suggest_digest(&before_task.title, before_task.description.as_deref());
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE tasks SET lock_version=lock_version+1 WHERE id='t_labels_bootstrap_cas'",
+                (),
+            )
+            .await
+            .expect("change task");
+        let error = store
+            .bootstrap_task_label(
+                "t_labels_bootstrap_cas",
+                BootstrapTaskLabelInput {
+                    label_id: "l_bootstrap_cas_task".to_owned(),
+                    event_id: "evt-bootstrap-cas-task".to_owned(),
+                    name: "task-cas".to_owned(),
+                    description: Some("task snapshot changed".to_owned()),
+                    applies_when: Vec::new(),
+                    excludes_when: Vec::new(),
+                    positive_examples: Vec::new(),
+                    negative_examples: Vec::new(),
+                    actor: "label-test".to_owned(),
+                    now: 100,
+                    expected_task_lock_version: Some(before_task.lock_version),
+                    expected_task_suggest_digest: Some(before_task_digest),
+                    expected_label_state_digest: Some(
+                        store
+                            .bootstrap_label_state_digest("default", "task-cas")
+                            .await
+                            .expect("target label snapshot"),
+                    ),
+                    expected_ontology_digest: Some(before_digest.clone()),
+                    verification_context: None,
+                },
+            )
+            .await
+            .expect_err("task snapshot must conflict");
+        assert!(error.to_string().contains("hash mismatch"));
+
+        let current_task = store
+            .get_task_global("t_labels_bootstrap_cas")
+            .await
+            .expect("current task");
+        let current_digest = store
+            .bootstrap_ontology_digest("default")
+            .await
+            .expect("current ontology snapshot");
+        let current_task_digest =
+            bootstrap_task_suggest_digest(&current_task.title, current_task.description.as_deref());
+        store
+            .create_board_label("default", create_label_input("l_concurrent", "concurrent"))
+            .await
+            .expect("change ontology");
+        let error = store
+            .bootstrap_task_label(
+                "t_labels_bootstrap_cas",
+                BootstrapTaskLabelInput {
+                    label_id: "l_bootstrap_cas_ontology".to_owned(),
+                    event_id: "evt-bootstrap-cas-ontology".to_owned(),
+                    name: "ontology-cas".to_owned(),
+                    description: Some("ontology snapshot changed".to_owned()),
+                    applies_when: Vec::new(),
+                    excludes_when: Vec::new(),
+                    positive_examples: Vec::new(),
+                    negative_examples: Vec::new(),
+                    actor: "label-test".to_owned(),
+                    now: 101,
+                    expected_task_lock_version: Some(current_task.lock_version),
+                    expected_task_suggest_digest: Some(current_task_digest),
+                    expected_label_state_digest: Some(
+                        store
+                            .bootstrap_label_state_digest("default", "ontology-cas")
+                            .await
+                            .expect("target label snapshot"),
+                    ),
+                    expected_ontology_digest: Some(current_digest),
+                    verification_context: None,
+                },
+            )
+            .await
+            .expect_err("ontology snapshot must conflict");
+        assert!(error.to_string().contains("hash mismatch"));
+        assert!(
+            !store
+                .list_board_labels("default")
+                .await
+                .expect("labels")
+                .iter()
+                .any(|label| label.name == "ontology-cas")
         );
     }
 }

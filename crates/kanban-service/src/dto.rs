@@ -69,6 +69,17 @@ pub struct LabelAtomRecord {
 pub struct BootstrapTaskLabelRecord {
     pub task: TaskRecord,
     pub semantics: LabelSemanticsRecord,
+    pub verification: Option<BootstrapTaskLabelVerification>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BootstrapTaskLabelVerification {
+    pub label_name: String,
+    pub score: f32,
+    pub source: String,
+    pub min_score: f32,
+    pub degraded: bool,
+    pub diagnostics: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

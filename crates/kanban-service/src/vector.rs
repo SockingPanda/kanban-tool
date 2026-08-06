@@ -20,6 +20,7 @@ use crate::{
     shared::{
         first_row, integer_value, now_ms, optional_integer_value, optional_text_value, text_value,
     },
+    store_operations::{AtomBuildInput, BootstrapTaskLabelInput, build_atoms},
 };
 
 pub(crate) const VECTOR_TASKS_PROJECTION: &str = "vector_tasks";
@@ -1059,18 +1060,172 @@ pub(crate) async fn embed_query(
         .vector_config()
         .await?
         .ok_or_else(|| vector_degraded("vector provider 未配置"))?;
-    let config_for_task = config.clone();
-    let text = text.to_owned();
-    let embedding = tokio::task::spawn_blocking(move || {
-        OllamaEmbeddingProvider::new(config_for_task).embed_batch(&[text])
-    })
-    .await
-    .map_err(|error| vector_degraded(format!("vector provider worker failed: {error}")))?
-    .map_err(|error| vector_degraded(error.message))?
-    .into_iter()
-    .next()
-    .ok_or_else(|| vector_degraded("vector provider 返回空 embedding"))?;
+    let embedding = embed_texts(config.clone(), vec![text.to_owned()])
+        .await
+        .map_err(|error| vector_degraded(error.message))?
+        .into_iter()
+        .next()
+        .ok_or_else(|| vector_degraded("vector provider 返回空 embedding"))?;
     Ok((config, embedding))
+}
+
+/// 在 canonical bootstrap transaction 之外，对候选 label 做一次 provider 验证。
+///
+/// 候选 atoms 只存在于内存；阈值失败或 provider 失败都不会写入 labels、semantics、
+/// atoms、task_labels 或 ontology ledger。provider 调用完成后，调用方再以 task/label/
+/// ontology 快照进入唯一 bootstrap transaction。
+pub(crate) async fn verify_bootstrap_task_label(
+    store: &TursoStore,
+    task_id: &str,
+    input: &BootstrapTaskLabelInput,
+    config: &VectorConfig,
+    min_score: f32,
+) -> Result<crate::BootstrapTaskLabelVerification, StoreError> {
+    if !(0.0..=1.0).contains(&min_score) {
+        return Err(StoreError::InvalidInput(
+            "min_verify_score 必须在 0 到 1 之间".to_owned(),
+        ));
+    }
+    config.validate()?;
+    let task = store.get_task_global(task_id).await?;
+    let name = input.name.trim().to_owned();
+    if name.is_empty() {
+        return Err(StoreError::InvalidInput("label name 不能为空".to_owned()));
+    }
+    let description = input
+        .description
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+    let applies_when = normalize_bootstrap_values(&input.applies_when);
+    let excludes_when = normalize_bootstrap_values(&input.excludes_when);
+    let positive_examples = normalize_bootstrap_values(&input.positive_examples);
+    let negative_examples = normalize_bootstrap_values(&input.negative_examples);
+    if description.is_none()
+        && applies_when.is_empty()
+        && excludes_when.is_empty()
+        && positive_examples.is_empty()
+        && negative_examples.is_empty()
+    {
+        return Err(StoreError::InvalidInput(
+            "label bootstrap 需要 description 或语义示例".to_owned(),
+        ));
+    }
+    let atoms = build_atoms(AtomBuildInput {
+        label_id: &input.label_id,
+        board_id: &task.board_id,
+        label_name: &name,
+        description: &description,
+        applies: &applies_when,
+        excludes: &excludes_when,
+        positive: &positive_examples,
+        negative: &negative_examples,
+        now: task.updated_at,
+    });
+    let positive_atoms = atoms
+        .iter()
+        .filter(|atom| atom.polarity == "positive")
+        .collect::<Vec<_>>();
+    if positive_atoms.is_empty() {
+        return Err(StoreError::InvalidInput(
+            "label bootstrap verification 需要至少一个正向 semantic atom".to_owned(),
+        ));
+    }
+    if positive_atoms.len() >= MAX_VECTOR_BATCH {
+        return Err(StoreError::InvalidInput(format!(
+            "label bootstrap verification 最多接受 {} 个 semantic atom",
+            MAX_VECTOR_BATCH - 1
+        )));
+    }
+    let task_text = match task.description.as_deref().map(str::trim) {
+        Some(description) if !description.is_empty() => {
+            format!("{}\n\n{}", task.title.trim(), description)
+        }
+        _ => task.title.trim().to_owned(),
+    };
+    let candidate_count = positive_atoms.len();
+    let existing_atoms = store.list_label_atoms(&task.board_id).await?;
+    let existing_capacity = MAX_VECTOR_BATCH.saturating_sub(candidate_count + 1);
+    let mut texts = Vec::with_capacity(candidate_count + existing_capacity + 1);
+    texts.push(task_text);
+    texts.extend(positive_atoms.iter().map(|atom| atom.text.clone()));
+    texts.extend(
+        existing_atoms
+            .iter()
+            .take(existing_capacity)
+            .map(|atom| atom.text.clone()),
+    );
+    let embeddings = embed_texts(config.clone(), texts).await.map_err(|error| {
+        StoreError::InvalidInput(format!(
+            "label bootstrap verification 失败：label suggest degraded（vector_query_error：{}）",
+            error.message
+        ))
+    })?;
+    let query = embeddings.first().ok_or_else(|| {
+        StoreError::InvalidInput(
+            "label bootstrap verification 失败：label suggest degraded（vector_query_error：缺少 task embedding）"
+                .to_owned(),
+        )
+    })?;
+    let score = embeddings[1..=candidate_count]
+        .iter()
+        .map(|embedding| cosine(query, embedding))
+        .fold(0.0_f32, f32::max);
+    if score <= f32::EPSILON {
+        return Err(StoreError::InvalidInput(format!(
+            "label bootstrap verification 失败：label {} 未被 label suggest 返回（was not returned by label suggest）",
+            name
+        )));
+    }
+    if score < min_score {
+        return Err(StoreError::InvalidInput(format!(
+            "label bootstrap verification 失败：label {} 的 score {score:.3} 低于 min_verify_score {min_score:.3}（below min_verify_score）",
+            name
+        )));
+    }
+    Ok(crate::BootstrapTaskLabelVerification {
+        label_name: name,
+        score,
+        source: "selected_labels".to_owned(),
+        min_score,
+        degraded: false,
+        diagnostics: Vec::new(),
+    })
+}
+
+fn normalize_bootstrap_values(values: &[String]) -> Vec<String> {
+    values
+        .iter()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .collect()
+}
+
+fn cosine(left: &[f32], right: &[f32]) -> f32 {
+    let dot = left
+        .iter()
+        .zip(right)
+        .map(|(left, right)| left * right)
+        .sum::<f32>();
+    let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
+    let right_norm = right.iter().map(|value| value * value).sum::<f32>().sqrt();
+    if left_norm == 0.0 || right_norm == 0.0 {
+        0.0
+    } else {
+        dot / (left_norm * right_norm)
+    }
+}
+
+async fn embed_texts(
+    config: VectorConfig,
+    texts: Vec<String>,
+) -> Result<Vec<Vec<f32>>, ProviderFailure> {
+    tokio::task::spawn_blocking(move || OllamaEmbeddingProvider::new(config).embed_batch(&texts))
+        .await
+        .map_err(|error| {
+            ProviderFailure::retryable(format!("vector provider worker failed: {error}"))
+        })?
 }
 
 fn vector_degraded(message: impl Into<String>) -> StoreError {

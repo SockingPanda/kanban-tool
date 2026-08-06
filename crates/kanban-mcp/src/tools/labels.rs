@@ -2,7 +2,7 @@ use kanban_protocol::{
     AddTaskLabelRequest, AddTaskLabelResponse, BootstrapTaskLabelRequest,
     BootstrapTaskLabelResponse, CreateBoardLabelRequest, CreateBoardLabelResponse,
     DeleteBoardLabelResponse, ListBoardLabelsResponse, ListTaskLabelsResponse,
-    RemoveTaskLabelResponse,
+    RemoveTaskLabelResponse, VectorConfigureRequest,
 };
 use rmcp::{
     ErrorData as McpError,
@@ -90,6 +90,16 @@ struct TaskLabelBootstrapArgs {
     positive_examples: Vec<String>,
     #[serde(default)]
     negative_examples: Vec<String>,
+    #[serde(default)]
+    verify: bool,
+    #[serde(default = "default_bootstrap_verify_score")]
+    min_verify_score: f32,
+    #[serde(default)]
+    vector_config: Option<VectorConfigureRequest>,
+}
+
+fn default_bootstrap_verify_score() -> f32 {
+    0.50
 }
 
 #[tool_router(router = label_tools, vis = "pub(crate)")]
@@ -223,6 +233,9 @@ impl KanbanMcp {
             excludes_when: args.excludes_when,
             positive_examples: args.positive_examples,
             negative_examples: args.negative_examples,
+            verify: args.verify,
+            min_verify_score: args.min_verify_score,
+            vector_config: args.vector_config,
             actor: None,
         };
         let response = call_client(move || {

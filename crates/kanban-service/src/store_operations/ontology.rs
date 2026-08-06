@@ -2384,7 +2384,7 @@ fn append_items(values: &mut Vec<String>, items: Vec<String>) {
         }
     }
 }
-fn fnv_hash(value: &str) -> String {
+pub(crate) fn fnv_hash(value: &str) -> String {
     let mut hash = 0xcbf29ce484222325_u64;
     for byte in value.as_bytes() {
         hash ^= u64::from(*byte);

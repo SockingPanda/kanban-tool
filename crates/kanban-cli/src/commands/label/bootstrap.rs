@@ -1,7 +1,7 @@
 use clap::Args;
 use kanban_protocol::{
-    BootstrapTaskLabelRequest,
-    cli_labels::{CliLabelBootstrapOutput, CliLabelBootstrapResult},
+    BootstrapTaskLabelRequest, VectorConfigureRequest,
+    cli_labels::{CliLabelBootstrapOutput, CliLabelBootstrapResult, CliLabelBootstrapVerification},
 };
 
 use crate::{context::CliContext, error::CliFailure, output};
@@ -20,7 +20,7 @@ pub(crate) struct BootstrapArgs {
     pub(crate) positive_examples: Vec<String>,
     #[arg(long = "negative-example")]
     pub(crate) negative_examples: Vec<String>,
-    /// Reserved for the staged vector verification flow, which is host-owned and not yet exposed.
+    /// 在 canonical host 提交前运行 provider 驱动的 staged verification。
     #[arg(long)]
     pub(crate) verify: bool,
     #[arg(long = "min-verify-score", default_value_t = 0.50)]
@@ -30,18 +30,19 @@ pub(crate) struct BootstrapArgs {
 }
 
 pub(crate) fn run(ctx: &CliContext, args: &BootstrapArgs) -> Result<(), CliFailure> {
-    if args.verify || args.vector_config.is_some() {
-        return Err(crate::error::feature_not_available(
-            "label bootstrap verification must run through the canonical host",
-        ));
-    }
-    if !(0.0..=1.0).contains(&args.min_verify_score) {
+    let verify = args.verify || args.vector_config.is_some();
+    if verify && !(0.0..=1.0).contains(&args.min_verify_score) {
         return Err(CliFailure {
             code: "invalid_input",
-            message: "min_verify_score must be between 0 and 1".to_owned(),
+            message: "min_verify_score 必须在 0 到 1 之间".to_owned(),
             exit_code: 2,
         });
     }
+    let vector_config = args
+        .vector_config
+        .as_deref()
+        .map(read_vector_config)
+        .transpose()?;
     let client = ctx.client()?;
     let response = client.bootstrap_task_label_by_selector(
         &ctx.board,
@@ -53,6 +54,9 @@ pub(crate) fn run(ctx: &CliContext, args: &BootstrapArgs) -> Result<(), CliFailu
             excludes_when: args.excludes_when.clone(),
             positive_examples: args.positive_examples.clone(),
             negative_examples: args.negative_examples.clone(),
+            verify,
+            min_verify_score: args.min_verify_score,
+            vector_config,
             actor: None,
         },
     )?;
@@ -61,7 +65,16 @@ pub(crate) fn run(ctx: &CliContext, args: &BootstrapArgs) -> Result<(), CliFailu
             data: CliLabelBootstrapResult {
                 task: response.data.task,
                 semantics: response.data.semantics,
-                verification: None,
+                verification: response.data.verification.map(|value| {
+                    CliLabelBootstrapVerification {
+                        label_name: value.label_name,
+                        score: value.score,
+                        source: value.source,
+                        min_score: value.min_score,
+                        degraded: value.degraded,
+                        diagnostics: value.diagnostics,
+                    }
+                }),
             },
         });
     } else {
@@ -79,6 +92,30 @@ pub(crate) fn run(ctx: &CliContext, args: &BootstrapArgs) -> Result<(), CliFailu
                 .collect::<Vec<_>>()
                 .join(",")
         );
+        if let Some(verification) = response.data.verification {
+            println!(
+                "verification label={} score={:.3} min_score={:.3} source={}",
+                verification.label_name,
+                verification.score,
+                verification.min_score,
+                verification.source
+            );
+        }
     }
     Ok(())
+}
+
+fn read_vector_config(path: &std::path::Path) -> Result<VectorConfigureRequest, CliFailure> {
+    let config = crate::config::read_project_config(path)?;
+    let vector = config.vector.ok_or_else(|| CliFailure {
+        code: "invalid_input",
+        message: format!("vector config {} 缺少 [vector] 配置", path.display()),
+        exit_code: 2,
+    })?;
+    Ok(VectorConfigureRequest {
+        provider: vector.provider,
+        endpoint: vector.endpoint,
+        model: vector.model,
+        dimensions: vector.dimensions,
+    })
 }

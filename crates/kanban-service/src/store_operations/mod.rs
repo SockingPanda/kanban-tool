@@ -27,7 +27,9 @@ pub use comments::CreateCommentInput;
 pub use dependencies::{AddDependencyInput, RemoveDependencyInput};
 pub use entities::EntityUpsertInput;
 pub use labels::{AddTaskLabelsInput, CreateLabelInput, RemoveTaskLabelInput};
-pub(crate) use labels::{BootstrapTaskLabelInput, DeleteBoardLabelInput};
+pub(crate) use labels::{
+    BootstrapTaskLabelInput, DeleteBoardLabelInput, bootstrap_task_suggest_digest,
+};
 pub use lifecycle::{
     ArchiveTaskInput, BlockTaskInput, ClaimTaskInput, ClaimTaskRecord, CompleteTaskInput,
     HeartbeatTaskInput, MarkExecutionPlanNotRequiredInput, PromoteTaskInput,

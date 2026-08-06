@@ -70,6 +70,13 @@ fn default_label_suggestion_max_selected_labels() -> usize {
 fn default_label_suggestion_min_score() -> f32 {
     0.15
 }
+
+fn default_bootstrap_verify_min_score() -> f32 {
+    0.50
+}
+fn is_default_bootstrap_verify_min_score(value: &f32) -> bool {
+    *value == default_bootstrap_verify_min_score()
+}
 fn default_label_atom_index_limit() -> usize {
     24
 }
@@ -400,6 +407,16 @@ wire!(
     }
 );
 wire!(
+    pub struct BootstrapTaskLabelVerification {
+        pub label_name: String,
+        pub score: f32,
+        pub source: String,
+        pub min_score: f32,
+        pub degraded: bool,
+        pub diagnostics: Vec<String>,
+    }
+);
+wire!(
     pub struct BootstrapTaskLabelRequest {
         pub name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -416,6 +433,15 @@ wire!(
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         #[cfg_attr(feature = "schema", schemars(extend("default" = serde_json::json!([]))))]
         pub negative_examples: Vec<String>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        pub verify: bool,
+        #[serde(
+            default = "default_bootstrap_verify_min_score",
+            skip_serializing_if = "is_default_bootstrap_verify_min_score"
+        )]
+        pub min_verify_score: f32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub vector_config: Option<crate::VectorConfigureRequest>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pub actor: Option<String>,
     }
@@ -424,6 +450,8 @@ wire!(
     pub struct BootstrapTaskLabelData {
         pub task: crate::ApiTask,
         pub semantics: LabelSemanticsWire,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub verification: Option<BootstrapTaskLabelVerification>,
     }
 );
 

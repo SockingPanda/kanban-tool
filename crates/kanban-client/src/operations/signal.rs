@@ -125,10 +125,10 @@ fn signals_path(board: &str, suffix: &str, query: &SignalQuery) -> String {
     for kind in &query.kind {
         pairs.push(format!("kind={}", encode_path_segment(kind)));
     }
-    if let Some(task_ref) = query.task_ref.as_deref().map(str::trim) {
-        if !task_ref.is_empty() {
-            pairs.push(format!("task_ref={}", encode_path_segment(task_ref)));
-        }
+    if let Some(task_ref) = query.task_ref.as_deref().map(str::trim)
+        && !task_ref.is_empty()
+    {
+        pairs.push(format!("task_ref={}", encode_path_segment(task_ref)));
     }
     if query.include_all {
         pairs.push("include_all=true".to_owned());

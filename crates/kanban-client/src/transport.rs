@@ -6,6 +6,8 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{KanbanClient, error::ClientError};
 
+type AttachmentBytesResponse = (Option<String>, Option<String>, Option<String>, Vec<u8>);
+
 impl KanbanClient {
     pub(crate) fn get<T>(&self, path: &str) -> Result<T, ClientError>
     where
@@ -93,7 +95,7 @@ impl KanbanClient {
         &self,
         path: &str,
         accept: &str,
-    ) -> Result<(Option<String>, Option<String>, Option<String>, Vec<u8>), ClientError> {
+    ) -> Result<AttachmentBytesResponse, ClientError> {
         let request = self
             .agent
             .get(&format!("{}{path}", self.base_url))
@@ -160,7 +162,7 @@ fn decode_text_response(
 
 fn decode_bytes_response(
     response: Result<ureq::Response, ureq::Error>,
-) -> Result<(Option<String>, Option<String>, Option<String>, Vec<u8>), ClientError> {
+) -> Result<AttachmentBytesResponse, ClientError> {
     match response {
         Ok(response) => {
             let content_type = response.header("Content-Type").map(str::to_owned);

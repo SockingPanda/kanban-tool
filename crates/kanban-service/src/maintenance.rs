@@ -926,7 +926,7 @@ impl TursoStore {
             // native VACUUM 成功后重新执行 canonical 完整性检查；若检查失败，调用方
             // 收到错误而不会拿到伪造的 ok=true 报告，Turso 自身负责 VACUUM 阶段回滚。
             let doctor = doctor_connection(&connection).await?;
-            if !doctor_replace_safe(&doctor) {
+            if !doctor_canonical_safe(&doctor) {
                 return Err(StoreError::InvalidInput(
                     "VACUUM 后 canonical doctor 校验未通过".to_owned(),
                 ));
@@ -1439,13 +1439,16 @@ async fn doctor_connection(connection: &Connection) -> Result<StoreDoctorReport,
     })
 }
 
+/// VACUUM 只改变 canonical 数据库的物理布局；其 postcondition 需要拒绝物理完整性和
+/// 引用完整性错误，但不能把独立的派生 projection 降级误判成 VACUUM 失败。
+fn doctor_canonical_safe(report: &StoreDoctorReport) -> bool {
+    report.integrity_check.eq_ignore_ascii_case("ok") && report.consistency_errors == 0
+}
+
 /// doctor 的 `ok` 还包含现有产品的 migration/user_version 和计划提醒；replace 只允许
 /// canonical 完整性、引用完整性和 derived error 通过，不能把正常提醒误判为事务失败。
 fn doctor_replace_safe(report: &StoreDoctorReport) -> bool {
-    report.integrity_check.eq_ignore_ascii_case("ok")
-        && report.consistency_errors == 0
-        && report.outbox_failed == 0
-        && report.derived_error_stores == 0
+    doctor_canonical_safe(report) && report.outbox_failed == 0 && report.derived_error_stores == 0
 }
 
 async fn maintenance_status_connection(
@@ -2950,13 +2953,32 @@ mod tests {
             .execute("DELETE FROM vacuum_fixture WHERE id > 0", ())
             .await
             .expect("fixture cleanup");
+        // 派生 projection 可以因 provider 不可用而降级；VACUUM 仍须只依据
+        // canonical 物理/引用完整性决定是否成功，不能把派生错误静默清掉或误报为失败。
+        connection
+            .execute(
+                "UPDATE projection_state SET lifecycle_status='degraded', dirty=1, last_error='fixture provider unavailable' WHERE projection IN ('vector_tasks', 'vector_label_atoms')",
+                (),
+            )
+            .await
+            .expect("derived projection failure");
         drop(connection);
+
+        let doctor_before = store.doctor().await.expect("pre-vacuum doctor");
+        assert_eq!(doctor_before.derived_error_stores, 2);
+        assert!(
+            !doctor_before.ok,
+            "derived errors must remain visible to doctor"
+        );
 
         let before = fs::metadata(&path).expect("database metadata").len();
         let report = store.vacuum().await.expect("native vacuum");
         assert!(report.ok);
         assert_eq!(report.before_bytes, before);
         assert!(report.after_bytes < report.before_bytes);
+        let doctor_after = store.doctor().await.expect("post-vacuum doctor");
+        assert_eq!(doctor_after.derived_error_stores, 2);
+        assert!(!doctor_after.ok, "VACUUM must not hide derived errors");
 
         let connection = store.connection().await.expect("post-vacuum connection");
         let mut rows = connection

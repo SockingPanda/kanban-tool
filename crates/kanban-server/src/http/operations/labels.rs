@@ -8,15 +8,20 @@ use axum::{
     Json, Router,
     extract::{Path, State, rejection::JsonRejection},
     http::{HeaderMap, StatusCode},
-    routing::{delete, get},
+    routing::{delete, get, post},
 };
 use kanban_protocol::{
     AddTaskLabelPath, AddTaskLabelRequest, AddTaskLabelResponse, BoardLabelPath,
-    CreateBoardLabelRequest, CreateBoardLabelResponse, DataEnvelope, ListBoardLabelsResponse,
-    ListTaskLabelsPath, ListTaskLabelsResponse, RemoveTaskLabelPath, RemoveTaskLabelResponse,
+    BootstrapTaskLabelRequest, BootstrapTaskLabelResponse, CreateBoardLabelRequest,
+    CreateBoardLabelResponse, DataEnvelope, LabelAtomWire, LabelSemanticsWire,
+    ListBoardLabelsResponse, ListTaskLabelsPath, ListTaskLabelsResponse, RemoveTaskLabelPath,
+    RemoveTaskLabelResponse, TaskLabelSurfacePath,
 };
 use kanban_service::KanbanError;
-use kanban_service::{AddTaskLabelsCommand, CreateBoardLabelCommand, RemoveTaskLabelCommand};
+use kanban_service::{
+    AddTaskLabelsCommand, BootstrapTaskLabelCommand, CreateBoardLabelCommand,
+    RemoveTaskLabelCommand,
+};
 
 pub(crate) async fn list_board_labels(
     State(state): State<AppState>,
@@ -113,6 +118,39 @@ pub(crate) async fn remove_task_label(
     }))
 }
 
+pub(crate) async fn bootstrap_task_label(
+    State(state): State<AppState>,
+    Path(TaskLabelSurfacePath { task_id }): Path<TaskLabelSurfacePath>,
+    headers: HeaderMap,
+    body: Result<Json<BootstrapTaskLabelRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<BootstrapTaskLabelResponse>), ApiError> {
+    let Json(body) =
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
+    let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
+    let record = state
+        .application()
+        .bootstrap_task_label(BootstrapTaskLabelCommand {
+            task_id,
+            name: body.name,
+            description: body.description,
+            applies_when: body.applies_when,
+            excludes_when: body.excludes_when,
+            positive_examples: body.positive_examples,
+            negative_examples: body.negative_examples,
+            actor,
+        })
+        .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(DataEnvelope {
+            data: kanban_protocol::BootstrapTaskLabelData {
+                task: api_task(record.task)?,
+                semantics: api_semantics(record.semantics),
+            },
+        }),
+    ))
+}
+
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route(
@@ -142,6 +180,46 @@ pub(super) fn router() -> Router<AppState> {
             ),
             delete(remove_task_label),
         )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/tasks/:task_id/labels/bootstrap",
+            ),
+            post(bootstrap_task_label),
+        )
+}
+
+fn api_semantics(value: kanban_service::LabelSemanticsRecord) -> LabelSemanticsWire {
+    LabelSemanticsWire {
+        label_id: value.label_id,
+        board_id: value.board_id,
+        label_name: value.label_name,
+        semantics_hash: value.semantics_hash,
+        description: value.description,
+        applies_when: value.applies_when,
+        excludes_when: value.excludes_when,
+        positive_examples: value.positive_examples,
+        negative_examples: value.negative_examples,
+        created_at: value.created_at,
+        updated_at: value.updated_at,
+        atoms: value
+            .atoms
+            .into_iter()
+            .map(|atom| LabelAtomWire {
+                id: atom.id,
+                label_id: atom.label_id,
+                board_id: atom.board_id,
+                label_name: atom.label_name,
+                polarity: atom.polarity,
+                kind: atom.kind,
+                text: atom.text,
+                ordinal: atom.ordinal,
+                content_hash: atom.content_hash,
+                created_at: atom.created_at,
+                updated_at: atom.updated_at,
+            })
+            .collect(),
+    }
 }
 
 #[cfg(test)]

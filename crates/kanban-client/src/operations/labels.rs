@@ -1,7 +1,7 @@
 use kanban_protocol::{
-    AddTaskLabelRequest, AddTaskLabelResponse, ApiLabel, ApiTask, CreateBoardLabelRequest,
-    CreateBoardLabelResponse, ListBoardLabelsResponse, ListTaskLabelsResponse,
-    RemoveTaskLabelResponse,
+    AddTaskLabelRequest, AddTaskLabelResponse, ApiLabel, ApiTask, BootstrapTaskLabelRequest,
+    BootstrapTaskLabelResponse, CreateBoardLabelRequest, CreateBoardLabelResponse,
+    ListBoardLabelsResponse, ListTaskLabelsResponse, RemoveTaskLabelResponse,
 };
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
@@ -112,6 +112,31 @@ impl KanbanClient {
     ) -> Result<ApiTask, ClientError> {
         let task_id = self.resolve_task_id(board, selector)?;
         self.remove_task_label(&task_id, label_id)
+    }
+
+    pub fn bootstrap_task_label(
+        &self,
+        task_id: &str,
+        request: &BootstrapTaskLabelRequest,
+    ) -> Result<BootstrapTaskLabelResponse, ClientError> {
+        let task_id = require_task_id(task_id)?;
+        self.post(
+            &format!(
+                "/api/v1/tasks/{}/labels/bootstrap",
+                encode_path_segment(task_id)
+            ),
+            request,
+        )
+    }
+
+    pub fn bootstrap_task_label_by_selector(
+        &self,
+        board: &str,
+        selector: &str,
+        request: &BootstrapTaskLabelRequest,
+    ) -> Result<BootstrapTaskLabelResponse, ClientError> {
+        let task_id = self.resolve_task_id(board, selector)?;
+        self.bootstrap_task_label(&task_id, request)
     }
 }
 

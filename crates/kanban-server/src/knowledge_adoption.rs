@@ -15,13 +15,13 @@ use http_body_util::BodyExt;
 use kanban_protocol::{
     AddTaskLabelRequest, AddTaskLabelResponse, ApiCreateTaskStatus, ApiTask, ArchiveBoardRequest,
     ArchiveBoardResponse, BoardLabelPath, BoardQuery, BoardTaskMapPath, BoardTaskMapQuery,
-    BoardTaskMapResponse, BuildContextPath, BuildContextQuery, BuildContextResponse,
-    ConfirmSignalsResponse, CreateBoardLabelRequest, CreateBoardLabelResponse, CreateBoardRequest,
-    CreateBoardResponse, CreateTaskRequest, CreateTaskResponse, EntityListQuery,
-    EntityListResponse, EntityPath, EntityResponse, EntityUpsertRequest, ErrorEnvelope,
-    GetLabelOntologySignalResponse, GetLabelProposalResponse, GetSignalResponse,
-    GraphMaintenanceResponse, GraphNeighborsQuery, GraphNeighborsResponse, GraphQueryQuery,
-    GraphStatusResponse, LabelAtomIndexStatusResponse, LabelOntologyActionRequest,
+    BoardTaskMapResponse, BootstrapTaskLabelRequest, BootstrapTaskLabelResponse, BuildContextPath,
+    BuildContextQuery, BuildContextResponse, ConfirmSignalsResponse, CreateBoardLabelRequest,
+    CreateBoardLabelResponse, CreateBoardRequest, CreateBoardResponse, CreateTaskRequest,
+    CreateTaskResponse, EntityListQuery, EntityListResponse, EntityPath, EntityResponse,
+    EntityUpsertRequest, ErrorEnvelope, GetLabelOntologySignalResponse, GetLabelProposalResponse,
+    GetSignalResponse, GraphMaintenanceResponse, GraphNeighborsQuery, GraphNeighborsResponse,
+    GraphQueryQuery, GraphStatusResponse, LabelAtomIndexStatusResponse, LabelOntologyActionRequest,
     LabelOntologyActionResponse, LabelOntologyReviewQuery, LabelOntologySignalQuery,
     LabelOntologySignalWire, LabelOntologySignalsResponse, LabelProposalCandidateWire,
     LabelProposalDecisionRequest, LabelSemanticsPath, ListBoardsResponse, ListLabelAtomsResponse,
@@ -30,10 +30,11 @@ use kanban_protocol::{
     RecordLabelOntologyObservationRequest, RecordLabelOntologyObservationResponse,
     RecordSignalRequest, RecordSignalResponse, RemoveTaskLabelResponse, ReviewSignalsRequest,
     SearchStatusResponse, SearchTasksByStatusResponse, SearchTasksQuery, SearchTasksResponse,
-    SignalFilterMeta, SignalPath, TaskNeighborhoodPath, TaskNeighborhoodQuery,
-    TaskNeighborhoodResponse, UpsertLabelSemanticsRequest, UpsertLabelSemanticsResponse,
-    VectorConfigureRequest, VectorConfigureResponse, VectorProjectionRequest,
-    VectorProjectionResponse, VectorQuery, VectorStatusQuery, VectorStatusResponse,
+    SignalFilterMeta, SignalPath, TaskLabelSurfacePath, TaskNeighborhoodPath,
+    TaskNeighborhoodQuery, TaskNeighborhoodResponse, UpsertLabelSemanticsRequest,
+    UpsertLabelSemanticsResponse, VectorConfigureRequest, VectorConfigureResponse,
+    VectorProjectionRequest, VectorProjectionResponse, VectorQuery, VectorStatusQuery,
+    VectorStatusResponse,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use tempfile::TempDir;
@@ -386,6 +387,53 @@ async fn labels_semantics_and_atoms_use_committed_fixtures_through_host() {
     assert_eq!(response.status(), StatusCode::OK);
     let status: LabelAtomIndexStatusResponse = response_json(response).await;
     assert!(!status.data.backend.is_empty());
+}
+
+#[tokio::test]
+async fn bootstrap_task_label_request_and_response_fixtures_reach_real_host() {
+    let (_directory, router) = test_router().await;
+    create_board(&router, "fixture").await;
+    let task = create_task(&router, "fixture", "t_fixture", "fixture bootstrap task").await;
+    let path: TaskLabelSurfacePath = fixture!(
+        TaskLabelSurfacePath,
+        "bootstrap-task-label-path.v1.valid.json"
+    );
+    assert_eq!(path.task_id, task.id);
+    let request: BootstrapTaskLabelRequest = fixture!(
+        BootstrapTaskLabelRequest,
+        "bootstrap-task-label-request.v1.valid.json"
+    );
+    let response = router
+        .clone()
+        .oneshot(request_json_with_headers(
+            Method::POST,
+            &format!("/api/v1/tasks/{}/labels/bootstrap", path.task_id),
+            &request,
+            &actor_headers(),
+        ))
+        .await
+        .expect("bootstrap task label response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let actual: BootstrapTaskLabelResponse = response_json(response).await;
+    let expected: BootstrapTaskLabelResponse = fixture!(
+        BootstrapTaskLabelResponse,
+        "bootstrap-task-label-response.v1.valid.json"
+    );
+    assert_eq!(actual.data.task.id, task.id);
+    assert_eq!(actual.data.task.labels.len(), 1);
+    assert_eq!(
+        actual.data.semantics.label_name,
+        expected.data.semantics.label_name
+    );
+    assert_eq!(
+        actual.data.semantics.description,
+        expected.data.semantics.description
+    );
+    assert_eq!(
+        actual.data.semantics.applies_when,
+        expected.data.semantics.applies_when
+    );
+    assert_eq!(actual.data.semantics.atoms.len(), 2);
 }
 
 #[tokio::test]

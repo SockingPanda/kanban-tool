@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::test_support::*;
-    use crate::{
+    use crate::store_operations::{
         OntologyActorInput, OntologyApplyAtomInput, OntologyRevertInput, UpsertLabelSemanticsInput,
     };
+    use crate::test_support::*;
 
     async fn label(store: &TursoStore, id: &str, name: &str) {
         let connection = store.connection().await.expect("connection");

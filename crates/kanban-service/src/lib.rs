@@ -65,16 +65,11 @@ pub use error::StoreError;
 // 输入在 service 边界显式使用别名。与 application DTO 重名的 record 和 option
 // 保持在 `store_operations` 内部。
 pub(crate) use store_operations::{
-    AddTaskLabelsInput, ArchiveBoardInput, ArchiveTaskInput, BlockTaskInput, ClaimTaskInput,
-    CompleteTaskInput, CreateAttachmentInput, CreateBoardInput, CreateCommentInput,
-    CreateLabelInput, CreateSignalInput, EntityUpsertInput, HeartbeatTaskInput,
-    LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
-    MarkExecutionPlanNotRequiredInput, OntologyActionInput, OntologyActorInput,
-    OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
-    PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput, RelationDeleteInput,
-    RelationPredicateInput, RelationUpsertInput, ReleaseTaskInput, RemoveTaskLabelInput,
-    ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SpecifyTaskInput,
-    SubmitReviewTaskInput, UnblockTaskInput, UpsertLabelSemanticsInput,
+    AddTaskLabelsInput, ArchiveBoardInput, CreateAttachmentInput, CreateBoardInput,
+    CreateCommentInput, CreateLabelInput, EntityUpsertInput, LabelProposalDecisionInput,
+    LabelProposalInput, LabelSuggestionOptions, OntologyActionInput, OntologyApplyAtomInput,
+    OntologyObservationInput, OntologyRevertInput, OntologyValidateInput, RelationDeleteInput,
+    RelationPredicateInput, RelationUpsertInput, RemoveTaskLabelInput, UpsertLabelSemanticsInput,
 };
 
 pub use vector::{

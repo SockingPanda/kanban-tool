@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
+    use crate::StoreError;
+    use crate::store_operations::{CreateSignalInput, ReviewSignalsInput, SignalLifecycleInput};
     use crate::test_support::*;
-    use crate::{CreateSignalInput, ReviewSignalsInput, SignalLifecycleInput, StoreError};
 
     fn signal_input(
         id: &str,

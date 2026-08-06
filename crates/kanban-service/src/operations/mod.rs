@@ -40,9 +40,7 @@ pub use graph::{
     ProjectionStatusOptions, TaskNeighborhoodOptions,
 };
 pub use labels::{
-    AddTaskLabelsCommand, AddTaskLabelsRecord, AddTaskLabelsRecordInput, BoardLabelCreate,
-    BoardLabelList, CreateBoardLabelCommand, CreateLabelRecord, RemoveTaskLabelCommand,
-    RemoveTaskLabelRecord, TaskLabelAdd, TaskLabelList, TaskLabelRemove,
+    AddTaskLabelsCommand, AddTaskLabelsRecord, CreateBoardLabelCommand, RemoveTaskLabelCommand,
 };
 pub use maintenance::*;
 pub use ontology::LabelOntologyOperations;

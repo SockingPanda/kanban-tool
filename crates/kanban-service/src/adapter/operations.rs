@@ -1,7 +1,6 @@
 mod context;
 mod entities;
 mod graph;
-mod labels;
 mod maintenance;
 mod ontology;
 mod relations;

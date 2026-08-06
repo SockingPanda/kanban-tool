@@ -4,8 +4,7 @@ use std::{
 };
 
 use crate::{
-    AddTaskLabelsRecord as ApplicationAddTaskLabelsRecord, ApplicationStore,
-    DependencyEdgeRecord as ApplicationDependencyEdge,
+    ApplicationStore, DependencyEdgeRecord as ApplicationDependencyEdge,
     DependencySnapshotRecord as ApplicationDependencySnapshot,
     ExecutionPlanRecord as ApplicationExecutionPlan, ExecutionPlanState,
     LabelRecord as ApplicationLabel, SignalObservationRecord as ApplicationSignalObservation,
@@ -13,7 +12,7 @@ use crate::{
     SignalStatus as ApplicationSignalStatus, StepRecord as ApplicationStep,
 };
 use crate::{
-    StoreAddTaskLabelsRecord, StoreError, TursoStore,
+    StoreError, TursoStore,
     domain::{
         DependencySnapshotRecord as StoreDependencySnapshot,
         TaskExecutionPlanRecord as StoreExecutionPlan,
@@ -258,19 +257,6 @@ pub(crate) fn application_label(label: crate::domain::LabelRecord) -> Applicatio
         created_at: label.created_at,
         updated_at: label.updated_at,
     }
-}
-
-pub(crate) fn application_add_task_labels(
-    record: StoreAddTaskLabelsRecord,
-) -> Result<ApplicationAddTaskLabelsRecord> {
-    Ok(ApplicationAddTaskLabelsRecord {
-        task: application_task(record.task)?,
-        created_labels: record
-            .created_labels
-            .into_iter()
-            .map(application_label)
-            .collect(),
-    })
 }
 
 pub(crate) fn application_execution_plan(

@@ -1,5 +1,6 @@
 use kanban_protocol::{
-    AddTaskLabelRequest, AddTaskLabelResponse, CreateBoardLabelRequest, CreateBoardLabelResponse,
+    AddTaskLabelRequest, AddTaskLabelResponse, BootstrapTaskLabelRequest,
+    BootstrapTaskLabelResponse, CreateBoardLabelRequest, CreateBoardLabelResponse,
     ListBoardLabelsResponse, ListTaskLabelsResponse, RemoveTaskLabelResponse,
 };
 use rmcp::{
@@ -58,6 +59,25 @@ struct TaskLabelRemoveArgs {
     task_ref: String,
     /// Label ID 或完全匹配的 label name。
     label_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TaskLabelBootstrapArgs {
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
+    board: Option<String>,
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
+    task_ref: String,
+    name: String,
+    description: Option<String>,
+    #[serde(default)]
+    applies_when: Vec<String>,
+    #[serde(default)]
+    excludes_when: Vec<String>,
+    #[serde(default)]
+    positive_examples: Vec<String>,
+    #[serde(default)]
+    negative_examples: Vec<String>,
 }
 
 #[tool_router(router = label_tools, vis = "pub(crate)")]
@@ -155,6 +175,33 @@ impl KanbanMcp {
                 .await?;
         Ok(Json(RemoveTaskLabelResponse { data: task }))
     }
+
+    #[tool(
+        name = "task_label_bootstrap",
+        description = "通过 canonical application service 创建首个 label semantics 并绑定任务"
+    )]
+    async fn task_label_bootstrap(
+        &self,
+        Parameters(args): Parameters<TaskLabelBootstrapArgs>,
+    ) -> Result<Json<BootstrapTaskLabelResponse>, McpError> {
+        let board = self.board(args.board);
+        let task_ref = args.task_ref;
+        let client = self.client.clone();
+        let request = BootstrapTaskLabelRequest {
+            name: args.name,
+            description: args.description,
+            applies_when: args.applies_when,
+            excludes_when: args.excludes_when,
+            positive_examples: args.positive_examples,
+            negative_examples: args.negative_examples,
+            actor: None,
+        };
+        let response = call_client(move || {
+            client.bootstrap_task_label_by_selector(&board, &task_ref, &request)
+        })
+        .await?;
+        Ok(Json(response))
+    }
 }
 
 #[cfg(test)]
@@ -174,6 +221,7 @@ mod tests {
                 "label_create",
                 "label_list",
                 "task_label_add",
+                "task_label_bootstrap",
                 "task_label_list",
                 "task_label_remove",
             ]

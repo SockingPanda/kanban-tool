@@ -15,6 +15,11 @@ const LABEL_WITNESS: AdoptionLocator = AdoptionLocator {
     test_target: "cli_label_contract_adoption",
     exact_test: "labels_semantics_atoms_and_proposals_flow_through_real_cli",
 };
+const LABEL_BOOTSTRAP_WITNESS: AdoptionLocator = AdoptionLocator {
+    package: "kanban-cli",
+    test_target: "label_contract_adoption",
+    exact_test: "bootstrap_label_flow_through_real_cli",
+};
 
 const LABEL_ONTOLOGY_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-cli",
@@ -112,7 +117,7 @@ const CLI_LABELS_OPERATIONS: &[OperationDeclaration] = &[
         "label bootstrap",
         "Kanban CLI label bootstrap output v1",
         crate::cli_labels::CliLabelBootstrapOutput,
-        LABEL_WITNESS
+        LABEL_BOOTSTRAP_WITNESS
     ),
     cli_operation!(
         "label-atom-index-query",

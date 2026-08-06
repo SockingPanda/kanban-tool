@@ -1,4 +1,5 @@
 mod add;
+mod bootstrap;
 mod create;
 mod list;
 pub(crate) mod ontology;
@@ -16,6 +17,8 @@ pub(crate) enum LabelCommand {
     Create(create::CreateArgs),
     /// 将一个或多个 label 绑定到任务。
     Add(add::AddArgs),
+    /// 从任务上下文创建首个 label semantics 并绑定任务。
+    Bootstrap(bootstrap::BootstrapArgs),
     /// 按 ID 或名称移除任务的 label。
     Remove(remove::RemoveArgs),
     /// 管理 label semantics 文本和示例。
@@ -57,6 +60,7 @@ pub(crate) fn run(ctx: &CliContext, command: &LabelCommand) -> Result<(), CliFai
         LabelCommand::List(args) => list::run(ctx, args),
         LabelCommand::Create(args) => create::run(ctx, args),
         LabelCommand::Add(args) => add::run(ctx, args),
+        LabelCommand::Bootstrap(args) => bootstrap::run(ctx, args),
         LabelCommand::Remove(args) => remove::run(ctx, args),
         LabelCommand::Semantics { command } => ontology::run_semantics(ctx, command),
         LabelCommand::Atoms { command } => ontology::run_atoms(ctx, command),

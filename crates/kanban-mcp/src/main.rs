@@ -46,8 +46,7 @@ async fn main() -> anyhow::Result<()> {
 mod tests {
     use super::KanbanMcp;
     use kanban_protocol::{
-        McpOperationClass, operation_catalog, project_mcp_policy,
-        validate_mcp_policy_projection,
+        McpOperationClass, operation_catalog, project_mcp_policy, validate_mcp_policy_projection,
     };
 
     #[test]
@@ -68,7 +67,7 @@ mod tests {
         assert_eq!(names, catalog_names);
         validate_mcp_policy_projection(&projection)
             .expect("MCP projection 只能绑定已存在的领域 endpoint");
-        assert_eq!(catalog_names.len(), 103);
+        assert_eq!(catalog_names.len(), 104);
     }
 
     #[test]

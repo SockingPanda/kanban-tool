@@ -95,6 +95,11 @@ const LABEL_DELETE_WITNESS: AdoptionLocator = AdoptionLocator {
     test_target: "lib",
     exact_test: "suite::labels_adoption::delete_board_label_response_fixture_is_produced_by_real_router",
 };
+const LABEL_BOOTSTRAP_WITNESS: AdoptionLocator = AdoptionLocator {
+    package: "kanban-server",
+    test_target: "lib",
+    exact_test: "knowledge_adoption::bootstrap_task_label_request_and_response_fixtures_reach_real_host",
+};
 const SIGNAL_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
@@ -434,7 +439,7 @@ const API_BOOTSTRAP_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Kanban bootstrap task label path v1",
         TASK_LABEL_PATH_PARAMETERS,
         crate::TaskLabelSurfacePath,
-        LABEL_WITNESS
+        LABEL_BOOTSTRAP_WITNESS
     ),
     header_contract!(
         "bootstrap-task-label",
@@ -450,7 +455,7 @@ const API_BOOTSTRAP_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "bootstrap-task-label-request",
         "Kanban bootstrap task label request v1",
         crate::BootstrapTaskLabelRequest,
-        LABEL_WITNESS
+        LABEL_BOOTSTRAP_WITNESS
     ),
     response_contract!(
         "api.bootstrap-task-label.response",
@@ -459,7 +464,7 @@ const API_BOOTSTRAP_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "bootstrap-task-label-response",
         "Kanban bootstrap task label response v1",
         crate::BootstrapTaskLabelResponse,
-        LABEL_WITNESS
+        LABEL_BOOTSTRAP_WITNESS
     ),
 ];
 

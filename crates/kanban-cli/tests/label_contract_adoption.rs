@@ -7,11 +7,11 @@ use kanban_protocol::{
     cli_labels::{
         CliLabelAtomIndexQueryOutput, CliLabelAtomIndexRebuildOutput,
         CliLabelAtomIndexStatusOutput, CliLabelAtomsExplainOutput, CliLabelAtomsListOutput,
-        CliLabelCreateOutput, CliLabelOntologyConfirmOutput, CliLabelOntologyQualityOutput,
-        CliLabelOntologyRecordOutput, CliLabelOntologyShowOutput, CliLabelProposalsAcceptOutput,
-        CliLabelProposalsListOutput, CliLabelProposalsRejectOutput, CliLabelProposalsShowOutput,
-        CliLabelProposeOutput, CliLabelSemanticsListOutput, CliLabelSemanticsShowOutput,
-        CliLabelSemanticsUpsertOutput, CliLabelSuggestOutput,
+        CliLabelBootstrapOutput, CliLabelCreateOutput, CliLabelOntologyConfirmOutput,
+        CliLabelOntologyQualityOutput, CliLabelOntologyRecordOutput, CliLabelOntologyShowOutput,
+        CliLabelProposalsAcceptOutput, CliLabelProposalsListOutput, CliLabelProposalsRejectOutput,
+        CliLabelProposalsShowOutput, CliLabelProposeOutput, CliLabelSemanticsListOutput,
+        CliLabelSemanticsShowOutput, CliLabelSemanticsUpsertOutput, CliLabelSuggestOutput,
     },
 };
 
@@ -196,6 +196,48 @@ fn labels_semantics_atoms_and_proposals_flow_through_real_cli() {
         rejected.data.status,
         kanban_protocol::LabelProposalStatusWire::Rejected
     ));
+}
+
+#[test]
+fn bootstrap_label_flow_through_real_cli() {
+    let host = Host::new();
+    let task: CliTaskCreateOutput = host.json(&[
+        "task",
+        "create",
+        "CLI bootstrap task",
+        "--task-id",
+        "t_cli_label_bootstrap",
+        "--status",
+        "todo",
+    ]);
+    assert_eq!(task.data.id, "t_cli_label_bootstrap");
+
+    let output: CliLabelBootstrapOutput = host.json(&[
+        "label",
+        "bootstrap",
+        task.data.id.as_str(),
+        "backend",
+        "--description",
+        "Backend implementation work",
+        "--applies-when",
+        "touches Rust service code",
+        "--positive-example",
+        "add a service command",
+    ]);
+    let fixture: CliLabelBootstrapOutput = serde_json::from_str(include_str!(
+        "../../../schemas/fixtures/cli/label-bootstrap-output.v1.valid.json"
+    ))
+    .expect("bootstrap CLI fixture");
+    assert_eq!(output.data.task.id, task.data.id);
+    assert_eq!(
+        output.data.semantics.label_name,
+        fixture.data.semantics.label_name
+    );
+    assert_eq!(
+        output.data.semantics.applies_when,
+        fixture.data.semantics.applies_when
+    );
+    assert_eq!(output.data.verification, fixture.data.verification);
 }
 
 #[test]

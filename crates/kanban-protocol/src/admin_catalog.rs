@@ -126,12 +126,6 @@ macro_rules! maintenance_witnesses {
 }
 
 maintenance_witnesses!(
-    MAINTENANCE_PATH_PRODUCER,
-    MAINTENANCE_PATH_CONSUMER,
-    "suite::maintenance_adoption::maintenance_path_request_producer",
-    "suite::maintenance_adoption::maintenance_path_request_consumer"
-);
-maintenance_witnesses!(
     MAINTENANCE_IMPORT_REQUEST_PRODUCER,
     MAINTENANCE_IMPORT_REQUEST_CONSUMER,
     "suite::maintenance_adoption::maintenance_import_request_producer",

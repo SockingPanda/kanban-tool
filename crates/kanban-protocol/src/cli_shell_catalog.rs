@@ -335,7 +335,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "graph-neighbors",
         "graph neighbors",
         "Kanban CLI graph neighbors output v1",
-        crate::CliGraphNeighborsOutput,
+        crate::cli_helpers::CliGraphNeighborsOutput,
         CLI_KNOWLEDGE_WITNESS
     ),
     adopted_cli_operation!(
@@ -344,7 +344,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "graph-query",
         "graph query",
         "Kanban CLI graph query output v1",
-        crate::CliGraphQueryOutput,
+        crate::cli_helpers::CliGraphQueryOutput,
         CLI_KNOWLEDGE_WITNESS
     ),
     adopted_cli_operation!(
@@ -371,7 +371,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "graph-rebuild",
         "graph rebuild",
         "Kanban CLI graph rebuild output v1",
-        crate::CliGraphRebuildOutput,
+        crate::cli_helpers::CliGraphRebuildOutput,
         CLI_KNOWLEDGE_WITNESS
     ),
     adopted_cli_operation!(
@@ -380,7 +380,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "graph-status",
         "graph status",
         "Kanban CLI graph status output v1",
-        crate::CliGraphStatusOutput,
+        crate::cli_helpers::CliGraphStatusOutput,
         CLI_KNOWLEDGE_WITNESS
     ),
     adopted_cli_operation!(
@@ -389,7 +389,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "graph-sync",
         "graph sync",
         "Kanban CLI graph sync output v1",
-        crate::CliGraphSyncOutput,
+        crate::cli_helpers::CliGraphSyncOutput,
         CLI_KNOWLEDGE_WITNESS
     ),
     excluded_cli_operation!(
@@ -408,7 +408,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "hook-codex-install",
         "hook codex install",
         "Kanban CLI hook codex install output v1",
-        crate::CliHookCodexInstallOutput,
+        crate::cli_operator::CliHookCodexInstallOutput,
         CLI_HOOK_WITNESS
     ),
     adopted_cli_operation!(
@@ -417,7 +417,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "hook-codex-status",
         "hook codex status",
         "Kanban CLI hook codex status output v1",
-        crate::CliHookCodexStatusOutput,
+        crate::cli_operator::CliHookCodexStatusOutput,
         CLI_HOOK_WITNESS
     ),
     adopted_cli_operation!(
@@ -426,7 +426,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "hook-codex-uninstall",
         "hook codex uninstall",
         "Kanban CLI hook codex uninstall output v1",
-        crate::CliHookCodexUninstallOutput,
+        crate::cli_operator::CliHookCodexUninstallOutput,
         CLI_HOOK_WITNESS
     ),
     adopted_cli_operation!(
@@ -453,7 +453,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "index-rebuild",
         "index rebuild",
         "Kanban CLI index rebuild output v1",
-        crate::CliIndexRebuildOutput,
+        crate::cli_helpers::CliIndexRebuildOutput,
         CLI_KNOWLEDGE_WITNESS
     ),
     adopted_cli_operation!(
@@ -471,7 +471,7 @@ const CLI_SHELL_OPERATIONS: &[OperationDeclaration] = &[
         "index-sync",
         "index sync",
         "Kanban CLI index sync output v1",
-        crate::CliIndexSyncOutput,
+        crate::cli_helpers::CliIndexSyncOutput,
         CLI_KNOWLEDGE_WITNESS
     ),
     adopted_cli_operation!(

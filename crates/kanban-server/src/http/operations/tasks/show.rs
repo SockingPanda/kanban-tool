@@ -154,7 +154,13 @@ fn api_task_ontology_signal_summary(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id", get(get_task))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/tasks/:task_id",
+        ),
+        get(get_task),
+    )
 }
 #[cfg(test)]
 mod tests {

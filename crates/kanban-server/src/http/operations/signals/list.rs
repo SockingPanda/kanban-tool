@@ -75,6 +75,18 @@ fn signal_options(query: &SignalQuery) -> Result<ApplicationSignalListOptions, A
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/boards/:board/signals", get(list_signals))
-        .route("/api/v1/boards/:board/signals/review", get(review_signals))
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/signals",
+            ),
+            get(list_signals),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/signals/review",
+            ),
+            get(review_signals),
+        )
 }

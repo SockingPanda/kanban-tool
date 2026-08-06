@@ -42,7 +42,13 @@ pub(crate) async fn add_dependency(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/dependencies", post(add_dependency))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/dependencies",
+        ),
+        post(add_dependency),
+    )
 }
 #[cfg(test)]
 mod tests {

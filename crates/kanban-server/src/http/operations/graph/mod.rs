@@ -299,16 +299,55 @@ fn api_graph_meta(meta: TaskGraphMetaRecord) -> Result<TaskGraphMeta, ApiError> 
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/graph/status", get(graph_status))
-        .route("/api/v1/graph/neighbors", get(graph_neighbors))
-        .route("/api/v1/graph/query", get(graph_query))
-        .route("/api/v1/graph/rebuild", post(graph_rebuild))
-        .route("/api/v1/graph/sync", post(graph_sync))
         .route(
-            "/api/v1/tasks/:task_id/neighborhood",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/graph/status",
+            ),
+            get(graph_status),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/graph/neighbors",
+            ),
+            get(graph_neighbors),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/graph/query",
+            ),
+            get(graph_query),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/graph/rebuild",
+            ),
+            post(graph_rebuild),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/graph/sync",
+            ),
+            post(graph_sync),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/tasks/:task_id/neighborhood",
+            ),
             get(task_neighborhood),
         )
-        .route("/api/v1/boards/:board/task-map", get(board_task_map))
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/task-map",
+            ),
+            get(board_task_map),
+        )
 }
 
 #[cfg(test)]

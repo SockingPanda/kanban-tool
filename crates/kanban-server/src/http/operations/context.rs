@@ -105,7 +105,13 @@ fn context_item(value: kanban_service::ContextItem) -> ContextItem {
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/context", get(build_context))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/tasks/:task_id/context",
+        ),
+        get(build_context),
+    )
 }
 
 #[cfg(test)]

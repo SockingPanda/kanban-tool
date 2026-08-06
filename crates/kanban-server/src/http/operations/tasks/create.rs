@@ -58,7 +58,13 @@ pub(crate) async fn create_task(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/boards/:board/tasks", post(create_task))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/boards/:board/tasks",
+        ),
+        post(create_task),
+    )
 }
 #[cfg(test)]
 mod tests {

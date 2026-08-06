@@ -151,3 +151,45 @@ fn desktop_cors_layer() -> CorsLayer {
             header::HeaderName::from_static("x-kb-actor"),
         ])
 }
+
+#[cfg(test)]
+mod contract_catalog_tests {
+    use std::collections::BTreeSet;
+
+    use kanban_protocol::{HttpMethod, endpoint_catalog};
+
+    use crate::http::operations::registered_api_routes;
+
+    #[test]
+    fn api_route_catalog_matches_exact_contract_catalog() {
+        let routes = registered_api_routes();
+        let actual = routes
+            .iter()
+            .map(|route| format!("{} {}", method_name(route.method), route.path))
+            .collect::<BTreeSet<_>>();
+        let expected = endpoint_catalog()
+            .iter()
+            .map(|endpoint| format!("{} {}", method_name(endpoint.method), endpoint.path))
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(
+            routes.len(),
+            actual.len(),
+            "同一个 method+path 不得重复注册；实际路由注册必须保持唯一"
+        );
+        assert_eq!(
+            actual, expected,
+            "Axum 实际 route 注册必须与精确 API contract catalog 完全一致"
+        );
+    }
+
+    fn method_name(method: HttpMethod) -> &'static str {
+        match method {
+            HttpMethod::Get => "GET",
+            HttpMethod::Post => "POST",
+            HttpMethod::Put => "PUT",
+            HttpMethod::Patch => "PATCH",
+            HttpMethod::Delete => "DELETE",
+        }
+    }
+}

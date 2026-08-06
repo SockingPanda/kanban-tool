@@ -78,16 +78,31 @@ async fn review(
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/v1/boards/:board/signals/confirm",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/boards/:board/signals/confirm",
+            ),
             post(confirm_signals),
         )
-        .route("/api/v1/boards/:board/signals/reject", post(reject_signals))
         .route(
-            "/api/v1/boards/:board/signals/resolve",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/boards/:board/signals/reject",
+            ),
+            post(reject_signals),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/boards/:board/signals/resolve",
+            ),
             post(resolve_signals),
         )
         .route(
-            "/api/v1/boards/:board/signals/supersede",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/boards/:board/signals/supersede",
+            ),
             post(supersede_signals),
         )
 }

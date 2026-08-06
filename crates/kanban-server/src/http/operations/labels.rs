@@ -116,15 +116,30 @@ pub(crate) async fn remove_task_label(
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/v1/boards/:board/labels",
+            crate::http::operations::registered_paths(
+                "/api/v1/boards/:board/labels",
+                &[
+                    kanban_protocol::HttpMethod::Get,
+                    kanban_protocol::HttpMethod::Post,
+                ],
+            ),
             get(list_board_labels).post(create_board_label),
         )
         .route(
-            "/api/v1/tasks/:task_id/labels",
+            crate::http::operations::registered_paths(
+                "/api/v1/tasks/:task_id/labels",
+                &[
+                    kanban_protocol::HttpMethod::Get,
+                    kanban_protocol::HttpMethod::Post,
+                ],
+            ),
             get(list_task_labels).post(add_task_labels),
         )
         .route(
-            "/api/v1/tasks/:task_id/labels/:label_id",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Delete,
+                "/api/v1/tasks/:task_id/labels/:label_id",
+            ),
             delete(remove_task_label),
         )
 }

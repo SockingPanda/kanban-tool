@@ -66,7 +66,13 @@ pub(crate) async fn create_comment(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/comments", post(create_comment))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/comments",
+        ),
+        post(create_comment),
+    )
 }
 #[cfg(test)]
 mod tests {

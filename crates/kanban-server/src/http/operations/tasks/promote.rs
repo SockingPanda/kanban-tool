@@ -29,7 +29,10 @@ pub(crate) async fn promote_task(
 
 pub(super) fn router() -> Router<AppState> {
     Router::new().route(
-        "/api/v1/tasks/:task_id/transitions/promote",
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/transitions/promote",
+        ),
         post(promote_task),
     )
 }

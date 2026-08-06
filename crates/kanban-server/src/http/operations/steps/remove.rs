@@ -33,5 +33,11 @@ pub(crate) async fn remove_step(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/steps/:step_id", delete(remove_step))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Delete,
+            "/api/v1/tasks/:task_id/steps/:step_id",
+        ),
+        delete(remove_step),
+    )
 }

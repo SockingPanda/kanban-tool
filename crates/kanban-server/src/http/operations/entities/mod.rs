@@ -81,8 +81,23 @@ fn api_entity(entity: EntityRecord) -> CliEntity {
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/entities", get(list_entities).put(upsert_entity))
-        .route("/api/v1/entities/:uri", get(get_entity))
+        .route(
+            crate::http::operations::registered_paths(
+                "/api/v1/entities",
+                &[
+                    kanban_protocol::HttpMethod::Get,
+                    kanban_protocol::HttpMethod::Put,
+                ],
+            ),
+            get(list_entities).put(upsert_entity),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/entities/:uri",
+            ),
+            get(get_entity),
+        )
 }
 
 #[cfg(test)]

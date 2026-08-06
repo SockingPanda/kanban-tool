@@ -66,7 +66,13 @@ fn sse_frame(event: StreamEventData) -> Result<String, ApiError> {
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/stream/events", get(stream_events))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/stream/events",
+        ),
+        get(stream_events),
+    )
 }
 
 #[cfg(test)]

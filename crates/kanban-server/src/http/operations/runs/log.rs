@@ -7,7 +7,13 @@ use axum::{
 use kanban_protocol::{ApiRunLog, GetRunLogPath, GetRunLogResponse};
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/runs/:run_id/log", get(get_run_log))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/runs/:run_id/log",
+        ),
+        get(get_run_log),
+    )
 }
 
 pub(crate) async fn get_run_log(

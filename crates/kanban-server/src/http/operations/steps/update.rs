@@ -40,7 +40,13 @@ pub(crate) async fn update_step(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/steps/:step_id", patch(update_step))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Patch,
+            "/api/v1/tasks/:task_id/steps/:step_id",
+        ),
+        patch(update_step),
+    )
 }
 #[cfg(test)]
 mod tests {}

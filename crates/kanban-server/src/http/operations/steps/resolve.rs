@@ -86,15 +86,24 @@ pub(crate) async fn reopen_step(
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/v1/tasks/:task_id/steps/:step_id/done",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/tasks/:task_id/steps/:step_id/done",
+            ),
             post(complete_step),
         )
         .route(
-            "/api/v1/tasks/:task_id/steps/:step_id/skip",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/tasks/:task_id/steps/:step_id/skip",
+            ),
             post(skip_step),
         )
         .route(
-            "/api/v1/tasks/:task_id/steps/:step_id/reopen",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/tasks/:task_id/steps/:step_id/reopen",
+            ),
             post(reopen_step),
         )
 }

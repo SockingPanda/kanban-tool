@@ -181,12 +181,39 @@ fn task_status(status: ApiTaskStatus) -> TaskStatus {
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/search/tasks", get(search_tasks))
         .route(
-            "/api/v1/search/tasks/by-status",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/search/tasks",
+            ),
+            get(search_tasks),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/search/tasks/by-status",
+            ),
             get(search_tasks_by_status),
         )
-        .route("/api/v1/search/status", get(search_status))
-        .route("/api/v1/search/index/rebuild", post(rebuild_search))
-        .route("/api/v1/search/index/sync", post(sync_search))
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/search/status",
+            ),
+            get(search_status),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/search/index/rebuild",
+            ),
+            post(rebuild_search),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/search/index/sync",
+            ),
+            post(sync_search),
+        )
 }

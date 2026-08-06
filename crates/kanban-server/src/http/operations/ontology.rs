@@ -670,73 +670,152 @@ pub(crate) async fn validate(
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/v1/boards/:board/labels/semantics",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/labels/semantics",
+            ),
             get(list_semantics),
         )
         .route(
-            "/api/v1/boards/:board/labels/:label_id/semantics",
+            crate::http::operations::registered_paths(
+                "/api/v1/boards/:board/labels/:label_id/semantics",
+                &[
+                    kanban_protocol::HttpMethod::Get,
+                    kanban_protocol::HttpMethod::Put,
+                    kanban_protocol::HttpMethod::Delete,
+                ],
+            ),
             get(get_semantics)
                 .put(upsert_semantics)
                 .delete(delete_semantics),
         )
-        .route("/api/v1/boards/:board/labels/atoms", get(list_atoms))
         .route(
-            "/api/v1/boards/:board/labels/atoms/:atom_ref/explain",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/labels/atoms",
+            ),
+            get(list_atoms),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/labels/atoms/:atom_ref/explain",
+            ),
             get(explain_atom),
         )
         .route(
-            "/api/v1/boards/:board/labels/atom-index/status",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/labels/atom-index/status",
+            ),
             get(index_status),
         )
         .route(
-            "/api/v1/boards/:board/labels/atom-index/rebuild",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/boards/:board/labels/atom-index/rebuild",
+            ),
             post(rebuild_index),
         )
         .route(
-            "/api/v1/boards/:board/labels/atom-index/query",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/labels/atom-index/query",
+            ),
             get(query_index),
         )
         .route(
-            "/api/v1/tasks/:task_id/labels/suggestions",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/tasks/:task_id/labels/suggestions",
+            ),
             get(suggestions),
         )
         .route(
-            "/api/v1/tasks/:task_id/label-proposals",
+            crate::http::operations::registered_paths(
+                "/api/v1/tasks/:task_id/label-proposals",
+                &[
+                    kanban_protocol::HttpMethod::Get,
+                    kanban_protocol::HttpMethod::Post,
+                ],
+            ),
             get(list_proposals_for_task).post(propose_for_task),
         )
         .route(
-            "/api/v1/tasks/:task_id/label-ontology/observations",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/tasks/:task_id/label-ontology/observations",
+            ),
             post(record_observation),
         )
         .route(
-            "/api/v1/boards/:board/label-ontology/signals",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/label-ontology/signals",
+            ),
             get(list_signals),
         )
         .route(
-            "/api/v1/boards/:board/label-ontology/review",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/boards/:board/label-ontology/review",
+            ),
             get(review_signals),
         )
         .route(
-            "/api/v1/boards/:board/label-ontology/actions",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/boards/:board/label-ontology/actions",
+            ),
             post(create_action),
         )
         .route(
-            "/api/v1/boards/:board/label-ontology/apply/atom",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/boards/:board/label-ontology/apply/atom",
+            ),
             post(apply_atom),
         )
-        .route("/api/v1/boards/:board/label-ontology/revert", post(revert))
         .route(
-            "/api/v1/boards/:board/label-ontology/validate",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/boards/:board/label-ontology/revert",
+            ),
+            post(revert),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/boards/:board/label-ontology/validate",
+            ),
             post(validate),
         )
-        .route("/api/v1/label-ontology/signals/:signal_id", get(get_signal))
-        .route("/api/v1/label-proposals/:proposal_id", get(get_proposal))
         .route(
-            "/api/v1/label-proposals/:proposal_id/accept",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/label-ontology/signals/:signal_id",
+            ),
+            get(get_signal),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/label-proposals/:proposal_id",
+            ),
+            get(get_proposal),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/label-proposals/:proposal_id/accept",
+            ),
             post(accept_proposal),
         )
         .route(
-            "/api/v1/label-proposals/:proposal_id/reject",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/label-proposals/:proposal_id/reject",
+            ),
             post(reject_proposal),
         )
 }

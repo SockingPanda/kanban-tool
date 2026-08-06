@@ -40,5 +40,11 @@ pub(crate) async fn update_task(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id", patch(update_task))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Patch,
+            "/api/v1/tasks/:task_id",
+        ),
+        patch(update_task),
+    )
 }

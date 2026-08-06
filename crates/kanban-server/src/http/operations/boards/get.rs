@@ -18,5 +18,11 @@ pub(crate) async fn get_board(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/boards/:board", get(get_board))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/boards/:board",
+        ),
+        get(get_board),
+    )
 }

@@ -56,7 +56,13 @@ pub(crate) async fn list_tasks(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/boards/:board/tasks", get(list_tasks))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/boards/:board/tasks",
+        ),
+        get(list_tasks),
+    )
 }
 #[cfg(test)]
 mod tests {}

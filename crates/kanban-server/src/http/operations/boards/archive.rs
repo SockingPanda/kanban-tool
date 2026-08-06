@@ -30,5 +30,11 @@ pub(crate) async fn archive_board(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/boards/:board/archive", post(archive_board))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/boards/:board/archive",
+        ),
+        post(archive_board),
+    )
 }

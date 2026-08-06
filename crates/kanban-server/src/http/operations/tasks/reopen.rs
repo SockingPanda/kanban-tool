@@ -33,7 +33,10 @@ pub(crate) async fn reopen_task(
 
 pub(super) fn router() -> Router<AppState> {
     Router::new().route(
-        "/api/v1/tasks/:task_id/transitions/reopen",
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/transitions/reopen",
+        ),
         post(reopen_task),
     )
 }

@@ -38,7 +38,10 @@ pub(crate) async fn mark_execution_plan_not_required(
 
 pub(super) fn router() -> Router<AppState> {
     Router::new().route(
-        "/api/v1/tasks/:task_id/execution-plan/not-required",
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/execution-plan/not-required",
+        ),
         post(mark_execution_plan_not_required),
     )
 }

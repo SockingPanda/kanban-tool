@@ -136,11 +136,23 @@ fn api_attachment(attachment: kanban_service::AttachmentRecord) -> ApiAttachment
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route(
-            "/api/v1/tasks/:task_id/attachments",
+            crate::http::operations::registered_paths(
+                "/api/v1/tasks/:task_id/attachments",
+                &[
+                    kanban_protocol::HttpMethod::Get,
+                    kanban_protocol::HttpMethod::Post,
+                ],
+            ),
             get(list_attachments).post(create_attachment),
         )
         .route(
-            "/api/v1/tasks/:task_id/attachments/:attachment_id",
+            crate::http::operations::registered_paths(
+                "/api/v1/tasks/:task_id/attachments/:attachment_id",
+                &[
+                    kanban_protocol::HttpMethod::Get,
+                    kanban_protocol::HttpMethod::Delete,
+                ],
+            ),
             get(download_attachment).delete(delete_attachment),
         )
 }

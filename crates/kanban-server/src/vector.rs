@@ -24,12 +24,48 @@ use crate::{error::ApiError, state::AppState};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/vector/status", get(status))
-        .route("/api/v1/vector/configure", post(configure))
-        .route("/api/v1/vector/rebuild", post(rebuild))
-        .route("/api/v1/vector/sync", post(sync))
-        .route("/api/v1/vector/query-chunks", get(query_chunks))
-        .route("/api/v1/vector/query-label-atoms", get(query_label_atoms))
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/vector/status",
+            ),
+            get(status),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/vector/configure",
+            ),
+            post(configure),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/vector/rebuild",
+            ),
+            post(rebuild),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/vector/sync",
+            ),
+            post(sync),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/vector/query-chunks",
+            ),
+            get(query_chunks),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/vector/query-label-atoms",
+            ),
+            get(query_label_atoms),
+        )
 }
 
 async fn status(

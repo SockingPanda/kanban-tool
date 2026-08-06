@@ -299,18 +299,81 @@ fn run_report(value: kanban_service::MaintenanceRunRecord) -> MaintenanceRunRepo
 
 pub(super) fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/maintenance/doctor", get(doctor))
-        .route("/api/v1/maintenance/checkpoint", post(checkpoint))
-        .route("/api/v1/maintenance/backup", post(backup))
-        .route("/api/v1/maintenance/export", post(export))
-        .route("/api/v1/maintenance/import", post(import))
         .route(
-            "/api/v1/maintenance/import-v30",
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/maintenance/doctor",
+            ),
+            get(doctor),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/maintenance/checkpoint",
+            ),
+            post(checkpoint),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/maintenance/backup",
+            ),
+            post(backup),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/maintenance/export",
+            ),
+            post(export),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/maintenance/import",
+            ),
+            post(import),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/maintenance/import-v30",
+            ),
             post(import_legacy_sqlite_v30),
         )
-        .route("/api/v1/maintenance/vacuum", post(vacuum))
-        .route("/api/v1/maintenance/status", get(maintenance_status))
-        .route("/api/v1/maintenance/run", post(maintenance_run))
-        .route("/api/v1/maintenance/rebuild", post(maintenance_rebuild))
-        .route("/api/v1/maintenance/cleanup", post(maintenance_cleanup))
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/maintenance/vacuum",
+            ),
+            post(vacuum),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Get,
+                "/api/v1/maintenance/status",
+            ),
+            get(maintenance_status),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/maintenance/run",
+            ),
+            post(maintenance_run),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/maintenance/rebuild",
+            ),
+            post(maintenance_rebuild),
+        )
+        .route(
+            crate::http::operations::registered_path(
+                kanban_protocol::HttpMethod::Post,
+                "/api/v1/maintenance/cleanup",
+            ),
+            post(maintenance_cleanup),
+        )
 }

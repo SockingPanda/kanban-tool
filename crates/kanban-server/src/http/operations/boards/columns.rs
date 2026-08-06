@@ -41,7 +41,13 @@ pub(crate) async fn list_board_columns(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/boards/:board/columns", get(list_board_columns))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/boards/:board/columns",
+        ),
+        get(list_board_columns),
+    )
 }
 
 #[cfg(test)]

@@ -51,5 +51,11 @@ pub(crate) async fn record_signal(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/boards/:board/signals", post(record_signal))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/boards/:board/signals",
+        ),
+        post(record_signal),
+    )
 }

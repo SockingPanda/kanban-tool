@@ -37,5 +37,11 @@ pub(crate) async fn create_board(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/boards", post(create_board))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/boards",
+        ),
+        post(create_board),
+    )
 }

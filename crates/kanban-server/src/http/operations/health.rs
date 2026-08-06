@@ -26,7 +26,10 @@ pub(crate) async fn health(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/health", get(health))
+    Router::new().route(
+        crate::http::operations::registered_path(kanban_protocol::HttpMethod::Get, "/health"),
+        get(health),
+    )
 }
 
 #[cfg(test)]

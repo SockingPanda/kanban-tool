@@ -39,7 +39,13 @@ pub(crate) async fn claim_task(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/transitions/claim", post(claim_task))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/transitions/claim",
+        ),
+        post(claim_task),
+    )
 }
 
 #[cfg(test)]

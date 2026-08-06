@@ -18,5 +18,11 @@ pub(crate) async fn get_signal(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/signals/:signal_id", get(get_signal))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/signals/:signal_id",
+        ),
+        get(get_signal),
+    )
 }

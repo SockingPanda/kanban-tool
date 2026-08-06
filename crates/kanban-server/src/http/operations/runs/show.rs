@@ -18,7 +18,13 @@ pub(crate) async fn get_run(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/runs/:run_id", get(get_run))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/runs/:run_id",
+        ),
+        get(get_run),
+    )
 }
 
 #[cfg(test)]

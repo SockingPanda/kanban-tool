@@ -387,7 +387,7 @@ struct Attachment {
 }
 
 /// host service 使用的自由函数入口。
-pub async fn import_legacy_sqlite_v30(
+pub(crate) async fn import_legacy_sqlite_v30(
     store: &TursoStore,
     options: LegacyImportOptions,
 ) -> Result<LegacyImportResult, StoreError> {

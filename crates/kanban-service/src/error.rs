@@ -6,7 +6,7 @@ use std::{
 use kanban_core::KanbanError;
 
 #[derive(Debug)]
-pub enum StoreError {
+pub(crate) enum StoreError {
     Turso(turso::Error),
     InvalidPath,
     InvalidInput(String),

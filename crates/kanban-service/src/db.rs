@@ -15,7 +15,7 @@ use crate::{
 
 /// 升级前备份的请求。内置流程已生成并验证快照；调用方可在 hook 中记录、追加验证或拒绝升级。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UpgradeBackupRequest {
+pub(crate) struct UpgradeBackupRequest {
     pub source_path: PathBuf,
     pub backup_path: PathBuf,
     pub family: String,
@@ -25,12 +25,12 @@ pub struct UpgradeBackupRequest {
 }
 
 /// 宿主可以实现这个 seam，追加自己的备份登记或策略校验。
-pub trait UpgradeBackupHook: Send + Sync {
+pub(crate) trait UpgradeBackupHook: Send + Sync {
     fn before_upgrade(&self, request: &UpgradeBackupRequest) -> Result<(), StoreError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CapabilityRecord {
+pub(crate) struct CapabilityRecord {
     pub capability: String,
     pub available: bool,
     pub detail: String,
@@ -38,13 +38,13 @@ pub struct CapabilityRecord {
 }
 
 #[derive(Clone)]
-pub struct TursoStore {
+pub(crate) struct TursoStore {
     database: Database,
     path: Arc<PathBuf>,
 }
 
 impl TursoStore {
-    pub async fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+    pub(crate) async fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref().to_str().ok_or(StoreError::InvalidPath)?;
         if path.is_empty() {
             return Err(StoreError::InvalidPath);
@@ -60,13 +60,13 @@ impl TursoStore {
         })
     }
 
-    pub async fn initialize(&self) -> Result<(), StoreError> {
+    pub(crate) async fn initialize(&self) -> Result<(), StoreError> {
         self.initialize_with_backup_hook(None).await
     }
 
     /// 将旧 SQLite v30 逻辑导入当前 Turso canonical 数据库。
     #[cfg(feature = "legacy-sqlite-import")]
-    pub async fn import_legacy_sqlite_v30(
+    pub(crate) async fn import_legacy_sqlite_v30(
         &self,
         options: crate::legacy_import::LegacyImportOptions,
     ) -> Result<crate::legacy_import::LegacyImportResult, StoreError> {
@@ -75,7 +75,7 @@ impl TursoStore {
 
     /// `import_legacy_sqlite_v30` 的简短别名，供 host 管理 operation 使用。
     #[cfg(feature = "legacy-sqlite-import")]
-    pub async fn import_legacy_sqlite(
+    pub(crate) async fn import_legacy_sqlite(
         &self,
         options: crate::legacy_import::LegacyImportOptions,
     ) -> Result<crate::legacy_import::LegacyImportResult, StoreError> {
@@ -83,7 +83,7 @@ impl TursoStore {
     }
 
     /// 使用可选的升级前备份 hook 初始化。没有升级时不会调用 hook。
-    pub async fn initialize_with_backup_hook(
+    pub(crate) async fn initialize_with_backup_hook(
         &self,
         backup_hook: Option<&dyn UpgradeBackupHook>,
     ) -> Result<(), StoreError> {
@@ -129,14 +129,14 @@ impl TursoStore {
     }
 
     /// 在内置升级备份之外追加宿主 hook；hook 失败会阻止 schema 事务开始。
-    pub async fn initialize_requiring_backup(
+    pub(crate) async fn initialize_requiring_backup(
         &self,
         backup_hook: &dyn UpgradeBackupHook,
     ) -> Result<(), StoreError> {
         self.initialize_with_backup_hook(Some(backup_hook)).await
     }
 
-    pub async fn capability_report(&self) -> Result<Vec<CapabilityRecord>, StoreError> {
+    pub(crate) async fn capability_report(&self) -> Result<Vec<CapabilityRecord>, StoreError> {
         let connection = self.connection().await?;
         let mut rows = connection
             .query(

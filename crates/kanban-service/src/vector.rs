@@ -22,12 +22,12 @@ use crate::{
     },
 };
 
-pub const VECTOR_TASKS_PROJECTION: &str = "vector_tasks";
-pub const VECTOR_LABEL_ATOMS_PROJECTION: &str = "vector_label_atoms";
-pub const VECTOR_BACKEND: &str = "turso-vector32";
-pub const MAX_VECTOR_BATCH: usize = 64;
-pub const MAX_VECTOR_DIMENSIONS: usize = 16_384;
-pub const MAX_VECTOR_CONTENT_BYTES: usize = 1_048_576;
+pub(crate) const VECTOR_TASKS_PROJECTION: &str = "vector_tasks";
+pub(crate) const VECTOR_LABEL_ATOMS_PROJECTION: &str = "vector_label_atoms";
+pub(crate) const VECTOR_BACKEND: &str = "turso-vector32";
+pub(crate) const MAX_VECTOR_BATCH: usize = 64;
+pub(crate) const MAX_VECTOR_DIMENSIONS: usize = 16_384;
+pub(crate) const MAX_VECTOR_CONTENT_BYTES: usize = 1_048_576;
 
 const OLLAMA_READ_TIMEOUT: Duration = Duration::from_secs(30);
 const OLLAMA_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -35,7 +35,7 @@ const OLLAMA_MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 
 /// host 侧 Ollama 配置。该配置只描述 provider，不改变 canonical 事实。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VectorConfig {
+pub(crate) struct VectorConfig {
     pub provider: String,
     pub endpoint: String,
     pub model: String,
@@ -43,7 +43,7 @@ pub struct VectorConfig {
 }
 
 impl VectorConfig {
-    pub fn validate(&self) -> Result<(), StoreError> {
+    pub(crate) fn validate(&self) -> Result<(), StoreError> {
         if !self.provider.eq_ignore_ascii_case("ollama") {
             return Err(StoreError::InvalidInput(
                 "vector provider 目前必须是 ollama".to_owned(),
@@ -90,14 +90,14 @@ impl VectorConfig {
         Ok(())
     }
 
-    pub fn fingerprint(&self) -> String {
+    pub(crate) fn fingerprint(&self) -> String {
         provider_fingerprint(&self.provider, &self.model, self.dimensions)
     }
 }
 
 /// projection_state 的稳定读取 DTO。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VectorStatusRecord {
+pub(crate) struct VectorStatusRecord {
     pub backend: String,
     pub enabled: bool,
     pub message: String,
@@ -116,7 +116,7 @@ pub struct VectorStatusRecord {
 
 /// 由 canonical 事实构造的文本文档。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VectorDocumentInput {
+pub(crate) struct VectorDocumentInput {
     pub id: String,
     pub board_id: String,
     pub entity_uri: Option<String>,
@@ -129,7 +129,7 @@ pub struct VectorDocumentInput {
 
 /// 一个可投影的向量值。
 #[derive(Debug, Clone, PartialEq)]
-pub struct VectorEmbeddingInput {
+pub(crate) struct VectorEmbeddingInput {
     pub id: String,
     pub board_id: String,
     pub entity_uri: Option<String>,
@@ -143,7 +143,7 @@ pub struct VectorEmbeddingInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProjectionJobRecord {
+pub(crate) struct ProjectionJobRecord {
     pub id: i64,
     pub board_id: Option<String>,
     pub source_event_id: Option<i64>,
@@ -159,7 +159,7 @@ pub struct ProjectionJobRecord {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct VectorChunkHitRecord {
+pub(crate) struct VectorChunkHitRecord {
     pub id: String,
     pub board_id: Option<String>,
     pub entity_uri: Option<String>,
@@ -172,7 +172,7 @@ pub struct VectorChunkHitRecord {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct VectorLabelAtomHitRecord {
+pub(crate) struct VectorLabelAtomHitRecord {
     pub atom_id: String,
     pub label_id: String,
     pub label_name: String,
@@ -1014,13 +1014,13 @@ fn corpus_fingerprint(projection: &str, provider_fingerprint: &str) -> String {
     format!("sha256:{:x}", digest.finalize())
 }
 
-pub fn content_hash(content: &str) -> String {
+pub(crate) fn content_hash(content: &str) -> String {
     let mut digest = Sha256::new();
     digest.update(content.as_bytes());
     format!("sha256:{:x}", digest.finalize())
 }
 
-pub fn stable_id(prefix: &str, parts: &[&str]) -> String {
+pub(crate) fn stable_id(prefix: &str, parts: &[&str]) -> String {
     let mut digest = Sha256::new();
     for part in parts {
         digest.update(part.as_bytes());
@@ -1051,7 +1051,7 @@ fn retry_backoff_ms(attempts: i64) -> i64 {
 }
 
 /// 使用当前 canonical vector 配置生成查询 embedding。
-pub async fn embed_query(
+pub(crate) async fn embed_query(
     store: &TursoStore,
     text: &str,
 ) -> Result<(VectorConfig, Vec<f32>), StoreError> {
@@ -1078,7 +1078,7 @@ fn vector_degraded(message: impl Into<String>) -> StoreError {
 }
 
 /// 执行一个 host 内 vector projection worker tick。
-pub async fn worker_tick(store: TursoStore, owner: &str) -> Result<usize, StoreError> {
+pub(crate) async fn worker_tick(store: TursoStore, owner: &str) -> Result<usize, StoreError> {
     let Some(config) = store.vector_config().await? else {
         return Ok(0);
     };

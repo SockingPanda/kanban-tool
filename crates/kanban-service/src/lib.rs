@@ -25,11 +25,11 @@ pub mod adoption_test_support;
 
 pub mod dto;
 pub mod operations;
-pub mod service;
-pub mod vector;
+mod service;
+mod vector;
 
 #[cfg(feature = "legacy-sqlite-import")]
-pub mod legacy_import;
+mod legacy_import;
 
 pub use dto::*;
 pub use kanban_core::{Board, BoardColumn, KanbanError, Result, TaskStatus, new_task_id};
@@ -57,10 +57,10 @@ pub use operations::{
 };
 pub use service::KanbanService;
 
-// 规范持久化入口。Store row model 保持私有，避免 service DTO 边界意外暴露第二套
-// application model。
-pub use db::{CapabilityRecord, TursoStore, UpgradeBackupHook, UpgradeBackupRequest};
-pub use error::StoreError;
+// 规范持久化入口只在 service crate 内可见；host 只能使用上面的 KanbanService。
+// Store row model 和 StoreError 不进入跨 crate 的 application API。
+pub(crate) use db::{CapabilityRecord, TursoStore, UpgradeBackupHook, UpgradeBackupRequest};
+pub(crate) use error::StoreError;
 
 // 输入在 service 边界显式使用别名。与 application DTO 重名的 record 和 option
 // 保持在 `store_operations` 内部。
@@ -72,7 +72,7 @@ pub(crate) use store_operations::{
     RelationPredicateInput, RelationUpsertInput, RemoveTaskLabelInput, UpsertLabelSemanticsInput,
 };
 
-pub use vector::{
+pub(crate) use vector::{
     MAX_VECTOR_BATCH, MAX_VECTOR_CONTENT_BYTES, MAX_VECTOR_DIMENSIONS, ProjectionJobRecord,
     VECTOR_BACKEND, VECTOR_LABEL_ATOMS_PROJECTION, VECTOR_TASKS_PROJECTION, VectorChunkHitRecord,
     VectorConfig, VectorDocumentInput, VectorEmbeddingInput, VectorLabelAtomHitRecord,
@@ -82,5 +82,5 @@ pub use vector::{
 #[cfg(feature = "legacy-sqlite-import")]
 pub use legacy_import::{
     LegacyImportOptions, LegacyImportResult, LegacyImportTableCount, LegacySqliteImportOptions,
-    LegacySqliteImportResult, import_legacy_sqlite_v30,
+    LegacySqliteImportResult,
 };

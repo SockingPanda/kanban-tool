@@ -44,7 +44,7 @@ impl KanbanService<SystemClock> {
         })
     }
 
-    pub fn new(store: TursoStore) -> Self {
+    pub(crate) fn new(store: TursoStore) -> Self {
         Self {
             store,
             run_log_root: None,
@@ -60,7 +60,7 @@ where
     C: Clock,
 {
     /// 为 service 保留可测试的 Clock seam。
-    pub fn with_clock(store: TursoStore, clock: C) -> Self {
+    pub(crate) fn with_clock(store: TursoStore, clock: C) -> Self {
         Self {
             store,
             run_log_root: None,

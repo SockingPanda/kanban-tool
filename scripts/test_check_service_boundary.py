@@ -22,7 +22,11 @@ class ServiceBoundaryGateTests(unittest.TestCase):
         self.root = Path(self.temp_dir.name)
         (self.root / GATE.SERVER_ROOT).mkdir(parents=True)
         (self.root / GATE.SERVICE_API).parent.mkdir(parents=True, exist_ok=True)
+        (self.root / GATE.SERVICE_ROOT).parent.mkdir(parents=True, exist_ok=True)
         (self.root / GATE.SERVICE_API).write_text(
+            "pub struct KanbanService;\n", encoding="utf-8"
+        )
+        (self.root / GATE.SERVICE_ROOT).write_text(
             "pub struct KanbanService;\n", encoding="utf-8"
         )
         (self.root / GATE.SERVER_ROOT / "state.rs").write_text(
@@ -46,6 +50,37 @@ class ServiceBoundaryGateTests(unittest.TestCase):
         (self.root / GATE.SERVICE_API).write_text("", encoding="utf-8")
         failures = GATE.check_boundary(self.root)
         self.assertTrue(any("KanbanService" in failure for failure in failures))
+
+    def test_public_store_reexport_is_rejected(self) -> None:
+        (self.root / GATE.SERVICE_ROOT).write_text(
+            "pub struct KanbanService;\npub use db::TursoStore;\n",
+            encoding="utf-8",
+        )
+        failures = GATE.check_boundary(self.root)
+        self.assertTrue(any("root 不得 public re-export" in failure for failure in failures))
+
+    def test_public_vector_row_reexport_is_rejected(self) -> None:
+        (self.root / GATE.SERVICE_ROOT).write_text(
+            "pub struct KanbanService;\npub use vector::VectorStatusRecord;\n",
+            encoding="utf-8",
+        )
+        failures = GATE.check_boundary(self.root)
+        self.assertTrue(any("root 不得 public re-export" in failure for failure in failures))
+
+    def test_public_vector_module_is_rejected(self) -> None:
+        (self.root / GATE.SERVICE_ROOT).write_text(
+            "pub struct KanbanService;\npub mod vector;\n",
+            encoding="utf-8",
+        )
+        failures = GATE.check_boundary(self.root)
+        self.assertTrue(any("root 不得 public re-export" in failure for failure in failures))
+
+    def test_crate_private_store_reexport_is_allowed(self) -> None:
+        (self.root / GATE.SERVICE_ROOT).write_text(
+            "pub struct KanbanService;\npub(crate) use db::TursoStore;\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(GATE.check_boundary(self.root), [])
 
 
 if __name__ == "__main__":

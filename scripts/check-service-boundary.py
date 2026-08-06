@@ -15,9 +15,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SERVER_ROOT = Path("crates/kanban-server/src")
 SERVICE_API = Path("crates/kanban-service/src/service.rs")
+SERVICE_ROOT = Path("crates/kanban-service/src/lib.rs")
 FORBIDDEN_SERVER_SYMBOLS = re.compile(
     r"\b(?:ApplicationService|TursoApplicationStore|TursoStore|StoreError|"
     r"HostApplicationService)\b"
+)
+FORBIDDEN_SERVICE_PUBLIC_EXPORTS = re.compile(
+    r"^\s*pub\s+(?:use\b.*\b(?:db|error|vector)::|mod\s+"
+    r"(?:db|error|vector|legacy_import|store_operations)\b)|"
+    r"^\s*pub\s+use\b.*\b(?:TursoStore|StoreError|CapabilityRecord|"
+    r"UpgradeBackupHook|UpgradeBackupRequest|ProjectionJobRecord|"
+    r"VectorStatusRecord|VectorDocumentInput|VectorEmbeddingInput|"
+    r"VectorChunkHitRecord|VectorLabelAtomHitRecord|VectorConfig|"
+    r"VECTOR_TASKS_PROJECTION|VECTOR_LABEL_ATOMS_PROJECTION|VECTOR_BACKEND|"
+    r"MAX_VECTOR_BATCH|MAX_VECTOR_DIMENSIONS|MAX_VECTOR_CONTENT_BYTES|"
+    r"content_hash|stable_id|embed_query|worker_tick)\b",
+    re.MULTILINE,
 )
 
 
@@ -31,6 +44,18 @@ def check_boundary(root: Path = ROOT) -> list[str]:
         return [f"{SERVICE_API}: 无法读取 service API: {error}"]
     if not re.search(r"\bpub struct KanbanService\b", service_source):
         failures.append(f"{SERVICE_API}: 缺少 host-facing KanbanService")
+
+    service_root = root / SERVICE_ROOT
+    try:
+        service_root_source = service_root.read_text(encoding="utf-8")
+    except OSError as error:
+        failures.append(f"{SERVICE_ROOT}: 无法读取 service root: {error}")
+    else:
+        match = FORBIDDEN_SERVICE_PUBLIC_EXPORTS.search(service_root_source)
+        if match:
+            failures.append(
+                f"{SERVICE_ROOT}: kanban-service root 不得 public re-export store/vector symbol"
+            )
 
     server_root = root / SERVER_ROOT
     try:

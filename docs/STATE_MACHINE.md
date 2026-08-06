@@ -22,6 +22,9 @@ triage | todo | scheduled | ready | running | blocked | review | done | archived
 
 `tasks.status` 是唯一状态事实；`board_columns` 仅做展示映射。ready 判定重新读取 canonical facts，并检查标题/规格、排期、父依赖、execution plan、board/task archived 和 `lock_version`。guard 失败时不写 task、run、event 或 projection job。
 
+CLI 的 `board columns` 只读取展示映射；它不会创建新的状态或 transition。任务状态仍由下方
+显式 lifecycle command 驱动，wire method/path 以 protocol endpoint catalog 为准。
+
 ## 2. 创建、规格和 execution plan
 
 ### `task.create`

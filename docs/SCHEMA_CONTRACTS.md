@@ -34,8 +34,8 @@ canonical Turso
 
 当前 catalog 覆盖：
 
-- API：health、boards、tasks/lifecycle、steps、comments、attachments、dependencies、entities、graph、search/context、labels/ontology、signals、runs/events、maintenance 和 vector；
-- CLI：board/config/task/label/comment/context/attachment/dep/entity/graph/search/index/signal/vector、run/event、host-admin、hook/init/completion；原始 bytes 下载、completion、hook stdin/stdout、serve daemon 等非 JSON 输出保持 `excluded`；
+- API：health、boards（含 columns）、tasks/lifecycle（含 specify）、steps、comments、attachments、dependencies、entities（含 upsert）、graph（含 neighborhood/map）、search/context（含 index rebuild/sync）、labels/ontology、signals、runs/events、maintenance 和 vector；
+- CLI：board/config/task/label/comment/context/attachment/dep/entity/graph/search/index/signal/vector、run/event、host-admin、hook/init/completion；原始 bytes 下载、completion、hook stdin/stdout、serve daemon 等非 JSON 输出保持 `excluded`。canonical leaf 以 Clap `get_name()` 为准，visible alias 不重复登记；
 - MCP：`crates/kanban-mcp/src/main.rs` 的 89-tool inventory；
 - JSONL/metadata/config：portable import/export、decision/signal/ontology metadata、project config。
 

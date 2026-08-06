@@ -1,6 +1,6 @@
 # Canonical 数据模型
 
-本文件描述 `kanban-service` 当前持有的 Turso schema、canonical/derived 边界和两条导入路径。权威实现为 `crates/kanban-service/src/schema.rs`、`migration.rs`、`maintenance.rs` 与 `legacy_import.rs`；文档不创造第二份 schema inventory。
+本文件描述 `kanban-service` 当前持有的 Turso schema、canonical/derived 边界和两条导入路径。权威实现为 `crates/kanban-service/src/schema.rs`、`migration.rs`、`maintenance.rs`、`legacy_import.rs` 以及 entities/graph/search/vector operations；文档不创造第二份 schema inventory。
 
 ## 1. Schema family 与 lineage
 

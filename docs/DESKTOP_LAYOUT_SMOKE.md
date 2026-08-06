@@ -3,7 +3,8 @@
 Desktop 当前保留十个可导航视图：`board`、`list`、`map`、`events`、`runs`、`signals`、
 `ontology`、`maintenance`、`health`、`settings`。所有视图和 task detail 都通过
 `KanbanApi` 请求 `kanban serve`；本清单不把旧 external projection/helper 或直连数据库路径
-当作布局依赖。维护操作的 phase/degraded/restart 结果必须按 host response 展示。
+当作布局依赖。board 列来自 host 的 `board columns` 展示映射，map/context 来自 typed
+graph/context API；维护操作的 phase/degraded/restart 结果必须按 host response 展示。
 
 本清单是可重复使用的桌面端验证指南，用于补充
 `apps/desktop/src/app/layout-scroll-contract.test.ts`

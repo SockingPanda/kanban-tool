@@ -40,13 +40,19 @@ kanban board current
 
 ```bash
 kanban board list
+kanban board columns default
 kanban task create "整理项目首页" --description "让第一次访问的人看懂项目"
 kanban task step not-required default#1 --reason "单步任务"
+kanban task specify default#1 --description "补充可执行规格"
 kanban task promote default#1
 kanban task claim default#1
 kanban search "项目首页"
+kanban index rebuild
+kanban index sync
+kanban entity upsert --uri 'kb://task/t_example' --kind task --source-table tasks --source-id t_example
 kanban context build default#1
 kanban graph neighborhood default#1
+kanban --board default graph map
 kanban vector status
 ```
 
@@ -57,6 +63,12 @@ kanban vector status
 - **CLI**：普通命令通过 `kanban-client` 访问 localhost；`serve`、`init`、配置/board 选择、completion 和 Codex hook 是本地 shell 或 host 装配命令。
 - **MCP**：`kanban-mcp` 使用 stdio 和 `rmcp`，当前工具清单由 `crates/kanban-mcp/src/main.rs` 的稳定 inventory 测试锁定；所有 tool 都调用 typed client，不启动 host、不直接写数据库。
 - **Desktop**：Tauri/React shell 通过 typed HTTP 使用 `board`、`list`、`map`、`events`、`runs`、`signals`、`ontology`、`maintenance`、`health`、`settings` 十个导航视图；task detail、attachments、steps、comments、dependencies、context 和 maintenance 继续复用同一 host。
+
+CLI 的 canonical leaf 和 HTTP 的 method/path 由 `kanban-protocol` 的
+`surface_operation_catalog()`/`endpoint_catalog()` 固定；可见 alias 只改善交互，不增加第二条
+contract operation。当前知识面包含 board columns、entity upsert、task specify、graph
+neighborhood/map，以及 search index 的 status/doctor/rebuild/sync；完整参数和 wire 形状见
+[`docs/CLI_SPEC.md`](docs/CLI_SPEC.md) 与 [`docs/API_SPEC.md`](docs/API_SPEC.md)。
 
 跨入口的领域面包括：
 

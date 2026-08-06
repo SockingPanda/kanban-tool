@@ -65,7 +65,7 @@ adapter input
   → protocol DTO / error envelope
 ```
 
-`tasks.status` 是唯一事实；`board_columns` 仅展示。`ready → running` 在一个 immediate transaction 中 CAS claim，创建 active run 和 event。heartbeat、release、review、complete、block、specify、unblock、reopen、reclaim、archive、label/ontology/signal review、attachment publish 和 import journal 都复用 service operation，adapter 不重新解释 guard。
+`tasks.status` 是唯一事实；`board_columns` 仅展示。`ready → running` 在一个 immediate transaction 中 CAS claim，创建 active run 和 event。heartbeat、release、review、done、block、specify、unblock、reopen、reclaim、archive、label/ontology/signal review、attachment publish 和 import journal 都复用 service operation，adapter 不重新解释 guard。
 
 `kanban-service` 同时提供实体/关系写入、board-scoped BFS、bounded context merge、label atom index、projection generation/fingerprint、Ollama outage degraded 和重建。派生状态只写 `projection_jobs`/`projection_state`/retrieval 表，不反向改变 canonical facts。
 

@@ -1,6 +1,6 @@
 # Turso 全功能 parity ledger
 
-本账本以 `6ea277583e51ea010aa6739a53091337676b4cff` 为功能基线（下文简称 baseline），以当前工作树 `b874fd98` 为实现快照。它回答四个问题：baseline 每个领域现在由谁拥有、HTTP/CLI/MCP/Desktop 通过什么入口、数据/语义如何迁移、哪些测试已经存在以及最终 gates 还缺什么。
+本账本以 `6ea277583e51ea010aa6739a53091337676b4cff` 为功能基线（下文简称 baseline），以当前工作树 `fbfc4dc3` 为实现快照。它回答四个问题：baseline 每个领域现在由谁拥有、HTTP/CLI/MCP/Desktop 通过什么入口、数据/语义如何迁移、哪些测试已经存在以及最终 gates 还缺什么。
 
 本账本不把 catalog、孤立文件或一次未运行的命令标为 green。状态含义：
 
@@ -13,7 +13,7 @@
 
 ## 0. 快照与证据口径
 
-baseline 的 machine source 是 `6ea277` 中的 migration、`crates/kanban-contract`、CLI args、Desktop navigation 和 helper/backend crates；当前 source 是 `Cargo.toml`、`crates/kanban-service/src/schema.rs`、`crates/kanban-server/src/http/operations/**`、`crates/kanban-cli/src/main.rs`、`crates/kanban-mcp/src/main.rs`、`apps/desktop/src` 和 `crates/kanban-protocol` catalog。
+baseline 的 machine source 是 `6ea277` 中的 migration、`crates/kanban-contract`、CLI args、Desktop navigation 和 helper/backend crates；当前 source 是 `Cargo.toml`、`crates/kanban-service/src/schema.rs`、`crates/kanban-server/src/http/operations/**`、`crates/kanban-client/src/**`、`crates/kanban-cli/src/main.rs`、`crates/kanban-mcp/src/main.rs`、`apps/desktop/src` 和 `crates/kanban-protocol` catalog。
 
 可复核命令：
 
@@ -39,8 +39,8 @@ rg -n '#\[tool\(|name = "' crates/kanban-mcp/src
 | `label_semantics`、`label_atoms`、proposal | service ontology facts + Turso vector atom index | ontology/atom-index/suggest/proposal HTTP；CLI `label semantics/atoms/atom-index/suggest/propose/proposals`；MCP ontology tools；Desktop Ontology workbench | semantics CAS/hash、atom effect、proposal accept/reject 保留；atom index 可删可 rebuild；provider degraded 不写错误 canonical | `delete_semantics_removes_derived_atoms`；`apply_and_revert_keep_canonical_hashes_and_atoms_in_sync`；ontology MCP/tool tests；Desktop Ontology tests | `implemented-evidence`; final index/adoption gate pending |
 | ontology ledger (`observations/signals/actions/effects`) | service ontology ledger | `/label-ontology/*`；CLI `label ontology ...`；MCP ontology tools；Desktop Ontology | record/review/quality/confirm/reject/resolve/supersede/apply/revert/validate 共用 CAS、board guard、event；不将 graph projection 当事实 | `crates/kanban-service/src/store_operations/ontology_tests.rs`；server ontology route fixtures；CLI ontology contract tests | `implemented-evidence`; full semantic acceptance pending |
 | generic `signal_observations`、`signals` | service signal ledger | `/boards/:board/signals{,/review,/confirm...}`、`/signals/:id`；CLI `signal`；MCP signal tools；Desktop Signals | record、backlink、review transition 与 event 原子提交；同 board dedupe key idempotent | server signal record/review tests；MCP `signal_tools_are_independently_locatable`；Desktop SignalsWorkbench tests | `implemented-evidence`; full cross-surface gate pending |
-| `entities`、`relation_predicates`、`entity_relations`、baseline substrate | service canonical relation store | `/entities`；`entity list/show/upsert`；MCP graph/task map；Desktop Map/context | relation facts 迁入 Turso；board composite FK；旧 outbox/state 改为 host `projection_jobs/state`，不保留第二 control plane | `entity_upsert_list_and_show_are_available_on_host`；`unknown_entity_is_not_found`；`graph_reads_canonical_relations_with_cycle_safe_bounded_bfs`；`graph_neighbors_enforces_board_isolation` | `implemented-evidence`; full graph rebuild/repair gate pending |
-| baseline search/index state | Turso FTS + service search operations | `/search/tasks`、`by-status`、`status`、`index/rebuild`、`index/sync`；CLI `search/index`；MCP search；Desktop list/context | `retrieval_documents` + `task_search_fts` 从 canonical task/comment/run/event 重建；FTS stale/error 回退 canonical SQL；旧 external index 不迁移为 owner | `fts_capability_exercises_insert_update_delete_score_and_highlight`；`rebuilds_turso_fts_and_falls_back_for_exact_references`；server search route tests；CLI index contract tests | `implemented-evidence`; FTS/full surface gate pending |
+| `entities`、`relation_predicates`、`entity_relations`、baseline substrate | service canonical relation store | `/entities`；`entity list/show/upsert`；MCP graph/task map；Desktop Map/context | relation facts 迁入 Turso；board composite FK；旧派生控制面改为 host `projection_jobs/state`，不保留第二 control plane | `entity_upsert_list_and_show_are_available_on_host`；`unknown_entity_is_not_found`；`graph_reads_canonical_relations_with_cycle_safe_bounded_bfs`；`graph_neighbors_enforces_board_isolation` | `implemented-evidence`; full graph rebuild/repair gate pending |
+| baseline search/index state | Turso FTS + service search operations | `/search/tasks`、`/search/tasks/by-status`、`/search/status`、`/search/index/rebuild`、`/search/index/sync`；CLI `search/index status|doctor|rebuild|sync`；MCP search；Desktop list/context | `retrieval_documents` + `task_search_fts` 从 canonical task/comment/run/event 重建；FTS stale/error 回退 canonical SQL；旧 external index 不迁移为 owner | `fts_capability_exercises_insert_update_delete_score_and_highlight`；`rebuilds_turso_fts_and_falls_back_for_exact_references`；server search route tests；CLI index contract tests | `implemented-evidence`; FTS/full surface gate pending |
 | vector task chunks / label atoms | Turso `vector32` + host Ollama provider | `/vector/status/configure/rebuild/sync/query-*`；CLI vector；MCP read-only vector；Desktop context/ontology typed API | 导入只保留 canonical source；embedding/model/dimension/fingerprint 作为 derived metadata；provider outage 设 degraded 并保留 job | `vector32_roundtrip_dimension_and_cosine_are_real_turso_capabilities`；`vector_routes_use_typed_envelopes_and_degraded_query_error`；vector fixture producer/consumer tests；MCP vector inventory | `implemented-evidence`; Ollama integration/adoption/full gate pending |
 | graph/BFS/task map | service bounded BFS over canonical relations | `/graph/status/neighbors/query/rebuild/sync`、`/tasks/:id/neighborhood`、`/boards/:board/task-map`；CLI graph；MCP graph；Desktop Map | BFS depth/cycle/dedup/board isolation；graph projection 删除后 rebuild；不恢复 Oxigraph/helper protocol | `graph_status_and_task_map_routes_are_adopted`；`graph_maintenance_routes_publish_generation_and_counts`；Desktop TaskGraph tests | `implemented-evidence`; full repair/rebuild gate pending |
 | context pack | service context merge + FTS/BFS/vector adapters | `/tasks/:id/context`；CLI `context build`；MCP `context_build`；Desktop typed `KanbanApi.buildContext` | subject/reference/query selector；budget/depth/lexical/graph/vector limit；按 provenance 去重；provider degraded 保留可用部分 | `context_merge_is_stable_deduplicated_and_ranked`；`context_merge_enforces_budget_and_board_isolation`；server context route tests；CLI/MCP context contract tests | `implemented-evidence`; Desktop UI adoption/full gate pending |
@@ -51,7 +51,7 @@ rg -n '#\[tool\(|name = "' crates/kanban-mcp/src
 
 | baseline operation | 当前 owner / surfaces | 迁移规则 | 证据 | 状态 |
 | --- | --- | --- | --- | --- |
-| `promote`、`claim`、`heartbeat`、`review`、`done/complete`、`block` | service lifecycle；HTTP `/transitions/*`；CLI task；MCP lifecycle；Desktop task actions | 保留 plan/依赖/排期/owner/token/CAS；claim + run + event 同事务 | claim concurrency/guard、review/done/block server tests；service lifecycle suites | `implemented-evidence` |
+| `promote`、`claim`、`heartbeat`、`review`、`done`、`block` | service lifecycle；HTTP `/transitions/*`；CLI task；MCP lifecycle；Desktop task actions | 保留 plan/依赖/排期/owner/token/CAS；claim + run + event 同事务 | claim concurrency/guard、review/done/block server tests；service lifecycle suites | `implemented-evidence` |
 | `release` | service release；HTTP/CLI/MCP/Desktop | 新增 matching token release：cancel run、clear lease、回 ready、写 event | `release_task_returns_ready_and_cancels_run_atomically`；server release route test | `implemented-evidence` |
 | `specify`、`unblock`、`reopen`、`reclaim`、`archive`、task `update` | service explicit operations；HTTP/CLI/MCP/Desktop task detail/actions | 不允许 generic status setter；按 canonical facts 重算目标；保留历史与 retry/event | `specify_task_recomputes_unplanned_task_to_todo`；`unblock_task_recomputes_blocked_task_without_forcing_ready`；`reopen_task_clears_completion_but_preserves_result_and_recomputes_children`；`explicit_reclaim_expires_run_in_one_transaction_and_increments_retry`；`archive_task_sets_archived_state_and_event` | `implemented-evidence`; full surface gate pending |
 | steps `done/skip/reopen/remove` | service step lifecycle；HTTP/CLI/MCP/Desktop detail | required step、linked task board、parent plan guard；状态和 event 同事务 | `step_lifecycle_routes_share_one_application_and_store_path`；Desktop steps contract tests | `implemented-evidence`; full adoption gate pending |
@@ -66,7 +66,7 @@ rg -n '#\[tool\(|name = "' crates/kanban-mcp/src
 
 ### CLI
 
-当前 clap 顶层覆盖 `serve`、board/config/task/label/comment/context/attachment/dep/entity/graph/events/runs/run/search/index/signal/vector、doctor/stats/backup/export/import/import-v30/checkpoint/vacuum/maintenance、init/completions/__complete/hook。CLI contract tests 已覆盖 board/task/label/maintenance/config 等 adapter；`surface.rs` 中非 JSON 输出（serve、completion、raw attachment、hook handler）明确 `excluded`，不算 JSON adoption。
+当前 Clap 顶层覆盖 `serve`、board/config/task/label/comment/context/attachment/dep/entity/graph/events/runs/run/search/index/signal/vector、doctor/stats/backup/export/import/import-v30/checkpoint/vacuum/maintenance、init/completions/__complete/hook。canonical leaf 已包含 `board columns`、`entity upsert`、`task specify`、`graph neighborhood`、`graph map`、`index rebuild` 和 `index sync`；CLI contract tests 已覆盖 board/task/label/maintenance/config 等 adapter；`surface.rs` 中非 JSON 输出（serve、completion、raw attachment、hook handler）明确 `excluded`，不算 JSON adoption。visible alias 不单独形成 surface operation。
 
 迁移规则：普通 command 只调用 client；host-admin 命令只调用 host；不恢复 baseline direct DB path。剩余 gate 是 clap leaf 与 protocol surface inventory 的精确审计，以及未在本轮运行的 exact witness/full tests。
 
@@ -106,10 +106,11 @@ portable path 导出/导入 canonical facts，`replace=true` 在 host 独占窗�
 
 | gate | 目的 | 本次状态 |
 | --- | --- | --- |
-| `just diff-check` | 文档空白/冲突检查 | 本分支完成后运行并记录 |
-| `just spec-bundle-generate` + 独立 bundle commit | 从 source docs 生成 `KANBAN_SPEC_BUNDLE.md` | 授权生成；生成后单独提交 |
-| `just spec-bundle-check` | bundle 与 source docs 一致 | 待运行 |
-| `just schema-docs` | spec bundle、schema marker、fixture 映射 | 待运行；不因 bundle 生成成功自动通过 |
+| `just diff-check` | 文档空白/冲突检查 | 已运行，exit 0 |
+| `just spec-bundle-generate` + 独立 bundle commit | 从 source docs 生成 `KANBAN_SPEC_BUNDLE.md` | 已生成；bundle 仍需独立提交并复核 diff |
+| `just spec-bundle-check` | bundle 与 source docs 一致 | 已运行，5 项测试与 source check 均通过 |
+| `just schema-check` | protocol schema/catalog 一致性 | 已运行，562 roots、0 未闭合项；不等于 runtime/full gate |
+| `just schema-docs` | spec bundle、schema marker、fixture 映射 | 已运行，14 项 marker 测试通过；不因 bundle 生成成功自动通过 runtime gate |
 | `just schema-surface-audit` | 实际 HTTP/CLI/MCP surface 与 catalog 对齐 | 未运行，不标 green |
 | `just schema-adoption-witness` | exact producer/consumer witness | 未运行，不标 green |
 | 受影响 Rust/CLI/MCP/Desktop package tests | 纵向行为和 UI contract | 本文记录已有测试名；未跑的 package/full 结果保持未知 |

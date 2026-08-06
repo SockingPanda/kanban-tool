@@ -10,6 +10,9 @@
 - `error.code` 是稳定机器字段，`message` 只供人阅读。常见 code：`invalid_input`（400）、`not_found`（404）、`conflict`/`idempotency_conflict`/`dependency_cycle`/`claim_conflict`/`invalid_transition`（409）、`claim_token_mismatch`（403）、`feature_not_available`（501）、`internal`（500）。
 - path 中 task 使用全局 `t_...`，run 使用 `r_...`，step 使用 `step_...`；board-local selector 由 typed client 先解析，不在 handler 里复制第二套语义。
 
+host 未启动或 URL 不可达时，client 返回稳定的 `server_unavailable`；人类消息保持可行动，
+例如“服务端不可用：请检查服务端 URL，并确认已运行 `kanban serve`”。
+
 <!-- schema-doc-ignore: envelope 说明性示例，不绑定具体 endpoint root。 -->
 ```json
 {"data": {}}
@@ -62,6 +65,8 @@
 | `POST` | `/api/v1/tasks/:task_id/execution-plan/not-required` | 显式 plan gate |
 
 task list/search 默认排除 `archived`；所有 selector、board isolation、idempotency 和 dependency guard 由 service 处理。
+状态筛选属于 `/api/v1/boards/:board/tasks` 的 query contract；搜索按状态的只读结果使用
+`/api/v1/search/tasks/by-status`，两者不是第二套 task mutation path。
 
 ### Lifecycle
 
@@ -120,19 +125,33 @@ run 没有独立 create/update API；claim 创建 run，后续 lifecycle 同事�
 
 ### Ontology/atom/proposal
 
-语义、atoms、atom-index、suggestions、proposals 和 ontology ledger 的当前路径包括：
+语义、atoms、atom-index、suggestions、proposals 和 ontology ledger 的当前 exact paths 为：
 
-```text
-GET/PUT/DELETE /api/v1/boards/:board/labels/{semantics,atoms,atom-index/*}
-GET           /api/v1/boards/:board/labels/atoms/:atom_ref/explain
-GET           /api/v1/tasks/:task_id/labels/suggestions
-GET/POST       /api/v1/tasks/:task_id/label-proposals
-GET/POST       /api/v1/tasks/:task_id/label-ontology/observations
-GET/POST       /api/v1/boards/:board/label-ontology/{signals,review,actions,apply/atom,revert,validate}
-GET             /api/v1/label-ontology/signals/:signal_id
-GET             /api/v1/label-proposals/:proposal_id
-POST            /api/v1/label-proposals/:proposal_id/{accept,reject}
-```
+| Method | Path |
+| --- | --- |
+| `GET` | `/api/v1/boards/:board/labels/semantics` |
+| `GET` | `/api/v1/boards/:board/labels/:label_id/semantics` |
+| `PUT` | `/api/v1/boards/:board/labels/:label_id/semantics` |
+| `DELETE` | `/api/v1/boards/:board/labels/:label_id/semantics` |
+| `GET` | `/api/v1/boards/:board/labels/atoms` |
+| `GET` | `/api/v1/boards/:board/labels/atoms/:atom_ref/explain` |
+| `GET` | `/api/v1/boards/:board/labels/atom-index/status` |
+| `POST` | `/api/v1/boards/:board/labels/atom-index/rebuild` |
+| `GET` | `/api/v1/boards/:board/labels/atom-index/query` |
+| `GET` | `/api/v1/tasks/:task_id/labels/suggestions` |
+| `GET` | `/api/v1/tasks/:task_id/label-proposals` |
+| `POST` | `/api/v1/tasks/:task_id/label-proposals` |
+| `POST` | `/api/v1/tasks/:task_id/label-ontology/observations` |
+| `GET` | `/api/v1/boards/:board/label-ontology/signals` |
+| `GET` | `/api/v1/boards/:board/label-ontology/review` |
+| `POST` | `/api/v1/boards/:board/label-ontology/actions` |
+| `POST` | `/api/v1/boards/:board/label-ontology/apply/atom` |
+| `POST` | `/api/v1/boards/:board/label-ontology/revert` |
+| `POST` | `/api/v1/boards/:board/label-ontology/validate` |
+| `GET` | `/api/v1/label-ontology/signals/:signal_id` |
+| `GET` | `/api/v1/label-proposals/:proposal_id` |
+| `POST` | `/api/v1/label-proposals/:proposal_id/accept` |
+| `POST` | `/api/v1/label-proposals/:proposal_id/reject` |
 
 每个 action 由 service 做 CAS、board guard、atom effects、review/validate/revert 和 event；index 是可重建派生状态。
 
@@ -175,7 +194,9 @@ GET     /api/v1/tasks/:task_id/neighborhood
 GET     /api/v1/boards/:board/task-map
 ```
 
-graph query 使用 canonical `entities`/relations 的 bounded BFS，包含 depth、dedup、cycle 和 board isolation。
+`PUT /api/v1/entities` 是 entity upsert；graph query 使用 canonical `entities`/relations 的
+bounded BFS，包含 depth、dedup、cycle 和 board isolation。`neighborhood` 和 `task-map` 都是
+只读聚合，不创建新的 graph facts。
 
 ### Vector/context
 
@@ -194,5 +215,10 @@ vector32 查询使用 host Ollama embedding provider；provider outage 返回 ty
 ## 8. Contract 与验证边界
 
 `kanban-protocol::endpoint_catalog()` 是 method/path/DTO/schema descriptor 的权威来源；真实 router、typed client、CLI/MCP/Desktop 和 fixture/adoption witness 必须逐项绑定。catalog 中的 `adopted` 只表示 protocol surface contract 已闭合，不能单独证明运行时 full/adoption gate 已运行。
+
+本文件按领域解释语义；逐项 exact method/path 以 `endpoint_catalog()` 及生成的
+`schemas/json-schema/draft-2020-12/surface-operations.json` 为准。`/api/v1/search/tasks/by-status`
+是当前搜索查询 surface，task board 列表本身仍通过 `/api/v1/boards/:board/tasks` 的 query
+完成状态筛选。
 
 已有 server/service evidence 包括 task lifecycle、label round-trip、ontology action/revert、signal ledger、FTS capability、graph BFS/rebuild、vector fixture/degraded、context merge、maintenance import/replace 和 Desktop contract tests。完整 schema adoption、surface audit、full package、release 和 PR gate 不由本文档更新自动执行，结果见 parity ledger 的待验收清单。

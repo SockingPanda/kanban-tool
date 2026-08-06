@@ -277,7 +277,7 @@ MVP 不提供 `0.0.0.0` 远程模式。
 - promote
 - claim
 - heartbeat
-- complete
+- done
 - submit_review
 - block
 - unblock
@@ -944,7 +944,7 @@ action、atom 和 proposal 会增加 schema、outbox、query API 和重建复杂
 
 - `labels` identity CRUD 是基础 vocabulary registry，不写 ontology mutation action；task
   label binding 只绑定已存在 label，写普通 task event。
-- `label delete` 永不隐式删除 `label_semantics` / `label_atoms`；force 只允许移除 task
+- 删除 label identity 时永不隐式删除 `label_semantics` / `label_atoms`；force 只允许移除 task
   bindings 后删除空 identity。
 - `label_semantics` / `label_atoms` canonical mutation 一次 transaction 只写一条 root
   mutation action；实际 atom delta 写入 `label_ontology_action_atom_effects` 的
@@ -1084,7 +1084,8 @@ binding/granularity/location/direction/operation/surface 失败关闭。本 ADR 
 
 ### 状态
 
-已接受
+历史快照；当前 task-read surface 以 ADR-0023、`docs/API_SPEC.md` 和
+`kanban-protocol::endpoint_catalog()` 为准
 
 ### 背景
 
@@ -1093,27 +1094,25 @@ binding/granularity/location/direction/operation/surface 失败关闭。本 ADR 
 
 ### 决策
 
-`GET /api/v1/boards/:board/tasks` 与 `/tasks/by-status` 分别拥有独立 path/query DTO，
-  形成 4 个 `Adopted` 精确 contract。两个 server 本地类型化 Axum extractor 分别绑定对应
-  `Path<...>`，并各自从 `parts.uri.query()` 读取一次 raw URI 后进入共享有序解析器；handler
-  只接收已绑定的 request，不持有 `RawQuery`、`Query<T>` 或第二个 raw source。
+`GET /api/v1/boards/:board/tasks` 使用唯一的 task-list path/query DTO；状态筛选通过同一
+query contract 表达，搜索按状态的只读结果由 `/api/v1/search/tasks/by-status` 负责。server
+使用类型化 Axum extractor 从一次 raw URI 进入共享有序解析器；handler 只接收已绑定的
+request，不持有第二个 raw source。
 - Query 语法：只有 `status`、`priority`、`label`、`plan_filter` 是
   `RepeatedOrdered`；其余标量重复、未知 key 与旧 `search` 别名均返回
   `400 invalid_input`。54 对上限由 9/4/3/32 个重复参数预算加 6 个标量参数推导；
   raw query 上限为 8192 字节。`q` 是唯一文本搜索 key。label 会 trim Unicode 边缘空白，
   但纯 Unicode 空白失败关闭；percent/UTF-8、枚举、priority、limit、offset 和 sort 边界由
   真实 router URI 矩阵固定。
-每个 contract 都有独立的 DTO-to-fixture producer 和 fixture-to-real-router consumer；
-  非默认 board 哨兵证明真实 path 消费。AST 测试锁定 DTO 所有权、类型化
-  extractor、两个 raw URI 消费点及 handler `&path.board` 到 `list_tasks_page` 的实参，并以显式
-  变异覆盖别名、私有 DTO、错误 extractor、双重来源、第二个 raw parser，以及两个
-  handler 各自的 `path.board -> default`。producer/consumer 区域保护只证明当前源码区域直接
-  分离，不把任意未来共同 helper 间接层夸大为变异完备证明。
+contract 仍有 DTO-to-fixture producer 和 fixture-to-real-router consumer；非默认 board 哨兵
+证明真实 path 消费。当前 route/catalog 对齐测试覆盖类型化 extractor、raw URI 单一来源、
+`&path.board` 到 `list_tasks_page` 的实参和 query 边界。producer/consumer 区域保护只证明
+当前源码区域直接分离，不把任意未来共同 helper 间接层夸大为变异完备证明。
 
 ### 影响
 
 Desktop/Web/CLI 的 HTTP 调用方必须使用上述语法；现有 Desktop 调用方已使用 `q`
-  并保留重复参数顺序。SQLite service 的防御性上限直接引用唯一 application 权威，
+  并保留重复参数顺序。Turso service 的防御性上限直接引用唯一 application 权威，
   server 相等性门禁覆盖该实际 service 路径；service 查询行为与 core 状态机不变。本文保留
   决策时的迁移边界；当前采用状态以 `docs/SCHEMA_CONTRACTS.md` 为准。
 
@@ -1264,6 +1263,10 @@ baseline `6ea277` 同时存在窄 queue、外部 projection/helper、独立 back
    release/projection 文档只允许标为 historical archive，不得成为 active runbook 或 release
    gate。
 6. release、push、PR、merge、发布和外部协调不是本次 architecture/parity 文档的验收条件。
+7. API method/path 以 `kanban-protocol::endpoint_catalog()` 为准，CLI canonical leaf 以
+   Clap `get_name()` 与 `surface_operation_catalog()` 对齐。当前新增的 board columns、entity
+   upsert、task specify、graph neighborhood/map 和 search index rebuild/sync 都属于 active
+   surface；visible alias 不形成第二条 contract operation。
 
 ### 影响
 

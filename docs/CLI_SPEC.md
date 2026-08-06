@@ -21,7 +21,7 @@ JSON 成功通常为 `{ "data": ... }`；运行期错误使用 `error.code` 和 
 
 <!-- schema-doc-ignore: CLI 错误 envelope 说明性示例。 -->
 ```json
-{"error":{"code":"server_unavailable","message":"server unavailable","exit_code":9}}
+{"error":{"code":"server_unavailable","message":"服务端不可用：请检查服务端 URL，并确认已运行 `kanban serve`","exit_code":9}}
 ```
 
 task selector 支持全局 `t_...`、`board#seq`、`#seq` 和当前 board 数字 seq；typed client 在需要全局 path 时先解析 selector。`--board` > `KB_BOARD` > 最近项目 `.kb/config.toml` > `default`；`--db` > `KANBAN_DB` > `KB_DB` > 项目/global config > XDG 默认路径。
@@ -104,7 +104,7 @@ kanban task claim <TASK_SELECTOR> [--ttl-ms <MS>] [--worker-profile <PROFILE>]
 kanban task heartbeat <TASK_SELECTOR> --claim-token <TOKEN> [--ttl-ms <MS>] [--note <TEXT>]
 kanban task release <TASK_SELECTOR> --claim-token <TOKEN>
 kanban task review <TASK_SELECTOR> [--claim-token <TOKEN>] [--force]
-kanban task done|complete <TASK_SELECTOR> [--claim-token <TOKEN>] [--force]
+kanban task done <TASK_SELECTOR> [--claim-token <TOKEN>] [--force]
 kanban task block <TASK_SELECTOR> [<REASON>|--reason-file <PATH|->] [--claim-token <TOKEN>] [--force]
 kanban task unblock <TASK_SELECTOR> [--reason <TEXT>]
 kanban task reopen <TASK_SELECTOR> [--reason <TEXT>]
@@ -112,7 +112,7 @@ kanban task reclaim <TASK_SELECTOR> [--force]
 kanban task archive <TASK_SELECTOR> [--force]
 ```
 
-claim 是原子 `ready → running`，同时创建 run/event；heartbeat/release/review/done/block/reclaim 复用 owner/token、lease、CAS 和同一 transaction。`done` 是 `complete` visible alias；`block` reason inline 与 `--reason-file` 互斥。
+claim 是原子 `ready → running`，同时创建 run/event；heartbeat/release/review/done/block/reclaim 复用 owner/token、lease、CAS 和同一 transaction。`block` reason inline 与 `--reason-file` 互斥。
 
 ## 5. Labels、ontology、signals
 
@@ -199,3 +199,12 @@ kanban maintenance run|rebuild|cleanup [--owner <OWNER>]
 host 停止或端口不可达时，已注册 command 返回 `server_unavailable`（exit `9`）；未知顶层 command 使用 external catch-all 返回 `feature_not_available`（exit `10`），不触碰存储。没有直接 DB fallback。
 
 `kanban-protocol` 的 operation/surface catalog、fixture 和 adoption witness 是机器契约；本文件只描述实际 clap adapter。schema surface audit、adoption/full、Desktop package、release、push 和 PR 不因 CLI 文档同步自动运行或变绿。
+
+### Canonical leaf 口径
+
+`kanban-protocol::surface_operation_catalog()` 与 Clap 的 canonical `get_name()` 一一对应；
+visible alias 不会产生第二个 leaf contract。当前新增并已接入的 leaf 包括 `board columns`、
+`entity upsert`、`task specify`、`graph neighborhood`、`graph map`、`index rebuild` 和
+`index sync`。旧 projection/admin、独立 lifecycle leaf 与旧 task-read path 不在 active
+catalog 中；完整 exact 列表以 `schemas/json-schema/draft-2020-12/surface-operations.json`
+和对应源代码为准。

@@ -74,6 +74,12 @@ triage | todo | scheduled | ready | running | blocked | review | done | archived
 
 CLI 顶层包括 `serve`、board/config/task/label/comment/context/attachment/dep/entity/graph/events/runs/run/search/index/signal/vector、doctor/stats/backup/export/import/import-v30/checkpoint/vacuum/maintenance、init/completions/__complete/hook。所有 domain/host-admin 命令（`serve` 除外）通过 client 请求 host；`import-v30` 未启用 feature 时返回 `feature_not_available`。
 
+当前 canonical leaf 以 `kanban-protocol::surface_operation_catalog()` 与 Clap 的
+`get_name()` 对齐。看板列使用 `board columns`，实体写入使用 `entity upsert`，triage
+规格补全使用 `task specify`；graph 提供 `neighborhood`/`map`，search index 提供
+`index rebuild`/`index sync`。visible alias 不单独产生 contract operation；已清理的旧
+projection/admin、独立 lifecycle leaf 和 task-read 旧路径不属于 active surface。
+
 ### 4.3 MCP
 
 `kanban-mcp` 是 Rust stdio server，当前 89 个 tool 的排序由 `crates/kanban-mcp/src/main.rs::tool_inventory_is_stable` 锁定，覆盖任务生命周期、labels/ontology/signals、graph/context/search/vector、comments/steps/dependencies、attachments、runs/events 和 boards。MCP 不启动 host、不打开数据库、不提供 migration/backup/vacuum/replace 管理命令。

@@ -62,91 +62,6 @@ const ENDPOINTS: &[EndpointDescriptor] = &[
         },
     },
     EndpointDescriptor {
-        operation_id: "api.list-boards",
-        surface: ContractSurface::Api,
-        method: HttpMethod::Get,
-        path: "/api/v1/boards",
-        migration: MigrationState::Adopted,
-        exclusion: None,
-        shared_components: &[],
-        obligations: EndpointObligations {
-            path: EndpointObligation::NotApplicable,
-            query: EndpointObligation::Contract("api.list-boards.query"),
-            headers: EndpointObligation::Contract("api.list-boards.headers"),
-            body: EndpointObligation::NotApplicable,
-            success: EndpointObligation::Contract("api.list-boards.response"),
-            sse: EndpointObligation::NotApplicable,
-        },
-    },
-    EndpointDescriptor {
-        operation_id: "api.create-board",
-        surface: ContractSurface::Api,
-        method: HttpMethod::Post,
-        path: "/api/v1/boards",
-        migration: MigrationState::Adopted,
-        exclusion: None,
-        shared_components: &[],
-        obligations: EndpointObligations {
-            path: EndpointObligation::NotApplicable,
-            query: EndpointObligation::NotApplicable,
-            headers: EndpointObligation::Contract("api.create-board.headers"),
-            body: EndpointObligation::Contract("api.create-board.request"),
-            success: EndpointObligation::Contract("api.create-board.response"),
-            sse: EndpointObligation::NotApplicable,
-        },
-    },
-    EndpointDescriptor {
-        operation_id: "api.get-board",
-        surface: ContractSurface::Api,
-        method: HttpMethod::Get,
-        path: "/api/v1/boards/:board",
-        migration: MigrationState::Adopted,
-        exclusion: None,
-        shared_components: &[],
-        obligations: EndpointObligations {
-            path: EndpointObligation::Contract("api.get-board.path"),
-            query: EndpointObligation::NotApplicable,
-            headers: EndpointObligation::Contract("api.get-board.headers"),
-            body: EndpointObligation::NotApplicable,
-            success: EndpointObligation::Contract("api.get-board.response"),
-            sse: EndpointObligation::NotApplicable,
-        },
-    },
-    EndpointDescriptor {
-        operation_id: "api.archive-board",
-        surface: ContractSurface::Api,
-        method: HttpMethod::Post,
-        path: "/api/v1/boards/:board/archive",
-        migration: MigrationState::Adopted,
-        exclusion: None,
-        shared_components: &[],
-        obligations: EndpointObligations {
-            path: EndpointObligation::Contract("api.archive-board.path"),
-            query: EndpointObligation::NotApplicable,
-            headers: EndpointObligation::Contract("api.archive-board.headers"),
-            body: EndpointObligation::Contract("api.archive-board.request"),
-            success: EndpointObligation::Contract("api.archive-board.response"),
-            sse: EndpointObligation::NotApplicable,
-        },
-    },
-    EndpointDescriptor {
-        operation_id: "api.list-board-columns",
-        surface: ContractSurface::Api,
-        method: HttpMethod::Get,
-        path: "/api/v1/boards/:board/columns",
-        migration: MigrationState::Adopted,
-        exclusion: None,
-        shared_components: &[],
-        obligations: EndpointObligations {
-            path: EndpointObligation::Contract("api.list-board-columns.path"),
-            query: EndpointObligation::NotApplicable,
-            headers: EndpointObligation::Contract("api.list-board-columns.headers"),
-            body: EndpointObligation::NotApplicable,
-            success: EndpointObligation::Contract("api.list-board-columns.response"),
-            sse: EndpointObligation::NotApplicable,
-        },
-    },
-    EndpointDescriptor {
         operation_id: "api.list-board-labels",
         surface: ContractSurface::Api,
         method: HttpMethod::Get,
@@ -2004,11 +1919,24 @@ const ENDPOINTS: &[EndpointDescriptor] = &[
 ];
 
 pub fn endpoint_catalog() -> &'static [EndpointDescriptor] {
-    ENDPOINTS
+    static CATALOG: std::sync::OnceLock<Vec<EndpointDescriptor>> = std::sync::OnceLock::new();
+    CATALOG
+        .get_or_init(|| {
+            let board = crate::board_catalog::endpoint_catalog();
+            let mut catalog = Vec::with_capacity(ENDPOINTS.len() + board.len());
+            for endpoint in ENDPOINTS {
+                catalog.push(*endpoint);
+                if endpoint.operation_id == "api.health" {
+                    catalog.extend(board.iter().copied());
+                }
+            }
+            catalog
+        })
+        .as_slice()
 }
 
 pub fn endpoint_descriptor(operation_id: &str) -> Option<&'static EndpointDescriptor> {
-    ENDPOINTS
+    endpoint_catalog()
         .iter()
         .find(|endpoint| endpoint.operation_id == operation_id)
 }

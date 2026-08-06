@@ -47,6 +47,7 @@ pub enum McpExposure {
 pub struct McpPolicy {
     pub exposure: McpExposure,
     pub tool_bindings: &'static [McpToolBinding],
+    pub invariants: &'static [crate::McpOperationInvariant],
 }
 
 /// `schema` feature 下的显式 schema generator。

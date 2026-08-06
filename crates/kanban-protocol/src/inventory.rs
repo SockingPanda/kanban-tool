@@ -387,10 +387,6 @@ const REMOVE_DEPENDENCY_PATH_PARAMETERS: &[WireParameter] = &[
         cardinality: Some(WireParameterCardinality::RequiredOne),
     },
 ];
-const BOARD_COLUMNS_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
-    name: "board",
-    cardinality: Some(WireParameterCardinality::RequiredOne),
-}];
 const CREATE_TASK_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
     name: "board",
     cardinality: Some(WireParameterCardinality::RequiredOne),
@@ -659,11 +655,6 @@ macro_rules! adopted_api_runtime_contract {
         }
     };
 }
-
-const LIST_BOARDS_QUERY_PARAMETERS: &[WireParameter] = &[WireParameter {
-    name: "include_archived",
-    cardinality: Some(WireParameterCardinality::OptionalOne),
-}];
 
 const BOARD_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
     name: "board",
@@ -966,33 +957,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "checkpoint_output_fixture_is_consumed_by_public_contract"
     ),
     adopted_cli_output_contract!(
-        "cli.board-list.output",
-        "board list",
-        "urn:kanban-tool:schema:cli:board-list-output:v1",
-        "schemas/fixtures/cli/board-list-output.v1.valid.json",
-        "cli_board_contract_adoption",
-        "board_list_output_fixture_is_produced_by_real_cli",
-        "board_list_output_fixture_is_consumed_by_contract_root"
-    ),
-    adopted_cli_output_contract!(
-        "cli.board-create.output",
-        "board create",
-        "urn:kanban-tool:schema:cli:board-create-output:v1",
-        "schemas/fixtures/cli/board-create-output.v1.valid.json",
-        "cli_board_contract_adoption",
-        "board_create_output_fixture_is_produced_by_real_cli",
-        "board_create_output_fixture_is_consumed_by_contract_root"
-    ),
-    adopted_cli_output_contract!(
-        "cli.board-show.output",
-        "board show",
-        "urn:kanban-tool:schema:cli:board-show-output:v1",
-        "schemas/fixtures/cli/board-show-output.v1.valid.json",
-        "cli_board_contract_adoption",
-        "board_show_output_fixture_is_produced_by_real_cli",
-        "board_show_output_fixture_is_consumed_by_contract_root"
-    ),
-    adopted_cli_output_contract!(
         "cli.board-use.output",
         "board use",
         "urn:kanban-tool:schema:cli:board-use-output:v1",
@@ -1009,24 +973,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "cli_board_contract_adoption",
         "board_current_output_fixture_is_produced_by_real_cli",
         "board_current_output_fixture_is_consumed_by_contract_root"
-    ),
-    adopted_cli_output_contract!(
-        "cli.board-archive.output",
-        "board archive",
-        "urn:kanban-tool:schema:cli:board-archive-output:v1",
-        "schemas/fixtures/cli/board-archive-output.v1.valid.json",
-        "cli_board_contract_adoption",
-        "board_archive_output_fixture_is_produced_by_real_cli",
-        "board_archive_output_fixture_is_consumed_by_contract_root"
-    ),
-    adopted_cli_output_contract!(
-        "cli.board-columns.output",
-        "board columns",
-        "urn:kanban-tool:schema:cli:board-columns-output:v1",
-        "schemas/fixtures/cli/board-columns-output.v1.valid.json",
-        "cli_board_contract_adoption",
-        "board_columns_output_fixture_is_produced_by_real_cli",
-        "board_columns_output_fixture_is_consumed_by_contract_root"
     ),
     adopted_cli_output_contract!(
         "cli.task-list.output",
@@ -2312,30 +2258,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "suite::execution_adoption::get_run_log_response_fixture_is_produced_by_real_router",
         "suite::execution_adoption::get_run_log_response_fixture_is_consumed_by_contract_root"
     ),
-    adopted_comment_contract!(
-        "api.list-board-columns.path",
-        "GET /api/v1/boards/:board/columns path",
-        "GET /api/v1/boards/:board/columns",
-        ContractDirection::Deserialize,
-        "urn:kanban-tool:schema:api:list-board-columns-path:v1",
-        "schemas/fixtures/api/list-board-columns-path.v1.valid.json",
-        HttpTransportLocation::Path,
-        BOARD_COLUMNS_PATH_PARAMETERS,
-        "suite::execution_adoption::list_board_columns_path_dto_serializes_to_committed_fixture",
-        "suite::execution_adoption::list_board_columns_path_fixture_is_consumed_by_real_router"
-    ),
-    adopted_comment_contract!(
-        "api.list-board-columns.response",
-        "GET /api/v1/boards/:board/columns response",
-        "GET /api/v1/boards/:board/columns",
-        ContractDirection::Serialize,
-        "urn:kanban-tool:schema:api:list-board-columns-response:v1",
-        "schemas/fixtures/api/list-board-columns-response.v1.valid.json",
-        HttpTransportLocation::Success,
-        &[],
-        "suite::execution_adoption::list_board_columns_response_fixture_is_produced_by_real_router",
-        "suite::execution_adoption::list_board_columns_response_fixture_is_consumed_by_contract_root"
-    ),
     adopted_api_response_contract!(
         "api.doctor.response",
         "GET /api/v1/maintenance/doctor response",
@@ -2434,84 +2356,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         },
         binding: ContractBinding::SharedComponent,
     },
-    adopted_api_parameter_contract!(
-        "api.list-boards.query",
-        "GET /api/v1/boards query",
-        "GET /api/v1/boards",
-        "urn:kanban-tool:schema:api:list-boards-query:v1",
-        "schemas/fixtures/api/list-boards-query.v1.valid.json",
-        "suite::boards_adoption::list_boards_query_dto_serializes_to_committed_fixture",
-        "suite::boards_adoption::list_boards_query_fixture_is_consumed_by_real_router",
-        HttpTransportLocation::Query,
-        LIST_BOARDS_QUERY_PARAMETERS
-    ),
-    adopted_api_request!(
-        "api.create-board.request",
-        "POST /api/v1/boards request",
-        "POST /api/v1/boards",
-        "urn:kanban-tool:schema:api:create-board-request:v1",
-        "schemas/fixtures/api/create-board-request.v1.valid.json",
-        "suite::boards_adoption::create_board_request_dto_serializes_to_committed_fixture",
-        "suite::boards_adoption::create_board_request_fixture_is_consumed_by_real_router"
-    ),
-    adopted_api_parameter_contract!(
-        "api.get-board.path",
-        "GET /api/v1/boards/:board path",
-        "GET /api/v1/boards/:board",
-        "urn:kanban-tool:schema:api:get-board-path:v1",
-        "schemas/fixtures/api/get-board-path.v1.valid.json",
-        "suite::boards_adoption::get_board_path_dto_serializes_to_committed_fixture",
-        "suite::boards_adoption::get_board_path_fixture_is_consumed_by_real_router",
-        HttpTransportLocation::Path,
-        BOARD_PATH_PARAMETERS
-    ),
-    adopted_api_parameter_contract!(
-        "api.archive-board.path",
-        "POST /api/v1/boards/:board/archive path",
-        "POST /api/v1/boards/:board/archive",
-        "urn:kanban-tool:schema:api:archive-board-path:v1",
-        "schemas/fixtures/api/archive-board-path.v1.valid.json",
-        "suite::boards_adoption::archive_board_path_dto_serializes_to_committed_fixture",
-        "suite::boards_adoption::archive_board_path_fixture_is_consumed_by_real_router",
-        HttpTransportLocation::Path,
-        BOARD_PATH_PARAMETERS
-    ),
-    adopted_api_response_contract!(
-        "api.list-boards.response",
-        "GET /api/v1/boards response",
-        "GET /api/v1/boards",
-        "urn:kanban-tool:schema:api:list-boards-response:v1",
-        "schemas/fixtures/api/list-boards-response.v1.valid.json",
-        "suite::boards_adoption::list_boards_response_fixture_is_produced_by_real_router",
-        "suite::boards_adoption::list_boards_response_fixture_is_consumed_by_contract_root"
-    ),
-    adopted_api_response_contract!(
-        "api.create-board.response",
-        "POST /api/v1/boards response",
-        "POST /api/v1/boards",
-        "urn:kanban-tool:schema:api:create-board-response:v1",
-        "schemas/fixtures/api/create-board-response.v1.valid.json",
-        "suite::boards_adoption::create_board_response_fixture_is_produced_by_real_router",
-        "suite::boards_adoption::create_board_response_fixture_is_consumed_by_contract_root"
-    ),
-    adopted_api_response_contract!(
-        "api.get-board.response",
-        "GET /api/v1/boards/:board response",
-        "GET /api/v1/boards/:board",
-        "urn:kanban-tool:schema:api:get-board-response:v1",
-        "schemas/fixtures/api/get-board-response.v1.valid.json",
-        "suite::boards_adoption::get_board_response_fixture_is_produced_by_real_router",
-        "suite::boards_adoption::get_board_response_fixture_is_consumed_by_contract_root"
-    ),
-    adopted_api_response_contract!(
-        "api.archive-board.response",
-        "POST /api/v1/boards/:board/archive response",
-        "POST /api/v1/boards/:board/archive",
-        "urn:kanban-tool:schema:api:archive-board-response:v1",
-        "schemas/fixtures/api/archive-board-response.v1.valid.json",
-        "suite::boards_adoption::archive_board_response_fixture_is_produced_by_real_router",
-        "suite::boards_adoption::archive_board_response_fixture_is_consumed_by_contract_root"
-    ),
     adopted_api_parameter_contract!(
         "api.list-tasks.path",
         "GET /api/v1/boards/:board/tasks path",
@@ -3071,15 +2915,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "schemas/fixtures/api/archive-task-request.v1.valid.json",
         "suite::lifecycle_request_adoption::archive_task_request_dto_serializes_to_committed_fixture",
         "suite::lifecycle_request_adoption::archive_task_request_fixture_is_consumed_by_real_router"
-    ),
-    adopted_api_request!(
-        "api.archive-board.request",
-        "POST /api/v1/boards/:board/archive",
-        "POST /api/v1/boards/:board/archive",
-        "urn:kanban-tool:schema:api:archive-board-request:v1",
-        "schemas/fixtures/api/archive-board-request.v1.valid.json",
-        "suite::lifecycle_request_adoption::archive_board_request_dto_serializes_to_committed_fixture",
-        "suite::lifecycle_request_adoption::archive_board_request_fixture_is_consumed_by_real_router"
     ),
     adopted_api_request!(
         "api.add-dependency.request",
@@ -5019,7 +4854,7 @@ pub fn operation_inventory() -> &'static [OperationContract] {
     static INVENTORY: std::sync::OnceLock<Vec<OperationContract>> = std::sync::OnceLock::new();
     INVENTORY
         .get_or_init(|| {
-            let mut inventory = OPERATION_INVENTORY.to_vec();
+            let mut inventory = hybrid_static_inventory();
             adopt_phase5_api_contracts(&mut inventory);
             adopt_protocol_contracts(&mut inventory);
             inventory.extend(portable_operation_contracts());
@@ -5031,6 +4866,67 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             inventory
         })
         .as_slice()
+}
+
+fn hybrid_static_inventory() -> Vec<OperationContract> {
+    let board = crate::board_catalog::operation_contracts();
+    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 15);
+
+    for contract in OPERATION_INVENTORY {
+        match contract.id {
+            // Keep the historical CLI order around the retained board use/current rows.
+            "cli.board-use.output" => {
+                append_board_contract(&mut inventory, &board, "cli.board-list.output");
+                append_board_contract(&mut inventory, &board, "cli.board-create.output");
+                append_board_contract(&mut inventory, &board, "cli.board-show.output");
+                inventory.push(*contract);
+            }
+            "cli.task-list.output" => {
+                append_board_contract(&mut inventory, &board, "cli.board-archive.output");
+                append_board_contract(&mut inventory, &board, "cli.board-columns.output");
+                inventory.push(*contract);
+            }
+            // Columns used to sit immediately before maintenance doctor.
+            "api.doctor.response" => {
+                append_board_contract(&mut inventory, &board, "api.list-board-columns.path");
+                append_board_contract(&mut inventory, &board, "api.list-board-columns.response");
+                inventory.push(*contract);
+            }
+            // The CRUD board rows used to follow the shared error component.
+            "api.error.response" => {
+                inventory.push(*contract);
+                append_board_contract(&mut inventory, &board, "api.list-boards.query");
+                append_board_contract(&mut inventory, &board, "api.create-board.request");
+                append_board_contract(&mut inventory, &board, "api.get-board.path");
+                append_board_contract(&mut inventory, &board, "api.archive-board.path");
+                append_board_contract(&mut inventory, &board, "api.list-boards.response");
+                append_board_contract(&mut inventory, &board, "api.create-board.response");
+                append_board_contract(&mut inventory, &board, "api.get-board.response");
+                append_board_contract(&mut inventory, &board, "api.archive-board.response");
+            }
+            // Archive-board request historically followed archive-task request.
+            "api.add-dependency.request" => {
+                append_board_contract(&mut inventory, &board, "api.archive-board.request");
+                inventory.push(*contract);
+            }
+            _ => inventory.push(*contract),
+        }
+    }
+    inventory
+}
+
+fn append_board_contract(
+    inventory: &mut Vec<OperationContract>,
+    board: &[OperationContract],
+    id: &str,
+) {
+    inventory.push(
+        board
+            .iter()
+            .find(|contract| contract.id == id)
+            .copied()
+            .unwrap_or_else(|| panic!("missing board catalog contract: {id}")),
+    );
 }
 
 #[derive(Debug, Clone, Copy)]

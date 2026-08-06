@@ -10,6 +10,7 @@
 
 mod api_components;
 mod attachments;
+pub mod board_catalog;
 mod boards;
 mod cli;
 pub mod cli_helpers;

@@ -82,12 +82,10 @@ impl<'a> CatalogProjection<'a> {
     }
 }
 
-/// 目前尚未迁移的空 source 占位。
-///
-/// 后续 domain slice 应在本模块或同级 domain 文件中通过 `operation_catalog!` 填充；
-/// 旧 endpoint/inventory/schema 清单在迁移完成前继续作为 wire/artifact compatibility
-/// baseline，不从这里隐式复制。
-pub const OPERATION_DECLARATIONS: &[OperationDeclaration] = &[];
+/// 当前已迁移的 domain source；其余 operation 继续由 legacy registry 提供 compatibility
+/// baseline，直到对应 family 完成 declaration migration。
+pub const OPERATION_DECLARATIONS: &[OperationDeclaration] =
+    crate::board_catalog::operation_declarations();
 
 /// 返回当前 declaration source。
 pub const fn operation_catalog() -> &'static [OperationDeclaration] {
@@ -249,6 +247,21 @@ mod tests {
         let first = CatalogProjection::new(&[OPERATION]).contracts();
         let second = CatalogProjection::new(&[OPERATION]).contracts();
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn migrated_domain_source_is_exposed_without_legacy_duplication() {
+        assert_eq!(operation_catalog().len(), 10);
+        assert_eq!(
+            operation_catalog()
+                .iter()
+                .map(|operation| operation.operation_id)
+                .collect::<Vec<_>>(),
+            crate::board_catalog::operation_declarations()
+                .iter()
+                .map(|operation| operation.operation_id)
+                .collect::<Vec<_>>()
+        );
     }
 
     #[cfg(feature = "schema")]

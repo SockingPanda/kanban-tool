@@ -37,13 +37,11 @@ const ACTOR_OPERATIONS: &[&str] = &[
     "api.accept-label-proposal",
     "api.add-dependency",
     "api.add-task-label",
-    "api.archive-board",
     "api.archive-task",
     "api.block-task",
     "api.claim-task",
     "api.complete-step",
     "api.complete-task",
-    "api.create-board",
     "api.create-comment",
     "api.create-attachment",
     "api.create-step",
@@ -73,7 +71,6 @@ const ACTOR_OPERATIONS: &[&str] = &[
 
 const OPTIONAL_JSON_BODY_OPERATIONS: &[&str] = &[
     "api.accept-label-proposal",
-    "api.archive-board",
     "api.archive-task",
     "api.promote-task",
     "api.propose-task-label",
@@ -92,7 +89,7 @@ pub enum ApiHeaderProfile {
 }
 
 impl ApiHeaderProfile {
-    pub fn parameters(self) -> &'static [WireParameter] {
+    pub const fn parameters(self) -> &'static [WireParameter] {
         match self {
             Self::Locale => LOCALE_PARAMETERS,
             Self::LocaleActor => LOCALE_ACTOR_PARAMETERS,
@@ -102,7 +99,7 @@ impl ApiHeaderProfile {
         }
     }
 
-    pub fn fixture_stem(self) -> &'static str {
+    pub const fn fixture_stem(self) -> &'static str {
         match self {
             Self::Locale => "locale-headers",
             Self::LocaleActor => "locale-actor-headers",
@@ -128,7 +125,8 @@ pub fn api_header_contract_specs() -> Vec<ApiHeaderContractSpec> {
                 Some(ApiHeaderContractSpec {
                     contract_id,
                     endpoint,
-                    profile: header_profile(endpoint),
+                    profile: crate::board_catalog::header_profile(endpoint.operation_id)
+                        .unwrap_or_else(|| header_profile(endpoint)),
                 })
             }
             _ => None,
@@ -140,6 +138,10 @@ pub(crate) fn header_operation_contracts() -> Vec<OperationContract> {
     api_header_contract_specs()
         .into_iter()
         .map(|spec| {
+            if let Some(contract) = crate::board_catalog::header_contract(spec.endpoint.operation_id)
+            {
+                return contract;
+            }
             let operation = leak(format!(
                 "{} {}",
                 method_name(spec.endpoint.method),

@@ -8,12 +8,11 @@ use serde_json::{Map, Value};
 
 use crate::{
     AddDependencyPath, AddDependencyRequest, AddDependencyResponse, AddTaskLabelPath,
-    AddTaskLabelRequest, AddTaskLabelResponse, ArchiveBoardPath, ArchiveBoardRequest,
-    ArchiveBoardResponse, ArchiveTaskPath, ArchiveTaskRequest, ArchiveTaskResponse,
-    AttachmentDownloadResponse, BlockTaskPath, BlockTaskRequest, BlockTaskResponse,
-    BoardTaskMapPath, BoardTaskMapQuery, BoardTaskMapResponse, CheckpointResponse, ClaimTaskPath,
-    ClaimTaskRequest, ClaimTaskResponse, CliAttachmentAddOutput, CliAttachmentListOutput,
-    CliAttachmentRemoveOutput, CliBoardColumnsOutput, CliBoardCurrentOutput, CliBoardUseOutput,
+    AddTaskLabelRequest, AddTaskLabelResponse, ArchiveTaskPath, ArchiveTaskRequest,
+    ArchiveTaskResponse, AttachmentDownloadResponse, BlockTaskPath, BlockTaskRequest,
+    BlockTaskResponse, BoardTaskMapPath, BoardTaskMapQuery, BoardTaskMapResponse,
+    CheckpointResponse, ClaimTaskPath, ClaimTaskRequest, ClaimTaskResponse, CliAttachmentAddOutput,
+    CliAttachmentListOutput, CliAttachmentRemoveOutput, CliBoardCurrentOutput, CliBoardUseOutput,
     CliCheckpointOutput, CliCommentAddOutput, CliCommentListOutput, CliConfigShowOutput,
     CliDependencyAddOutput, CliDependencyListOutput, CliDependencyRemoveOutput, CliDoctorOutput,
     CliEntityListOutput, CliEntityShowOutput, CliEntityUpsertOutput, CliEventsOutput,
@@ -27,16 +26,14 @@ use crate::{
     CliTaskStepUpdateOutput, CliTaskUnblockOutput, CliTaskUpdateOutput, CompleteStepPath,
     CompleteStepRequest, CompleteStepResponse, CompleteTaskPath, CompleteTaskRequest,
     CompleteTaskResponse, ConfirmSignalsResponse, ContractDirection, ContractStrictness,
-    CreateAttachmentPath, CreateAttachmentRequest, CreateAttachmentResponse, CreateBoardRequest,
-    CreateBoardResponse, CreateCommentPath, CreateCommentRequest, CreateCommentResponse,
-    CreateStepPath, CreateStepRequest, CreateStepResponse, CreateTaskPath, CreateTaskRequest,
-    CreateTaskResponse, DecisionMetadata, DeleteAttachmentPath, DeleteAttachmentResponse,
-    DeleteResponse, DoctorResponse, ErrorEnvelope, GetBoardPath, GetBoardResponse, GetRunLogPath,
-    GetRunLogResponse, GetRunPath, GetRunResponse, GetSignalResponse, GetTaskPath, GetTaskQuery,
-    GetTaskResponse, HealthResponse, HeartbeatTaskPath, HeartbeatTaskRequest,
+    CreateAttachmentPath, CreateAttachmentRequest, CreateAttachmentResponse, CreateCommentPath,
+    CreateCommentRequest, CreateCommentResponse, CreateStepPath, CreateStepRequest,
+    CreateStepResponse, CreateTaskPath, CreateTaskRequest, CreateTaskResponse, DecisionMetadata,
+    DeleteAttachmentPath, DeleteAttachmentResponse, DeleteResponse, DoctorResponse, ErrorEnvelope,
+    GetRunLogPath, GetRunLogResponse, GetRunPath, GetRunResponse, GetSignalResponse, GetTaskPath,
+    GetTaskQuery, GetTaskResponse, HealthResponse, HeartbeatTaskPath, HeartbeatTaskRequest,
     HeartbeatTaskResponse, LabelOntologySignalsResponse, ListAttachmentsPath,
-    ListAttachmentsResponse, ListBoardColumnsPath, ListBoardColumnsResponse, ListBoardsQuery,
-    ListBoardsResponse, ListCommentsPath, ListCommentsResponse, ListDependenciesPath,
+    ListAttachmentsResponse, ListCommentsPath, ListCommentsResponse, ListDependenciesPath,
     ListDependenciesResponse, ListEventsResponse, ListRunsPath, ListRunsResponse,
     ListSignalsResponse, ListStepsPath, ListStepsResponse, ListTaskLabelsPath,
     ListTaskLabelsResponse, ListTasksByStatusPath, ListTasksByStatusQuery,
@@ -314,33 +311,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         LegacyImportResponse
     ),
     response_schema_root!(
-        "urn:kanban-tool:schema:cli:board-list-output:v1",
-        "cli/board-list-output.v1.schema.json",
-        "Kanban CLI board list output v1",
-        "cli.board-list.output",
-        "schemas/fixtures/cli/board-list-output.v1.valid.json",
-        "schemas/fixtures/cli/board-list-output.v1.invalid.json",
-        ListBoardsResponse
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:board-create-output:v1",
-        "cli/board-create-output.v1.schema.json",
-        "Kanban CLI board create output v1",
-        "cli.board-create.output",
-        "schemas/fixtures/cli/board-create-output.v1.valid.json",
-        "schemas/fixtures/cli/board-create-output.v1.invalid.json",
-        CreateBoardResponse
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:board-show-output:v1",
-        "cli/board-show-output.v1.schema.json",
-        "Kanban CLI board show output v1",
-        "cli.board-show.output",
-        "schemas/fixtures/cli/board-show-output.v1.valid.json",
-        "schemas/fixtures/cli/board-show-output.v1.invalid.json",
-        GetBoardResponse
-    ),
-    response_schema_root!(
         "urn:kanban-tool:schema:cli:board-use-output:v1",
         "cli/board-use-output.v1.schema.json",
         "Kanban CLI board use output v1",
@@ -357,24 +327,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/cli/board-current-output.v1.valid.json",
         "schemas/fixtures/cli/board-current-output.v1.invalid.json",
         CliBoardCurrentOutput
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:board-archive-output:v1",
-        "cli/board-archive-output.v1.schema.json",
-        "Kanban CLI board archive output v1",
-        "cli.board-archive.output",
-        "schemas/fixtures/cli/board-archive-output.v1.valid.json",
-        "schemas/fixtures/cli/board-archive-output.v1.invalid.json",
-        ArchiveBoardResponse
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:board-columns-output:v1",
-        "cli/board-columns-output.v1.schema.json",
-        "Kanban CLI board columns output v1",
-        "cli.board-columns.output",
-        "schemas/fixtures/cli/board-columns-output.v1.valid.json",
-        "schemas/fixtures/cli/board-columns-output.v1.invalid.json",
-        CliBoardColumnsOutput
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:task-list-output:v1",
@@ -1470,86 +1422,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         invalid_fixture: "schemas/fixtures/api/health-response.v1.invalid.json",
         generate: generate_for::<HealthResponse>,
     },
-    request_schema_root!(
-        "urn:kanban-tool:schema:api:list-boards-query:v1",
-        "api/list-boards-query.v1.schema.json",
-        "Kanban list boards query v1",
-        "api.list-boards.query",
-        "schemas/fixtures/api/list-boards-query.v1.valid.json",
-        "schemas/fixtures/api/list-boards-query.v1.invalid.json",
-        ListBoardsQuery
-    ),
-    request_schema_root!(
-        "urn:kanban-tool:schema:api:create-board-request:v1",
-        "api/create-board-request.v1.schema.json",
-        "Kanban create board request v1",
-        "api.create-board.request",
-        "schemas/fixtures/api/create-board-request.v1.valid.json",
-        "schemas/fixtures/api/create-board-request.v1.invalid.json",
-        CreateBoardRequest
-    ),
-    request_schema_root!(
-        "urn:kanban-tool:schema:api:get-board-path:v1",
-        "api/get-board-path.v1.schema.json",
-        "Kanban get board path v1",
-        "api.get-board.path",
-        "schemas/fixtures/api/get-board-path.v1.valid.json",
-        "schemas/fixtures/api/get-board-path.v1.invalid.json",
-        GetBoardPath
-    ),
-    request_schema_root!(
-        "urn:kanban-tool:schema:api:archive-board-path:v1",
-        "api/archive-board-path.v1.schema.json",
-        "Kanban archive board path v1",
-        "api.archive-board.path",
-        "schemas/fixtures/api/archive-board-path.v1.valid.json",
-        "schemas/fixtures/api/archive-board-path.v1.invalid.json",
-        ArchiveBoardPath
-    ),
-    SchemaRoot {
-        id: "urn:kanban-tool:schema:api:list-boards-response:v1",
-        artifact_path: "api/list-boards-response.v1.schema.json",
-        title: "Kanban list boards response v1",
-        contract_id: "api.list-boards.response",
-        direction: ContractDirection::Serialize,
-        strictness: ContractStrictness::DenyUnknownFields,
-        valid_fixture: "schemas/fixtures/api/list-boards-response.v1.valid.json",
-        invalid_fixture: "schemas/fixtures/api/list-boards-response.v1.invalid.json",
-        generate: generate_for::<ListBoardsResponse>,
-    },
-    SchemaRoot {
-        id: "urn:kanban-tool:schema:api:create-board-response:v1",
-        artifact_path: "api/create-board-response.v1.schema.json",
-        title: "Kanban create board response v1",
-        contract_id: "api.create-board.response",
-        direction: ContractDirection::Serialize,
-        strictness: ContractStrictness::DenyUnknownFields,
-        valid_fixture: "schemas/fixtures/api/create-board-response.v1.valid.json",
-        invalid_fixture: "schemas/fixtures/api/create-board-response.v1.invalid.json",
-        generate: generate_for::<CreateBoardResponse>,
-    },
-    SchemaRoot {
-        id: "urn:kanban-tool:schema:api:get-board-response:v1",
-        artifact_path: "api/get-board-response.v1.schema.json",
-        title: "Kanban get board response v1",
-        contract_id: "api.get-board.response",
-        direction: ContractDirection::Serialize,
-        strictness: ContractStrictness::DenyUnknownFields,
-        valid_fixture: "schemas/fixtures/api/get-board-response.v1.valid.json",
-        invalid_fixture: "schemas/fixtures/api/get-board-response.v1.invalid.json",
-        generate: generate_for::<GetBoardResponse>,
-    },
-    SchemaRoot {
-        id: "urn:kanban-tool:schema:api:archive-board-response:v1",
-        artifact_path: "api/archive-board-response.v1.schema.json",
-        title: "Kanban archive board response v1",
-        contract_id: "api.archive-board.response",
-        direction: ContractDirection::Serialize,
-        strictness: ContractStrictness::DenyUnknownFields,
-        valid_fixture: "schemas/fixtures/api/archive-board-response.v1.valid.json",
-        invalid_fixture: "schemas/fixtures/api/archive-board-response.v1.invalid.json",
-        generate: generate_for::<ArchiveBoardResponse>,
-    },
     SchemaRoot {
         id: "urn:kanban-tool:schema:api:list-tasks-response:v1",
         artifact_path: "api/list-tasks-response.v1.schema.json",
@@ -2439,15 +2311,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         ArchiveTaskRequest
     ),
     request_schema_root!(
-        "urn:kanban-tool:schema:api:archive-board-request:v1",
-        "api/archive-board-request.v1.schema.json",
-        "Kanban archive board request v1",
-        "api.archive-board.request",
-        "schemas/fixtures/api/archive-board-request.v1.valid.json",
-        "schemas/fixtures/api/archive-board-request.v1.invalid.json",
-        ArchiveBoardRequest
-    ),
-    request_schema_root!(
         "urn:kanban-tool:schema:api:add-dependency-request:v1",
         "api/add-dependency-request.v1.schema.json",
         "Kanban add dependency request v1",
@@ -2554,24 +2417,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/api/get-run-log-response.v1.valid.json",
         "schemas/fixtures/api/get-run-log-response.v1.invalid.json",
         GetRunLogResponse
-    ),
-    request_schema_root!(
-        "urn:kanban-tool:schema:api:list-board-columns-path:v1",
-        "api/list-board-columns-path.v1.schema.json",
-        "Kanban API list board columns path v1",
-        "api.list-board-columns.path",
-        "schemas/fixtures/api/list-board-columns-path.v1.valid.json",
-        "schemas/fixtures/api/list-board-columns-path.v1.invalid.json",
-        ListBoardColumnsPath
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:api:list-board-columns-response:v1",
-        "api/list-board-columns-response.v1.schema.json",
-        "Kanban API list board columns response v1",
-        "api.list-board-columns.response",
-        "schemas/fixtures/api/list-board-columns-response.v1.valid.json",
-        "schemas/fixtures/api/list-board-columns-response.v1.invalid.json",
-        ListBoardColumnsResponse
     ),
     request_schema_root!(
         "urn:kanban-tool:schema:api:list-attachments-path:v1",
@@ -3524,13 +3369,68 @@ pub fn schema_registry() -> &'static [SchemaRoot] {
     static REGISTRY: std::sync::OnceLock<Vec<SchemaRoot>> = std::sync::OnceLock::new();
     REGISTRY
         .get_or_init(|| {
-            let mut registry = SCHEMA_REGISTRY.to_vec();
+            let mut registry = hybrid_static_schema_roots();
             registry.extend(protocol_schema_roots());
             registry.extend(portable_schema_roots());
             registry.extend(header_schema_roots());
             registry
         })
         .as_slice()
+}
+
+fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
+    let board = crate::board_catalog::schema_roots();
+    let mut registry = Vec::with_capacity(SCHEMA_REGISTRY.len() + 16);
+    for root in SCHEMA_REGISTRY {
+        match root.contract_id {
+            "cli.board-use.output" => {
+                append_board_schema_root(&mut registry, &board, "cli.board-list.output");
+                append_board_schema_root(&mut registry, &board, "cli.board-create.output");
+                append_board_schema_root(&mut registry, &board, "cli.board-show.output");
+                registry.push(*root);
+            }
+            "cli.task-list.output" => {
+                append_board_schema_root(&mut registry, &board, "cli.board-archive.output");
+                append_board_schema_root(&mut registry, &board, "cli.board-columns.output");
+                registry.push(*root);
+            }
+            "api.health.response" => {
+                registry.push(*root);
+                append_board_schema_root(&mut registry, &board, "api.list-boards.query");
+                append_board_schema_root(&mut registry, &board, "api.create-board.request");
+                append_board_schema_root(&mut registry, &board, "api.get-board.path");
+                append_board_schema_root(&mut registry, &board, "api.archive-board.path");
+                append_board_schema_root(&mut registry, &board, "api.list-boards.response");
+                append_board_schema_root(&mut registry, &board, "api.create-board.response");
+                append_board_schema_root(&mut registry, &board, "api.get-board.response");
+                append_board_schema_root(&mut registry, &board, "api.archive-board.response");
+            }
+            "api.add-dependency.request" => {
+                append_board_schema_root(&mut registry, &board, "api.archive-board.request");
+                registry.push(*root);
+            }
+            "api.list-attachments.path" => {
+                append_board_schema_root(&mut registry, &board, "api.list-board-columns.path");
+                append_board_schema_root(&mut registry, &board, "api.list-board-columns.response");
+                registry.push(*root);
+            }
+            _ => registry.push(*root),
+        }
+    }
+    registry
+}
+
+fn append_board_schema_root(
+    registry: &mut Vec<SchemaRoot>,
+    board: &[SchemaRoot],
+    contract_id: &str,
+) {
+    registry.push(
+        *board
+            .iter()
+            .find(|root| root.contract_id == contract_id)
+            .unwrap_or_else(|| panic!("missing board schema root: {contract_id}")),
+    );
 }
 
 fn protocol_schema_roots() -> Vec<SchemaRoot> {
@@ -3700,37 +3600,46 @@ fn portable_schema_roots() -> Vec<SchemaRoot> {
 }
 
 fn header_schema_roots() -> Vec<SchemaRoot> {
+    let board = crate::board_catalog::schema_roots();
     crate::headers::api_header_contract_specs()
         .into_iter()
-        .map(|spec| SchemaRoot {
-            id: crate::headers::schema_id(spec.endpoint.operation_id),
-            artifact_path: crate::headers::artifact_path(spec.endpoint.operation_id),
-            title: Box::leak(
-                format!("Kanban {} request headers v1", spec.endpoint.operation_id)
-                    .into_boxed_str(),
-            ),
-            contract_id: spec.contract_id,
-            direction: ContractDirection::Deserialize,
-            strictness: ContractStrictness::DenyUnknownFields,
-            valid_fixture: crate::headers::fixture_path(spec.profile, true),
-            invalid_fixture: crate::headers::fixture_path(spec.profile, false),
-            generate: match spec.profile {
-                crate::headers::ApiHeaderProfile::Locale => {
-                    generate_for::<crate::headers::LocaleHeaders>
-                }
-                crate::headers::ApiHeaderProfile::LocaleActor => {
-                    generate_for::<crate::headers::LocaleActorHeaders>
-                }
-                crate::headers::ApiHeaderProfile::LocaleJson => {
-                    generate_for::<crate::headers::LocaleJsonHeaders>
-                }
-                crate::headers::ApiHeaderProfile::LocaleActorJson => {
-                    generate_for::<crate::headers::LocaleActorJsonHeaders>
-                }
-                crate::headers::ApiHeaderProfile::LocaleActorOptionalJson => {
-                    generate_for::<crate::headers::LocaleActorOptionalJsonHeaders>
-                }
-            },
+        .map(|spec| {
+            if let Some(root) = board
+                .iter()
+                .find(|root| root.contract_id == spec.contract_id)
+            {
+                return *root;
+            }
+            SchemaRoot {
+                id: crate::headers::schema_id(spec.endpoint.operation_id),
+                artifact_path: crate::headers::artifact_path(spec.endpoint.operation_id),
+                title: Box::leak(
+                    format!("Kanban {} request headers v1", spec.endpoint.operation_id)
+                        .into_boxed_str(),
+                ),
+                contract_id: spec.contract_id,
+                direction: ContractDirection::Deserialize,
+                strictness: ContractStrictness::DenyUnknownFields,
+                valid_fixture: crate::headers::fixture_path(spec.profile, true),
+                invalid_fixture: crate::headers::fixture_path(spec.profile, false),
+                generate: match spec.profile {
+                    crate::headers::ApiHeaderProfile::Locale => {
+                        generate_for::<crate::headers::LocaleHeaders>
+                    }
+                    crate::headers::ApiHeaderProfile::LocaleActor => {
+                        generate_for::<crate::headers::LocaleActorHeaders>
+                    }
+                    crate::headers::ApiHeaderProfile::LocaleJson => {
+                        generate_for::<crate::headers::LocaleJsonHeaders>
+                    }
+                    crate::headers::ApiHeaderProfile::LocaleActorJson => {
+                        generate_for::<crate::headers::LocaleActorJsonHeaders>
+                    }
+                    crate::headers::ApiHeaderProfile::LocaleActorOptionalJson => {
+                        generate_for::<crate::headers::LocaleActorOptionalJsonHeaders>
+                    }
+                },
+            }
         })
         .collect()
 }

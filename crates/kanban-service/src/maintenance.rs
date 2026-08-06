@@ -13,6 +13,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(test)]
+use std::sync::atomic::AtomicU8;
+
 #[cfg(feature = "legacy-sqlite-import")]
 use std::future::Future;
 
@@ -43,7 +46,6 @@ pub(crate) const PORTABLE_TABLES: &[&str] = &[
     "entity_relations",
     "label_semantics",
     "label_atoms",
-    "label_atom_index_boards",
     "label_semantic_proposals",
     "label_ontology_observations",
     "label_ontology_signals",
@@ -297,6 +299,33 @@ struct PortableSnapshot {
     table_counts: BTreeMap<String, u64>,
 }
 
+#[cfg(test)]
+const FAILPOINT_PUBLISHED_JOURNAL: u8 = 1;
+#[cfg(test)]
+const FAILPOINT_REBUILD_ENQUEUE: u8 = 2;
+#[cfg(test)]
+const FAILPOINT_BACKUP_JOURNAL: u8 = 3;
+#[cfg(test)]
+static IMPORT_FAILPOINT: AtomicU8 = AtomicU8::new(0);
+
+#[cfg(test)]
+fn failpoint_once(point: u8) -> Result<(), StoreError> {
+    if IMPORT_FAILPOINT
+        .compare_exchange(
+            point,
+            0,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        )
+        .is_ok()
+    {
+        return Err(StoreError::InvalidInput(format!(
+            "maintenance test fault injection: {point}"
+        )));
+    }
+    Ok(())
+}
+
 impl TursoStore {
     /// 在 host maintenance lease 内运行一个需要独占窗口的操作。
     ///
@@ -388,53 +417,66 @@ impl TursoStore {
         let lease = self
             .acquire_maintenance_lease("backup", "host-admin")
             .await?;
-        let source_fingerprint = self.database_fingerprint().await?;
-        let temp = temporary_sibling(&out_path, "export")?;
-        let mut writer = BufWriter::new(File::create(&temp).map_err(io_error)?);
-        let connection = self.connection().await?;
-        let (schema_family, schema_lineage, schema_version, schema_fingerprint) =
-            portable_schema_identity(&connection).await?;
-        let records = collect_portable_records(&connection).await?;
-        let (payload, table_counts) = serialize_portable_records(&records)?;
-        let mut header = PortableHeader {
-            format: "kanban.portable.jsonl".to_owned(),
-            version: 2,
-            schema_family,
-            schema_lineage,
-            schema_version,
-            schema_fingerprint,
-            source_fingerprint: source_fingerprint.clone(),
-            canonical_tables: PORTABLE_TABLES
-                .iter()
-                .map(|table| (*table).to_owned())
-                .collect(),
-            record_count: records.len() as u64,
-            payload_checksum_sha256: digest_bytes(&payload),
-            table_counts,
-            manifest_checksum_sha256: String::new(),
-            attachments_mode: "metadata_only".to_owned(),
-        };
-        header.manifest_checksum_sha256 = manifest_checksum(&header)?;
-        serde_json::to_writer(&mut writer, &header).map_err(json_error)?;
-        writer.write_all(b"\n").map_err(io_error)?;
-        writer.write_all(&payload).map_err(io_error)?;
-        writer.flush().map_err(io_error)?;
-        writer
-            .into_inner()
-            .map_err(|error| io_error(error.into_error()))?
-            .sync_all()
-            .map_err(io_error)?;
-        durable_rename(&temp, &out_path)?;
-        let (checksum_sha256, bytes) = file_digest(&out_path)?;
-        let report = StoreExportReport {
-            out_path: out_path.display().to_string(),
-            checksum_sha256,
-            bytes,
-            record_count: records.len() as u64,
-            source_fingerprint,
-        };
-        self.release_maintenance_lease(&lease).await?;
-        Ok(report)
+        let result = async {
+            let temp = temporary_sibling(&out_path, "export")?;
+            let mut writer = BufWriter::new(File::create(&temp).map_err(io_error)?);
+            let mut connection = self.connection().await?;
+            // 读取事务把 schema、facts 和 event history 固定在同一个 Turso
+            // snapshot；进程内 quiesce gate 同时阻止 host mutation 交错。
+            let transaction = connection
+                .transaction_with_behavior(TransactionBehavior::Deferred)
+                .await?;
+            let (schema_family, schema_lineage, schema_version, schema_fingerprint) =
+                portable_schema_identity(&transaction).await?;
+            let records = collect_portable_records(&transaction).await?;
+            let (payload, table_counts) = serialize_portable_records(&records)?;
+            let source_fingerprint = digest_bytes(&payload);
+            let mut header = PortableHeader {
+                format: "kanban.portable.jsonl".to_owned(),
+                version: 2,
+                schema_family,
+                schema_lineage,
+                schema_version,
+                schema_fingerprint,
+                source_fingerprint: source_fingerprint.clone(),
+                canonical_tables: PORTABLE_TABLES
+                    .iter()
+                    .map(|table| (*table).to_owned())
+                    .collect(),
+                record_count: records.len() as u64,
+                payload_checksum_sha256: source_fingerprint.clone(),
+                table_counts,
+                manifest_checksum_sha256: String::new(),
+                attachments_mode: "metadata_only".to_owned(),
+            };
+            header.manifest_checksum_sha256 = manifest_checksum(&header)?;
+            transaction.commit().await?;
+            serde_json::to_writer(&mut writer, &header).map_err(json_error)?;
+            writer.write_all(b"\n").map_err(io_error)?;
+            writer.write_all(&payload).map_err(io_error)?;
+            writer.flush().map_err(io_error)?;
+            writer
+                .into_inner()
+                .map_err(|error| io_error(error.into_error()))?
+                .sync_all()
+                .map_err(io_error)?;
+            durable_rename(&temp, &out_path)?;
+            let (checksum_sha256, bytes) = file_digest(&out_path)?;
+            Ok::<StoreExportReport, StoreError>(StoreExportReport {
+                out_path: out_path.display().to_string(),
+                checksum_sha256,
+                bytes,
+                record_count: records.len() as u64,
+                source_fingerprint,
+            })
+        }
+        .await;
+        let release = self.release_maintenance_lease(&lease).await;
+        match (result, release) {
+            (Ok(report), Ok(())) => Ok(report),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
+        }
     }
 
     /// 当前 host 已持有 Turso handle，replace 不直接替换旧 inode。非 replace 导入
@@ -535,9 +577,25 @@ impl TursoStore {
                         },
                     ));
                 }
-                "failed" => {}
+                // `prepared` 既可能表示“尚未提交”，也可能表示 canonical transaction
+                // 刚在 journal 阶段更新失败前提交。下面的恢复探测区分这两种状态，
+                // 不靠猜测，也不重复写入事实。
+                "prepared" | "failed" => {}
                 "validated" if replace => {}
-                "published" if replace => {}
+                "published" => {
+                    if !replace {
+                        return self
+                            .resume_published_import(
+                                in_path,
+                                &snapshot,
+                                &snapshot_fingerprint,
+                                &mut connection,
+                                journal,
+                                &target_fingerprint_before,
+                            )
+                            .await;
+                    }
+                }
                 phase => {
                     return Err(StoreError::MaintenanceBusy(format!(
                         "portable import journal {} 处于不可恢复阶段 {phase}，请先完成 recovery",
@@ -548,6 +606,65 @@ impl TursoStore {
         }
 
         let existing = canonical_record_count(&connection).await?;
+        if let Some(journal) = journal.as_ref()
+            && journal.phase == "prepared"
+        {
+            if verify_imported_target(&connection, &snapshot.header)
+                .await
+                .is_ok()
+            {
+                // canonical facts 已经存在。这是“提交成功但 journal 更新失败”窗口的
+                // 恢复分支；这里只推进 journal，并继续幂等的派生工作。
+                if let Err(error) =
+                    update_import_journal_phase(&connection, &journal.id, "published", None).await
+                {
+                    let _ = mark_import_journal_error(
+                        &connection,
+                        &journal.id,
+                        error.to_string().as_str(),
+                    )
+                    .await;
+                    return Err(error);
+                }
+                let recovered = find_portable_journal(&connection, &snapshot_fingerprint)
+                    .await?
+                    .ok_or_else(|| {
+                        StoreError::InvalidInput("portable import recovery journal 丢失".to_owned())
+                    })?;
+                if replace {
+                    return self
+                        .replace_import_transaction(
+                            in_path,
+                            &snapshot,
+                            &manifest,
+                            &snapshot_fingerprint,
+                            &mut connection,
+                            (Some(&recovered), &target_fingerprint_before),
+                        )
+                        .await;
+                } else {
+                    return self
+                        .resume_published_import(
+                            in_path,
+                            &snapshot,
+                            &snapshot_fingerprint,
+                            &mut connection,
+                            &recovered,
+                            &target_fingerprint_before,
+                        )
+                        .await;
+                }
+            } else if existing > 0 && !replace {
+                let error = StoreError::InvalidInput(
+                    "portable import journal prepared 但 canonical facts 与 snapshot 不匹配，拒绝猜测恢复"
+                        .to_owned(),
+                );
+                let _ =
+                    mark_import_journal_error(&connection, &journal.id, error.to_string().as_str())
+                        .await;
+                return Err(error);
+            }
+        }
         if replace && !return_prepared {
             return self
                 .replace_import_transaction(
@@ -680,14 +797,34 @@ impl TursoStore {
                     return Err(error);
                 }
             };
-        let jobs = enqueue_rebuild_jobs(&connection, &snapshot_fingerprint).await?;
-        verify_imported_target(&connection, &snapshot.header).await?;
-        connection
-            .execute(
-                "UPDATE import_journal SET phase='completed', updated_at=?1 WHERE id=?2",
-                (now_ms(), journal_id.as_str()),
-            )
-            .await?;
+        if let Err(error) =
+            update_import_journal_phase(&connection, &journal_id, "published", None).await
+        {
+            let _ = mark_import_journal_error(&connection, &journal_id, error.to_string().as_str())
+                .await;
+            return Err(error);
+        }
+        let jobs = match enqueue_rebuild_jobs(&connection, &snapshot_fingerprint).await {
+            Ok(jobs) => jobs,
+            Err(error) => {
+                let _ =
+                    mark_import_journal_error(&connection, &journal_id, error.to_string().as_str())
+                        .await;
+                return Err(error);
+            }
+        };
+        if let Err(error) = verify_imported_target(&connection, &snapshot.header).await {
+            let _ = mark_import_journal_error(&connection, &journal_id, error.to_string().as_str())
+                .await;
+            return Err(error);
+        }
+        if let Err(error) =
+            update_import_journal_phase(&connection, &journal_id, "completed", None).await
+        {
+            let _ = mark_import_journal_error(&connection, &journal_id, error.to_string().as_str())
+                .await;
+            return Err(error);
+        }
         Ok(import_report(
             in_path,
             &snapshot.header,
@@ -699,6 +836,58 @@ impl TursoStore {
                 restart_required: false,
                 staged_database_path: None,
                 target_fingerprint_before,
+                staged_fingerprint: None,
+                publish_preconditions: Vec::new(),
+            },
+        ))
+    }
+
+    /// 恢复 canonical 已提交但 derived enqueue/verify/journal 收尾未完成的导入。
+    ///
+    /// `published` 是一个可重入阶段：重复请求只使用幂等 dedupe key 补齐 job，
+    /// 不再次插入或清空 canonical facts。每一个失败都把阶段和错误留在 journal，
+    /// 让下一次相同 fingerprint 请求继续恢复。
+    async fn resume_published_import(
+        &self,
+        in_path: &Path,
+        snapshot: &PortableSnapshot,
+        snapshot_fingerprint: &str,
+        connection: &mut Connection,
+        journal: &PortableJournal,
+        target_fingerprint_before: &str,
+    ) -> Result<StoreImportReport, StoreError> {
+        let jobs = match enqueue_rebuild_jobs(connection, snapshot_fingerprint).await {
+            Ok(jobs) => jobs,
+            Err(error) => {
+                let _ =
+                    mark_import_journal_error(connection, &journal.id, error.to_string().as_str())
+                        .await;
+                return Err(error);
+            }
+        };
+        if let Err(error) = verify_imported_target(connection, &snapshot.header).await {
+            let _ = mark_import_journal_error(connection, &journal.id, error.to_string().as_str())
+                .await;
+            return Err(error);
+        }
+        if let Err(error) =
+            update_import_journal_phase(connection, &journal.id, "completed", None).await
+        {
+            let _ = mark_import_journal_error(connection, &journal.id, error.to_string().as_str())
+                .await;
+            return Err(error);
+        }
+        Ok(import_report(
+            in_path,
+            &snapshot.header,
+            journal.id.clone(),
+            snapshot.header.record_count,
+            jobs,
+            ImportReportDetails {
+                phase: "completed",
+                restart_required: false,
+                staged_database_path: None,
+                target_fingerprint_before: target_fingerprint_before.to_owned(),
                 staged_fingerprint: None,
                 publish_preconditions: Vec::new(),
             },
@@ -737,20 +926,42 @@ impl TursoStore {
         if let Some(journal) = journal
             && journal.phase == "published"
         {
-            let jobs = enqueue_rebuild_jobs(connection, snapshot_fingerprint).await?;
-            verify_imported_target(connection, &snapshot.header).await?;
+            let jobs = match enqueue_rebuild_jobs(connection, snapshot_fingerprint).await {
+                Ok(jobs) => jobs,
+                Err(error) => {
+                    let _ = mark_import_journal_error(
+                        connection,
+                        &journal.id,
+                        error.to_string().as_str(),
+                    )
+                    .await;
+                    return Err(error);
+                }
+            };
+            if let Err(error) = verify_imported_target(connection, &snapshot.header).await {
+                let _ =
+                    mark_import_journal_error(connection, &journal.id, error.to_string().as_str())
+                        .await;
+                return Err(error);
+            }
             let doctor = doctor_connection(connection).await?;
             if !doctor_replace_safe(&doctor) {
-                return Err(StoreError::InvalidInput(
+                let error = StoreError::InvalidInput(
                     "portable replace published target doctor 校验未通过".to_owned(),
-                ));
+                );
+                let _ =
+                    mark_import_journal_error(connection, &journal.id, error.to_string().as_str())
+                        .await;
+                return Err(error);
             }
-            connection
-                .execute(
-                    "UPDATE import_journal SET phase='completed', error=NULL, updated_at=?1 WHERE id=?2",
-                    (now_ms(), journal.id.as_str()),
-                )
-                .await?;
+            if let Err(error) =
+                update_import_journal_phase(connection, &journal.id, "completed", None).await
+            {
+                let _ =
+                    mark_import_journal_error(connection, &journal.id, error.to_string().as_str())
+                        .await;
+                return Err(error);
+            }
             return Ok(import_report(
                 in_path,
                 &snapshot.header,
@@ -790,8 +1001,20 @@ impl TursoStore {
                 return Err(error);
             }
         };
-        update_import_journal_backup(connection, &journal_id, target_fingerprint_before, &backup)
-            .await?;
+        if let Err(error) = update_import_journal_backup(
+            connection,
+            &journal_id,
+            target_fingerprint_before,
+            &backup,
+        )
+        .await
+        {
+            // canonical target 尚未改变。保留可重入的 `prepared`，并记录具体错误，
+            // 不把它变成无法恢复的 MaintenanceBusy journal。
+            let _ = mark_import_journal_error(connection, &journal_id, error.to_string().as_str())
+                .await;
+            return Err(error);
+        }
 
         let transaction_result = async {
             let transaction = connection
@@ -827,20 +1050,44 @@ impl TursoStore {
 
         // rebuild job 是 derived projection，不参与 facts 清空；在 canonical commit 后入队。
         // enqueue 失败时保留 `published` journal，下一次相同 fingerprint 请求可安全恢复。
-        let jobs = enqueue_rebuild_jobs(connection, snapshot_fingerprint).await?;
-        verify_imported_target(connection, &snapshot.header).await?;
-        let doctor = doctor_connection(connection).await?;
-        if !doctor_replace_safe(&doctor) {
-            return Err(StoreError::InvalidInput(
-                "portable replace committed target doctor 校验未通过".to_owned(),
-            ));
+        let jobs = match enqueue_rebuild_jobs(connection, snapshot_fingerprint).await {
+            Ok(jobs) => jobs,
+            Err(error) => {
+                let _ =
+                    mark_import_journal_error(connection, &journal_id, error.to_string().as_str())
+                        .await;
+                return Err(error);
+            }
+        };
+        if let Err(error) = verify_imported_target(connection, &snapshot.header).await {
+            let _ = mark_import_journal_error(connection, &journal_id, error.to_string().as_str())
+                .await;
+            return Err(error);
         }
-        connection
-            .execute(
-                "UPDATE import_journal SET phase='completed', error=NULL, updated_at=?1 WHERE id=?2",
-                (now_ms(), journal_id.as_str()),
-            )
-            .await?;
+        let doctor = match doctor_connection(connection).await {
+            Ok(doctor) => doctor,
+            Err(error) => {
+                let _ =
+                    mark_import_journal_error(connection, &journal_id, error.to_string().as_str())
+                        .await;
+                return Err(error);
+            }
+        };
+        if !doctor_replace_safe(&doctor) {
+            let error = StoreError::InvalidInput(
+                "portable replace committed target doctor 校验未通过".to_owned(),
+            );
+            let _ = mark_import_journal_error(connection, &journal_id, error.to_string().as_str())
+                .await;
+            return Err(error);
+        }
+        if let Err(error) =
+            update_import_journal_phase(connection, &journal_id, "completed", None).await
+        {
+            let _ = mark_import_journal_error(connection, &journal_id, error.to_string().as_str())
+                .await;
+            return Err(error);
+        }
         Ok(import_report(
             in_path,
             &snapshot.header,
@@ -2065,6 +2312,18 @@ async fn verify_imported_target(
             "portable import 存在没有 board_columns 的 board".to_owned(),
         ));
     }
+    // 行数/schema 相同并不代表导入的是同一批 facts（例如两个 snapshot
+    // 都只有一个 task）。重新序列化 canonical rows，绑定 payload checksum，
+    // 也让 prepared-journal recovery 不会把另一份数据误判为已提交。
+    let records = collect_portable_records(connection).await?;
+    let (payload, _) = serialize_portable_records(&records)?;
+    let observed_payload = digest_bytes(&payload);
+    if observed_payload != header.payload_checksum_sha256 {
+        return Err(StoreError::InvalidInput(format!(
+            "portable import canonical payload 不匹配: expected={}, observed={}",
+            header.payload_checksum_sha256, observed_payload
+        )));
+    }
     Ok(())
 }
 
@@ -2099,6 +2358,8 @@ async fn enqueue_rebuild_jobs(
     connection: &Connection,
     snapshot_fingerprint: &str,
 ) -> Result<u64, StoreError> {
+    #[cfg(test)]
+    failpoint_once(FAILPOINT_REBUILD_ENQUEUE)?;
     let now = now_ms();
     let mut boards = connection
         .query("SELECT id FROM boards ORDER BY id", ())
@@ -2119,13 +2380,22 @@ async fn enqueue_rebuild_jobs(
                 .await?;
             enqueued += changed;
         }
+        connection
+            .execute(
+                "INSERT INTO label_atom_index_boards(store_name, board_id, dirty, last_rebuild_at, last_error, updated_at) VALUES ('vector_label_atoms', ?1, 1, NULL, ?2, ?3) ON CONFLICT(store_name, board_id) DO UPDATE SET dirty=1, last_rebuild_at=NULL, last_error=excluded.last_error, updated_at=excluded.updated_at",
+                (board_id.as_str(), "portable import requires label atom rebuild", now),
+            )
+            .await?;
     }
     connection
         .execute(
-            "UPDATE projection_state SET dirty=1, lifecycle_status='bootstrap_required', last_error=NULL, updated_at=?1",
+            "UPDATE projection_state SET dirty=1, lifecycle_status='bootstrap_required', active_generation=NULL, active_fingerprint=NULL, building_generation=NULL, building_fingerprint=NULL, last_error=NULL, updated_at=?1",
             [now],
         )
         .await?;
+    // `label_atom_index_boards` 是 provider 生成的 derived ledger，不属于
+    // portable canonical facts。导入后即使旧 target 有过 ready 数据，也必须
+    // 先标脏并等待新的 vector worker 成功发布，provider outage 不能复用旧值。
     Ok(enqueued)
 }
 
@@ -2177,6 +2447,8 @@ struct VerifiedReplaceBackup {
 struct PortableJournal {
     id: String,
     phase: String,
+    #[allow(dead_code)]
+    error: Option<String>,
     staged_database_path: Option<PathBuf>,
     manifest_json: String,
     previous_identity_json: Option<String>,
@@ -2197,7 +2469,7 @@ async fn find_portable_journal(
 ) -> Result<Option<PortableJournal>, StoreError> {
     let mut rows = connection
         .query(
-            "SELECT id, phase, staged_database_path, manifest_json, previous_identity_json FROM import_journal WHERE source_kind='jsonl' AND snapshot_fingerprint=?1 ORDER BY updated_at DESC LIMIT 1",
+            "SELECT id, phase, error, staged_database_path, manifest_json, previous_identity_json FROM import_journal WHERE source_kind='jsonl' AND snapshot_fingerprint=?1 ORDER BY updated_at DESC LIMIT 1",
             [snapshot_fingerprint],
         )
         .await?;
@@ -2206,7 +2478,16 @@ async fn find_portable_journal(
     };
     let id = text_value(row.get_value(0)?, "import_journal.id")?;
     let phase = text_value(row.get_value(1)?, "import_journal.phase")?;
-    let staged_database_path = match row.get_value(2)? {
+    let error = match row.get_value(2)? {
+        Value::Null => None,
+        Value::Text(value) => Some(value),
+        _ => {
+            return Err(StoreError::InvalidStoredValue {
+                field: "import_journal.error",
+            });
+        }
+    };
+    let staged_database_path = match row.get_value(3)? {
         Value::Null => None,
         Value::Text(value) => Some(PathBuf::from(value)),
         _ => {
@@ -2215,8 +2496,8 @@ async fn find_portable_journal(
             });
         }
     };
-    let manifest_json = text_value(row.get_value(3)?, "import_journal.manifest_json")?;
-    let previous_identity_json = match row.get_value(4)? {
+    let manifest_json = text_value(row.get_value(4)?, "import_journal.manifest_json")?;
+    let previous_identity_json = match row.get_value(5)? {
         Value::Null => None,
         Value::Text(value) => Some(value),
         _ => {
@@ -2228,6 +2509,7 @@ async fn find_portable_journal(
     Ok(Some(PortableJournal {
         id,
         phase,
+        error,
         staged_database_path,
         manifest_json,
         previous_identity_json,
@@ -2317,6 +2599,8 @@ async fn update_import_journal_backup(
     target_fingerprint_before: &str,
     backup: &VerifiedReplaceBackup,
 ) -> Result<(), StoreError> {
+    #[cfg(test)]
+    failpoint_once(FAILPOINT_BACKUP_JOURNAL)?;
     let mut rows = connection
         .query(
             "SELECT previous_identity_json FROM import_journal WHERE id=?1",
@@ -2397,9 +2681,38 @@ async fn mark_import_journal_failed(
     journal_id: &str,
     error: &str,
 ) -> Result<(), StoreError> {
+    update_import_journal_phase(connection, journal_id, "failed", Some(error)).await
+}
+
+/// 持久化一个可恢复阶段及其最近错误。阶段更新采用单条幂等 UPDATE，
+/// 因此重复请求只会覆盖同一 journal 的进度，不会创建第二份事实。
+async fn update_import_journal_phase(
+    connection: &Connection,
+    journal_id: &str,
+    phase: &str,
+    error: Option<&str>,
+) -> Result<(), StoreError> {
+    #[cfg(test)]
+    if phase == "published" {
+        failpoint_once(FAILPOINT_PUBLISHED_JOURNAL)?;
+    }
     connection
         .execute(
-            "UPDATE import_journal SET phase='failed', error=?1, updated_at=?2 WHERE id=?3",
+            "UPDATE import_journal SET phase=?1, error=?2, updated_at=?3 WHERE id=?4",
+            (phase, error, now_ms(), journal_id),
+        )
+        .await?;
+    Ok(())
+}
+
+async fn mark_import_journal_error(
+    connection: &Connection,
+    journal_id: &str,
+    error: &str,
+) -> Result<(), StoreError> {
+    connection
+        .execute(
+            "UPDATE import_journal SET error=?1, updated_at=?2 WHERE id=?3",
             (error, now_ms(), journal_id),
         )
         .await?;
@@ -2744,11 +3057,11 @@ fn json_error(error: serde_json::Error) -> StoreError {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path};
+    use std::{fs, path::Path, sync::atomic::Ordering};
 
     use turso::transaction::TransactionBehavior;
 
-    use super::{integer_value, text_value};
+    use super::{integer_value, optional_text, text_value};
     use crate::test_support::{create_input, store};
     use crate::{StoreError, TursoStore, maintenance::scalar_integer_params, shared::now_ms};
 
@@ -3196,6 +3509,223 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn portable_non_replace_post_commit_failure_is_reentrant() {
+        let (source_directory, source, _source_path) =
+            store("maintenance-post-commit-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task(
+                "default",
+                create_input("t_post_commit", None, "post commit recovery"),
+            )
+            .await
+            .expect("source task");
+        let export_path = source_directory.path().join("portable.jsonl");
+        source.export(&export_path).await.expect("portable export");
+
+        let (_target_directory, target, _target_path) =
+            store("maintenance-post-commit-target").await;
+        target.initialize().await.expect("initialize target");
+        super::IMPORT_FAILPOINT.store(super::FAILPOINT_PUBLISHED_JOURNAL, Ordering::SeqCst);
+        let first = target
+            .import(&export_path, false)
+            .await
+            .expect_err("journal publish fault must surface after canonical commit");
+        assert!(first.to_string().contains("fault injection"));
+
+        let connection = target.connection().await.expect("journal connection");
+        let mut rows = connection
+            .query(
+                "SELECT phase, error FROM import_journal WHERE source_kind='jsonl' ORDER BY updated_at DESC LIMIT 1",
+                (),
+            )
+            .await
+            .expect("journal query");
+        let row = rows
+            .next()
+            .await
+            .expect("journal row result")
+            .expect("journal row");
+        assert_eq!(
+            text_value(row.get_value(0).expect("phase"), "phase").expect("phase"),
+            "prepared"
+        );
+        assert!(
+            optional_text(row.get_value(1).expect("error"))
+                .expect("error")
+                .is_some()
+        );
+        drop(rows);
+        let imported = scalar_integer_params(
+            &connection,
+            "SELECT COUNT(*) FROM tasks WHERE id='t_post_commit'",
+            (),
+            "imported task",
+        )
+        .await
+        .expect("imported task count");
+        assert_eq!(
+            imported, 1,
+            "facts committed exactly once before journal fault"
+        );
+        drop(connection);
+
+        let resumed = target
+            .import(&export_path, false)
+            .await
+            .expect("same fingerprint resumes prepared post-commit journal");
+        assert_eq!(resumed.phase, "completed");
+        assert!(
+            !target
+                .maintenance_status()
+                .await
+                .expect("maintenance status")
+                .owner
+                .active
+        );
+    }
+
+    #[tokio::test]
+    async fn portable_post_commit_enqueue_failure_persists_published_and_recovers() {
+        let (source_directory, source, _source_path) = store("maintenance-enqueue-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task(
+                "default",
+                create_input("t_enqueue_recovery", None, "enqueue recovery"),
+            )
+            .await
+            .expect("source task");
+        let export_path = source_directory.path().join("portable.jsonl");
+        source.export(&export_path).await.expect("portable export");
+
+        let (_target_directory, target, _target_path) = store("maintenance-enqueue-target").await;
+        target.initialize().await.expect("initialize target");
+        super::IMPORT_FAILPOINT.store(super::FAILPOINT_REBUILD_ENQUEUE, Ordering::SeqCst);
+        let first = target
+            .import(&export_path, false)
+            .await
+            .expect_err("enqueue fault must surface after published phase");
+        assert!(first.to_string().contains("fault injection"));
+        let connection = target.connection().await.expect("journal connection");
+        let mut rows = connection
+            .query(
+                "SELECT phase, error FROM import_journal WHERE source_kind='jsonl' ORDER BY updated_at DESC LIMIT 1",
+                (),
+            )
+            .await
+            .expect("journal query");
+        let row = rows
+            .next()
+            .await
+            .expect("journal row result")
+            .expect("journal row");
+        assert_eq!(
+            text_value(row.get_value(0).expect("phase"), "phase").expect("phase"),
+            "published"
+        );
+        assert!(
+            optional_text(row.get_value(1).expect("error"))
+                .expect("error")
+                .is_some()
+        );
+        drop(rows);
+        drop(connection);
+
+        let resumed = target
+            .import(&export_path, false)
+            .await
+            .expect("published journal recovery");
+        assert_eq!(resumed.phase, "completed");
+        let jobs = scalar_integer_params(
+            &target.connection().await.expect("connection"),
+            "SELECT COUNT(*) FROM projection_jobs WHERE operation='rebuild' AND status='pending'",
+            (),
+            "rebuild jobs",
+        )
+        .await
+        .expect("rebuild job count");
+        assert!(jobs > 0);
+    }
+
+    #[tokio::test]
+    async fn replace_backup_journal_failure_is_retryable_without_fact_loss() {
+        let (source_directory, source, _source_path) =
+            store("maintenance-backup-journal-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task(
+                "default",
+                create_input("t_backup_incoming", None, "backup journal incoming"),
+            )
+            .await
+            .expect("source task");
+        let export_path = source_directory.path().join("portable.jsonl");
+        source.export(&export_path).await.expect("portable export");
+
+        let (_target_directory, target, _target_path) =
+            store("maintenance-backup-journal-target").await;
+        target.initialize().await.expect("initialize target");
+        target
+            .create_task(
+                "default",
+                create_input("t_backup_existing", None, "backup journal existing"),
+            )
+            .await
+            .expect("existing task");
+        super::IMPORT_FAILPOINT.store(super::FAILPOINT_BACKUP_JOURNAL, Ordering::SeqCst);
+        let first = target
+            .import(&export_path, true)
+            .await
+            .expect_err("backup journal fault must surface before replace transaction");
+        assert!(first.to_string().contains("fault injection"));
+        let tasks = target
+            .list_tasks(
+                "default",
+                crate::store_operations::StoreTaskListOptions::default(),
+            )
+            .await
+            .expect("tasks after backup journal fault");
+        assert!(
+            tasks
+                .tasks
+                .iter()
+                .any(|task| task.id == "t_backup_existing")
+        );
+        assert!(
+            !tasks
+                .tasks
+                .iter()
+                .any(|task| task.id == "t_backup_incoming")
+        );
+
+        let resumed = target
+            .import(&export_path, true)
+            .await
+            .expect("prepared replace journal retries backup and transaction");
+        assert_eq!(resumed.phase, "completed");
+        let tasks = target
+            .list_tasks(
+                "default",
+                crate::store_operations::StoreTaskListOptions::default(),
+            )
+            .await
+            .expect("replaced tasks");
+        assert!(
+            tasks
+                .tasks
+                .iter()
+                .any(|task| task.id == "t_backup_incoming")
+        );
+        assert!(
+            !tasks
+                .tasks
+                .iter()
+                .any(|task| task.id == "t_backup_existing")
+        );
+    }
+
+    #[tokio::test]
     async fn portable_import_preserves_explicit_ids_times_and_relations() {
         let (source_directory, source, _source_path) = store("maintenance-facts-source").await;
         source.initialize().await.expect("initialize source");
@@ -3250,6 +3780,102 @@ mod tests {
                 .expect("created_at integer"),
             424242
         );
+    }
+
+    #[tokio::test]
+    async fn portable_import_excludes_derived_label_atom_ledger_and_marks_target_dirty() {
+        let (source_directory, source, _source_path) = store("maintenance-derived-source").await;
+        source.initialize().await.expect("initialize source");
+        source
+            .create_task(
+                "default",
+                create_input("t_derived_import", None, "derived import"),
+            )
+            .await
+            .expect("source task");
+        let export_path = source_directory.path().join("derived.jsonl");
+        source.export(&export_path).await.expect("portable export");
+        let export_text = fs::read_to_string(&export_path).expect("portable text");
+        assert!(
+            !export_text.contains("label_atom_index_boards"),
+            "derived ledger must not be portable canonical input"
+        );
+
+        let (_target_directory, target, _target_path) = store("maintenance-derived-target").await;
+        target.initialize().await.expect("initialize target");
+        let connection = target.connection().await.expect("target connection");
+        connection
+            .execute(
+                "INSERT INTO label_atom_index_boards(store_name, board_id, dirty, last_rebuild_at, last_error, updated_at) VALUES ('vector_label_atoms', 'b_default', 0, 1, NULL, 1)",
+                (),
+            )
+            .await
+            .expect("old derived ledger");
+        connection
+            .execute(
+                "UPDATE projection_state SET lifecycle_status='ready', dirty=0, active_generation='old-generation' WHERE projection='vector_label_atoms'",
+                (),
+            )
+            .await
+            .expect("old vector generation");
+        drop(connection);
+
+        target
+            .import(&export_path, false)
+            .await
+            .expect("portable import");
+        let connection = target.connection().await.expect("post-import connection");
+        let mut rows = connection
+            .query(
+                "SELECT dirty, last_rebuild_at, last_error FROM label_atom_index_boards WHERE store_name='vector_label_atoms' AND board_id='b_default'",
+                (),
+            )
+            .await
+            .expect("derived ledger query");
+        let row = rows
+            .next()
+            .await
+            .expect("derived row result")
+            .expect("derived row");
+        assert_eq!(
+            integer_value(row.get_value(0).expect("dirty"), "dirty").expect("dirty"),
+            1
+        );
+        assert!(matches!(
+            row.get_value(1).expect("last rebuild"),
+            turso::Value::Null
+        ));
+        assert!(
+            text_value(row.get_value(2).expect("last error"), "last_error")
+                .expect("last error text")
+                .contains("portable import")
+        );
+        let mut state_rows = connection
+            .query(
+                "SELECT lifecycle_status, dirty, active_generation FROM projection_state WHERE projection='vector_label_atoms'",
+                (),
+            )
+            .await
+            .expect("projection state query");
+        let state = state_rows
+            .next()
+            .await
+            .expect("projection state result")
+            .expect("projection state row");
+        assert_ne!(
+            text_value(state.get_value(0).expect("lifecycle"), "lifecycle")
+                .expect("lifecycle text"),
+            "ready"
+        );
+        assert_eq!(
+            integer_value(state.get_value(1).expect("state dirty"), "state dirty")
+                .expect("state dirty"),
+            1
+        );
+        assert!(matches!(
+            state.get_value(2).expect("active generation"),
+            turso::Value::Null
+        ));
     }
 
     #[tokio::test]

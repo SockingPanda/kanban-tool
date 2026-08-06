@@ -1,6 +1,6 @@
 //! 按领域分组的 application operation。
 //!
-//! 每个 operation 模块都向 [`ApplicationService`] 添加一个内聚的 command 或 query。
+//! 每个 operation 模块都向共享的 application/service 入口添加一个内聚的 command 或 query。
 //! 共享 service 状态仍保留在 service core 中。
 // Signal ledger operation 由所有 adapter 共享。
 
@@ -33,7 +33,6 @@ pub use context::{
     ContextItem, ContextPack, ContextPolicy, ContextProviderStatus, ContextSources,
     MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT,
 };
-pub use dependency::{DependencyCreate, DependencyList, DependencyRemove};
 pub use entities::{EntityListOptions, EntityQuery, EntityUpsertCommand};
 pub use event::*;
 pub use graph::{
@@ -70,8 +69,7 @@ pub use vector::{
 };
 
 pub use dependency::{
-    AddDependencyCommand, AddDependencyRecord, AddDependencyResult, RemoveDependencyCommand,
-    RemoveDependencyResult,
+    AddDependencyCommand, AddDependencyResult, RemoveDependencyCommand, RemoveDependencyResult,
 };
 pub use step::{
     CompleteStepCommand, CreateStepCommand, RemoveStepCommand, ReopenStepCommand, SkipStepCommand,

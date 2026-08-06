@@ -1,10 +1,8 @@
-use std::future::Future;
-
 use kanban_core::{
     Clock, KanbanError, ReadinessFacts, Result, TaskStatus, new_event_id, recompute_ready_status,
 };
 
-use crate::{ApplicationService, ApplicationStore, DependencySnapshotRecord, TaskRecord};
+use crate::{DependencySnapshotRecord, KanbanService};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AddDependencyCommand {
@@ -14,35 +12,13 @@ pub struct AddDependencyCommand {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AddDependencyRecord {
-    pub expected_child_lock_version: i64,
-    pub target_child_status: TaskStatus,
-    pub actor: String,
-    pub event_id: String,
-    pub recompute_event_id: String,
-    pub now: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AddDependencyResult {
     pub added: bool,
     pub dependencies: DependencySnapshotRecord,
 }
 
-pub trait DependencyCreate: ApplicationStore {
-    fn get_task(&self, task_id: &str) -> impl Future<Output = Result<TaskRecord>> + Send;
-
-    fn add_dependency(
-        &self,
-        child_task_id: &str,
-        parent_task_id: &str,
-        input: AddDependencyRecord,
-    ) -> impl Future<Output = Result<AddDependencyResult>> + Send;
-}
-
-impl<S, C> ApplicationService<S, C>
+impl<C> KanbanService<C>
 where
-    S: DependencyCreate,
     C: Clock,
 {
     pub async fn add_dependency(
@@ -71,8 +47,8 @@ where
             return Err(KanbanError::InvalidInput("actor is required".to_owned()));
         }
         let _mutation = self.mutation_gate.lock().await;
-        let child = self.store.get_task(child_task_id).await?;
-        let parent = self.store.get_task(parent_task_id).await?;
+        let child = self.get_task(child_task_id).await?;
+        let parent = self.get_task(parent_task_id).await?;
         if child.board_id != parent.board_id {
             return Err(KanbanError::InvalidInput(
                 "cross-board dependency is not allowed".to_owned(),
@@ -116,13 +92,16 @@ where
         } else {
             child.status
         };
-        self.store
+        let result = self
+            .application
+            .store
+            .store
             .add_dependency(
                 child_task_id,
                 parent_task_id,
-                AddDependencyRecord {
+                crate::store_operations::AddDependencyInput {
                     expected_child_lock_version: child.lock_version,
-                    target_child_status,
+                    target_child_status: target_child_status.as_str().to_owned(),
                     actor: actor.to_owned(),
                     event_id: new_event_id(),
                     recompute_event_id: new_event_id(),
@@ -130,30 +109,10 @@ where
                 },
             )
             .await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use kanban_core::{KanbanError, Result};
-
-    use crate::operations::test_support::{StubStore, task_for_id};
-    use crate::*;
-
-    impl DependencyCreate for StubStore {
-        async fn get_task(&self, task_id: &str) -> Result<TaskRecord> {
-            Ok(task_for_id(task_id))
-        }
-
-        async fn add_dependency(
-            &self,
-            _child_task_id: &str,
-            _parent_task_id: &str,
-            _input: AddDependencyRecord,
-        ) -> Result<AddDependencyResult> {
-            Err(KanbanError::FeatureNotAvailable(
-                "dependency stub is not configured".to_owned(),
-            ))
-        }
+            .map_err(crate::adapter::store_error)?;
+        Ok(AddDependencyResult {
+            added: result.added,
+            dependencies: crate::adapter::application_dependency_snapshot(result.dependencies)?,
+        })
     }
 }

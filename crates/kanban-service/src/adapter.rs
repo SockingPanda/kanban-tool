@@ -221,7 +221,7 @@ pub(crate) fn store_error(error: StoreError) -> KanbanError {
     }
 }
 
-fn application_dependency_snapshot(
+pub(crate) fn application_dependency_snapshot(
     snapshot: StoreDependencySnapshot,
 ) -> Result<ApplicationDependencySnapshot> {
     Ok(ApplicationDependencySnapshot {

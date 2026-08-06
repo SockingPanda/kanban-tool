@@ -1,4 +1,5 @@
-use crate::{AddDependencyInput, error::StoreError, store_operations::shared::validate_task_id};
+use super::create::AddDependencyInput;
+use crate::{error::StoreError, store_operations::shared::validate_task_id};
 
 pub(crate) fn validate_add_dependency_input(
     child_task_id: &str,

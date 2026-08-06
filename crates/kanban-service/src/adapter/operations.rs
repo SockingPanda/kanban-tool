@@ -1,5 +1,4 @@
 mod context;
-mod dependency;
 mod entities;
 mod graph;
 mod labels;

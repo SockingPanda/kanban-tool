@@ -1,4 +1,5 @@
-use crate::{RemoveDependencyInput, error::StoreError, store_operations::shared::validate_task_id};
+use super::remove::RemoveDependencyInput;
+use crate::{error::StoreError, store_operations::shared::validate_task_id};
 
 pub(crate) fn validate_remove_dependency_input(
     child_task_id: &str,

@@ -46,7 +46,7 @@ export function useSelectedTaskDetailState(
     enabled: false,
     queryKey: selectedId ? queryKeys.taskLabelSuggestions(selectedId) : ["task-label-suggestions", "none"],
     queryFn: ({ signal }) => {
-      if (!api || !selectedId) throw new Error("Label suggestions query is not ready")
+      if (!api || !selectedId) throw new Error("标签建议查询尚未就绪")
       return requestTaskLabelSuggestions(api, selectedId, signal)
     },
   })

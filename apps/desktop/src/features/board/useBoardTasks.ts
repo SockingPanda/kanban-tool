@@ -107,7 +107,7 @@ export function boardTasksQueryOptions({ api, enabled = true, ...input }: UseBoa
       offset: request.offset,
     }),
     queryFn: async ({ signal }: { signal?: AbortSignal }) => {
-      if (!api) throw new Error("API client is not ready")
+      if (!api) throw new Error("API 客户端尚未就绪")
       return loadBoardTasks(api, request, signal)
     },
     placeholderData: keepPreviousData,

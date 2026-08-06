@@ -67,7 +67,7 @@ function RunRow({ run }: { run: Run }) {
     <Card className="mb-2 p-3 text-sm">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-medium">{shortId(run.id)}</span>
-        <Badge variant={runBadgeVariant(run.status)}>{run.status}</Badge>
+        <Badge variant={runBadgeVariant(run.status)}>{t(run.status)}</Badge>
       </div>
       <InfoRow label={t("worker")} value={run.worker_profile ?? t("manual")} />
       <InfoRow label={t("owner")} value={run.claim_owner} />

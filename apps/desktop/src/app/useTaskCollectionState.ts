@@ -36,7 +36,7 @@ export function useTaskCollectionState(api: KanbanApi | null, view: OperatorView
     enabled: Boolean(api),
     queryKey: queryKeys.columns(api?.board ?? "pending"),
     queryFn: ({ signal }) => {
-      if (!api) throw new Error("API client is not ready")
+      if (!api) throw new Error("API 客户端尚未就绪")
       return api.listBoardColumns({ signal })
     },
   })
@@ -45,7 +45,7 @@ export function useTaskCollectionState(api: KanbanApi | null, view: OperatorView
     enabled: Boolean(api),
     queryKey: queryKeys.boards(),
     queryFn: ({ signal }) => {
-      if (!api) throw new Error("API client is not ready")
+      if (!api) throw new Error("API 客户端尚未就绪")
       return api.listBoards({ signal })
     },
   })
@@ -62,7 +62,7 @@ export function useTaskCollectionState(api: KanbanApi | null, view: OperatorView
     enabled: Boolean(api && statsEnabled),
     queryKey: queryKeys.stats(api?.board ?? "pending"),
     queryFn: ({ signal }) => {
-      if (!api) throw new Error("API client is not ready")
+      if (!api) throw new Error("API 客户端尚未就绪")
       return api.stats({ signal })
     },
     staleTime: 30_000,

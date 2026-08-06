@@ -6,6 +6,7 @@ import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/i
 import type { TaskStatus } from "@/lib/api"
 import { priorityBadgeClass, priorityLabel } from "@/lib/priority"
 import { cn, shortId } from "@/lib/utils"
+import { useI18n } from "@/i18n"
 
 export function PageToolbar({
   title,
@@ -109,9 +110,10 @@ export function TaskStatusBadge({
   status: TaskStatus | string
   className?: string
 }) {
+  const { t } = useI18n()
   return (
     <Badge variant={taskStatusBadgeVariant(status)} className={className}>
-      {status}
+      {t(status)}
     </Badge>
   )
 }

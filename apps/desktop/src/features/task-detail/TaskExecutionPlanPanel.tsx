@@ -50,7 +50,7 @@ export function TaskExecutionPlanPanel({
     <div className="space-y-3">
       <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Badge variant={task.execution_plan_state === "unplanned" ? "secondary" : "ready"}>
-          {task.execution_plan_state}
+          {t(task.execution_plan_state)}
         </Badge>
         <span>
           {t("{completed}/{total} steps", { completed: doneRequired, total: required.length })}

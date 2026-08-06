@@ -40,7 +40,7 @@ impl DesktopRuntime {
     fn config(&self) -> MutexGuard<'_, RuntimeConfig> {
         self.config
             .lock()
-            .expect("desktop runtime config lock poisoned")
+            .expect("桌面运行时配置锁已失效")
     }
 }
 
@@ -56,7 +56,7 @@ fn set_runtime_board(
 ) -> Result<RuntimeConfig, String> {
     let board = board.trim();
     if board.is_empty() {
-        return Err("board must not be empty".to_owned());
+        return Err("board 不能为空".to_owned());
     }
 
     let mut config = runtime.config();
@@ -91,7 +91,7 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running kanban desktop");
+        .expect("运行 kanban 桌面端时出错");
 }
 
 fn default_runtime_config() -> Result<RuntimeConfig, String> {
@@ -116,12 +116,12 @@ fn normalize_loopback_url(value: &str) -> Result<String, String> {
     let value = value.trim().trim_end_matches('/');
     let authority = value
         .strip_prefix("http://")
-        .ok_or_else(|| "KANBAN_SERVER_URL must use http on loopback".to_owned())?;
+        .ok_or_else(|| "KANBAN_SERVER_URL 必须使用回环地址上的 http".to_owned())?;
     if authority.is_empty()
         || authority.contains(['/', '?', '#', '@'])
         || !is_loopback_authority(authority)
     {
-        return Err("KANBAN_SERVER_URL must target loopback".to_owned());
+        return Err("KANBAN_SERVER_URL 必须指向回环地址".to_owned());
     }
     Ok(value.to_owned())
 }
@@ -167,7 +167,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             Ok(()) => return Ok(()),
             Err(error) => {
                 eprintln!(
-                    "kanban status notifier tray unavailable; falling back to tauri tray: {error:?}"
+                    "kanban 状态通知托盘不可用，将回退到 tauri 托盘：{error:?}"
                 );
             }
         }

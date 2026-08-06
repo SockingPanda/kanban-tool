@@ -297,7 +297,7 @@ function MapInspector({
             <MetricStrip
               className="grid-cols-2 text-sm"
               items={[
-                { id: "plan", label: t("Plan"), value: task.execution_plan_state },
+                { id: "plan", label: t("Plan"), value: t(task.execution_plan_state) },
                 { id: "required-open", label: t("Required open"), value: String(incompleteRequiredSteps(task)) },
                 { id: "parents", label: t("Parents"), value: String(counts.parents) },
                 { id: "children", label: t("Children"), value: String(counts.children) },

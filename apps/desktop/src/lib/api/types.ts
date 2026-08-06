@@ -88,7 +88,7 @@ export type LabelRecord = {
   updated_at: number
 }
 
-/** Canonical attachment metadata; bytes are fetched only through the download operation. */
+/** 规范附件元数据；字节内容只能通过下载操作获取。 */
 export type Attachment = {
   id: string
   board_id: string

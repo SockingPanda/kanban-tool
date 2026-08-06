@@ -77,7 +77,7 @@ export function useTaskDetail(
     enabled: Boolean(enabled && api && taskId),
     queryKey: taskId ? queryKeys.taskDetail(taskId) : ["task-detail", "none"],
     queryFn: async ({ signal }) => {
-      if (!api || !taskId) throw new Error("Task detail query is not ready")
+      if (!api || !taskId) throw new Error("任务详情查询尚未就绪")
       return api.getTask(taskId, { signal })
     },
   })
@@ -86,7 +86,7 @@ export function useTaskDetail(
     enabled: Boolean(ready && queryEnablement.dependencies),
     queryKey: taskId ? queryKeys.taskDependencies(taskId) : ["task-dependencies", "none"],
     queryFn: ({ signal }) => {
-      if (!api || !taskId) throw new Error("Task dependencies query is not ready")
+      if (!api || !taskId) throw new Error("任务依赖查询尚未就绪")
       return api.listDependencies(taskId, { signal })
     },
   })
@@ -95,7 +95,7 @@ export function useTaskDetail(
     enabled: Boolean(ready && queryEnablement.neighborhood),
     queryKey: taskId ? queryKeys.taskNeighborhood(taskId) : ["task-neighborhood", "none"],
     queryFn: ({ signal }) => {
-      if (!api || !taskId) throw new Error("Task neighborhood query is not ready")
+      if (!api || !taskId) throw new Error("任务邻域查询尚未就绪")
       return api.getTaskNeighborhood(taskId, { depth: 1, limitNodes: 40, signal })
     },
   })
@@ -104,7 +104,7 @@ export function useTaskDetail(
     enabled: Boolean(ready && queryEnablement.steps),
     queryKey: taskId ? queryKeys.taskSteps(taskId) : ["task-steps", "none"],
     queryFn: ({ signal }) => {
-      if (!api || !taskId) throw new Error("Task steps query is not ready")
+      if (!api || !taskId) throw new Error("任务步骤查询尚未就绪")
       return api.listSteps(taskId, { signal })
     },
   })
@@ -113,7 +113,7 @@ export function useTaskDetail(
     enabled: Boolean(ready && queryEnablement.runs),
     queryKey: taskId ? queryKeys.taskRuns(taskId) : ["task-runs", "none"],
     queryFn: ({ signal }) => {
-      if (!api || !taskId) throw new Error("Task runs query is not ready")
+      if (!api || !taskId) throw new Error("任务运行记录查询尚未就绪")
       return api.listRuns(taskId, { signal })
     },
   })
@@ -122,7 +122,7 @@ export function useTaskDetail(
     enabled: Boolean(ready && queryEnablement.events),
     queryKey: taskId ? queryKeys.taskEvents(taskId) : ["task-events", "none"],
     queryFn: async ({ signal }) => {
-      if (!api || !taskId) throw new Error("Task events query is not ready")
+      if (!api || !taskId) throw new Error("任务事件查询尚未就绪")
       const page = await api.listEvents(taskId, { signal })
       return page.events
     },
@@ -132,7 +132,7 @@ export function useTaskDetail(
     enabled: Boolean(ready && queryEnablement.comments),
     queryKey: taskId ? queryKeys.taskComments(taskId) : ["task-comments", "none"],
     queryFn: ({ signal }) => {
-      if (!api || !taskId) throw new Error("Task comments query is not ready")
+      if (!api || !taskId) throw new Error("任务评论查询尚未就绪")
       return api.listComments(taskId, { signal })
     },
   })
@@ -142,7 +142,7 @@ export function useTaskDetail(
     enabled: Boolean(ready && queryEnablement.runLog && runWithLog),
     queryKey: runWithLog ? queryKeys.taskRunLog(runWithLog.id) : ["task-run-log", "none"],
     queryFn: ({ signal }) => {
-      if (!api || !runWithLog) throw new Error("Task run log query is not ready")
+      if (!api || !runWithLog) throw new Error("任务运行日志查询尚未就绪")
       return api.getRunLog(runWithLog.id, { signal })
     },
   })

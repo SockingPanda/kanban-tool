@@ -3,6 +3,7 @@ import * as React from "react"
 import { PanelLeft } from "lucide-react"
 
 import { Button, type ButtonProps } from "@/components/ui/button"
+import { useI18n } from "@/i18n"
 import { cn } from "@/lib/utils"
 
 type SidebarContextValue = {
@@ -49,7 +50,7 @@ function SidebarProvider({
 function useSidebar() {
   const context = React.useContext(SidebarContext)
   if (!context) {
-    throw new Error("useSidebar must be used within a SidebarProvider.")
+    throw new Error("useSidebar 必须在 SidebarProvider 内使用。")
   }
   return context
 }
@@ -130,6 +131,7 @@ function SidebarMenuButton({ className, active = false, ...props }: ButtonProps 
 
 function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {
   const { open, setOpen } = useSidebar()
+  const { t } = useI18n()
 
   return (
     <Button
@@ -144,7 +146,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       {...props}
     >
       <PanelLeft className="h-4 w-4" />
-      <span className="sr-only">Toggle sidebar</span>
+      <span className="sr-only">{t("Toggle sidebar")}</span>
     </Button>
   )
 }
@@ -154,10 +156,11 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
 }
 
 function SidebarRail({ className, ...props }: React.ComponentProps<typeof Button>) {
+  const { t } = useI18n()
   return (
     <Button
       data-slot="sidebar-rail"
-      aria-label="Toggle sidebar"
+      aria-label={t("Toggle sidebar")}
       tabIndex={-1}
       variant="ghost"
       className={cn(

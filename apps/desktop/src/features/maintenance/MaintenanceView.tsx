@@ -522,7 +522,7 @@ function ProjectionStoreList({ stores }: { stores: ProjectionStoreStatus[] }) {
           <Card key={store.store_name} className="p-2">
             <div className="flex items-center justify-between gap-2">
               <span className="truncate font-medium">{store.store_name}</span>
-              <Badge variant={degraded ? "blocked" : "ready"}>{degraded ? t("degraded") : store.lifecycle_status}</Badge>
+              <Badge variant={degraded ? "blocked" : "ready"}>{degraded ? t("degraded") : t(store.lifecycle_status)}</Badge>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{t("active generation")}: {store.active_generation ?? "-"}</span>
@@ -534,7 +534,7 @@ function ProjectionStoreList({ stores }: { stores: ProjectionStoreStatus[] }) {
               <span>{t("pending")}: {store.pending}</span>
               <span>{t("running")}: {store.running}</span>
               <span>{t("failed")}: {store.failed}</span>
-              <span>{t("phase")}: {store.phase}</span>
+              <span>{t("phase")}: {t(store.phase)}</span>
               <span>{t("updated")}: {store.updated_at}</span>
               <span className="col-span-2 truncate">{t("last error")}: {store.last_error ?? "-"}</span>
               <span className="col-span-2 truncate">{t("errors")}: {store.errors.length > 0 ? store.errors.join("; ") : "-"}</span>
@@ -581,7 +581,7 @@ function ImportResultView({ report }: { report: ImportReport }) {
 function LegacyImportResultView({ report }: { report: LegacyImportReport }) {
   const { t } = useI18n()
   return <ResultView title={t("Legacy import complete")} rows={[
-    [t("phase"), report.phase],
+    [t("phase"), t(report.phase)],
     [t("path"), report.source_path],
     [t("resumed"), String(report.resumed)],
     [t("attachments"), String(report.attachment_count)],
@@ -592,11 +592,11 @@ function LegacyImportResultView({ report }: { report: LegacyImportReport }) {
 function MaintenanceRunResultView({ report }: { report: MaintenanceRunReport }) {
   const { t } = useI18n()
   return <ResultView title={t("Maintenance complete")} rows={[
-    [t("action"), report.action],
+    [t("action"), t(report.action)],
     [t("owner"), report.owner],
-    [t("mode"), report.mode],
+    [t("mode"), t(report.mode)],
     [t("processed"), String(report.processed)],
-    [t("phase"), report.phase],
+    [t("phase"), t(report.phase)],
     [t("degraded"), String(report.degraded)],
     [t("errors"), report.errors.length > 0 ? report.errors.join("; ") : "-"],
   ]} />
@@ -640,7 +640,7 @@ function StatsGrid({ stats }: { stats?: BoardStats }) {
         <div className="grid grid-cols-3 gap-2">
           <MetricStrip
             className="contents"
-            items={stats.status_counts.map((entry) => ({ id: `status-${entry.status}`, label: entry.status, value: String(entry.count) }))}
+            items={stats.status_counts.map((entry) => ({ id: `status-${entry.status}`, label: t(entry.status), value: String(entry.count) }))}
           />
           {stats.status_counts.length === 0 ? <EmptyText>{t("No status counts returned.")}</EmptyText> : null}
         </div>

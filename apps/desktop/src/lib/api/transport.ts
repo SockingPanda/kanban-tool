@@ -20,7 +20,7 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
   const apiBaseUrl = configuredApiBaseUrl || (usingWebDevDefault ? WEB_DEV_API_BASE_URL : "")
   if (!apiBaseUrl) {
     throw new Error(
-      "VITE_KB_API_BASE_URL is required outside Tauri; set it to an explicit API origin or an explicit Vite proxy base such as /__kb_api__.",
+      "Tauri 外运行时必须配置 VITE_KB_API_BASE_URL；请将其设置为明确的 API 源，或设置为明确的 Vite 代理基路径，例如 /__kb_api__。",
     )
   }
   return {
@@ -57,7 +57,7 @@ export class ApiTransport {
     const response = await fetch(`${this.config.apiBaseUrl}${path}`, { method: init.method ?? "GET", headers, body: init.body === undefined ? undefined : JSON.stringify(init.body), signal: init.signal })
     const text = await response.text()
     let json: unknown = null
-    try { json = text ? JSON.parse(text) : null } catch { throw new ApiError("invalid_response", "response must be valid JSON") }
+    try { json = text ? JSON.parse(text) : null } catch { throw new ApiError("invalid_response", "响应必须是有效 JSON") }
     const record = json && typeof json === "object" && !Array.isArray(json) ? json as Record<string, unknown> : null
     if (record && "error" in record) {
       const error = parseTaskReadErrorEnvelope(record)
@@ -82,7 +82,7 @@ export class ApiTransport {
     if (!response.ok) {
       const text = new TextDecoder().decode(bytes)
       let json: unknown = null
-      try { json = text ? JSON.parse(text) : null } catch { /* fall through to status error */ }
+      try { json = text ? JSON.parse(text) : null } catch { /* 解析失败时继续使用状态错误 */ }
       const record = json && typeof json === "object" && !Array.isArray(json) ? json as Record<string, unknown> : null
       if (record && "error" in record) {
         const error = parseTaskReadErrorEnvelope(record)

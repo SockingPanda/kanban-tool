@@ -45,9 +45,9 @@ export function SettingsView({ api, config }: { api: KanbanApi | null; config: R
               triggerClassName="h-8 min-w-32"
             />
           </InfoRow>
-          <InfoRow label="board" value={config?.board ?? "-"} />
-          <InfoRow label="actor" value={config?.actor ?? "-"} />
-          <InfoRow label="api base" value={config?.apiBaseUrl || "same-origin"} />
+          <InfoRow label={t("board")} value={config?.board ?? "-"} />
+          <InfoRow label={t("actor")} value={config?.actor ?? "-"} />
+          <InfoRow label={t("api base")} value={config?.apiBaseUrl || t("same-origin")} />
           <InfoRow label={t("database")} value={reportedValue(healthQuery.data?.db_path, t)} />
           <InfoRow label={t("db_fingerprint")} value={reportedValue(healthQuery.data?.db_fingerprint, t)} />
         </div>

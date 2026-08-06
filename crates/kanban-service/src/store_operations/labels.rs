@@ -35,6 +35,24 @@ pub struct RemoveTaskLabelInput {
     pub now: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DeleteBoardLabelInput {
+    pub label_ref: String,
+    pub event_id: String,
+    pub actor: String,
+    pub force: bool,
+    pub now: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DeleteBoardLabelRecord {
+    pub label: LabelRecord,
+    pub forced: bool,
+    pub removed_task_bindings: i64,
+    pub removed_semantics: bool,
+    pub removed_atoms: i64,
+}
+
 impl TursoStore {
     pub async fn list_board_labels(
         &self,
@@ -219,6 +237,102 @@ impl TursoStore {
         transaction.commit().await?;
         Ok(task)
     }
+
+    /// 在同一个事务中删除 canonical label identity。
+    ///
+    /// 任务绑定只有在显式 `force` 时才会移除；semantics/atoms 必须先通过带
+    /// CAS 与 reason 的 service operation 清理，identity delete 不得绕过 ontology 审计。
+    pub(crate) async fn delete_board_label(
+        &self,
+        board_selector: &str,
+        input: DeleteBoardLabelInput,
+    ) -> Result<DeleteBoardLabelRecord, StoreError> {
+        validate_delete_board_label_input(&input)?;
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+        let board_id = active_board_id_in_transaction(&transaction, board_selector).await?;
+        let label = resolve_label_in_transaction(&transaction, &board_id, &input.label_ref)
+            .await?
+            .ok_or_else(|| StoreError::LabelNotFound(input.label_ref.trim().to_owned()))?;
+
+        let removed_task_bindings =
+            count_label_references(&transaction, "task_labels", &board_id, &label.id).await?;
+        if removed_task_bindings > 0 && !input.force {
+            return Err(StoreError::InvalidInput(format!(
+                "label {} is attached to {} task(s); pass --force to delete it",
+                label.name, removed_task_bindings
+            )));
+        }
+
+        let removed_semantics =
+            count_label_references(&transaction, "label_semantics", &board_id, &label.id).await?
+                > 0;
+        let removed_atoms =
+            count_label_references(&transaction, "label_atoms", &board_id, &label.id).await?;
+        if removed_semantics || removed_atoms > 0 {
+            return Err(StoreError::InvalidInput(format!(
+                "label {} has semantics or atoms; clear semantics with reason and expected hash before deleting identity",
+                label.name
+            )));
+        }
+
+        if removed_task_bindings > 0 {
+            transaction
+                .execute(
+                    "DELETE FROM task_labels WHERE board_id = :board_id AND label_id = :label_id",
+                    [
+                        (":board_id", board_id.as_str()),
+                        (":label_id", label.id.as_str()),
+                    ],
+                )
+                .await?;
+        }
+        let changed = transaction
+            .execute(
+                "DELETE FROM labels WHERE board_id = :board_id AND id = :label_id",
+                [
+                    (":board_id", board_id.as_str()),
+                    (":label_id", label.id.as_str()),
+                ],
+            )
+            .await?;
+        if changed != 1 {
+            return Err(StoreError::LabelNotFound(label.id.clone()));
+        }
+
+        let payload = serde_json::json!({
+            "label_id": label.id,
+            "label": label.name,
+            "forced": input.force,
+            "removed_task_bindings": removed_task_bindings,
+            "removed_semantics": false,
+            "removed_atoms": 0,
+        })
+        .to_string();
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id, board_id, task_id, run_id, kind, actor, payload_json, created_at) VALUES (:event_id, :board_id, NULL, NULL, 'label.deleted', :actor, :payload_json, :created_at)",
+                turso::named_params! {
+                    ":event_id": input.event_id.as_str(),
+                    ":board_id": board_id.as_str(),
+                    ":actor": input.actor.as_str(),
+                    ":payload_json": payload.as_str(),
+                    ":created_at": input.now,
+                },
+            )
+            .await?;
+        transaction.commit().await?;
+
+        Ok(DeleteBoardLabelRecord {
+            label,
+            forced: input.force,
+            removed_task_bindings,
+            removed_semantics: false,
+            removed_atoms: 0,
+        })
+    }
 }
 
 fn validate_task_id(task_id: &str) -> Result<(), StoreError> {
@@ -269,6 +383,38 @@ fn validate_remove_task_label_input(input: &RemoveTaskLabelInput) -> Result<(), 
         return Err(StoreError::InvalidInput("actor is required".to_owned()));
     }
     Ok(())
+}
+
+fn validate_delete_board_label_input(input: &DeleteBoardLabelInput) -> Result<(), StoreError> {
+    if input.label_ref.trim().is_empty() {
+        return Err(StoreError::InvalidInput("label id is required".to_owned()));
+    }
+    if input.actor.trim().is_empty() {
+        return Err(StoreError::InvalidInput("actor is required".to_owned()));
+    }
+    if !input.event_id.trim().starts_with("e_") || input.event_id.trim().len() <= 2 {
+        return Err(StoreError::InvalidInput(
+            "event id must start with e_".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+async fn count_label_references(
+    transaction: &Transaction<'_>,
+    table: &str,
+    board_id: &str,
+    label_id: &str,
+) -> Result<i64, StoreError> {
+    let sql =
+        format!("SELECT COUNT(*) FROM {table} WHERE board_id = :board_id AND label_id = :label_id");
+    let row = first_row(
+        transaction
+            .query(&sql, [(":board_id", board_id), (":label_id", label_id)])
+            .await?,
+    )
+    .await?;
+    integer_value(row.get_value(0)?, "label reference count")
 }
 
 async fn active_board_id(
@@ -678,6 +824,188 @@ mod tests {
             .expect_err("archived task must be guarded");
         assert!(
             matches!(archived, StoreError::TaskNotFound(task_id) if task_id == "t_labels_isolation")
+        );
+    }
+
+    #[tokio::test]
+    async fn canonical_label_delete_requires_force_for_bindings_and_records_event() {
+        let (_directory, store, _path) = store("labels-delete").await;
+        store.initialize().await.expect("initialize");
+        store
+            .create_task(
+                "default",
+                create_input("t_labels_delete", Some("labels-delete"), "Delete label"),
+            )
+            .await
+            .expect("create task");
+        let label = store
+            .create_board_label("default", create_label_input("l_delete", "retired"))
+            .await
+            .expect("create label");
+        store
+            .add_task_labels(
+                "t_labels_delete",
+                add_input("retired", "l_unused", "evt-label-attach", false),
+            )
+            .await
+            .expect("attach label");
+
+        let blocked = store
+            .delete_board_label(
+                "default",
+                DeleteBoardLabelInput {
+                    label_ref: label.name.clone(),
+                    event_id: "e_label_delete_blocked".to_owned(),
+                    actor: "label-test".to_owned(),
+                    force: false,
+                    now: 200,
+                },
+            )
+            .await
+            .expect_err("bindings require force");
+        assert!(blocked.to_string().contains("attached to 1 task(s)"));
+        assert_eq!(store.list_board_labels("default").await.unwrap().len(), 1);
+
+        let deleted = store
+            .delete_board_label(
+                "default",
+                DeleteBoardLabelInput {
+                    label_ref: label.id.clone(),
+                    event_id: "e_label_delete_forced".to_owned(),
+                    actor: "label-test".to_owned(),
+                    force: true,
+                    now: 201,
+                },
+            )
+            .await
+            .expect("force delete");
+        assert_eq!(deleted.label, label);
+        assert!(deleted.forced);
+        assert_eq!(deleted.removed_task_bindings, 1);
+        assert!(!deleted.removed_semantics);
+        assert_eq!(deleted.removed_atoms, 0);
+        assert!(store.list_board_labels("default").await.unwrap().is_empty());
+
+        let connection = store.connection().await.expect("connection");
+        let row = first_row(
+            connection
+                .query(
+                    "SELECT kind, actor, payload_json FROM task_events WHERE event_id = 'e_label_delete_forced'",
+                    (),
+                )
+                .await
+                .expect("event query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(row.get_value(0).unwrap(), "event kind").unwrap(),
+            "label.deleted"
+        );
+        assert_eq!(
+            text_value(row.get_value(1).unwrap(), "event actor").unwrap(),
+            "label-test"
+        );
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(
+                &text_value(row.get_value(2).unwrap(), "event payload").unwrap(),
+            )
+            .unwrap()["removed_task_bindings"],
+            1
+        );
+        let row = first_row(
+            connection
+                .query(
+                    "SELECT COUNT(*) FROM task_labels WHERE task_id = 't_labels_delete'",
+                    (),
+                )
+                .await
+                .expect("binding count query"),
+        )
+        .await
+        .expect("binding count row");
+        assert_eq!(
+            integer_value(row.get_value(0).unwrap(), "binding count").unwrap(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn canonical_label_delete_rejects_semantics_and_keeps_board_isolation() {
+        let (_directory, store, _path) = store("labels-delete-guard").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "INSERT INTO boards(id, slug, name, created_at, updated_at) VALUES ('b_other_delete', 'other-delete', 'Other', 1, 1)",
+                (),
+            )
+            .await
+            .expect("other board");
+        let other = store
+            .create_board_label(
+                "other-delete",
+                create_label_input("l_other_delete", "shared"),
+            )
+            .await
+            .expect("other label");
+        let default_label = store
+            .create_board_label("default", create_label_input("l_default_delete", "shared"))
+            .await
+            .expect("default label");
+        connection
+            .execute(
+                "INSERT INTO label_semantics(label_id, board_id, description, created_at, updated_at) VALUES (?1, ?2, ?3, 1, 1)",
+                (
+                    default_label.id.as_str(),
+                    "b_default",
+                    "must clear before deleting",
+                ),
+            )
+            .await
+            .expect("semantics");
+        connection
+            .execute(
+                "INSERT INTO label_atoms(id, label_id, board_id, polarity, kind, text, ordinal, content_hash, created_at, updated_at) VALUES ('la_delete_guard', ?1, ?2, 'positive', 'description', 'guard', 0, 'hash-delete-guard', 1, 1)",
+                (default_label.id.as_str(), "b_default"),
+            )
+            .await
+            .expect("atom");
+
+        let wrong_board = store
+            .delete_board_label(
+                "default",
+                DeleteBoardLabelInput {
+                    label_ref: other.id,
+                    event_id: "e_label_delete_wrong_board".to_owned(),
+                    actor: "label-test".to_owned(),
+                    force: true,
+                    now: 200,
+                },
+            )
+            .await
+            .expect_err("cross-board label must be isolated");
+        assert!(
+            matches!(wrong_board, StoreError::LabelNotFound(reference) if reference == "l_other_delete")
+        );
+
+        let guarded = store
+            .delete_board_label(
+                "default",
+                DeleteBoardLabelInput {
+                    label_ref: default_label.name.clone(),
+                    event_id: "e_label_delete_guarded".to_owned(),
+                    actor: "label-test".to_owned(),
+                    force: true,
+                    now: 201,
+                },
+            )
+            .await
+            .expect_err("semantics must be cleared through ontology operation");
+        assert!(guarded.to_string().contains("has semantics or atoms"));
+        assert_eq!(
+            store.list_board_labels("default").await.unwrap(),
+            vec![default_label]
         );
     }
 }

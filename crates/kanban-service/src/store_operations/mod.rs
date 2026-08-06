@@ -26,6 +26,7 @@ pub use boards::{ArchiveBoardInput, CreateBoardInput};
 pub use comments::CreateCommentInput;
 pub use dependencies::{AddDependencyInput, RemoveDependencyInput};
 pub use entities::EntityUpsertInput;
+pub(crate) use labels::DeleteBoardLabelInput;
 pub use labels::{AddTaskLabelsInput, CreateLabelInput, RemoveTaskLabelInput};
 pub use lifecycle::{
     ArchiveTaskInput, BlockTaskInput, ClaimTaskInput, ClaimTaskRecord, CompleteTaskInput,

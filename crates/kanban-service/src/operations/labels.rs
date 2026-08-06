@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use kanban_core::{Clock, KanbanError, Result, new_event_id, new_typed_id};
 
-use crate::{AddTaskLabelsInput, KanbanService, LabelRecord, TaskRecord};
+use crate::{AddTaskLabelsInput, DeleteBoardLabelInput, KanbanService, LabelRecord, TaskRecord};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateBoardLabelCommand {
@@ -30,6 +30,23 @@ pub struct RemoveTaskLabelCommand {
     pub task_id: String,
     pub label_ref: String,
     pub actor: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeleteBoardLabelCommand {
+    pub board: String,
+    pub label_ref: String,
+    pub force: bool,
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeleteBoardLabelRecord {
+    pub label: LabelRecord,
+    pub forced: bool,
+    pub removed_task_bindings: i64,
+    pub removed_semantics: bool,
+    pub removed_atoms: i64,
 }
 
 impl<C> KanbanService<C>
@@ -144,6 +161,37 @@ where
             .await
             .map_err(crate::error::store_error)
             .and_then(super::application_task)
+    }
+
+    pub async fn delete_board_label(
+        &self,
+        command: DeleteBoardLabelCommand,
+    ) -> Result<DeleteBoardLabelRecord> {
+        let board = required_trimmed(&command.board, "board is required")?;
+        let label_ref = required_trimmed(&command.label_ref, "label id is required")?;
+        let actor = required_trimmed(&command.actor, "actor is required")?;
+        let _mutation = self.mutation_gate.lock().await;
+        let record = self
+            .store
+            .delete_board_label(
+                board,
+                DeleteBoardLabelInput {
+                    label_ref: label_ref.to_owned(),
+                    event_id: new_event_id(),
+                    actor: actor.to_owned(),
+                    force: command.force,
+                    now: self.clock.now_ms(),
+                },
+            )
+            .await
+            .map_err(crate::error::store_error)?;
+        Ok(DeleteBoardLabelRecord {
+            label: crate::operations::application_label(record.label),
+            forced: record.forced,
+            removed_task_bindings: record.removed_task_bindings,
+            removed_semantics: record.removed_semantics,
+            removed_atoms: record.removed_atoms,
+        })
     }
 }
 

@@ -44,16 +44,16 @@ pub use operations::{
     ContextDiagnostic, ContextEvidence, ContextItem, ContextPack, ContextPolicy,
     ContextProviderStatus, ContextSources, CreateAttachmentCommand, CreateAttachmentRecord,
     CreateBoardCommand, CreateBoardLabelCommand, CreateBoardRecord, DeleteAttachmentCommand,
-    EntityListOptions, EntityUpsertCommand, EventListOptions, EventListPage, EventRecord,
-    GraphNeighborsOptions, GraphQueryOptions, MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH,
-    MAX_CONTEXT_LIMIT, MAX_SEARCH_LIMIT, ProjectionStatusOptions, RUN_LOG_TAIL_BYTES,
-    ReclaimTaskCommand, RelationDeleteCommand, RelationListOptions, RelationPredicateCommand,
-    RelationUpsertCommand, RemoveTaskLabelCommand, ReopenTaskCommand, RunLogRecord, SearchHit,
-    SearchIndexStatus, SearchMeta, SearchQuery, SearchResults, SpecifyTaskCommand,
-    TaskDetailOntologyRecord, TaskDetailRecord, TaskNeighborhoodOptions,
-    TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord, UnblockTaskCommand,
-    UpdateTaskCommand, VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,
-    VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
+    DeleteBoardLabelCommand, DeleteBoardLabelRecord, EntityListOptions, EntityUpsertCommand,
+    EventListOptions, EventListPage, EventRecord, GraphNeighborsOptions, GraphQueryOptions,
+    MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT, MAX_SEARCH_LIMIT,
+    ProjectionStatusOptions, RUN_LOG_TAIL_BYTES, ReclaimTaskCommand, RelationDeleteCommand,
+    RelationListOptions, RelationPredicateCommand, RelationUpsertCommand, RemoveTaskLabelCommand,
+    ReopenTaskCommand, RunLogRecord, SearchHit, SearchIndexStatus, SearchMeta, SearchQuery,
+    SearchResults, SpecifyTaskCommand, TaskDetailOntologyRecord, TaskDetailRecord,
+    TaskNeighborhoodOptions, TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord,
+    UnblockTaskCommand, UpdateTaskCommand, VectorChunkQueryCommand, VectorChunkResult,
+    VectorConfigureCommand, VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
 };
 pub use service::KanbanService;
 
@@ -66,10 +66,11 @@ pub(crate) use error::StoreError;
 // 保持在 `store_operations` 内部。
 pub(crate) use store_operations::{
     AddTaskLabelsInput, ArchiveBoardInput, CreateAttachmentInput, CreateBoardInput,
-    CreateCommentInput, CreateLabelInput, EntityUpsertInput, LabelProposalDecisionInput,
-    LabelProposalInput, LabelSuggestionOptions, OntologyActionInput, OntologyApplyAtomInput,
-    OntologyObservationInput, OntologyRevertInput, OntologyValidateInput, RelationDeleteInput,
-    RelationPredicateInput, RelationUpsertInput, RemoveTaskLabelInput, UpsertLabelSemanticsInput,
+    CreateCommentInput, CreateLabelInput, DeleteBoardLabelInput, EntityUpsertInput,
+    LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions, OntologyActionInput,
+    OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
+    RelationDeleteInput, RelationPredicateInput, RelationUpsertInput, RemoveTaskLabelInput,
+    UpsertLabelSemanticsInput,
 };
 
 #[cfg(feature = "legacy-sqlite-import")]

@@ -908,22 +908,44 @@ impl TursoStore {
     }
 
     pub(crate) async fn vacuum(&self) -> Result<StoreVacuumReport, StoreError> {
-        let before_bytes = fs::metadata(self.database_path()).map_err(io_error)?.len();
         let lease = self
             .acquire_maintenance_lease("compact", "host-admin")
             .await?;
-        let source_fingerprint = self.database_fingerprint().await?;
-        let _ = self.checkpoint_inner().await?;
-        self.connection().await?.execute("VACUUM", ()).await?;
-        let after_bytes = fs::metadata(self.database_path()).map_err(io_error)?.len();
-        let report = StoreVacuumReport {
-            ok: true,
-            before_bytes,
-            after_bytes,
-            source_fingerprint,
-        };
-        self.release_maintenance_lease(&lease).await?;
-        Ok(report)
+        let result = async {
+            let before_bytes = fs::metadata(self.database_path()).map_err(io_error)?.len();
+            let source_fingerprint = self.database_fingerprint().await?;
+
+            // Turso 0.7.2 的 in-place VACUUM 是真正的 native compaction；它要求先把
+            // WAL 完整 checkpoint，且自身持有 stop-the-world/失败清理状态机。不要把
+            // `VACUUM` 改成 no-op，也不要在 host 进程仍持有 canonical handle 时自行
+            // rename 数据库文件。
+            let _ = self.checkpoint_inner().await?;
+            let connection = self.connection().await?;
+            connection.execute("VACUUM", ()).await?;
+
+            // native VACUUM 成功后重新执行 canonical 完整性检查；若检查失败，调用方
+            // 收到错误而不会拿到伪造的 ok=true 报告，Turso 自身负责 VACUUM 阶段回滚。
+            let doctor = doctor_connection(&connection).await?;
+            if !doctor_replace_safe(&doctor) {
+                return Err(StoreError::InvalidInput(
+                    "VACUUM 后 canonical doctor 校验未通过".to_owned(),
+                ));
+            }
+            let after_bytes = fs::metadata(self.database_path()).map_err(io_error)?.len();
+            Ok(StoreVacuumReport {
+                ok: true,
+                before_bytes,
+                after_bytes,
+                source_fingerprint,
+            })
+        }
+        .await;
+        let release = self.release_maintenance_lease(&lease).await;
+        match (result, release) {
+            (Ok(report), Ok(())) => Ok(report),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
+        }
     }
 
     pub(crate) async fn maintenance_status(&self) -> Result<StoreMaintenanceStatus, StoreError> {
@@ -2725,7 +2747,7 @@ mod tests {
 
     use super::{integer_value, text_value};
     use crate::test_support::{create_input, store};
-    use crate::{StoreError, maintenance::scalar_integer_params, shared::now_ms};
+    use crate::{StoreError, TursoStore, maintenance::scalar_integer_params, shared::now_ms};
 
     #[tokio::test]
     async fn maintenance_status_and_run_release_owner_lease() {
@@ -2896,6 +2918,153 @@ mod tests {
             .await
             .expect_err("active owner must win");
         assert!(matches!(error, StoreError::MaintenanceBusy(_)));
+    }
+
+    #[tokio::test]
+    async fn vacuum_executes_native_compaction_and_preserves_canonical_facts() {
+        let (_directory, store, path) = store("maintenance-vacuum-native").await;
+        store.initialize().await.expect("initialize");
+        let mut connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "CREATE TABLE vacuum_fixture(id INTEGER PRIMARY KEY, payload BLOB NOT NULL)",
+                (),
+            )
+            .await
+            .expect("fixture table");
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await
+            .expect("fixture transaction");
+        for id in 0..256_i64 {
+            transaction
+                .execute(
+                    "INSERT INTO vacuum_fixture(id, payload) VALUES (?1, randomblob(16384))",
+                    [id],
+                )
+                .await
+                .expect("fixture row");
+        }
+        transaction.commit().await.expect("fixture commit");
+        connection
+            .execute("DELETE FROM vacuum_fixture WHERE id > 0", ())
+            .await
+            .expect("fixture cleanup");
+        drop(connection);
+
+        let before = fs::metadata(&path).expect("database metadata").len();
+        let report = store.vacuum().await.expect("native vacuum");
+        assert!(report.ok);
+        assert_eq!(report.before_bytes, before);
+        assert!(report.after_bytes < report.before_bytes);
+
+        let connection = store.connection().await.expect("post-vacuum connection");
+        let mut rows = connection
+            .query("SELECT COUNT(*), length(payload) FROM vacuum_fixture", ())
+            .await
+            .expect("fixture query");
+        let row = rows
+            .next()
+            .await
+            .expect("fixture result")
+            .expect("fixture row");
+        assert_eq!(
+            integer_value(row.get_value(0).expect("fixture count"), "count").expect("count"),
+            1
+        );
+        assert_eq!(
+            integer_value(row.get_value(1).expect("fixture length"), "length").expect("length"),
+            16_384
+        );
+        let status = store
+            .maintenance_status()
+            .await
+            .expect("maintenance status");
+        assert!(
+            !status.owner.active,
+            "native vacuum must release host lease"
+        );
+    }
+
+    #[tokio::test]
+    async fn vacuum_failure_releases_lease_and_keeps_canonical_facts() {
+        let (_directory, store, path) = store("maintenance-vacuum-failure").await;
+        store.initialize().await.expect("initialize");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "CREATE TABLE vacuum_failure_fixture(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)",
+                (),
+            )
+            .await
+            .expect("fixture table");
+        connection
+            .execute(
+                "INSERT INTO vacuum_failure_fixture(id, payload) VALUES (1, 'preserve')",
+                (),
+            )
+            .await
+            .expect("fixture row");
+
+        // Keep a read transaction open on an independently opened host-owned database handle.
+        // Turso native VACUUM must fail closed rather than replacing or partially mutating the
+        // canonical file.
+        let blocker_store = TursoStore::open(&path).await.expect("blocker store");
+        let blocker_connection = blocker_store
+            .connection()
+            .await
+            .expect("blocker connection");
+        blocker_connection
+            .execute("BEGIN", ())
+            .await
+            .expect("blocker transaction");
+        let mut blocker_rows = blocker_connection
+            .query("SELECT payload FROM vacuum_failure_fixture", ())
+            .await
+            .expect("blocker query");
+        blocker_rows
+            .next()
+            .await
+            .expect("blocker result")
+            .expect("blocker row");
+        let error = store
+            .vacuum()
+            .await
+            .expect_err("active reader must block native vacuum");
+        assert!(
+            error.to_string().contains("busy")
+                || error.to_string().contains("lock")
+                || error.to_string().contains("checkpoint")
+                || error.to_string().contains("存储值无效"),
+            "unexpected vacuum error: {error}"
+        );
+        drop(blocker_rows);
+        blocker_connection
+            .execute("ROLLBACK", ())
+            .await
+            .expect("blocker rollback");
+
+        let mut rows = connection
+            .query("SELECT payload FROM vacuum_failure_fixture WHERE id=1", ())
+            .await
+            .expect("fixture query");
+        let row = rows
+            .next()
+            .await
+            .expect("fixture result")
+            .expect("fixture row");
+        assert_eq!(
+            text_value(row.get_value(0).expect("payload"), "payload").expect("payload text"),
+            "preserve"
+        );
+        let status = store
+            .maintenance_status()
+            .await
+            .expect("maintenance status");
+        assert!(
+            !status.owner.active,
+            "failed native vacuum must release host lease"
+        );
     }
 
     #[tokio::test]

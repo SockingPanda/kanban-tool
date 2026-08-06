@@ -409,7 +409,7 @@ pub use crate::operations::{
     RemoveDependencyResult, RemoveStepCommand, ReopenStepCommand, ReopenTaskCommand,
     SignalCreateRecord, SignalLedger, SignalLifecycle, SignalListOptions, SignalObservationRecord,
     SignalRecord, SignalRecordCommand, SignalRecordResult, SignalReviewCommand, SignalReviewRecord,
-    SignalStatus, SkipStepCommand, SpecifyTaskCommand, StaleClaimRecord, StatsQuery,
-    StatusCountRecord, SubmitReviewTaskCommand, TaskListOptions, TaskListPage, TaskListSort,
-    TaskPlanFilter, UnblockTaskCommand, UpdateStepCommand, UpdateTaskCommand,
+    SignalStatus, SkipStepCommand, SpecifyTaskCommand, StaleClaimRecord, StatusCountRecord,
+    SubmitReviewTaskCommand, TaskListOptions, TaskListPage, TaskListSort, TaskPlanFilter,
+    UnblockTaskCommand, UpdateStepCommand, UpdateTaskCommand,
 };

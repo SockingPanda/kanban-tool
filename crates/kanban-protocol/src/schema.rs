@@ -3385,6 +3385,11 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
     let task = crate::task_catalog::schema_roots();
     let mut registry = Vec::with_capacity(SCHEMA_REGISTRY.len() + 55);
     for root in SCHEMA_REGISTRY {
+        // archive-board request 历史上以 add-dependency 作为插入锚点。
+        // Dependency 已迁移为声明投影后，仍需先保留这条 Board schema root。
+        if root.contract_id == "api.add-dependency.request" {
+            append_board_schema_root(&mut registry, &board, "api.archive-board.request");
+        }
         if let Some(dependency_root) = dependency
             .iter()
             .find(|candidate| candidate.contract_id == root.contract_id)
@@ -3428,10 +3433,6 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
                 append_board_schema_root(&mut registry, &board, "api.create-board.response");
                 append_board_schema_root(&mut registry, &board, "api.get-board.response");
                 append_board_schema_root(&mut registry, &board, "api.archive-board.response");
-            }
-            "api.add-dependency.request" => {
-                append_board_schema_root(&mut registry, &board, "api.archive-board.request");
-                registry.push(*root);
             }
             "api.list-attachments.path" => {
                 append_board_schema_root(&mut registry, &board, "api.list-board-columns.path");

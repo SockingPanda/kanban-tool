@@ -4876,6 +4876,11 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
     let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 55);
 
     for contract in OPERATION_INVENTORY {
+        // archive-board request 历史上以 add-dependency 作为插入锚点。
+        // Dependency 已迁移为声明投影后，仍需先保留这条 Board row。
+        if contract.id == "api.add-dependency.request" {
+            append_board_contract(&mut inventory, &board, "api.archive-board.request");
+        }
         if let Some(dependency_contract) = dependency
             .iter()
             .find(|candidate| candidate.id == contract.id)
@@ -4921,11 +4926,6 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
                 append_board_contract(&mut inventory, &board, "api.create-board.response");
                 append_board_contract(&mut inventory, &board, "api.get-board.response");
                 append_board_contract(&mut inventory, &board, "api.archive-board.response");
-            }
-            // Archive-board request historically followed archive-task request.
-            "api.add-dependency.request" => {
-                append_board_contract(&mut inventory, &board, "api.archive-board.request");
-                inventory.push(*contract);
             }
             _ => inventory.push(*contract),
         }

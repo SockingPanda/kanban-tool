@@ -117,35 +117,6 @@ impl TursoApplicationStore {
             .await
     }
 
-    pub(crate) async fn vector_task_ids(&self, board: &str) -> StoreResult<Vec<String>> {
-        self.store.vector_task_ids(board).await
-    }
-
-    pub(crate) async fn vector_label_atom_ids(&self, board: &str) -> StoreResult<Vec<String>> {
-        self.store.vector_label_atom_ids(board).await
-    }
-
-    pub(crate) async fn enqueue_vector_job(
-        &self,
-        board_id: Option<&str>,
-        source_event_id: Option<i64>,
-        target: &str,
-        entity_uri: &str,
-        operation: &str,
-        payload_json: &str,
-    ) -> StoreResult<i64> {
-        self.store
-            .enqueue_vector_job(
-                board_id,
-                source_event_id,
-                target,
-                entity_uri,
-                operation,
-                payload_json,
-            )
-            .await
-    }
-
     pub(crate) async fn query_vector_chunks(
         &self,
         board_id: &str,

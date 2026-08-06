@@ -983,12 +983,7 @@ fn foundation_registry_contains_generated_roots() {
     expected.extend(
         operation_inventory()
             .iter()
-            .filter(|contract| {
-                matches!(
-                    contract.surface,
-                    ContractSurface::Config
-                )
-            })
+            .filter(|contract| matches!(contract.surface, ContractSurface::Config))
             .map(|contract| contract.schema_id.expect("adopted protocol schema id")),
     );
 

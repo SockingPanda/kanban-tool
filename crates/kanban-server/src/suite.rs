@@ -223,9 +223,9 @@ mod labels_adoption {
 
 mod maintenance_adoption {
     use kanban_protocol::{
-        BackupResponse, ExportResponse, ImportResponse, LegacyImportRequest,
-        LegacyImportResponse, MaintenanceImportRequest, MaintenancePathRequest,
-        CheckpointResponse, DoctorResponse, MaintenanceRebuildResponse, MaintenanceRunRequest,
+        BackupResponse, CheckpointResponse, DoctorResponse, ExportResponse, ImportResponse,
+        LegacyImportRequest, LegacyImportResponse, MaintenanceImportRequest,
+        MaintenancePathRequest, MaintenanceRebuildResponse, MaintenanceRunRequest,
         MaintenanceRunResponse, MaintenanceStatusResponse, VacuumResponse,
     };
     use serde::{Serialize, de::DeserializeOwned};
@@ -237,7 +237,10 @@ mod maintenance_adoption {
     {
         let expected: Value = serde_json::from_str(raw).expect("maintenance fixture JSON");
         let value: T = serde_json::from_value(expected.clone()).expect("maintenance fixture DTO");
-        assert_eq!(serde_json::to_value(value).expect("serialize maintenance DTO"), expected);
+        assert_eq!(
+            serde_json::to_value(value).expect("serialize maintenance DTO"),
+            expected
+        );
     }
 
     macro_rules! adoption_pair {
@@ -404,10 +407,16 @@ mod portable_adoption {
 
     fn assert_jsonl_fixture(raw: &str, discriminator: &str) {
         let expected: Value = serde_json::from_str(raw).expect("portable JSONL fixture");
-        assert_eq!(expected.get("type").and_then(Value::as_str), Some(discriminator));
+        assert_eq!(
+            expected.get("type").and_then(Value::as_str),
+            Some(discriminator)
+        );
         assert!(expected.get("data").is_some_and(Value::is_object));
         let encoded = serde_json::to_value(expected).expect("serialize portable JSONL fixture");
-        assert_eq!(encoded.get("type").and_then(Value::as_str), Some(discriminator));
+        assert_eq!(
+            encoded.get("type").and_then(Value::as_str),
+            Some(discriminator)
+        );
     }
 
     macro_rules! jsonl_pair {

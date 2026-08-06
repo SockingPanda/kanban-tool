@@ -255,11 +255,7 @@ fn check_active_maps(root: &Path) -> xtask::ToolResult<()> {
         "scripts/test-schema-cargo-tree.sh",
         "scripts/test_schema_recipe_witness.py",
     ];
-    const STALE_REFERENCES: &[&str] = &[
-        "kanban-schema-tool",
-        "kanban-sqlite",
-        "kanban-local",
-    ];
+    const STALE_REFERENCES: &[&str] = &["kanban-schema-tool", "kanban-sqlite", "kanban-local"];
     for relative in ACTIVE_MAPS {
         let path = root.join(relative);
         if !path.is_file() {

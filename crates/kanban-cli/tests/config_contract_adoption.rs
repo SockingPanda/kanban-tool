@@ -9,7 +9,10 @@ mod config_adoption {
     {
         let expected: Value = serde_json::from_str(raw).expect("config fixture JSON");
         let value: T = serde_json::from_value(expected.clone()).expect("config fixture DTO");
-        assert_eq!(serde_json::to_value(value).expect("serialize config DTO"), expected);
+        assert_eq!(
+            serde_json::to_value(value).expect("serialize config DTO"),
+            expected
+        );
     }
 
     #[test]

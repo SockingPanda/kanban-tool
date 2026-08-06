@@ -125,9 +125,17 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "maintenance cleanup-legacy verify",
             "cli.maintenance-cleanup-legacy-verify.output"
         ),
-        adopted!(Cli, "maintenance rebuild", "cli.maintenance-rebuild-v1.output"),
+        adopted!(
+            Cli,
+            "maintenance rebuild",
+            "cli.maintenance-rebuild-v1.output"
+        ),
         adopted!(Cli, "maintenance run", "cli.maintenance-run-v1.output"),
-        adopted!(Cli, "maintenance status", "cli.maintenance-status-v1.output"),
+        adopted!(
+            Cli,
+            "maintenance status",
+            "cli.maintenance-status-v1.output"
+        ),
         adopted!(Cli, "label add", "cli.label-add.output"),
         adopted!(
             Cli,

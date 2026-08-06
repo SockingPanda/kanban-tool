@@ -1,6 +1,4 @@
-use kanban_protocol::{
-    CliTaskBlockOutput, CliTaskCompleteOutput, CliTaskDoneOutput,
-};
+use kanban_protocol::{CliTaskBlockOutput, CliTaskCompleteOutput, CliTaskDoneOutput};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
@@ -10,7 +8,10 @@ where
 {
     let expected: Value = serde_json::from_str(raw).expect("CLI task fixture JSON");
     let value: T = serde_json::from_value(expected.clone()).expect("CLI task DTO");
-    assert_eq!(serde_json::to_value(value).expect("serialize CLI task DTO"), expected);
+    assert_eq!(
+        serde_json::to_value(value).expect("serialize CLI task DTO"),
+        expected
+    );
 }
 
 #[test]

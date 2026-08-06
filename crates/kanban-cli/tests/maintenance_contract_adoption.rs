@@ -13,7 +13,10 @@ mod maintenance_adoption {
     {
         let expected: Value = serde_json::from_str(raw).expect("CLI maintenance fixture JSON");
         let value: T = serde_json::from_value(expected.clone()).expect("CLI maintenance DTO");
-        assert_eq!(serde_json::to_value(value).expect("serialize CLI maintenance DTO"), expected);
+        assert_eq!(
+            serde_json::to_value(value).expect("serialize CLI maintenance DTO"),
+            expected
+        );
     }
 
     macro_rules! adoption_pair {

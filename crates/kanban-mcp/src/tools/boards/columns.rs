@@ -1,4 +1,4 @@
-use kanban_protocol::{DataEnvelope, ListBoardColumnsResponse};
+use kanban_protocol::ListBoardColumnsResponse;
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
@@ -28,7 +28,7 @@ impl KanbanMcp {
         let board = self.board(args.board);
         let client = self.client.clone();
         let columns = call_client(move || client.list_board_columns(&board)).await?;
-        Ok(Json(DataEnvelope::new(columns)))
+        Ok(Json(ListBoardColumnsResponse { data: columns }))
     }
 }
 

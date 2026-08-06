@@ -1,3 +1,12 @@
+/// Signal 审核操作在 application 与 store 之间共享的领域值；它不是持久化状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignalLifecycle {
+    Confirm,
+    Reject,
+    Resolve,
+    Supersede,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoardRecord {
     pub id: String,

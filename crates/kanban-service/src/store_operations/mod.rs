@@ -1,3 +1,5 @@
+pub(crate) use crate::domain::SignalLifecycle as SignalLifecycleInput;
+
 mod attachments;
 mod boards;
 mod comments;
@@ -39,8 +41,7 @@ pub use lifecycle::{
 pub use ontology::*;
 pub use relations::{RelationDeleteInput, RelationPredicateInput, RelationUpsertInput};
 pub use signals::{
-    CreateSignalInput, ReviewSignalsInput, SignalLifecycleInput,
-    SignalListOptions as StoreSignalListOptions,
+    CreateSignalInput, ReviewSignalsInput, SignalListOptions as StoreSignalListOptions,
 };
 pub use steps::{
     CompleteStepInput, CreateStepInput, RemoveStepInput, ReopenStepInput, SkipStepInput,

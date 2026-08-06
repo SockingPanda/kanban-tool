@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use turso::transaction::TransactionBehavior;
 
+use super::SignalLifecycleInput;
 use crate::{db::TursoStore, domain::*, error::StoreError, shared::*};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,14 +26,6 @@ pub struct CreateSignalInput {
     pub evidence_json: String,
     pub comment_body: Option<String>,
     pub created_at: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SignalLifecycleInput {
-    Confirm,
-    Reject,
-    Resolve,
-    Supersede,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

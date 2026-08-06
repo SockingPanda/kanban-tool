@@ -5,10 +5,10 @@ use std::collections::BTreeMap;
 use kanban_core::{Clock, KanbanError, Result, new_event_id, new_typed_id};
 use serde_json::Value;
 
-use crate::store_operations::{
-    CreateSignalInput, ReviewSignalsInput, SignalLifecycleInput, StoreSignalListOptions,
-};
+use crate::store_operations::{CreateSignalInput, ReviewSignalsInput, StoreSignalListOptions};
 use crate::{CommentRecord, KanbanService};
+
+pub use crate::domain::SignalLifecycle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignalStatus {
@@ -29,14 +29,6 @@ impl SignalStatus {
             Self::Resolved => "resolved",
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SignalLifecycle {
-    Confirm,
-    Reject,
-    Resolve,
-    Supersede,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -256,17 +248,11 @@ where
         }
         let event_ids = command.signal_ids.iter().map(|_| new_event_id()).collect();
         let _mutation = self.mutation_gate.lock().await;
-        let lifecycle = match command.lifecycle {
-            SignalLifecycle::Confirm => SignalLifecycleInput::Confirm,
-            SignalLifecycle::Reject => SignalLifecycleInput::Reject,
-            SignalLifecycle::Resolve => SignalLifecycleInput::Resolve,
-            SignalLifecycle::Supersede => SignalLifecycleInput::Supersede,
-        };
         self.store
             .review_signals(ReviewSignalsInput {
                 board: command.board.map(|board| board.trim().to_owned()),
                 signal_ids: command.signal_ids,
-                lifecycle,
+                lifecycle: command.lifecycle,
                 replacement_signal_id: command.replacement_signal_id,
                 actor: command.actor,
                 reason: command.reason,

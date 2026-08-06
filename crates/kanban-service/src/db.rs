@@ -93,15 +93,6 @@ impl TursoStore {
         crate::legacy_import::import_into_store(self, options).await
     }
 
-    /// `import_legacy_sqlite_v30` 的简短别名，供 host 管理 operation 使用。
-    #[cfg(feature = "legacy-sqlite-import")]
-    pub(crate) async fn import_legacy_sqlite(
-        &self,
-        options: crate::legacy_import::LegacyImportOptions,
-    ) -> Result<crate::legacy_import::LegacyImportResult, StoreError> {
-        self.import_legacy_sqlite_v30(options).await
-    }
-
     /// 使用可选的升级前备份 hook 初始化。没有升级时不会调用 hook。
     pub(crate) async fn initialize_with_backup_hook(
         &self,

@@ -386,14 +386,6 @@ struct Attachment {
     bytes: Vec<u8>,
 }
 
-/// host service 使用的自由函数入口。
-pub(crate) async fn import_legacy_sqlite_v30(
-    store: &TursoStore,
-    options: LegacyImportOptions,
-) -> Result<LegacyImportResult, StoreError> {
-    import_into_store(store, options).await
-}
-
 pub(crate) async fn import_into_store(
     store: &TursoStore,
     options: LegacyImportOptions,

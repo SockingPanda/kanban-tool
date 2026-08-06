@@ -39,6 +39,7 @@ pub mod adoption_test_support;
 pub mod dto;
 pub mod operations;
 mod service;
+mod suggestion_engine;
 mod vector;
 
 #[cfg(feature = "legacy-sqlite-import")]

@@ -1,7 +1,8 @@
 //! Turso 中 label semantics、atom 与 ontology ledger 的原子操作。
 //!
-//! 该模块只负责 canonical SQL 与事务边界。向量 provider 不在这里，索引
-//! rebuild/status 明确返回 degraded 状态，避免把 projection 成功误报为 canonical 成功。
+//! 该模块负责 canonical SQL 与事务边界；标签建议只通过 `crate::vector` 读取 provider
+//! embedding 与 Turso projection，不写 canonical 事实。索引 rebuild/status 同时报告
+//! projection 健康度，避免把 projection 成功误报为 canonical 成功。
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -24,6 +25,7 @@ use crate::{
         Value, first_row, integer_value, now_ms, optional_integer_value, optional_text_value,
         text_value,
     },
+    suggestion_engine::{AtomKind, AtomPolarity, RetrievedAtom, SolverConfig, resolve_from_atoms},
 };
 
 pub(crate) const LABEL_ATOM_INDEX_STORE: &str = "vector_label_atoms";
@@ -867,18 +869,54 @@ impl TursoStore {
             .unwrap_or(1)
                 != 0
         });
+        let Some(config) = self.vector_config().await? else {
+            return Ok(LabelAtomIndexStatusRecord {
+                backend: LABEL_ATOM_INDEX_STORE.to_owned(),
+                enabled: false,
+                message: "label atom vector provider 未配置；canonical atoms 仍可读取".to_owned(),
+                diagnostics: vec![
+                    "vector_provider_unavailable".to_owned(),
+                    "degraded".to_owned(),
+                ],
+                dirty,
+                board_dirty: dirty,
+                generation: None,
+            });
+        };
+        let diagnostics = self
+            .label_suggestion_projection_diagnostics(&board_id, &config)
+            .await?;
+        let generation = first_row(
+            connection
+                .query(
+                    "SELECT active_generation FROM projection_state WHERE projection='vector_label_atoms' LIMIT 1",
+                    (),
+                )
+                .await?,
+        )
+        .await
+        .ok()
+        .and_then(|row| optional_text_value(row.get_value(0).ok()?, "projection_state.active_generation").ok())
+        .flatten();
+        let enabled = diagnostics.is_empty();
+        let mut status_diagnostics = diagnostics;
+        if !enabled {
+            status_diagnostics.push("degraded".to_owned());
+        }
+        status_diagnostics.sort();
+        status_diagnostics.dedup();
         Ok(LabelAtomIndexStatusRecord {
             backend: LABEL_ATOM_INDEX_STORE.to_owned(),
-            enabled: false,
-            message: "label atom vector provider unavailable; canonical atoms remain queryable"
-                .to_owned(),
-            diagnostics: vec![
-                "vector_provider_unavailable".to_owned(),
-                "degraded".to_owned(),
-            ],
+            enabled,
+            message: if enabled {
+                "Turso label atom vector projection 已就绪".to_owned()
+            } else {
+                "label atom vector projection 降级；canonical atoms 仍可读取".to_owned()
+            },
+            diagnostics: status_diagnostics,
             dirty,
             board_dirty: dirty,
-            generation: None,
+            generation: generation.and_then(|value| value.parse::<i64>().ok()),
         })
     }
 
@@ -888,6 +926,7 @@ impl TursoStore {
     ) -> Result<LabelAtomIndexStatusRecord, StoreError> {
         let board_id = self.ontology_board_id(board).await?;
         let now = now_ms();
+        let provider_configured = self.vector_config().await?.is_some();
         let mut connection = self.connection().await?;
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -898,12 +937,15 @@ impl TursoStore {
                 turso::named_params! {
                     ":store": LABEL_ATOM_INDEX_STORE,
                     ":board": board_id.as_str(),
-                    ":error": "vector provider unavailable; rebuild deferred",
+                    ":error": if provider_configured { Option::<&str>::None } else { Some("vector provider 未配置；重建等待 provider") },
                     ":now": now,
                 },
             )
             .await?;
         transaction.commit().await?;
+        if provider_configured {
+            self.enqueue_vector_projection_jobs(board, true).await?;
+        }
         self.label_atom_index_status(board).await
     }
 
@@ -960,77 +1002,356 @@ impl TursoStore {
         task_ref: &str,
         options: LabelSuggestionOptions,
     ) -> Result<LabelSuggestionResultRecord, StoreError> {
+        validate_suggestion_options(&options)?;
         let board_id = self.ontology_board_id(board).await?;
         let (task_id, _, title, description) = self.ontology_task(&board_id, task_ref).await?;
-        let query = format!("{} {}", title, description.unwrap_or_default()).to_lowercase();
-        let atoms = self.list_label_atoms(board).await?;
-        let mut grouped = BTreeMap::<String, LabelSuggestionCandidateRecord>::new();
-        for atom in atoms.into_iter().take(options.atom_limit.max(1)) {
-            let haystack = atom.text.to_lowercase();
-            let score = token_overlap(&query, &haystack);
-            if score <= 0.0 {
-                continue;
-            }
-            let evidence = LabelSuggestionEvidenceRecord {
-                atom_id: atom.id.clone(),
-                label_id: atom.label_id.clone(),
-                label_name: atom.label_name.clone(),
-                polarity: atom.polarity.clone(),
-                kind: atom.kind.clone(),
-                text: atom.text.clone(),
-                score,
-            };
-            let entry = grouped.entry(atom.label_id.clone()).or_insert_with(|| {
-                LabelSuggestionCandidateRecord {
-                    label_id: atom.label_id.clone(),
-                    label_name: atom.label_name.clone(),
-                    score: 0.0,
-                    weight: 0.0,
-                    already_applied: false,
-                    evidence_atoms: Vec::new(),
-                    negative_evidence_atoms: Vec::new(),
-                }
-            });
-            entry.score = entry.score.max(score);
-            entry.weight += score;
-            if atom.polarity == "negative" {
-                entry.negative_evidence_atoms.push(evidence);
-            } else {
-                entry.evidence_atoms.push(evidence);
-            }
+        let mut applied_labels = BTreeSet::new();
+        let connection = self.connection().await?;
+        let mut label_rows = connection
+            .query(
+                "SELECT label_id FROM task_labels WHERE board_id=:board AND task_id=:task",
+                [(":board", board_id.as_str()), (":task", task_id.as_str())],
+            )
+            .await?;
+        while let Some(row) = label_rows.next().await? {
+            applied_labels.insert(text_value(row.get_value(0)?, "task_labels.label_id")?);
         }
-        let mut candidates = grouped.into_values().collect::<Vec<_>>();
-        candidates.sort_by(|left, right| {
-            right
-                .score
-                .total_cmp(&left.score)
-                .then_with(|| left.label_id.cmp(&right.label_id))
-        });
-        candidates.truncate(options.candidate_limit.max(1));
-        let selected = candidates
+
+        let Some(config) = self.vector_config().await? else {
+            return Ok(empty_label_suggestion(
+                task_id,
+                board_id,
+                vec!["vector_provider_unavailable".to_owned()],
+            ));
+        };
+        let mut diagnostics = self
+            .label_suggestion_projection_diagnostics(&board_id, &config)
+            .await?;
+        if !diagnostics.is_empty() {
+            return Ok(empty_label_suggestion(task_id, board_id, diagnostics));
+        }
+
+        let query_text = task_query_text(&title, description.as_deref());
+        let (embedded_config, query_vector) =
+            match crate::vector::embed_query(self, &query_text).await {
+                Ok(value) => value,
+                Err(error) => {
+                    diagnostics.push("vector_query_error".to_owned());
+                    diagnostics.push(bounded_diagnostic_message(&error));
+                    return Ok(empty_label_suggestion(task_id, board_id, diagnostics));
+                }
+            };
+        if embedded_config.fingerprint() != config.fingerprint() {
+            diagnostics.push("vector_fingerprint_mismatch".to_owned());
+            return Ok(empty_label_suggestion(task_id, board_id, diagnostics));
+        }
+        if query_vector.len() != config.dimensions {
+            diagnostics.push("vector_dimension_mismatch".to_owned());
+            diagnostics.push(format!(
+                "query embedding 维度不匹配：期望 {}，实际 {}",
+                config.dimensions,
+                query_vector.len()
+            ));
+            return Ok(empty_label_suggestion(task_id, board_id, diagnostics));
+        }
+
+        let staged_atoms = self
+            .stage_label_atom_vectors(&board_id, &config.model)
+            .await
+            .inspect_err(|error| {
+                diagnostics.push("vector_query_error".to_owned());
+                diagnostics.push(bounded_diagnostic_message(&error));
+            });
+        let staged_atoms = match staged_atoms {
+            Ok(atoms) => atoms,
+            Err(_) => return Ok(empty_label_suggestion(task_id, board_id, diagnostics)),
+        };
+        if staged_atoms.is_empty() {
+            diagnostics.push("label_atom_index_empty".to_owned());
+            return Ok(empty_label_suggestion(task_id, board_id, diagnostics));
+        }
+
+        let solver_config = SolverConfig {
+            max_candidates: options.candidate_limit,
+            max_selected_labels: options.max_selected_labels,
+            retrieval_limit: options.atom_limit,
+            min_candidate_score: options.min_score,
+            ..SolverConfig::default()
+        };
+        let solver_result = match resolve_from_atoms(&query_vector, &solver_config, &staged_atoms) {
+            Ok(result) => result,
+            Err(error) => {
+                diagnostics.push("vector_query_error".to_owned());
+                diagnostics.push(bounded_diagnostic_message(&error));
+                return Ok(empty_label_suggestion(task_id, board_id, diagnostics));
+            }
+        };
+        if solver_result.candidates.is_empty() {
+            diagnostics.push("label_atom_index_empty".to_owned());
+        }
+
+        let mut candidates = solver_result
+            .candidates
             .iter()
-            .filter(|candidate| candidate.score >= options.min_score)
-            .take(options.max_selected_labels.max(1))
-            .cloned()
+            .map(|candidate| LabelSuggestionCandidateRecord {
+                label_id: candidate.label_id.clone(),
+                label_name: candidate.label_name.clone(),
+                score: candidate.score,
+                weight: candidate.score,
+                already_applied: applied_labels.contains(&candidate.label_id),
+                evidence_atoms: candidate
+                    .evidence_atoms
+                    .iter()
+                    .map(map_suggestion_evidence)
+                    .collect(),
+                negative_evidence_atoms: candidate
+                    .negative_evidence_atoms
+                    .iter()
+                    .map(map_suggestion_evidence)
+                    .collect(),
+            })
             .collect::<Vec<_>>();
-        let coverage = selected
+        candidates.truncate(options.output_limit);
+        let mut selected_labels = solver_result
+            .selected_labels
             .iter()
-            .map(|value| value.score)
-            .sum::<f32>()
-            .min(1.0);
+            .map(|selected| LabelSuggestionCandidateRecord {
+                label_id: selected.label_id.clone(),
+                label_name: selected.label_name.clone(),
+                score: selected.score,
+                weight: selected.weight,
+                already_applied: applied_labels.contains(&selected.label_id),
+                evidence_atoms: selected
+                    .evidence_atoms
+                    .iter()
+                    .map(map_suggestion_evidence)
+                    .collect(),
+                negative_evidence_atoms: selected
+                    .negative_evidence_atoms
+                    .iter()
+                    .map(map_suggestion_evidence)
+                    .collect(),
+            })
+            .collect::<Vec<_>>();
+        selected_labels.truncate(options.output_limit);
+
+        let degraded = !diagnostics.is_empty();
+        let reason_codes = suggestion_reason_codes(
+            selected_labels.is_empty(),
+            solver_result.coverage,
+            solver_result.residual_norm,
+            solver_result.needs_new_label,
+            degraded,
+            &diagnostics,
+            &solver_config,
+        );
+        let needs_new_label = !degraded
+            && reason_codes
+                .iter()
+                .any(|code| is_coverage_review_reason(code));
         Ok(LabelSuggestionResultRecord {
             task_id,
             board_id,
-            selected_labels: selected,
+            selected_labels,
             candidates,
-            coverage,
-            coverage_cosine: 0.0,
-            residual_norm: 1.0 - coverage,
-            needs_new_label: coverage < options.min_score,
-            reason_codes: vec!["lexical_fallback".to_owned()],
-            degraded: true,
-            diagnostics: vec!["vector_provider_unavailable".to_owned()],
+            coverage: solver_result.coverage,
+            coverage_cosine: solver_result.coverage_cosine,
+            residual_norm: solver_result.residual_norm,
+            needs_new_label,
+            reason_codes,
+            degraded,
+            diagnostics,
         })
+    }
+
+    async fn label_suggestion_projection_diagnostics(
+        &self,
+        board_id: &str,
+        config: &crate::vector::VectorConfig,
+    ) -> Result<Vec<String>, StoreError> {
+        let connection = self.connection().await?;
+        let row = first_row(
+            connection
+                .query(
+                    "SELECT lifecycle_status,active_generation,active_fingerprint,provider,provider_fingerprint,embedding_model,embedding_dimensions,dirty,last_error FROM projection_state WHERE projection='vector_label_atoms' LIMIT 1",
+                    (),
+                )
+                .await?,
+        )
+        .await
+        .map_err(|error| match error {
+            turso::Error::QueryReturnedNoRows => {
+                StoreError::InvalidInput("label atom projection state 缺失".to_owned())
+            }
+            other => StoreError::Turso(other),
+        })?;
+        let lifecycle = text_value(row.get_value(0)?, "projection_state.lifecycle_status")?;
+        let active_generation =
+            optional_text_value(row.get_value(1)?, "projection_state.active_generation")?;
+        let active_fingerprint =
+            optional_text_value(row.get_value(2)?, "projection_state.active_fingerprint")?;
+        let provider = optional_text_value(row.get_value(3)?, "projection_state.provider")?;
+        let provider_fingerprint =
+            optional_text_value(row.get_value(4)?, "projection_state.provider_fingerprint")?;
+        let model = optional_text_value(row.get_value(5)?, "projection_state.embedding_model")?;
+        let dimensions =
+            optional_integer_value(row.get_value(6)?, "projection_state.embedding_dimensions")?;
+        let dirty = integer_value(row.get_value(7)?, "projection_state.dirty")? != 0;
+        let last_error = optional_text_value(row.get_value(8)?, "projection_state.last_error")?;
+        let board_row = first_row(
+            connection
+                .query(
+                    "SELECT dirty,last_error FROM label_atom_index_boards WHERE store_name=:store AND board_id=:board LIMIT 1",
+                    [
+                        (":store", LABEL_ATOM_INDEX_STORE),
+                        (":board", board_id),
+                    ],
+                )
+                .await?,
+        )
+        .await
+        .ok();
+        let board_dirty = board_row
+            .as_ref()
+            .map(|value| {
+                integer_value(
+                    value.get_value(0).unwrap_or(Value::Null),
+                    "label_atom_index_boards.dirty",
+                )
+                .unwrap_or(1)
+                    != 0
+            })
+            .unwrap_or(false);
+        let board_error = board_row
+            .as_ref()
+            .and_then(|value| {
+                optional_text_value(
+                    value.get_value(1).ok()?,
+                    "label_atom_index_boards.last_error",
+                )
+                .ok()
+            })
+            .flatten();
+        let pending_jobs = first_row(
+            connection
+                .query(
+                    "SELECT COALESCE(SUM(status IN ('pending','running','failed')),0) FROM projection_jobs WHERE target='vector_label_atoms' AND board_id=:board",
+                    [(":board", board_id)],
+                )
+                .await?,
+        )
+        .await
+        .map(|value| integer_value(value.get_value(0).unwrap_or(Value::Null), "projection_jobs.pending").unwrap_or(0))
+        .unwrap_or(0);
+
+        let mut diagnostics = Vec::new();
+        let expected_fingerprint = config.fingerprint();
+        if lifecycle != "ready" || dirty || board_dirty || pending_jobs > 0 {
+            diagnostics.push("label_atom_index_dirty".to_owned());
+        }
+        if let Some(error) = last_error {
+            diagnostics.push("label_atom_index_error".to_owned());
+            diagnostics.push(bounded_diagnostic_message(&error));
+        }
+        if let Some(error) = board_error {
+            diagnostics.push("label_atom_index_error".to_owned());
+            diagnostics.push(bounded_diagnostic_message(&error));
+        }
+        if provider.as_deref() != Some(config.provider.trim().to_ascii_lowercase().as_str()) {
+            diagnostics.push("vector_provider_mismatch".to_owned());
+        }
+        if model.as_deref() != Some(config.model.as_str()) {
+            diagnostics.push("vector_model_mismatch".to_owned());
+        }
+        if dimensions.and_then(|value| usize::try_from(value).ok()) != Some(config.dimensions) {
+            diagnostics.push("vector_dimension_mismatch".to_owned());
+        }
+        if provider_fingerprint.as_deref() != Some(expected_fingerprint.as_str())
+            || active_fingerprint.as_deref() != Some(expected_fingerprint.as_str())
+        {
+            diagnostics.push("vector_fingerprint_mismatch".to_owned());
+        }
+        if active_generation
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            diagnostics.push("vector_generation_missing".to_owned());
+        }
+        diagnostics.sort();
+        diagnostics.dedup();
+        Ok(diagnostics)
+    }
+
+    async fn stage_label_atom_vectors(
+        &self,
+        board_id: &str,
+        embedding_model: &str,
+    ) -> Result<Vec<RetrievedAtom>, StoreError> {
+        // 先构造固定上限的 board 快照，再由 solver 在每一轮按 residual 取 top
+        // hits；不能按 label_id 截断，否则靠后的 atom 永远无法解释 query。
+        const MAX_STAGED_ATOMS: usize = 4096;
+        let connection = self.connection().await?;
+        let mut rows = connection
+            .query(
+                &format!(
+                    "SELECT a.id,a.label_id,l.name,a.polarity,a.kind,a.text,a.content_hash,d.id,d.source_kind,d.content_hash,v.embedding_model,vector_extract(v.embedding) FROM label_atoms a JOIN labels l ON l.id=a.label_id AND l.board_id=a.board_id JOIN retrieval_vectors v ON v.board_id=a.board_id AND v.content_hash=a.content_hash JOIN retrieval_documents d ON d.id=v.document_id AND d.board_id=a.board_id AND d.source_kind='label_atom' AND d.content_hash=a.content_hash AND d.content=a.text WHERE a.board_id=:board AND v.embedding_model=:model ORDER BY a.label_id,a.ordinal,a.id LIMIT {MAX_STAGED_ATOMS}"
+                ),
+                [(
+                    ":board", board_id,
+                ), (":model", embedding_model)],
+            )
+            .await?;
+        let mut atoms = Vec::new();
+        while let Some(row) = rows.next().await? {
+            let atom_id = text_value(row.get_value(0)?, "label_atoms.id")?;
+            let atom_hash = text_value(row.get_value(6)?, "label_atoms.content_hash")?;
+            let document_id = text_value(row.get_value(7)?, "retrieval_documents.id")?;
+            let expected_document_id = crate::vector::stable_id("doc", &["label_atom", &atom_id]);
+            if document_id != expected_document_id {
+                continue;
+            }
+            let source_kind = text_value(row.get_value(8)?, "retrieval_documents.source_kind")?;
+            if source_kind != "label_atom" {
+                continue;
+            }
+            let document_hash = text_value(row.get_value(9)?, "retrieval_documents.content_hash")?;
+            if document_hash != atom_hash {
+                return Err(StoreError::SchemaMismatch(
+                    "label atom vector document content_hash 不匹配".to_owned(),
+                ));
+            }
+            let actual_model = text_value(row.get_value(10)?, "retrieval_vectors.embedding_model")?;
+            if actual_model != embedding_model {
+                return Err(StoreError::SchemaMismatch(
+                    "label atom vector embedding model 不匹配".to_owned(),
+                ));
+            }
+            let vector = match row.get_value(11)? {
+                Value::Text(value) => {
+                    serde_json::from_str::<Vec<f32>>(&value).map_err(|error| {
+                        StoreError::SchemaMismatch(format!("label atom vector 提取失败：{error}"))
+                    })?
+                }
+                _ => {
+                    return Err(StoreError::InvalidStoredValue {
+                        field: "retrieval_vectors.embedding",
+                    });
+                }
+            };
+            atoms.push(RetrievedAtom {
+                atom_id,
+                label_id: text_value(row.get_value(1)?, "label_atoms.label_id")?,
+                label_name: text_value(row.get_value(2)?, "labels.name")?,
+                polarity: suggestion_polarity(&text_value(
+                    row.get_value(3)?,
+                    "label_atoms.polarity",
+                )?)?,
+                kind: suggestion_kind(&text_value(row.get_value(4)?, "label_atoms.kind")?)?,
+                text: text_value(row.get_value(5)?, "label_atoms.text")?,
+                vector,
+            });
+        }
+        Ok(atoms)
     }
 
     pub async fn propose_task_label(
@@ -2482,13 +2803,195 @@ pub(crate) fn build_atoms(input: AtomBuildInput<'_>) -> Vec<LabelAtomRecord> {
     }
     atoms
 }
-fn token_overlap(query: &str, atom: &str) -> f32 {
-    let query = query.split_whitespace().collect::<BTreeSet<_>>();
-    let atom = atom.split_whitespace().collect::<BTreeSet<_>>();
-    if query.is_empty() || atom.is_empty() {
-        return 0.0;
+fn validate_suggestion_options(options: &LabelSuggestionOptions) -> Result<(), StoreError> {
+    if options.output_limit == 0 {
+        return Err(StoreError::InvalidInput("limit 必须 >= 1".to_owned()));
     }
-    query.intersection(&atom).count() as f32 / atom.len().max(1) as f32
+    if options.candidate_limit == 0 {
+        return Err(StoreError::InvalidInput(
+            "candidate_limit 必须 >= 1".to_owned(),
+        ));
+    }
+    if options.atom_limit == 0 {
+        return Err(StoreError::InvalidInput("atom_limit 必须 >= 1".to_owned()));
+    }
+    if options.max_selected_labels == 0 {
+        return Err(StoreError::InvalidInput(
+            "max_selected_labels 必须 >= 1".to_owned(),
+        ));
+    }
+    if !(0.0..=1.0).contains(&options.min_score) {
+        return Err(StoreError::InvalidInput(
+            "min_score 必须在 0 到 1 之间".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn task_query_text(title: &str, description: Option<&str>) -> String {
+    match description.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(description) => format!("{}\n\n{}", title.trim(), description),
+        None => title.trim().to_owned(),
+    }
+}
+
+fn suggestion_polarity(value: &str) -> Result<AtomPolarity, StoreError> {
+    match value {
+        "positive" => Ok(AtomPolarity::Positive),
+        "negative" => Ok(AtomPolarity::Negative),
+        _ => Err(StoreError::SchemaMismatch(format!(
+            "未知 label atom polarity：{value}"
+        ))),
+    }
+}
+
+fn suggestion_kind(value: &str) -> Result<AtomKind, StoreError> {
+    match value {
+        "name" => Ok(AtomKind::Name),
+        "description" => Ok(AtomKind::Description),
+        "applies_when" => Ok(AtomKind::AppliesWhen),
+        "positive_example" => Ok(AtomKind::PositiveExample),
+        "excludes_when" => Ok(AtomKind::ExcludesWhen),
+        "negative_example" => Ok(AtomKind::NegativeExample),
+        _ => Err(StoreError::SchemaMismatch(format!(
+            "未知 label atom kind：{value}"
+        ))),
+    }
+}
+
+fn map_suggestion_evidence(
+    evidence: &crate::suggestion_engine::Evidence,
+) -> LabelSuggestionEvidenceRecord {
+    LabelSuggestionEvidenceRecord {
+        atom_id: evidence.atom_id.clone(),
+        label_id: evidence.label_id.clone(),
+        label_name: evidence.label_name.clone(),
+        polarity: match evidence.polarity {
+            AtomPolarity::Positive => "positive".to_owned(),
+            AtomPolarity::Negative => "negative".to_owned(),
+        },
+        kind: match evidence.kind {
+            AtomKind::Name => "name",
+            AtomKind::Description => "description",
+            AtomKind::AppliesWhen => "applies_when",
+            AtomKind::PositiveExample => "positive_example",
+            AtomKind::ExcludesWhen => "excludes_when",
+            AtomKind::NegativeExample => "negative_example",
+        }
+        .to_owned(),
+        text: evidence.text.clone(),
+        score: evidence.similarity,
+    }
+}
+
+fn empty_label_suggestion(
+    task_id: String,
+    board_id: String,
+    mut diagnostics: Vec<String>,
+) -> LabelSuggestionResultRecord {
+    diagnostics.sort();
+    diagnostics.dedup();
+    let mut reason_codes = vec!["degraded_result".to_owned()];
+    reason_codes.extend(
+        diagnostics
+            .iter()
+            .filter(|diagnostic| is_stable_suggestion_diagnostic(diagnostic))
+            .cloned(),
+    );
+    reason_codes.sort();
+    reason_codes.dedup();
+    LabelSuggestionResultRecord {
+        task_id,
+        board_id,
+        selected_labels: Vec::new(),
+        candidates: Vec::new(),
+        coverage: 0.0,
+        coverage_cosine: 0.0,
+        residual_norm: 1.0,
+        needs_new_label: false,
+        reason_codes,
+        degraded: true,
+        diagnostics,
+    }
+}
+
+fn bounded_diagnostic_message(error: &impl std::fmt::Display) -> String {
+    let message = error.to_string();
+    if message.len() > 240 {
+        let boundary = message
+            .char_indices()
+            .map(|(index, _)| index)
+            .take_while(|index| *index <= 240)
+            .last()
+            .unwrap_or(0);
+        format!("{}...", &message[..boundary])
+    } else {
+        message
+    }
+}
+
+fn suggestion_reason_codes(
+    no_selected_labels: bool,
+    coverage: f32,
+    residual_norm: f32,
+    solver_needs_new_label: bool,
+    degraded: bool,
+    diagnostics: &[String],
+    solver_config: &SolverConfig,
+) -> Vec<String> {
+    const NEW_LABEL_COVERAGE_THRESHOLD: f32 = 0.55;
+    let mut reason_codes = Vec::new();
+    if degraded {
+        reason_codes.push("degraded_result".to_owned());
+        reason_codes.extend(
+            diagnostics
+                .iter()
+                .filter(|diagnostic| is_stable_suggestion_diagnostic(diagnostic))
+                .cloned(),
+        );
+    } else {
+        if no_selected_labels {
+            reason_codes.push("no_selected_labels".to_owned());
+        }
+        if coverage < NEW_LABEL_COVERAGE_THRESHOLD {
+            reason_codes.push("coverage_below_threshold".to_owned());
+        }
+        if residual_norm > solver_config.max_residual_norm {
+            reason_codes.push("residual_above_threshold".to_owned());
+        }
+        if solver_needs_new_label && reason_codes.is_empty() {
+            reason_codes.push("unexplained_residual".to_owned());
+        }
+    }
+    reason_codes.sort();
+    reason_codes.dedup();
+    reason_codes
+}
+
+fn is_coverage_review_reason(code: &str) -> bool {
+    matches!(
+        code,
+        "no_selected_labels"
+            | "coverage_below_threshold"
+            | "residual_above_threshold"
+            | "unexplained_residual"
+    )
+}
+
+fn is_stable_suggestion_diagnostic(diagnostic: &str) -> bool {
+    matches!(
+        diagnostic,
+        "vector_provider_unavailable"
+            | "vector_provider_mismatch"
+            | "vector_model_mismatch"
+            | "vector_dimension_mismatch"
+            | "vector_fingerprint_mismatch"
+            | "vector_generation_missing"
+            | "vector_query_error"
+            | "label_atom_index_dirty"
+            | "label_atom_index_error"
+            | "label_atom_index_empty"
+    )
 }
 fn normalize_label_name(value: &str) -> String {
     value.trim().to_lowercase()

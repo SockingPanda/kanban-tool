@@ -881,10 +881,19 @@ impl TursoStore {
             ));
         }
         let connection = self.connection().await?;
+        let now = now_ms();
         connection.execute(
             "UPDATE projection_state SET lifecycle_status='ready', active_generation=?1, active_fingerprint=?2, dirty=0, last_success_at=?3, last_error=NULL, updated_at=?3 WHERE projection IN ('vector_tasks','vector_label_atoms')",
-            (generation, fingerprint, now_ms()),
+            (generation, fingerprint, now),
         ).await?;
+        // vector_label_atoms 的 board ledger 是可重建状态镜像；只有在两个 vector
+        // projection 已经原子发布同一 generation 后，才能清除旧的 dirty 标记。
+        connection
+            .execute(
+                "UPDATE label_atom_index_boards SET dirty=0,last_rebuild_at=?1,last_error=NULL,updated_at=?1 WHERE store_name='vector_label_atoms'",
+                [now],
+            )
+            .await?;
         Ok(())
     }
 }

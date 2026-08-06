@@ -111,7 +111,6 @@ def is_schema_contract(path: str) -> bool:
             "justfile",
             ".cargo/config",
             ".cargo/config.toml",
-            "AGENTS.md",
             SCHEMA_TOOL_REGISTRY_APPROVAL,
         }
         or is_workspace_member_manifest(path)

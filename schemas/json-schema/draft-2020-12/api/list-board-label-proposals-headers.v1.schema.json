@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:list-board-label-proposals-headers:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "Accept-Language": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "List Board Label Proposals Headers v1",
+  "type": "object"
+}

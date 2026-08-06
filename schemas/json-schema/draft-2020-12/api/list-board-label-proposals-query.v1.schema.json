@@ -1,0 +1,29 @@
+{
+  "$defs": {
+    "LabelProposalStatusWire": {
+      "enum": [
+        "proposed",
+        "accepted",
+        "rejected"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:list-board-label-proposals-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LabelProposalStatusWire"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "title": "List Board Label Proposals Query v1",
+  "type": "object"
+}

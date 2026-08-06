@@ -167,7 +167,7 @@
       "type": "object"
     }
   },
-  "$id": "urn:kanban-tool:schema:cli:maintenance-cleanup-output.v1",
+  "$id": "urn:kanban-tool:schema:cli:maintenance-cleanup-output:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {

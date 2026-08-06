@@ -78,6 +78,18 @@
   },
   {
     "contracts": [
+      "api.list-board-label-proposals.path",
+      "api.list-board-label-proposals.query",
+      "api.list-board-label-proposals.headers",
+      "api.list-board-label-proposals.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/label-proposals",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
       "api.create-board-label.path",
       "api.create-board-label.headers",
       "api.create-board-label.request",
@@ -85,6 +97,19 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/labels",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.delete-board-label.path",
+      "api.delete-board-label.query",
+      "api.delete-board-label.headers",
+      "api.delete-board-label.response",
+      "api.error.response"
+    ],
+    "exclusion": null,
+    "key": "DELETE /api/v1/boards/:board/labels/:label_id",
     "migration": "adopted",
     "surface": "api"
   },
@@ -393,6 +418,19 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/labels",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.bootstrap-task-label.path",
+      "api.bootstrap-task-label.headers",
+      "api.bootstrap-task-label.request",
+      "api.bootstrap-task-label.response",
+      "api.error.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/tasks/:task_id/labels/bootstrap",
     "migration": "adopted",
     "surface": "api"
   },
@@ -1322,18 +1360,29 @@
     "surface": "api"
   },
   {
-    "contracts": [],
-    "exclusion": "隐藏的动态补全候选使用逐行文本协议，不是 JSON document",
-    "key": "__complete",
-    "migration": "excluded",
+    "contracts": [
+      "cli.board-list.output"
+    ],
+    "exclusion": null,
+    "key": "board list",
+    "migration": "adopted",
     "surface": "cli"
   },
   {
     "contracts": [
-      "cli.maintenance-backup.output"
+      "cli.board-create.output"
     ],
     "exclusion": null,
-    "key": "backup",
+    "key": "board create",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.board-show.output"
+    ],
+    "exclusion": null,
+    "key": "board show",
     "migration": "adopted",
     "surface": "cli"
   },
@@ -1357,400 +1406,285 @@
   },
   {
     "contracts": [
-      "cli.board-create.output"
+      "jsonl.board.input",
+      "jsonl.board.output"
     ],
     "exclusion": null,
-    "key": "board create",
+    "key": "type=board",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.board-current.output"
+      "jsonl.column.input",
+      "jsonl.column.output"
     ],
     "exclusion": null,
-    "key": "board current",
+    "key": "type=column",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.board-list.output"
+      "jsonl.task.input",
+      "jsonl.task.output"
     ],
     "exclusion": null,
-    "key": "board list",
+    "key": "type=task",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.board-show.output"
+      "jsonl.dependency.input",
+      "jsonl.dependency.output"
     ],
     "exclusion": null,
-    "key": "board show",
+    "key": "type=dependency",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.board-use.output"
+      "jsonl.run.input",
+      "jsonl.run.output"
     ],
     "exclusion": null,
-    "key": "board use",
+    "key": "type=run",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.checkpoint.output"
+      "jsonl.comment.input",
+      "jsonl.comment.output"
     ],
     "exclusion": null,
-    "key": "checkpoint",
+    "key": "type=comment",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.comment-add.output"
+      "jsonl.signal_observation.input",
+      "jsonl.signal_observation.output"
     ],
     "exclusion": null,
-    "key": "comment add",
+    "key": "type=signal_observation",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.comment-list.output"
+      "jsonl.signal.input",
+      "jsonl.signal.output"
     ],
     "exclusion": null,
-    "key": "comment list",
+    "key": "type=signal",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.attachment-add.output"
+      "jsonl.event.input",
+      "jsonl.event.output"
     ],
     "exclusion": null,
-    "key": "attachment add",
+    "key": "type=event",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.attachment-list.output"
+      "jsonl.attachment.input",
+      "jsonl.attachment.output"
     ],
     "exclusion": null,
-    "key": "attachment list",
+    "key": "type=attachment",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.attachment-remove.output"
+      "jsonl.label.input",
+      "jsonl.label.output"
     ],
     "exclusion": null,
-    "key": "attachment remove",
+    "key": "type=label",
     "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [],
-    "exclusion": "附件下载输出是原始 bytes 文件，不是 JSON machine envelope",
-    "key": "attachment download",
-    "migration": "excluded",
-    "surface": "cli"
-  },
-  {
-    "contracts": [],
-    "exclusion": "shell completion script 是文本脚本，不是 JSON document",
-    "key": "completions",
-    "migration": "excluded",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.config-show.output"
+      "jsonl.label_semantics.input",
+      "jsonl.label_semantics.output"
     ],
     "exclusion": null,
-    "key": "config show",
+    "key": "type=label_semantics",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.context-build.output"
+      "jsonl.label_atom.input",
+      "jsonl.label_atom.output"
     ],
     "exclusion": null,
-    "key": "context build",
+    "key": "type=label_atom",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.dep-add.output"
+      "jsonl.label_semantic_proposal.input",
+      "jsonl.label_semantic_proposal.output"
     ],
     "exclusion": null,
-    "key": "dep add",
+    "key": "type=label_semantic_proposal",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.dep-list.output"
+      "jsonl.label_ontology_observation.input",
+      "jsonl.label_ontology_observation.output"
     ],
     "exclusion": null,
-    "key": "dep list",
+    "key": "type=label_ontology_observation",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.dep-remove.output"
+      "jsonl.label_ontology_signal.input",
+      "jsonl.label_ontology_signal.output"
     ],
     "exclusion": null,
-    "key": "dep remove",
+    "key": "type=label_ontology_signal",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.doctor.output"
+      "jsonl.label_ontology_action.input",
+      "jsonl.label_ontology_action.output"
     ],
     "exclusion": null,
-    "key": "doctor",
+    "key": "type=label_ontology_action",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.entity-list.output"
+      "jsonl.label_ontology_action_atom_effect.input",
+      "jsonl.label_ontology_action_atom_effect.output"
     ],
     "exclusion": null,
-    "key": "entity list",
+    "key": "type=label_ontology_action_atom_effect",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.entity-show.output"
+      "jsonl.label_ontology_action_signal.input",
+      "jsonl.label_ontology_action_signal.output"
     ],
     "exclusion": null,
-    "key": "entity show",
+    "key": "type=label_ontology_action_signal",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.entity-upsert.output"
+      "jsonl.task_label.input",
+      "jsonl.task_label.output"
     ],
     "exclusion": null,
-    "key": "entity upsert",
+    "key": "type=task_label",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.events.output"
+      "jsonl.setting.input",
+      "jsonl.setting.output"
     ],
     "exclusion": null,
-    "key": "events",
+    "key": "type=setting",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "jsonl"
   },
   {
     "contracts": [
-      "cli.maintenance-export.output"
+      "metadata.decision.input"
     ],
     "exclusion": null,
-    "key": "export",
+    "key": "structured decision comment metadata input",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "metadata"
   },
   {
     "contracts": [
-      "cli.graph-neighbors.output"
+      "metadata.signal-record.input"
     ],
     "exclusion": null,
-    "key": "graph neighbors",
+    "key": "generic signal record input",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "metadata"
   },
   {
     "contracts": [
-      "cli.graph-query.output"
+      "metadata.signal-link.output"
     ],
     "exclusion": null,
-    "key": "graph query",
+    "key": "signal backlink comment metadata output",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "metadata"
   },
   {
     "contracts": [
-      "cli.graph-neighborhood.output"
+      "metadata.label-proposal-candidate.input"
     ],
     "exclusion": null,
-    "key": "graph neighborhood",
+    "key": "label proposal candidate input",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "metadata"
   },
   {
     "contracts": [
-      "cli.graph-map.output"
+      "metadata.ontology-record.input"
     ],
     "exclusion": null,
-    "key": "graph map",
+    "key": "label ontology observation input",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "metadata"
   },
   {
     "contracts": [
-      "cli.graph-rebuild.output"
+      "metadata.ontology-validation-evidence.input"
     ],
     "exclusion": null,
-    "key": "graph rebuild",
+    "key": "label ontology external validation evidence",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "metadata"
   },
   {
     "contracts": [
-      "cli.graph-status.output"
+      "config.project.input"
     ],
     "exclusion": null,
-    "key": "graph status",
+    "key": "project-local config after TOML decoding",
     "migration": "adopted",
-    "surface": "cli"
+    "surface": "config"
   },
   {
     "contracts": [
-      "cli.graph-sync.output"
+      "config.selected-worker-profile.input"
     ],
     "exclusion": null,
-    "key": "graph sync",
+    "key": "selected dispatcher worker profile after TOML decoding",
     "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Codex hook handler 使用独立 stdin/stdout protocol，不走通用 CLI JSON envelope",
-    "key": "hook codex handle failure",
-    "migration": "excluded",
-    "surface": "cli"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Codex hook handler 使用独立 stdin/stdout protocol，不走通用 CLI JSON envelope",
-    "key": "hook codex handle task-create",
-    "migration": "excluded",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.hook-codex-install.output"
-    ],
-    "exclusion": null,
-    "key": "hook codex install",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.hook-codex-status.output"
-    ],
-    "exclusion": null,
-    "key": "hook codex status",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.hook-codex-uninstall.output"
-    ],
-    "exclusion": null,
-    "key": "hook codex uninstall",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-import.output"
-    ],
-    "exclusion": null,
-    "key": "import",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.index-doctor.output"
-    ],
-    "exclusion": null,
-    "key": "index doctor",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.index-rebuild.output"
-    ],
-    "exclusion": null,
-    "key": "index rebuild",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.index-status.output"
-    ],
-    "exclusion": null,
-    "key": "index status",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.index-sync.output"
-    ],
-    "exclusion": null,
-    "key": "index sync",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.init.output"
-    ],
-    "exclusion": null,
-    "key": "init",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-rebuild-v1.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance rebuild",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-run-v1.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance run",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-status-v1.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance status",
-    "migration": "adopted",
-    "surface": "cli"
+    "surface": "config"
   },
   {
     "contracts": [
@@ -1758,6 +1692,15 @@
     ],
     "exclusion": null,
     "key": "label add",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-bootstrap.output"
+    ],
+    "exclusion": null,
+    "key": "label bootstrap",
     "migration": "adopted",
     "surface": "cli"
   },
@@ -1812,6 +1755,15 @@
     ],
     "exclusion": null,
     "key": "label create",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-delete.output"
+    ],
+    "exclusion": null,
+    "key": "label delete",
     "migration": "adopted",
     "surface": "cli"
   },
@@ -2147,6 +2099,392 @@
     "surface": "cli"
   },
   {
+    "contracts": [],
+    "exclusion": "隐藏的动态补全候选使用逐行文本协议，不是 JSON document",
+    "key": "__complete",
+    "migration": "excluded",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-backup.output"
+    ],
+    "exclusion": null,
+    "key": "backup",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.board-current.output"
+    ],
+    "exclusion": null,
+    "key": "board current",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.board-use.output"
+    ],
+    "exclusion": null,
+    "key": "board use",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.checkpoint.output"
+    ],
+    "exclusion": null,
+    "key": "checkpoint",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.comment-add.output"
+    ],
+    "exclusion": null,
+    "key": "comment add",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.comment-list.output"
+    ],
+    "exclusion": null,
+    "key": "comment list",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.attachment-add.output"
+    ],
+    "exclusion": null,
+    "key": "attachment add",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.attachment-list.output"
+    ],
+    "exclusion": null,
+    "key": "attachment list",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.attachment-remove.output"
+    ],
+    "exclusion": null,
+    "key": "attachment remove",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "附件下载输出是原始 bytes 文件，不是 JSON machine envelope",
+    "key": "attachment download",
+    "migration": "excluded",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "shell completion script 是文本脚本，不是 JSON document",
+    "key": "completions",
+    "migration": "excluded",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.config-show.output"
+    ],
+    "exclusion": null,
+    "key": "config show",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.context-build.output"
+    ],
+    "exclusion": null,
+    "key": "context build",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.doctor.output"
+    ],
+    "exclusion": null,
+    "key": "doctor",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.entity-list.output"
+    ],
+    "exclusion": null,
+    "key": "entity list",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.entity-show.output"
+    ],
+    "exclusion": null,
+    "key": "entity show",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.entity-upsert.output"
+    ],
+    "exclusion": null,
+    "key": "entity upsert",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.events.output"
+    ],
+    "exclusion": null,
+    "key": "events",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-export.output"
+    ],
+    "exclusion": null,
+    "key": "export",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-neighbors.output"
+    ],
+    "exclusion": null,
+    "key": "graph neighbors",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-query.output"
+    ],
+    "exclusion": null,
+    "key": "graph query",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-neighborhood.output"
+    ],
+    "exclusion": null,
+    "key": "graph neighborhood",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-map.output"
+    ],
+    "exclusion": null,
+    "key": "graph map",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-rebuild.output"
+    ],
+    "exclusion": null,
+    "key": "graph rebuild",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-status.output"
+    ],
+    "exclusion": null,
+    "key": "graph status",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-sync.output"
+    ],
+    "exclusion": null,
+    "key": "graph sync",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "Codex hook handler 使用独立 stdin/stdout protocol，不走通用 CLI JSON envelope",
+    "key": "hook codex handle failure",
+    "migration": "excluded",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "Codex hook handler 使用独立 stdin/stdout protocol，不走通用 CLI JSON envelope",
+    "key": "hook codex handle task-create",
+    "migration": "excluded",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.hook-codex-install.output"
+    ],
+    "exclusion": null,
+    "key": "hook codex install",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.hook-codex-status.output"
+    ],
+    "exclusion": null,
+    "key": "hook codex status",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.hook-codex-uninstall.output"
+    ],
+    "exclusion": null,
+    "key": "hook codex uninstall",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-import.output"
+    ],
+    "exclusion": null,
+    "key": "import",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.index-doctor.output"
+    ],
+    "exclusion": null,
+    "key": "index doctor",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.index-rebuild.output"
+    ],
+    "exclusion": null,
+    "key": "index rebuild",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.index-status.output"
+    ],
+    "exclusion": null,
+    "key": "index status",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.index-sync.output"
+    ],
+    "exclusion": null,
+    "key": "index sync",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.init.output"
+    ],
+    "exclusion": null,
+    "key": "init",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-rebuild-v1.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance rebuild",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-run-v1.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance run",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-status-v1.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance status",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.dep-add.output"
+    ],
+    "exclusion": null,
+    "key": "dep add",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.dep-list.output"
+    ],
+    "exclusion": null,
+    "key": "dep list",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.dep-remove.output"
+    ],
+    "exclusion": null,
+    "key": "dep remove",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
     "contracts": [
       "cli.stats.output"
     ],
@@ -2454,293 +2792,11 @@
   },
   {
     "contracts": [
-      "metadata.decision.input"
-    ],
-    "exclusion": null,
-    "key": "structured decision comment metadata input",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "metadata.signal-record.input"
-    ],
-    "exclusion": null,
-    "key": "generic signal record input",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "metadata.signal-link.output"
-    ],
-    "exclusion": null,
-    "key": "signal backlink comment metadata output",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "metadata.label-proposal-candidate.input"
-    ],
-    "exclusion": null,
-    "key": "label proposal candidate input",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "metadata.ontology-record.input"
-    ],
-    "exclusion": null,
-    "key": "label ontology observation input",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "metadata.ontology-validation-evidence.input"
-    ],
-    "exclusion": null,
-    "key": "label ontology external validation evidence",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
       "api.maintenance-path.request"
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/{operation}",
     "migration": "adopted",
     "surface": "api"
-  },
-  {
-    "contracts": [
-      "config.project.input"
-    ],
-    "exclusion": null,
-    "key": "project-local config after TOML decoding",
-    "migration": "adopted",
-    "surface": "config"
-  },
-  {
-    "contracts": [
-      "config.selected-worker-profile.input"
-    ],
-    "exclusion": null,
-    "key": "selected dispatcher worker profile after TOML decoding",
-    "migration": "adopted",
-    "surface": "config"
-  },
-  {
-    "contracts": [
-      "jsonl.board.input",
-      "jsonl.board.output"
-    ],
-    "exclusion": null,
-    "key": "type=board",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.column.input",
-      "jsonl.column.output"
-    ],
-    "exclusion": null,
-    "key": "type=column",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.task.input",
-      "jsonl.task.output"
-    ],
-    "exclusion": null,
-    "key": "type=task",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.dependency.input",
-      "jsonl.dependency.output"
-    ],
-    "exclusion": null,
-    "key": "type=dependency",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.run.input",
-      "jsonl.run.output"
-    ],
-    "exclusion": null,
-    "key": "type=run",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.comment.input",
-      "jsonl.comment.output"
-    ],
-    "exclusion": null,
-    "key": "type=comment",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.signal_observation.input",
-      "jsonl.signal_observation.output"
-    ],
-    "exclusion": null,
-    "key": "type=signal_observation",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.signal.input",
-      "jsonl.signal.output"
-    ],
-    "exclusion": null,
-    "key": "type=signal",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.event.input",
-      "jsonl.event.output"
-    ],
-    "exclusion": null,
-    "key": "type=event",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.attachment.input",
-      "jsonl.attachment.output"
-    ],
-    "exclusion": null,
-    "key": "type=attachment",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.label.input",
-      "jsonl.label.output"
-    ],
-    "exclusion": null,
-    "key": "type=label",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.label_semantics.input",
-      "jsonl.label_semantics.output"
-    ],
-    "exclusion": null,
-    "key": "type=label_semantics",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.label_atom.input",
-      "jsonl.label_atom.output"
-    ],
-    "exclusion": null,
-    "key": "type=label_atom",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.label_semantic_proposal.input",
-      "jsonl.label_semantic_proposal.output"
-    ],
-    "exclusion": null,
-    "key": "type=label_semantic_proposal",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.label_ontology_observation.input",
-      "jsonl.label_ontology_observation.output"
-    ],
-    "exclusion": null,
-    "key": "type=label_ontology_observation",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.label_ontology_signal.input",
-      "jsonl.label_ontology_signal.output"
-    ],
-    "exclusion": null,
-    "key": "type=label_ontology_signal",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.label_ontology_action.input",
-      "jsonl.label_ontology_action.output"
-    ],
-    "exclusion": null,
-    "key": "type=label_ontology_action",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.label_ontology_action_atom_effect.input",
-      "jsonl.label_ontology_action_atom_effect.output"
-    ],
-    "exclusion": null,
-    "key": "type=label_ontology_action_atom_effect",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.label_ontology_action_signal.input",
-      "jsonl.label_ontology_action_signal.output"
-    ],
-    "exclusion": null,
-    "key": "type=label_ontology_action_signal",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.task_label.input",
-      "jsonl.task_label.output"
-    ],
-    "exclusion": null,
-    "key": "type=task_label",
-    "migration": "adopted",
-    "surface": "jsonl"
-  },
-  {
-    "contracts": [
-      "jsonl.setting.input",
-      "jsonl.setting.output"
-    ],
-    "exclusion": null,
-    "key": "type=setting",
-    "migration": "adopted",
-    "surface": "jsonl"
   }
 ]

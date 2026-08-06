@@ -90,7 +90,7 @@ pub trait TaskDetailRead {
 
 impl<C> TaskDetailRead for KanbanService<C>
 where
-    C: Clock,
+    C: Clock + Sync,
 {
     async fn get_task_detail_parts(&self, task_id: &str) -> Result<TaskDetailRecord> {
         let task = self.get_task(task_id).await?;
@@ -349,7 +349,7 @@ fn signal_status_priority(status: &str) -> u8 {
 
 impl<C> KanbanService<C>
 where
-    C: Clock,
+    C: Clock + Sync,
 {
     pub async fn get_task_details(&self, task_id: &str) -> Result<TaskDetailRecord> {
         let task_id = task_id.trim();

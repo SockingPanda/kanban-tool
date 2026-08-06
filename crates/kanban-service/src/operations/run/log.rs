@@ -6,13 +6,20 @@ use tokio::{
     io::{AsyncReadExt, AsyncSeekExt},
 };
 
-use crate::{KanbanService, RunLogRecord};
+use crate::KanbanService;
 
 /// 未来 run-log reader 暴露的最大字节数。
 ///
 /// 规范 contract 有意不提供 tail query；实现该 operation 后，reader 始终使用这个有
 /// 界限的后缀。
 pub const RUN_LOG_TAIL_BYTES: usize = 256 * 1024;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunLogRecord {
+    pub run_id: String,
+    pub content: String,
+    pub truncated: bool,
+}
 
 impl<C> KanbanService<C>
 where

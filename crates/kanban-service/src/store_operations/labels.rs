@@ -1335,7 +1335,7 @@ mod tests {
         let row = first_row(
             connection
                 .query(
-                    "SELECT kind, COUNT(*) FROM task_events WHERE task_id = 't_labels_bootstrap' AND kind = 'task.label.added' GROUP BY kind",
+                    "SELECT COUNT(*) FROM task_events WHERE task_id = 't_labels_bootstrap' AND kind = 'task.label.added'",
                     (),
                 )
                 .await
@@ -1344,8 +1344,8 @@ mod tests {
         .await
         .expect("event row");
         assert_eq!(
-            text_value(row.get_value(0).unwrap(), "event kind").unwrap(),
-            "task.label.added"
+            integer_value(row.get_value(0).unwrap(), "label event count").unwrap(),
+            1
         );
 
         let replacement = store

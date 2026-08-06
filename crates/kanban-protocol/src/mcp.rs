@@ -5,11 +5,13 @@
 //! [`crate::endpoint_catalog`] 中真实存在的领域 HTTP operation；selector adapter
 //! 需要先解析任务时，可以在同一个条目中声明多个 operation。
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt};
 
 use serde::Serialize;
 
-use crate::{ContractSurface, endpoint_catalog};
+use crate::{
+    contract_catalog::McpExposure, endpoint_catalog, ContractSurface, OperationDeclaration,
+};
 
 /// MCP tool 的能力分类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -60,6 +62,275 @@ pub const MCP_HOST_ADMIN_OPERATION_IDS: &[&str] = &[
     "api.maintenance-cleanup",
     "api.maintenance-import-v30",
 ];
+
+/// declaration source 投影时的冲突。
+///
+/// 一个 tool 可以由多个 parent declaration 提供 operation；只有同名 tool 的
+/// exposure 与 invariants 完全一致时，projection 才会合并其 operation。这样新增
+/// family 不需要复制 MCP registry，但错误的跨边界绑定仍会在 source 层 fail closed。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum McpProjectionError {
+    /// tool 名称为空，无法形成稳定的 adapter binding。
+    EmptyToolName { operation_id: &'static str },
+    /// tool 没有任何 HTTP operation，无法形成可调用 binding。
+    EmptyToolOperations {
+        operation_id: &'static str,
+        tool_name: &'static str,
+    },
+    /// binding 中出现空 operation id。
+    EmptyOperationId {
+        operation_id: &'static str,
+        tool_name: &'static str,
+    },
+    /// 同名 tool 的 exposure 不一致。
+    ToolExposureConflict {
+        tool_name: &'static str,
+        first: McpOperationClass,
+        second: McpOperationClass,
+    },
+    /// 同名 tool 的边界 invariants 不一致。
+    ToolInvariantConflict { tool_name: &'static str },
+    /// 同一个 operation 被 declaration source 同时归入 Domain 与 HostAdmin。
+    OperationExposureConflict { operation_id: &'static str },
+}
+
+impl fmt::Display for McpProjectionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyToolName { operation_id } => {
+                write!(
+                    formatter,
+                    "MCP operation {operation_id} 的 tool name 不能为空"
+                )
+            }
+            Self::EmptyToolOperations {
+                operation_id,
+                tool_name,
+            } => write!(
+                formatter,
+                "MCP operation {operation_id} 的 tool {tool_name} 缺少 HTTP operation binding"
+            ),
+            Self::EmptyOperationId {
+                operation_id,
+                tool_name,
+            } => write!(
+                formatter,
+                "MCP operation {operation_id} 的 tool {tool_name} 含空 HTTP operation id"
+            ),
+            Self::ToolExposureConflict {
+                tool_name,
+                first,
+                second,
+            } => write!(
+                formatter,
+                "MCP tool {tool_name} 的 exposure 冲突：{first:?} 与 {second:?}"
+            ),
+            Self::ToolInvariantConflict { tool_name } => {
+                write!(formatter, "MCP tool {tool_name} 的 invariants 冲突")
+            }
+            Self::OperationExposureConflict { operation_id } => write!(
+                formatter,
+                "MCP operation {operation_id} 同时属于 Domain 与 HostAdmin"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for McpProjectionError {}
+
+/// 从一个或多个 declaration parent 投影出的 MCP tool binding。
+///
+/// `http_operations` 是 owned projection：同名 tool 可以跨 family 声明多个 operation，
+/// projection 会按第一次出现的 tool 顺序合并并去重。字段使用静态字符串是因为
+/// `OperationDeclaration`/`McpToolBinding` 的 wire literal 本身就是静态 source。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct McpToolBindingProjection {
+    /// rmcp adapter 对外暴露的 canonical tool name。
+    pub tool_name: &'static str,
+    /// 该 tool 可能调用的 operation，按 source 首次出现顺序排列。
+    pub http_operations: Vec<&'static str>,
+    /// declaration policy 归属的能力分类。
+    pub class: McpOperationClass,
+    /// declaration policy 声明的边界不变量，按首次出现顺序去重。
+    pub invariants: Vec<McpOperationInvariant>,
+}
+
+/// MCP policy 的纯 declaration projection。
+///
+/// 该 projection 不访问 endpoint registry、handler 或数据库；它只消费输入的
+/// `OperationDeclaration` 数组，因此可在任意 family source、测试 fixture 或最终
+/// canonical catalog 上重复计算。所有集合均按 declaration/binding source 顺序去重。
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+pub struct McpPolicyProjection {
+    /// 完整 tool binding，第一次出现的 tool 决定结果顺序。
+    pub tool_bindings: Vec<McpToolBindingProjection>,
+    /// 归入 Domain 的 operation id（含 policy parent 与其 tool binding 引用）。
+    pub domain_operations: Vec<&'static str>,
+    /// 归入 HostAdmin 的 operation id（含 policy parent 与其 tool binding 引用）。
+    pub host_admin_operations: Vec<&'static str>,
+    /// Domain policy 使用过的 invariants，按 source 顺序去重。
+    pub domain_invariants: Vec<McpOperationInvariant>,
+    /// HostAdmin policy 使用过的 invariants，按 source 顺序去重。
+    pub host_admin_invariants: Vec<McpOperationInvariant>,
+}
+
+impl McpPolicyProjection {
+    /// 返回按 source 顺序投影的 tool binding。
+    pub fn tool_bindings(&self) -> &[McpToolBindingProjection] {
+        &self.tool_bindings
+    }
+
+    /// 返回指定能力分类的 operation 集合。
+    pub fn operations(&self, class: McpOperationClass) -> &[&'static str] {
+        match class {
+            McpOperationClass::Domain => &self.domain_operations,
+            McpOperationClass::HostAdmin => &self.host_admin_operations,
+        }
+    }
+
+    /// 返回指定能力分类的不变量集合。
+    pub fn invariants(&self, class: McpOperationClass) -> &[McpOperationInvariant] {
+        match class {
+            McpOperationClass::Domain => &self.domain_invariants,
+            McpOperationClass::HostAdmin => &self.host_admin_invariants,
+        }
+    }
+}
+
+/// 将任意 operation declaration source 投影为 MCP policy。
+///
+/// projection 是纯函数：不排序、不依赖全局 registry，也不假设输入来自某个特定
+/// family。重复 operation/tool 会以输入中第一次出现的位置为准；同名 tool 的
+/// operation 会合并，exposure 或 invariants 冲突则返回错误。
+pub fn project_mcp_policy(
+    declarations: &[OperationDeclaration],
+) -> Result<McpPolicyProjection, McpProjectionError> {
+    let mut projection = McpPolicyProjection::default();
+    let mut tool_indexes: BTreeMap<&'static str, usize> = BTreeMap::new();
+
+    for declaration in declarations {
+        let Some(policy) = declaration.mcp_policy else {
+            continue;
+        };
+        let class = match policy.exposure {
+            McpExposure::Domain => McpOperationClass::Domain,
+            McpExposure::HostAdmin => McpOperationClass::HostAdmin,
+        };
+
+        push_operation(&mut projection, class, declaration.operation_id)?;
+        for invariant in policy.invariants {
+            push_invariant(&mut projection, class, *invariant);
+        }
+
+        for binding in policy.tool_bindings {
+            if binding.tool_name.is_empty() {
+                return Err(McpProjectionError::EmptyToolName {
+                    operation_id: declaration.operation_id,
+                });
+            }
+            if binding.http_operations.is_empty() {
+                return Err(McpProjectionError::EmptyToolOperations {
+                    operation_id: declaration.operation_id,
+                    tool_name: binding.tool_name,
+                });
+            }
+            for operation_id in binding.http_operations {
+                if operation_id.is_empty() {
+                    return Err(McpProjectionError::EmptyOperationId {
+                        operation_id: declaration.operation_id,
+                        tool_name: binding.tool_name,
+                    });
+                }
+                push_operation(&mut projection, class, operation_id)?;
+            }
+
+            if let Some(&tool_index) = tool_indexes.get(binding.tool_name) {
+                let tool = &mut projection.tool_bindings[tool_index];
+                if tool.class != class {
+                    return Err(McpProjectionError::ToolExposureConflict {
+                        tool_name: binding.tool_name,
+                        first: tool.class,
+                        second: class,
+                    });
+                }
+                if !same_invariants(&tool.invariants, policy.invariants) {
+                    return Err(McpProjectionError::ToolInvariantConflict {
+                        tool_name: binding.tool_name,
+                    });
+                }
+                for operation_id in binding.http_operations {
+                    if !tool.http_operations.contains(operation_id) {
+                        tool.http_operations.push(operation_id);
+                    }
+                }
+            } else {
+                let mut http_operations = Vec::new();
+                for operation_id in binding.http_operations {
+                    if !http_operations.contains(operation_id) {
+                        http_operations.push(*operation_id);
+                    }
+                }
+                let mut invariants = Vec::new();
+                for invariant in policy.invariants {
+                    if !invariants.contains(invariant) {
+                        invariants.push(*invariant);
+                    }
+                }
+                tool_indexes.insert(binding.tool_name, projection.tool_bindings.len());
+                projection.tool_bindings.push(McpToolBindingProjection {
+                    tool_name: binding.tool_name,
+                    http_operations,
+                    class,
+                    invariants,
+                });
+            }
+        }
+    }
+
+    Ok(projection)
+}
+
+fn push_operation(
+    projection: &mut McpPolicyProjection,
+    class: McpOperationClass,
+    operation_id: &'static str,
+) -> Result<(), McpProjectionError> {
+    let (operations, opposite) = match class {
+        McpOperationClass::Domain => (
+            &mut projection.domain_operations,
+            &projection.host_admin_operations,
+        ),
+        McpOperationClass::HostAdmin => (
+            &mut projection.host_admin_operations,
+            &projection.domain_operations,
+        ),
+    };
+    if opposite.contains(&operation_id) {
+        return Err(McpProjectionError::OperationExposureConflict { operation_id });
+    }
+    if !operations.contains(&operation_id) {
+        operations.push(operation_id);
+    }
+    Ok(())
+}
+
+fn push_invariant(
+    projection: &mut McpPolicyProjection,
+    class: McpOperationClass,
+    invariant: McpOperationInvariant,
+) {
+    let invariants = match class {
+        McpOperationClass::Domain => &mut projection.domain_invariants,
+        McpOperationClass::HostAdmin => &mut projection.host_admin_invariants,
+    };
+    if !invariants.contains(&invariant) {
+        invariants.push(invariant);
+    }
+}
+
+fn same_invariants(first: &[McpOperationInvariant], second: &[McpOperationInvariant]) -> bool {
+    first.len() == second.len() && first.iter().all(|invariant| second.contains(invariant))
+}
 
 /// 一个 MCP tool 的 canonical name、HTTP operation 绑定和边界不变量。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -296,6 +567,7 @@ pub fn validate_mcp_operation_catalog(catalog: &[McpOperationDescriptor]) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ContractSurface, McpPolicy, McpToolBinding, MigrationState, OperationDeclaration};
 
     #[test]
     fn catalog_is_valid_and_has_unique_sorted_tool_names() {
@@ -350,5 +622,251 @@ mod tests {
                 .expect_err("绑定 host-admin endpoint 时必须失败")
                 .contains("host-admin")
         );
+    }
+
+    const TEST_DOMAIN_INVARIANTS: &[McpOperationInvariant] = &[
+        McpOperationInvariant::CanonicalHostOnly,
+        McpOperationInvariant::SharedApplicationService,
+        McpOperationInvariant::NoHostAdminSurface,
+    ];
+    const TEST_HOST_ADMIN_INVARIANTS: &[McpOperationInvariant] = &[];
+    const MERGED_FIRST_BINDING: &[McpToolBinding] = &[McpToolBinding {
+        tool_name: "merged",
+        http_operations: &["api.example-a", "api.shared"],
+    }];
+    const MERGED_SECOND_BINDING: &[McpToolBinding] = &[McpToolBinding {
+        tool_name: "merged",
+        http_operations: &["api.shared", "api.example-b"],
+    }];
+    const STATS_BINDING: &[McpToolBinding] = &[McpToolBinding {
+        tool_name: "stats",
+        http_operations: &["api.get-stats"],
+    }];
+    const DOMAIN_POLICY: McpPolicy = McpPolicy {
+        exposure: McpExposure::Domain,
+        tool_bindings: MERGED_FIRST_BINDING,
+        invariants: TEST_DOMAIN_INVARIANTS,
+    };
+    const MERGED_POLICY: McpPolicy = McpPolicy {
+        exposure: McpExposure::Domain,
+        tool_bindings: MERGED_SECOND_BINDING,
+        invariants: TEST_DOMAIN_INVARIANTS,
+    };
+    const STATS_POLICY: McpPolicy = McpPolicy {
+        exposure: McpExposure::Domain,
+        tool_bindings: STATS_BINDING,
+        invariants: TEST_DOMAIN_INVARIANTS,
+    };
+    const HOST_ADMIN_POLICY: McpPolicy = McpPolicy {
+        exposure: McpExposure::HostAdmin,
+        tool_bindings: &[],
+        invariants: TEST_HOST_ADMIN_INVARIANTS,
+    };
+    const TEST_DOMAIN_FIRST: OperationDeclaration = OperationDeclaration::new(
+        "api.example-a",
+        ContractSurface::Api,
+        None,
+        None,
+        "example-a",
+        "example-a",
+        MigrationState::Adopted,
+        &[],
+    )
+    .with_mcp_policy(DOMAIN_POLICY);
+    const TEST_DOMAIN_SECOND: OperationDeclaration = OperationDeclaration::new(
+        "api.example-b",
+        ContractSurface::Api,
+        None,
+        None,
+        "example-b",
+        "example-b",
+        MigrationState::Adopted,
+        &[],
+    )
+    .with_mcp_policy(MERGED_POLICY);
+    const TEST_STATS: OperationDeclaration = OperationDeclaration::new(
+        "api.get-stats",
+        ContractSurface::Api,
+        None,
+        None,
+        "stats",
+        "stats",
+        MigrationState::Adopted,
+        &[],
+    )
+    .with_mcp_policy(STATS_POLICY);
+    const TEST_HOST_ADMIN: OperationDeclaration = OperationDeclaration::new(
+        "api.example-admin",
+        ContractSurface::Api,
+        None,
+        None,
+        "example-admin",
+        "example-admin",
+        MigrationState::Adopted,
+        &[],
+    )
+    .with_mcp_policy(HOST_ADMIN_POLICY);
+    const TEST_HOST_ADMIN_COLLISION: OperationDeclaration = OperationDeclaration::new(
+        "api.example-a",
+        ContractSurface::Api,
+        None,
+        None,
+        "example-a-admin",
+        "example-a-admin",
+        MigrationState::Adopted,
+        &[],
+    )
+    .with_mcp_policy(HOST_ADMIN_POLICY);
+
+    #[test]
+    fn policy_projection_merges_tools_and_deduplicates_in_source_order() {
+        let projection = project_mcp_policy(&[
+            TEST_DOMAIN_FIRST,
+            TEST_DOMAIN_SECOND,
+            TEST_STATS,
+            TEST_HOST_ADMIN,
+        ])
+        .expect("声明 policy 应能投影");
+
+        assert_eq!(
+            projection
+                .tool_bindings()
+                .iter()
+                .map(|binding| binding.tool_name)
+                .collect::<Vec<_>>(),
+            ["merged", "stats"]
+        );
+        assert_eq!(
+            projection.tool_bindings()[0].http_operations,
+            ["api.example-a", "api.shared", "api.example-b"]
+        );
+        assert_eq!(
+            projection.domain_operations,
+            [
+                "api.example-a",
+                "api.shared",
+                "api.example-b",
+                "api.get-stats"
+            ]
+        );
+        assert_eq!(projection.host_admin_operations, ["api.example-admin"]);
+        assert_eq!(
+            projection.invariants(McpOperationClass::Domain),
+            TEST_DOMAIN_INVARIANTS
+        );
+        assert_eq!(
+            projection.invariants(McpOperationClass::HostAdmin),
+            TEST_HOST_ADMIN_INVARIANTS
+        );
+        assert_eq!(
+            projection.tool_bindings()[1].class,
+            McpOperationClass::Domain
+        );
+        assert_eq!(projection.tool_bindings()[1].tool_name, "stats");
+    }
+
+    #[test]
+    fn policy_projection_rejects_cross_boundary_and_policy_conflicts() {
+        const HOST_TOOL_BINDING: &[McpToolBinding] = &[McpToolBinding {
+            tool_name: "merged",
+            http_operations: &["api.example-admin"],
+        }];
+        const HOST_TOOL_POLICY: McpPolicy = McpPolicy {
+            exposure: McpExposure::HostAdmin,
+            tool_bindings: HOST_TOOL_BINDING,
+            invariants: TEST_HOST_ADMIN_INVARIANTS,
+        };
+        const HOST_TOOL: OperationDeclaration = OperationDeclaration::new(
+            "api.example-admin-tool",
+            ContractSurface::Api,
+            None,
+            None,
+            "example-admin-tool",
+            "example-admin-tool",
+            MigrationState::Adopted,
+            &[],
+        )
+        .with_mcp_policy(HOST_TOOL_POLICY);
+
+        assert!(matches!(
+            project_mcp_policy(&[TEST_DOMAIN_FIRST, HOST_TOOL]),
+            Err(McpProjectionError::ToolExposureConflict {
+                tool_name: "merged",
+                ..
+            })
+        ));
+
+        const OTHER_DOMAIN_INVARIANTS: &[McpOperationInvariant] =
+            &[McpOperationInvariant::CanonicalHostOnly];
+        const OTHER_DOMAIN_POLICY: McpPolicy = McpPolicy {
+            exposure: McpExposure::Domain,
+            tool_bindings: MERGED_SECOND_BINDING,
+            invariants: OTHER_DOMAIN_INVARIANTS,
+        };
+        const OTHER_DOMAIN: OperationDeclaration = OperationDeclaration::new(
+            "api.example-c",
+            ContractSurface::Api,
+            None,
+            None,
+            "example-c",
+            "example-c",
+            MigrationState::Adopted,
+            &[],
+        )
+        .with_mcp_policy(OTHER_DOMAIN_POLICY);
+        assert!(matches!(
+            project_mcp_policy(&[TEST_DOMAIN_FIRST, OTHER_DOMAIN]),
+            Err(McpProjectionError::ToolInvariantConflict {
+                tool_name: "merged"
+            })
+        ));
+
+        assert!(matches!(
+            project_mcp_policy(&[TEST_DOMAIN_FIRST, TEST_HOST_ADMIN_COLLISION]),
+            Err(McpProjectionError::OperationExposureConflict {
+                operation_id: "api.example-a"
+            })
+        ));
+
+        const EMPTY_TOOL_BINDING: &[McpToolBinding] = &[McpToolBinding {
+            tool_name: "empty",
+            http_operations: &[],
+        }];
+        const EMPTY_TOOL_POLICY: McpPolicy = McpPolicy {
+            exposure: McpExposure::Domain,
+            tool_bindings: EMPTY_TOOL_BINDING,
+            invariants: TEST_DOMAIN_INVARIANTS,
+        };
+        const EMPTY_TOOL: OperationDeclaration = OperationDeclaration::new(
+            "api.empty",
+            ContractSurface::Api,
+            None,
+            None,
+            "empty",
+            "empty",
+            MigrationState::Adopted,
+            &[],
+        )
+        .with_mcp_policy(EMPTY_TOOL_POLICY);
+        assert!(matches!(
+            project_mcp_policy(&[EMPTY_TOOL]),
+            Err(McpProjectionError::EmptyToolOperations {
+                operation_id: "api.empty",
+                tool_name: "empty"
+            })
+        ));
+    }
+
+    #[test]
+    fn policy_projection_consumes_current_declaration_source_without_static_inventory() {
+        let projection = project_mcp_policy(crate::operation_catalog())
+            .expect("当前 declaration family 应可投影");
+        assert!(!projection.tool_bindings().is_empty());
+        assert!(!projection.domain_operations.is_empty());
+        assert!(projection.host_admin_operations.is_empty());
+        assert!(projection
+            .tool_bindings()
+            .windows(2)
+            .all(|window| window[0].tool_name != window[1].tool_name));
     }
 }

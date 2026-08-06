@@ -159,7 +159,8 @@ pub use lifecycle::{
 };
 pub use mcp::{
     MCP_HOST_ADMIN_OPERATION_IDS, MCP_OPERATION_CATALOG, McpOperationClass, McpOperationDescriptor,
-    McpOperationInvariant, mcp_operation_catalog, mcp_operation_descriptor,
+    McpOperationInvariant, McpPolicyProjection, McpProjectionError, McpToolBindingProjection,
+    mcp_operation_catalog, mcp_operation_descriptor, project_mcp_policy,
     validate_mcp_operation_catalog,
 };
 pub use ontology::{LabelOntologySignalWire, LabelOntologySignalsResponse};

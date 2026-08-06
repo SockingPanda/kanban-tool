@@ -368,6 +368,7 @@ struct Snapshot {
 struct ReadOnlySource {
     directory: PathBuf,
     path: PathBuf,
+    wal_path: Option<PathBuf>,
 }
 
 impl Drop for ReadOnlySource {
@@ -382,7 +383,7 @@ struct Attachment {
     rel_path: String,
     sha256: String,
     size: i64,
-    path: PathBuf,
+    bytes: Vec<u8>,
 }
 
 /// host service 使用的自由函数入口。
@@ -575,7 +576,16 @@ fn read_snapshot(path: &Path) -> Result<Snapshot, StoreError> {
         &columns,
     )?;
     let schema_fingerprint = schema_fingerprint();
-    let source_fingerprint = source_fingerprint(&path, &schema_fingerprint, &attachments)?;
+    let snapshot_database =
+        fs::read(&readonly.path).map_err(|e| error(format!("读取 SQLite 快照失败: {e}")))?;
+    let snapshot_wal = readonly
+        .wal_path
+        .as_deref()
+        .map(fs::read)
+        .transpose()
+        .map_err(|e| error(format!("读取 SQLite WAL 快照失败: {e}")))?;
+    let source_fingerprint =
+        source_fingerprint(&snapshot_database, snapshot_wal.as_deref(), &attachments);
     Ok(Snapshot {
         source_path: path,
         schema_fingerprint,
@@ -618,6 +628,7 @@ fn copy_source_for_read(path: &Path) -> Result<ReadOnlySource, StoreError> {
             "复制源 SQLite 到只读临时目录失败: {io_error}"
         )));
     }
+    let mut wal_path = None;
     for suffix in ["-wal", "-shm"] {
         let source_sidecar = PathBuf::from(format!("{}{suffix}", path.display()));
         if source_sidecar.is_file() {
@@ -628,11 +639,15 @@ fn copy_source_for_read(path: &Path) -> Result<ReadOnlySource, StoreError> {
                     "复制源 SQLite {suffix} sidecar 失败: {io_error}"
                 )));
             }
+            if suffix == "-wal" {
+                wal_path = Some(PathBuf::from(format!("{}-wal", copied_path.display())));
+            }
         }
     }
     Ok(ReadOnlySource {
         directory,
         path: copied_path,
+        wal_path,
     })
 }
 
@@ -1024,10 +1039,14 @@ fn read_attachments(
         if !canonical.starts_with(&root) {
             return Err(error(format!("附件 {idv} 路径穿越")));
         }
+        let bytes = fs::read(&path).map_err(|e| error(format!("读取附件 {idv} 失败: {e}")))?;
         let expected_size = integer(row.get(size), "task_attachments.size_bytes")?;
         let expected_sha = optional_text(row.get(sha), "task_attachments.sha256")?;
-        let observed_sha = sha256_file(&path)?;
-        if expected_size < 0 || meta.len() != expected_size as u64 {
+        let observed_sha = sha256_bytes(&bytes);
+        if expected_size < 0
+            || meta.len() != expected_size as u64
+            || bytes.len() != expected_size as usize
+        {
             return Err(error(format!("附件 {idv} size 不匹配")));
         }
         if let Some(value) = expected_sha.as_deref()
@@ -1040,7 +1059,7 @@ fn read_attachments(
             rel_path: path_to_string(&relv)?,
             sha256: expected_sha.unwrap_or(observed_sha),
             size: expected_size,
-            path,
+            bytes,
         });
     }
     Ok(out)
@@ -1072,32 +1091,32 @@ fn schema_fingerprint() -> String {
     format!("columns-sha256:{:x}", digest.finalize())
 }
 
-fn source_fingerprint(
-    path: &Path,
-    schema: &str,
-    attachments: &[Attachment],
-) -> Result<String, StoreError> {
+fn source_fingerprint(database: &[u8], wal: Option<&[u8]>, attachments: &[Attachment]) -> String {
     let mut digest = Sha256::new();
     digest.update(b"kanban.sqlite_v30.snapshot\0");
-    digest.update(schema.as_bytes());
-    hash_into(path, &mut digest)?;
-    let wal = PathBuf::from(format!("{}-wal", path.display()));
-    if wal.is_file() {
+    digest.update(SOURCE_VERSION.to_le_bytes());
+    digest.update((database.len() as u64).to_le_bytes());
+    digest.update(database);
+    if let Some(wal) = wal {
         digest.update(b"\0wal\0");
-        hash_into(&wal, &mut digest)?;
+        digest.update((wal.len() as u64).to_le_bytes());
+        digest.update(wal);
     }
+    let mut attachments = attachments.iter().collect::<Vec<_>>();
+    attachments.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| left.rel_path.cmp(&right.rel_path))
+    });
     for attachment in attachments {
+        digest.update(attachment.id.as_bytes());
+        digest.update([0]);
         digest.update(attachment.rel_path.as_bytes());
-        hash_into(&attachment.path, &mut digest)?;
+        digest.update([0]);
+        digest.update((attachment.bytes.len() as u64).to_le_bytes());
+        digest.update(&attachment.bytes);
     }
-    Ok(format!("sha256:{:x}", digest.finalize()))
-}
-
-fn hash_into(path: &Path, digest: &mut Sha256) -> Result<(), StoreError> {
-    let bytes = fs::read(path).map_err(|e| error(format!("读取 fingerprint 文件失败: {e}")))?;
-    digest.update((bytes.len() as u64).to_le_bytes());
-    digest.update(bytes);
-    Ok(())
+    format!("sha256:{:x}", digest.finalize())
 }
 
 fn stage_attachments(snapshot: &Snapshot, root: &Path) -> Result<Vec<Attachment>, StoreError> {
@@ -1113,18 +1132,20 @@ fn stage_attachments(snapshot: &Snapshot, root: &Path) -> Result<Vec<Attachment>
             fs::create_dir_all(parent)
                 .map_err(|e| error(format!("创建 staging 子目录失败: {e}")))?;
         }
-        fs::copy(&attachment.path, &target)
-            .map_err(|e| error(format!("复制附件 {} 失败: {e}", attachment.id)))?;
+        fs::write(&target, &attachment.bytes)
+            .map_err(|e| error(format!("写入 staging 附件 {} 失败: {e}", attachment.id)))?;
         if fs::metadata(&target)
             .map_err(|e| error(format!("读取 staging 附件失败: {e}")))?
             .len()
             != attachment.size as u64
-            || !sha256_file(&target)?.eq_ignore_ascii_case(&attachment.sha256)
+            || !sha256_bytes(
+                &fs::read(&target).map_err(|e| error(format!("读取 staging 附件失败: {e}")))?,
+            )
+            .eq_ignore_ascii_case(&attachment.sha256)
         {
             return Err(error(format!("附件 {} staging 校验失败", attachment.id)));
         }
         staged.push(Attachment {
-            path: target,
             ..attachment.clone()
         });
     }
@@ -1582,10 +1603,13 @@ fn to_turso(value: &SqlValue) -> Result<Value, StoreError> {
     })
 }
 fn sha256_file(path: &Path) -> Result<String, StoreError> {
-    Ok(format!(
-        "{:x}",
-        Sha256::digest(fs::read(path).map_err(|e| error(format!("读取文件失败: {e}")))?)
+    Ok(sha256_bytes(
+        &fs::read(path).map_err(|e| error(format!("读取文件失败: {e}")))?,
     ))
+}
+
+fn sha256_bytes(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
 }
 
 #[cfg(test)]
@@ -1666,16 +1690,87 @@ mod tests {
                 rel_path: "nested/file.bin".to_owned(),
                 sha256: checksum.clone(),
                 size: b"immutable attachment".len() as i64,
-                path: source,
+                bytes: b"immutable attachment".to_vec(),
             }],
         };
-        let staged = stage_attachments(&snapshot, &directory.path().join("staging"))
-            .expect("stage attachment");
+        let staging_root = directory.path().join("staging");
+        let staged = stage_attachments(&snapshot, &staging_root).expect("stage attachment");
         assert_eq!(staged.len(), 1);
         assert_eq!(staged[0].sha256, checksum);
         assert_eq!(
-            fs::read(&staged[0].path).expect("read staged"),
+            fs::read(staging_root.join("nested/file.bin")).expect("read staged"),
             b"immutable attachment"
         );
+    }
+
+    #[test]
+    fn source_fingerprint_is_bound_to_snapshot_bytes() {
+        let attachments = vec![Attachment {
+            id: "a_test".to_owned(),
+            rel_path: "nested/file.bin".to_owned(),
+            sha256: sha256_bytes(b"snapshot attachment"),
+            size: b"snapshot attachment".len() as i64,
+            bytes: b"snapshot attachment".to_vec(),
+        }];
+        let first = source_fingerprint(b"snapshot database", Some(b"snapshot wal"), &attachments);
+        let second = source_fingerprint(b"snapshot database", Some(b"snapshot wal"), &attachments);
+        assert_eq!(first, second);
+
+        let mut changed = attachments;
+        changed[0].bytes = b"changed source file".to_vec();
+        assert_ne!(
+            first,
+            source_fingerprint(b"snapshot database", Some(b"snapshot wal"), &changed)
+        );
+    }
+
+    #[cfg(feature = "test-support")]
+    #[tokio::test]
+    async fn repeated_import_is_idempotent_and_snapshot_survives_source_change() {
+        let directory = tempfile::tempdir().expect("temporary source directory");
+        let source = crate::adoption_test_support::make_legacy_source(directory.path())
+            .expect("legacy source");
+        let snapshot = read_snapshot(&source).expect("read snapshot");
+        let fingerprint = snapshot.source_fingerprint.clone();
+        let staging = directory.path().join("snapshot-staging");
+
+        let source_connection = SqliteConnection::open(&source).expect("open source");
+        source_connection
+            .execute(
+                "UPDATE tasks SET metadata_json='{\"changed\":true}' WHERE id='t_legacy'",
+                [],
+            )
+            .expect("mutate source after snapshot");
+        drop(source_connection);
+
+        let staged = stage_attachments(&snapshot, &staging).expect("stage snapshot");
+        assert_eq!(snapshot.source_fingerprint, fingerprint);
+        assert_eq!(staged.len(), 1);
+        assert_eq!(
+            fs::read(staging.join("attachments/legacy.txt")).expect("read staged snapshot"),
+            b"legacy\n"
+        );
+
+        let target_path = directory.path().join("target.turso");
+        let target = TursoStore::open(&target_path).await.expect("open target");
+        target.initialize().await.expect("initialize target");
+        let first = import_into_store(
+            &target,
+            LegacyImportOptions::new(&source)
+                .with_canonical_attachment_root(directory.path().join("canonical")),
+        )
+        .await
+        .expect("first import");
+        let second = import_into_store(
+            &target,
+            LegacyImportOptions::new(&source)
+                .with_canonical_attachment_root(directory.path().join("canonical")),
+        )
+        .await
+        .expect("repeated import");
+        assert_ne!(first.source_fingerprint, fingerprint);
+        assert_eq!(second.phase, "completed");
+        assert!(!second.resumed);
+        assert_eq!(first.journal_id, second.journal_id);
     }
 }

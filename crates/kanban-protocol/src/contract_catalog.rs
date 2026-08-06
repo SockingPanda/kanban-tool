@@ -193,7 +193,7 @@ impl ContractDeclaration {
 ///
 /// API/SSE parent 必须提供 `method` 与 raw URI `path`；CLI、JSONL、metadata 和 config
 /// 等 non-HTTP surface 可将两者设为 `None`，并用 `key` 指定其 canonical surface key。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct OperationDeclaration {
     pub operation_id: &'static str,
     pub surface: ContractSurface,
@@ -212,6 +212,10 @@ pub struct OperationDeclaration {
 
 impl OperationDeclaration {
     /// 创建一个 parent declaration。
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "operation 的标识、surface 与 transport 字段必须在声明点保持显式"
+    )]
     pub const fn new(
         operation_id: &'static str,
         surface: ContractSurface,

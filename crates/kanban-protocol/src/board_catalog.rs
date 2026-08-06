@@ -763,7 +763,7 @@ mod tests {
                 .filter(|endpoint| endpoint.operation_id == source.operation_id)
                 .collect::<Vec<_>>();
             assert_eq!(matches.len(), 1, "board endpoint must be projected once");
-            assert_eq!(matches[0], source);
+            assert_eq!(*matches[0], source);
         }
 
         let surfaces = crate::surface_operation_catalog();

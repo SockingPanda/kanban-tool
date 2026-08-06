@@ -130,9 +130,9 @@ macro_rules! contract_catalog {
 mod tests {
     use super::*;
     use crate::{
-        ContractBinding, ContractDirection, ContractGranularity, ContractStrictness,
-        ContractSurface, EndpointObligation, EndpointObligationKind, HttpMethod,
-        HttpTransportLocation, MigrationState,
+        ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+        ContractStrictness, ContractSurface, EndpointObligation, EndpointObligationKind,
+        HttpMethod, HttpTransportLocation, MigrationState,
     };
 
     const QUERY: ContractDeclaration = ContractDeclaration {
@@ -268,6 +268,7 @@ mod tests {
     #[test]
     fn schema_projection_requires_explicit_generator() {
         #[derive(schemars::JsonSchema)]
+        #[expect(dead_code, reason = "该测试只需要验证类型驱动的 schema generator")]
         struct ExampleSchema {
             value: String,
         }

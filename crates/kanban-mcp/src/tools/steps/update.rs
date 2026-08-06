@@ -15,7 +15,7 @@ struct StepUpdateArgs {
     board: Option<String>,
     /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
-    /// 全局 step_... ID 或确定性的 S<n> 列表选择器。
+    /// 全局 `step_...` ID 或确定性的 `S<n>` 列表选择器。
     step_ref: String,
     title: Option<String>,
     /// 非 null body 会替换原 body；null 或省略表示保持不变。

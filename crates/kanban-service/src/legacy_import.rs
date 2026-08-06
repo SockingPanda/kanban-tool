@@ -1119,29 +1119,99 @@ fn source_fingerprint(database: &[u8], wal: Option<&[u8]>, attachments: &[Attach
     format!("sha256:{:x}", digest.finalize())
 }
 
+fn ensure_no_follow_directory(path: &Path, label: &str) -> Result<(), StoreError> {
+    if path.as_os_str().is_empty() {
+        return Err(error(format!("{label} 路径为空")));
+    }
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        current.push(component.as_os_str());
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(error(format!(
+                    "{label} 包含 symlink: {}",
+                    current.display()
+                )));
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(error(format!("{label} 不是目录: {}", current.display())));
+            }
+            Ok(_) => {}
+            Err(io_error) if io_error.kind() == std::io::ErrorKind::NotFound => {
+                fs::create_dir(&current)
+                    .map_err(|e| error(format!("创建 {label} 目录失败: {e}")))?;
+                let metadata = fs::symlink_metadata(&current)
+                    .map_err(|e| error(format!("读取 {label} 目录失败: {e}")))?;
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err(error(format!(
+                        "{label} 创建后不是普通目录: {}",
+                        current.display()
+                    )));
+                }
+            }
+            Err(io_error) => {
+                return Err(error(format!("读取 {label} 目录失败: {io_error}")));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn ensure_no_follow_file(
+    path: &Path,
+    label: &str,
+    allow_missing: bool,
+) -> Result<bool, StoreError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Err(error(format!("{label} 是 symlink: {}", path.display())))
+        }
+        Ok(metadata) if !metadata.is_file() => {
+            Err(error(format!("{label} 不是普通文件: {}", path.display())))
+        }
+        Ok(_) => Ok(true),
+        Err(io_error) if allow_missing && io_error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(false)
+        }
+        Err(io_error) => Err(error(format!("读取 {label} 失败: {io_error}"))),
+    }
+}
+
+fn verify_file_containment(root: &Path, path: &Path, label: &str) -> Result<(), StoreError> {
+    let canonical_root =
+        fs::canonicalize(root).map_err(|e| error(format!("解析 {label} 根目录失败: {e}")))?;
+    let canonical_path =
+        fs::canonicalize(path).map_err(|e| error(format!("解析 {label} 路径失败: {e}")))?;
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(error(format!("{label} 路径超出根目录: {}", path.display())));
+    }
+    Ok(())
+}
+
 fn stage_attachments(snapshot: &Snapshot, root: &Path) -> Result<Vec<Attachment>, StoreError> {
     if snapshot.attachments.is_empty() {
         return Ok(Vec::new());
     }
-    fs::create_dir_all(root).map_err(|e| error(format!("创建 staging 根目录失败: {e}")))?;
+    ensure_no_follow_directory(root, "staging 根目录")?;
     let mut staged = Vec::with_capacity(snapshot.attachments.len());
     for attachment in &snapshot.attachments {
         let rel = safe_rel(&attachment.rel_path)?;
         let target = root.join(&rel);
         if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| error(format!("创建 staging 子目录失败: {e}")))?;
+            ensure_no_follow_directory(parent, "staging 子目录")?;
+        }
+        let exists = ensure_no_follow_file(&target, "staging 附件", true)?;
+        if exists {
+            fs::remove_file(&target).map_err(|e| error(format!("替换 staging 附件失败: {e}")))?;
         }
         fs::write(&target, &attachment.bytes)
             .map_err(|e| error(format!("写入 staging 附件 {} 失败: {e}", attachment.id)))?;
-        if fs::metadata(&target)
-            .map_err(|e| error(format!("读取 staging 附件失败: {e}")))?
-            .len()
-            != attachment.size as u64
-            || !sha256_bytes(
-                &fs::read(&target).map_err(|e| error(format!("读取 staging 附件失败: {e}")))?,
-            )
-            .eq_ignore_ascii_case(&attachment.sha256)
+        ensure_no_follow_file(&target, "staging 附件", false)?;
+        verify_file_containment(root, &target, "staging 附件")?;
+        let staged_bytes =
+            fs::read(&target).map_err(|e| error(format!("读取 staging 附件失败: {e}")))?;
+        if staged_bytes.len() as i64 != attachment.size
+            || !sha256_bytes(&staged_bytes).eq_ignore_ascii_case(&attachment.sha256)
         {
             return Err(error(format!("附件 {} staging 校验失败", attachment.id)));
         }
@@ -1345,31 +1415,46 @@ async fn publish(
     target: &Path,
     attachments: &[Attachment],
 ) -> Result<(), StoreError> {
-    fs::create_dir_all(target)
-        .map_err(|e| error(format!("创建 canonical attachments 根目录失败: {e}")))?;
+    ensure_no_follow_directory(target, "canonical attachments 根目录")?;
+    if !attachments.is_empty() {
+        ensure_no_follow_directory(staging, "staging 根目录")?;
+    }
     for attachment in attachments {
         let rel = safe_rel(&attachment.rel_path)?;
         let from = staging.join(&rel);
         let to = target.join(&rel);
         if let Some(parent) = to.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| error(format!("创建 canonical 附件目录失败: {e}")))?;
+            ensure_no_follow_directory(parent, "canonical 附件目录")?;
         }
-        if to.exists() {
-            if fs::metadata(&to)
-                .map_err(|e| error(format!("读取已发布附件失败: {e}")))?
-                .len()
-                != attachment.size as u64
-                || !sha256_file(&to)?.eq_ignore_ascii_case(&attachment.sha256)
+        let from_exists = ensure_no_follow_file(&from, "staging 附件", true)?;
+        let to_exists = ensure_no_follow_file(&to, "canonical 附件", true)?;
+        if to_exists {
+            verify_file_containment(target, &to, "canonical 附件")?;
+            let published = fs::read(&to).map_err(|e| error(format!("读取已发布附件失败: {e}")))?;
+            if published.len() as i64 != attachment.size
+                || !sha256_bytes(&published).eq_ignore_ascii_case(&attachment.sha256)
             {
                 return Err(error(format!("目标附件校验不一致: {}", to.display())));
             }
-            if from.exists() {
+            if from_exists {
+                verify_file_containment(staging, &from, "staging 附件")?;
                 fs::remove_file(from).map_err(|e| error(format!("清理 staging 附件失败: {e}")))?;
             }
         } else {
+            if !from_exists {
+                return Err(error(format!("staging 附件不存在: {}", from.display())));
+            }
+            verify_file_containment(staging, &from, "staging 附件")?;
             fs::rename(&from, &to)
                 .map_err(|e| error(format!("原子发布附件 {} 失败: {e}", attachment.id)))?;
+            ensure_no_follow_file(&to, "canonical 附件", false)?;
+            verify_file_containment(target, &to, "canonical 附件")?;
+        }
+        let published = fs::read(&to).map_err(|e| error(format!("读取发布后附件失败: {e}")))?;
+        if published.len() as i64 != attachment.size
+            || !sha256_bytes(&published).eq_ignore_ascii_case(&attachment.sha256)
+        {
+            return Err(error(format!("发布后附件校验不一致: {}", to.display())));
         }
         connection.execute("UPDATE attachment_staging SET phase='published',observed_sha256=?1,observed_size_bytes=?2,updated_at=?3 WHERE journal_id=?4 AND attachment_id=?5", (attachment.sha256.as_str(),attachment.size,now_ms(),journal,attachment.id.as_str())).await?;
     }
@@ -1602,12 +1687,6 @@ fn to_turso(value: &SqlValue) -> Result<Value, StoreError> {
         SqlValue::Blob(v) => Value::Blob(v.clone()),
     })
 }
-fn sha256_file(path: &Path) -> Result<String, StoreError> {
-    Ok(sha256_bytes(
-        &fs::read(path).map_err(|e| error(format!("读取文件失败: {e}")))?,
-    ))
-}
-
 fn sha256_bytes(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
@@ -1677,7 +1756,7 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary attachment directory");
         let source = directory.path().join("source.bin");
         fs::write(&source, b"immutable attachment").expect("write attachment");
-        let checksum = sha256_file(&source).expect("attachment checksum");
+        let checksum = sha256_bytes(&fs::read(&source).expect("read attachment"));
         let snapshot = Snapshot {
             source_path: directory.path().join("legacy.sqlite"),
             schema_fingerprint: "schema".to_owned(),
@@ -1700,6 +1779,73 @@ mod tests {
         assert_eq!(
             fs::read(staging_root.join("nested/file.bin")).expect("read staged"),
             b"immutable attachment"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn staging_rejects_symlink_parent() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempfile::tempdir().expect("temporary staging directory");
+        let root = directory.path().join("staging");
+        fs::create_dir_all(&root).expect("staging root");
+        let outside = directory.path().join("outside");
+        fs::create_dir_all(&outside).expect("outside root");
+        symlink(&outside, root.join("nested")).expect("symlink parent");
+        let snapshot = Snapshot {
+            source_path: directory.path().join("legacy.sqlite"),
+            schema_fingerprint: "schema".to_owned(),
+            source_fingerprint: "sha256:test".to_owned(),
+            rows: BTreeMap::new(),
+            columns: BTreeMap::new(),
+            counts: BTreeMap::new(),
+            attachments: vec![Attachment {
+                id: "a_test".to_owned(),
+                rel_path: "nested/file.bin".to_owned(),
+                sha256: sha256_bytes(b"immutable attachment"),
+                size: b"immutable attachment".len() as i64,
+                bytes: b"immutable attachment".to_vec(),
+            }],
+        };
+        assert!(stage_attachments(&snapshot, &root).is_err());
+        assert!(!outside.join("file.bin").exists());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn publish_rejects_canonical_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempfile::tempdir().expect("temporary publish directory");
+        let path = directory.path().join("target.turso");
+        let store = TursoStore::open(&path).await.expect("open target");
+        store.initialize().await.expect("initialize target");
+        let staging = directory.path().join("staging");
+        let target = directory.path().join("canonical");
+        fs::create_dir_all(&staging).expect("staging root");
+        fs::create_dir_all(&target).expect("canonical root");
+        let outside = directory.path().join("outside.bin");
+        fs::write(&outside, b"immutable attachment").expect("outside file");
+        let published = target.join("file.bin");
+        symlink(&outside, &published).expect("canonical symlink");
+        fs::write(staging.join("file.bin"), b"immutable attachment").expect("staging file");
+
+        let attachment = Attachment {
+            id: "a_test".to_owned(),
+            rel_path: "file.bin".to_owned(),
+            sha256: sha256_bytes(b"immutable attachment"),
+            size: b"immutable attachment".len() as i64,
+            bytes: b"immutable attachment".to_vec(),
+        };
+        let mut connection = store.connection().await.expect("target connection");
+        let result = publish(&mut connection, "ij_test", &staging, &target, &[attachment]).await;
+        assert!(result.is_err());
+        assert!(
+            fs::symlink_metadata(&published)
+                .expect("published path")
+                .file_type()
+                .is_symlink()
         );
     }
 

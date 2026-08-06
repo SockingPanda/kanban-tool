@@ -1771,7 +1771,7 @@
       "invalid_fixture": "schemas/fixtures/api/bootstrap-task-label-request.v1.invalid.json",
       "path": "api/bootstrap-task-label-request.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/bootstrap-task-label-request.v1.valid.json",
-      "sha256": "sha256:4c7059998fa987770f6282a07829ddfaad504f2e264216bc365ea84194aed967",
+      "sha256": "sha256:578827af975553bdd550399165afe928f36412eca44cec58d56f930ba7690d60",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1781,7 +1781,7 @@
       "invalid_fixture": "schemas/fixtures/api/bootstrap-task-label-response.v1.invalid.json",
       "path": "api/bootstrap-task-label-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/bootstrap-task-label-response.v1.valid.json",
-      "sha256": "sha256:3e34a88db5938fc1b99521a14faf884038fcb590e1a00976678ffbb383e1e857",
+      "sha256": "sha256:7b546557976f5de40a36e5cd8b4b0bfd1baf511e8495506b5890bd575d53057b",
       "strictness": "deny_unknown_fields"
     },
     {

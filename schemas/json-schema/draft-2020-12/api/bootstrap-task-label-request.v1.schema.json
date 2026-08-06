@@ -1,4 +1,32 @@
 {
+  "$defs": {
+    "VectorConfigureRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "dimensions": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "endpoint",
+        "model",
+        "dimensions"
+      ],
+      "type": "object"
+    }
+  },
   "$id": "urn:kanban-tool:schema:api:bootstrap-task-label-request:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
@@ -29,6 +57,10 @@
       },
       "type": "array"
     },
+    "min_verify_score": {
+      "format": "float",
+      "type": "number"
+    },
     "name": {
       "type": "string"
     },
@@ -45,6 +77,19 @@
         "type": "string"
       },
       "type": "array"
+    },
+    "vector_config": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VectorConfigureRequest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "verify": {
+      "type": "boolean"
     }
   },
   "required": [

@@ -105,7 +105,8 @@ pub fn operation_catalog() -> &'static [OperationDeclaration] {
                 + crate::portable::operation_declarations().len()
                 + crate::metadata_config_catalog::operation_declarations().len()
                 + crate::cli_labels_catalog::operation_declarations().len()
-                + crate::cli_shell_catalog::operation_declarations().len(),
+                + crate::cli_shell_catalog::operation_declarations().len()
+                + crate::cli_queue_catalog::operation_declarations().len(),
         );
         declarations.extend_from_slice(crate::board_catalog::operation_declarations());
         declarations.extend_from_slice(crate::task_catalog::operation_declarations());
@@ -119,6 +120,7 @@ pub fn operation_catalog() -> &'static [OperationDeclaration] {
         declarations.extend_from_slice(crate::metadata_config_catalog::operation_declarations());
         declarations.extend_from_slice(crate::cli_labels_catalog::operation_declarations());
         declarations.extend_from_slice(crate::cli_shell_catalog::operation_declarations());
+        declarations.extend_from_slice(crate::cli_queue_catalog::operation_declarations());
         declarations
     })
     .as_slice()
@@ -283,7 +285,7 @@ mod tests {
 
     #[test]
     fn migrated_domain_source_is_exposed_without_legacy_duplication() {
-        assert_eq!(operation_catalog().len(), 240);
+        assert_eq!(operation_catalog().len(), 277);
         assert_eq!(
             operation_catalog()
                 .iter()
@@ -344,6 +346,11 @@ mod tests {
                 )
                 .chain(
                     crate::cli_shell_catalog::operation_declarations()
+                        .iter()
+                        .map(|operation| operation.operation_id),
+                )
+                .chain(
+                    crate::cli_queue_catalog::operation_declarations()
                         .iter()
                         .map(|operation| operation.operation_id),
                 )

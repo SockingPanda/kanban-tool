@@ -3391,7 +3391,8 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
     let knowledge = crate::knowledge_catalog::schema_roots();
     let metadata_config = crate::metadata_config_catalog::schema_roots();
     let cli_labels = crate::cli_labels_catalog::schema_roots();
-    let mut registry = Vec::with_capacity(SCHEMA_REGISTRY.len() + 111);
+    let queue = crate::cli_queue_catalog::schema_roots();
+    let mut registry = Vec::with_capacity(SCHEMA_REGISTRY.len() + 111 + queue.len());
     for root in SCHEMA_REGISTRY {
         // archive-board request 历史上以 add-dependency 作为插入锚点。
         // Dependency 已迁移为声明投影后，仍需先保留这条 Board schema root。
@@ -3403,6 +3404,13 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
             .find(|candidate| candidate.contract_id == root.contract_id)
         {
             registry.push(*dependency_root);
+            continue;
+        }
+        if let Some(queue_root) = queue
+            .iter()
+            .find(|candidate| candidate.contract_id == root.contract_id)
+        {
+            registry.push(*queue_root);
             continue;
         }
         if let Some(step_root) = step

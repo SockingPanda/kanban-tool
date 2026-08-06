@@ -4868,7 +4868,19 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             let mut legacy_maintenance = maintenance_operation_contracts();
             legacy_maintenance.retain(|contract| contract.surface == ContractSurface::Cli);
             inventory.extend(crate::admin_catalog::inventory_contracts());
-            inventory.extend(legacy_maintenance);
+            let queue = crate::cli_queue_catalog::operation_contracts();
+            for legacy in legacy_maintenance {
+                if inventory.iter().any(|contract| contract.id == legacy.id) {
+                    continue;
+                }
+                inventory.push(
+                    queue
+                        .iter()
+                        .find(|contract| contract.id == legacy.id)
+                        .copied()
+                        .unwrap_or(legacy),
+                );
+            }
             converge_adoption_witnesses(&mut inventory);
             inventory
         })
@@ -4928,7 +4940,8 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
     let metadata_config = crate::metadata_config_catalog::operation_contracts();
     let shared_components = crate::metadata_config_catalog::shared_component_contracts();
     let cli_labels = crate::cli_labels_catalog::operation_contracts();
-    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 111);
+    let queue = crate::cli_queue_catalog::operation_contracts();
+    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 111 + queue.len());
 
     for contract in OPERATION_INVENTORY {
         // archive-board request 历史上以 add-dependency 作为插入锚点。
@@ -4941,6 +4954,10 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
             .find(|candidate| candidate.id == contract.id)
         {
             inventory.push(*dependency_contract);
+            continue;
+        }
+        if let Some(queue_contract) = queue.iter().find(|candidate| candidate.id == contract.id) {
+            inventory.push(*queue_contract);
             continue;
         }
         if let Some(step_contract) = step.iter().find(|candidate| candidate.id == contract.id) {

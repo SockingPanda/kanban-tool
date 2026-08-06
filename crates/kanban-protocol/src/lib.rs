@@ -21,6 +21,10 @@ pub mod cli_labels;
 pub mod cli_labels_catalog;
 pub mod cli_operator;
 pub mod cli_shell_catalog;
+// Queue CLI parent declarations stay in one source projection for inventory and schema users.
+// Its tests also verify each legacy row is projected exactly once.
+// Keep this module public so xtask can consume the same declaration source.
+pub mod cli_queue_catalog;
 mod comments;
 pub mod contract_catalog;
 mod create_task;

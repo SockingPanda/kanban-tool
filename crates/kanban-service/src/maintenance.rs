@@ -3219,8 +3219,9 @@ fn json_error(error: serde_json::Error) -> StoreError {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path};
+    use std::{collections::BTreeMap, fs, path::Path, sync::Arc, time::Duration};
 
+    use tokio::sync::Notify;
     use turso::transaction::TransactionBehavior;
 
     use super::{integer_value, optional_text, text_value};
@@ -3426,6 +3427,59 @@ mod tests {
         };
         assert!(matches!(competing, StoreError::MaintenanceBusy(_)));
         lease.release().await.expect("release heartbeat lease");
+    }
+
+    #[tokio::test]
+    async fn maintenance_quiesce_blocks_service_mutation_until_release() {
+        let (_directory, store, _path) = store("maintenance-quiesce-service-mutation").await;
+        store.initialize().await.expect("initialize");
+        let quiesce = store.mutation_gate.lock().await;
+        let lease = store
+            .acquire_maintenance_lease("rebuild", "quiesce-test")
+            .await
+            .expect("acquire maintenance lease");
+        let entered = Arc::new(Notify::new());
+        let service = crate::KanbanService::new(store.clone());
+        let mut task = tokio::spawn({
+            let entered = entered.clone();
+            async move {
+                entered.notify_one();
+                service
+                    .create_task(crate::CreateTaskCommand {
+                        task_id: "t_quiesce_gate".to_owned(),
+                        board: "default".to_owned(),
+                        idempotency_key: None,
+                        title: "quiesce gate".to_owned(),
+                        description: None,
+                        requested_status: None,
+                        assignee: None,
+                        priority: 0,
+                        scheduled_at: None,
+                        due_at: None,
+                        max_retries: None,
+                        metadata: BTreeMap::new(),
+                        labels: Vec::new(),
+                        depends_on: Vec::new(),
+                        actor: "quiesce-test".to_owned(),
+                    })
+                    .await
+            }
+        });
+        entered.notified().await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(40), &mut task)
+                .await
+                .is_err(),
+            "service mutation must wait while maintenance owns the shared quiesce gate"
+        );
+        drop(quiesce);
+        let created = tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .expect("service mutation after quiesce release")
+            .expect("service task join")
+            .expect("service mutation");
+        assert_eq!(created.id, "t_quiesce_gate");
+        lease.release().await.expect("release maintenance lease");
     }
 
     #[tokio::test]

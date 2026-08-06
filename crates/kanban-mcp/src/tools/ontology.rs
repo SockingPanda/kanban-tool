@@ -1,4 +1,4 @@
-//! MCP tools for label semantics, atoms, proposals and ontology ledger.
+//! 提供 label semantics、atoms、proposals 和 ontology ledger 的 MCP tools。
 
 use rmcp::{
     ErrorData as McpError,
@@ -35,7 +35,7 @@ where
 impl KanbanMcp {
     #[tool(
         name = "label_semantics_list",
-        description = "List canonical label semantics"
+        description = "列出 canonical label semantics"
     )]
     async fn label_semantics_list(
         &self,
@@ -48,7 +48,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_semantics_show",
-        description = "Show one label semantics record"
+        description = "查看一条 label semantics 记录"
     )]
     async fn label_semantics_show(
         &self,
@@ -62,7 +62,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_semantics_upsert",
-        description = "CAS upsert label semantics"
+        description = "使用 CAS upsert label semantics"
     )]
     async fn label_semantics_upsert(
         &self,
@@ -77,7 +77,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_semantics_delete",
-        description = "CAS delete label semantics"
+        description = "使用 CAS 删除 label semantics"
     )]
     async fn label_semantics_delete(
         &self,
@@ -100,7 +100,7 @@ impl KanbanMcp {
         call(move || client.delete_label_semantics(&board, &reference, &expected, &reason)).await
     }
 
-    #[tool(name = "label_atoms_list", description = "List canonical label atoms")]
+    #[tool(name = "label_atoms_list", description = "列出 canonical label atoms")]
     async fn label_atoms_list(
         &self,
         Parameters(args): Parameters<OntologyArgs>,
@@ -110,7 +110,7 @@ impl KanbanMcp {
         call(move || client.list_label_atoms(&board)).await
     }
 
-    #[tool(name = "label_atom_explain", description = "Explain atom provenance")]
+    #[tool(name = "label_atom_explain", description = "解释 atom provenance")]
     async fn label_atom_explain(
         &self,
         Parameters(args): Parameters<OntologyArgs>,
@@ -123,7 +123,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_atom_index_status",
-        description = "Inspect degraded atom index status"
+        description = "查看 degraded atom index 状态"
     )]
     async fn label_atom_index_status(
         &self,
@@ -136,7 +136,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_atom_index_rebuild",
-        description = "Rebuild atom index projection"
+        description = "重建 atom index projection"
     )]
     async fn label_atom_index_rebuild(
         &self,
@@ -149,7 +149,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_atom_index_query",
-        description = "Query atom index with degraded fallback"
+        description = "查询 atom index，必要时使用 degraded fallback"
     )]
     async fn label_atom_index_query(
         &self,
@@ -168,7 +168,7 @@ impl KanbanMcp {
         .await
     }
 
-    #[tool(name = "label_suggest", description = "Suggest labels for a task")]
+    #[tool(name = "label_suggest", description = "为任务建议 labels")]
     async fn label_suggest(
         &self,
         Parameters(args): Parameters<OntologyArgs>,
@@ -180,7 +180,7 @@ impl KanbanMcp {
         call(move || client.suggest_task_labels(&task, Some(&board), payload)).await
     }
 
-    #[tool(name = "label_propose", description = "Propose a task label")]
+    #[tool(name = "label_propose", description = "提出任务 label")]
     async fn label_propose(
         &self,
         Parameters(args): Parameters<OntologyArgs>,
@@ -194,7 +194,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_proposals_list",
-        description = "List task label proposals"
+        description = "列出任务 label proposals"
     )]
     async fn label_proposals_list(
         &self,
@@ -205,7 +205,7 @@ impl KanbanMcp {
         call(move || client.list_label_proposals(&board, args.task_ref.as_deref(), None)).await
     }
 
-    #[tool(name = "label_proposal_show", description = "Show one label proposal")]
+    #[tool(name = "label_proposal_show", description = "查看一条 label proposal")]
     async fn label_proposal_show(
         &self,
         Parameters(args): Parameters<OntologyArgs>,
@@ -215,10 +215,7 @@ impl KanbanMcp {
         call(move || client.get_label_proposal(&proposal)).await
     }
 
-    #[tool(
-        name = "label_proposal_accept",
-        description = "Accept a label proposal"
-    )]
+    #[tool(name = "label_proposal_accept", description = "接受 label proposal")]
     async fn label_proposal_accept(
         &self,
         Parameters(args): Parameters<OntologyArgs>,
@@ -229,10 +226,7 @@ impl KanbanMcp {
         call(move || client.decide_label_proposal(&proposal, true, payload)).await
     }
 
-    #[tool(
-        name = "label_proposal_reject",
-        description = "Reject a label proposal"
-    )]
+    #[tool(name = "label_proposal_reject", description = "拒绝 label proposal")]
     async fn label_proposal_reject(
         &self,
         Parameters(args): Parameters<OntologyArgs>,
@@ -243,7 +237,7 @@ impl KanbanMcp {
         call(move || client.decide_label_proposal(&proposal, false, payload)).await
     }
 
-    #[tool(name = "label_ontology_signals", description = "List ontology signals")]
+    #[tool(name = "label_ontology_signals", description = "列出 ontology signals")]
     async fn label_ontology_signals(
         &self,
         Parameters(args): Parameters<OntologyArgs>,
@@ -256,7 +250,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_ontology_signal_show",
-        description = "Show one ontology signal"
+        description = "查看一条 ontology signal"
     )]
     async fn label_ontology_signal_show(
         &self,
@@ -269,7 +263,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_ontology_review",
-        description = "Review ontology signal groups"
+        description = "审阅 ontology signal groups"
     )]
     async fn label_ontology_review(
         &self,
@@ -283,7 +277,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_ontology_action",
-        description = "Record a confirm/reject/resolve ontology action"
+        description = "记录 confirm/reject/resolve ontology action"
     )]
     async fn label_ontology_action(
         &self,
@@ -295,10 +289,7 @@ impl KanbanMcp {
         call(move || client.create_label_ontology_action(&board, payload)).await
     }
 
-    #[tool(
-        name = "label_ontology_apply_atom",
-        description = "Apply an atom mutation"
-    )]
+    #[tool(name = "label_ontology_apply_atom", description = "应用 atom mutation")]
     async fn label_ontology_apply_atom(
         &self,
         Parameters(args): Parameters<OntologyArgs>,
@@ -311,7 +302,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_ontology_revert",
-        description = "Revert an ontology mutation with baseline CAS"
+        description = "使用 baseline CAS 回滚 ontology mutation"
     )]
     async fn label_ontology_revert(
         &self,
@@ -323,10 +314,7 @@ impl KanbanMcp {
         call(move || client.revert_label_ontology(&board, payload)).await
     }
 
-    #[tool(
-        name = "label_ontology_validate",
-        description = "Validate an ontology action"
-    )]
+    #[tool(name = "label_ontology_validate", description = "校验 ontology action")]
     async fn label_ontology_validate(
         &self,
         Parameters(args): Parameters<OntologyArgs>,
@@ -339,7 +327,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_ontology_quality",
-        description = "Report ontology quality evidence"
+        description = "报告 ontology quality evidence"
     )]
     async fn label_ontology_quality(
         &self,
@@ -352,7 +340,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_ontology_observe",
-        description = "Record an ontology observation and signals"
+        description = "记录 ontology observation 和 signals"
     )]
     async fn label_ontology_observe(
         &self,

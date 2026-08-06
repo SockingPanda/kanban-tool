@@ -92,7 +92,7 @@ struct SignalSupersedeArgs {
 impl KanbanMcp {
     #[tool(
         name = "signal_record",
-        description = "Record a generic signal through the canonical application service"
+        description = "通过 canonical application service 记录 generic signal"
     )]
     async fn signal_record(
         &self,
@@ -126,7 +126,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "signal_list",
-        description = "List generic signals from the canonical application service"
+        description = "通过 canonical application service 列出 generic signals"
     )]
     async fn signal_list(
         &self,
@@ -147,7 +147,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "signal_show",
-        description = "Show one generic signal by global id"
+        description = "按全局 ID 查看一条 generic signal"
     )]
     async fn signal_show(
         &self,
@@ -160,7 +160,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "signal_review",
-        description = "List generic signals eligible for review"
+        description = "列出可 review 的 generic signals"
     )]
     async fn signal_review(
         &self,
@@ -181,7 +181,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "signal_confirm",
-        description = "Confirm one or more generic signals"
+        description = "确认一个或多个 generic signals"
     )]
     async fn signal_confirm(
         &self,
@@ -194,10 +194,7 @@ impl KanbanMcp {
         Ok(Json(response))
     }
 
-    #[tool(
-        name = "signal_reject",
-        description = "Reject one or more generic signals"
-    )]
+    #[tool(name = "signal_reject", description = "拒绝一个或多个 generic signals")]
     async fn signal_reject(
         &self,
         Parameters(args): Parameters<SignalActionArgs>,
@@ -211,7 +208,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "signal_resolve",
-        description = "Resolve one or more generic signals"
+        description = "解决一个或多个 generic signals"
     )]
     async fn signal_resolve(
         &self,
@@ -226,7 +223,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "signal_supersede",
-        description = "Supersede one or more generic signals with another signal"
+        description = "使用另一条 signal supersede 一个或多个 generic signals"
     )]
     async fn signal_supersede(
         &self,

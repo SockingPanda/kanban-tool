@@ -33,7 +33,7 @@ const fn default_limit_nodes() -> usize {
 impl KanbanMcp {
     #[tool(
         name = "task_neighborhood",
-        description = "Return a bounded task neighborhood with cycle-safe traversal"
+        description = "返回支持 cycle-safe traversal 的有界任务邻域"
     )]
     async fn task_neighborhood(
         &self,

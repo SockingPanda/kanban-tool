@@ -17,7 +17,7 @@ struct Args {
 impl KanbanMcp {
     #[tool(
         name = "vector_status",
-        description = "Read Turso vector projection status"
+        description = "读取 Turso vector projection 状态"
     )]
     async fn vector_status(
         &self,

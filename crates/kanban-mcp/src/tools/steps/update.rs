@@ -11,14 +11,14 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct StepUpdateArgs {
-    /// Board used when task_ref or linked_task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 或 linked_task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
-    /// Global step_... id or deterministic S<n> list selector.
+    /// 全局 step_... ID 或确定性的 S<n> 列表选择器。
     step_ref: String,
     title: Option<String>,
-    /// A non-null body replaces the body; null/omitted leaves it unchanged.
+    /// 非 null body 会替换原 body；null 或省略表示保持不变。
     body: Option<String>,
     linked_task_ref: Option<String>,
     #[serde(default)]
@@ -31,7 +31,7 @@ struct StepUpdateArgs {
 impl KanbanMcp {
     #[tool(
         name = "step_update",
-        description = "Update editable execution-plan fields without changing step status"
+        description = "更新可编辑的 execution-plan 字段，不改变 step status"
     )]
     async fn step_update(
         &self,

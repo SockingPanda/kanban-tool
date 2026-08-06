@@ -14,7 +14,7 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 struct TaskListArgs {
-    /// Board slug or id. Defaults to KB_BOARD/default.
+    /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
     status: Vec<ApiTaskStatus>,
     priority: Vec<i64>,
@@ -37,7 +37,7 @@ const fn default_list_limit() -> usize {
 impl KanbanMcp {
     #[tool(
         name = "task_list",
-        description = "List tasks through the canonical kanban application service"
+        description = "通过 canonical kanban application service 列出任务"
     )]
     async fn task_list(
         &self,
@@ -49,7 +49,7 @@ impl KanbanMcp {
             .map(|value| {
                 ApiTaskPriority::try_from(value).map_err(|value| {
                     McpError::invalid_params(
-                        format!("priority must be between 0 and 3, got {value}"),
+                        format!("priority 必须在 0 到 3 之间，当前值为 {value}"),
                         None,
                     )
                 })
@@ -63,7 +63,7 @@ impl KanbanMcp {
                 .into_iter()
                 .map(|value| {
                     TaskReadLabel::new(value.clone()).ok_or_else(|| {
-                        McpError::invalid_params(format!("invalid label: {value}"), None)
+                        McpError::invalid_params(format!("label 无效：{value}"), None)
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,

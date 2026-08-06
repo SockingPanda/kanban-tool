@@ -14,14 +14,14 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 struct LabelListArgs {
-    /// Board slug or id. Defaults to KB_BOARD/default.
+    /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct LabelCreateArgs {
-    /// Board slug or id. Defaults to KB_BOARD/default.
+    /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
     name: String,
     color: Option<String>,
@@ -30,18 +30,18 @@ struct LabelCreateArgs {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskLabelListArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskLabelAddArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
     name: Option<String>,
     names: Option<Vec<String>>,
@@ -52,11 +52,11 @@ struct TaskLabelAddArgs {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskLabelRemoveArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
-    /// Label id or exact label name.
+    /// Label ID 或完全匹配的 label name。
     label_id: String,
 }
 
@@ -64,7 +64,7 @@ struct TaskLabelRemoveArgs {
 impl KanbanMcp {
     #[tool(
         name = "label_list",
-        description = "List board labels from the canonical kanban host"
+        description = "从 canonical kanban host 列出 board labels"
     )]
     async fn label_list(
         &self,
@@ -78,7 +78,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "label_create",
-        description = "Create a board label through the canonical application service"
+        description = "通过 canonical application service 创建 board label"
     )]
     async fn label_create(
         &self,
@@ -101,7 +101,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "task_label_list",
-        description = "List labels attached to a task through the canonical application service"
+        description = "通过 canonical application service 列出任务上的 labels"
     )]
     async fn task_label_list(
         &self,
@@ -117,7 +117,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "task_label_add",
-        description = "Attach one or more labels to a task through the canonical application service"
+        description = "通过 canonical application service 为任务附加一个或多个 labels"
     )]
     async fn task_label_add(
         &self,
@@ -140,7 +140,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "task_label_remove",
-        description = "Remove a task label through the canonical application service"
+        description = "通过 canonical application service 删除任务 label"
     )]
     async fn task_label_remove(
         &self,

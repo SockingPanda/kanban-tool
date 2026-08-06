@@ -19,7 +19,7 @@ struct AttachmentListArgs {
 impl KanbanMcp {
     #[tool(
         name = "attachment_list",
-        description = "List task attachment metadata through the canonical host"
+        description = "通过 canonical host 列出任务附件 metadata"
     )]
     async fn attachment_list(
         &self,

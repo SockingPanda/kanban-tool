@@ -24,7 +24,7 @@ struct AttachmentCreateArgs {
 impl KanbanMcp {
     #[tool(
         name = "attachment_create",
-        description = "Create a metadata-safe file-backed task attachment through the host"
+        description = "通过 host 创建 metadata 安全的文件型任务附件"
     )]
     async fn attachment_create(
         &self,

@@ -11,7 +11,7 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 struct SearchTasksArgs {
-    /// Board slug or id. Defaults to KB_BOARD/default.
+    /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
     q: String,
     status: Vec<ApiTaskStatus>,
@@ -30,7 +30,7 @@ const fn default_search_limit() -> usize {
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 struct SearchStatusArgs {
-    /// Board slug or id. Defaults to KB_BOARD/default.
+    /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
 }
 
@@ -38,7 +38,7 @@ struct SearchStatusArgs {
 impl KanbanMcp {
     #[tool(
         name = "search_tasks",
-        description = "Search tasks through the canonical kanban application service"
+        description = "通过 canonical kanban application service 搜索任务"
     )]
     async fn search_tasks(
         &self,
@@ -61,7 +61,7 @@ impl KanbanMcp {
 
     #[tool(
         name = "search_status",
-        description = "Inspect canonical task search projection status"
+        description = "查看 canonical task search projection 状态"
     )]
     async fn search_status(
         &self,

@@ -11,9 +11,9 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskPlanNotRequiredArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
     reason: String,
 }
@@ -22,7 +22,7 @@ struct TaskPlanNotRequiredArgs {
 impl KanbanMcp {
     #[tool(
         name = "task_plan_not_required",
-        description = "Mark a task execution plan as not required through the canonical application service"
+        description = "通过 canonical application service 将任务 execution plan 标记为 not required"
     )]
     async fn task_plan_not_required(
         &self,

@@ -11,7 +11,7 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Default, Deserialize, schemars::JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 struct ContextBuildArgs {
-    /// Board slug or id. Defaults to KB_BOARD/default.
+    /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
     task: Option<String>,
     reference: Option<String>,
@@ -48,7 +48,7 @@ const fn default_budget() -> usize {
 impl KanbanMcp {
     #[tool(
         name = "context_build",
-        description = "Build a bounded read-only context pack from lexical, graph, and vector providers"
+        description = "从 lexical、graph 和 vector provider 构建有界只读 context pack"
     )]
     async fn context_build(
         &self,
@@ -56,7 +56,7 @@ impl KanbanMcp {
     ) -> Result<Json<BuildContextResponse>, McpError> {
         if args.task.is_none() && args.reference.is_none() && args.query.is_none() {
             return Err(McpError::invalid_params(
-                "one of task, reference or query is required",
+                "task、reference 或 query 至少提供一个",
                 None,
             ));
         }

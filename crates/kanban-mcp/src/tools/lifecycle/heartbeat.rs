@@ -11,16 +11,16 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskHeartbeatArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
-    /// Exact token returned by task_claim.
+    /// task_claim 返回的 exact token。
     claim_token: String,
-    /// New claim lease duration in milliseconds.
+    /// 新的 claim lease 时长，单位为毫秒。
     #[serde(default = "default_claim_ttl_ms")]
     ttl_ms: i64,
-    /// Optional heartbeat note recorded on the event.
+    /// 可选 heartbeat note，会记录在 event 上。
     note: Option<String>,
 }
 
@@ -32,7 +32,7 @@ const fn default_claim_ttl_ms() -> i64 {
 impl KanbanMcp {
     #[tool(
         name = "task_heartbeat",
-        description = "Extend an active claim lease through the canonical application service"
+        description = "通过 canonical application service 延长 active claim lease"
     )]
     async fn task_heartbeat(
         &self,

@@ -26,7 +26,7 @@ const fn default_limit() -> usize {
 impl KanbanMcp {
     #[tool(
         name = "graph_neighbors",
-        description = "List outgoing canonical relation facts for an entity"
+        description = "列出实体发出的 canonical relation facts"
     )]
     async fn graph_neighbors(
         &self,

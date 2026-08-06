@@ -25,7 +25,7 @@ const fn default_limit() -> usize {
 impl KanbanMcp {
     #[tool(
         name = "graph_query",
-        description = "Run the bounded read-only canonical graph query compatibility surface"
+        description = "运行有界只读 canonical graph query compatibility surface"
     )]
     async fn graph_query(
         &self,

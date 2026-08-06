@@ -20,7 +20,7 @@ struct AttachmentRemoveArgs {
 impl KanbanMcp {
     #[tool(
         name = "attachment_remove",
-        description = "Remove attachment metadata and retain a recoverable host-local trash copy"
+        description = "删除附件 metadata，并保留可恢复的 host-local trash 副本"
     )]
     async fn attachment_remove(
         &self,

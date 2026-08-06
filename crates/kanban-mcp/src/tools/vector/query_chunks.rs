@@ -19,7 +19,7 @@ struct Args {
 impl KanbanMcp {
     #[tool(
         name = "vector_query_chunks",
-        description = "Query board task chunks by cosine similarity"
+        description = "按 cosine similarity 查询 board task chunks"
     )]
     async fn vector_query_chunks(
         &self,

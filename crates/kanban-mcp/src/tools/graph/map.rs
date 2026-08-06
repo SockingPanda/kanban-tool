@@ -43,7 +43,7 @@ const fn default_include_done_context() -> bool {
 impl KanbanMcp {
     #[tool(
         name = "board_task_map",
-        description = "Return a bounded board task map with context expansion"
+        description = "返回带 context expansion 的有界 board task map"
     )]
     async fn board_task_map(
         &self,

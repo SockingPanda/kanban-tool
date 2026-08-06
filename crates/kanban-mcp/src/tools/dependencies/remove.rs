@@ -11,11 +11,11 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct DependencyRemoveArgs {
-    /// Board used when child_task_ref or parent_task_ref is board-local. Defaults to KB_BOARD/default.
+    /// child_task_ref 或 parent_task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence for the child task.
+    /// child task 的全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     child_task_ref: String,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence for the parent task.
+    /// parent task 的全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     parent_task_ref: String,
 }
 
@@ -23,7 +23,7 @@ struct DependencyRemoveArgs {
 impl KanbanMcp {
     #[tool(
         name = "dependency_remove",
-        description = "Remove a direct parent dependency through the canonical kanban application service"
+        description = "通过 canonical kanban application service 删除 direct parent dependency"
     )]
     async fn dependency_remove(
         &self,

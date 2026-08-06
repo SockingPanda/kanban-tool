@@ -13,7 +13,7 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskCreateArgs {
-    /// Board slug or id. Defaults to KB_BOARD/default.
+    /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
     title: String,
     description: Option<String>,
@@ -41,7 +41,7 @@ const fn default_priority() -> i64 {
 impl KanbanMcp {
     #[tool(
         name = "task_create",
-        description = "Create a task through the canonical kanban application service"
+        description = "通过 canonical kanban application service 创建任务"
     )]
     async fn task_create(
         &self,

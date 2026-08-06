@@ -18,7 +18,7 @@ struct GraphStatusArgs {
 impl KanbanMcp {
     #[tool(
         name = "graph_status",
-        description = "Report canonical graph relation and projection status"
+        description = "报告 canonical graph relation 和 projection 状态"
     )]
     async fn graph_status(
         &self,

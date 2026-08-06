@@ -28,7 +28,7 @@ struct AttachmentDownloadOutput {
 impl KanbanMcp {
     #[tool(
         name = "attachment_download",
-        description = "Download file-backed attachment bytes through the canonical host"
+        description = "通过 canonical host 下载文件型附件字节"
     )]
     async fn attachment_download(
         &self,

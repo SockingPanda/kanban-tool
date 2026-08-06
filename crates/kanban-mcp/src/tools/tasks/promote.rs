@@ -11,9 +11,9 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskPromoteArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
 }
 
@@ -21,7 +21,7 @@ struct TaskPromoteArgs {
 impl KanbanMcp {
     #[tool(
         name = "task_promote",
-        description = "Promote an eligible task to ready through the canonical application service"
+        description = "通过 canonical application service 将符合条件的任务 promote 为 ready"
     )]
     async fn task_promote(
         &self,

@@ -11,7 +11,7 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct RunLogArgs {
-    /// Global r_... run id.
+    /// 全局 r_... run ID。
     run_id: String,
 }
 
@@ -19,7 +19,7 @@ struct RunLogArgs {
 impl KanbanMcp {
     #[tool(
         name = "run_log",
-        description = "Read a task run log through the canonical kanban application service"
+        description = "通过 canonical kanban application service 读取任务 run 日志"
     )]
     async fn run_log(
         &self,

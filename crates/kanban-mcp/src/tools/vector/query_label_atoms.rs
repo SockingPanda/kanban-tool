@@ -20,7 +20,7 @@ struct Args {
 impl KanbanMcp {
     #[tool(
         name = "vector_query_label_atoms",
-        description = "Query canonical label atoms by cosine similarity"
+        description = "按 cosine similarity 查询 canonical label atoms"
     )]
     async fn vector_query_label_atoms(
         &self,

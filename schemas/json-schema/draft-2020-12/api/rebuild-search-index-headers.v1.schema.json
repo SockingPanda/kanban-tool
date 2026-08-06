@@ -1,5 +1,5 @@
 {
-  "$id": "urn:kanban-tool:schema:api:list-tasks-by-status-headers:v1",
+  "$id": "urn:kanban-tool:schema:api:rebuild-search-index-headers:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -10,6 +10,6 @@
       ]
     }
   },
-  "title": "Kanban api.list-tasks-by-status request headers v1",
+  "title": "Kanban api.rebuild-search-index request headers v1",
   "type": "object"
 }

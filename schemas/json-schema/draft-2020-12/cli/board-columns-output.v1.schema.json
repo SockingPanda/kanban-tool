@@ -1,6 +1,6 @@
 {
   "$defs": {
-    "ColumnJsonlData": {
+    "ApiBoardColumn": {
       "additionalProperties": false,
       "properties": {
         "board_id": {
@@ -21,7 +21,7 @@
           "type": "integer"
         },
         "status": {
-          "$ref": "#/$defs/PortableTaskStatus"
+          "$ref": "#/$defs/ApiTaskStatus"
         },
         "title": {
           "type": "string"
@@ -31,7 +31,11 @@
           "type": "integer"
         },
         "wip_limit": {
-          "$ref": "#/$defs/RequiredNullableSchema"
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
@@ -47,13 +51,7 @@
       ],
       "type": "object"
     },
-    "ColumnJsonlType": {
-      "enum": [
-        "column"
-      ],
-      "type": "string"
-    },
-    "PortableTaskStatus": {
+    "ApiTaskStatus": {
       "enum": [
         "triage",
         "todo",
@@ -66,31 +64,22 @@
         "archived"
       ],
       "type": "string"
-    },
-    "RequiredNullableSchema": {
-      "description": "仅供 schema 使用的标记，表示 key 必须存在但可以包含 JSON null。\n\nschemars 会把裸 `Option<T>` 视为可省略，而 `#[schemars(required)]` 会有意移除\nnull 分支。这个透明的非 Option wrapper 保留 wire contract 的两部分。",
-      "format": "int64",
-      "type": [
-        "integer",
-        "null"
-      ]
     }
   },
-  "$id": "urn:kanban-tool:schema:jsonl:column-input:v1",
+  "$id": "urn:kanban-tool:schema:cli:board-columns-output:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
     "data": {
-      "$ref": "#/$defs/ColumnJsonlData"
-    },
-    "type": {
-      "$ref": "#/$defs/ColumnJsonlType"
+      "items": {
+        "$ref": "#/$defs/ApiBoardColumn"
+      },
+      "type": "array"
     }
   },
   "required": [
-    "type",
     "data"
   ],
-  "title": "Kanban JSONL column input v1",
+  "title": "Kanban CLI board columns output v1",
   "type": "object"
 }

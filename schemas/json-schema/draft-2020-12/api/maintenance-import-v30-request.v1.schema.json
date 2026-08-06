@@ -2,7 +2,7 @@
   "$id": "urn:kanban-tool:schema:api:maintenance-import-v30-request:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Legacy SQLite v30 import request.  This host-admin path is deliberately\nseparate from portable JSONL import because it reads an old on-disk schema\nand may need an explicit attachment-root mapping.",
+  "description": "Legacy SQLite v30 导入请求。此 host-admin 路径有意与 portable JSONL 导入分开，\n因为它读取旧的磁盘 schema，并可能需要显式的附件根目录映射。",
   "properties": {
     "canonical_attachment_root": {
       "default": null,

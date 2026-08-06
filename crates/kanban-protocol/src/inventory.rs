@@ -912,60 +912,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "index_doctor_output_fixture_is_consumed_by_public_contract"
     ),
     adopted_cli_output_contract!(
-        "cli.maintenance-cleanup-legacy-inventory.output",
-        "maintenance cleanup-legacy inventory",
-        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-inventory-output:v1",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.valid.json",
-        "cli_projection_maintenance_contract_adoption",
-        "maintenance_cleanup_legacy_inventory_output_fixture_is_produced_by_real_cli",
-        "maintenance_cleanup_legacy_inventory_output_fixture_is_consumed_by_public_contract"
-    ),
-    adopted_cli_output_contract!(
-        "cli.maintenance-cleanup-legacy-apply.output",
-        "maintenance cleanup-legacy apply",
-        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-apply-output:v1",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.valid.json",
-        "cli_projection_maintenance_contract_adoption",
-        "maintenance_cleanup_legacy_apply_output_fixture_is_produced_by_real_cli",
-        "maintenance_cleanup_legacy_apply_output_fixture_is_consumed_by_public_contract"
-    ),
-    adopted_cli_output_contract!(
-        "cli.maintenance-cleanup-legacy-verify.output",
-        "maintenance cleanup-legacy verify",
-        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-verify-output:v1",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.valid.json",
-        "cli_projection_maintenance_contract_adoption",
-        "maintenance_cleanup_legacy_verify_output_fixture_is_produced_by_real_cli",
-        "maintenance_cleanup_legacy_verify_output_fixture_is_consumed_by_public_contract"
-    ),
-    adopted_cli_output_contract!(
-        "cli.maintenance-cleanup-legacy-restore.output",
-        "maintenance cleanup-legacy restore",
-        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-restore-output:v1",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.valid.json",
-        "cli_projection_maintenance_contract_adoption",
-        "maintenance_cleanup_legacy_restore_output_fixture_is_produced_by_real_cli",
-        "maintenance_cleanup_legacy_restore_output_fixture_is_consumed_by_public_contract"
-    ),
-    adopted_cli_output_contract!(
-        "cli.derived-status.output",
-        "derived status",
-        "urn:kanban-tool:schema:cli:derived-status-output:v1",
-        "schemas/fixtures/cli/derived-status-output.v1.valid.json",
-        "cli_substrate_contract_adoption",
-        "derived_status_output_fixture_proves_global_dirty_watermark",
-        "derived_status_output_fixture_is_consumed_by_public_contract"
-    ),
-    adopted_cli_output_contract!(
-        "cli.outbox-list.output",
-        "outbox list",
-        "urn:kanban-tool:schema:cli:outbox-list-output:v1",
-        "schemas/fixtures/cli/outbox-list-output.v1.valid.json",
-        "cli_substrate_contract_adoption",
-        "outbox_list_output_fixture_is_produced_by_real_cli",
-        "outbox_list_output_fixture_is_consumed_by_public_contract"
-    ),
-    adopted_cli_output_contract!(
         "cli.entity-list.output",
         "entity list",
         "urn:kanban-tool:schema:cli:entity-list-output:v1",
@@ -982,6 +928,15 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "cli_entity_contract_adoption",
         "producer_entity_show_matches_exact_fixture",
         "entity_show_output_fixture_is_consumed_by_public_contract"
+    ),
+    adopted_cli_output_contract!(
+        "cli.entity-upsert.output",
+        "entity upsert",
+        "urn:kanban-tool:schema:cli:entity-upsert-output:v1",
+        "schemas/fixtures/cli/entity-upsert-output.v1.valid.json",
+        "cli_knowledge_adoption",
+        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
+        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers"
     ),
     adopted_cli_output_contract!(
         "cli.doctor.output",
@@ -1065,6 +1020,15 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "board_archive_output_fixture_is_consumed_by_contract_root"
     ),
     adopted_cli_output_contract!(
+        "cli.board-columns.output",
+        "board columns",
+        "urn:kanban-tool:schema:cli:board-columns-output:v1",
+        "schemas/fixtures/cli/board-columns-output.v1.valid.json",
+        "cli_board_contract_adoption",
+        "board_columns_output_fixture_is_produced_by_real_cli",
+        "board_columns_output_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_cli_output_contract!(
         "cli.task-list.output",
         "task list",
         "urn:kanban-tool:schema:cli:task-list-output:v1",
@@ -1081,6 +1045,15 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "cli_task_read_contract_adoption",
         "task_show_output_fixture_is_produced_by_real_cli",
         "task_show_output_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_cli_output_contract!(
+        "cli.task-specify.output",
+        "task specify",
+        "urn:kanban-tool:schema:cli:task-specify-output:v1",
+        "schemas/fixtures/cli/task-specify-output.v1.valid.json",
+        "cli_lifecycle_adoption",
+        "lifecycle_cli_runs_each_transition_through_localhost_host",
+        "lifecycle_cli_runs_each_transition_through_localhost_host"
     ),
     adopted_cli_output_contract!(
         "cli.comment-add.output",
@@ -1263,15 +1236,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "task_claim_output_fixture_is_consumed_by_contract_root"
     ),
     adopted_cli_output_contract!(
-        "cli.task-start.output",
-        "task start",
-        "urn:kanban-tool:schema:cli:task-start-output:v1",
-        "schemas/fixtures/cli/task-start-output.v1.valid.json",
-        "cli_task_claim_contract_adoption",
-        "task_start_output_fixture_is_produced_by_real_cli",
-        "task_start_output_fixture_is_consumed_by_contract_root"
-    ),
-    adopted_cli_output_contract!(
         "cli.task-reclaim.output",
         "task reclaim",
         "urn:kanban-tool:schema:cli:task-reclaim-output:v1",
@@ -1324,15 +1288,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "cli_task_contract_adoption",
         "task_done_output_contract",
         "task_done_output_contract"
-    ),
-    adopted_cli_output_contract!(
-        "cli.task-complete.output",
-        "task complete",
-        "urn:kanban-tool:schema:cli:task-complete-output:v1",
-        "schemas/fixtures/cli/task-complete-output.v1.valid.json",
-        "cli_task_contract_adoption",
-        "task_complete_output_contract",
-        "task_complete_output_contract"
     ),
     adopted_cli_output_contract!(
         "cli.task-review.output",
@@ -1407,21 +1362,9 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "cli_label_contract_adoption"
     ),
     adopted_cli_slug_output_contract!(
-        "label-bootstrap",
-        "label_bootstrap",
-        "label bootstrap",
-        "cli_label_contract_adoption"
-    ),
-    adopted_cli_slug_output_contract!(
         "label-create",
         "label_create",
         "label create",
-        "cli_label_contract_adoption"
-    ),
-    adopted_cli_slug_output_contract!(
-        "label-delete",
-        "label_delete",
-        "label delete",
         "cli_label_contract_adoption"
     ),
     adopted_cli_slug_output_contract!(
@@ -1574,6 +1517,24 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "graph neighbors",
         "cli_helper_contract_adoption"
     ),
+    adopted_cli_output_contract!(
+        "cli.graph-neighborhood.output",
+        "graph neighborhood",
+        "urn:kanban-tool:schema:cli:graph-neighborhood-output:v1",
+        "schemas/fixtures/cli/graph-neighborhood-output.v1.valid.json",
+        "cli_knowledge_adoption",
+        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
+        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers"
+    ),
+    adopted_cli_output_contract!(
+        "cli.graph-map.output",
+        "graph map",
+        "urn:kanban-tool:schema:cli:graph-map-output:v1",
+        "schemas/fixtures/cli/graph-map-output.v1.valid.json",
+        "cli_knowledge_adoption",
+        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
+        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers"
+    ),
     adopted_cli_slug_output_contract!(
         "graph-query",
         "graph_query",
@@ -1719,12 +1680,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "hook codex uninstall",
         "cli_operator_contract_adoption"
     ),
-    adopted_cli_slug_output_contract!(
-        "dispatch",
-        "dispatch",
-        "dispatch",
-        "cli_operator_contract_adoption"
-    ),
     adopted_api_parameter_contract!(
         "api.get-stats.query",
         "GET /api/v1/stats query",
@@ -1801,6 +1756,46 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         "GET /api/v1/search/status response",
         "GET /api/v1/search/status",
         "urn:kanban-tool:schema:api:search-status-response:v1",
+        "schemas/fixtures/api/search-status-response.v1.valid.json",
+        "suite::derived_adoption::search_status_response_fixture_is_produced_by_real_router",
+        "suite::derived_adoption::search_status_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_parameter_contract!(
+        "api.rebuild-search-index.query",
+        "POST /api/v1/search/index/rebuild query",
+        "POST /api/v1/search/index/rebuild",
+        "urn:kanban-tool:schema:api:rebuild-search-index-query:v1",
+        "schemas/fixtures/api/search-status-query.v1.valid.json",
+        "suite::derived_adoption::search_status_query_dto_serializes_to_committed_fixture",
+        "suite::derived_adoption::search_status_query_fixture_is_consumed_by_real_router",
+        HttpTransportLocation::Query,
+        BOARD_QUERY_PARAMETERS
+    ),
+    adopted_api_response_contract!(
+        "api.rebuild-search-index.response",
+        "POST /api/v1/search/index/rebuild response",
+        "POST /api/v1/search/index/rebuild",
+        "urn:kanban-tool:schema:api:rebuild-search-index-response:v1",
+        "schemas/fixtures/api/search-status-response.v1.valid.json",
+        "suite::derived_adoption::search_status_response_fixture_is_produced_by_real_router",
+        "suite::derived_adoption::search_status_response_fixture_is_consumed_by_contract_root"
+    ),
+    adopted_api_parameter_contract!(
+        "api.sync-search-index.query",
+        "POST /api/v1/search/index/sync query",
+        "POST /api/v1/search/index/sync",
+        "urn:kanban-tool:schema:api:sync-search-index-query:v1",
+        "schemas/fixtures/api/search-status-query.v1.valid.json",
+        "suite::derived_adoption::search_status_query_dto_serializes_to_committed_fixture",
+        "suite::derived_adoption::search_status_query_fixture_is_consumed_by_real_router",
+        HttpTransportLocation::Query,
+        BOARD_QUERY_PARAMETERS
+    ),
+    adopted_api_response_contract!(
+        "api.sync-search-index.response",
+        "POST /api/v1/search/index/sync response",
+        "POST /api/v1/search/index/sync",
+        "urn:kanban-tool:schema:api:sync-search-index-response:v1",
         "schemas/fixtures/api/search-status-response.v1.valid.json",
         "suite::derived_adoption::search_status_response_fixture_is_produced_by_real_router",
         "suite::derived_adoption::search_status_response_fixture_is_consumed_by_contract_root"
@@ -2539,28 +2534,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         HttpTransportLocation::Query,
         TASK_READ_QUERY_PARAMETERS
     ),
-    adopted_api_parameter_contract!(
-        "api.list-tasks-by-status.path",
-        "GET /api/v1/boards/:board/tasks/by-status path",
-        "GET /api/v1/boards/:board/tasks/by-status",
-        "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
-        "schemas/fixtures/api/list-tasks-by-status-path.v1.valid.json",
-        "suite::task_read_request_adoption::list_tasks_by_status_path_dto_serializes_to_committed_fixture",
-        "suite::task_read_request_adoption::list_tasks_by_status_path_fixture_is_consumed_by_real_router",
-        HttpTransportLocation::Path,
-        TASK_READ_PATH_PARAMETERS
-    ),
-    adopted_api_parameter_contract!(
-        "api.list-tasks-by-status.query",
-        "GET /api/v1/boards/:board/tasks/by-status query",
-        "GET /api/v1/boards/:board/tasks/by-status",
-        "urn:kanban-tool:schema:api:list-tasks-by-status-query:v1",
-        "schemas/fixtures/api/list-tasks-by-status-query.v1.valid.json",
-        "suite::task_read_request_adoption::list_tasks_by_status_query_dto_serializes_to_committed_fixture",
-        "suite::task_read_request_adoption::list_tasks_by_status_query_fixture_is_consumed_by_real_router",
-        HttpTransportLocation::Query,
-        TASK_READ_QUERY_PARAMETERS
-    ),
     OperationContract {
         id: "api.list-tasks.response",
         path: "GET /api/v1/boards/:board/tasks response",
@@ -2596,46 +2569,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         migration: MigrationState::Adopted,
         transport: ContractTransport::Http {
             operation_key: Some("GET /api/v1/boards/:board/tasks"),
-            location: HttpTransportLocation::Success,
-            parameters: &[],
-        },
-        binding: ContractBinding::ExactSurface,
-    },
-    OperationContract {
-        id: "api.list-tasks-by-status.response",
-        path: "GET /api/v1/boards/:board/tasks/by-status response",
-        surface: ContractSurface::Api,
-        operation: "GET /api/v1/boards/:board/tasks/by-status",
-        direction: ContractDirection::Serialize,
-        granularity: ContractGranularity::Exact,
-        strictness: ContractStrictness::DenyUnknownFields,
-        schema_id: Some("urn:kanban-tool:schema:api:list-tasks-by-status-response:v1"),
-        fixture: Some("schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json"),
-        adoption: Some(AdoptionEvidence {
-            producer_fixture: "schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json",
-            producer: AdoptionWitness {
-                operation: "GET /api/v1/boards/:board/tasks/by-status",
-                contract_id: "api.list-tasks-by-status.response",
-                surface: ContractSurface::Api,
-                direction: ContractDirection::Serialize,
-                package: "kanban-server",
-                test_target: "lib",
-                exact_test: "suite::api_task_component::list_tasks_by_status_response_producer_fixture",
-            },
-            consumer: AdoptionWitness {
-                operation: "GET /api/v1/boards/:board/tasks/by-status",
-                contract_id: "api.list-tasks-by-status.response",
-                surface: ContractSurface::Api,
-                direction: ContractDirection::Serialize,
-                package: "kanban-server",
-                test_target: "lib",
-                exact_test: "suite::api_task_component::list_tasks_by_status_response_consumer_fixture",
-            },
-        }),
-        exclusion: None,
-        migration: MigrationState::Adopted,
-        transport: ContractTransport::Http {
-            operation_key: Some("GET /api/v1/boards/:board/tasks/by-status"),
             location: HttpTransportLocation::Success,
             parameters: &[],
         },
@@ -4120,39 +4053,6 @@ const OPERATION_INVENTORY: &[OperationContract] = &[
         &[]
     ),
     generated_api_contract!(
-        "api.bootstrap-task-label.path",
-        "POST /api/v1/tasks/:task_id/labels/bootstrap path",
-        "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        ContractDirection::Deserialize,
-        "urn:kanban-tool:schema:api:bootstrap-task-label-path:v1",
-        "schemas/fixtures/api/bootstrap-task-label-path.v1.valid.json",
-        HttpTransportLocation::Path,
-        &[WireParameter {
-            name: "task_id",
-            cardinality: Some(WireParameterCardinality::RequiredOne)
-        }]
-    ),
-    generated_api_contract!(
-        "api.bootstrap-task-label.request",
-        "POST /api/v1/tasks/:task_id/labels/bootstrap body",
-        "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        ContractDirection::Deserialize,
-        "urn:kanban-tool:schema:api:bootstrap-task-label-request:v1",
-        "schemas/fixtures/api/bootstrap-task-label-request.v1.valid.json",
-        HttpTransportLocation::Body,
-        &[]
-    ),
-    generated_api_contract!(
-        "api.bootstrap-task-label.response",
-        "POST /api/v1/tasks/:task_id/labels/bootstrap success",
-        "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        ContractDirection::Serialize,
-        "urn:kanban-tool:schema:api:bootstrap-task-label-response:v1",
-        "schemas/fixtures/api/bootstrap-task-label-response.v1.valid.json",
-        HttpTransportLocation::Success,
-        &[]
-    ),
-    generated_api_contract!(
         "api.suggest-task-labels.path",
         "GET /api/v1/tasks/:task_id/labels/suggestions path",
         "GET /api/v1/tasks/:task_id/labels/suggestions",
@@ -5227,12 +5127,6 @@ fn canonical_cli_witness(id: &str) -> WitnessLocator {
             "completion_and_hidden_complete_are_local_and_do_not_open_database",
         );
     }
-    if id == "cli.dispatch.output" {
-        return cli_test(
-            "cli_admin_adoption",
-            "dispatcher_profile_is_consumed_by_real_serve_and_only_claims_ready",
-        );
-    }
     if id.starts_with("cli.graph-")
         || id.starts_with("cli.entity-")
         || id.starts_with("cli.search-")
@@ -5250,8 +5144,6 @@ fn canonical_cli_witness(id: &str) -> WitnessLocator {
         || id.starts_with("cli.doctor")
         || id.starts_with("cli.checkpoint")
         || id.starts_with("cli.stats")
-        || id.starts_with("cli.derived-")
-        || id.starts_with("cli.outbox-")
     {
         return cli_test(
             "cli_admin_adoption",
@@ -5450,9 +5342,6 @@ fn canonical_api_witness(contract: &OperationContract, consumer: bool) -> Option
         "api.list-tasks.path"
             | "api.list-tasks.query"
             | "api.list-tasks.response"
-            | "api.list-tasks-by-status.path"
-            | "api.list-tasks-by-status.query"
-            | "api.list-tasks-by-status.response"
             | "api.create-task.path"
             | "api.create-task.request"
             | "api.create-task.response"
@@ -6085,7 +5974,7 @@ macro_rules! phase5_api_request_contract {
     };
 }
 
-const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 55] = [
+const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 53] = [
     phase5_api_request_contract!(
         "api.list-label-semantics.path",
         list_label_semantics_request_fixture_reaches_handler
@@ -6195,14 +6084,6 @@ const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 55] = [
         supersede_signals_request_fixtures_reach_handler
     ),
     phase5_api_request_contract!(
-        "api.bootstrap-task-label.path",
-        bootstrap_task_label_request_fixtures_reach_handler
-    ),
-    phase5_api_request_contract!(
-        "api.bootstrap-task-label.request",
-        bootstrap_task_label_request_fixtures_reach_handler
-    ),
-    phase5_api_request_contract!(
         "api.suggest-task-labels.path",
         suggest_task_labels_request_fixtures_reach_handler
     ),
@@ -6308,7 +6189,7 @@ const PHASE5_API_REQUEST_CONTRACTS: [(&str, &str); 55] = [
     ),
 ];
 
-const PHASE5_API_RESPONSE_CONTRACTS: [(&str, &str); 30] = [
+const PHASE5_API_RESPONSE_CONTRACTS: [(&str, &str); 29] = [
     (
         "api.list-label-semantics.response",
         "suite::api_generated_adoption::generated_empty_collection_responses_are_produced_by_real_router",
@@ -6372,10 +6253,6 @@ const PHASE5_API_RESPONSE_CONTRACTS: [(&str, &str); 30] = [
     (
         "api.supersede-signals.response",
         "suite::api_generated_adoption::generated_signal_action_responses_are_produced_by_real_router",
-    ),
-    (
-        "api.bootstrap-task-label.response",
-        "suite::api_generated_adoption::generated_task_label_responses_are_produced_by_real_router",
     ),
     (
         "api.suggest-task-labels.response",

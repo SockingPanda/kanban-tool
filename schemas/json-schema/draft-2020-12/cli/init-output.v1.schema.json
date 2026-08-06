@@ -10,14 +10,14 @@
           "type": "string"
         },
         "config_path": {
-          "description": "Project config path created or reused by `kanban init`; database ownership remains with `serve`.",
+          "description": "`kanban init` 创建或复用的项目配置路径；数据库仍由 `serve` 独占。",
           "type": [
             "string",
             "null"
           ]
         },
         "created": {
-          "description": "Whether this invocation changed the project config file.",
+          "description": "本次调用是否修改了项目配置文件。",
           "type": [
             "boolean",
             "null"

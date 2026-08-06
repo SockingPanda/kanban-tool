@@ -217,18 +217,6 @@
   },
   {
     "contracts": [
-      "api.list-tasks-by-status.path",
-      "api.list-tasks-by-status.query",
-      "api.list-tasks-by-status.headers",
-      "api.list-tasks-by-status.response"
-    ],
-    "exclusion": null,
-    "key": "GET /api/v1/boards/:board/tasks/by-status",
-    "migration": "adopted",
-    "surface": "api"
-  },
-  {
-    "contracts": [
       "api.list-signals.path",
       "api.list-signals.query",
       "api.list-signals.headers",
@@ -392,18 +380,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/labels",
-    "migration": "adopted",
-    "surface": "api"
-  },
-  {
-    "contracts": [
-      "api.bootstrap-task-label.path",
-      "api.bootstrap-task-label.headers",
-      "api.bootstrap-task-label.request",
-      "api.bootstrap-task-label.response"
-    ],
-    "exclusion": null,
-    "key": "POST /api/v1/tasks/:task_id/labels/bootstrap",
     "migration": "adopted",
     "surface": "api"
   },
@@ -1008,6 +984,28 @@
   },
   {
     "contracts": [
+      "api.rebuild-search-index.query",
+      "api.rebuild-search-index.headers",
+      "api.rebuild-search-index.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/search/index/rebuild",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.sync-search-index.query",
+      "api.sync-search-index.headers",
+      "api.sync-search-index.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/search/index/sync",
+    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
       "api.build-context.path",
       "api.build-context.query",
       "api.build-context.headers",
@@ -1337,6 +1335,15 @@
   },
   {
     "contracts": [
+      "cli.board-columns.output"
+    ],
+    "exclusion": null,
+    "key": "board columns",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
       "cli.board-create.output"
     ],
     "exclusion": null,
@@ -1495,24 +1502,6 @@
   },
   {
     "contracts": [
-      "cli.derived-status.output"
-    ],
-    "exclusion": null,
-    "key": "derived status",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.dispatch.output"
-    ],
-    "exclusion": null,
-    "key": "dispatch",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
       "cli.doctor.output"
     ],
     "exclusion": null,
@@ -1535,6 +1524,15 @@
     ],
     "exclusion": null,
     "key": "entity show",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.entity-upsert.output"
+    ],
+    "exclusion": null,
+    "key": "entity upsert",
     "migration": "adopted",
     "surface": "cli"
   },
@@ -1571,6 +1569,24 @@
     ],
     "exclusion": null,
     "key": "graph query",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-neighborhood.output"
+    ],
+    "exclusion": null,
+    "key": "graph neighborhood",
+    "migration": "adopted",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-map.output"
+    ],
+    "exclusion": null,
+    "key": "graph map",
     "migration": "adopted",
     "surface": "cli"
   },
@@ -1698,42 +1714,6 @@
   },
   {
     "contracts": [
-      "cli.maintenance-cleanup-legacy-apply.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance cleanup-legacy apply",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-cleanup-legacy-inventory.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance cleanup-legacy inventory",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-cleanup-legacy-restore.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance cleanup-legacy restore",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-cleanup-legacy-verify.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance cleanup-legacy verify",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
       "cli.maintenance-rebuild-v1.output"
     ],
     "exclusion": null,
@@ -1815,28 +1795,10 @@
   },
   {
     "contracts": [
-      "cli.label-bootstrap.output"
-    ],
-    "exclusion": null,
-    "key": "label bootstrap",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
       "cli.label-create.output"
     ],
     "exclusion": null,
     "key": "label create",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-delete.output"
-    ],
-    "exclusion": null,
-    "key": "label delete",
     "migration": "adopted",
     "surface": "cli"
   },
@@ -2058,15 +2020,6 @@
   },
   {
     "contracts": [
-      "cli.outbox-list.output"
-    ],
-    "exclusion": null,
-    "key": "outbox list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
       "cli.run-logs.output"
     ],
     "exclusion": null,
@@ -2218,15 +2171,6 @@
   },
   {
     "contracts": [
-      "cli.task-complete.output"
-    ],
-    "exclusion": null,
-    "key": "task complete",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
       "cli.task-create.output"
     ],
     "exclusion": null,
@@ -2317,10 +2261,10 @@
   },
   {
     "contracts": [
-      "cli.task-start.output"
+      "cli.task-specify.output"
     ],
     "exclusion": null,
-    "key": "task start",
+    "key": "task specify",
     "migration": "adopted",
     "surface": "cli"
   },

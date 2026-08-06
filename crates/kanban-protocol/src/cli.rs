@@ -589,6 +589,7 @@ pub struct CliEntity {
 
 pub type CliEntityListOutput = DataEnvelope<Vec<CliEntity>>;
 pub type CliEntityShowOutput = DataEnvelope<CliEntity>;
+pub type CliEntityUpsertOutput = CliEntityShowOutput;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -623,6 +624,7 @@ pub type CliDerivedStatusOutput = DataEnvelope<Vec<CliDerivedStoreStatus>>;
 
 pub type CliTaskListOutput = DataEnvelope<Vec<ApiTask>>;
 pub type CliTaskShowOutput = GetTaskResponse;
+pub type CliTaskSpecifyOutput = crate::SpecifyTaskResponse;
 pub type CliTaskCreateOutput = DataEnvelope<ApiTask>;
 pub type CliTaskUpdateOutput = DataEnvelope<ApiTask>;
 pub type CliTaskPromoteOutput = DataEnvelope<ApiTask>;
@@ -810,6 +812,7 @@ pub struct CliBoardConfigSelection {
 
 pub type CliBoardUseOutput = DataEnvelope<CliBoardConfigSelection>;
 pub type CliBoardCurrentOutput = DataEnvelope<CliBoardConfigSelection>;
+pub type CliBoardColumnsOutput = crate::ListBoardColumnsResponse;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]

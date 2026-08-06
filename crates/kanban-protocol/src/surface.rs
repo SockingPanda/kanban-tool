@@ -44,6 +44,7 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         ),
         adopted!(Cli, "backup", "cli.maintenance-backup.output"),
         adopted!(Cli, "board archive", "cli.board-archive.output"),
+        adopted!(Cli, "board columns", "cli.board-columns.output"),
         adopted!(Cli, "board create", "cli.board-create.output"),
         adopted!(Cli, "board current", "cli.board-current.output"),
         adopted!(Cli, "board list", "cli.board-list.output"),
@@ -70,15 +71,16 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         adopted!(Cli, "dep add", "cli.dep-add.output"),
         adopted!(Cli, "dep list", "cli.dep-list.output"),
         adopted!(Cli, "dep remove", "cli.dep-remove.output"),
-        adopted!(Cli, "derived status", "cli.derived-status.output"),
-        adopted!(Cli, "dispatch", "cli.dispatch.output"),
         adopted!(Cli, "doctor", "cli.doctor.output"),
         adopted!(Cli, "entity list", "cli.entity-list.output"),
         adopted!(Cli, "entity show", "cli.entity-show.output"),
+        adopted!(Cli, "entity upsert", "cli.entity-upsert.output"),
         adopted!(Cli, "events", "cli.events.output"),
         adopted!(Cli, "export", "cli.maintenance-export.output"),
         adopted!(Cli, "graph neighbors", "cli.graph-neighbors.output"),
         adopted!(Cli, "graph query", "cli.graph-query.output"),
+        adopted!(Cli, "graph neighborhood", "cli.graph-neighborhood.output"),
+        adopted!(Cli, "graph map", "cli.graph-map.output"),
         adopted!(Cli, "graph rebuild", "cli.graph-rebuild.output"),
         adopted!(Cli, "graph status", "cli.graph-status.output"),
         adopted!(Cli, "graph sync", "cli.graph-sync.output"),
@@ -105,26 +107,6 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         adopted!(Cli, "index status", "cli.index-status.output"),
         adopted!(Cli, "index sync", "cli.index-sync.output"),
         adopted!(Cli, "init", "cli.init.output"),
-        adopted!(
-            Cli,
-            "maintenance cleanup-legacy apply",
-            "cli.maintenance-cleanup-legacy-apply.output"
-        ),
-        adopted!(
-            Cli,
-            "maintenance cleanup-legacy inventory",
-            "cli.maintenance-cleanup-legacy-inventory.output"
-        ),
-        adopted!(
-            Cli,
-            "maintenance cleanup-legacy restore",
-            "cli.maintenance-cleanup-legacy-restore.output"
-        ),
-        adopted!(
-            Cli,
-            "maintenance cleanup-legacy verify",
-            "cli.maintenance-cleanup-legacy-verify.output"
-        ),
         adopted!(
             Cli,
             "maintenance rebuild",
@@ -154,9 +136,7 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         ),
         adopted!(Cli, "label atoms explain", "cli.label-atoms-explain.output"),
         adopted!(Cli, "label atoms list", "cli.label-atoms-list.output"),
-        adopted!(Cli, "label bootstrap", "cli.label-bootstrap.output"),
         adopted!(Cli, "label create", "cli.label-create.output"),
-        adopted!(Cli, "label delete", "cli.label-delete.output"),
         adopted!(Cli, "label list", "cli.label-list.output"),
         adopted!(
             Cli,
@@ -253,7 +233,6 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
             "cli.label-semantics-upsert.output"
         ),
         adopted!(Cli, "label suggest", "cli.label-suggest.output"),
-        adopted!(Cli, "outbox list", "cli.outbox-list.output"),
         adopted!(Cli, "run logs", "cli.run-logs.output"),
         adopted!(Cli, "run show", "cli.run-show.output"),
         adopted!(Cli, "runs", "cli.runs.output"),
@@ -275,7 +254,6 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         adopted!(Cli, "task archive", "cli.task-archive.output"),
         adopted!(Cli, "task block", "cli.task-block.output"),
         adopted!(Cli, "task claim", "cli.task-claim.output"),
-        adopted!(Cli, "task complete", "cli.task-complete.output"),
         adopted!(Cli, "task create", "cli.task-create.output"),
         adopted!(Cli, "task done", "cli.task-done.output"),
         adopted!(Cli, "task heartbeat", "cli.task-heartbeat.output"),
@@ -286,7 +264,7 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         adopted!(Cli, "task reopen", "cli.task-reopen.output"),
         adopted!(Cli, "task review", "cli.task-review.output"),
         adopted!(Cli, "task show", "cli.task-show.output"),
-        adopted!(Cli, "task start", "cli.task-start.output"),
+        adopted!(Cli, "task specify", "cli.task-specify.output"),
         adopted!(Cli, "task step add", "cli.task-step-add.output"),
         adopted!(Cli, "task step done", "cli.task-step-done.output"),
         adopted!(Cli, "task step list", "cli.task-step-list.output"),

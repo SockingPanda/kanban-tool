@@ -20,7 +20,7 @@
           "type": "string"
         },
         "decided_at": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "format": "int64",
           "type": [
             "integer",
@@ -28,14 +28,14 @@
           ]
         },
         "decision_reason": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
           ]
         },
         "description": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
@@ -82,7 +82,7 @@
           "type": "array"
         },
         "resolved_label_id": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
@@ -95,14 +95,14 @@
           "type": "string"
         },
         "top1_existing_label_id": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
           ]
         },
         "top1_existing_label_name": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"

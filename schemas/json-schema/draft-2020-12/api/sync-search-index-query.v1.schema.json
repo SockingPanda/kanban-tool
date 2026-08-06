@@ -1,16 +1,13 @@
 {
-  "$id": "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
+  "$id": "urn:kanban-tool:schema:api:sync-search-index-query:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
     "board": {
-      "minLength": 1,
+      "default": "default",
       "type": "string"
     }
   },
-  "required": [
-    "board"
-  ],
-  "title": "Kanban list tasks by status path v1",
+  "title": "Kanban sync search index query v1",
   "type": "object"
 }

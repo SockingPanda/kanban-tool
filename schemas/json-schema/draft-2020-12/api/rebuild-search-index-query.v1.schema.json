@@ -1,15 +1,13 @@
 {
-  "$id": "urn:kanban-tool:schema:api:bootstrap-task-label-path:v1",
+  "$id": "urn:kanban-tool:schema:api:rebuild-search-index-query:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "task_id": {
+    "board": {
+      "default": "default",
       "type": "string"
     }
   },
-  "required": [
-    "task_id"
-  ],
-  "title": "Bootstrap Task Label Path v1",
+  "title": "Kanban rebuild search index query v1",
   "type": "object"
 }

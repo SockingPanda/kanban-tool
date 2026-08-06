@@ -65,14 +65,14 @@ pub use boards::{
 };
 pub use cli::{
     CliAttachmentAddOutput, CliAttachmentListOutput, CliAttachmentRemoveOutput, CliBackupOutput,
-    CliBackupResult, CliBoardConfigSelection, CliBoardCurrentOutput, CliBoardUseOutput,
-    CliCheckpointOutput, CliCommentAddOutput, CliCommentListOutput, CliConfigShow,
-    CliConfigShowOutput, CliConfigSource, CliDependencyAddOutput, CliDependencyEdge,
+    CliBackupResult, CliBoardColumnsOutput, CliBoardConfigSelection, CliBoardCurrentOutput,
+    CliBoardUseOutput, CliCheckpointOutput, CliCommentAddOutput, CliCommentListOutput,
+    CliConfigShow, CliConfigShowOutput, CliConfigSource, CliDependencyAddOutput, CliDependencyEdge,
     CliDependencyListOutput, CliDependencyMutation, CliDependencyRemoveOutput,
     CliDependencySnapshot, CliDependencyTask, CliDerivedStatusOutput, CliDerivedStoreStatus,
-    CliDoctorOutput, CliEntity, CliEntityListOutput, CliEntityShowOutput, CliEvent,
-    CliEventsOutput, CliIndexDoctorOutput, CliIndexStatusOutput, CliInitOutput, CliInitResult,
-    CliLegacyProjectionRootKind, CliMachineOutput, CliMaintenanceLegacyCleanup,
+    CliDoctorOutput, CliEntity, CliEntityListOutput, CliEntityShowOutput, CliEntityUpsertOutput,
+    CliEvent, CliEventsOutput, CliIndexDoctorOutput, CliIndexStatusOutput, CliInitOutput,
+    CliInitResult, CliLegacyProjectionRootKind, CliMachineOutput, CliMaintenanceLegacyCleanup,
     CliMaintenanceLegacyCleanupAction, CliMaintenanceLegacyCleanupApply,
     CliMaintenanceLegacyCleanupApplyOutput, CliMaintenanceLegacyCleanupInventory,
     CliMaintenanceLegacyCleanupInventoryOutput, CliMaintenanceLegacyCleanupOutput,
@@ -87,13 +87,13 @@ pub use cli::{
     CliStatsOutput, CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput,
     CliTaskCompleteOutput, CliTaskCreateOutput, CliTaskDoneOutput, CliTaskHeartbeatOutput,
     CliTaskListOutput, CliTaskPromoteOutput, CliTaskReclaimOutput, CliTaskReleaseOutput,
-    CliTaskReopenOutput, CliTaskReviewOutput, CliTaskShowOutput, CliTaskStartOutput,
-    CliTaskStepAddOutput, CliTaskStepDoneOutput, CliTaskStepListOutput,
+    CliTaskReopenOutput, CliTaskReviewOutput, CliTaskShowOutput, CliTaskSpecifyOutput,
+    CliTaskStartOutput, CliTaskStepAddOutput, CliTaskStepDoneOutput, CliTaskStepListOutput,
     CliTaskStepNotRequiredOutput, CliTaskStepRemoveOutput, CliTaskStepRemoveResult,
     CliTaskStepReopenOutput, CliTaskStepSkipOutput, CliTaskStepUpdateOutput, CliTaskUnblockOutput,
     CliTaskUpdateOutput, CliVacuumOutput, CliVacuumResult, cli_operation_catalog,
 };
-pub use cli_helpers::CliContextBuildOutput;
+pub use cli_helpers::{CliContextBuildOutput, CliGraphMapOutput, CliGraphNeighborhoodOutput};
 pub use comments::{
     ApiComment, CommentAuthorType, CommentKind, CreateCommentPath, CreateCommentRequest,
     CreateCommentResponse, ListCommentsPath, ListCommentsResponse,

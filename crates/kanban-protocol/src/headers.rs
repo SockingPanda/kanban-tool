@@ -40,7 +40,6 @@ const ACTOR_OPERATIONS: &[&str] = &[
     "api.archive-board",
     "api.archive-task",
     "api.block-task",
-    "api.bootstrap-task-label",
     "api.claim-task",
     "api.complete-step",
     "api.complete-task",

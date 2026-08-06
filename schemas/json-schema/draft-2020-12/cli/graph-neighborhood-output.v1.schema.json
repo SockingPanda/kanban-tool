@@ -1,33 +1,5 @@
 {
   "$defs": {
-    "ApiClaim": {
-      "additionalProperties": false,
-      "properties": {
-        "claim_expires_at": {
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "claim_token": {
-          "type": "string"
-        },
-        "run": {
-          "$ref": "#/$defs/ApiRun"
-        },
-        "task": {
-          "$ref": "#/$defs/ApiTask"
-        }
-      },
-      "required": [
-        "task",
-        "run",
-        "claim_token",
-        "claim_expires_at"
-      ],
-      "type": "object"
-    },
     "ApiExecutionPlanState": {
       "enum": [
         "unplanned",
@@ -72,96 +44,6 @@
         "updated_at"
       ],
       "type": "object"
-    },
-    "ApiRun": {
-      "additionalProperties": false,
-      "properties": {
-        "claim_owner": {
-          "type": "string"
-        },
-        "error": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "exit_code": {
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "finished_at": {
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "has_log": {
-          "type": "boolean"
-        },
-        "id": {
-          "type": "string"
-        },
-        "metadata": true,
-        "started_at": {
-          "format": "int64",
-          "type": "integer"
-        },
-        "status": {
-          "$ref": "#/$defs/ApiRunStatus"
-        },
-        "summary": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "task_id": {
-          "type": "string"
-        },
-        "worker_pid": {
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "worker_profile": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "id",
-        "task_id",
-        "status",
-        "worker_profile",
-        "worker_pid",
-        "claim_owner",
-        "started_at",
-        "finished_at",
-        "exit_code",
-        "summary",
-        "error",
-        "has_log",
-        "metadata"
-      ],
-      "type": "object"
-    },
-    "ApiRunStatus": {
-      "enum": [
-        "running",
-        "succeeded",
-        "failed",
-        "canceled",
-        "expired"
-      ],
-      "type": "string"
     },
     "ApiTask": {
       "additionalProperties": false,
@@ -378,6 +260,25 @@
       ],
       "type": "object"
     },
+    "ApiTaskGraphEdgeKind": {
+      "enum": [
+        "dependency",
+        "step"
+      ],
+      "type": "string"
+    },
+    "ApiTaskGraphNodeRole": {
+      "enum": [
+        "center",
+        "dependency_parent",
+        "dependency_child",
+        "step_parent",
+        "step_child",
+        "active",
+        "context"
+      ],
+      "type": "string"
+    },
     "ApiTaskPriority": {
       "format": "uint8",
       "maximum": 3,
@@ -397,19 +298,171 @@
         "archived"
       ],
       "type": "string"
+    },
+    "TaskGraphEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "blocking": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ApiTaskGraphEdgeKind"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "source_task_id": {
+          "type": "string"
+        },
+        "target_task_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_task_id",
+        "target_task_id",
+        "kind",
+        "required",
+        "blocking"
+      ],
+      "type": "object"
+    },
+    "TaskGraphMeta": {
+      "additionalProperties": false,
+      "properties": {
+        "active_only": {
+          "type": "boolean"
+        },
+        "active_statuses": {
+          "items": {
+            "$ref": "#/$defs/ApiTaskStatus"
+          },
+          "type": "array"
+        },
+        "context_depth": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "depth": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "edge_count": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "generated_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "hide_isolated": {
+          "type": "boolean"
+        },
+        "include_archived_context": {
+          "type": "boolean"
+        },
+        "include_done_context": {
+          "type": "boolean"
+        },
+        "limit_nodes": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "node_count": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "depth",
+        "context_depth",
+        "generated_at",
+        "node_count",
+        "edge_count",
+        "truncated",
+        "active_statuses",
+        "active_only",
+        "include_done_context",
+        "include_archived_context",
+        "hide_isolated",
+        "limit_nodes"
+      ],
+      "type": "object"
+    },
+    "TaskGraphNode": {
+      "additionalProperties": false,
+      "properties": {
+        "context_only": {
+          "type": "boolean"
+        },
+        "role": {
+          "$ref": "#/$defs/ApiTaskGraphNodeRole"
+        },
+        "task": {
+          "$ref": "#/$defs/ApiTask"
+        }
+      },
+      "required": [
+        "task",
+        "role",
+        "context_only"
+      ],
+      "type": "object"
+    },
+    "TaskNeighborhood": {
+      "additionalProperties": false,
+      "properties": {
+        "center_task_id": {
+          "type": "string"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/TaskGraphEdge"
+          },
+          "type": "array"
+        },
+        "meta": {
+          "$ref": "#/$defs/TaskGraphMeta"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/TaskGraphNode"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "center_task_id",
+        "nodes",
+        "edges",
+        "meta"
+      ],
+      "type": "object"
     }
   },
-  "$id": "urn:kanban-tool:schema:cli:task-start-output:v1",
+  "$id": "urn:kanban-tool:schema:cli:graph-neighborhood-output:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
     "data": {
-      "$ref": "#/$defs/ApiClaim"
+      "$ref": "#/$defs/TaskNeighborhood"
     }
   },
   "required": [
     "data"
   ],
-  "title": "Kanban CLI task start output v1",
+  "title": "Kanban CLI graph neighborhood output v1",
   "type": "object"
 }

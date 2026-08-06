@@ -2,7 +2,7 @@
   "$id": "urn:kanban-tool:schema:api:vector-status-query:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Canonical host vector status query。",
+  "description": "canonical host vector 状态查询。",
   "properties": {
     "board": {
       "default": "default",

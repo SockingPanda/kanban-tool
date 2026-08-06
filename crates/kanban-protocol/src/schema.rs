@@ -13,36 +13,33 @@ use crate::{
     AttachmentDownloadResponse, BlockTaskPath, BlockTaskRequest, BlockTaskResponse,
     BoardTaskMapPath, BoardTaskMapQuery, BoardTaskMapResponse, CheckpointResponse, ClaimTaskPath,
     ClaimTaskRequest, ClaimTaskResponse, CliAttachmentAddOutput, CliAttachmentListOutput,
-    CliAttachmentRemoveOutput, CliBoardCurrentOutput, CliBoardUseOutput, CliCheckpointOutput,
-    CliCommentAddOutput, CliCommentListOutput, CliConfigShowOutput, CliDependencyAddOutput,
-    CliDependencyListOutput, CliDependencyRemoveOutput, CliDerivedStatusOutput, CliDoctorOutput,
-    CliEntityListOutput, CliEntityShowOutput, CliEventsOutput, CliIndexDoctorOutput,
-    CliIndexStatusOutput, CliInitOutput, CliMaintenanceLegacyCleanupApplyOutput,
-    CliMaintenanceLegacyCleanupInventoryOutput, CliMaintenanceLegacyCleanupRestoreOutput,
-    CliMaintenanceLegacyCleanupVerifyOutput, CliOutboxListOutput, CliRunLogsOutput,
-    CliRunShowOutput, CliRunsOutput, CliStatsOutput, CliTaskArchiveOutput, CliTaskBlockOutput,
-    CliTaskClaimOutput, CliTaskCompleteOutput, CliTaskCreateOutput, CliTaskDoneOutput,
-    CliTaskHeartbeatOutput, CliTaskListOutput, CliTaskPromoteOutput, CliTaskReclaimOutput,
-    CliTaskReleaseOutput, CliTaskReopenOutput, CliTaskReviewOutput, CliTaskShowOutput,
-    CliTaskStartOutput, CliTaskStepAddOutput, CliTaskStepDoneOutput, CliTaskStepListOutput,
-    CliTaskStepNotRequiredOutput, CliTaskStepRemoveOutput, CliTaskStepReopenOutput,
-    CliTaskStepSkipOutput, CliTaskStepUpdateOutput, CliTaskUnblockOutput, CliTaskUpdateOutput,
-    CompleteStepPath, CompleteStepRequest, CompleteStepResponse, CompleteTaskPath,
-    CompleteTaskRequest, CompleteTaskResponse, ConfirmSignalsResponse, ContractDirection,
-    ContractStrictness, CreateAttachmentPath, CreateAttachmentRequest, CreateAttachmentResponse,
-    CreateBoardRequest, CreateBoardResponse, CreateCommentPath, CreateCommentRequest,
-    CreateCommentResponse, CreateStepPath, CreateStepRequest, CreateStepResponse, CreateTaskPath,
-    CreateTaskRequest, CreateTaskResponse, DecisionMetadata, DeleteAttachmentPath,
-    DeleteAttachmentResponse, DeleteResponse, DoctorResponse, ErrorEnvelope, GetBoardPath,
-    GetBoardResponse, GetRunLogPath, GetRunLogResponse, GetRunPath, GetRunResponse,
-    GetSignalResponse, GetTaskPath, GetTaskQuery, GetTaskResponse, HealthResponse,
-    HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse, LabelOntologySignalsResponse,
-    ListAttachmentsPath, ListAttachmentsResponse, ListBoardColumnsPath, ListBoardColumnsResponse,
-    ListBoardsQuery, ListBoardsResponse, ListCommentsPath, ListCommentsResponse,
-    ListDependenciesPath, ListDependenciesResponse, ListEventsResponse, ListRunsPath,
-    ListRunsResponse, ListSignalsResponse, ListStepsPath, ListStepsResponse, ListTaskLabelsPath,
-    ListTaskLabelsResponse, ListTasksByStatusPath, ListTasksByStatusQuery,
-    ListTasksByStatusResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
+    CliAttachmentRemoveOutput, CliBoardColumnsOutput, CliBoardCurrentOutput, CliBoardUseOutput,
+    CliCheckpointOutput, CliCommentAddOutput, CliCommentListOutput, CliConfigShowOutput,
+    CliDependencyAddOutput, CliDependencyListOutput, CliDependencyRemoveOutput, CliDoctorOutput,
+    CliEntityListOutput, CliEntityShowOutput, CliEntityUpsertOutput, CliEventsOutput,
+    CliIndexDoctorOutput, CliIndexStatusOutput, CliInitOutput, CliRunLogsOutput, CliRunShowOutput,
+    CliRunsOutput, CliStatsOutput, CliTaskArchiveOutput, CliTaskBlockOutput, CliTaskClaimOutput,
+    CliTaskCreateOutput, CliTaskDoneOutput, CliTaskHeartbeatOutput, CliTaskListOutput,
+    CliTaskPromoteOutput, CliTaskReclaimOutput, CliTaskReleaseOutput, CliTaskReopenOutput,
+    CliTaskReviewOutput, CliTaskShowOutput, CliTaskSpecifyOutput, CliTaskStepAddOutput,
+    CliTaskStepDoneOutput, CliTaskStepListOutput, CliTaskStepNotRequiredOutput,
+    CliTaskStepRemoveOutput, CliTaskStepReopenOutput, CliTaskStepSkipOutput,
+    CliTaskStepUpdateOutput, CliTaskUnblockOutput, CliTaskUpdateOutput, CompleteStepPath,
+    CompleteStepRequest, CompleteStepResponse, CompleteTaskPath, CompleteTaskRequest,
+    CompleteTaskResponse, ConfirmSignalsResponse, ContractDirection, ContractStrictness,
+    CreateAttachmentPath, CreateAttachmentRequest, CreateAttachmentResponse, CreateBoardRequest,
+    CreateBoardResponse, CreateCommentPath, CreateCommentRequest, CreateCommentResponse,
+    CreateStepPath, CreateStepRequest, CreateStepResponse, CreateTaskPath, CreateTaskRequest,
+    CreateTaskResponse, DecisionMetadata, DeleteAttachmentPath, DeleteAttachmentResponse,
+    DeleteResponse, DoctorResponse, ErrorEnvelope, GetBoardPath, GetBoardResponse, GetRunLogPath,
+    GetRunLogResponse, GetRunPath, GetRunResponse, GetSignalResponse, GetTaskPath, GetTaskQuery,
+    GetTaskResponse, HealthResponse, HeartbeatTaskPath, HeartbeatTaskRequest,
+    HeartbeatTaskResponse, LabelOntologySignalsResponse, ListAttachmentsPath,
+    ListAttachmentsResponse, ListBoardColumnsPath, ListBoardColumnsResponse, ListBoardsQuery,
+    ListBoardsResponse, ListCommentsPath, ListCommentsResponse, ListDependenciesPath,
+    ListDependenciesResponse, ListEventsResponse, ListRunsPath, ListRunsResponse,
+    ListSignalsResponse, ListStepsPath, ListStepsResponse, ListTaskLabelsPath,
+    ListTaskLabelsResponse, ListTasksPath, ListTasksQuery, ListTasksResponse,
     MarkExecutionPlanNotRequiredPath, MarkExecutionPlanNotRequiredRequest,
     MarkExecutionPlanNotRequiredResponse, PromoteTaskPath, PromoteTaskRequest, PromoteTaskResponse,
     ReclaimTaskPath, ReclaimTaskRequest, ReclaimTaskResponse, RecordSignalRequest,
@@ -181,60 +178,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         CliIndexDoctorOutput
     ),
     response_schema_root!(
-        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-inventory-output:v1",
-        "cli/maintenance-cleanup-legacy-inventory-output.v1.schema.json",
-        "Kanban CLI maintenance cleanup legacy inventory output v1",
-        "cli.maintenance-cleanup-legacy-inventory.output",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.valid.json",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.invalid.json",
-        CliMaintenanceLegacyCleanupInventoryOutput
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-apply-output:v1",
-        "cli/maintenance-cleanup-legacy-apply-output.v1.schema.json",
-        "Kanban CLI maintenance cleanup legacy apply output v1",
-        "cli.maintenance-cleanup-legacy-apply.output",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.valid.json",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.invalid.json",
-        CliMaintenanceLegacyCleanupApplyOutput
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-verify-output:v1",
-        "cli/maintenance-cleanup-legacy-verify-output.v1.schema.json",
-        "Kanban CLI maintenance cleanup legacy verify output v1",
-        "cli.maintenance-cleanup-legacy-verify.output",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.valid.json",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.invalid.json",
-        CliMaintenanceLegacyCleanupVerifyOutput
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-restore-output:v1",
-        "cli/maintenance-cleanup-legacy-restore-output.v1.schema.json",
-        "Kanban CLI maintenance cleanup legacy restore output v1",
-        "cli.maintenance-cleanup-legacy-restore.output",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.valid.json",
-        "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.invalid.json",
-        CliMaintenanceLegacyCleanupRestoreOutput
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:derived-status-output:v1",
-        "cli/derived-status-output.v1.schema.json",
-        "Kanban CLI derived status output v1",
-        "cli.derived-status.output",
-        "schemas/fixtures/cli/derived-status-output.v1.valid.json",
-        "schemas/fixtures/cli/derived-status-output.v1.invalid.json",
-        CliDerivedStatusOutput
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:outbox-list-output:v1",
-        "cli/outbox-list-output.v1.schema.json",
-        "Kanban CLI outbox list output v1",
-        "cli.outbox-list.output",
-        "schemas/fixtures/cli/outbox-list-output.v1.valid.json",
-        "schemas/fixtures/cli/outbox-list-output.v1.invalid.json",
-        CliOutboxListOutput
-    ),
-    response_schema_root!(
         "urn:kanban-tool:schema:cli:entity-list-output:v1",
         "cli/entity-list-output.v1.schema.json",
         "Kanban CLI entity list output v1",
@@ -251,6 +194,15 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/cli/entity-show-output.v1.valid.json",
         "schemas/fixtures/cli/entity-show-output.v1.invalid.json",
         CliEntityShowOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:entity-upsert-output:v1",
+        "cli/entity-upsert-output.v1.schema.json",
+        "Kanban CLI entity upsert output v1",
+        "cli.entity-upsert.output",
+        "schemas/fixtures/cli/entity-upsert-output.v1.valid.json",
+        "schemas/fixtures/cli/entity-upsert-output.v1.invalid.json",
+        CliEntityUpsertOutput
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:doctor-output:v1",
@@ -415,6 +367,15 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         ArchiveBoardResponse
     ),
     response_schema_root!(
+        "urn:kanban-tool:schema:cli:board-columns-output:v1",
+        "cli/board-columns-output.v1.schema.json",
+        "Kanban CLI board columns output v1",
+        "cli.board-columns.output",
+        "schemas/fixtures/cli/board-columns-output.v1.valid.json",
+        "schemas/fixtures/cli/board-columns-output.v1.invalid.json",
+        CliBoardColumnsOutput
+    ),
+    response_schema_root!(
         "urn:kanban-tool:schema:cli:task-list-output:v1",
         "cli/task-list-output.v1.schema.json",
         "Kanban CLI task list output v1",
@@ -431,6 +392,15 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/cli/task-show-output.v1.valid.json",
         "schemas/fixtures/cli/task-show-output.v1.invalid.json",
         CliTaskShowOutput
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:cli:task-specify-output:v1",
+        "cli/task-specify-output.v1.schema.json",
+        "Kanban CLI task specify output v1",
+        "cli.task-specify.output",
+        "schemas/fixtures/cli/task-specify-output.v1.valid.json",
+        "schemas/fixtures/cli/task-specify-output.v1.invalid.json",
+        CliTaskSpecifyOutput
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:comment-add-output:v1",
@@ -613,15 +583,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         CliTaskClaimOutput
     ),
     response_schema_root!(
-        "urn:kanban-tool:schema:cli:task-start-output:v1",
-        "cli/task-start-output.v1.schema.json",
-        "Kanban CLI task start output v1",
-        "cli.task-start.output",
-        "schemas/fixtures/cli/task-start-output.v1.valid.json",
-        "schemas/fixtures/cli/task-start-output.v1.invalid.json",
-        CliTaskStartOutput
-    ),
-    response_schema_root!(
         "urn:kanban-tool:schema:cli:task-reclaim-output:v1",
         "cli/task-reclaim-output.v1.schema.json",
         "Kanban CLI task reclaim output v1",
@@ -674,15 +635,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/cli/task-done-output.v1.valid.json",
         "schemas/fixtures/cli/task-done-output.v1.invalid.json",
         CliTaskDoneOutput
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:cli:task-complete-output:v1",
-        "cli/task-complete-output.v1.schema.json",
-        "Kanban CLI task complete output v1",
-        "cli.task-complete.output",
-        "schemas/fixtures/cli/task-complete-output.v1.valid.json",
-        "schemas/fixtures/cli/task-complete-output.v1.invalid.json",
-        CliTaskCompleteOutput
     ),
     response_schema_root!(
         "urn:kanban-tool:schema:cli:task-review-output:v1",
@@ -746,13 +698,7 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "label atoms list",
         CliLabelAtomsListOutput
     ),
-    cli_response_schema_root!(
-        "label-bootstrap",
-        "label bootstrap",
-        CliLabelBootstrapOutput
-    ),
     cli_response_schema_root!("label-create", "label create", CliLabelCreateOutput),
-    cli_response_schema_root!("label-delete", "label delete", CliLabelDeleteOutput),
     cli_response_schema_root!("label-list", "label list", CliLabelListOutput),
     cli_response_schema_root!(
         "label-ontology-apply-atom",
@@ -862,6 +808,12 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "graph neighbors",
         CliGraphNeighborsOutput
     ),
+    cli_response_schema_root!(
+        "graph-neighborhood",
+        "graph neighborhood",
+        CliGraphNeighborhoodOutput
+    ),
+    cli_response_schema_root!("graph-map", "graph map", CliGraphMapOutput),
     cli_response_schema_root!("graph-query", "graph query", CliGraphQueryOutput),
     cli_response_schema_root!("graph-rebuild", "graph rebuild", CliGraphRebuildOutput),
     cli_response_schema_root!("graph-status", "graph status", CliGraphStatusOutput),
@@ -915,7 +867,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "hook codex uninstall",
         CliHookCodexUninstallOutput
     ),
-    cli_response_schema_root!("dispatch", "dispatch", CliDispatchOutput),
     request_schema_root!(
         "urn:kanban-tool:schema:api:get-stats-query:v1",
         "api/get-stats-query.v1.schema.json",
@@ -984,6 +935,42 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "api/search-status-response.v1.schema.json",
         "Kanban search status response v1",
         "api.search-status.response",
+        "schemas/fixtures/api/search-status-response.v1.valid.json",
+        "schemas/fixtures/api/search-status-response.v1.invalid.json",
+        SearchStatusResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:rebuild-search-index-query:v1",
+        "api/rebuild-search-index-query.v1.schema.json",
+        "Kanban rebuild search index query v1",
+        "api.rebuild-search-index.query",
+        "schemas/fixtures/api/search-status-query.v1.valid.json",
+        "schemas/fixtures/api/search-status-query.v1.invalid.json",
+        BoardQuery
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:rebuild-search-index-response:v1",
+        "api/rebuild-search-index-response.v1.schema.json",
+        "Kanban rebuild search index response v1",
+        "api.rebuild-search-index.response",
+        "schemas/fixtures/api/search-status-response.v1.valid.json",
+        "schemas/fixtures/api/search-status-response.v1.invalid.json",
+        SearchStatusResponse
+    ),
+    request_schema_root!(
+        "urn:kanban-tool:schema:api:sync-search-index-query:v1",
+        "api/sync-search-index-query.v1.schema.json",
+        "Kanban sync search index query v1",
+        "api.sync-search-index.query",
+        "schemas/fixtures/api/search-status-query.v1.valid.json",
+        "schemas/fixtures/api/search-status-query.v1.invalid.json",
+        BoardQuery
+    ),
+    response_schema_root!(
+        "urn:kanban-tool:schema:api:sync-search-index-response:v1",
+        "api/sync-search-index-response.v1.schema.json",
+        "Kanban sync search index response v1",
+        "api.sync-search-index.response",
         "schemas/fixtures/api/search-status-response.v1.valid.json",
         "schemas/fixtures/api/search-status-response.v1.invalid.json",
         SearchStatusResponse
@@ -1573,17 +1560,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         invalid_fixture: "schemas/fixtures/api/list-tasks-response.v1.invalid.json",
         generate: generate_for::<ListTasksResponse>,
     },
-    SchemaRoot {
-        id: "urn:kanban-tool:schema:api:list-tasks-by-status-response:v1",
-        artifact_path: "api/list-tasks-by-status-response.v1.schema.json",
-        title: "Kanban list tasks by status response v1",
-        contract_id: "api.list-tasks-by-status.response",
-        direction: ContractDirection::Serialize,
-        strictness: ContractStrictness::DenyUnknownFields,
-        valid_fixture: "schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json",
-        invalid_fixture: "schemas/fixtures/api/list-tasks-by-status-response.v1.invalid.json",
-        generate: generate_for::<ListTasksByStatusResponse>,
-    },
     request_schema_root!(
         "urn:kanban-tool:schema:api:create-task-path:v1",
         "api/create-task-path.v1.schema.json",
@@ -1630,24 +1606,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/api/list-tasks-query.v1.valid.json",
         "schemas/fixtures/api/list-tasks-query.v1.invalid.json",
         ListTasksQuery
-    ),
-    request_schema_root!(
-        "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
-        "api/list-tasks-by-status-path.v1.schema.json",
-        "Kanban list tasks by status path v1",
-        "api.list-tasks-by-status.path",
-        "schemas/fixtures/api/list-tasks-by-status-path.v1.valid.json",
-        "schemas/fixtures/api/list-tasks-by-status-path.v1.invalid.json",
-        ListTasksByStatusPath
-    ),
-    request_schema_root!(
-        "urn:kanban-tool:schema:api:list-tasks-by-status-query:v1",
-        "api/list-tasks-by-status-query.v1.schema.json",
-        "Kanban list tasks by status query v1",
-        "api.list-tasks-by-status.query",
-        "schemas/fixtures/api/list-tasks-by-status-query.v1.valid.json",
-        "schemas/fixtures/api/list-tasks-by-status-query.v1.invalid.json",
-        ListTasksByStatusQuery
     ),
     request_schema_root!(
         "urn:kanban-tool:schema:api:list-runs-path:v1",
@@ -3022,24 +2980,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/api/supersede-signals-response.v1.invalid.json",
         SupersedeSignalsResponse
     ),
-    request_schema_root!(
-        "urn:kanban-tool:schema:api:bootstrap-task-label-request:v1",
-        "api/bootstrap-task-label-request.v1.schema.json",
-        "Bootstrap task label request v1",
-        "api.bootstrap-task-label.request",
-        "schemas/fixtures/api/bootstrap-task-label-request.v1.valid.json",
-        "schemas/fixtures/api/bootstrap-task-label-request.v1.invalid.json",
-        BootstrapTaskLabelRequest
-    ),
-    response_schema_root!(
-        "urn:kanban-tool:schema:api:bootstrap-task-label-response:v1",
-        "api/bootstrap-task-label-response.v1.schema.json",
-        "Bootstrap task label response v1",
-        "api.bootstrap-task-label.response",
-        "schemas/fixtures/api/bootstrap-task-label-response.v1.valid.json",
-        "schemas/fixtures/api/bootstrap-task-label-response.v1.invalid.json",
-        BootstrapTaskLabelResponse
-    ),
     response_schema_root!(
         "urn:kanban-tool:schema:api:suggest-task-labels-response:v1",
         "api/suggest-task-labels-response.v1.schema.json",
@@ -3390,15 +3330,6 @@ const SCHEMA_REGISTRY: &[SchemaRoot] = &[
         "schemas/fixtures/api/get-label-ontology-signal-path.v1.valid.json",
         "schemas/fixtures/api/get-label-ontology-signal-path.v1.invalid.json",
         SignalPath
-    ),
-    request_schema_root!(
-        "urn:kanban-tool:schema:api:bootstrap-task-label-path:v1",
-        "api/bootstrap-task-label-path.v1.schema.json",
-        "Bootstrap Task Label Path v1",
-        "api.bootstrap-task-label.path",
-        "schemas/fixtures/api/bootstrap-task-label-path.v1.valid.json",
-        "schemas/fixtures/api/bootstrap-task-label-path.v1.invalid.json",
-        TaskLabelSurfacePath
     ),
     request_schema_root!(
         "urn:kanban-tool:schema:api:review-signals-query:v1",

@@ -114,20 +114,6 @@ async fn lifecycle_cli_runs_each_transition_through_localhost_host() {
     assert_fixture_shape(&done, "task-done");
     assert_eq!(done["data"]["status"], "done");
 
-    create_task(&host, "t_complete", "Complete contract task", "ready");
-    let (_, complete_token) = claim_task(&host, "t_complete");
-    let complete = host.json(&[
-        "--json",
-        "task",
-        "complete",
-        "t_complete",
-        "--claim-token",
-        &complete_token,
-    ]);
-    assert_contract("task complete", "task-complete");
-    assert_fixture_shape(&complete, "task-complete");
-    assert_eq!(complete["data"]["status"], "done");
-
     create_task(&host, "t_release", "Release contract task", "ready");
     let (_, release_token) = claim_task(&host, "t_release");
     let release = host.json(&[

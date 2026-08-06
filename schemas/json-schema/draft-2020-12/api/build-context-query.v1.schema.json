@@ -8,7 +8,7 @@
       "type": "string"
     },
     "budget": {
-      "description": "Total item budget.  `max_items` remains accepted as the v1 alias.",
+      "description": "条目总预算。`max_items` 仍作为 v1 别名接受。",
       "format": "uint",
       "minimum": 0,
       "type": [
@@ -41,21 +41,21 @@
       "type": "integer"
     },
     "query": {
-      "description": "Free-text query used for lexical/vector subject resolution.",
+      "description": "用于词法/向量主体解析的自由文本查询。",
       "type": [
         "string",
         "null"
       ]
     },
     "reference": {
-      "description": "Board-local task reference such as `kanban-tool#12`.",
+      "description": "看板内任务引用，例如 `kanban-tool#12`。",
       "type": [
         "string",
         "null"
       ]
     },
     "task": {
-      "description": "Optional global task id.  When omitted, `reference` or `query` selects\nthe context subject.",
+      "description": "可选的全局任务 ID。省略时由 `reference` 或 `query` 选择上下文主体。",
       "type": [
         "string",
         "null"

@@ -78,16 +78,4 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(fixture).unwrap()
         );
     }
-
-    #[test]
-    fn task_complete_output_contract() {
-        let fixture =
-            include_str!("../../../../../schemas/fixtures/cli/task-complete-output.v1.valid.json");
-        let output: kanban_protocol::CliTaskCompleteOutput = serde_json::from_str(fixture).unwrap();
-        assert_eq!(output.data.status.as_str(), "done");
-        assert_eq!(
-            serde_json::to_value(CompleteTaskResponse::new(output.data.clone())).unwrap(),
-            serde_json::from_str::<serde_json::Value>(fixture).unwrap()
-        );
-    }
 }

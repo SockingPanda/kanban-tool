@@ -154,234 +154,6 @@
   {
     "adoption": {
       "consumer": {
-        "contract_id": "cli.maintenance-cleanup-legacy-inventory.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "maintenance cleanup-legacy inventory",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.maintenance-cleanup-legacy-inventory.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "maintenance cleanup-legacy inventory",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-inventory-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.maintenance-cleanup-legacy-inventory.output",
-    "migration": "adopted",
-    "operation": "maintenance cleanup-legacy inventory",
-    "path": "kanban maintenance cleanup-legacy inventory --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-inventory-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "cli.maintenance-cleanup-legacy-apply.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "maintenance cleanup-legacy apply",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.maintenance-cleanup-legacy-apply.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "maintenance cleanup-legacy apply",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-apply-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.maintenance-cleanup-legacy-apply.output",
-    "migration": "adopted",
-    "operation": "maintenance cleanup-legacy apply",
-    "path": "kanban maintenance cleanup-legacy apply --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-apply-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "cli.maintenance-cleanup-legacy-verify.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "maintenance cleanup-legacy verify",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.maintenance-cleanup-legacy-verify.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "maintenance cleanup-legacy verify",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-verify-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.maintenance-cleanup-legacy-verify.output",
-    "migration": "adopted",
-    "operation": "maintenance cleanup-legacy verify",
-    "path": "kanban maintenance cleanup-legacy verify --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-verify-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "cli.maintenance-cleanup-legacy-restore.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "maintenance cleanup-legacy restore",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.maintenance-cleanup-legacy-restore.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "maintenance cleanup-legacy restore",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/maintenance-cleanup-legacy-restore-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.maintenance-cleanup-legacy-restore.output",
-    "migration": "adopted",
-    "operation": "maintenance cleanup-legacy restore",
-    "path": "kanban maintenance cleanup-legacy restore --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:maintenance-cleanup-legacy-restore-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "cli.derived-status.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "derived status",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.derived-status.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "derived status",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/derived-status-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/derived-status-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.derived-status.output",
-    "migration": "adopted",
-    "operation": "derived status",
-    "path": "kanban derived status --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:derived-status-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "cli.outbox-list.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "outbox list",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.outbox-list.output",
-        "direction": "serialize",
-        "exact_test": "maintenance_admin_commands_use_real_host_and_typed_json",
-        "operation": "outbox list",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/outbox-list-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/outbox-list-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.outbox-list.output",
-    "migration": "adopted",
-    "operation": "outbox list",
-    "path": "kanban outbox list --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:outbox-list-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
         "contract_id": "cli.entity-list.output",
         "direction": "serialize",
         "exact_test": "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
@@ -449,6 +221,44 @@
     "operation": "entity show",
     "path": "kanban entity show --json stdout",
     "schema_id": "urn:kanban-tool:schema:cli:entity-show-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.entity-upsert.output",
+        "direction": "serialize",
+        "exact_test": "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
+        "operation": "entity upsert",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_knowledge_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.entity-upsert.output",
+        "direction": "serialize",
+        "exact_test": "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
+        "operation": "entity upsert",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_knowledge_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/entity-upsert-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/entity-upsert-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.entity-upsert.output",
+    "migration": "adopted",
+    "operation": "entity upsert",
+    "path": "kanban entity upsert --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:entity-upsert-output:v1",
     "strictness": "deny_unknown_fields",
     "surface": "cli",
     "transport": {
@@ -800,6 +610,44 @@
   {
     "adoption": {
       "consumer": {
+        "contract_id": "cli.board-columns.output",
+        "direction": "serialize",
+        "exact_test": "queue_cli_uses_real_host_for_config_board_and_task_commands",
+        "operation": "board columns",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_queue_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.board-columns.output",
+        "direction": "serialize",
+        "exact_test": "queue_cli_uses_real_host_for_config_board_and_task_commands",
+        "operation": "board columns",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_queue_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/board-columns-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/board-columns-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.board-columns.output",
+    "migration": "adopted",
+    "operation": "board columns",
+    "path": "kanban board columns --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:board-columns-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
         "contract_id": "cli.task-list.output",
         "direction": "serialize",
         "exact_test": "queue_cli_uses_real_host_for_config_board_and_task_commands",
@@ -867,6 +715,44 @@
     "operation": "task show",
     "path": "kanban task show --json stdout",
     "schema_id": "urn:kanban-tool:schema:cli:task-show-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.task-specify.output",
+        "direction": "serialize",
+        "exact_test": "lifecycle_cli_runs_each_transition_through_localhost_host",
+        "operation": "task specify",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_lifecycle_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.task-specify.output",
+        "direction": "serialize",
+        "exact_test": "lifecycle_cli_runs_each_transition_through_localhost_host",
+        "operation": "task specify",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_lifecycle_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/task-specify-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/task-specify-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.task-specify.output",
+    "migration": "adopted",
+    "operation": "task specify",
+    "path": "kanban task specify --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:task-specify-output:v1",
     "strictness": "deny_unknown_fields",
     "surface": "cli",
     "transport": {
@@ -1636,44 +1522,6 @@
   {
     "adoption": {
       "consumer": {
-        "contract_id": "cli.task-start.output",
-        "direction": "serialize",
-        "exact_test": "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "operation": "task start",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_lifecycle_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.task-start.output",
-        "direction": "serialize",
-        "exact_test": "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "operation": "task start",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_lifecycle_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/task-start-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/task-start-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.task-start.output",
-    "migration": "adopted",
-    "operation": "task start",
-    "path": "kanban task start --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:task-start-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
         "contract_id": "cli.task-reclaim.output",
         "direction": "serialize",
         "exact_test": "lifecycle_cli_runs_each_transition_through_localhost_host",
@@ -1893,44 +1741,6 @@
     "operation": "task done",
     "path": "kanban task done --json stdout",
     "schema_id": "urn:kanban-tool:schema:cli:task-done-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "cli.task-complete.output",
-        "direction": "serialize",
-        "exact_test": "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "operation": "task complete",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_lifecycle_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.task-complete.output",
-        "direction": "serialize",
-        "exact_test": "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "operation": "task complete",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_lifecycle_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/task-complete-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/task-complete-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.task-complete.output",
-    "migration": "adopted",
-    "operation": "task complete",
-    "path": "kanban task complete --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:task-complete-output:v1",
     "strictness": "deny_unknown_fields",
     "surface": "cli",
     "transport": {
@@ -2320,44 +2130,6 @@
   {
     "adoption": {
       "consumer": {
-        "contract_id": "cli.label-bootstrap.output",
-        "direction": "serialize",
-        "exact_test": "labels_semantics_atoms_and_proposals_flow_through_real_cli",
-        "operation": "label bootstrap",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_label_contract_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.label-bootstrap.output",
-        "direction": "serialize",
-        "exact_test": "labels_semantics_atoms_and_proposals_flow_through_real_cli",
-        "operation": "label bootstrap",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_label_contract_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/label-bootstrap-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/label-bootstrap-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.label-bootstrap.output",
-    "migration": "adopted",
-    "operation": "label bootstrap",
-    "path": "kanban label bootstrap --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:label-bootstrap-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
         "contract_id": "cli.label-create.output",
         "direction": "serialize",
         "exact_test": "labels_semantics_atoms_and_proposals_flow_through_real_cli",
@@ -2387,44 +2159,6 @@
     "operation": "label create",
     "path": "kanban label create --json stdout",
     "schema_id": "urn:kanban-tool:schema:cli:label-create-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "cli.label-delete.output",
-        "direction": "serialize",
-        "exact_test": "labels_semantics_atoms_and_proposals_flow_through_real_cli",
-        "operation": "label delete",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_label_contract_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.label-delete.output",
-        "direction": "serialize",
-        "exact_test": "labels_semantics_atoms_and_proposals_flow_through_real_cli",
-        "operation": "label delete",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_label_contract_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/label-delete-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/label-delete-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.label-delete.output",
-    "migration": "adopted",
-    "operation": "label delete",
-    "path": "kanban label delete --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:label-delete-output:v1",
     "strictness": "deny_unknown_fields",
     "surface": "cli",
     "transport": {
@@ -3384,6 +3118,82 @@
   {
     "adoption": {
       "consumer": {
+        "contract_id": "cli.graph-neighborhood.output",
+        "direction": "serialize",
+        "exact_test": "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
+        "operation": "graph neighborhood",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_knowledge_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.graph-neighborhood.output",
+        "direction": "serialize",
+        "exact_test": "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
+        "operation": "graph neighborhood",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_knowledge_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/graph-neighborhood-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/graph-neighborhood-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.graph-neighborhood.output",
+    "migration": "adopted",
+    "operation": "graph neighborhood",
+    "path": "kanban graph neighborhood --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:graph-neighborhood-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "cli.graph-map.output",
+        "direction": "serialize",
+        "exact_test": "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
+        "operation": "graph map",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_knowledge_adoption"
+      },
+      "producer": {
+        "contract_id": "cli.graph-map.output",
+        "direction": "serialize",
+        "exact_test": "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
+        "operation": "graph map",
+        "package": "kanban-cli",
+        "surface": "cli",
+        "test_target": "cli_knowledge_adoption"
+      },
+      "producer_fixture": "schemas/fixtures/cli/graph-map-output.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/cli/graph-map-output.v1.valid.json",
+    "granularity": "exact",
+    "id": "cli.graph-map.output",
+    "migration": "adopted",
+    "operation": "graph map",
+    "path": "kanban graph map --json stdout",
+    "schema_id": "urn:kanban-tool:schema:cli:graph-map-output:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "cli",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
         "contract_id": "cli.graph-query.output",
         "direction": "serialize",
         "exact_test": "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
@@ -4334,44 +4144,6 @@
   {
     "adoption": {
       "consumer": {
-        "contract_id": "cli.dispatch.output",
-        "direction": "serialize",
-        "exact_test": "dispatcher_profile_is_consumed_by_real_serve_and_only_claims_ready",
-        "operation": "dispatch",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer": {
-        "contract_id": "cli.dispatch.output",
-        "direction": "serialize",
-        "exact_test": "dispatcher_profile_is_consumed_by_real_serve_and_only_claims_ready",
-        "operation": "dispatch",
-        "package": "kanban-cli",
-        "surface": "cli",
-        "test_target": "cli_admin_adoption"
-      },
-      "producer_fixture": "schemas/fixtures/cli/dispatch-output.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/cli/dispatch-output.v1.valid.json",
-    "granularity": "exact",
-    "id": "cli.dispatch.output",
-    "migration": "adopted",
-    "operation": "dispatch",
-    "path": "kanban dispatch --json stdout",
-    "schema_id": "urn:kanban-tool:schema:cli:dispatch-output:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "cli",
-    "transport": {
-      "kind": "no_transport"
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
         "contract_id": "api.get-stats.query",
         "direction": "deserialize",
         "exact_test": "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
@@ -4770,6 +4542,180 @@
       "kind": "http",
       "location": "success",
       "operation_key": "GET /api/v1/search/status",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.rebuild-search-index.query",
+        "direction": "deserialize",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
+        "operation": "POST /api/v1/search/index/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.rebuild-search-index.query",
+        "direction": "deserialize",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
+        "operation": "POST /api/v1/search/index/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/search-status-query.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/search-status-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.rebuild-search-index.query",
+    "migration": "adopted",
+    "operation": "POST /api/v1/search/index/rebuild",
+    "path": "POST /api/v1/search/index/rebuild query",
+    "schema_id": "urn:kanban-tool:schema:api:rebuild-search-index-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "POST /api/v1/search/index/rebuild",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "board"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.rebuild-search-index.response",
+        "direction": "serialize",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
+        "operation": "POST /api/v1/search/index/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.rebuild-search-index.response",
+        "direction": "serialize",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
+        "operation": "POST /api/v1/search/index/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/search-status-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/search-status-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.rebuild-search-index.response",
+    "migration": "adopted",
+    "operation": "POST /api/v1/search/index/rebuild",
+    "path": "POST /api/v1/search/index/rebuild response",
+    "schema_id": "urn:kanban-tool:schema:api:rebuild-search-index-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/search/index/rebuild",
+      "parameters": []
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.sync-search-index.query",
+        "direction": "deserialize",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
+        "operation": "POST /api/v1/search/index/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.sync-search-index.query",
+        "direction": "deserialize",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
+        "operation": "POST /api/v1/search/index/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/search-status-query.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/search-status-query.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.sync-search-index.query",
+    "migration": "adopted",
+    "operation": "POST /api/v1/search/index/sync",
+    "path": "POST /api/v1/search/index/sync query",
+    "schema_id": "urn:kanban-tool:schema:api:sync-search-index-query:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "query",
+      "operation_key": "POST /api/v1/search/index/sync",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "board"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.sync-search-index.response",
+        "direction": "serialize",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
+        "operation": "POST /api/v1/search/index/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.sync-search-index.response",
+        "direction": "serialize",
+        "exact_test": "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index",
+        "operation": "POST /api/v1/search/index/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/search-status-response.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/search-status-response.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.sync-search-index.response",
+    "migration": "adopted",
+    "operation": "POST /api/v1/search/index/sync",
+    "path": "POST /api/v1/search/index/sync response",
+    "schema_id": "urn:kanban-tool:schema:api:sync-search-index-response:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "success",
+      "operation_key": "POST /api/v1/search/index/sync",
       "parameters": []
     }
   },
@@ -7471,134 +7417,6 @@
   {
     "adoption": {
       "consumer": {
-        "contract_id": "api.list-tasks-by-status.path",
-        "direction": "deserialize",
-        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
-        "operation": "GET /api/v1/boards/:board/tasks/by-status",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer": {
-        "contract_id": "api.list-tasks-by-status.path",
-        "direction": "deserialize",
-        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
-        "operation": "GET /api/v1/boards/:board/tasks/by-status",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer_fixture": "schemas/fixtures/api/list-tasks-by-status-path.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "deserialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/api/list-tasks-by-status-path.v1.valid.json",
-    "granularity": "exact",
-    "id": "api.list-tasks-by-status.path",
-    "migration": "adopted",
-    "operation": "GET /api/v1/boards/:board/tasks/by-status",
-    "path": "GET /api/v1/boards/:board/tasks/by-status path",
-    "schema_id": "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "transport": {
-      "kind": "http",
-      "location": "path",
-      "operation_key": "GET /api/v1/boards/:board/tasks/by-status",
-      "parameters": [
-        {
-          "cardinality": "required_one",
-          "name": "board"
-        }
-      ]
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "api.list-tasks-by-status.query",
-        "direction": "deserialize",
-        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
-        "operation": "GET /api/v1/boards/:board/tasks/by-status",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer": {
-        "contract_id": "api.list-tasks-by-status.query",
-        "direction": "deserialize",
-        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
-        "operation": "GET /api/v1/boards/:board/tasks/by-status",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer_fixture": "schemas/fixtures/api/list-tasks-by-status-query.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "deserialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/api/list-tasks-by-status-query.v1.valid.json",
-    "granularity": "exact",
-    "id": "api.list-tasks-by-status.query",
-    "migration": "adopted",
-    "operation": "GET /api/v1/boards/:board/tasks/by-status",
-    "path": "GET /api/v1/boards/:board/tasks/by-status query",
-    "schema_id": "urn:kanban-tool:schema:api:list-tasks-by-status-query:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "transport": {
-      "kind": "http",
-      "location": "query",
-      "operation_key": "GET /api/v1/boards/:board/tasks/by-status",
-      "parameters": [
-        {
-          "cardinality": "repeated_ordered",
-          "name": "status"
-        },
-        {
-          "cardinality": "repeated_ordered",
-          "name": "priority"
-        },
-        {
-          "cardinality": "repeated_ordered",
-          "name": "label"
-        },
-        {
-          "cardinality": "repeated_ordered",
-          "name": "plan_filter"
-        },
-        {
-          "cardinality": "optional_one",
-          "name": "assignee"
-        },
-        {
-          "cardinality": "optional_one",
-          "name": "q"
-        },
-        {
-          "cardinality": "optional_one",
-          "name": "include_archived"
-        },
-        {
-          "cardinality": "optional_one",
-          "name": "limit"
-        },
-        {
-          "cardinality": "optional_one",
-          "name": "offset"
-        },
-        {
-          "cardinality": "optional_one",
-          "name": "sort"
-        }
-      ]
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
         "contract_id": "api.list-tasks.response",
         "direction": "serialize",
         "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
@@ -7634,47 +7452,6 @@
       "kind": "http",
       "location": "success",
       "operation_key": "GET /api/v1/boards/:board/tasks",
-      "parameters": []
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "api.list-tasks-by-status.response",
-        "direction": "serialize",
-        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
-        "operation": "GET /api/v1/boards/:board/tasks/by-status",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer": {
-        "contract_id": "api.list-tasks-by-status.response",
-        "direction": "serialize",
-        "exact_test": "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
-        "operation": "GET /api/v1/boards/:board/tasks/by-status",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer_fixture": "schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json",
-    "granularity": "exact",
-    "id": "api.list-tasks-by-status.response",
-    "migration": "adopted",
-    "operation": "GET /api/v1/boards/:board/tasks/by-status",
-    "path": "GET /api/v1/boards/:board/tasks/by-status response",
-    "schema_id": "urn:kanban-tool:schema:api:list-tasks-by-status-response:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "transport": {
-      "kind": "http",
-      "location": "success",
-      "operation_key": "GET /api/v1/boards/:board/tasks/by-status",
       "parameters": []
     }
   },
@@ -13158,134 +12935,6 @@
   {
     "adoption": {
       "consumer": {
-        "contract_id": "api.bootstrap-task-label.path",
-        "direction": "deserialize",
-        "exact_test": "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
-        "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer": {
-        "contract_id": "api.bootstrap-task-label.path",
-        "direction": "deserialize",
-        "exact_test": "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
-        "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer_fixture": "schemas/fixtures/api/bootstrap-task-label-path.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "deserialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/api/bootstrap-task-label-path.v1.valid.json",
-    "granularity": "exact",
-    "id": "api.bootstrap-task-label.path",
-    "migration": "adopted",
-    "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-    "path": "POST /api/v1/tasks/:task_id/labels/bootstrap path",
-    "schema_id": "urn:kanban-tool:schema:api:bootstrap-task-label-path:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "transport": {
-      "kind": "http",
-      "location": "path",
-      "operation_key": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-      "parameters": [
-        {
-          "cardinality": "required_one",
-          "name": "task_id"
-        }
-      ]
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "api.bootstrap-task-label.request",
-        "direction": "deserialize",
-        "exact_test": "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
-        "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer": {
-        "contract_id": "api.bootstrap-task-label.request",
-        "direction": "deserialize",
-        "exact_test": "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
-        "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer_fixture": "schemas/fixtures/api/bootstrap-task-label-request.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "deserialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/api/bootstrap-task-label-request.v1.valid.json",
-    "granularity": "exact",
-    "id": "api.bootstrap-task-label.request",
-    "migration": "adopted",
-    "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-    "path": "POST /api/v1/tasks/:task_id/labels/bootstrap body",
-    "schema_id": "urn:kanban-tool:schema:api:bootstrap-task-label-request:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "transport": {
-      "kind": "http",
-      "location": "body",
-      "operation_key": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-      "parameters": []
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "api.bootstrap-task-label.response",
-        "direction": "serialize",
-        "exact_test": "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
-        "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer": {
-        "contract_id": "api.bootstrap-task-label.response",
-        "direction": "serialize",
-        "exact_test": "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
-        "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer_fixture": "schemas/fixtures/api/bootstrap-task-label-response.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "serialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/api/bootstrap-task-label-response.v1.valid.json",
-    "granularity": "exact",
-    "id": "api.bootstrap-task-label.response",
-    "migration": "adopted",
-    "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-    "path": "POST /api/v1/tasks/:task_id/labels/bootstrap success",
-    "schema_id": "urn:kanban-tool:schema:api:bootstrap-task-label-response:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "transport": {
-      "kind": "http",
-      "location": "success",
-      "operation_key": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-      "parameters": []
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
         "contract_id": "api.suggest-task-labels.path",
         "direction": "deserialize",
         "exact_test": "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
@@ -18423,52 +18072,6 @@
   {
     "adoption": {
       "consumer": {
-        "contract_id": "api.list-tasks-by-status.headers",
-        "direction": "deserialize",
-        "exact_test": "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
-        "operation": "GET /api/v1/boards/:board/tasks/by-status",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer": {
-        "contract_id": "api.list-tasks-by-status.headers",
-        "direction": "deserialize",
-        "exact_test": "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
-        "operation": "GET /api/v1/boards/:board/tasks/by-status",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "deserialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
-    "granularity": "exact",
-    "id": "api.list-tasks-by-status.headers",
-    "migration": "adopted",
-    "operation": "GET /api/v1/boards/:board/tasks/by-status",
-    "path": "GET /api/v1/boards/:board/tasks/by-status headers",
-    "schema_id": "urn:kanban-tool:schema:api:list-tasks-by-status-headers:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "transport": {
-      "kind": "http",
-      "location": "headers",
-      "operation_key": "GET /api/v1/boards/:board/tasks/by-status",
-      "parameters": [
-        {
-          "cardinality": "optional_one",
-          "name": "Accept-Language"
-        }
-      ]
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
         "contract_id": "api.list-signals.headers",
         "direction": "deserialize",
         "exact_test": "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
@@ -19130,60 +18733,6 @@
       "kind": "http",
       "location": "headers",
       "operation_key": "POST /api/v1/tasks/:task_id/labels",
-      "parameters": [
-        {
-          "cardinality": "optional_one",
-          "name": "Accept-Language"
-        },
-        {
-          "cardinality": "optional_one",
-          "name": "X-KB-Actor"
-        },
-        {
-          "cardinality": "required_one",
-          "name": "Content-Type"
-        }
-      ]
-    }
-  },
-  {
-    "adoption": {
-      "consumer": {
-        "contract_id": "api.bootstrap-task-label.headers",
-        "direction": "deserialize",
-        "exact_test": "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router",
-        "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer": {
-        "contract_id": "api.bootstrap-task-label.headers",
-        "direction": "deserialize",
-        "exact_test": "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router",
-        "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        "package": "kanban-server",
-        "surface": "api",
-        "test_target": "lib"
-      },
-      "producer_fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json"
-    },
-    "binding": "exact_surface",
-    "direction": "deserialize",
-    "exclusion": null,
-    "fixture": "schemas/fixtures/api/headers/locale-actor-json-headers.v1.valid.json",
-    "granularity": "exact",
-    "id": "api.bootstrap-task-label.headers",
-    "migration": "adopted",
-    "operation": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-    "path": "POST /api/v1/tasks/:task_id/labels/bootstrap headers",
-    "schema_id": "urn:kanban-tool:schema:api:bootstrap-task-label-headers:v1",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "transport": {
-      "kind": "http",
-      "location": "headers",
-      "operation_key": "POST /api/v1/tasks/:task_id/labels/bootstrap",
       "parameters": [
         {
           "cardinality": "optional_one",
@@ -21766,6 +21315,98 @@
       "kind": "http",
       "location": "headers",
       "operation_key": "GET /api/v1/search/status",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.rebuild-search-index.headers",
+        "direction": "deserialize",
+        "exact_test": "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
+        "operation": "POST /api/v1/search/index/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.rebuild-search-index.headers",
+        "direction": "deserialize",
+        "exact_test": "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
+        "operation": "POST /api/v1/search/index/rebuild",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.rebuild-search-index.headers",
+    "migration": "adopted",
+    "operation": "POST /api/v1/search/index/rebuild",
+    "path": "POST /api/v1/search/index/rebuild headers",
+    "schema_id": "urn:kanban-tool:schema:api:rebuild-search-index-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/search/index/rebuild",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        }
+      ]
+    }
+  },
+  {
+    "adoption": {
+      "consumer": {
+        "contract_id": "api.sync-search-index.headers",
+        "direction": "deserialize",
+        "exact_test": "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
+        "operation": "POST /api/v1/search/index/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer": {
+        "contract_id": "api.sync-search-index.headers",
+        "direction": "deserialize",
+        "exact_test": "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
+        "operation": "POST /api/v1/search/index/sync",
+        "package": "kanban-server",
+        "surface": "api",
+        "test_target": "lib"
+      },
+      "producer_fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json"
+    },
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/api/headers/locale-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "api.sync-search-index.headers",
+    "migration": "adopted",
+    "operation": "POST /api/v1/search/index/sync",
+    "path": "POST /api/v1/search/index/sync headers",
+    "schema_id": "urn:kanban-tool:schema:api:sync-search-index-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "POST /api/v1/search/index/sync",
       "parameters": [
         {
           "cardinality": "optional_one",

@@ -250,7 +250,10 @@ async fn run(cli: &Cli) -> Result<(), CliFailure> {
 
 #[cfg(test)]
 mod tests {
-    use clap::Parser;
+    use std::collections::BTreeSet;
+
+    use clap::{Command as ClapCommand, CommandFactory, Parser};
+    use kanban_protocol::{ContractSurface, surface_operation_keys};
 
     use crate::{Cli, Command};
 
@@ -374,5 +377,41 @@ mod tests {
         else {
             panic!("expected vector status command");
         };
+    }
+
+    #[test]
+    fn clap_leaf_commands_match_exact_contract_catalog() {
+        let mut actual = BTreeSet::new();
+        collect_leaf_commands(&Cli::command(), &mut Vec::new(), &mut actual);
+        let expected = surface_operation_keys(ContractSurface::Cli).collect::<BTreeSet<_>>();
+
+        assert_eq!(
+            actual, expected,
+            "新增、删除或重命名 CLI leaf command 时必须同步精确 contract catalog"
+        );
+    }
+
+    fn collect_leaf_commands(
+        command: &ClapCommand,
+        prefix: &mut Vec<String>,
+        output: &mut BTreeSet<String>,
+    ) {
+        let subcommands = command.get_subcommands().collect::<Vec<_>>();
+        if subcommands.is_empty() {
+            if !prefix.is_empty() {
+                output.insert(prefix.join(" "));
+            }
+            return;
+        }
+
+        for subcommand in subcommands {
+            // `get_name` 是 Clap 的 canonical name；不把 visible/hidden alias
+            // 当成第二个 leaf。`get_subcommands` 会保留 hidden command（例如
+            // `__complete`），而 external subcommand 没有静态名字，因而不会被
+            // 错误地伪造为 contract operation。
+            prefix.push(subcommand.get_name().to_owned());
+            collect_leaf_commands(subcommand, prefix, output);
+            prefix.pop();
+        }
     }
 }

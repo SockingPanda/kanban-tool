@@ -1,4 +1,4 @@
-use kanban_protocol::{CliTaskBlockOutput, CliTaskCompleteOutput, CliTaskDoneOutput};
+use kanban_protocol::{CliTaskBlockOutput, CliTaskDoneOutput};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
@@ -18,13 +18,6 @@ where
 fn task_done_output_contract() {
     assert_fixture_roundtrip::<CliTaskDoneOutput>(include_str!(
         "../../../schemas/fixtures/cli/task-done-output.v1.valid.json"
-    ));
-}
-
-#[test]
-fn task_complete_output_contract() {
-    assert_fixture_roundtrip::<CliTaskCompleteOutput>(include_str!(
-        "../../../schemas/fixtures/cli/task-complete-output.v1.valid.json"
     ));
 }
 

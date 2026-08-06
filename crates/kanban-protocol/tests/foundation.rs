@@ -275,7 +275,6 @@ const B4_C2_LABEL_OPERATION_IDS: &[&str] = &[
     "api.query-label-atom-index",
     "api.list-task-labels",
     "api.add-task-label",
-    "api.bootstrap-task-label",
     "api.suggest-task-labels",
     "api.list-task-label-proposals",
     "api.propose-task-label",
@@ -363,7 +362,6 @@ fn b7_header_profiles_fail_closed_over_actor_and_body_cardinality() {
         "api.archive-board",
         "api.archive-task",
         "api.block-task",
-        "api.bootstrap-task-label",
         "api.claim-task",
         "api.complete-step",
         "api.complete-task",
@@ -453,7 +451,7 @@ fn b7_header_profiles_fail_closed_over_actor_and_body_cardinality() {
 
 #[test]
 fn b4_c2_label_operations_exactly_own_all_non_header_dimensions() {
-    assert_eq!(B4_C2_LABEL_OPERATION_IDS.len(), 29);
+    assert_eq!(B4_C2_LABEL_OPERATION_IDS.len(), 28);
     for operation_id in B4_C2_LABEL_OPERATION_IDS {
         let endpoint = endpoint_descriptor(operation_id).expect("B4-C2 endpoint descriptor");
         assert_eq!(
@@ -712,9 +710,6 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:board-task-map-path:v1",
         "urn:kanban-tool:schema:api:board-task-map-query:v1",
         "urn:kanban-tool:schema:api:board-task-map-response:v1",
-        "urn:kanban-tool:schema:api:bootstrap-task-label-path:v1",
-        "urn:kanban-tool:schema:api:bootstrap-task-label-request:v1",
-        "urn:kanban-tool:schema:api:bootstrap-task-label-response:v1",
         "urn:kanban-tool:schema:api:checkpoint-response:v1",
         "urn:kanban-tool:schema:api:maintenance-path-request:v1",
         "urn:kanban-tool:schema:api:maintenance-backup-request:v1",
@@ -850,9 +845,6 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:list-task-label-proposals-response:v1",
         "urn:kanban-tool:schema:api:list-task-labels-path:v1",
         "urn:kanban-tool:schema:api:list-task-labels-response:v1",
-        "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
-        "urn:kanban-tool:schema:api:list-tasks-by-status-query:v1",
-        "urn:kanban-tool:schema:api:list-tasks-by-status-response:v1",
         "urn:kanban-tool:schema:api:list-tasks-path:v1",
         "urn:kanban-tool:schema:api:list-tasks-query:v1",
         "urn:kanban-tool:schema:api:list-tasks-response:v1",
@@ -941,6 +933,10 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:search-tasks-by-status-response:v1",
         "urn:kanban-tool:schema:api:search-status-query:v1",
         "urn:kanban-tool:schema:api:search-status-response:v1",
+        "urn:kanban-tool:schema:api:rebuild-search-index-query:v1",
+        "urn:kanban-tool:schema:api:rebuild-search-index-response:v1",
+        "urn:kanban-tool:schema:api:sync-search-index-query:v1",
+        "urn:kanban-tool:schema:api:sync-search-index-response:v1",
         "urn:kanban-tool:schema:api:build-context-path:v1",
         "urn:kanban-tool:schema:api:build-context-query:v1",
         "urn:kanban-tool:schema:api:build-context-response:v1",
@@ -1597,10 +1593,7 @@ fn b1_c1_task_read_schema_and_runtime_budgets_are_exact() {
     assert_eq!(kanban_protocol::MAX_TASK_READ_LIMIT, 1_000);
 
     let artifacts = generated_artifacts();
-    for artifact in [
-        "api/list-tasks-query.v1.schema.json",
-        "api/list-tasks-by-status-query.v1.schema.json",
-    ] {
+    for artifact in ["api/list-tasks-query.v1.schema.json"] {
         let schema: serde_json::Value =
             serde_json::from_slice(artifacts.get(artifact).expect("task-read schema artifact"))
                 .expect("valid generated schema");
@@ -1694,22 +1687,15 @@ fn b1_c1_task_read_contracts_are_endpoint_specific_and_exact() {
         ("sort", OPTIONAL),
     ];
 
-    for (operation_id, path_contract_id, query_contract_id, response_contract_id, operation_key) in [
-        (
+    for (operation_id, path_contract_id, query_contract_id, response_contract_id, operation_key) in
+        [(
             "api.list-tasks",
             "api.list-tasks.path",
             "api.list-tasks.query",
             "api.list-tasks.response",
             "GET /api/v1/boards/:board/tasks",
-        ),
-        (
-            "api.list-tasks-by-status",
-            "api.list-tasks-by-status.path",
-            "api.list-tasks-by-status.query",
-            "api.list-tasks-by-status.response",
-            "GET /api/v1/boards/:board/tasks/by-status",
-        ),
-    ] {
+        )]
+    {
         let endpoint = endpoint_descriptor(operation_id).expect("task-read endpoint descriptor");
         assert_eq!(endpoint.migration, MigrationState::Adopted);
         assert_eq!(
@@ -1840,7 +1826,7 @@ fn current_train_freeze_requires_closed_authority() {
             EndpointObligation::Excluded { .. } => excluded += 1,
         }
     }
-    assert_eq!((contract, todo, not_applicable, excluded), (391, 0, 292, 1));
+    assert_eq!((contract, todo, not_applicable, excluded), (389, 0, 294, 1));
     let unfinished_contracts = operation_inventory()
         .iter()
         .filter(|contract| {

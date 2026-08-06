@@ -5,7 +5,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ContextPack, DataEnvelope, MetadataEnvelope, SearchMeta, SearchStatus, SearchTaskHit};
+use crate::{
+    BoardTaskMapResponse, ContextPack, DataEnvelope, MetadataEnvelope, SearchMeta, SearchStatus,
+    SearchTaskHit, TaskNeighborhoodResponse,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -95,6 +98,8 @@ pub struct CliGraphQueryRow {
 }
 
 pub type CliGraphQueryOutput = DataEnvelope<Vec<CliGraphQueryRow>>;
+pub type CliGraphNeighborhoodOutput = TaskNeighborhoodResponse;
+pub type CliGraphMapOutput = BoardTaskMapResponse;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]

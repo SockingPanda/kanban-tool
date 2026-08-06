@@ -13,7 +13,7 @@
   "$id": "urn:kanban-tool:schema:config:selected-worker-profile-input:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Strict decoded shape for the single `[workers.<profile>]` section selected by the CLI.\nSelection and opaque handling of other profile sections remain adapter concerns.",
+  "description": "CLI 选中的单个 `[workers.<profile>]` 小节的严格解码结构。\n其它 profile 小节的选择与 opaque 处理仍属于 adapter 关注点。",
   "properties": {
     "claim_ttl_ms": {
       "format": "int64",

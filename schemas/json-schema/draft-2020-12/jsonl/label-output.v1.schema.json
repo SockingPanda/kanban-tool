@@ -7,7 +7,7 @@
           "type": "string"
         },
         "color": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"

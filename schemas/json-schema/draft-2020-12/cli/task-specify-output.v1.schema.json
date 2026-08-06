@@ -281,7 +281,7 @@
       "type": "string"
     }
   },
-  "$id": "urn:kanban-tool:schema:cli:task-complete-output:v1",
+  "$id": "urn:kanban-tool:schema:cli:task-specify-output:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -292,6 +292,6 @@
   "required": [
     "data"
   ],
-  "title": "Kanban CLI task complete output v1",
+  "title": "Kanban CLI task specify output v1",
   "type": "object"
 }

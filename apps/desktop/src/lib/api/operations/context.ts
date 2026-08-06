@@ -1,5 +1,5 @@
-import { ApiTransport } from "../../transport"
-import type { ContextBuildOptions, ContextPack } from "../../types"
+import { ApiTransport } from "../transport"
+import type { ContextBuildOptions, ContextPack } from "../types"
 
 export async function buildContext(
   api: ApiTransport,

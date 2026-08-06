@@ -4912,7 +4912,9 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
     let task = crate::task_catalog::operation_contracts();
     let labels = crate::labels_catalog::operation_contracts();
     let knowledge = crate::knowledge_catalog::operation_contracts();
-    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 55);
+    let metadata_config = crate::metadata_config_catalog::operation_contracts();
+    let shared_components = crate::metadata_config_catalog::shared_component_contracts();
+    let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 64);
 
     for contract in OPERATION_INVENTORY {
         // archive-board request 历史上以 add-dependency 作为插入锚点。
@@ -4952,6 +4954,24 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
         }
         if let Some(admin_contract) = admin.iter().find(|candidate| candidate.id == contract.id) {
             inventory.push(*admin_contract);
+            continue;
+        }
+        if let Some(source_contract) = metadata_config
+            .iter()
+            .chain(shared_components.iter())
+            .find(|candidate| candidate.id == contract.id)
+        {
+            inventory.push(*source_contract);
+            if contract.id == "api.error.response" {
+                append_board_contract(&mut inventory, &board, "api.list-boards.query");
+                append_board_contract(&mut inventory, &board, "api.create-board.request");
+                append_board_contract(&mut inventory, &board, "api.get-board.path");
+                append_board_contract(&mut inventory, &board, "api.archive-board.path");
+                append_board_contract(&mut inventory, &board, "api.list-boards.response");
+                append_board_contract(&mut inventory, &board, "api.create-board.response");
+                append_board_contract(&mut inventory, &board, "api.get-board.response");
+                append_board_contract(&mut inventory, &board, "api.archive-board.response");
+            }
             continue;
         }
         match contract.id {

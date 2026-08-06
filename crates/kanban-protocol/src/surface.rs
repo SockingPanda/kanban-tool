@@ -339,6 +339,17 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         ),
     ];
     operations.extend(crate::portable::surface_catalog());
+    // Metadata/Config rows remain in the legacy vector for compatibility, but their declaration
+    // source owns the projected surface facts. shared API error is intentionally not a surface
+    // parent and therefore does not add a synthetic operation here.
+    let source = crate::metadata_config_catalog::surface_catalog();
+    for operation in &mut operations {
+        if let Some(declaration) = source.iter().find(|candidate| {
+            candidate.surface == operation.surface && candidate.key == operation.key
+        }) {
+            *operation = declaration.clone();
+        }
+    }
     operations
 }
 

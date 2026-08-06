@@ -3389,6 +3389,7 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
     let task = crate::task_catalog::schema_roots();
     let labels = crate::labels_catalog::schema_roots();
     let knowledge = crate::knowledge_catalog::schema_roots();
+    let metadata_config = crate::metadata_config_catalog::schema_roots();
     let mut registry = Vec::with_capacity(SCHEMA_REGISTRY.len() + 55);
     for root in SCHEMA_REGISTRY {
         // archive-board request 历史上以 add-dependency 作为插入锚点。
@@ -3462,6 +3463,13 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
             registry.push(*admin_template_root);
             continue;
         }
+        if let Some(source_root) = metadata_config
+            .iter()
+            .find(|candidate| candidate.contract_id == root.contract_id)
+        {
+            registry.push(*source_root);
+            continue;
+        }
         match root.contract_id {
             "cli.board-use.output" => {
                 append_board_schema_root(&mut registry, &board, "cli.board-list.output");
@@ -3499,7 +3507,7 @@ fn append_board_schema_root(
 }
 
 fn protocol_schema_roots() -> Vec<SchemaRoot> {
-    vec![
+    let legacy = vec![
         request_schema_root!(
             "urn:kanban-tool:schema:config:project-input:v1",
             "config/project-input.v1.schema.json",
@@ -3518,7 +3526,18 @@ fn protocol_schema_roots() -> Vec<SchemaRoot> {
             "schemas/fixtures/config/selected-worker-profile-input.v1.invalid.json",
             crate::WorkerProfileInput
         ),
-    ]
+    ];
+    let source = crate::metadata_config_catalog::schema_roots();
+    legacy
+        .into_iter()
+        .map(|root| {
+            source
+                .iter()
+                .find(|candidate| candidate.contract_id == root.contract_id)
+                .copied()
+                .unwrap_or(root)
+        })
+        .collect()
 }
 
 fn portable_schema_roots() -> Vec<SchemaRoot> {

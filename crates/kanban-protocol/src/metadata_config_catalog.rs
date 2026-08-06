@@ -12,10 +12,12 @@
 
 use crate::{
     AdoptionLocator, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
-    ContractStrictness, ContractSurface, ContractTransport, EndpointDescriptor, HttpMethod,
-    HttpTransportLocation, MigrationState, OperationContract, OperationDeclaration,
-    SurfaceOperation,
+    ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod, HttpTransportLocation,
+    MigrationState, OperationContract, OperationDeclaration, SurfaceOperation,
 };
+
+#[cfg(test)]
+use crate::ContractTransport;
 
 const METADATA_DECISION_PRODUCER: AdoptionLocator = AdoptionLocator {
     package: "kanban-cli",

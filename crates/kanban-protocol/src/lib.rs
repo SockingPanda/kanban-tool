@@ -39,6 +39,7 @@ mod labels;
 pub mod labels_catalog;
 mod lifecycle;
 mod mcp;
+pub mod metadata_config_catalog;
 mod ontology;
 pub mod operation_catalog;
 mod portable;

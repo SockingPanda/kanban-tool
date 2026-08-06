@@ -35,23 +35,25 @@ impl KanbanService<SystemClock> {
             .initialize()
             .await
             .map_err(|error| KanbanError::Storage(error.to_string()))?;
+        let mutation_gate = store.mutation_gate();
         Ok(Self {
             store,
             run_log_root,
             attachment_root: Some(attachment_root),
             clock: SystemClock,
-            mutation_gate: Arc::new(Mutex::new(())),
+            mutation_gate,
         })
     }
 
     #[cfg(test)]
     pub(crate) fn new(store: TursoStore) -> Self {
+        let mutation_gate = store.mutation_gate();
         Self {
             store,
             run_log_root: None,
             attachment_root: None,
             clock: SystemClock,
-            mutation_gate: Arc::new(Mutex::new(())),
+            mutation_gate,
         }
     }
 }
@@ -63,12 +65,13 @@ where
     /// 为 service 保留可测试的 Clock seam。
     #[cfg(test)]
     pub(crate) fn with_clock(store: TursoStore, clock: C) -> Self {
+        let mutation_gate = store.mutation_gate();
         Self {
             store,
             run_log_root: None,
             attachment_root: None,
             clock,
-            mutation_gate: Arc::new(Mutex::new(())),
+            mutation_gate,
         }
     }
 }

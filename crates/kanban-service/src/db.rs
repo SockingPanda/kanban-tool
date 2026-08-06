@@ -5,6 +5,10 @@ use std::{
     sync::Arc,
 };
 
+#[cfg(test)]
+use std::sync::atomic::AtomicU8;
+
+use tokio::sync::Mutex;
 use turso::{Builder, Connection, Database, transaction::TransactionBehavior};
 
 use crate::{
@@ -42,6 +46,14 @@ pub(crate) struct CapabilityRecord {
 pub(crate) struct TursoStore {
     database: Database,
     path: Arc<PathBuf>,
+    /// 单一 canonical host 进程内的 mutation/quiesce 边界。
+    ///
+    /// 该 gate 放在 `TursoStore` 而不是 `KanbanService` 的单个实例上，确保
+    /// 同一个数据库被测试 seam、dispatcher 或多个 service wrapper 引用时仍
+    /// 共享同一把锁。维护操作持有它的整个 owner lease 生命周期。
+    pub(crate) mutation_gate: Arc<Mutex<()>>,
+    #[cfg(test)]
+    pub(crate) import_failpoint: Arc<AtomicU8>,
 }
 
 impl TursoStore {
@@ -58,7 +70,14 @@ impl TursoStore {
         Ok(Self {
             database,
             path: Arc::new(PathBuf::from(path)),
+            mutation_gate: Arc::new(Mutex::new(())),
+            #[cfg(test)]
+            import_failpoint: Arc::new(AtomicU8::new(0)),
         })
+    }
+
+    pub(crate) fn mutation_gate(&self) -> Arc<Mutex<()>> {
+        self.mutation_gate.clone()
     }
 
     pub(crate) async fn initialize(&self) -> Result<(), StoreError> {

@@ -10,7 +10,11 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{BufWriter, Write},
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(test)]
@@ -24,6 +28,12 @@ use sha2::{Digest, Sha256};
 use turso::{Connection, Value, params_from_iter, transaction::TransactionBehavior};
 
 use crate::{TursoStore, error::StoreError, migration, schema, shared::now_ms};
+
+const MAINTENANCE_LEASE_TTL_MS: i64 = 60_000;
+#[cfg(not(test))]
+const MAINTENANCE_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
+#[cfg(test)]
+const MAINTENANCE_HEARTBEAT_INTERVAL: Duration = Duration::from_millis(10);
 
 /// 外部快照中的 canonical facts。派生 projection 不得被导出为事实。
 pub(crate) const PORTABLE_TABLES: &[&str] = &[
@@ -306,27 +316,33 @@ const FAILPOINT_REBUILD_ENQUEUE: u8 = 2;
 #[cfg(test)]
 const FAILPOINT_BACKUP_JOURNAL: u8 = 3;
 #[cfg(test)]
-static IMPORT_FAILPOINT: AtomicU8 = AtomicU8::new(0);
+tokio::task_local! {
+    static IMPORT_FAILPOINT: Arc<AtomicU8>;
+}
 
 #[cfg(test)]
 fn failpoint_once(point: u8) -> Result<(), StoreError> {
-    if IMPORT_FAILPOINT
-        .compare_exchange(
-            point,
-            0,
-            std::sync::atomic::Ordering::SeqCst,
-            std::sync::atomic::Ordering::SeqCst,
-        )
-        .is_ok()
-    {
-        return Err(StoreError::InvalidInput(format!(
-            "maintenance test fault injection: {point}"
-        )));
-    }
-    Ok(())
+    IMPORT_FAILPOINT
+        .try_with(|failpoint| {
+            if failpoint
+                .compare_exchange(point, 0, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                return Err(StoreError::InvalidInput(format!(
+                    "维护测试故障注入: {point}"
+                )));
+            }
+            Ok(())
+        })
+        .unwrap_or(Ok(()))
 }
 
 impl TursoStore {
+    #[cfg(test)]
+    pub(crate) fn set_import_failpoint(&self, point: u8) {
+        self.import_failpoint.store(point, Ordering::SeqCst);
+    }
+
     /// 在 host maintenance lease 内运行一个需要独占窗口的操作。
     ///
     /// v30 legacy importer 与 portable importer 共享同一把 lease；操作失败或
@@ -342,9 +358,10 @@ impl TursoStore {
         F: FnOnce() -> Fut,
         Fut: Future<Output = Result<T, StoreError>>,
     {
+        let _quiesce = self.mutation_gate.lock().await;
         let lease = self.acquire_maintenance_lease(mode, owner).await?;
         let result = operation().await;
-        let release = self.release_maintenance_lease(&lease).await;
+        let release = lease.release().await;
         match (result, release) {
             (Ok(value), Ok(())) => Ok(value),
             (Err(error), _) => Err(error),
@@ -357,12 +374,17 @@ impl TursoStore {
     }
 
     pub(crate) async fn checkpoint(&self) -> Result<StoreCheckpointReport, StoreError> {
+        let _quiesce = self.mutation_gate.lock().await;
         let lease = self
             .acquire_maintenance_lease("backup", "host-admin")
             .await?;
-        let report = self.checkpoint_inner().await?;
-        self.release_maintenance_lease(&lease).await?;
-        Ok(report)
+        let result = self.checkpoint_inner().await;
+        let release = lease.release().await;
+        match (result, release) {
+            (Ok(report), Ok(())) => Ok(report),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
+        }
     }
 
     async fn checkpoint_inner(&self) -> Result<StoreCheckpointReport, StoreError> {
@@ -388,31 +410,40 @@ impl TursoStore {
         &self,
         out_path: impl AsRef<Path>,
     ) -> Result<StoreBackupReport, StoreError> {
+        let _quiesce = self.mutation_gate.lock().await;
         let out_path = checked_target(out_path.as_ref(), "backup")?;
         let lease = self
             .acquire_maintenance_lease("backup", "host-admin")
             .await?;
-        let _ = self.checkpoint_inner().await?;
-        let source_fingerprint = self.database_fingerprint().await?;
-        let temp = temporary_sibling(&out_path, "backup")?;
-        vacuum_into(&self.connection().await?, &temp).await?;
-        verify_database_file(&temp).await?;
-        durable_rename(&temp, &out_path)?;
-        let (checksum_sha256, bytes) = file_digest(&out_path)?;
-        let report = StoreBackupReport {
-            out_path: out_path.display().to_string(),
-            checksum_sha256,
-            bytes,
-            source_fingerprint,
-        };
-        self.release_maintenance_lease(&lease).await?;
-        Ok(report)
+        let result = async {
+            let _ = self.checkpoint_inner().await?;
+            let source_fingerprint = self.database_fingerprint().await?;
+            let temp = temporary_sibling(&out_path, "backup")?;
+            vacuum_into(&self.connection().await?, &temp).await?;
+            verify_database_file(&temp).await?;
+            durable_rename(&temp, &out_path)?;
+            let (checksum_sha256, bytes) = file_digest(&out_path)?;
+            Ok::<StoreBackupReport, StoreError>(StoreBackupReport {
+                out_path: out_path.display().to_string(),
+                checksum_sha256,
+                bytes,
+                source_fingerprint,
+            })
+        }
+        .await;
+        let release = lease.release().await;
+        match (result, release) {
+            (Ok(report), Ok(())) => Ok(report),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
+        }
     }
 
     pub(crate) async fn export(
         &self,
         out_path: impl AsRef<Path>,
     ) -> Result<StoreExportReport, StoreError> {
+        let _quiesce = self.mutation_gate.lock().await;
         let out_path = checked_target(out_path.as_ref(), "export")?;
         let lease = self
             .acquire_maintenance_lease("backup", "host-admin")
@@ -471,7 +502,7 @@ impl TursoStore {
             })
         }
         .await;
-        let release = self.release_maintenance_lease(&lease).await;
+        let release = lease.release().await;
         match (result, release) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) => Err(error),
@@ -486,6 +517,7 @@ impl TursoStore {
         in_path: impl AsRef<Path>,
         replace: bool,
     ) -> Result<StoreImportReport, StoreError> {
+        let _quiesce = self.mutation_gate.lock().await;
         let in_path = in_path.as_ref();
         if !fs::symlink_metadata(in_path)
             .map(|metadata| metadata.file_type().is_file())
@@ -499,10 +531,18 @@ impl TursoStore {
         let lease = self
             .acquire_maintenance_lease("import", "host-admin")
             .await?;
+        #[cfg(test)]
+        let result = IMPORT_FAILPOINT
+            .scope(
+                self.import_failpoint.clone(),
+                self.import_with_lease(in_path, replace, &lease, false),
+            )
+            .await;
+        #[cfg(not(test))]
         let result = self
             .import_with_lease(in_path, replace, &lease, false)
             .await;
-        let release = self.release_maintenance_lease(&lease).await;
+        let release = lease.release().await;
         match (result, release) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) => Err(error),
@@ -518,6 +558,7 @@ impl TursoStore {
         &self,
         in_path: impl AsRef<Path>,
     ) -> Result<StoreImportReport, StoreError> {
+        let _quiesce = self.mutation_gate.lock().await;
         let in_path = in_path.as_ref();
         if !fs::symlink_metadata(in_path)
             .map(|metadata| metadata.file_type().is_file())
@@ -531,8 +572,16 @@ impl TursoStore {
         let lease = self
             .acquire_maintenance_lease("import", "host-admin")
             .await?;
+        #[cfg(test)]
+        let result = IMPORT_FAILPOINT
+            .scope(
+                self.import_failpoint.clone(),
+                self.import_with_lease(in_path, true, &lease, true),
+            )
+            .await;
+        #[cfg(not(test))]
         let result = self.import_with_lease(in_path, true, &lease, true).await;
-        let release = self.release_maintenance_lease(&lease).await;
+        let release = lease.release().await;
         match (result, release) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) => Err(error),
@@ -1155,6 +1204,7 @@ impl TursoStore {
     }
 
     pub(crate) async fn vacuum(&self) -> Result<StoreVacuumReport, StoreError> {
+        let _quiesce = self.mutation_gate.lock().await;
         let lease = self
             .acquire_maintenance_lease("compact", "host-admin")
             .await?;
@@ -1187,7 +1237,7 @@ impl TursoStore {
             })
         }
         .await;
-        let release = self.release_maintenance_lease(&lease).await;
+        let release = lease.release().await;
         match (result, release) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), _) => Err(error),
@@ -1204,6 +1254,7 @@ impl TursoStore {
         owner: &str,
         action: &str,
     ) -> Result<StoreMaintenanceRun, StoreError> {
+        let _quiesce = self.mutation_gate.lock().await;
         let action = action.trim();
         if !matches!(action, "run" | "rebuild" | "cleanup" | "compact") {
             return Err(StoreError::InvalidInput(format!(
@@ -1226,7 +1277,7 @@ impl TursoStore {
 
         // 维护阶段可能跨多个 projection。无论哪个阶段失败，都先把失败写入
         // projection_state，再释放 owner lease，供下一次 run resume。
-        let release_result = self.release_maintenance_lease(&lease).await;
+        let release_result = lease.release().await;
         match (result, release_result) {
             (Ok(report), Ok(())) => Ok(report),
             (Err(error), Ok(())) => Err(error),
@@ -1515,15 +1566,71 @@ impl TursoStore {
             )));
         }
         let token = format!("mt_{}", unique_suffix());
-        let expires = now.saturating_add(60_000);
-        transaction.execute("INSERT INTO projection_maintenance_owner(singleton, owner, lease_token, mode, lease_expires_at, fence_epoch, capabilities_json, build_identity, started_at, last_heartbeat_at, updated_at) VALUES (1, ?1, ?2, ?3, ?4, ?5, '[]', ?6, ?7, ?7, ?7) ON CONFLICT(singleton) DO UPDATE SET owner=excluded.owner, lease_token=excluded.lease_token, mode=excluded.mode, lease_expires_at=excluded.lease_expires_at, fence_epoch=excluded.fence_epoch, build_identity=excluded.build_identity, started_at=excluded.started_at, last_heartbeat_at=excluded.last_heartbeat_at, updated_at=excluded.updated_at", (owner, token.as_str(), mode, expires, epoch.saturating_add(1), env!("CARGO_PKG_VERSION"), now)).await?;
+        let fence_epoch = epoch.saturating_add(1);
+        let expires = now.saturating_add(MAINTENANCE_LEASE_TTL_MS);
+        transaction.execute("INSERT INTO projection_maintenance_owner(singleton, owner, lease_token, mode, lease_expires_at, fence_epoch, capabilities_json, build_identity, started_at, last_heartbeat_at, updated_at) VALUES (1, ?1, ?2, ?3, ?4, ?5, '[]', ?6, ?7, ?7, ?7) ON CONFLICT(singleton) DO UPDATE SET owner=excluded.owner, lease_token=excluded.lease_token, mode=excluded.mode, lease_expires_at=excluded.lease_expires_at, fence_epoch=excluded.fence_epoch, build_identity=excluded.build_identity, started_at=excluded.started_at, last_heartbeat_at=excluded.last_heartbeat_at, updated_at=excluded.updated_at", (owner, token.as_str(), mode, expires, fence_epoch, env!("CARGO_PKG_VERSION"), now)).await?;
         transaction.commit().await?;
-        Ok(MaintenanceLease { token })
+        let heartbeat_failed = Arc::new(AtomicBool::new(false));
+        let heartbeat_store = self.clone();
+        let heartbeat_token = token.clone();
+        let heartbeat_failed_flag = heartbeat_failed.clone();
+        let heartbeat_task = tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(MAINTENANCE_HEARTBEAT_INTERVAL);
+            // `interval` 会立即 tick；先消费这个立即 tick，之后按周期续租，
+            // 确保新 lease 一获得就拥有完整 TTL 和受 fence 保护的续租。
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                if heartbeat_store
+                    .renew_maintenance_lease(&heartbeat_token, fence_epoch)
+                    .await
+                    .is_err()
+                {
+                    heartbeat_failed_flag.store(true, Ordering::SeqCst);
+                    break;
+                }
+            }
+        });
+        Ok(MaintenanceLease {
+            store: self.clone(),
+            token,
+            fence_epoch,
+            heartbeat_failed,
+            heartbeat_task: Some(heartbeat_task),
+            released: false,
+        })
     }
 
     async fn release_maintenance_lease(&self, lease: &MaintenanceLease) -> Result<(), StoreError> {
         let connection = self.connection().await?;
-        connection.execute("UPDATE projection_maintenance_owner SET owner=NULL, lease_token=NULL, mode=NULL, lease_expires_at=NULL, last_heartbeat_at=?1, updated_at=?1 WHERE singleton=1 AND lease_token=?2", (now_ms(), lease.token.as_str())).await?;
+        let changed = connection.execute("UPDATE projection_maintenance_owner SET owner=NULL, lease_token=NULL, mode=NULL, lease_expires_at=NULL, last_heartbeat_at=?1, updated_at=?1 WHERE singleton=1 AND lease_token=?2 AND fence_epoch=?3", (now_ms(), lease.token.as_str(), lease.fence_epoch)).await?;
+        if changed != 1 {
+            return Err(StoreError::MaintenanceBusy(
+                "maintenance lease release 丢失 fence".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn renew_maintenance_lease(
+        &self,
+        token: &str,
+        fence_epoch: i64,
+    ) -> Result<(), StoreError> {
+        let now = now_ms();
+        let expires = now.saturating_add(MAINTENANCE_LEASE_TTL_MS);
+        let connection = self.connection().await?;
+        let changed = connection
+            .execute(
+                "UPDATE projection_maintenance_owner SET lease_expires_at=?1, last_heartbeat_at=?2, updated_at=?2 WHERE singleton=1 AND lease_token=?3 AND fence_epoch=?4",
+                (expires, now, token, fence_epoch),
+            )
+            .await?;
+        if changed != 1 {
+            return Err(StoreError::MaintenanceBusy(
+                "maintenance lease heartbeat 丢失 fence".to_owned(),
+            ));
+        }
         Ok(())
     }
 
@@ -1549,7 +1656,62 @@ impl TursoStore {
 }
 
 struct MaintenanceLease {
+    store: TursoStore,
     token: String,
+    fence_epoch: i64,
+    heartbeat_failed: Arc<AtomicBool>,
+    heartbeat_task: Option<tokio::task::JoinHandle<()>>,
+    released: bool,
+}
+
+impl MaintenanceLease {
+    async fn release(mut self) -> Result<(), StoreError> {
+        if let Some(task) = self.heartbeat_task.take() {
+            task.abort();
+            let _ = task.await;
+        }
+        let heartbeat_failed = self.heartbeat_failed.load(Ordering::SeqCst);
+        let result = self.store.release_maintenance_lease(&self).await;
+        if result.is_ok() {
+            self.released = true;
+        }
+        if heartbeat_failed && result.is_ok() {
+            return Err(StoreError::MaintenanceBusy(
+                "maintenance lease heartbeat 失败，拒绝报告成功".to_owned(),
+            ));
+        }
+        result
+    }
+}
+
+impl Drop for MaintenanceLease {
+    fn drop(&mut self) {
+        if self.released {
+            return;
+        }
+        if let Some(task) = self.heartbeat_task.take() {
+            task.abort();
+        }
+        let Some(handle) = tokio::runtime::Handle::try_current().ok() else {
+            return;
+        };
+        let store = self.store.clone();
+        let token = self.token.clone();
+        let fence_epoch = self.fence_epoch;
+        // Drop 不能 await；在 panic/unwind 或任意 `?` 提前返回时，仍异步补偿
+        // 清除 owner。SQL 使用 lease_token 条件，旧 token 不会误清新 owner。
+        handle.spawn(async move {
+            let lease = MaintenanceLease {
+                store: store.clone(),
+                token,
+                fence_epoch,
+                heartbeat_failed: Arc::new(AtomicBool::new(false)),
+                heartbeat_task: None,
+                released: true,
+            };
+            let _ = store.release_maintenance_lease(&lease).await;
+        });
+    }
 }
 
 async fn doctor_connection(connection: &Connection) -> Result<StoreDoctorReport, StoreError> {
@@ -3057,7 +3219,7 @@ fn json_error(error: serde_json::Error) -> StoreError {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path, sync::atomic::Ordering};
+    use std::{fs, path::Path};
 
     use turso::transaction::TransactionBehavior;
 
@@ -3234,6 +3396,36 @@ mod tests {
             .await
             .expect_err("active owner must win");
         assert!(matches!(error, StoreError::MaintenanceBusy(_)));
+    }
+
+    #[tokio::test]
+    async fn maintenance_lease_heartbeat_keeps_expired_original_ttl_fenced() {
+        let (_directory, store, _path) = store("maintenance-lease-heartbeat").await;
+        store.initialize().await.expect("initialize");
+        let lease = store
+            .acquire_maintenance_lease("rebuild", "long-running-owner")
+            .await
+            .expect("acquire lease");
+        let connection = store.connection().await.expect("connection");
+        connection
+            .execute(
+                "UPDATE projection_maintenance_owner SET lease_expires_at=?1 WHERE singleton=1",
+                [now_ms().saturating_add(1)],
+            )
+            .await
+            .expect("shorten lease for test");
+        // 测试构建把 heartbeat 间隔压到毫秒级；即使原 60s TTL 已经过期，
+        // 续租仍以 token+fence 条件保护 owner，第二个 host 不能抢占。
+        tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+        let competing = match store
+            .acquire_maintenance_lease("rebuild", "competing-owner")
+            .await
+        {
+            Ok(_) => panic!("heartbeat must keep the original owner fenced"),
+            Err(error) => error,
+        };
+        assert!(matches!(competing, StoreError::MaintenanceBusy(_)));
+        lease.release().await.expect("release heartbeat lease");
     }
 
     #[tokio::test]
@@ -3526,12 +3718,12 @@ mod tests {
         let (_target_directory, target, _target_path) =
             store("maintenance-post-commit-target").await;
         target.initialize().await.expect("initialize target");
-        super::IMPORT_FAILPOINT.store(super::FAILPOINT_PUBLISHED_JOURNAL, Ordering::SeqCst);
+        target.set_import_failpoint(super::FAILPOINT_PUBLISHED_JOURNAL);
         let first = target
             .import(&export_path, false)
             .await
             .expect_err("journal publish fault must surface after canonical commit");
-        assert!(first.to_string().contains("fault injection"));
+        assert!(first.to_string().contains("故障注入"));
 
         let connection = target.connection().await.expect("journal connection");
         let mut rows = connection
@@ -3601,12 +3793,12 @@ mod tests {
 
         let (_target_directory, target, _target_path) = store("maintenance-enqueue-target").await;
         target.initialize().await.expect("initialize target");
-        super::IMPORT_FAILPOINT.store(super::FAILPOINT_REBUILD_ENQUEUE, Ordering::SeqCst);
+        target.set_import_failpoint(super::FAILPOINT_REBUILD_ENQUEUE);
         let first = target
             .import(&export_path, false)
             .await
             .expect_err("enqueue fault must surface after published phase");
-        assert!(first.to_string().contains("fault injection"));
+        assert!(first.to_string().contains("故障注入"));
         let connection = target.connection().await.expect("journal connection");
         let mut rows = connection
             .query(
@@ -3673,12 +3865,12 @@ mod tests {
             )
             .await
             .expect("existing task");
-        super::IMPORT_FAILPOINT.store(super::FAILPOINT_BACKUP_JOURNAL, Ordering::SeqCst);
+        target.set_import_failpoint(super::FAILPOINT_BACKUP_JOURNAL);
         let first = target
             .import(&export_path, true)
             .await
             .expect_err("backup journal fault must surface before replace transaction");
-        assert!(first.to_string().contains("fault injection"));
+        assert!(first.to_string().contains("故障注入"));
         let tasks = target
             .list_tasks(
                 "default",

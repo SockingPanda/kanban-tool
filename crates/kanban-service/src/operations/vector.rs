@@ -112,6 +112,7 @@ where
             model: command.model,
             dimensions: command.dimensions,
         };
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .configure_vector(&config)
             .await
@@ -132,6 +133,7 @@ where
     /// 为 board 的 canonical task/label atom 事实排队，并返回入队数量。
     pub async fn enqueue_vector_jobs(&self, board: &str, rebuild: bool) -> Result<u64> {
         let board = normalize_board(board)?;
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .enqueue_vector_projection_jobs(&board, rebuild)
             .await
@@ -226,6 +228,7 @@ where
                 "vector worker owner 不能为空".to_owned(),
             ));
         }
+        let _mutation = self.mutation_gate.lock().await;
         crate::vector::worker_tick(self.store.clone(), owner)
             .await
             .map_err(vector_store_error)

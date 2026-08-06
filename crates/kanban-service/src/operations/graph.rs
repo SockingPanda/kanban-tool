@@ -98,6 +98,7 @@ where
         if board.trim().is_empty() {
             return Err(KanbanError::InvalidInput("board is required".to_owned()));
         }
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .graph_rebuild(board.trim())
             .await
@@ -109,6 +110,7 @@ where
         if board.trim().is_empty() {
             return Err(KanbanError::InvalidInput("board is required".to_owned()));
         }
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .graph_sync(board.trim())
             .await

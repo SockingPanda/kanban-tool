@@ -69,6 +69,7 @@ where
                 "predicate name is required".to_owned(),
             ));
         }
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .upsert_relation_predicate(RelationPredicateInput {
                 name: command.name,
@@ -114,6 +115,7 @@ where
                 "relation subject, predicate and object are required".to_owned(),
             ));
         }
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .upsert_relation(RelationUpsertInput {
                 subject_uri: command.subject_uri,
@@ -133,6 +135,7 @@ where
     }
 
     pub async fn delete_relation(&self, command: RelationDeleteCommand) -> Result<bool> {
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .delete_relation(RelationDeleteInput {
                 subject_uri: command.subject_uri,

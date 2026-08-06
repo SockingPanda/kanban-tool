@@ -74,6 +74,7 @@ where
                 "entity uri and kind are required".to_owned(),
             ));
         }
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .upsert_entity(EntityUpsertInput {
                 uri: command.uri,

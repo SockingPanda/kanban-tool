@@ -142,6 +142,7 @@ where
 
     pub async fn rebuild_search_index(&self, board: &str) -> Result<SearchIndexStatus> {
         let board = normalize_board(board)?;
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .rebuild_search_index(&board)
             .await
@@ -151,6 +152,7 @@ where
 
     pub async fn sync_search_index(&self, board: &str) -> Result<SearchIndexStatus> {
         let board = normalize_board(board)?;
+        let _mutation = self.mutation_gate.lock().await;
         self.store
             .sync_search_index(&board)
             .await

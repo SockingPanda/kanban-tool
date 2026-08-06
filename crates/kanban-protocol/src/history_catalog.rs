@@ -56,20 +56,17 @@ const LIST_EVENTS_QUERY_PARAMETERS: &[WireParameter] = &[
 const RUN_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "http::operations::contract_adoption::suite_runs_and_logs_adoption_uses_real_router_paths_and_fixtures",
+    exact_test: "http::operations::contract_adoption::suite_runs_and_logs_adoption_uses_real_router_paths_and_fixtures",
 };
 const COMMENT_ATTACHMENT_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "http::operations::contract_adoption::suite_comments_and_attachments_adoption_uses_real_router_fixtures",
+    exact_test: "http::operations::contract_adoption::suite_comments_and_attachments_adoption_uses_real_router_fixtures",
 };
 const EVENT_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
+    exact_test: "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
 };
 const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",

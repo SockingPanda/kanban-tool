@@ -168,6 +168,11 @@ wire!(
     }
 );
 wire!(
+    pub struct ListBoardLabelProposalsPath {
+        pub board: String,
+    }
+);
+wire!(
     pub struct SignalPath {
         pub signal_id: String,
     }
@@ -336,6 +341,12 @@ wire!(
         )]
         #[cfg_attr(feature = "schema", schemars(extend("default" = 0.15_f32)))]
         pub min_score: f32,
+    }
+);
+wire!(
+    pub struct ListBoardLabelProposalsQuery {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub status: Option<LabelProposalStatusWire>,
     }
 );
 wire!(
@@ -1207,6 +1218,7 @@ pub type SuggestTaskLabelsResponse = crate::DataEnvelope<LabelSuggestionResultWi
 pub type BootstrapTaskLabelResponse = crate::DataEnvelope<BootstrapTaskLabelData>;
 pub type ProposeTaskLabelResponse = crate::DataEnvelope<LabelProposalAttemptWire>;
 pub type ListTaskLabelProposalsResponse = crate::DataEnvelope<Vec<LabelSemanticProposalWire>>;
+pub type ListBoardLabelProposalsResponse = crate::DataEnvelope<Vec<LabelSemanticProposalWire>>;
 pub type GetLabelProposalResponse = crate::DataEnvelope<LabelSemanticProposalWire>;
 pub type LabelProposalDecisionResponse = crate::DataEnvelope<LabelSemanticProposalWire>;
 pub type ListSignalsResponse = crate::MetadataEnvelope<Vec<SignalWire>, crate::SignalFilterMeta>;

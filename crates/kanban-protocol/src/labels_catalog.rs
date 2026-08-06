@@ -16,6 +16,10 @@ const BOARD_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
     name: "board",
     cardinality: Some(WireParameterCardinality::RequiredOne),
 }];
+const BOARD_LABEL_PROPOSALS_QUERY_PARAMETERS: &[WireParameter] = &[WireParameter {
+    name: "status",
+    cardinality: Some(WireParameterCardinality::OptionalOne),
+}];
 
 const LABEL_SEMANTICS_PATH_PARAMETERS: &[WireParameter] = &[
     WireParameter {
@@ -1104,6 +1108,62 @@ const API_LIST_TASK_LABEL_PROPOSALS_CONTRACTS: &[ContractDeclaration] = &[
     ),
 ];
 
+const API_LIST_BOARD_LABEL_PROPOSALS_CONTRACTS: &[ContractDeclaration] = &[
+    path_contract!(
+        "api.list-board-label-proposals.path",
+        "GET /api/v1/boards/:board/label-proposals",
+        "list-board-label-proposals-path",
+        "List Board Label Proposals Path v1",
+        BOARD_PATH_PARAMETERS,
+        crate::ListBoardLabelProposalsPath,
+        PROPOSAL_WITNESS
+    ),
+    api_contract!(
+        "api.list-board-label-proposals.query",
+        "GET /api/v1/boards/:board/label-proposals query",
+        "GET /api/v1/boards/:board/label-proposals",
+        ContractDirection::Deserialize,
+        HttpTransportLocation::Query,
+        BOARD_LABEL_PROPOSALS_QUERY_PARAMETERS,
+        "list-board-label-proposals-query",
+        "List Board Label Proposals Query v1",
+        crate::ListBoardLabelProposalsQuery,
+        PROPOSAL_WITNESS
+    ),
+    {
+        let contract = ContractDeclaration::new(
+            "api.list-board-label-proposals.headers",
+            "GET /api/v1/boards/:board/label-proposals headers",
+            ContractDirection::Deserialize,
+            Some(HttpTransportLocation::Headers),
+            ContractStrictness::DenyUnknownFields,
+            ContractGranularity::Exact,
+            ContractBinding::ExactSurface,
+        )
+        .with_transport(None, ApiHeaderProfile::Locale.parameters())
+        .with_schema(
+            "urn:kanban-tool:schema:api:list-board-label-proposals-headers:v1",
+            "api/list-board-label-proposals-headers.v1.schema.json",
+            "List Board Label Proposals Headers v1",
+            "schemas/fixtures/api/headers/list-board-label-proposals-locale-headers.v1.valid.json",
+            "schemas/fixtures/api/headers/list-board-label-proposals-locale-headers.v1.invalid.json",
+        )
+        .with_adoption(PROPOSAL_WITNESS, PROPOSAL_WITNESS);
+        #[cfg(feature = "schema")]
+        let contract = contract.with_schema_type::<crate::headers::LocaleHeaders>();
+        contract
+    },
+    response_contract!(
+        "api.list-board-label-proposals.response",
+        "GET /api/v1/boards/:board/label-proposals",
+        "success",
+        "list-board-label-proposals-response",
+        "List board label proposals response v1",
+        crate::ListBoardLabelProposalsResponse,
+        PROPOSAL_WITNESS
+    ),
+];
+
 const API_PROPOSE_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
     path_contract!(
         "api.propose-task-label.path",
@@ -1540,6 +1600,24 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
     .with_header_profile(ApiHeaderProfile::Locale)
     .with_mcp_policy(policy!("label_list", ["api.list-board-labels"])),
     OperationDeclaration::new(
+        "api.list-board-label-proposals",
+        ContractSurface::Api,
+        Some(HttpMethod::Get),
+        Some("/api/v1/boards/:board/label-proposals"),
+        "GET /api/v1/boards/:board/label-proposals",
+        "GET /api/v1/boards/:board/label-proposals",
+        MigrationState::Adopted,
+        API_LIST_BOARD_LABEL_PROPOSALS_CONTRACTS,
+    )
+    .with_header_profile(ApiHeaderProfile::Locale)
+    .with_mcp_policy(policy!(
+        "label_proposals_list",
+        [
+            "api.list-task-label-proposals",
+            "api.list-board-label-proposals"
+        ]
+    )),
+    OperationDeclaration::new(
         "api.create-board-label",
         ContractSurface::Api,
         Some(HttpMethod::Post),
@@ -1798,7 +1876,10 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
     .with_header_profile(ApiHeaderProfile::Locale)
     .with_mcp_policy(policy!(
         "label_proposals_list",
-        ["api.list-task-label-proposals"]
+        [
+            "api.list-task-label-proposals",
+            "api.list-board-label-proposals"
+        ]
     )),
     OperationDeclaration::new(
         "api.propose-task-label",

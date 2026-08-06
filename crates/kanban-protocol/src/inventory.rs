@@ -4862,6 +4862,7 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             inventory.extend(attachment_api_contracts());
             converge_history_catalog_contracts(&mut inventory);
             converge_labels_catalog_contracts(&mut inventory);
+            converge_knowledge_catalog_contracts(&mut inventory);
             inventory.extend(attachment_cli_contracts());
             inventory.extend(maintenance_operation_contracts());
             converge_adoption_witnesses(&mut inventory);
@@ -4888,12 +4889,25 @@ fn converge_labels_catalog_contracts(inventory: &mut [OperationContract]) {
     }
 }
 
+fn converge_knowledge_catalog_contracts(inventory: &mut [OperationContract]) {
+    let knowledge = crate::knowledge_catalog::operation_contracts();
+    for contract in inventory {
+        if let Some(source) = knowledge
+            .iter()
+            .find(|candidate| candidate.id == contract.id)
+        {
+            *contract = *source;
+        }
+    }
+}
+
 fn hybrid_static_inventory() -> Vec<OperationContract> {
     let board = crate::board_catalog::operation_contracts();
     let dependency = crate::dependency_catalog::operation_contracts();
     let step = crate::step_catalog::operation_contracts();
     let task = crate::task_catalog::operation_contracts();
     let labels = crate::labels_catalog::operation_contracts();
+    let knowledge = crate::knowledge_catalog::operation_contracts();
     let mut inventory = Vec::with_capacity(OPERATION_INVENTORY.len() + 55);
 
     for contract in OPERATION_INVENTORY {
@@ -4919,6 +4933,13 @@ fn hybrid_static_inventory() -> Vec<OperationContract> {
         }
         if let Some(labels_contract) = labels.iter().find(|candidate| candidate.id == contract.id) {
             inventory.push(*labels_contract);
+            continue;
+        }
+        if let Some(knowledge_contract) = knowledge
+            .iter()
+            .find(|candidate| candidate.id == contract.id)
+        {
+            inventory.push(*knowledge_contract);
             continue;
         }
         match contract.id {
@@ -5335,6 +5356,59 @@ fn canonical_api_witness(contract: &OperationContract, consumer: bool) -> Option
         || id == "api.remove-task-label.path"
         || id == "api.remove-task-label.response"
     {
+        return None;
+    }
+
+    if matches!(
+        id,
+        "api.board-task-map.path"
+            | "api.board-task-map.query"
+            | "api.board-task-map.response"
+            | "api.task-neighborhood.path"
+            | "api.task-neighborhood.query"
+            | "api.task-neighborhood.response"
+            | "api.search-tasks.query"
+            | "api.search-tasks.response"
+            | "api.search-tasks-by-status.query"
+            | "api.search-tasks-by-status.response"
+            | "api.search-status.query"
+            | "api.search-status.response"
+            | "api.rebuild-search-index.query"
+            | "api.rebuild-search-index.response"
+            | "api.sync-search-index.query"
+            | "api.sync-search-index.response"
+            | "api.build-context.path"
+            | "api.build-context.query"
+            | "api.build-context.response"
+            | "api.graph-status.query"
+            | "api.graph-status.response"
+            | "api.graph-neighbors.query"
+            | "api.graph-neighbors.response"
+            | "api.graph-query.query"
+            | "api.graph-query.response"
+            | "api.graph-rebuild.query"
+            | "api.graph-rebuild.response"
+            | "api.graph-sync.query"
+            | "api.graph-sync.response"
+            | "api.entity-list.query"
+            | "api.entity-list.response"
+            | "api.entity.path"
+            | "api.entity.response"
+            | "api.entity-upsert.request"
+            | "api.entity-upsert.response"
+            | "api.vector-status.query"
+            | "api.vector-status.response"
+            | "api.vector-configure.request"
+            | "api.vector-configure.response"
+            | "api.vector-rebuild.request"
+            | "api.vector-rebuild.response"
+            | "api.vector-sync.request"
+            | "api.vector-sync.response"
+            | "api.vector-query-chunks.query"
+            | "api.vector-query-chunks.response"
+            | "api.vector-query-label-atoms.query"
+            | "api.vector-query-label-atoms.response"
+    ) {
         return None;
     }
 

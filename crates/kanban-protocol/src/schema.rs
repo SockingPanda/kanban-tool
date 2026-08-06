@@ -3386,6 +3386,7 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
     let step = crate::step_catalog::schema_roots();
     let task = crate::task_catalog::schema_roots();
     let labels = crate::labels_catalog::schema_roots();
+    let knowledge = crate::knowledge_catalog::schema_roots();
     let mut registry = Vec::with_capacity(SCHEMA_REGISTRY.len() + 55);
     for root in SCHEMA_REGISTRY {
         // archive-board request 历史上以 add-dependency 作为插入锚点。
@@ -3419,6 +3420,13 @@ fn hybrid_static_schema_roots() -> Vec<SchemaRoot> {
             .find(|candidate| candidate.contract_id == root.contract_id)
         {
             registry.push(*labels_root);
+            continue;
+        }
+        if let Some(knowledge_root) = knowledge
+            .iter()
+            .find(|candidate| candidate.contract_id == root.contract_id)
+        {
+            registry.push(*knowledge_root);
             continue;
         }
         match root.contract_id {
@@ -3641,6 +3649,7 @@ fn header_schema_roots() -> Vec<SchemaRoot> {
     let step = crate::step_catalog::schema_roots();
     let task = crate::task_catalog::schema_roots();
     let labels = crate::labels_catalog::schema_roots();
+    let knowledge = crate::knowledge_catalog::schema_roots();
     crate::headers::api_header_contract_specs()
         .into_iter()
         .map(|spec| {
@@ -3675,6 +3684,12 @@ fn header_schema_roots() -> Vec<SchemaRoot> {
                 return *root;
             }
             if let Some(root) = labels
+                .iter()
+                .find(|root| root.contract_id == spec.contract_id)
+            {
+                return *root;
+            }
+            if let Some(root) = knowledge
                 .iter()
                 .find(|root| root.contract_id == spec.contract_id)
             {

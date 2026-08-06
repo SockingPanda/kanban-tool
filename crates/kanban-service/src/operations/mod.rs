@@ -43,7 +43,6 @@ pub use labels::{
     AddTaskLabelsCommand, AddTaskLabelsRecord, CreateBoardLabelCommand, RemoveTaskLabelCommand,
 };
 pub use maintenance::*;
-pub use ontology::LabelOntologyOperations;
 pub use relations::{
     RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationUpsertCommand,
 };

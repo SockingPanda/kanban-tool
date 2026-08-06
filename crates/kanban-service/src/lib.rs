@@ -39,7 +39,6 @@ pub mod legacy_import;
 pub use adapter::TursoApplicationStore;
 pub use dto::*;
 pub use kanban_core::{Board, BoardColumn, KanbanError, Result, TaskStatus, new_task_id};
-pub use operations::LabelOntologyOperations;
 pub use operations::{
     AddTaskLabelsCommand, AddTaskLabelsRecord, ArchiveBoardCommand, ArchiveBoardRecord,
     ArchiveTaskCommand, BackupReportRecord, BoardTaskMapOptions, CheckpointReportRecord,

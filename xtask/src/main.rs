@@ -151,6 +151,7 @@ fn run_agents_check(root: &Path) -> xtask::ToolResult<()> {
     ensure_regular_file(&agents, "根 AGENTS.md")?;
     let text = fs::read_to_string(&agents)?;
     check_agents_document_contract(root, &text)?;
+    check_workspace_map(root, &text)?;
     check_skill_packages(root)?;
     check_active_maps(root)?;
     println!("ok: AGENTS.md、技能包结构和 active recipe/package map 已通过");
@@ -260,8 +261,8 @@ fn check_include_str_targets(root: &Path) -> xtask::ToolResult<()> {
 }
 
 fn check_crate_readme_includes(root: &Path, agents_text: &str) -> xtask::ToolResult<()> {
+    check_workspace_map(root, agents_text)?;
     let members = workspace_members(root)?;
-    let workspace_section = section_body(agents_text, "## 3. 工作区地图")?;
     for member in members {
         let member_root = root.join(&member);
         ensure_regular_directory(&member_root, "workspace crate")?;
@@ -289,7 +290,13 @@ fn check_crate_readme_includes(root: &Path, agents_text: &str) -> xtask::ToolRes
             ))
             .into());
         }
+    }
+    Ok(())
+}
 
+fn check_workspace_map(root: &Path, agents_text: &str) -> xtask::ToolResult<()> {
+    let workspace_section = section_body(agents_text, "## 3. 工作区地图")?;
+    for member in workspace_members(root)? {
         let map_key = member
             .rsplit('/')
             .next()
@@ -716,9 +723,14 @@ mod tests {
     }
 
     fn write_agents(root: &Path) {
-        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../AGENTS.md");
-        let text = fs::read_to_string(source).expect("canonical AGENTS should be readable");
-        fs::write(root.join("AGENTS.md"), text).expect("AGENTS should be writable");
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let agents = fs::read_to_string(repository.join("AGENTS.md"))
+            .expect("canonical AGENTS should be readable");
+        fs::write(root.join("AGENTS.md"), agents).expect("AGENTS should be writable");
+        let manifest = fs::read_to_string(repository.join("Cargo.toml"))
+            .expect("workspace manifest should be readable");
+        fs::write(root.join("Cargo.toml"), manifest)
+            .expect("workspace manifest should be writable");
     }
 
     #[test]

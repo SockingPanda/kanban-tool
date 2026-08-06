@@ -18,6 +18,7 @@ mod boards;
 mod cli;
 pub mod cli_helpers;
 pub mod cli_labels;
+pub mod cli_labels_catalog;
 pub mod cli_operator;
 mod comments;
 pub mod contract_catalog;

@@ -499,10 +499,10 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Deserialize,
             "urn:kanban-tool:schema:metadata:decision:v1",
             "schemas/fixtures/metadata/decision.v1.valid.json",
-            "metadata_contract_adoption",
-            "metadata_decision_input_fixture_is_produced_by_cli_contract_dto",
-            "comments",
-            "metadata_decision_input_fixture_is_consumed_by_real_cli",
+            "cli_history_adoption",
+            "history_cli_covers_runs_logs_comments_attachments_events_and_stats",
+            "cli_history_adoption",
+            "history_cli_covers_runs_logs_comments_attachments_events_and_stats",
         ),
         (
             "metadata.signal-record.input",
@@ -510,10 +510,10 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Deserialize,
             "urn:kanban-tool:schema:metadata:signal-record-input:v1",
             "schemas/fixtures/metadata/signal-record-input.v1.valid.json",
-            "metadata_contract_adoption",
-            "metadata_signal_record_input_fixture_is_produced_by_cli_contract_dto",
-            "signal",
-            "metadata_signal_record_input_fixture_is_consumed_by_real_cli",
+            "cli_label_contract_adoption",
+            "generic_signals_record_review_and_confirm_flow_through_real_cli",
+            "cli_label_contract_adoption",
+            "generic_signals_record_review_and_confirm_flow_through_real_cli",
         ),
         (
             "metadata.signal-link.output",
@@ -521,10 +521,10 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Serialize,
             "urn:kanban-tool:schema:metadata:signal-link-output:v1",
             "schemas/fixtures/metadata/signal-link-output.v1.valid.json",
-            "signal",
-            "metadata_signal_link_output_fixture_is_produced_by_real_service_adapter",
-            "metadata_contract_adoption",
-            "metadata_signal_link_output_fixture_is_consumed_by_cli_contract_dto",
+            "cli_label_contract_adoption",
+            "generic_signals_record_review_and_confirm_flow_through_real_cli",
+            "cli_label_contract_adoption",
+            "generic_signals_record_review_and_confirm_flow_through_real_cli",
         ),
         (
             "metadata.label-proposal-candidate.input",
@@ -532,10 +532,10 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Deserialize,
             "urn:kanban-tool:schema:metadata:label-proposal-candidate-input:v1",
             "schemas/fixtures/metadata/label-proposal-candidate-input.v1.valid.json",
-            "metadata_contract_adoption",
-            "metadata_label_proposal_candidate_input_fixture_is_produced_by_cli_contract_dto",
-            "task",
-            "metadata_label_proposal_candidate_input_fixture_is_consumed_by_real_cli",
+            "cli_label_contract_adoption",
+            "labels_semantics_atoms_and_proposals_flow_through_real_cli",
+            "cli_label_contract_adoption",
+            "labels_semantics_atoms_and_proposals_flow_through_real_cli",
         ),
         (
             "metadata.ontology-record.input",
@@ -543,10 +543,10 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Deserialize,
             "urn:kanban-tool:schema:metadata:ontology-record-input:v1",
             "schemas/fixtures/metadata/ontology-record-input.v1.valid.json",
-            "metadata_contract_adoption",
-            "metadata_ontology_record_input_fixture_is_produced_by_cli_contract_dto",
-            "task",
-            "metadata_ontology_record_input_fixture_is_consumed_by_real_cli",
+            "cli_label_contract_adoption",
+            "ontology_observation_signal_review_and_action_flow_through_real_cli",
+            "cli_label_contract_adoption",
+            "ontology_observation_signal_review_and_action_flow_through_real_cli",
         ),
         (
             "metadata.ontology-validation-evidence.input",
@@ -554,10 +554,10 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Deserialize,
             "urn:kanban-tool:schema:metadata:ontology-validation-evidence-input:v1",
             "schemas/fixtures/metadata/ontology-validation-evidence-input.v1.valid.json",
-            "metadata_contract_adoption",
-            "metadata_ontology_validation_evidence_input_fixture_is_produced_by_cli_contract_dto",
             "cli_label_contract_adoption",
-            "metadata_ontology_validation_evidence_input_fixture_is_consumed_by_real_cli",
+            "ontology_observation_signal_review_and_action_flow_through_real_cli",
+            "cli_label_contract_adoption",
+            "ontology_observation_signal_review_and_action_flow_through_real_cli",
         ),
     ];
 
@@ -1947,11 +1947,11 @@ fn selected_worker_profile_contract_matches_runtime_selection_boundary() {
         .expect("selected profile adoption witness");
     assert_eq!(
         adoption.producer.exact_test,
-        "tests::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto"
+        "config_adoption::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto"
     );
     assert_eq!(
         adoption.consumer.exact_test,
-        "tests::selected_worker_profile_input_fixture_is_consumed_by_real_toml_decoder"
+        "dispatcher_profile_is_consumed_by_real_serve_and_only_claims_ready"
     );
 
     let root = kanban_protocol::schema_registry()

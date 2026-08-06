@@ -5065,9 +5065,470 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             inventory.extend(attachment_api_contracts());
             inventory.extend(attachment_cli_contracts());
             inventory.extend(maintenance_operation_contracts());
+            converge_adoption_witnesses(&mut inventory);
             inventory
         })
         .as_slice()
+}
+
+#[derive(Debug, Clone, Copy)]
+struct WitnessLocator {
+    package: &'static str,
+    test_target: &'static str,
+    exact_test: &'static str,
+}
+
+const fn server_route_test(exact_test: &'static str) -> WitnessLocator {
+    WitnessLocator {
+        package: "kanban-server",
+        test_target: "lib",
+        exact_test,
+    }
+}
+
+const fn cli_test(test_target: &'static str, exact_test: &'static str) -> WitnessLocator {
+    WitnessLocator {
+        package: "kanban-cli",
+        test_target,
+        exact_test,
+    }
+}
+
+fn converge_adoption_witnesses(inventory: &mut [OperationContract]) {
+    for contract in inventory {
+        let Some(mut adoption) = contract.adoption else {
+            continue;
+        };
+
+        if let Some(locator) = canonical_witness(contract, false) {
+            adoption.producer.package = locator.package;
+            adoption.producer.test_target = locator.test_target;
+            adoption.producer.exact_test = locator.exact_test;
+        }
+        if let Some(locator) = canonical_witness(contract, true) {
+            adoption.consumer.package = locator.package;
+            adoption.consumer.test_target = locator.test_target;
+            adoption.consumer.exact_test = locator.exact_test;
+        }
+        contract.adoption = Some(adoption);
+    }
+}
+
+fn canonical_witness(contract: &OperationContract, consumer: bool) -> Option<WitnessLocator> {
+    match contract.surface {
+        ContractSurface::Jsonl => None,
+        ContractSurface::Config => Some(canonical_config_witness(contract.id, consumer)),
+        ContractSurface::Metadata => Some(match contract.id {
+            "metadata.decision.input" => cli_test(
+                "cli_history_adoption",
+                "history_cli_covers_runs_logs_comments_attachments_events_and_stats",
+            ),
+            "metadata.signal-record.input" | "metadata.signal-link.output" => cli_test(
+                "cli_label_contract_adoption",
+                "generic_signals_record_review_and_confirm_flow_through_real_cli",
+            ),
+            "metadata.label-proposal-candidate.input" => cli_test(
+                "cli_label_contract_adoption",
+                "labels_semantics_atoms_and_proposals_flow_through_real_cli",
+            ),
+            _ => cli_test(
+                "cli_label_contract_adoption",
+                "ontology_observation_signal_review_and_action_flow_through_real_cli",
+            ),
+        }),
+        ContractSurface::Cli => Some(canonical_cli_witness(contract.id)),
+        ContractSurface::Sse => Some(server_route_test(
+            "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
+        )),
+        ContractSurface::Api => canonical_api_witness(contract, consumer),
+    }
+}
+
+fn canonical_config_witness(id: &str, consumer: bool) -> WitnessLocator {
+    match (id, consumer) {
+        ("config.selected-worker-profile.input", false) => cli_test(
+            "cli_config_contract_adoption",
+            "config_adoption::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto",
+        ),
+        ("config.selected-worker-profile.input", true) => cli_test(
+            "cli_admin_adoption",
+            "dispatcher_profile_is_consumed_by_real_serve_and_only_claims_ready",
+        ),
+        (_, false) => cli_test(
+            "cli_config_contract_adoption",
+            "config_adoption::project_config_input_fixture_is_produced_by_runtime_config_dto",
+        ),
+        (_, true) => cli_test(
+            "cli_queue_adoption",
+            "queue_cli_uses_real_host_for_config_board_and_task_commands",
+        ),
+    }
+}
+
+fn canonical_cli_witness(id: &str) -> WitnessLocator {
+    if id.starts_with("cli.task-step-") || id.starts_with("cli.dep-") {
+        return cli_test(
+            "cli_steps_dependencies_adoption",
+            "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
+        );
+    }
+    if id.starts_with("cli.task-")
+        && !matches!(
+            id,
+            "cli.task-create.output"
+                | "cli.task-list.output"
+                | "cli.task-show.output"
+                | "cli.task-update.output"
+        )
+    {
+        return cli_test(
+            "cli_lifecycle_adoption",
+            "lifecycle_cli_runs_each_transition_through_localhost_host",
+        );
+    }
+    if id.starts_with("cli.run")
+        || id.starts_with("cli.runs")
+        || id.starts_with("cli.comment-")
+        || id.starts_with("cli.attachment-")
+        || id == "cli.events.output"
+    {
+        return cli_test(
+            "cli_history_adoption",
+            "history_cli_covers_runs_logs_comments_attachments_events_and_stats",
+        );
+    }
+    if id.starts_with("cli.label-") {
+        if id.contains("ontology") {
+            return cli_test(
+                "cli_label_contract_adoption",
+                "ontology_observation_signal_review_and_action_flow_through_real_cli",
+            );
+        }
+        return cli_test(
+            "cli_label_contract_adoption",
+            "labels_semantics_atoms_and_proposals_flow_through_real_cli",
+        );
+    }
+    if id.starts_with("cli.signal-") {
+        return cli_test(
+            "cli_label_contract_adoption",
+            "generic_signals_record_review_and_confirm_flow_through_real_cli",
+        );
+    }
+    if id.starts_with("cli.graph-")
+        || id.starts_with("cli.entity-")
+        || id.starts_with("cli.search-")
+        || id.starts_with("cli.vector-")
+        || id.starts_with("cli.index-")
+        || id.starts_with("cli.context-")
+    {
+        return cli_test(
+            "cli_knowledge_adoption",
+            "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
+        );
+    }
+    if id.starts_with("cli.maintenance-")
+        || id.starts_with("cli.import-v30")
+        || id.starts_with("cli.doctor")
+        || id.starts_with("cli.checkpoint")
+        || id.starts_with("cli.stats")
+        || id.starts_with("cli.dispatch")
+        || id.starts_with("cli.hook-")
+        || id.starts_with("cli.completion")
+        || id.starts_with("cli.derived-")
+        || id.starts_with("cli.outbox-")
+    {
+        return cli_test(
+            "cli_admin_adoption",
+            "maintenance_admin_commands_use_real_host_and_typed_json",
+        );
+    }
+    cli_test(
+        "cli_queue_adoption",
+        "queue_cli_uses_real_host_for_config_board_and_task_commands",
+    )
+}
+
+fn canonical_api_witness(contract: &OperationContract, consumer: bool) -> Option<WitnessLocator> {
+    let id = contract.id;
+
+    if id.ends_with(".headers") {
+        return Some(server_route_test(
+            "knowledge_adoption::label_add_route_consumes_committed_header_fixture",
+        ));
+    }
+    if id == "api.vector-configure.request" {
+        return Some(if consumer {
+            server_route_test(
+                "vector::tests::vector_configure_request_fixture_is_consumed_by_real_router",
+            )
+        } else {
+            WitnessLocator {
+                package: "kanban-client",
+                test_target: "lib",
+                exact_test: "operations::vector::tests::vector_configure_request_fixture_is_produced",
+            }
+        });
+    }
+    if id == "api.vector-rebuild.request" {
+        return Some(if consumer {
+            server_route_test(
+                "vector::tests::vector_rebuild_request_fixture_is_consumed_by_real_router",
+            )
+        } else {
+            WitnessLocator {
+                package: "kanban-client",
+                test_target: "lib",
+                exact_test: "operations::vector::tests::vector_rebuild_request_fixture_is_produced",
+            }
+        });
+    }
+    if id == "api.vector-sync.request" {
+        return Some(if consumer {
+            server_route_test(
+                "vector::tests::vector_sync_request_fixture_is_consumed_by_real_router",
+            )
+        } else {
+            WitnessLocator {
+                package: "kanban-client",
+                test_target: "lib",
+                exact_test: "operations::vector::tests::vector_sync_request_fixture_is_produced",
+            }
+        });
+    }
+    if id == "api.vector-query-chunks.query" {
+        return Some(if consumer {
+            server_route_test(
+                "vector::tests::vector_query_chunks_query_fixture_is_consumed_by_real_router",
+            )
+        } else {
+            WitnessLocator {
+                package: "kanban-client",
+                test_target: "lib",
+                exact_test: "operations::vector::tests::vector_query_chunks_query_fixture_is_produced",
+            }
+        });
+    }
+    if id == "api.vector-query-label-atoms.query" {
+        return Some(if consumer {
+            server_route_test(
+                "vector::tests::vector_query_label_atoms_query_fixture_is_consumed_by_real_router",
+            )
+        } else {
+            WitnessLocator {
+                package: "kanban-client",
+                test_target: "lib",
+                exact_test: "operations::vector::tests::vector_query_label_atoms_query_fixture_is_produced",
+            }
+        });
+    }
+    if id == "api.vector-configure.response" {
+        return Some(if consumer {
+            WitnessLocator {
+                package: "kanban-client",
+                test_target: "lib",
+                exact_test: "operations::vector::tests::vector_configure_response_fixture_is_consumed_by_client",
+            }
+        } else {
+            server_route_test(
+                "vector::tests::vector_configure_response_fixture_is_produced_by_real_router",
+            )
+        });
+    }
+    if id == "api.vector-rebuild.response" {
+        return Some(if consumer {
+            WitnessLocator {
+                package: "kanban-client",
+                test_target: "lib",
+                exact_test: "operations::vector::tests::vector_rebuild_response_fixture_is_consumed_by_client",
+            }
+        } else {
+            server_route_test(
+                "vector::tests::vector_rebuild_response_fixture_is_produced_by_real_router",
+            )
+        });
+    }
+    if id == "api.vector-sync.response" {
+        return Some(if consumer {
+            WitnessLocator {
+                package: "kanban-client",
+                test_target: "lib",
+                exact_test: "operations::vector::tests::vector_sync_response_fixture_is_consumed_by_client",
+            }
+        } else {
+            server_route_test(
+                "vector::tests::vector_sync_response_fixture_is_produced_by_real_router",
+            )
+        });
+    }
+    if id == "api.vector-query-chunks.response" {
+        return Some(if consumer {
+            WitnessLocator {
+                package: "kanban-client",
+                test_target: "lib",
+                exact_test: "operations::vector::tests::vector_query_chunks_response_fixture_is_consumed_by_client",
+            }
+        } else {
+            server_route_test(
+                "vector::tests::vector_query_chunks_response_fixture_is_produced_by_real_router",
+            )
+        });
+    }
+    if id == "api.vector-query-label-atoms.response" {
+        return Some(if consumer {
+            WitnessLocator {
+                package: "kanban-client",
+                test_target: "lib",
+                exact_test: "operations::vector::tests::vector_query_label_atoms_response_fixture_is_consumed_by_client",
+            }
+        } else {
+            server_route_test(
+                "vector::tests::vector_query_label_atoms_response_fixture_is_produced_by_real_router",
+            )
+        });
+    }
+
+    if id.starts_with("api.maintenance-") {
+        return Some(server_route_test(maintenance_witness(id, consumer)));
+    }
+    if id == "api.health.response" {
+        return Some(server_route_test(
+            "http::operations::contract_adoption::suite_health_and_errors_use_real_router_fixtures",
+        ));
+    }
+    if id == "api.error.response" {
+        return Some(server_route_test(
+            "http::operations::contract_adoption::suite_health_and_errors_use_real_router_fixtures",
+        ));
+    }
+
+    if id == "api.list-board-labels.path"
+        || id == "api.list-board-labels.response"
+        || id == "api.create-board-label.path"
+        || id == "api.create-board-label.request"
+        || id == "api.create-board-label.response"
+        || id == "api.list-task-labels.path"
+        || id == "api.list-task-labels.response"
+        || id == "api.add-task-label.path"
+        || id == "api.add-task-label.request"
+        || id == "api.add-task-label.response"
+        || id == "api.remove-task-label.path"
+        || id == "api.remove-task-label.response"
+    {
+        return None;
+    }
+
+    let route_test = if id.contains("label-ontology") || id.contains("ontology-") {
+        "knowledge_adoption::ontology_ledger_routes_consume_observation_and_action_fixtures"
+    } else if id.contains("signal") {
+        "knowledge_adoption::signal_routes_consume_record_list_show_and_review_fixtures"
+    } else if id.contains("proposal") || id.contains("propose-task-label") {
+        "knowledge_adoption::label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal"
+    } else if id.contains("label") {
+        "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host"
+    } else if id.contains("entity") {
+        "knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"
+    } else if id.contains("search") {
+        "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
+    } else if id.contains("context") {
+        "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
+    } else if id.contains("graph") || id.contains("task-neighborhood") || id.contains("task-map") {
+        "knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"
+    } else if id.contains("vector-status") {
+        "knowledge_adoption::vector_routes_consume_typed_projection_fixtures_and_real_degraded_queries"
+    } else if id.contains("stats") || id.contains("events") || id.starts_with("sse.") {
+        "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures"
+    } else if id.contains("board") {
+        "http::operations::contract_adoption::suite_boards_adoption_uses_request_path_query_and_response_fixtures"
+    } else if id.contains("step") || id.contains("execution-plan") {
+        "http::operations::contract_adoption::suite_steps_and_plans_adoption_uses_real_router_fixtures"
+    } else if id.contains("depend") {
+        "http::operations::contract_adoption::suite_dependencies_adoption_uses_path_body_and_response_fixtures"
+    } else if id.contains("comment") || id.contains("attachment") {
+        "http::operations::contract_adoption::suite_comments_and_attachments_adoption_uses_real_router_fixtures"
+    } else if id.contains("run") {
+        "http::operations::contract_adoption::suite_runs_and_logs_adoption_uses_real_router_paths_and_fixtures"
+    } else if id.contains("task") || id.contains("transition") {
+        "http::operations::contract_adoption::suite_task_lifecycle_adoption_uses_committed_requests_and_typed_responses"
+    } else {
+        "http::operations::contract_adoption::suite_health_and_errors_use_real_router_fixtures"
+    };
+    Some(server_route_test(route_test))
+}
+
+fn maintenance_witness(id: &str, consumer: bool) -> &'static str {
+    let role = if consumer { "consumer" } else { "producer" };
+    match id {
+        "api.maintenance-path.request" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_path_request_consumer",
+            _ => "suite::maintenance_adoption::maintenance_path_request_producer",
+        },
+        "api.maintenance-import.request" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_import_request_consumer",
+            _ => "suite::maintenance_adoption::maintenance_import_request_producer",
+        },
+        "api.maintenance-backup.request" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_backup_request_consumer",
+            _ => "suite::maintenance_adoption::maintenance_backup_request_producer",
+        },
+        "api.maintenance-export.request" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_export_request_consumer",
+            _ => "suite::maintenance_adoption::maintenance_export_request_producer",
+        },
+        "api.maintenance-run.request" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_run_request_consumer",
+            _ => "suite::maintenance_adoption::maintenance_run_request_producer",
+        },
+        "api.maintenance-rebuild.request" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_rebuild_request_consumer",
+            _ => "suite::maintenance_adoption::maintenance_rebuild_request_producer",
+        },
+        "api.maintenance-cleanup.request" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_cleanup_request_consumer",
+            _ => "suite::maintenance_adoption::maintenance_cleanup_request_producer",
+        },
+        "api.maintenance-import-v30.request" => match role {
+            "consumer" => "suite::maintenance_adoption::legacy_import_v30_request_consumer",
+            _ => "suite::maintenance_adoption::legacy_import_v30_request_producer",
+        },
+        "api.maintenance-backup.response" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_backup_response_consumer",
+            _ => "suite::maintenance_adoption::maintenance_backup_response_producer",
+        },
+        "api.maintenance-export.response" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_export_response_consumer",
+            _ => "suite::maintenance_adoption::maintenance_export_response_producer",
+        },
+        "api.maintenance-import.response" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_import_response_consumer",
+            _ => "suite::maintenance_adoption::maintenance_import_response_producer",
+        },
+        "api.maintenance-vacuum.response" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_vacuum_response_consumer",
+            _ => "suite::maintenance_adoption::maintenance_vacuum_response_producer",
+        },
+        "api.maintenance-status.response" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_status_response_consumer",
+            _ => "suite::maintenance_adoption::maintenance_status_response_producer",
+        },
+        "api.maintenance-run.response" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_run_response_consumer",
+            _ => "suite::maintenance_adoption::maintenance_run_response_producer",
+        },
+        "api.maintenance-rebuild.response" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_rebuild_response_consumer",
+            _ => "suite::maintenance_adoption::maintenance_rebuild_response_producer",
+        },
+        "api.maintenance-cleanup.response" => match role {
+            "consumer" => "suite::maintenance_adoption::maintenance_cleanup_response_consumer",
+            _ => "suite::maintenance_adoption::maintenance_cleanup_response_producer",
+        },
+        "api.maintenance-import-v30.response" => match role {
+            "consumer" => "suite::maintenance_adoption::legacy_import_v30_response_consumer",
+            _ => "suite::maintenance_adoption::legacy_import_v30_response_producer",
+        },
+        _ => "suite::maintenance_adoption::maintenance_run_response_consumer",
+    }
 }
 
 fn attachment_api_contracts() -> Vec<OperationContract> {

@@ -83,7 +83,7 @@ macro_rules! portable_descriptor {
                 producer_test: concat!(
                     "suite::portable_adoption::",
                     $discriminator,
-                    "_input_fixture_is_produced_by_contract"
+                    "_output_fixture_is_produced_by_real_export"
                 ),
                 consumer_test: concat!(
                     "suite::portable_adoption::",
@@ -117,7 +117,7 @@ macro_rules! portable_descriptor {
                 consumer_test: concat!(
                     "suite::portable_adoption::",
                     $discriminator,
-                    "_output_fixture_is_consumed_by_contract"
+                    "_input_fixture_is_consumed_by_real_import"
                 ),
             },
         }

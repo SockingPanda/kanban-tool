@@ -61,8 +61,7 @@ const CONFIG_PROJECT_CONSUMER: AdoptionLocator = AdoptionLocator {
 const CONFIG_WORKER_PRODUCER: AdoptionLocator = AdoptionLocator {
     package: "kanban-cli",
     test_target: "cli_config_contract_adoption",
-    exact_test:
-        "config_adoption::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto",
+    exact_test: "config_adoption::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto",
 };
 const CONFIG_WORKER_CONSUMER: AdoptionLocator = AdoptionLocator {
     package: "kanban-cli",
@@ -73,8 +72,7 @@ const CONFIG_WORKER_CONSUMER: AdoptionLocator = AdoptionLocator {
 const API_ERROR_PRODUCER: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "http::operations::contract_adoption::suite_health_and_errors_use_real_router_fixtures",
+    exact_test: "http::operations::contract_adoption::suite_health_and_errors_use_real_router_fixtures",
 };
 const API_ERROR_CONSUMER: AdoptionLocator = API_ERROR_PRODUCER;
 
@@ -424,20 +422,26 @@ pub fn endpoint_catalog() -> Vec<EndpointDescriptor> {
     Vec::new()
 }
 
-/// 查找 Metadata/Config parent 的 operation projection。
+/// 查找 source 中任意 contract 的 operation projection。
 pub fn operation_contract(id: &str) -> Option<OperationContract> {
     operation_contracts()
         .into_iter()
         .find(|contract| contract.id == id)
+        .or_else(|| {
+            shared_component_contracts()
+                .into_iter()
+                .find(|contract| contract.id == id)
+        })
 }
 
-/// 查找 source 中任意 contract（包含 shared API error component）。
+/// 判断 contract 是否由本 family 声明（含 shared error）。
+pub fn owns_contract(id: &str) -> bool {
+    operation_contract(id).is_some()
+}
+
+/// 保留旧 helper 名称，供只关心 shared component 的调用方使用。
 pub fn contract(id: &str) -> Option<OperationContract> {
-    operation_contract(id).or_else(|| {
-        shared_component_contracts()
-            .into_iter()
-            .find(|contract| contract.id == id)
-    })
+    operation_contract(id)
 }
 
 /// 返回 source 中显式 schema roots。
@@ -448,11 +452,6 @@ pub fn schema_roots() -> Vec<crate::schema::SchemaRoot> {
     roots
 }
 
-/// 判断 contract 是否由本 family 声明（含 shared error）。
-pub fn owns_contract(id: &str) -> bool {
-    contract(id).is_some()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,9 +459,11 @@ mod tests {
     #[test]
     fn metadata_and_config_source_has_no_endpoint_parent() {
         assert_eq!(operation_declarations().len(), 8);
-        assert!(operation_declarations()
-            .iter()
-            .all(|operation| operation.method.is_none() && operation.path.is_none()));
+        assert!(
+            operation_declarations()
+                .iter()
+                .all(|operation| operation.method.is_none() && operation.path.is_none())
+        );
         assert!(endpoint_catalog().is_empty());
         assert_eq!(operation_contracts().len(), 8);
     }

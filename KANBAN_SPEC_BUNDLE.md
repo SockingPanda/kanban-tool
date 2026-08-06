@@ -973,7 +973,9 @@ GET           /api/v1/tasks/:task_id/labels/suggestions
 GET/POST       /api/v1/tasks/:task_id/label-proposals
 GET/POST       /api/v1/tasks/:task_id/label-ontology/observations
 GET/POST       /api/v1/boards/:board/label-ontology/{signals,review,actions,apply/atom,revert,validate}
-GET/POST       /api/v1/{label-ontology/signals/:signal_id,label-proposals/:proposal_id*}
+GET             /api/v1/label-ontology/signals/:signal_id
+GET             /api/v1/label-proposals/:proposal_id
+POST            /api/v1/label-proposals/:proposal_id/{accept,reject}
 ```
 
 每个 action 由 service 做 CAS、board guard、atom effects、review/validate/revert 和 event；index 是可重建派生状态。

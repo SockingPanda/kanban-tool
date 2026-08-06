@@ -275,7 +275,7 @@ pub struct TaskListPage {
 }
 
 // Ontology 记录有意保持为 store 所有的值。这里不解释 JSON 字段；由
-// application/contract adapter 在传输边界校验其结构，同时由 Turso 强制执行
+// application/contract boundary 在传输边界校验其结构，同时由 Turso 强制执行
 // `json_valid` 和看板外键约束。
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct LabelSemanticsRecord {

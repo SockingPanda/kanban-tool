@@ -248,6 +248,11 @@ fn check_include_str_targets(root: &Path) -> xtask::ToolResult<()> {
     for path in repository_files(root, "rs")? {
         let text = fs::read_to_string(&path)?;
         for target in include_targets(root, &path, &text)? {
+            // `concat!(env!("CARGO_MANIFEST_DIR"), "/base/", $literal)` 在宏定义处
+            // 只能解析到基础目录；具体文件由每个宏展开和 rustdoc 编译继续校验。
+            if target.is_dir() {
+                continue;
+            }
             ensure_regular_file(&target, "include_str! 目标")?;
         }
     }
@@ -380,7 +385,10 @@ fn collect_files(
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let name = entry.file_name();
-        if name == ".git" || name == "target" {
+        if matches!(
+            name.to_str(),
+            Some(".git" | "target" | "node_modules" | ".pnpm")
+        ) {
             continue;
         }
         collect_files(&entry.path(), extension, files)?;
@@ -736,6 +744,61 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn repository_files_skips_dependency_and_build_trees() {
+        let root = temp_root("repository-files");
+        fs::create_dir_all(root.join("docs")).expect("docs directory should be creatable");
+        fs::create_dir_all(root.join("node_modules/pkg"))
+            .expect("node_modules directory should be creatable");
+        fs::create_dir_all(root.join("target/doc")).expect("target directory should be creatable");
+        fs::write(root.join("docs/guide.md"), "# Guide\n").expect("guide should be writable");
+        fs::write(
+            root.join("node_modules/pkg/README.md"),
+            "[broken](../missing)\n",
+        )
+        .expect("dependency README should be writable");
+        fs::write(
+            root.join("target/doc/generated.md"),
+            "[broken](../missing)\n",
+        )
+        .expect("generated README should be writable");
+
+        let files = repository_files(&root, "md").expect("repository files should be readable");
+        assert_eq!(files, vec![root.join("docs/guide.md")]);
+
+        fs::remove_dir_all(root).expect("temporary root should be removable");
+    }
+
+    #[test]
+    fn include_targets_accept_existing_dynamic_base_directory() {
+        let root = temp_root("dynamic-include");
+        let crate_root = root.join("crates/example");
+        fs::create_dir_all(crate_root.join("src")).expect("crate source should be creatable");
+        fs::create_dir_all(root.join("schemas/fixtures"))
+            .expect("fixture directory should be creatable");
+        fs::write(
+            crate_root.join("Cargo.toml"),
+            "[package]\nname = \"example\"\n",
+        )
+        .expect("manifest should be writable");
+        fs::write(
+            crate_root.join("src/lib.rs"),
+            r#"include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../schemas/fixtures/",
+                $path
+            ));"#,
+        )
+        .expect("source should be writable");
+
+        assert!(check_include_str_targets(&root).is_ok());
+        fs::remove_dir_all(root.join("schemas/fixtures"))
+            .expect("fixture directory should be removable");
+        assert!(check_include_str_targets(&root).is_err());
+
+        fs::remove_dir_all(root).expect("temporary root should be removable");
     }
 
     #[test]

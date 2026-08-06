@@ -3,6 +3,8 @@ use std::{
     fmt::{Display, Formatter},
 };
 
+use kanban_core::KanbanError;
+
 #[derive(Debug)]
 pub enum StoreError {
     Turso(turso::Error),
@@ -121,5 +123,73 @@ impl Error for StoreError {}
 impl From<turso::Error> for StoreError {
     fn from(error: turso::Error) -> Self {
         Self::Turso(error)
+    }
+}
+
+/// 将 canonical store 错误收敛到 application service 的稳定错误边界。
+pub(crate) fn store_error(error: StoreError) -> KanbanError {
+    match error {
+        StoreError::BoardNotFound(selector) => KanbanError::NotFound(format!("看板 {selector}")),
+        StoreError::TaskNotFound(task_id) => KanbanError::NotFound(format!("task {task_id}")),
+        StoreError::LabelNotFound(label) => KanbanError::NotFound(format!("label {label}")),
+        StoreError::RunNotFound(run_id) => KanbanError::NotFound(format!("run {run_id}")),
+        StoreError::StepNotFound(step_id) => KanbanError::NotFound(format!("step {step_id}")),
+        StoreError::AttachmentNotFound(attachment_id) => {
+            KanbanError::NotFound(format!("attachment {attachment_id}"))
+        }
+        StoreError::AttachmentFileMissing(path) => {
+            KanbanError::Storage(format!("attachment file missing: {path}"))
+        }
+        StoreError::AttachmentConflict(message) => KanbanError::Conflict(message),
+        StoreError::AttachmentIntegrity(message) => KanbanError::Storage(message),
+        StoreError::AttachmentIo(message) => KanbanError::Storage(message),
+        StoreError::SignalNotFound(signal_id) => {
+            KanbanError::NotFound(format!("signal {signal_id}"))
+        }
+        StoreError::EntityNotFound(uri) => KanbanError::NotFound(format!("entity {uri}")),
+        StoreError::PredicateNotFound(name) => {
+            KanbanError::NotFound(format!("relation predicate {name}"))
+        }
+        StoreError::RelationNotFound(id) => KanbanError::NotFound(format!("relation {id}")),
+        StoreError::EntityConflict(message) | StoreError::RelationConflict(message) => {
+            KanbanError::Conflict(message)
+        }
+        StoreError::DependencyCycle(message) => KanbanError::Conflict(message),
+        StoreError::TaskConflict(task_id) => {
+            KanbanError::Conflict(format!("task id already exists: {task_id}"))
+        }
+        StoreError::InvalidInput(message) if message.contains("hash mismatch") => {
+            KanbanError::Conflict(message)
+        }
+        StoreError::SignalConflict(message) => KanbanError::Conflict(message),
+        StoreError::SignalIdempotencyConflict {
+            board_id,
+            key,
+            existing_signal_id,
+        } => KanbanError::IdempotencyConflict(format!(
+            "board {board_id}, key {key}, existing signal {existing_signal_id}"
+        )),
+        StoreError::InvalidInput(message) => KanbanError::InvalidInput(message),
+        StoreError::InvalidTransition(message) => KanbanError::InvalidTransition(message),
+        StoreError::ClaimConflict(message) => {
+            KanbanError::InvalidTransition(format!("claim conflict: {message}"))
+        }
+        StoreError::ClaimTokenMismatch => {
+            KanbanError::InvalidTransition("claim token mismatch".to_owned())
+        }
+        StoreError::StepsIncomplete(message) => KanbanError::StepsIncomplete(message),
+        StoreError::IdempotencyConflict {
+            board_id,
+            key,
+            existing_task_id,
+        } => KanbanError::IdempotencyConflict(format!(
+            "board {board_id}, key {key}, existing task {existing_task_id}"
+        )),
+        StoreError::MaintenanceBusy(message) => KanbanError::Conflict(message),
+        StoreError::BackupRequired(message) => KanbanError::Conflict(message),
+        StoreError::LegacyImport(message) => {
+            KanbanError::Storage(format!("legacy sqlite import failed: {message}"))
+        }
+        other => KanbanError::Storage(other.to_string()),
     }
 }

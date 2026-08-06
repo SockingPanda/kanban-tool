@@ -93,8 +93,6 @@ where
             child.status
         };
         let result = self
-            .application
-            .store
             .store
             .add_dependency(
                 child_task_id,
@@ -109,10 +107,10 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         Ok(AddDependencyResult {
             added: result.added,
-            dependencies: crate::adapter::application_dependency_snapshot(result.dependencies)?,
+            dependencies: crate::operations::application_dependency_snapshot(result.dependencies)?,
         })
     }
 }

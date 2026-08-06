@@ -13,12 +13,10 @@ where
                 "task_id must be a global t_... id".to_owned(),
             ));
         }
-        self.application
-            .store
-            .store
+        self.store
             .list_dependencies(task_id)
             .await
-            .map_err(crate::adapter::store_error)
-            .and_then(crate::adapter::application_dependency_snapshot)
+            .map_err(crate::error::store_error)
+            .and_then(crate::operations::application_dependency_snapshot)
     }
 }

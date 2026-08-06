@@ -34,9 +34,7 @@ where
             return Err(KanbanError::InvalidInput("actor is required".to_owned()));
         }
         let _mutation = self.mutation_gate.lock().await;
-        self.application
-            .store
-            .store
+        self.store
             .mark_execution_plan_not_required(
                 task_id,
                 crate::store_operations::MarkExecutionPlanNotRequiredInput {
@@ -47,7 +45,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
-            .and_then(crate::adapter::application_execution_plan)
+            .map_err(crate::error::store_error)
+            .and_then(crate::operations::step::application_execution_plan)
     }
 }

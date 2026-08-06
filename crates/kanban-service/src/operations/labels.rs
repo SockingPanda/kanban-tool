@@ -38,16 +38,14 @@ where
 {
     pub async fn list_board_labels(&self, board: &str) -> Result<Vec<LabelRecord>> {
         let board = required_trimmed(board, "board is required")?;
-        self.application
-            .store
-            .store
+        self.store
             .list_board_labels(board)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(|labels| {
                 labels
                     .into_iter()
-                    .map(crate::adapter::application_label)
+                    .map(crate::operations::application_label)
                     .collect()
             })
     }
@@ -63,9 +61,7 @@ where
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty());
         let _mutation = self.mutation_gate.lock().await;
-        self.application
-            .store
-            .store
+        self.store
             .create_board_label(
                 board,
                 crate::CreateLabelInput {
@@ -76,22 +72,20 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
-            .map(crate::adapter::application_label)
+            .map_err(crate::error::store_error)
+            .map(crate::operations::application_label)
     }
 
     pub async fn list_task_labels(&self, task_id: &str) -> Result<Vec<LabelRecord>> {
         let task_id = global_task_id(task_id)?;
-        self.application
-            .store
-            .store
+        self.store
             .list_task_labels(task_id)
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .map(|labels| {
                 labels
                     .into_iter()
-                    .map(crate::adapter::application_label)
+                    .map(crate::operations::application_label)
                     .collect()
             })
     }
@@ -108,8 +102,6 @@ where
         let now = self.clock.now_ms();
         let _mutation = self.mutation_gate.lock().await;
         let record = self
-            .application
-            .store
             .store
             .add_task_labels(
                 task_id,
@@ -123,13 +115,13 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         Ok(AddTaskLabelsRecord {
             task: super::application_task(record.task)?,
             created_labels: record
                 .created_labels
                 .into_iter()
-                .map(crate::adapter::application_label)
+                .map(crate::operations::application_label)
                 .collect(),
         })
     }
@@ -139,9 +131,7 @@ where
         let label_ref = required_trimmed(&command.label_ref, "label id is required")?;
         let actor = required_trimmed(&command.actor, "actor is required")?;
         let _mutation = self.mutation_gate.lock().await;
-        self.application
-            .store
-            .store
+        self.store
             .remove_task_label(
                 task_id,
                 crate::RemoveTaskLabelInput {
@@ -152,7 +142,7 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)
+            .map_err(crate::error::store_error)
             .and_then(super::application_task)
     }
 }
@@ -165,6 +155,17 @@ fn global_task_id(value: &str) -> Result<&str> {
         ));
     }
     Ok(value)
+}
+
+pub(crate) fn application_label(label: crate::domain::LabelRecord) -> LabelRecord {
+    LabelRecord {
+        id: label.id,
+        board_id: label.board_id,
+        name: label.name,
+        color: label.color,
+        created_at: label.created_at,
+        updated_at: label.updated_at,
+    }
 }
 
 fn required_trimmed<'a>(value: &'a str, message: &str) -> Result<&'a str> {

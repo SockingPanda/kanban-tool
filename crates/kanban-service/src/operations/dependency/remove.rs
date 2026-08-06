@@ -46,8 +46,6 @@ where
         }
         let _mutation = self.mutation_gate.lock().await;
         let result = self
-            .application
-            .store
             .store
             .remove_dependency(
                 child_task_id,
@@ -59,10 +57,10 @@ where
                 },
             )
             .await
-            .map_err(crate::adapter::store_error)?;
+            .map_err(crate::error::store_error)?;
         Ok(RemoveDependencyResult {
             removed: result.removed,
-            dependencies: crate::adapter::application_dependency_snapshot(result.dependencies)?,
+            dependencies: crate::operations::application_dependency_snapshot(result.dependencies)?,
         })
     }
 }

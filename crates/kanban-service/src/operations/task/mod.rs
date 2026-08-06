@@ -22,7 +22,7 @@ pub use block::BlockTaskCommand;
 pub use claim::ClaimTaskCommand;
 pub use create::CreateTaskCommand;
 pub use details::{
-    TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskOntologySignalSummaryRecord,
+    TaskDetailOntologyRecord, TaskDetailRecord, TaskOntologySignalSummaryRecord,
     TaskOntologySummaryRecord,
 };
 pub use done::CompleteTaskCommand;
@@ -96,7 +96,7 @@ pub(crate) fn application_task(
         labels: task
             .labels
             .into_iter()
-            .map(crate::adapter::application_label)
+            .map(crate::operations::application_label)
             .collect(),
     })
 }

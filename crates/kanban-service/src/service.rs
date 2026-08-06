@@ -21,7 +21,7 @@ pub struct ApplicationService<S, C = SystemClock> {
 ///
 /// 当前仍以 [`ApplicationService`] 承载尚未完成扁平化的 operation。这个兼容核心只在
 /// service crate 内装配；后续领域迁移完成后会逐步删除 generic store abstraction。
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct KanbanService<C = SystemClock> {
     pub(crate) application: ApplicationService<TursoApplicationStore, C>,
 }

@@ -28,6 +28,7 @@ mod endpoint;
 pub mod event_payload;
 mod events;
 mod headers;
+pub mod history_catalog;
 mod inventory;
 pub mod jsonl_core;
 pub mod jsonl_ledger;

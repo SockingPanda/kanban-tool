@@ -3629,6 +3629,7 @@ fn portable_schema_roots() -> Vec<SchemaRoot> {
 fn header_schema_roots() -> Vec<SchemaRoot> {
     let board = crate::board_catalog::schema_roots();
     let dependency = crate::dependency_catalog::schema_roots();
+    let history = crate::history_catalog::schema_roots();
     let step = crate::step_catalog::schema_roots();
     let task = crate::task_catalog::schema_roots();
     crate::headers::api_header_contract_specs()
@@ -3647,6 +3648,12 @@ fn header_schema_roots() -> Vec<SchemaRoot> {
                 return *root;
             }
             if let Some(root) = dependency
+                .iter()
+                .find(|root| root.contract_id == spec.contract_id)
+            {
+                return *root;
+            }
+            if let Some(root) = history
                 .iter()
                 .find(|root| root.contract_id == spec.contract_id)
             {

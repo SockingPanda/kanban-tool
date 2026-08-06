@@ -1923,8 +1923,14 @@ pub fn endpoint_catalog() -> &'static [EndpointDescriptor] {
     CATALOG
         .get_or_init(|| {
             let board = crate::board_catalog::endpoint_catalog();
-            let mut catalog = Vec::with_capacity(ENDPOINTS.len() + board.len() + 28);
+            let mut catalog = Vec::with_capacity(ENDPOINTS.len() + board.len() + 39);
             for endpoint in ENDPOINTS {
+                if let Some(history) =
+                    crate::history_catalog::endpoint_descriptor(endpoint.operation_id)
+                {
+                    catalog.push(history);
+                    continue;
+                }
                 if let Some(dependency) =
                     crate::dependency_catalog::endpoint_descriptor(endpoint.operation_id)
                 {

@@ -4860,12 +4860,22 @@ pub fn operation_inventory() -> &'static [OperationContract] {
             inventory.extend(portable_operation_contracts());
             inventory.extend(crate::headers::header_operation_contracts());
             inventory.extend(attachment_api_contracts());
+            converge_history_catalog_contracts(&mut inventory);
             inventory.extend(attachment_cli_contracts());
             inventory.extend(maintenance_operation_contracts());
             converge_adoption_witnesses(&mut inventory);
             inventory
         })
         .as_slice()
+}
+
+fn converge_history_catalog_contracts(inventory: &mut [OperationContract]) {
+    let history = crate::history_catalog::operation_contracts();
+    for contract in inventory {
+        if let Some(source) = history.iter().find(|candidate| candidate.id == contract.id) {
+            *contract = *source;
+        }
+    }
 }
 
 fn hybrid_static_inventory() -> Vec<OperationContract> {

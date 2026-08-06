@@ -13,7 +13,7 @@ mod entities;
 mod event;
 mod graph;
 mod labels;
-mod maintenance;
+pub(crate) mod maintenance;
 mod ontology;
 mod relations;
 mod run;

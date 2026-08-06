@@ -193,7 +193,7 @@ where
         .await?;
 
         let (vector, vector_provider) = vector_candidates(
-            application_store,
+            store,
             &lexical_query,
             &board_id,
             options.vector_limit,
@@ -586,7 +586,7 @@ async fn vector_candidates(
             },
         ));
     }
-    let (config, embedding) = match store.embed_query(query).await {
+    let (config, embedding) = match crate::vector::embed_query(store, query).await {
         Ok(value) => value,
         Err(error) => {
             push_unique(degraded, "vector_provider_unavailable");

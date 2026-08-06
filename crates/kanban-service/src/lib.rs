@@ -74,7 +74,7 @@ pub(crate) use store_operations::{
     PromoteTaskInput, ReclaimExpiredTaskInput, ReclaimTaskInput, RelationDeleteInput,
     RelationPredicateInput, RelationUpsertInput, ReleaseTaskInput, RemoveTaskLabelInput,
     ReopenTaskInput, ReviewSignalsInput, SignalLifecycleInput, SpecifyTaskInput,
-    StoreSignalListOptions, SubmitReviewTaskInput, UnblockTaskInput, UpsertLabelSemanticsInput,
+    SubmitReviewTaskInput, UnblockTaskInput, UpsertLabelSemanticsInput,
 };
 
 pub use vector::{

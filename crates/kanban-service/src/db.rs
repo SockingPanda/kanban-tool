@@ -1,3 +1,5 @@
+#![doc = include_str!("../docs/persistence.md")]
+
 use std::{
     path::{Path, PathBuf},
     sync::Arc,

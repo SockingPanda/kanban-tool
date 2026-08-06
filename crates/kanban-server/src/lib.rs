@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 mod dispatcher;
 mod error;
 mod http;

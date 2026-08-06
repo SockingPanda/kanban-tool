@@ -62,7 +62,7 @@ describe("desktop layout and scroll contracts", () => {
 
   it("tracks the manual narrow-width smoke checklist beside the automatic contracts", () => {
     const checklist = readFileSync(
-      new URL("../../../../docs/DESKTOP_LAYOUT_SMOKE.md", import.meta.url),
+      new URL("../../docs/layout.md", import.meta.url),
       "utf8",
     )
 

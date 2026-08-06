@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 //! kanban-tool 的公开 wire contract 与离线 schema catalog。
 //!
 //! 该 crate 只拥有跨 adapter 的机器可读契约，不拥有 SQLite record、service input、

@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 //! 所有 kanban-tool adapter 共享的 application service 与规范 Turso 边界。
 //!
 //! HTTP host 在规范 store 之上构造一个 [`ApplicationService`]。CLI、MCP 和 Desktop

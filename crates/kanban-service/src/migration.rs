@@ -1,3 +1,5 @@
+#![doc = include_str!("../docs/migration.md")]
+
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},

@@ -3,6 +3,8 @@
 //! 所有方法只在 `kanban-server` 的 canonical Turso owner 内调用。portable JSONL
 //! 只包含 canonical facts；projection、FTS、vector 和 graph 表属于可重建派生物。
 
+#![doc = include_str!("../docs/maintenance.md")]
+
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},

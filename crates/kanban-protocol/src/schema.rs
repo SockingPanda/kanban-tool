@@ -1,3 +1,5 @@
+#![doc = include_str!("../docs/schema.md")]
+
 use crate::label_surfaces::*;
 use crate::{cli_helpers::*, cli_labels::*, cli_operator::*};
 

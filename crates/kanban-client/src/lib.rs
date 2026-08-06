@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 //! 面向 canonical localhost kanban host 的轻量同步客户端。
 
 mod client;

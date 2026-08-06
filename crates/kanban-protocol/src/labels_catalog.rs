@@ -8,7 +8,8 @@ use crate::{
     AdoptionLocator, ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection,
     ContractGranularity, ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod,
     HttpTransportLocation, McpExposure, McpPolicy, McpToolBinding, MigrationState,
-    OperationContract, SurfaceOperation, WireParameter, WireParameterCardinality,
+    OperationContract, OperationDeclaration, SurfaceOperation, WireParameter,
+    WireParameterCardinality,
 };
 
 const BOARD_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
@@ -73,8 +74,7 @@ const DOMAIN_INVARIANTS: &[crate::McpOperationInvariant] = &[
 const LABEL_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
+    exact_test: "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
 };
 const SIGNAL_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
@@ -84,14 +84,12 @@ const SIGNAL_WITNESS: AdoptionLocator = AdoptionLocator {
 const ONTOLOGY_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "knowledge_adoption::ontology_ledger_routes_consume_observation_and_action_fixtures",
+    exact_test: "knowledge_adoption::ontology_ledger_routes_consume_observation_and_action_fixtures",
 };
 const PROPOSAL_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "knowledge_adoption::label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal",
+    exact_test: "knowledge_adoption::label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal",
 };
 const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
@@ -116,8 +114,7 @@ const HEADER_ACTOR_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
 const HEADER_OPTIONAL_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
     test_target: "lib",
-    exact_test:
-        "knowledge_adoption::locale_actor_optional_json_header_fixture_is_consumed_by_real_router",
+    exact_test: "knowledge_adoption::locale_actor_optional_json_header_fixture_is_consumed_by_real_router",
 };
 
 macro_rules! api_contract {
@@ -295,6 +292,16 @@ macro_rules! policy {
     };
 }
 
+macro_rules! label_adoption {
+    ($test:literal) => {
+        AdoptionLocator {
+            package: "kanban-server",
+            test_target: "lib",
+            exact_test: $test,
+        }
+    };
+}
+
 const API_LIST_TASK_LABELS_CONTRACTS: &[ContractDeclaration] = &[
     path_contract!(
         "api.list-task-labels.path",
@@ -304,6 +311,14 @@ const API_LIST_TASK_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         TASK_LABEL_PATH_PARAMETERS,
         crate::ListTaskLabelsPath,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::list_task_labels_path_dto_serializes_to_committed_fixture"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::list_task_labels_path_fixture_is_consumed_by_real_router"
+        ),
     ),
     header_contract!(
         "list-task-labels",
@@ -320,6 +335,14 @@ const API_LIST_TASK_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         "Kanban list task labels response v1",
         crate::ListTaskLabelsResponse,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::list_task_labels_response_fixture_is_produced_by_real_router"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::list_task_labels_response_fixture_is_consumed_by_contract_root"
+        ),
     ),
 ];
 
@@ -332,6 +355,14 @@ const API_ADD_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         TASK_LABEL_PATH_PARAMETERS,
         crate::AddTaskLabelPath,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::add_task_label_path_dto_serializes_to_committed_fixture"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::add_task_label_path_fixture_is_consumed_by_real_router"
+        ),
     ),
     header_contract!(
         "add-task-label",
@@ -348,6 +379,14 @@ const API_ADD_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Kanban add task label request v1",
         crate::AddTaskLabelRequest,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::add_task_label_request_dto_serializes_to_committed_fixture"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::add_task_label_request_fixture_is_consumed_by_real_router"
+        ),
     ),
     response_contract!(
         "api.add-task-label.response",
@@ -357,6 +396,14 @@ const API_ADD_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Kanban add task label response v1",
         crate::AddTaskLabelResponse,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::add_task_label_response_fixture_is_produced_by_real_router"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::add_task_label_response_fixture_is_consumed_by_contract_root"
+        ),
     ),
 ];
 
@@ -369,6 +416,14 @@ const API_REMOVE_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         REMOVE_TASK_LABEL_PATH_PARAMETERS,
         crate::RemoveTaskLabelPath,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::remove_task_label_path_dto_serializes_to_committed_fixture"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::remove_task_label_path_fixture_is_consumed_by_real_router"
+        ),
     ),
     header_contract!(
         "remove-task-label",
@@ -385,6 +440,14 @@ const API_REMOVE_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Kanban remove task label response v1",
         crate::RemoveTaskLabelResponse,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::remove_task_label_response_fixture_is_produced_by_real_router"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::remove_task_label_response_fixture_is_consumed_by_contract_root"
+        ),
     ),
 ];
 
@@ -397,6 +460,14 @@ const API_LIST_BOARD_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::list_board_labels_path_dto_serializes_to_committed_fixture"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::list_board_labels_path_fixture_is_consumed_by_real_router"
+        ),
     ),
     header_contract!(
         "list-board-labels",
@@ -413,6 +484,14 @@ const API_LIST_BOARD_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         "List board labels response v1",
         crate::ListBoardLabelsResponse,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::list_board_labels_response_fixture_is_produced_by_real_router"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::list_board_labels_response_fixture_is_consumed_by_contract_root"
+        ),
     ),
 ];
 
@@ -425,13 +504,21 @@ const API_CREATE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::create_board_label_path_dto_serializes_to_committed_fixture"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::create_board_label_path_fixture_is_consumed_by_real_router"
+        ),
     ),
     header_contract!(
         "create-board-label",
         "POST /api/v1/boards/:board/labels",
-        ApiHeaderProfile::LocaleActorJson,
-        "locale-actor-json-headers",
-        crate::headers::LocaleActorJsonHeaders
+        ApiHeaderProfile::LocaleJson,
+        "locale-json-headers",
+        crate::headers::LocaleJsonHeaders
     ),
     body_contract!(
         "api.create-board-label.request",
@@ -441,6 +528,14 @@ const API_CREATE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Create board label request v1",
         crate::CreateBoardLabelRequest,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::create_board_label_request_dto_serializes_to_committed_fixture"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::create_board_label_request_fixture_is_consumed_by_real_router"
+        ),
     ),
     response_contract!(
         "api.create-board-label.response",
@@ -450,6 +545,14 @@ const API_CREATE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Create board label response v1",
         crate::CreateBoardLabelResponse,
         LABEL_WITNESS
+    )
+    .with_adoption(
+        label_adoption!(
+            "suite::labels_adoption::create_board_label_response_fixture_is_produced_by_real_router"
+        ),
+        label_adoption!(
+            "suite::labels_adoption::create_board_label_response_fixture_is_consumed_by_contract_root"
+        ),
     ),
 ];
 
@@ -580,7 +683,11 @@ const API_DELETE_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         crate::DeleteResponse,
         LABEL_WITNESS
     )
-    .with_operation("label semantics deletion acknowledgement"),
+    .with_operation("label semantics deletion acknowledgement")
+    .with_transport(
+        Some("DELETE /api/v1/boards/:board/labels/:label_id/semantics"),
+        &[],
+    ),
 ];
 
 const API_LIST_LABEL_ATOMS_CONTRACTS: &[ContractDeclaration] = &[
@@ -832,12 +939,12 @@ const API_GET_SIGNAL_CONTRACTS: &[ContractDeclaration] = &[
 ];
 
 macro_rules! signal_mutation_contracts {
-    ($slug:literal, $operation:literal, $path_title:literal, $request_slug:literal, $request_title:literal, $request_type:ty, $response_slug:literal, $response_title:literal, $response_type:ty) => {
+    ($slug:literal, $operation:literal, $path_slug:literal, $path_title:literal, $request_slug:literal, $request_title:literal, $request_type:ty, $response_slug:literal, $response_title:literal, $response_type:ty) => {
         &[
             path_contract!(
                 concat!("api.", $slug, ".path"),
                 $operation,
-                concat!($slug, "-path"),
+                $path_slug,
                 $path_title,
                 BOARD_PATH_PARAMETERS,
                 crate::BoardLabelPath,
@@ -875,6 +982,7 @@ macro_rules! signal_mutation_contracts {
 const API_RECORD_SIGNAL_CONTRACTS: &[ContractDeclaration] = signal_mutation_contracts!(
     "record-signal",
     "POST /api/v1/boards/:board/signals",
+    "record-signal-path",
     "Record Signal Path v1",
     "record-signal-request",
     "Record signal request v1",
@@ -886,6 +994,7 @@ const API_RECORD_SIGNAL_CONTRACTS: &[ContractDeclaration] = signal_mutation_cont
 const API_CONFIRM_SIGNALS_CONTRACTS: &[ContractDeclaration] = signal_mutation_contracts!(
     "confirm-signals",
     "POST /api/v1/boards/:board/signals/confirm",
+    "confirm-signals-path",
     "Confirm Signals Path v1",
     "review-signals-request",
     "Review signals request v1",
@@ -897,6 +1006,7 @@ const API_CONFIRM_SIGNALS_CONTRACTS: &[ContractDeclaration] = signal_mutation_co
 const API_REJECT_SIGNALS_CONTRACTS: &[ContractDeclaration] = signal_mutation_contracts!(
     "reject-signals",
     "POST /api/v1/boards/:board/signals/reject",
+    "reject-signals-path",
     "Reject Signals Path v1",
     "reject-signals-request",
     "Reject signals request v1",
@@ -908,6 +1018,7 @@ const API_REJECT_SIGNALS_CONTRACTS: &[ContractDeclaration] = signal_mutation_con
 const API_RESOLVE_SIGNALS_CONTRACTS: &[ContractDeclaration] = signal_mutation_contracts!(
     "resolve-signals",
     "POST /api/v1/boards/:board/signals/resolve",
+    "resolve-signals-path",
     "Resolve Signals Path v1",
     "resolve-signals-request",
     "Resolve signals request v1",
@@ -919,6 +1030,7 @@ const API_RESOLVE_SIGNALS_CONTRACTS: &[ContractDeclaration] = signal_mutation_co
 const API_SUPERSEDE_SIGNALS_CONTRACTS: &[ContractDeclaration] = signal_mutation_contracts!(
     "supersede-signals",
     "POST /api/v1/boards/:board/signals/supersede",
+    "supersede-signals-path",
     "Supersede Signals Path v1",
     "supersede-signals-request",
     "Supersede signals request v1",
@@ -1147,12 +1259,12 @@ const API_REVIEW_LABEL_ONTOLOGY_CONTRACTS: &[ContractDeclaration] = &[
 ];
 
 macro_rules! ontology_mutation_contracts {
-    ($slug:literal, $operation:literal, $path_title:literal, $request_slug:literal, $request_title:literal, $request_type:ty, $response_slug:literal, $response_title:literal, $response_type:ty) => {
+    ($slug:literal, $operation:literal, $path_slug:literal, $path_title:literal, $request_slug:literal, $request_title:literal, $request_type:ty, $response_slug:literal, $response_title:literal, $response_type:ty) => {
         &[
             path_contract!(
                 concat!("api.", $slug, ".path"),
                 $operation,
-                concat!($slug, "-path"),
+                $path_slug,
                 $path_title,
                 BOARD_PATH_PARAMETERS,
                 crate::BoardLabelPath,
@@ -1190,6 +1302,7 @@ macro_rules! ontology_mutation_contracts {
 const API_CREATE_LABEL_ONTOLOGY_ACTION_CONTRACTS: &[ContractDeclaration] = ontology_mutation_contracts!(
     "create-label-ontology-action",
     "POST /api/v1/boards/:board/label-ontology/actions",
+    "create-label-ontology-action-path",
     "Create Label Ontology Action Path v1",
     "create-label-ontology-action-request",
     "Create label ontology action request v1",
@@ -1201,6 +1314,7 @@ const API_CREATE_LABEL_ONTOLOGY_ACTION_CONTRACTS: &[ContractDeclaration] = ontol
 const API_APPLY_LABEL_ONTOLOGY_ATOM_CONTRACTS: &[ContractDeclaration] = ontology_mutation_contracts!(
     "apply-label-ontology-atom",
     "POST /api/v1/boards/:board/label-ontology/apply/atom",
+    "apply-label-ontology-atom-path",
     "Apply Label Ontology Atom Path v1",
     "apply-label-ontology-atom-request",
     "Apply label ontology atom request v1",
@@ -1212,6 +1326,7 @@ const API_APPLY_LABEL_ONTOLOGY_ATOM_CONTRACTS: &[ContractDeclaration] = ontology
 const API_REVERT_LABEL_ONTOLOGY_MUTATION_CONTRACTS: &[ContractDeclaration] = ontology_mutation_contracts!(
     "revert-label-ontology-mutation",
     "POST /api/v1/boards/:board/label-ontology/revert",
+    "revert-label-ontology-mutation-path",
     "Revert Label Ontology Mutation Path v1",
     "revert-label-ontology-mutation-request",
     "Revert label ontology mutation request v1",
@@ -1223,6 +1338,7 @@ const API_REVERT_LABEL_ONTOLOGY_MUTATION_CONTRACTS: &[ContractDeclaration] = ont
 const API_VALIDATE_LABEL_ONTOLOGY_ACTION_CONTRACTS: &[ContractDeclaration] = ontology_mutation_contracts!(
     "validate-label-ontology-action",
     "POST /api/v1/boards/:board/label-ontology/validate",
+    "validate-label-ontology-action-path",
     "Validate Label Ontology Action Path v1",
     "validate-label-ontology-action-request",
     "Validate label ontology action request v1",
@@ -1289,12 +1405,12 @@ const API_GET_LABEL_PROPOSAL_CONTRACTS: &[ContractDeclaration] = &[
 ];
 
 macro_rules! label_proposal_decision_contracts {
-    ($slug:literal, $operation:literal, $path_title:literal, $body_slug:literal, $body_title:literal, $response_slug:literal, $response_title:literal) => {
+    ($slug:literal, $operation:literal, $path_slug:literal, $path_title:literal, $body_slug:literal, $body_title:literal, $response_slug:literal, $response_title:literal) => {
         &[
             path_contract!(
                 concat!("api.", $slug, ".path"),
                 $operation,
-                concat!($slug, "-path"),
+                $path_slug,
                 $path_title,
                 PROPOSAL_PATH_PARAMETERS,
                 crate::ProposalPath,
@@ -1332,6 +1448,7 @@ macro_rules! label_proposal_decision_contracts {
 const API_ACCEPT_LABEL_PROPOSAL_CONTRACTS: &[ContractDeclaration] = label_proposal_decision_contracts!(
     "accept-label-proposal",
     "POST /api/v1/label-proposals/:proposal_id/accept",
+    "accept-label-proposal-path",
     "Accept Label Proposal Path v1",
     "accept-label-proposal-body",
     "Accept Label Proposal Body v1",
@@ -1341,6 +1458,7 @@ const API_ACCEPT_LABEL_PROPOSAL_CONTRACTS: &[ContractDeclaration] = label_propos
 const API_REJECT_LABEL_PROPOSAL_CONTRACTS: &[ContractDeclaration] = label_proposal_decision_contracts!(
     "reject-label-proposal",
     "POST /api/v1/label-proposals/:proposal_id/reject",
+    "reject-label-proposal-path",
     "Reject Label Proposal Path v1",
     "reject-label-proposal-body",
     "Reject Label Proposal Body v1",
@@ -1431,7 +1549,7 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         MigrationState::Adopted,
         API_CREATE_BOARD_LABEL_CONTRACTS,
     )
-    .with_header_profile(ApiHeaderProfile::LocaleActorJson)
+    .with_header_profile(ApiHeaderProfile::LocaleJson)
     .with_mcp_policy(policy!("label_create", ["api.create-board-label"])),
     OperationDeclaration::new(
         "api.list-label-semantics",
@@ -1931,9 +2049,11 @@ mod tests {
         assert_eq!(ids.len(), count);
         assert_eq!(LABEL_OPERATIONS.len(), 36);
         assert_eq!(contracts.len(), 132);
-        assert!(LABEL_OPERATIONS
-            .iter()
-            .all(|operation| operation.mcp_policy.is_some()));
+        assert!(
+            LABEL_OPERATIONS
+                .iter()
+                .all(|operation| operation.mcp_policy.is_some())
+        );
     }
 
     #[test]

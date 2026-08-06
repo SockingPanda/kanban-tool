@@ -407,7 +407,7 @@ impl ContractDeclaration {
         locator: AdoptionLocator,
     ) -> AdoptionWitness {
         AdoptionWitness {
-            operation: self.operation.unwrap_or(parent.operation),
+            operation: self.operation_key.unwrap_or(parent.operation),
             contract_id: self.id,
             surface: parent.surface,
             direction: self.direction,

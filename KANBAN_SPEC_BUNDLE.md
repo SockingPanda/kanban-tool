@@ -62,13 +62,19 @@ kanban board current
 
 ```bash
 kanban board list
+kanban board columns default
 kanban task create "整理项目首页" --description "让第一次访问的人看懂项目"
 kanban task step not-required default#1 --reason "单步任务"
+kanban task specify default#1 --description "补充可执行规格"
 kanban task promote default#1
 kanban task claim default#1
 kanban search "项目首页"
+kanban index rebuild
+kanban index sync
+kanban entity upsert --uri 'kb://task/t_example' --kind task --source-table tasks --source-id t_example
 kanban context build default#1
 kanban graph neighborhood default#1
+kanban --board default graph map
 kanban vector status
 ```
 
@@ -79,6 +85,12 @@ kanban vector status
 - **CLI**：普通命令通过 `kanban-client` 访问 localhost；`serve`、`init`、配置/board 选择、completion 和 Codex hook 是本地 shell 或 host 装配命令。
 - **MCP**：`kanban-mcp` 使用 stdio 和 `rmcp`，当前工具清单由 `crates/kanban-mcp/src/main.rs` 的稳定 inventory 测试锁定；所有 tool 都调用 typed client，不启动 host、不直接写数据库。
 - **Desktop**：Tauri/React shell 通过 typed HTTP 使用 `board`、`list`、`map`、`events`、`runs`、`signals`、`ontology`、`maintenance`、`health`、`settings` 十个导航视图；task detail、attachments、steps、comments、dependencies、context 和 maintenance 继续复用同一 host。
+
+CLI 的 canonical leaf 和 HTTP 的 method/path 由 `kanban-protocol` 的
+`surface_operation_catalog()`/`endpoint_catalog()` 固定；可见 alias 只改善交互，不增加第二条
+contract operation。当前知识面包含 board columns、entity upsert、task specify、graph
+neighborhood/map，以及 search index 的 status/doctor/rebuild/sync；完整参数和 wire 形状见
+[`docs/CLI_SPEC.md`](docs/CLI_SPEC.md) 与 [`docs/API_SPEC.md`](docs/API_SPEC.md)。
 
 跨入口的领域面包括：
 
@@ -213,6 +225,12 @@ triage | todo | scheduled | ready | running | blocked | review | done | archived
 
 CLI 顶层包括 `serve`、board/config/task/label/comment/context/attachment/dep/entity/graph/events/runs/run/search/index/signal/vector、doctor/stats/backup/export/import/import-v30/checkpoint/vacuum/maintenance、init/completions/__complete/hook。所有 domain/host-admin 命令（`serve` 除外）通过 client 请求 host；`import-v30` 未启用 feature 时返回 `feature_not_available`。
 
+当前 canonical leaf 以 `kanban-protocol::surface_operation_catalog()` 与 Clap 的
+`get_name()` 对齐。看板列使用 `board columns`，实体写入使用 `entity upsert`，triage
+规格补全使用 `task specify`；graph 提供 `neighborhood`/`map`，search index 提供
+`index rebuild`/`index sync`。visible alias 不单独产生 contract operation；已清理的旧
+projection/admin、独立 lifecycle leaf 和 task-read 旧路径不属于 active surface。
+
 ### 4.3 MCP
 
 `kanban-mcp` 是 Rust stdio server，当前 89 个 tool 的排序由 `crates/kanban-mcp/src/main.rs::tool_inventory_is_stable` 锁定，覆盖任务生命周期、labels/ontology/signals、graph/context/search/vector、comments/steps/dependencies、attachments、runs/events 和 boards。MCP 不启动 host、不打开数据库、不提供 migration/backup/vacuum/replace 管理命令。
@@ -331,7 +349,7 @@ adapter input
   → protocol DTO / error envelope
 ```
 
-`tasks.status` 是唯一事实；`board_columns` 仅展示。`ready → running` 在一个 immediate transaction 中 CAS claim，创建 active run 和 event。heartbeat、release、review、complete、block、specify、unblock、reopen、reclaim、archive、label/ontology/signal review、attachment publish 和 import journal 都复用 service operation，adapter 不重新解释 guard。
+`tasks.status` 是唯一事实；`board_columns` 仅展示。`ready → running` 在一个 immediate transaction 中 CAS claim，创建 active run 和 event。heartbeat、release、review、done、block、specify、unblock、reopen、reclaim、archive、label/ontology/signal review、attachment publish 和 import journal 都复用 service operation，adapter 不重新解释 guard。
 
 `kanban-service` 同时提供实体/关系写入、board-scoped BFS、bounded context merge、label atom index、projection generation/fingerprint、Ollama outage degraded 和重建。派生状态只写 `projection_jobs`/`projection_state`/retrieval 表，不反向改变 canonical facts。
 
@@ -404,6 +422,9 @@ triage | todo | scheduled | ready | running | blocked | review | done | archived
 | `archived` | 只读历史状态 | 否 |
 
 `tasks.status` 是唯一状态事实；`board_columns` 仅做展示映射。ready 判定重新读取 canonical facts，并检查标题/规格、排期、父依赖、execution plan、board/task archived 和 `lock_version`。guard 失败时不写 task、run、event 或 projection job。
+
+CLI 的 `board columns` 只读取展示映射；它不会创建新的状态或 transition。任务状态仍由下方
+显式 lifecycle command 驱动，wire method/path 以 protocol endpoint catalog 为准。
 
 ## 2. 创建、规格和 execution plan
 
@@ -535,7 +556,7 @@ dispatcher 绝不 claim `review`、`todo`、`scheduled` 或 `triage`，也不直
 
 # Canonical 数据模型
 
-本文件描述 `kanban-service` 当前持有的 Turso schema、canonical/derived 边界和两条导入路径。权威实现为 `crates/kanban-service/src/schema.rs`、`migration.rs`、`maintenance.rs` 与 `legacy_import.rs`；文档不创造第二份 schema inventory。
+本文件描述 `kanban-service` 当前持有的 Turso schema、canonical/derived 边界和两条导入路径。权威实现为 `crates/kanban-service/src/schema.rs`、`migration.rs`、`maintenance.rs`、`legacy_import.rs` 以及 entities/graph/search/vector operations；文档不创造第二份 schema inventory。
 
 ## 1. Schema family 与 lineage
 
@@ -658,7 +679,7 @@ JSON 成功通常为 `{ "data": ... }`；运行期错误使用 `error.code` 和 
 
 <!-- schema-doc-ignore: CLI 错误 envelope 说明性示例。 -->
 ```json
-{"error":{"code":"server_unavailable","message":"server unavailable","exit_code":9}}
+{"error":{"code":"server_unavailable","message":"服务端不可用：请检查服务端 URL，并确认已运行 `kanban serve`","exit_code":9}}
 ```
 
 task selector 支持全局 `t_...`、`board#seq`、`#seq` 和当前 board 数字 seq；typed client 在需要全局 path 时先解析 selector。`--board` > `KB_BOARD` > 最近项目 `.kb/config.toml` > `default`；`--db` > `KANBAN_DB` > `KB_DB` > 项目/global config > XDG 默认路径。
@@ -741,7 +762,7 @@ kanban task claim <TASK_SELECTOR> [--ttl-ms <MS>] [--worker-profile <PROFILE>]
 kanban task heartbeat <TASK_SELECTOR> --claim-token <TOKEN> [--ttl-ms <MS>] [--note <TEXT>]
 kanban task release <TASK_SELECTOR> --claim-token <TOKEN>
 kanban task review <TASK_SELECTOR> [--claim-token <TOKEN>] [--force]
-kanban task done|complete <TASK_SELECTOR> [--claim-token <TOKEN>] [--force]
+kanban task done <TASK_SELECTOR> [--claim-token <TOKEN>] [--force]
 kanban task block <TASK_SELECTOR> [<REASON>|--reason-file <PATH|->] [--claim-token <TOKEN>] [--force]
 kanban task unblock <TASK_SELECTOR> [--reason <TEXT>]
 kanban task reopen <TASK_SELECTOR> [--reason <TEXT>]
@@ -749,7 +770,7 @@ kanban task reclaim <TASK_SELECTOR> [--force]
 kanban task archive <TASK_SELECTOR> [--force]
 ```
 
-claim 是原子 `ready → running`，同时创建 run/event；heartbeat/release/review/done/block/reclaim 复用 owner/token、lease、CAS 和同一 transaction。`done` 是 `complete` visible alias；`block` reason inline 与 `--reason-file` 互斥。
+claim 是原子 `ready → running`，同时创建 run/event；heartbeat/release/review/done/block/reclaim 复用 owner/token、lease、CAS 和同一 transaction。`block` reason inline 与 `--reason-file` 互斥。
 
 ## 5. Labels、ontology、signals
 
@@ -837,6 +858,15 @@ host 停止或端口不可达时，已注册 command 返回 `server_unavailable`
 
 `kanban-protocol` 的 operation/surface catalog、fixture 和 adoption witness 是机器契约；本文件只描述实际 clap adapter。schema surface audit、adoption/full、Desktop package、release、push 和 PR 不因 CLI 文档同步自动运行或变绿。
 
+### Canonical leaf 口径
+
+`kanban-protocol::surface_operation_catalog()` 与 Clap 的 canonical `get_name()` 一一对应；
+visible alias 不会产生第二个 leaf contract。当前新增并已接入的 leaf 包括 `board columns`、
+`entity upsert`、`task specify`、`graph neighborhood`、`graph map`、`index rebuild` 和
+`index sync`。旧 projection/admin、独立 lifecycle leaf 与旧 task-read path 不在 active
+catalog 中；完整 exact 列表以 `schemas/json-schema/draft-2020-12/surface-operations.json`
+和对应源代码为准。
+
 
 ---
 
@@ -853,6 +883,9 @@ host 停止或端口不可达时，已注册 command 返回 `server_unavailable`
 - mutation actor 依次来自 body `actor`、`X-KB-Actor`、host 默认 actor；comment `author` 是命名上的 body 优先级例外。
 - `error.code` 是稳定机器字段，`message` 只供人阅读。常见 code：`invalid_input`（400）、`not_found`（404）、`conflict`/`idempotency_conflict`/`dependency_cycle`/`claim_conflict`/`invalid_transition`（409）、`claim_token_mismatch`（403）、`feature_not_available`（501）、`internal`（500）。
 - path 中 task 使用全局 `t_...`，run 使用 `r_...`，step 使用 `step_...`；board-local selector 由 typed client 先解析，不在 handler 里复制第二套语义。
+
+host 未启动或 URL 不可达时，client 返回稳定的 `server_unavailable`；人类消息保持可行动，
+例如“服务端不可用：请检查服务端 URL，并确认已运行 `kanban serve`”。
 
 <!-- schema-doc-ignore: envelope 说明性示例，不绑定具体 endpoint root。 -->
 ```json
@@ -906,6 +939,8 @@ host 停止或端口不可达时，已注册 command 返回 `server_unavailable`
 | `POST` | `/api/v1/tasks/:task_id/execution-plan/not-required` | 显式 plan gate |
 
 task list/search 默认排除 `archived`；所有 selector、board isolation、idempotency 和 dependency guard 由 service 处理。
+状态筛选属于 `/api/v1/boards/:board/tasks` 的 query contract；搜索按状态的只读结果使用
+`/api/v1/search/tasks/by-status`，两者不是第二套 task mutation path。
 
 ### Lifecycle
 
@@ -964,19 +999,33 @@ run 没有独立 create/update API；claim 创建 run，后续 lifecycle 同事�
 
 ### Ontology/atom/proposal
 
-语义、atoms、atom-index、suggestions、proposals 和 ontology ledger 的当前路径包括：
+语义、atoms、atom-index、suggestions、proposals 和 ontology ledger 的当前 exact paths 为：
 
-```text
-GET/PUT/DELETE /api/v1/boards/:board/labels/{semantics,atoms,atom-index/*}
-GET           /api/v1/boards/:board/labels/atoms/:atom_ref/explain
-GET           /api/v1/tasks/:task_id/labels/suggestions
-GET/POST       /api/v1/tasks/:task_id/label-proposals
-GET/POST       /api/v1/tasks/:task_id/label-ontology/observations
-GET/POST       /api/v1/boards/:board/label-ontology/{signals,review,actions,apply/atom,revert,validate}
-GET             /api/v1/label-ontology/signals/:signal_id
-GET             /api/v1/label-proposals/:proposal_id
-POST            /api/v1/label-proposals/:proposal_id/{accept,reject}
-```
+| Method | Path |
+| --- | --- |
+| `GET` | `/api/v1/boards/:board/labels/semantics` |
+| `GET` | `/api/v1/boards/:board/labels/:label_id/semantics` |
+| `PUT` | `/api/v1/boards/:board/labels/:label_id/semantics` |
+| `DELETE` | `/api/v1/boards/:board/labels/:label_id/semantics` |
+| `GET` | `/api/v1/boards/:board/labels/atoms` |
+| `GET` | `/api/v1/boards/:board/labels/atoms/:atom_ref/explain` |
+| `GET` | `/api/v1/boards/:board/labels/atom-index/status` |
+| `POST` | `/api/v1/boards/:board/labels/atom-index/rebuild` |
+| `GET` | `/api/v1/boards/:board/labels/atom-index/query` |
+| `GET` | `/api/v1/tasks/:task_id/labels/suggestions` |
+| `GET` | `/api/v1/tasks/:task_id/label-proposals` |
+| `POST` | `/api/v1/tasks/:task_id/label-proposals` |
+| `POST` | `/api/v1/tasks/:task_id/label-ontology/observations` |
+| `GET` | `/api/v1/boards/:board/label-ontology/signals` |
+| `GET` | `/api/v1/boards/:board/label-ontology/review` |
+| `POST` | `/api/v1/boards/:board/label-ontology/actions` |
+| `POST` | `/api/v1/boards/:board/label-ontology/apply/atom` |
+| `POST` | `/api/v1/boards/:board/label-ontology/revert` |
+| `POST` | `/api/v1/boards/:board/label-ontology/validate` |
+| `GET` | `/api/v1/label-ontology/signals/:signal_id` |
+| `GET` | `/api/v1/label-proposals/:proposal_id` |
+| `POST` | `/api/v1/label-proposals/:proposal_id/accept` |
+| `POST` | `/api/v1/label-proposals/:proposal_id/reject` |
 
 每个 action 由 service 做 CAS、board guard、atom effects、review/validate/revert 和 event；index 是可重建派生状态。
 
@@ -1019,7 +1068,9 @@ GET     /api/v1/tasks/:task_id/neighborhood
 GET     /api/v1/boards/:board/task-map
 ```
 
-graph query 使用 canonical `entities`/relations 的 bounded BFS，包含 depth、dedup、cycle 和 board isolation。
+`PUT /api/v1/entities` 是 entity upsert；graph query 使用 canonical `entities`/relations 的
+bounded BFS，包含 depth、dedup、cycle 和 board isolation。`neighborhood` 和 `task-map` 都是
+只读聚合，不创建新的 graph facts。
 
 ### Vector/context
 
@@ -1038,6 +1089,11 @@ vector32 查询使用 host Ollama embedding provider；provider outage 返回 ty
 ## 8. Contract 与验证边界
 
 `kanban-protocol::endpoint_catalog()` 是 method/path/DTO/schema descriptor 的权威来源；真实 router、typed client、CLI/MCP/Desktop 和 fixture/adoption witness 必须逐项绑定。catalog 中的 `adopted` 只表示 protocol surface contract 已闭合，不能单独证明运行时 full/adoption gate 已运行。
+
+本文件按领域解释语义；逐项 exact method/path 以 `endpoint_catalog()` 及生成的
+`schemas/json-schema/draft-2020-12/surface-operations.json` 为准。`/api/v1/search/tasks/by-status`
+是当前搜索查询 surface，task board 列表本身仍通过 `/api/v1/boards/:board/tasks` 的 query
+完成状态筛选。
 
 已有 server/service evidence 包括 task lifecycle、label round-trip、ontology action/revert、signal ledger、FTS capability、graph BFS/rebuild、vector fixture/degraded、context merge、maintenance import/replace 和 Desktop contract tests。完整 schema adoption、surface audit、full package、release 和 PR gate 不由本文档更新自动执行，结果见 parity ledger 的待验收清单。
 
@@ -1082,8 +1138,8 @@ canonical Turso
 
 当前 catalog 覆盖：
 
-- API：health、boards、tasks/lifecycle、steps、comments、attachments、dependencies、entities、graph、search/context、labels/ontology、signals、runs/events、maintenance 和 vector；
-- CLI：board/config/task/label/comment/context/attachment/dep/entity/graph/search/index/signal/vector、run/event、host-admin、hook/init/completion；原始 bytes 下载、completion、hook stdin/stdout、serve daemon 等非 JSON 输出保持 `excluded`；
+- API：health、boards（含 columns）、tasks/lifecycle（含 specify）、steps、comments、attachments、dependencies、entities（含 upsert）、graph（含 neighborhood/map）、search/context（含 index rebuild/sync）、labels/ontology、signals、runs/events、maintenance 和 vector；
+- CLI：board/config/task/label/comment/context/attachment/dep/entity/graph/search/index/signal/vector、run/event、host-admin、hook/init/completion；原始 bytes 下载、completion、hook stdin/stdout、serve daemon 等非 JSON 输出保持 `excluded`。canonical leaf 以 Clap `get_name()` 为准，visible alias 不重复登记；
 - MCP：`crates/kanban-mcp/src/main.rs` 的 89-tool inventory；
 - JSONL/metadata/config：portable import/export、decision/signal/ontology metadata、project config。
 
@@ -1439,7 +1495,7 @@ MVP 不提供 `0.0.0.0` 远程模式。
 - promote
 - claim
 - heartbeat
-- complete
+- done
 - submit_review
 - block
 - unblock
@@ -2106,7 +2162,7 @@ action、atom 和 proposal 会增加 schema、outbox、query API 和重建复杂
 
 - `labels` identity CRUD 是基础 vocabulary registry，不写 ontology mutation action；task
   label binding 只绑定已存在 label，写普通 task event。
-- `label delete` 永不隐式删除 `label_semantics` / `label_atoms`；force 只允许移除 task
+- 删除 label identity 时永不隐式删除 `label_semantics` / `label_atoms`；force 只允许移除 task
   bindings 后删除空 identity。
 - `label_semantics` / `label_atoms` canonical mutation 一次 transaction 只写一条 root
   mutation action；实际 atom delta 写入 `label_ontology_action_atom_effects` 的
@@ -2246,7 +2302,8 @@ binding/granularity/location/direction/operation/surface 失败关闭。本 ADR 
 
 ### 状态
 
-已接受
+历史快照；当前 task-read surface 以 ADR-0023、`docs/API_SPEC.md` 和
+`kanban-protocol::endpoint_catalog()` 为准
 
 ### 背景
 
@@ -2255,27 +2312,25 @@ binding/granularity/location/direction/operation/surface 失败关闭。本 ADR 
 
 ### 决策
 
-`GET /api/v1/boards/:board/tasks` 与 `/tasks/by-status` 分别拥有独立 path/query DTO，
-  形成 4 个 `Adopted` 精确 contract。两个 server 本地类型化 Axum extractor 分别绑定对应
-  `Path<...>`，并各自从 `parts.uri.query()` 读取一次 raw URI 后进入共享有序解析器；handler
-  只接收已绑定的 request，不持有 `RawQuery`、`Query<T>` 或第二个 raw source。
+`GET /api/v1/boards/:board/tasks` 使用唯一的 task-list path/query DTO；状态筛选通过同一
+query contract 表达，搜索按状态的只读结果由 `/api/v1/search/tasks/by-status` 负责。server
+使用类型化 Axum extractor 从一次 raw URI 进入共享有序解析器；handler 只接收已绑定的
+request，不持有第二个 raw source。
 - Query 语法：只有 `status`、`priority`、`label`、`plan_filter` 是
   `RepeatedOrdered`；其余标量重复、未知 key 与旧 `search` 别名均返回
   `400 invalid_input`。54 对上限由 9/4/3/32 个重复参数预算加 6 个标量参数推导；
   raw query 上限为 8192 字节。`q` 是唯一文本搜索 key。label 会 trim Unicode 边缘空白，
   但纯 Unicode 空白失败关闭；percent/UTF-8、枚举、priority、limit、offset 和 sort 边界由
   真实 router URI 矩阵固定。
-每个 contract 都有独立的 DTO-to-fixture producer 和 fixture-to-real-router consumer；
-  非默认 board 哨兵证明真实 path 消费。AST 测试锁定 DTO 所有权、类型化
-  extractor、两个 raw URI 消费点及 handler `&path.board` 到 `list_tasks_page` 的实参，并以显式
-  变异覆盖别名、私有 DTO、错误 extractor、双重来源、第二个 raw parser，以及两个
-  handler 各自的 `path.board -> default`。producer/consumer 区域保护只证明当前源码区域直接
-  分离，不把任意未来共同 helper 间接层夸大为变异完备证明。
+contract 仍有 DTO-to-fixture producer 和 fixture-to-real-router consumer；非默认 board 哨兵
+证明真实 path 消费。当前 route/catalog 对齐测试覆盖类型化 extractor、raw URI 单一来源、
+`&path.board` 到 `list_tasks_page` 的实参和 query 边界。producer/consumer 区域保护只证明
+当前源码区域直接分离，不把任意未来共同 helper 间接层夸大为变异完备证明。
 
 ### 影响
 
 Desktop/Web/CLI 的 HTTP 调用方必须使用上述语法；现有 Desktop 调用方已使用 `q`
-  并保留重复参数顺序。SQLite service 的防御性上限直接引用唯一 application 权威，
+  并保留重复参数顺序。Turso service 的防御性上限直接引用唯一 application 权威，
   server 相等性门禁覆盖该实际 service 路径；service 查询行为与 core 状态机不变。本文保留
   决策时的迁移边界；当前采用状态以 `docs/SCHEMA_CONTRACTS.md` 为准。
 
@@ -2426,6 +2481,10 @@ baseline `6ea277` 同时存在窄 queue、外部 projection/helper、独立 back
    release/projection 文档只允许标为 historical archive，不得成为 active runbook 或 release
    gate。
 6. release、push、PR、merge、发布和外部协调不是本次 architecture/parity 文档的验收条件。
+7. API method/path 以 `kanban-protocol::endpoint_catalog()` 为准，CLI canonical leaf 以
+   Clap `get_name()` 与 `surface_operation_catalog()` 对齐。当前新增的 board columns、entity
+   upsert、task specify、graph neighborhood/map 和 search index rebuild/sync 都属于 active
+   surface；visible alias 不形成第二条 contract operation。
 
 ### 影响
 

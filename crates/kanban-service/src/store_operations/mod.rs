@@ -24,9 +24,7 @@ mod tasks;
 pub use attachments::CreateAttachmentInput;
 pub use boards::{ArchiveBoardInput, CreateBoardInput};
 pub use comments::CreateCommentInput;
-pub use dependencies::{
-    AddDependencyInput, AddDependencyRecord, RemoveDependencyInput, RemoveDependencyRecord,
-};
+pub use dependencies::{AddDependencyInput, RemoveDependencyInput};
 pub use entities::EntityUpsertInput;
 pub use labels::{AddTaskLabelsInput, AddTaskLabelsRecord, CreateLabelInput, RemoveTaskLabelInput};
 pub use lifecycle::{

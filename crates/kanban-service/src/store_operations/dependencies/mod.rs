@@ -5,8 +5,8 @@ mod remove;
 mod remove_support;
 pub(crate) mod support;
 
-pub use create::{AddDependencyInput, AddDependencyRecord};
-pub use remove::{RemoveDependencyInput, RemoveDependencyRecord};
+pub use create::AddDependencyInput;
+pub use remove::RemoveDependencyInput;
 
 #[cfg(test)]
 mod create_tests;

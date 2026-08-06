@@ -91,27 +91,27 @@ const TASK_LIFECYCLE_WITNESS: AdoptionLocator = AdoptionLocator {
 };
 const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
-    test_target: "all",
+    test_target: "lib",
     exact_test: "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
 };
 const HEADER_ACTOR_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
-    test_target: "all",
+    test_target: "lib",
     exact_test: "knowledge_adoption::locale_actor_header_fixture_is_consumed_by_real_router",
 };
 const HEADER_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
-    test_target: "all",
+    test_target: "lib",
     exact_test: "knowledge_adoption::locale_json_header_fixture_is_consumed_by_real_router",
 };
 const HEADER_ACTOR_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
-    test_target: "all",
+    test_target: "lib",
     exact_test: "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router",
 };
 const HEADER_OPTIONAL_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
     package: "kanban-server",
-    test_target: "all",
+    test_target: "lib",
     exact_test:
         "knowledge_adoption::locale_actor_optional_json_header_fixture_is_consumed_by_real_router",
 };

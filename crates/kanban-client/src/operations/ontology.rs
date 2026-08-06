@@ -393,7 +393,34 @@ fn proposals_path(base: &str, status: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::proposals_path;
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread::{self, JoinHandle},
+    };
+
+    use super::{KanbanClient, proposals_path};
+
+    fn response_server(expected_path: &str, status: &str, body: &str) -> (String, JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let expected_request_line = format!("GET {expected_path} HTTP/1.1");
+        let status = status.to_owned();
+        let body = body.to_owned();
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 8192];
+            let size = stream.read(&mut request).unwrap();
+            let request = String::from_utf8_lossy(&request[..size]);
+            assert_eq!(request.lines().next(), Some(expected_request_line.as_str()));
+            let response = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+        (format!("http://{address}"), handle)
+    }
 
     #[test]
     fn proposal_list_paths_keep_task_and_board_scopes_distinct() {
@@ -415,5 +442,58 @@ mod tests {
             proposals_path("/api/v1/boards/team%2Fone/label-proposals", None),
             "/api/v1/boards/team%2Fone/label-proposals"
         );
+    }
+
+    #[test]
+    fn generic_proposal_list_dispatches_task_and_board_routes_without_fake_task() {
+        let (base_url, handle) = response_server(
+            "/api/v1/boards/team%2Fone/label-proposals?status=accepted",
+            "200 OK",
+            r#"{"data":[]}"#,
+        );
+        let client = KanbanClient::new(base_url, "test").unwrap();
+        let board = client
+            .list_label_proposals("team/one", None, Some("accepted"))
+            .unwrap();
+        assert_eq!(board, serde_json::json!({"data": []}));
+        handle.join().unwrap();
+
+        let (base_url, handle) = response_server(
+            "/api/v1/tasks/t_scope/label-proposals?board=team%2Fone&status=proposed",
+            "200 OK",
+            r#"{"data":[]}"#,
+        );
+        let client = KanbanClient::new(base_url, "test").unwrap();
+        let task = client
+            .list_label_proposals("team/one", Some("t_scope"), Some("proposed"))
+            .unwrap();
+        assert_eq!(task, serde_json::json!({"data": []}));
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn proposal_list_client_preserves_standard_error_envelope() {
+        let (base_url, handle) = response_server(
+            "/api/v1/boards/missing/label-proposals",
+            "404 Not Found",
+            r#"{"error":{"code":"not_found","message":"board missing"}}"#,
+        );
+        let client = KanbanClient::new(base_url, "test").unwrap();
+        let error = client
+            .list_board_label_proposals("missing", None)
+            .expect_err("HTTP error should decode as ErrorEnvelope");
+        assert_eq!(error.code(), "not_found");
+        match error {
+            crate::ClientError::Api {
+                status,
+                code: kanban_protocol::ApiErrorCode::NotFound,
+                message,
+            } => {
+                assert_eq!(status, 404);
+                assert_eq!(message, "board missing");
+            }
+            other => panic!("unexpected client error: {other:?}"),
+        }
+        handle.join().unwrap();
     }
 }

@@ -853,9 +853,125 @@ pub(super) fn router() -> Router<AppState> {
 mod tests {
     use super::*;
     use crate::http::operations::test_support::*;
+    use axum::Router;
     use kanban_protocol::{
-        ListBoardLabelProposalsResponse, cli_labels::CliLabelOntologyQualityOutput,
+        ApiErrorCode, CreateBoardResponse, CreateTaskResponse, ErrorEnvelope,
+        LabelProposalDecisionResponse, ListBoardLabelProposalsResponse,
+        ListTaskLabelProposalsResponse, ProposeTaskLabelResponse,
+        cli_labels::CliLabelOntologyQualityOutput,
     };
+
+    async fn create_board(router: &Router, board: &str) {
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/boards",
+                serde_json::json!({
+                    "slug": board,
+                    "name": format!("{board} board"),
+                    "description": "label proposal HTTP test",
+                    "actor": "tester"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let _: CreateBoardResponse =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+    }
+
+    async fn create_task(router: &Router, board: &str, task_id: &str) {
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                &format!("/api/v1/boards/{board}/tasks"),
+                serde_json::json!({
+                    "task_id": task_id,
+                    "title": format!("{task_id} title"),
+                    "description": "label proposal HTTP test",
+                    "priority": 1,
+                    "metadata": {},
+                    "labels": [],
+                    "depends_on": [],
+                    "actor": "tester"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let _: CreateTaskResponse =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+    }
+
+    async fn create_proposal(
+        router: &Router,
+        board: &str,
+        task_id: &str,
+        name: &str,
+    ) -> kanban_protocol::LabelSemanticProposalWire {
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                &format!("/api/v1/tasks/{task_id}/label-proposals?board={board}"),
+                serde_json::json!({
+                    "name": name,
+                    "description": "proposal fixture",
+                    "applies_when": ["HTTP route"],
+                    "excludes_when": [],
+                    "positive_examples": [],
+                    "negative_examples": [],
+                    "actor": "tester"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let created: ProposeTaskLabelResponse =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        created.data.proposal.expect("explicit proposal candidate")
+    }
+
+    async fn list_board_proposals(
+        router: &Router,
+        board: &str,
+        status: Option<&str>,
+    ) -> ListBoardLabelProposalsResponse {
+        let uri = status.map_or_else(
+            || format!("/api/v1/boards/{board}/label-proposals"),
+            |status| format!("/api/v1/boards/{board}/label-proposals?status={status}"),
+        );
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap()
+    }
+
+    async fn list_task_proposals(
+        router: &Router,
+        board: &str,
+        task_id: &str,
+        status: Option<&str>,
+    ) -> ListTaskLabelProposalsResponse {
+        let uri = status.map_or_else(
+            || format!("/api/v1/tasks/{task_id}/label-proposals?board={board}"),
+            |status| {
+                format!("/api/v1/tasks/{task_id}/label-proposals?board={board}&status={status}")
+            },
+        );
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap()
+    }
 
     #[tokio::test]
     async fn board_proposal_list_uses_the_board_scoped_service_path() {
@@ -876,6 +992,135 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let proposals: ListBoardLabelProposalsResponse = serde_json::from_slice(&body).unwrap();
         assert!(proposals.data.is_empty());
+    }
+
+    #[tokio::test]
+    async fn board_proposal_list_is_isolated_and_filters_status_with_typed_scopes() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let router = build_router(state);
+        create_board(&router, "other").await;
+        create_task(&router, "default", "t_board_default_accepted").await;
+        create_task(&router, "default", "t_board_default_proposed").await;
+        create_task(&router, "other", "t_board_other_proposed").await;
+
+        let accepted = create_proposal(
+            &router,
+            "default",
+            "t_board_default_accepted",
+            "default accepted",
+        )
+        .await;
+        let proposed = create_proposal(
+            &router,
+            "default",
+            "t_board_default_proposed",
+            "default proposed",
+        )
+        .await;
+        let other =
+            create_proposal(&router, "other", "t_board_other_proposed", "other proposed").await;
+
+        let response = router
+            .clone()
+            .oneshot(json_request(
+                &format!("/api/v1/label-proposals/{}/accept", accepted.id),
+                serde_json::json!({"reason": "test", "actor": "tester"}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let decided: LabelProposalDecisionResponse =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert!(matches!(
+            decided.data.status,
+            kanban_protocol::LabelProposalStatusWire::Accepted
+        ));
+
+        let all_default = list_board_proposals(&router, "default", None).await;
+        assert_eq!(all_default.data.len(), 2);
+        assert!(
+            all_default
+                .data
+                .iter()
+                .all(|item| item.board_id == accepted.board_id)
+        );
+        assert!(all_default.data.iter().any(|item| item.id == accepted.id));
+        assert!(all_default.data.iter().any(|item| item.id == proposed.id));
+        assert!(all_default.data.iter().all(|item| item.id != other.id));
+
+        let accepted_default = list_board_proposals(&router, "default", Some("accepted")).await;
+        assert_eq!(accepted_default.data.len(), 1);
+        assert_eq!(accepted_default.data[0].id, accepted.id);
+        assert!(matches!(
+            accepted_default.data[0].status,
+            kanban_protocol::LabelProposalStatusWire::Accepted
+        ));
+
+        let proposed_default = list_board_proposals(&router, "default", Some("proposed")).await;
+        assert_eq!(proposed_default.data.len(), 1);
+        assert_eq!(proposed_default.data[0].id, proposed.id);
+
+        let all_other = list_board_proposals(&router, "other", None).await;
+        assert_eq!(all_other.data.len(), 1);
+        assert_eq!(all_other.data[0].id, other.id);
+        assert_eq!(all_other.data[0].board_id, other.board_id);
+
+        let task_default = list_task_proposals(
+            &router,
+            "default",
+            "t_board_default_accepted",
+            Some("accepted"),
+        )
+        .await;
+        assert_eq!(task_default.data.len(), 1);
+        assert_eq!(task_default.data[0].id, accepted.id);
+
+        let task_other =
+            list_task_proposals(&router, "other", "t_board_other_proposed", None).await;
+        assert_eq!(task_other.data.len(), 1);
+        assert_eq!(task_other.data[0].id, other.id);
+    }
+
+    #[tokio::test]
+    async fn board_proposal_list_rejects_invalid_queries_with_error_envelopes() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = AppState::open(directory.path().join("kanban.db"), "test")
+            .await
+            .unwrap();
+        let router = build_router(state);
+        for (uri, expected_status, expected_code) in [
+            (
+                "/api/v1/boards/default/label-proposals?status=unknown",
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::InvalidInput,
+            ),
+            (
+                "/api/v1/boards/default/label-proposals?unexpected=1",
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::InvalidInput,
+            ),
+            (
+                "/api/v1/boards/not-found/label-proposals",
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::NotFound,
+            ),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected_status, "{uri}");
+            let error: ErrorEnvelope =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .unwrap();
+            assert_eq!(error.error.code, expected_code, "{uri}");
+            assert!(!error.error.message.trim().is_empty(), "{uri}");
+        }
     }
 
     #[tokio::test]

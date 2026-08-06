@@ -8,6 +8,7 @@
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
+    future::Future,
     io::{BufWriter, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -295,6 +296,30 @@ struct PortableSnapshot {
 }
 
 impl TursoStore {
+    /// 在 host maintenance lease 内运行一个需要独占窗口的操作。
+    ///
+    /// v30 legacy importer 与 portable importer 共享同一把 lease；操作失败或
+    /// release 失败时仍尽力释放当前 token，避免把数据库永久留在 busy 状态。
+    pub(crate) async fn run_with_maintenance_lease<T, F, Fut>(
+        &self,
+        mode: &str,
+        owner: &str,
+        operation: F,
+    ) -> Result<T, StoreError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<T, StoreError>>,
+    {
+        let lease = self.acquire_maintenance_lease(mode, owner).await?;
+        let result = operation().await;
+        let release = self.release_maintenance_lease(&lease).await;
+        match (result, release) {
+            (Ok(value), Ok(())) => Ok(value),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
+        }
+    }
+
     pub(crate) async fn doctor(&self) -> Result<StoreDoctorReport, StoreError> {
         doctor_connection(&self.connection().await?).await
     }

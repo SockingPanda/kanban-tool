@@ -398,6 +398,18 @@ pub(crate) async fn import_into_store(
     options: LegacyImportOptions,
 ) -> Result<LegacyImportResult, StoreError> {
     let snapshot = read_snapshot(&options.source_path)?;
+    store
+        .run_with_maintenance_lease("import", "host-admin", || async {
+            import_snapshot_into_store(store, options, snapshot).await
+        })
+        .await
+}
+
+async fn import_snapshot_into_store(
+    store: &TursoStore,
+    options: LegacyImportOptions,
+    snapshot: Snapshot,
+) -> Result<LegacyImportResult, StoreError> {
     let target_root = options
         .canonical_attachment_root
         .clone()

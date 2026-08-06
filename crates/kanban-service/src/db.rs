@@ -29,6 +29,7 @@ pub(crate) trait UpgradeBackupHook: Send + Sync {
     fn before_upgrade(&self, request: &UpgradeBackupRequest) -> Result<(), StoreError>;
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CapabilityRecord {
     pub capability: String,
@@ -129,6 +130,7 @@ impl TursoStore {
     }
 
     /// 在内置升级备份之外追加宿主 hook；hook 失败会阻止 schema 事务开始。
+    #[cfg(test)]
     pub(crate) async fn initialize_requiring_backup(
         &self,
         backup_hook: &dyn UpgradeBackupHook,
@@ -136,6 +138,7 @@ impl TursoStore {
         self.initialize_with_backup_hook(Some(backup_hook)).await
     }
 
+    #[cfg(test)]
     pub(crate) async fn capability_report(&self) -> Result<Vec<CapabilityRecord>, StoreError> {
         let connection = self.connection().await?;
         let mut rows = connection

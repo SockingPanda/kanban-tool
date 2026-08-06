@@ -269,11 +269,19 @@ fn assert_json_shape(actual: &Value, expected: &Value, path: &str, fixture_name:
             let expected_keys = expected.keys().collect::<BTreeSet<_>>();
             let missing_keys = expected_keys
                 .difference(&actual_keys)
-                .filter(|key| **key != "meta")
+                .filter(|key| !optional_fixture_field(path, key))
+                .collect::<Vec<_>>();
+            let extra_keys = actual_keys
+                .difference(&expected_keys)
+                .filter(|key| !optional_fixture_field(path, key))
                 .collect::<Vec<_>>();
             assert!(
                 missing_keys.is_empty(),
                 "fixture {fixture_name} 在 {path} 缺少字段：期望={expected_keys:?}, 实际={actual_keys:?}"
+            );
+            assert!(
+                extra_keys.is_empty(),
+                "fixture {fixture_name} 在 {path} 出现未声明字段：期望={expected_keys:?}, 实际={actual_keys:?}"
             );
             for (key, expected_child) in expected {
                 if let Some(actual_child) = actual.get(key) {
@@ -308,6 +316,13 @@ fn assert_json_shape(actual: &Value, expected: &Value, path: &str, fixture_name:
             "fixture {fixture_name} 在 {path} 的 JSON 类型不一致：actual={actual:?}, expected={expected:?}"
         ),
     }
+}
+
+fn optional_fixture_field(path: &str, key: &str) -> bool {
+    matches!(
+        (path, key),
+        ("$", "meta") | ("$.data", "created") | ("$.data", "config_path")
+    )
 }
 
 /// 让测试名称直接对应 protocol catalog 中的 CLI contract ID。

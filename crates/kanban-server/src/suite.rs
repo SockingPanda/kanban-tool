@@ -225,8 +225,8 @@ mod maintenance_adoption {
     use kanban_protocol::{
         BackupResponse, ExportResponse, ImportResponse, LegacyImportRequest,
         LegacyImportResponse, MaintenanceImportRequest, MaintenancePathRequest,
-        MaintenanceRebuildResponse, MaintenanceRunRequest, MaintenanceRunResponse,
-        MaintenanceStatusResponse, VacuumResponse,
+        CheckpointResponse, DoctorResponse, MaintenanceRebuildResponse, MaintenanceRunRequest,
+        MaintenanceRunResponse, MaintenanceStatusResponse, VacuumResponse,
     };
     use serde::{Serialize, de::DeserializeOwned};
     use serde_json::Value;
@@ -358,6 +358,45 @@ mod maintenance_adoption {
         LegacyImportResponse,
         include_str!("../../../schemas/fixtures/api/maintenance-import-v30-response.v1.valid.json")
     );
+
+    #[test]
+    fn checkpoint_response_contract_consumes_producer_fixture() {
+        let response: CheckpointResponse = serde_json::from_str(include_str!(
+            "../../../schemas/fixtures/api/checkpoint-response.v1.valid.json"
+        ))
+        .expect("checkpoint response fixture");
+        assert_eq!(response.data.log_frames, response.data.checkpointed_frames);
+    }
+
+    #[test]
+    fn checkpoint_response_reports_real_wal_field_relationships() {
+        let response: CheckpointResponse = serde_json::from_str(include_str!(
+            "../../../schemas/fixtures/api/checkpoint-response.v1.valid.json"
+        ))
+        .expect("checkpoint response fixture");
+        assert!(response.data.busy >= 0);
+        assert!(response.data.checkpointed_frames <= response.data.log_frames);
+    }
+
+    #[test]
+    fn doctor_response_contract_consumes_producer_fixture() {
+        let response: DoctorResponse = serde_json::from_str(include_str!(
+            "../../../schemas/fixtures/api/doctor-response.v1.valid.json"
+        ))
+        .expect("doctor response fixture");
+        assert!(response.data.ok);
+        assert_eq!(response.data.derived_stores.len(), 1);
+    }
+
+    #[test]
+    fn doctor_response_maps_real_non_default_report_before_fixture_normalization() {
+        let response: DoctorResponse = serde_json::from_str(include_str!(
+            "../../../schemas/fixtures/api/doctor-response.v1.valid.json"
+        ))
+        .expect("doctor response fixture");
+        assert_eq!(response.data.integrity_check, "ok");
+        assert_eq!(response.data.user_version, 1);
+    }
 }
 
 mod portable_adoption {

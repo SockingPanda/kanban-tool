@@ -19,6 +19,8 @@ full gates 仍按实际执行结果记录，保持 `pending`。它回答四个�
 
 baseline 的 machine source 是 `6ea277` 中的 migration、`crates/kanban-contract`、CLI args、Desktop navigation 和 helper/backend crates；当前 source 是 `Cargo.toml`、`crates/kanban-service/src/schema.rs`/`service.rs`、`crates/kanban-server/src/http/operations/**`、`crates/kanban-client/src/**`、`crates/kanban-cli/src/main.rs`、`crates/kanban-protocol` catalog、`crates/kanban-mcp/src/main.rs` 的 adapter 对齐测试和 `apps/desktop/src`。
 
+legacy SQLite v30 的表清单以 `crates/kanban-service/src/legacy_import.rs::{LEGACY_TABLES, CANONICAL_TABLES}` 为 machine source：共 35 张源表，其中 27 张是 canonical facts，另外 8 张只是旧 projection/outbox/control-plane 的 shape witness。这里的表数不等同于旧 workspace 的 backend/helper crate 数；后者仅作为历史 source map 保留。
+
 可复核命令：
 
 ```bash
@@ -28,7 +30,7 @@ rg -n '\.route\(' crates/kanban-server/src/http/operations crates/kanban-server/
 rg -n 'MCP_OPERATION_CATALOG|MCP_HOST_ADMIN_OPERATION_IDS|mcp_operation_catalog' crates/kanban-protocol/src/mcp.rs crates/kanban-mcp/src/main.rs
 ```
 
-当前 active workspace 明确是七个产品 Rust crate（`kanban-core`、`kanban-service`、`kanban-protocol`、`kanban-client`、`kanban-server`、`kanban-cli`、`kanban-mcp`）、Desktop Tauri package 和私有 `xtask`。旧的 11 个 backend/helper sidecar 不再是 workspace/runtime 成员；它们只在 baseline source map、历史 release/projection 文档或迁移 fixture 中作为证据保留。
+当前 active workspace 明确是七个产品 Rust crate（`kanban-core`、`kanban-service`、`kanban-protocol`、`kanban-client`、`kanban-server`、`kanban-cli`、`kanban-mcp`）、Desktop Tauri package 和私有 `xtask`。旧 backend/helper sidecar 不再是 workspace/runtime 成员；它们只在 baseline source map、历史 release/projection 文档或迁移 fixture 中作为证据保留。
 
 ## 1. 数据域映射
 
@@ -55,7 +57,7 @@ rg -n 'MCP_OPERATION_CATALOG|MCP_HOST_ADMIN_OPERATION_IDS|mcp_operation_catalog'
 
 | baseline operation | 当前 owner / surfaces | 迁移规则 | 证据 | 状态 |
 | --- | --- | --- | --- | --- |
-| `promote`、`claim`、`heartbeat`、`review`、`done`、`block` | service lifecycle；HTTP `/transitions/*`；CLI task；MCP lifecycle；Desktop task actions | 保留 plan/依赖/排期/owner/token/CAS；claim + run + event 同事务 | claim concurrency/guard、review/done/block server tests；service lifecycle suites | `implemented-evidence` |
+| `promote`、baseline `start`/当前 `claim`、`heartbeat`、`review`、`done`、`block` | service lifecycle；HTTP `/transitions/*`；CLI task；MCP lifecycle；Desktop task actions | 保留 plan/依赖/排期/owner/token/CAS；claim + run + event 同事务；baseline `start` 词法折叠为 `claim`，不是第二条状态路径 | claim concurrency/guard、review/done/block server tests；service lifecycle suites；CLI completion 明确不再建议 `task start` | `implemented-evidence`; exact `start` spelling compatibility remains `pending-gate` |
 | `release` | service release；HTTP/CLI/MCP/Desktop | 新增 matching token release：cancel run、clear lease、回 ready、写 event | `release_task_returns_ready_and_cancels_run_atomically`；server release route test | `implemented-evidence` |
 | `specify`、`unblock`、`reopen`、`reclaim`、`archive`、task `update` | service explicit operations；HTTP/CLI/MCP/Desktop task detail/actions | 不允许 generic status setter；按 canonical facts 重算目标；保留历史与 retry/event | `specify_task_recomputes_unplanned_task_to_todo`；`unblock_task_recomputes_blocked_task_without_forcing_ready`；`reopen_task_clears_completion_but_preserves_result_and_recomputes_children`；`explicit_reclaim_expires_run_in_one_transaction_and_increments_retry`；`archive_task_sets_archived_state_and_event` | `implemented-evidence`; full surface gate pending |
 | steps `done/skip/reopen/remove` | service step lifecycle；HTTP/CLI/MCP/Desktop detail | required step、linked task board、parent plan guard；状态和 event 同事务 | `step_lifecycle_routes_share_one_application_and_store_path`；Desktop steps contract tests | `implemented-evidence`; full adoption gate pending |
@@ -79,7 +81,7 @@ rg -n 'MCP_OPERATION_CATALOG|MCP_HOST_ADMIN_OPERATION_IDS|mcp_operation_catalog'
 ### MCP
 
 baseline 没有 MCP；当前 `kanban-protocol::MCP_OPERATION_CATALOG` 是唯一 machine-readable
-source，共 103 个 tool，覆盖全部 102 个非 host-admin HTTP operation。`MCP_HOST_ADMIN_OPERATION_IDS`
+source，共 103 个 tool，绑定全部 103 个非 host-admin HTTP operation。`MCP_HOST_ADMIN_OPERATION_IDS`
 明确禁止 12 个 host-admin operation；search/graph/vector 与 label atom-index 的 domain
 `rebuild`/`sync` 不在禁止项内。MCP 只调用 `KanbanClient`，不启动 host、不提供
 migration/backup/vacuum/replace。
@@ -95,6 +97,31 @@ baseline 的十个 `OperatorView` 现在全部存在并由 `primaryViews/sidebar
 
 实际 evidence：`task-detail-capability-cutline.test.ts`、`MaintenanceView`/`SignalsWorkbench`/`OntologyReviewWorkbench`/`BoardTaskMapView` tests、API contract tests、`layout-scroll-contract`。剩余 gate 是运行 `just desktop-check` 与完整 UI/API cross-surface adoption；未运行前不标 green。
 
+### Baseline surface closure
+
+baseline HTTP catalog 还有一个当前没有 owner/entry 的真实缺口：`api.bootstrap-task-label`，即
+`POST /api/v1/tasks/:task_id/labels/bootstrap`。baseline 的
+`crates/kanban-contract/src/endpoint.rs`、`handlers::tasks::bootstrap_task_label`、route
+registration 和 adoption tests 都存在；当前 route、service operation、typed client、CLI、MCP
+和 Desktop 均没有绑定。`BootstrapTaskLabelRequest`/`BootstrapTaskLabelData` 仍在
+`kanban-protocol` 中只是 orphan DTO，不能算 runtime parity。它需要 canonical service
+transaction、HTTP/client adapter 以及各入口是否暴露的明确决策；本账本不把它标为
+`historical` 或“暂不支持”，状态保持 `pending-gate`。
+
+baseline CLI leaf 的差异也逐项记账，避免从“没有同名命令”误推断已闭合：
+
+| baseline leaf | 当前事实 / 迁移 | 状态 |
+| --- | --- | --- |
+| `task start` | 语义由 `task claim` 承载；completion test 明确不再建议 `task start`，未保留词法 alias | `pending-gate`（若验收要求 exact spelling） |
+| `label bootstrap` | 与缺失的 `api.bootstrap-task-label` 是同一能力缺口，当前无 service/HTTP/client/CLI/MCP/Desktop 纵向路径 | `pending-gate` |
+| identity `label delete` | 当前只有 label-semantics delete；没有 baseline identity delete 的 HTTP/CLI owner | `pending-gate`（需决定是否保留该 baseline capability） |
+| `outbox list`、`derived status` | 旧 control plane 已由 host `maintenance status`/`doctor` 的 `projection_jobs`/`projection_state` 取代；不复制旧表 rows | `historical` semantic replacement；exact leaf 若仍是验收项则 `pending-gate` |
+| hidden `dispatch` | 语义并入 canonical host `kanban serve --dispatcher-profile`，只 claim `ready`；有真实 serve/dispatcher adoption test | `implemented-evidence` semantic migration |
+| `maintenance cleanup-legacy` | 当前 `maintenance cleanup` 只清理 projection；旧 sidecar cleanup 没有同名入口，保留为历史 decision | `historical`；exact compatibility 若要求则 `pending-gate` |
+
+baseline 没有 MCP，因此当前 103 个 domain tools 是新增 surface，不构成 baseline 缺失；MCP
+catalog 的 exact binding 仍以 §5 gate 为准。
+
 ## 4. 双迁移路径和停止条件
 
 ### Turso v1 → v2
@@ -106,6 +133,27 @@ host 先精确检查 schema family/shape/constraints/FK/board guard，创建并�
 portable path 导出/导入 canonical facts，`replace=true` 在 host 独占窗口中 verified backup + atomic canonical transaction，提交后 enqueue rebuild。legacy v30 path 只读 SQLite source、preflight schema/attachment/checksum/board isolation，显式 `legacy-sqlite-import` feature 下执行；默认构建未加载 importer，不能称第二 backend。
 
 现有 maintenance tests 覆盖 portable round-trip、checksum failure、explicit IDs/relations、replace commit/rollback/writer lock/idempotency；legacy importer unit tests 覆盖 v30 manifest、source preflight、attachment staging。待运行的是 feature-enabled host/CLI/Desktop end-to-end adoption 和完整 recovery gate。
+
+### 旧 SQLite v30 表逐项闭合
+
+`LEGACY_TABLES` 的 35 张表已经按 source shape 校验；`CANONICAL_TABLES` 的 27 张表才进入
+canonical import：
+
+- canonical facts（27）：`boards`、`board_columns`、`tasks`、`task_execution_plans`、`task_steps`、`task_dependencies`、`task_runs`、`task_comments`、`task_events`、`task_attachments`、`labels`、`task_labels`、`app_settings`、`task_subtasks`、`entities`、`relation_predicates`、`entity_relations`、`label_semantics`、`label_atoms`、`label_semantic_proposals`、`label_ontology_observations`、`label_ontology_signals`、`label_ontology_actions`、`label_ontology_action_signals`、`label_ontology_action_atom_effects`、`signal_observations`、`signals`。
+- source-only shape witness（8）：`derived_store_state`、`index_outbox`、`label_atom_index_boards`、`projection_database`、`projection_deliveries`、`projection_maintenance_owner`、`projection_store_state`、`schema_migrations`。
+
+旧 control-plane 到当前 host state 的映射是显式的，而不是旧 row 的隐式复制：
+
+- `derived_store_state` + `projection_store_state` → 当前 `projection_state`；
+- `index_outbox` + `projection_deliveries` → 当前 `projection_jobs`；
+- `projection_database` → 当前 `schema_identity`/host metadata，重新建立 identity，不复制旧 projection database row；
+- `schema_migrations` → 当前 schema migration metadata，重新校验 lineage，不作为业务事实导入；
+- `label_atom_index_boards`、`projection_maintenance_owner` → 当前可重建的 atom-index/maintenance lease host state，不进入 canonical facts。
+
+因此 importer 只发布上述 27 张 canonical fact 表；8 张 source-only 表既不被静默忽略，也不被当作第二
+control plane。证据是 `legacy_import.rs` 的 `v30_manifest_has_exact_table_and_migration_shape`、
+`source_preflight_rejects_non_v30_without_touching_source` 和 staging checksum/size tests；feature
+enabled 的 host/CLI/Desktop end-to-end 仍按 §5 保持 `pending-gate`。
 
 ### 停止条件
 
@@ -122,7 +170,7 @@ portable path 导出/导入 canonical facts，`replace=true` 在 host 独占窗�
 | `just docs-check` | 文档链接、rustdoc include、crate README 和 ADR index | 本次尝试受并发代码编译失败影响，未形成通过证据；稳定主线需复跑 |
 | `just diff-check` | 文档空白/冲突检查 | 本次运行 exit 0 |
 | `just schema-check` | protocol schema/catalog 一致性 | 本任务未运行，保持 `pending-gate` |
-| `just schema-surface-audit` | 实际 HTTP/CLI surface 与 catalog 对齐 | 本任务未运行，保持 `pending-gate` |
+| `just schema-surface-audit` | 实际 HTTP/CLI surface 与 catalog 对齐 | 本工作树已实际执行：server exact route 与 CLI exact leaf tests 均通过；最终集成 HEAD 仍需复跑，状态 `pending-gate` |
 | `just schema-adoption-witness` | exact producer/consumer witness | 本任务未运行，保持 `pending-gate` |
 | final HEAD / full gate | 集成后的最终 revision 与完整 runtime/full 证据 | pending；本账本不预先宣称通过 |
 | 受影响 Rust/CLI/MCP/Desktop package tests | 纵向行为和 UI contract | 本任务未运行 package/full gate；已有代表性测试名仅作证据索引，未运行项保持 `unknown` |

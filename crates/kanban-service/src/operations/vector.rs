@@ -6,7 +6,10 @@
 
 use kanban_core::{Clock, KanbanError, Result};
 
-use crate::{KanbanService, VectorConfig, VectorStatusRecord};
+use crate::{
+    KanbanService,
+    vector::{VectorConfig, VectorStatusRecord},
+};
 
 /// 配置 host 内 vector provider 的 service command。
 #[derive(Debug, Clone, PartialEq, Eq)]

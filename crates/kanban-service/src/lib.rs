@@ -59,7 +59,7 @@ pub use service::KanbanService;
 
 // 规范持久化入口只在 service crate 内可见；host 只能使用上面的 KanbanService。
 // Store row model 和 StoreError 不进入跨 crate 的 application API。
-pub(crate) use db::{CapabilityRecord, TursoStore, UpgradeBackupHook, UpgradeBackupRequest};
+pub(crate) use db::{TursoStore, UpgradeBackupHook, UpgradeBackupRequest};
 pub(crate) use error::StoreError;
 
 // 输入在 service 边界显式使用别名。与 application DTO 重名的 record 和 option
@@ -70,13 +70,6 @@ pub(crate) use store_operations::{
     LabelProposalInput, LabelSuggestionOptions, OntologyActionInput, OntologyApplyAtomInput,
     OntologyObservationInput, OntologyRevertInput, OntologyValidateInput, RelationDeleteInput,
     RelationPredicateInput, RelationUpsertInput, RemoveTaskLabelInput, UpsertLabelSemanticsInput,
-};
-
-pub(crate) use vector::{
-    MAX_VECTOR_BATCH, MAX_VECTOR_CONTENT_BYTES, MAX_VECTOR_DIMENSIONS, ProjectionJobRecord,
-    VECTOR_BACKEND, VECTOR_LABEL_ATOMS_PROJECTION, VECTOR_TASKS_PROJECTION, VectorChunkHitRecord,
-    VectorConfig, VectorDocumentInput, VectorEmbeddingInput, VectorLabelAtomHitRecord,
-    VectorStatusRecord, content_hash, stable_id,
 };
 
 #[cfg(feature = "legacy-sqlite-import")]

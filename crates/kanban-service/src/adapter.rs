@@ -21,8 +21,6 @@ use kanban_core::{KanbanError, Result};
 
 type StoreResult<T> = std::result::Result<T, StoreError>;
 
-mod operations;
-
 #[derive(Clone)]
 pub struct TursoApplicationStore {
     pub(crate) store: TursoStore,

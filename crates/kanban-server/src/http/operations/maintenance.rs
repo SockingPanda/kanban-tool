@@ -13,7 +13,8 @@ use kanban_protocol::{
     MaintenanceStatusReport, MaintenanceStatusResponse, ProjectionStoreStatus, VacuumReport,
     VacuumResponse,
 };
-use kanban_service::LegacyImportOptionsRecord;
+#[cfg(feature = "legacy-sqlite-import")]
+use kanban_service::LegacyImportOptions;
 
 pub(crate) async fn doctor(
     State(state): State<AppState>,
@@ -154,15 +155,16 @@ pub(crate) async fn import(
     ))
 }
 
+#[cfg(feature = "legacy-sqlite-import")]
 pub(crate) async fn import_legacy_sqlite_v30(
     State(state): State<AppState>,
     Json(request): Json<LegacyImportRequest>,
 ) -> Result<(StatusCode, Json<LegacyImportResponse>), ApiError> {
     let report = state
         .application()
-        .import_legacy_sqlite_v30(LegacyImportOptionsRecord {
-            source_path: request.path,
-            canonical_attachment_root: request.canonical_attachment_root,
+        .import_legacy_sqlite_v30(LegacyImportOptions {
+            source_path: request.path.into(),
+            canonical_attachment_root: request.canonical_attachment_root.map(Into::into),
         })
         .await?;
     Ok((
@@ -170,7 +172,7 @@ pub(crate) async fn import_legacy_sqlite_v30(
         Json(DataEnvelope::new(LegacyImportReport {
             journal_id: report.journal_id,
             phase: report.phase,
-            source_path: report.source_path,
+            source_path: report.source_path.to_string_lossy().into_owned(),
             source_fingerprint: report.source_fingerprint,
             schema_fingerprint: report.schema_fingerprint,
             resumed: report.resumed,
@@ -186,6 +188,16 @@ pub(crate) async fn import_legacy_sqlite_v30(
                 .collect(),
         })),
     ))
+}
+
+#[cfg(not(feature = "legacy-sqlite-import"))]
+pub(crate) async fn import_legacy_sqlite_v30(
+    State(_state): State<AppState>,
+    Json(_request): Json<LegacyImportRequest>,
+) -> Result<(StatusCode, Json<LegacyImportResponse>), ApiError> {
+    Err(ApiError(kanban_service::KanbanError::FeatureNotAvailable(
+        "legacy sqlite v30 importer is not enabled".to_owned(),
+    )))
 }
 
 pub(crate) async fn vacuum(
@@ -260,7 +272,7 @@ pub(crate) async fn maintenance_cleanup(
     Ok(Json(DataEnvelope::new(run_report(report))))
 }
 
-fn projection_status(value: kanban_service::ProjectionStatusRecord) -> ProjectionStoreStatus {
+fn projection_status(value: kanban_service::StoreProjectionStatus) -> ProjectionStoreStatus {
     ProjectionStoreStatus {
         store_name: value.store_name,
         active_generation: value.active_generation,
@@ -282,7 +294,7 @@ fn projection_status(value: kanban_service::ProjectionStatusRecord) -> Projectio
     }
 }
 
-fn run_report(value: kanban_service::MaintenanceRunRecord) -> MaintenanceRunReport {
+fn run_report(value: kanban_service::StoreMaintenanceRun) -> MaintenanceRunReport {
     MaintenanceRunReport {
         database_instance_id: value.database_instance_id,
         protocol_version: value.protocol_version,

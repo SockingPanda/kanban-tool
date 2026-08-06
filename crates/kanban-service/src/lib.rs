@@ -33,31 +33,27 @@ pub mod vector;
 #[cfg(feature = "legacy-sqlite-import")]
 pub mod legacy_import;
 
-// 下面重新导出 entity/relation/graph DTO，使每个 host adapter（包括 host-admin
-// maintenance）都使用同一个规范 service boundary。
+// 下面重新导出 entity/relation/graph DTO，使每个 host adapter 都使用同一个规范
+// service boundary。
 
 pub use adapter::TursoApplicationStore;
 pub use dto::*;
 pub use kanban_core::{Board, BoardColumn, KanbanError, Result, TaskStatus, new_task_id};
 pub use operations::{
     AddTaskLabelsCommand, AddTaskLabelsRecord, ArchiveBoardCommand, ArchiveBoardRecord,
-    ArchiveTaskCommand, BackupReportRecord, BoardTaskMapOptions, CheckpointReportRecord,
-    ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence, ContextItem,
-    ContextPack, ContextPolicy, ContextProviderStatus, ContextSources, CreateAttachmentCommand,
-    CreateAttachmentRecord, CreateBoardCommand, CreateBoardLabelCommand, CreateBoardRecord,
-    DeleteAttachmentCommand, DoctorDerivedStoreRecord, DoctorIssueRecord, DoctorReportRecord,
+    ArchiveTaskCommand, BoardTaskMapOptions, ContextBuildOptions, ContextCandidate,
+    ContextDiagnostic, ContextEvidence, ContextItem, ContextPack, ContextPolicy,
+    ContextProviderStatus, ContextSources, CreateAttachmentCommand, CreateAttachmentRecord,
+    CreateBoardCommand, CreateBoardLabelCommand, CreateBoardRecord, DeleteAttachmentCommand,
     EntityListOptions, EntityUpsertCommand, EventListOptions, EventListPage, EventRecord,
-    ExportReportRecord, GraphNeighborsOptions, GraphQueryOptions, ImportReportRecord,
-    LegacyImportOptionsRecord, LegacyImportResultRecord, LegacyImportTableCountRecord,
-    MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT, MAX_SEARCH_LIMIT,
-    MaintenanceOwnerRecord, MaintenanceQuery, MaintenanceRunRecord, MaintenanceStatusRecord,
-    ProjectionStatusOptions, ProjectionStatusRecord, RUN_LOG_TAIL_BYTES, ReclaimTaskCommand,
-    RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationUpsertCommand,
-    RemoveTaskLabelCommand, ReopenTaskCommand, RunLogRecord, SearchHit, SearchIndexStatus,
-    SearchMeta, SearchQuery, SearchResults, SpecifyTaskCommand, TaskDetailOntologyRecord,
-    TaskDetailRead, TaskDetailRecord, TaskNeighborhoodOptions, TaskOntologySignalSummaryRecord,
-    TaskOntologySummaryRecord, UnblockTaskCommand, UpdateTaskCommand, VacuumReportRecord,
-    VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,
+    GraphNeighborsOptions, GraphQueryOptions, MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH,
+    MAX_CONTEXT_LIMIT, MAX_SEARCH_LIMIT, ProjectionStatusOptions, RUN_LOG_TAIL_BYTES,
+    ReclaimTaskCommand, RelationDeleteCommand, RelationListOptions, RelationPredicateCommand,
+    RelationUpsertCommand, RemoveTaskLabelCommand, ReopenTaskCommand, RunLogRecord, SearchHit,
+    SearchIndexStatus, SearchMeta, SearchQuery, SearchResults, SpecifyTaskCommand,
+    TaskDetailOntologyRecord, TaskDetailRead, TaskDetailRecord, TaskNeighborhoodOptions,
+    TaskOntologySignalSummaryRecord, TaskOntologySummaryRecord, UnblockTaskCommand,
+    UpdateTaskCommand, VectorChunkQueryCommand, VectorChunkResult, VectorConfigureCommand,
     VectorLabelAtomQueryCommand, VectorLabelAtomResult, VectorStatus,
 };
 pub use ports::ApplicationStore;

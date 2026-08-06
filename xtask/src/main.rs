@@ -353,10 +353,9 @@ fn workspace_members(root: &Path) -> xtask::ToolResult<Vec<String>> {
         if let Some(value) = line
             .strip_prefix('"')
             .and_then(|value| value.strip_suffix(','))
+            .and_then(|value| value.strip_suffix('"'))
         {
-            if let Some(value) = value.strip_suffix('"') {
-                members.push(value.to_owned());
-            }
+            members.push(value.to_owned());
         }
     }
     if members.is_empty() {
@@ -444,25 +443,20 @@ fn include_targets(
     let mut targets = Vec::new();
     let mut remaining = text;
     while let Some(start) = remaining.find("include_str!(") {
-        if remaining[..start].chars().last() == Some('"') {
+        if remaining[..start].ends_with('"') {
             remaining = &remaining[start + "include_str!(".len()..];
             continue;
         }
         let after = remaining[start + "include_str!(".len()..].trim_start();
         if !after.starts_with('"') {
-            if after.starts_with("concat!(") && after.contains("CARGO_MANIFEST_DIR") {
-                if let Some(relative) = after
-                    .split('"')
-                    .filter(|value| value.starts_with("/"))
-                    .next()
-                {
-                    if let Some(manifest_dir) = source
-                        .ancestors()
-                        .find(|candidate| candidate.join("Cargo.toml").is_file())
-                    {
-                        targets.push(manifest_dir.join(relative.trim_start_matches('/')));
-                    }
-                }
+            if after.starts_with("concat!(")
+                && after.contains("CARGO_MANIFEST_DIR")
+                && let Some(relative) = after.split('"').find(|value| value.starts_with('/'))
+                && let Some(manifest_dir) = source
+                    .ancestors()
+                    .find(|candidate| candidate.join("Cargo.toml").is_file())
+            {
+                targets.push(manifest_dir.join(relative.trim_start_matches('/')));
             }
             remaining = after;
             continue;

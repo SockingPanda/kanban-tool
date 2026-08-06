@@ -82,7 +82,7 @@ pub struct SchemaRoot {
     pub strictness: ContractStrictness,
     pub valid_fixture: &'static str,
     pub invalid_fixture: &'static str,
-    generate: fn(ContractDirection) -> Value,
+    pub(crate) generate: fn(ContractDirection) -> Value,
 }
 
 macro_rules! request_schema_root {

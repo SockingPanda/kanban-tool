@@ -2719,7 +2719,7 @@ impl EndpointObligationKind {
             Self::Sse => "sse",
         }
     }
-    const fn location(self) -> crate::HttpTransportLocation {
+    pub(crate) const fn location(self) -> crate::HttpTransportLocation {
         match self {
             Self::Path => crate::HttpTransportLocation::Path,
             Self::Query => crate::HttpTransportLocation::Query,

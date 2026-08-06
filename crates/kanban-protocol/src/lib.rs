@@ -16,6 +16,7 @@ pub mod cli_helpers;
 pub mod cli_labels;
 pub mod cli_operator;
 mod comments;
+pub mod contract_catalog;
 mod create_task;
 mod dependencies;
 mod derived;
@@ -31,6 +32,7 @@ mod labels;
 mod lifecycle;
 mod mcp;
 mod ontology;
+pub mod operation_catalog;
 mod portable;
 #[cfg(all(test, feature = "schema"))]
 mod protocol_tests;
@@ -99,6 +101,12 @@ pub use comments::{
     ApiComment, CommentAuthorType, CommentKind, CreateCommentPath, CreateCommentRequest,
     CreateCommentResponse, ListCommentsPath, ListCommentsResponse,
 };
+pub use contract_catalog::{
+    AdoptionLocator, ContractDeclaration, McpExposure, McpPolicy, McpToolBinding,
+    OperationDeclaration,
+};
+#[cfg(feature = "schema")]
+pub use contract_catalog::{SchemaGenerator, generate_schema_for};
 pub use create_task::{ApiCreateTaskStatus, CreateTaskPath, CreateTaskRequest, CreateTaskResponse};
 pub use dependencies::{
     AddDependencyPath, AddDependencyResponse, ApiDependencies, ApiDependencyEdge,
@@ -145,6 +153,9 @@ pub use mcp::{
     validate_mcp_operation_catalog,
 };
 pub use ontology::{LabelOntologySignalWire, LabelOntologySignalsResponse};
+pub use operation_catalog::{
+    CatalogProjection, OPERATION_DECLARATIONS, operation_catalog, project,
+};
 pub use portable::{
     PortableContractDescriptor, PortableContractLane, PortableContractSide,
     portable_contract_catalog,

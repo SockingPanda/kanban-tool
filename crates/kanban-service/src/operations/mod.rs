@@ -24,9 +24,12 @@ mod step;
 mod task;
 mod vector;
 
-pub use attachment::{CreateAttachmentCommand, CreateAttachmentRecord, DeleteAttachmentCommand};
+pub use attachment::{
+    AttachmentCreate, AttachmentDelete, AttachmentList, AttachmentRead, CreateAttachmentCommand,
+    CreateAttachmentRecord, DeleteAttachmentCommand,
+};
 pub use board::{ArchiveBoardCommand, ArchiveBoardRecord, CreateBoardCommand, CreateBoardRecord};
-pub use comment::{CreateCommentCommand, CreateCommentRecord};
+pub use comment::{CommentCreate, CommentList, CreateCommentCommand, CreateCommentRecord};
 pub use context::{
     ContextBuild, ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence,
     ContextItem, ContextPack, ContextPolicy, ContextProviderStatus, ContextSources,

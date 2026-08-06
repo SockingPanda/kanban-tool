@@ -67,7 +67,7 @@ mod tests {
         assert_eq!(names, catalog_names);
         validate_mcp_policy_projection(&projection)
             .expect("MCP projection 只能绑定已存在的领域 endpoint");
-        assert_eq!(catalog_names.len(), 104);
+        assert_eq!(catalog_names.len(), 105);
     }
 
     #[test]

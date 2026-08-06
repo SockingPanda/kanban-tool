@@ -1,4 +1,4 @@
-# Architecture
+# 架构
 
 kanban-tool 只有一条 canonical host 路径：
 
@@ -12,10 +12,10 @@ kanban-server（kanban serve）
 kanban-service ── kanban-core
         │
         ▼
-Turso canonical database
+Turso canonical 数据库
 ```
 
-## Ownership
+## 所有权
 
 - `kanban-core` 拥有领域 ID、状态机、readiness 和纯错误；不依赖内部 crate、HTTP 或数据库。
 - `kanban-service` 拥有 application service、事务、Turso schema/migration、repository、projection 和只读 importer。
@@ -27,7 +27,7 @@ Turso canonical database
 第三方依赖的精确 owner 和 feature 由 Cargo manifest 与 `$style` 维护。内部依赖方向必须保持单向：
 domain 不向 adapter 反向依赖，adapter 不复制 service 状态机。
 
-## Canonical and derived
+## 规范事实与派生数据
 
 业务事实包括 board/task/lifecycle、execution plan、依赖、评论、附件 metadata、labels/ontology/
 signals、entities/relations、runs 和 events。`tasks.status` 是唯一状态事实，event 是追加审计事实。
@@ -36,15 +36,14 @@ FTS、vector、graph/context、projection jobs、缓存和 capability probe 是�
 它们可以删除后重建，不能反向写 canonical facts。详细事务和迁移边界归
 [`kanban-service`](../crates/kanban-service/README.md)。
 
-## Host boundary
+## Host 边界
 
 只有 `kanban serve` 打开 Turso 并执行共享 application path。client、CLI、MCP、Desktop 和 dispatcher
 通过 typed localhost contract 工作；host 停止或输入无效时返回稳定错误，不 fallback 到另一个数据库。
 
-## Guides
+## 指南
 
-- [core state machine](../crates/kanban-core/docs/state_machine.md)
-- [service persistence](../crates/kanban-service/docs/persistence.md)
-- [protocol schema](../crates/kanban-protocol/docs/schema.md)
-- [ADR index](adr/README.md)
-
+- [`kanban-core` 状态机](../crates/kanban-core/docs/state_machine.md)
+- [`kanban-service` 持久化](../crates/kanban-service/docs/persistence.md)
+- [`kanban-protocol` schema 契约](../crates/kanban-protocol/docs/schema.md)
+- [ADR 索引](adr/README.md)

@@ -3,7 +3,7 @@ name: docs
 description: 维护 kanban-tool 的文档事实源、owner placement 和同步边界；当产品行为、crate/app ownership、状态机、persistence、wire/schema、CLI、Desktop layout 或安装环境发生变化，或需要判断应读和应改哪份文档时使用。不负责 Rust 实现、长文措辞、底层检查命令或提交。
 ---
 
-# 文档 owner contract
+# 文档所有者契约
 
 ## 行为契约
 
@@ -15,7 +15,7 @@ description: 维护 kanban-tool 的文档事实源、owner placement 和同步�
 
 不触发：只改中文句子用 `$prose`；只改 Rust/Cargo 用 `$style`；只选择验证用 `$check`；只创建提交用 `$commit`。
 
-## Placement
+## 文档落点
 
 - 根 `README.md` 是产品首页、最小使用路径和指南索引。
 - 根 `AGENTS.md` 是仓库地图、稳定不变量和文档路由。
@@ -23,7 +23,7 @@ description: 维护 kanban-tool 的文档事实源、owner placement 和同步�
 - Rust crate/module guide 使用准确的 `#[doc = include_str!(...)]` 纳入 rustdoc；移动源码时同步检查目标路径。
 - 长期跨模块取舍一项一 ADR，放在 `docs/adr/`；迁移进度、gate、测试名称和 baseline 留在任务、CI 或 Git history。
 
-## Ownership
+## 所有权
 
 `kanban-core` → state machine；`kanban-service` → persistence/migration/maintenance；`kanban-protocol` →
 wire/schema/catalog；`kanban-client` → typed transport；`kanban-server` → host/dispatcher；`kanban-cli`、
@@ -32,10 +32,11 @@ wire/schema/catalog；`kanban-client` → typed transport；`kanban-server` → 
 精确 CLI 由 Clap help、精确 HTTP/MCP 由 router/catalog、精确 schema 由 migration/generated artifact
 持有。不要手工复制 operation、表、字段、命令、测试或 gate inventory。
 
-## History and evidence
+## 历史与证据
 
-当前指南只描述当前行为；已完成 ledger、旧 recovery runbook 和聚合快照离开 active tree。修改前先核对
-owner source，冲突时报告 current implementation 与既有承诺，不静默创造第二份规范。
+当前指南只描述当前行为；已完成 ledger、旧 recovery runbook 和聚合快照不作为 active 指南的事实源。
+若它们仍保留在 `docs/migration/` 或 `docs/release/`，仅按任务或发布证据追溯。修改前先核对 owner
+source，冲突时报告 current implementation 与既有承诺，不静默创造第二份规范。
 
 ## 验证案例
 

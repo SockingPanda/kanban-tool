@@ -1,10 +1,9 @@
-# Architecture decisions
+# 架构决策
 
 这里只保留仍然影响当前架构的长期决定。每个决定独立成文；实现进度、测试结果、migration ledger、
 baseline 和一次性 workaround 不进入 ADR。
 
-- [0001 Single-host Turso ownership](0001_single_host_turso.md)
-- [0002 Status is canonical](0002_status_is_canonical.md)
-- [0003 Canonical and derived data](0003_canonical_and_derived_data.md)
-- [0004 Explicit task lifecycle](0004_explicit_task_lifecycle.md)
-
+- [0001 单 Host 的 Turso 所有权](0001_single_host_turso.md)
+- [0002 状态是规范事实](0002_status_is_canonical.md)
+- [0003 规范事实与派生数据](0003_canonical_and_derived_data.md)
+- [0004 显式任务生命周期](0004_explicit_task_lifecycle.md)

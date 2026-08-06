@@ -1,4 +1,4 @@
-# Desktop layout
+# Desktop 布局
 
 本页是 Desktop 的布局与滚动指南，补充 `apps/desktop/src/app/layout-scroll-contract.test.ts` 的自动
 契约。它描述用户可观察的布局边界，不维护视图数量或完整导航 inventory。

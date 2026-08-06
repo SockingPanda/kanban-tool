@@ -4,7 +4,7 @@
 规则、DTO/port、事务和 repository 组合成共享 application service；HTTP host、CLI、MCP 和 Desktop
 不能绕过这条路径写数据库。
 
-## Ownership
+## 所有权
 
 - `kanban serve` 装配 service 并持有数据库连接。
 - Turso schema、migration、repository、projection、search/vector provider 和只读 legacy importer
@@ -13,7 +13,6 @@
 
 行为指南：
 
-- [canonical persistence](docs/persistence.md)
-- [migration and import](docs/migration.md)
-- [maintenance](docs/maintenance.md)
-
+- [规范持久化](docs/persistence.md)
+- [迁移与导入](docs/migration.md)
+- [维护](docs/maintenance.md)

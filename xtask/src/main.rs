@@ -435,6 +435,20 @@ fn include_targets(
         }
         let after = remaining[start + "include_str!(".len()..].trim_start();
         if !after.starts_with('"') {
+            if after.starts_with("concat!(") && after.contains("CARGO_MANIFEST_DIR") {
+                if let Some(relative) = after
+                    .split('"')
+                    .filter(|value| value.starts_with("/"))
+                    .next()
+                {
+                    if let Some(manifest_dir) = source
+                        .ancestors()
+                        .find(|candidate| candidate.join("Cargo.toml").is_file())
+                    {
+                        targets.push(manifest_dir.join(relative.trim_start_matches('/')));
+                    }
+                }
+            }
             remaining = after;
             continue;
         }

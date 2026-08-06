@@ -42,8 +42,9 @@ pub use graph::{
 };
 pub(crate) use labels::application_label;
 pub use labels::{
-    AddTaskLabelsCommand, AddTaskLabelsRecord, CreateBoardLabelCommand, DeleteBoardLabelCommand,
-    DeleteBoardLabelRecord, RemoveTaskLabelCommand,
+    AddTaskLabelsCommand, AddTaskLabelsRecord, BootstrapTaskLabelCommand, BootstrapTaskLabelRecord,
+    CreateBoardLabelCommand, DeleteBoardLabelCommand, DeleteBoardLabelRecord,
+    RemoveTaskLabelCommand,
 };
 pub use relations::{
     RelationDeleteCommand, RelationListOptions, RelationPredicateCommand, RelationUpsertCommand,

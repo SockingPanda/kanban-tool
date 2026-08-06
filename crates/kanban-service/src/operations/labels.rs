@@ -2,7 +2,10 @@ use std::collections::HashSet;
 
 use kanban_core::{Clock, KanbanError, Result, new_event_id, new_typed_id};
 
-use crate::{AddTaskLabelsInput, DeleteBoardLabelInput, KanbanService, LabelRecord, TaskRecord};
+use crate::{
+    AddTaskLabelsInput, BootstrapTaskLabelInput, DeleteBoardLabelInput, KanbanService,
+    LabelAtomRecord, LabelRecord, LabelSemanticsRecord, TaskRecord,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateBoardLabelCommand {
@@ -47,6 +50,24 @@ pub struct DeleteBoardLabelRecord {
     pub removed_task_bindings: i64,
     pub removed_semantics: bool,
     pub removed_atoms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BootstrapTaskLabelCommand {
+    pub task_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub applies_when: Vec<String>,
+    pub excludes_when: Vec<String>,
+    pub positive_examples: Vec<String>,
+    pub negative_examples: Vec<String>,
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BootstrapTaskLabelRecord {
+    pub task: TaskRecord,
+    pub semantics: LabelSemanticsRecord,
 }
 
 impl<C> KanbanService<C>
@@ -193,6 +214,38 @@ where
             removed_atoms: record.removed_atoms,
         })
     }
+
+    pub async fn bootstrap_task_label(
+        &self,
+        command: BootstrapTaskLabelCommand,
+    ) -> Result<BootstrapTaskLabelRecord> {
+        let task_id = global_task_id(&command.task_id)?;
+        let actor = required_trimmed(&command.actor, "actor is required")?;
+        let _mutation = self.mutation_gate.lock().await;
+        let record = self
+            .store
+            .bootstrap_task_label(
+                task_id,
+                BootstrapTaskLabelInput {
+                    label_id: new_typed_id("l"),
+                    event_id: new_event_id(),
+                    name: command.name,
+                    description: command.description,
+                    applies_when: command.applies_when,
+                    excludes_when: command.excludes_when,
+                    positive_examples: command.positive_examples,
+                    negative_examples: command.negative_examples,
+                    actor: actor.to_owned(),
+                    now: self.clock.now_ms(),
+                },
+            )
+            .await
+            .map_err(crate::error::store_error)?;
+        Ok(BootstrapTaskLabelRecord {
+            task: super::application_task(record.task)?,
+            semantics: application_semantics(record.semantics),
+        })
+    }
 }
 
 fn global_task_id(value: &str) -> Result<&str> {
@@ -213,6 +266,39 @@ pub(crate) fn application_label(label: crate::domain::LabelRecord) -> LabelRecor
         color: label.color,
         created_at: label.created_at,
         updated_at: label.updated_at,
+    }
+}
+
+fn application_semantics(value: crate::domain::LabelSemanticsRecord) -> LabelSemanticsRecord {
+    LabelSemanticsRecord {
+        label_id: value.label_id,
+        board_id: value.board_id,
+        label_name: value.label_name,
+        semantics_hash: value.semantics_hash,
+        description: value.description,
+        applies_when: value.applies_when,
+        excludes_when: value.excludes_when,
+        positive_examples: value.positive_examples,
+        negative_examples: value.negative_examples,
+        created_at: value.created_at,
+        updated_at: value.updated_at,
+        atoms: value
+            .atoms
+            .into_iter()
+            .map(|atom| LabelAtomRecord {
+                id: atom.id,
+                label_id: atom.label_id,
+                board_id: atom.board_id,
+                label_name: atom.label_name,
+                polarity: atom.polarity,
+                kind: atom.kind,
+                text: atom.text,
+                ordinal: atom.ordinal,
+                content_hash: atom.content_hash,
+                created_at: atom.created_at,
+                updated_at: atom.updated_at,
+            })
+            .collect(),
     }
 }
 

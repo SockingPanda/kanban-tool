@@ -53,13 +53,13 @@ pub use operations::maintenance::{
 };
 pub use operations::{
     AddTaskLabelsCommand, AddTaskLabelsRecord, ArchiveBoardCommand, ArchiveBoardRecord,
-    ArchiveTaskCommand, BoardTaskMapOptions, ContextBuildOptions, ContextCandidate,
-    ContextDiagnostic, ContextEvidence, ContextItem, ContextPack, ContextPolicy,
-    ContextProviderStatus, ContextSources, CreateAttachmentCommand, CreateAttachmentRecord,
-    CreateBoardCommand, CreateBoardLabelCommand, CreateBoardRecord, DeleteAttachmentCommand,
-    DeleteBoardLabelCommand, DeleteBoardLabelRecord, EntityListOptions, EntityUpsertCommand,
-    EventListOptions, EventListPage, EventRecord, GraphNeighborsOptions, GraphQueryOptions,
-    MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT, MAX_SEARCH_LIMIT,
+    ArchiveTaskCommand, BoardTaskMapOptions, BootstrapTaskLabelCommand, BootstrapTaskLabelRecord,
+    ContextBuildOptions, ContextCandidate, ContextDiagnostic, ContextEvidence, ContextItem,
+    ContextPack, ContextPolicy, ContextProviderStatus, ContextSources, CreateAttachmentCommand,
+    CreateAttachmentRecord, CreateBoardCommand, CreateBoardLabelCommand, CreateBoardRecord,
+    DeleteAttachmentCommand, DeleteBoardLabelCommand, DeleteBoardLabelRecord, EntityListOptions,
+    EntityUpsertCommand, EventListOptions, EventListPage, EventRecord, GraphNeighborsOptions,
+    GraphQueryOptions, MAX_CONTEXT_BUDGET, MAX_CONTEXT_DEPTH, MAX_CONTEXT_LIMIT, MAX_SEARCH_LIMIT,
     ProjectionStatusOptions, RUN_LOG_TAIL_BYTES, ReclaimTaskCommand, RelationDeleteCommand,
     RelationListOptions, RelationPredicateCommand, RelationUpsertCommand, RemoveTaskLabelCommand,
     ReopenTaskCommand, RunLogRecord, SearchHit, SearchIndexStatus, SearchMeta, SearchQuery,
@@ -78,12 +78,12 @@ pub(crate) use error::StoreError;
 // 输入在 service 边界显式使用别名。与 application DTO 重名的 record 和 option
 // 保持在 `store_operations` 内部。
 pub(crate) use store_operations::{
-    AddTaskLabelsInput, ArchiveBoardInput, CreateAttachmentInput, CreateBoardInput,
-    CreateCommentInput, CreateLabelInput, DeleteBoardLabelInput, EntityUpsertInput,
-    LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions, OntologyActionInput,
-    OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput, OntologyValidateInput,
-    RelationDeleteInput, RelationPredicateInput, RelationUpsertInput, RemoveTaskLabelInput,
-    UpsertLabelSemanticsInput,
+    AddTaskLabelsInput, ArchiveBoardInput, BootstrapTaskLabelInput, CreateAttachmentInput,
+    CreateBoardInput, CreateCommentInput, CreateLabelInput, DeleteBoardLabelInput,
+    EntityUpsertInput, LabelProposalDecisionInput, LabelProposalInput, LabelSuggestionOptions,
+    OntologyActionInput, OntologyApplyAtomInput, OntologyObservationInput, OntologyRevertInput,
+    OntologyValidateInput, RelationDeleteInput, RelationPredicateInput, RelationUpsertInput,
+    RemoveTaskLabelInput, UpsertLabelSemanticsInput,
 };
 
 #[cfg(feature = "legacy-sqlite-import")]

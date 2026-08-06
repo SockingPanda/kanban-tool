@@ -2392,7 +2392,7 @@ fn fnv_hash(value: &str) -> String {
     }
     format!("{hash:016x}")
 }
-fn semantics_hash(
+pub(crate) fn semantics_hash(
     label_id: &str,
     label_name: &str,
     description: &Option<String>,
@@ -2403,7 +2403,7 @@ fn semantics_hash(
 ) -> String {
     fnv_hash(&json!({"label_id":label_id,"label_name":label_name,"description":description,"applies_when":applies,"excludes_when":excludes,"positive_examples":positive,"negative_examples":negative}).to_string())
 }
-fn semantics_snapshot_json(
+pub(crate) fn semantics_snapshot_json(
     current: Option<&LabelSemanticsRecord>,
     label_id: &str,
     label_name: &str,
@@ -2411,19 +2411,19 @@ fn semantics_snapshot_json(
 ) -> JsonValue {
     current.map(|v|json!({"label_id":v.label_id,"label_name":v.label_name,"description":v.description,"applies_when":v.applies_when,"excludes_when":v.excludes_when,"positive_examples":v.positive_examples,"negative_examples":v.negative_examples,"semantics_hash":hash})).unwrap_or_else(||json!({"label_id":label_id,"label_name":label_name,"description":null,"applies_when":[],"excludes_when":[],"positive_examples":[],"negative_examples":[],"semantics_hash":hash}))
 }
-struct AtomBuildInput<'a> {
-    label_id: &'a str,
-    board_id: &'a str,
-    label_name: &'a str,
-    description: &'a Option<String>,
-    applies: &'a [String],
-    excludes: &'a [String],
-    positive: &'a [String],
-    negative: &'a [String],
-    now: i64,
+pub(crate) struct AtomBuildInput<'a> {
+    pub(crate) label_id: &'a str,
+    pub(crate) board_id: &'a str,
+    pub(crate) label_name: &'a str,
+    pub(crate) description: &'a Option<String>,
+    pub(crate) applies: &'a [String],
+    pub(crate) excludes: &'a [String],
+    pub(crate) positive: &'a [String],
+    pub(crate) negative: &'a [String],
+    pub(crate) now: i64,
 }
 
-fn build_atoms(input: AtomBuildInput<'_>) -> Vec<LabelAtomRecord> {
+pub(crate) fn build_atoms(input: AtomBuildInput<'_>) -> Vec<LabelAtomRecord> {
     let AtomBuildInput {
         label_id,
         board_id,
@@ -2594,7 +2594,7 @@ fn review_group(
     }
 }
 
-async fn mark_index_dirty(
+pub(crate) async fn mark_index_dirty(
     transaction: &turso::transaction::Transaction<'_>,
     board_id: &str,
     now: i64,
@@ -2603,27 +2603,27 @@ async fn mark_index_dirty(
     Ok(())
 }
 
-struct ActionInsertInput<'a> {
-    board_id: &'a str,
-    action_type: &'a str,
-    reason: &'a str,
-    signal_ids: &'a [String],
-    target_label_id: Option<&'a str>,
-    result_label_id: Option<&'a str>,
-    result_atom_id: Option<&'a str>,
-    result_atom_content_hash: Option<&'a str>,
-    result_proposal_id: Option<&'a str>,
-    before_hash: Option<&'a str>,
-    after_hash: Option<&'a str>,
-    change_json: &'a JsonValue,
-    validation_status: &'a str,
-    validation_json: &'a str,
-    now: i64,
-    created_by: &'a str,
-    agent_type: Option<&'a str>,
+pub(crate) struct ActionInsertInput<'a> {
+    pub(crate) board_id: &'a str,
+    pub(crate) action_type: &'a str,
+    pub(crate) reason: &'a str,
+    pub(crate) signal_ids: &'a [String],
+    pub(crate) target_label_id: Option<&'a str>,
+    pub(crate) result_label_id: Option<&'a str>,
+    pub(crate) result_atom_id: Option<&'a str>,
+    pub(crate) result_atom_content_hash: Option<&'a str>,
+    pub(crate) result_proposal_id: Option<&'a str>,
+    pub(crate) before_hash: Option<&'a str>,
+    pub(crate) after_hash: Option<&'a str>,
+    pub(crate) change_json: &'a JsonValue,
+    pub(crate) validation_status: &'a str,
+    pub(crate) validation_json: &'a str,
+    pub(crate) now: i64,
+    pub(crate) created_by: &'a str,
+    pub(crate) agent_type: Option<&'a str>,
 }
 
-async fn insert_action(
+pub(crate) async fn insert_action(
     transaction: &turso::transaction::Transaction<'_>,
     input: ActionInsertInput<'_>,
 ) -> Result<String, StoreError> {
@@ -2659,7 +2659,7 @@ async fn insert_action(
     Ok(action_id)
 }
 
-async fn insert_atom_effect(
+pub(crate) async fn insert_atom_effect(
     transaction: &turso::transaction::Transaction<'_>,
     board_id: &str,
     action_id: &str,

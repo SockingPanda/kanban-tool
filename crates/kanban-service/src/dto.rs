@@ -31,6 +31,46 @@ pub struct LabelRecord {
     pub updated_at: i64,
 }
 
+/// 标签 semantics 的 application record。
+///
+/// 该 DTO 只暴露 canonical service 结果；store/domain row 不穿过 host 边界。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LabelSemanticsRecord {
+    pub label_id: String,
+    pub board_id: String,
+    pub label_name: String,
+    pub semantics_hash: String,
+    pub description: Option<String>,
+    pub applies_when: Vec<String>,
+    pub excludes_when: Vec<String>,
+    pub positive_examples: Vec<String>,
+    pub negative_examples: Vec<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub atoms: Vec<LabelAtomRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelAtomRecord {
+    pub id: String,
+    pub label_id: String,
+    pub board_id: String,
+    pub label_name: String,
+    pub polarity: String,
+    pub kind: String,
+    pub text: String,
+    pub ordinal: i64,
+    pub content_hash: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BootstrapTaskLabelRecord {
+    pub task: TaskRecord,
+    pub semantics: LabelSemanticsRecord,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionPlanState {

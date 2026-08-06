@@ -2,6 +2,12 @@ use turso::transaction::TransactionBehavior;
 use turso::{Connection, Row, transaction::Transaction};
 
 use crate::{db::TursoStore, domain::*, error::StoreError, shared::*};
+use serde_json::json;
+
+use super::ontology::{
+    ActionInsertInput, AtomBuildInput, build_atoms, insert_action, insert_atom_effect,
+    mark_index_dirty, semantics_hash, semantics_snapshot_json,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateLabelInput {
@@ -53,7 +59,238 @@ pub(crate) struct DeleteBoardLabelRecord {
     pub removed_atoms: i64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct BootstrapTaskLabelInput {
+    pub label_id: String,
+    pub event_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub applies_when: Vec<String>,
+    pub excludes_when: Vec<String>,
+    pub positive_examples: Vec<String>,
+    pub negative_examples: Vec<String>,
+    pub actor: String,
+    pub now: i64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct BootstrapTaskLabelStoreRecord {
+    pub task: TaskRecord,
+    pub semantics: LabelSemanticsRecord,
+}
+
 impl TursoStore {
+    /// 在一个立即事务中创建/复用 label、写入首个 semantics、记录 ontology action，
+    /// 并将 label 幂等地挂到任务上。
+    pub(crate) async fn bootstrap_task_label(
+        &self,
+        task_id: &str,
+        input: BootstrapTaskLabelInput,
+    ) -> Result<BootstrapTaskLabelStoreRecord, StoreError> {
+        validate_task_id(task_id)?;
+        validate_bootstrap_task_label_input(&input)?;
+        let mut connection = self.connection().await?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+        let board_id = active_task_board_id_in_transaction(&transaction, task_id).await?;
+        let name = input.name.trim();
+        let label = match label_by_name_in_transaction(&transaction, &board_id, name).await? {
+            Some(label) => {
+                let row = first_row(
+                    transaction
+                        .query(
+                            "SELECT COUNT(*) FROM label_semantics WHERE board_id=:board AND label_id=:label",
+                            [
+                                (":board", board_id.as_str()),
+                                (":label", label.id.as_str()),
+                            ],
+                        )
+                        .await?,
+                )
+                .await?;
+                if integer_value(row.get_value(0)?, "label semantics count")? > 0 {
+                    return Err(StoreError::InvalidInput(format!(
+                        "label bootstrap would replace existing semantics for label {}; use a dedicated semantics mutation or proposal adoption path",
+                        label.name
+                    )));
+                }
+                label
+            }
+            None => {
+                transaction
+                    .execute(
+                        "INSERT INTO labels(id, board_id, name, color, created_at, updated_at) VALUES (:id, :board, :name, NULL, :now, :now)",
+                        turso::named_params! {
+                            ":id": input.label_id.as_str(),
+                            ":board": board_id.as_str(),
+                            ":name": name,
+                            ":now": input.now,
+                        },
+                    )
+                    .await?;
+                label_by_id_in_transaction(&transaction, &board_id, &input.label_id)
+                    .await?
+                    .ok_or_else(|| StoreError::LabelNotFound(input.label_id.clone()))?
+            }
+        };
+        let description = input
+            .description
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        let applies_when = normalize_bootstrap_list(&input.applies_when);
+        let excludes_when = normalize_bootstrap_list(&input.excludes_when);
+        let positive_examples = normalize_bootstrap_list(&input.positive_examples);
+        let negative_examples = normalize_bootstrap_list(&input.negative_examples);
+        let atoms = build_atoms(AtomBuildInput {
+            label_id: &label.id,
+            board_id: &board_id,
+            label_name: &label.name,
+            description: &description,
+            applies: &applies_when,
+            excludes: &excludes_when,
+            positive: &positive_examples,
+            negative: &negative_examples,
+            now: input.now,
+        });
+        let after_hash = semantics_hash(
+            &label.id,
+            &label.name,
+            &description,
+            &applies_when,
+            &excludes_when,
+            &positive_examples,
+            &negative_examples,
+        );
+        transaction
+            .execute(
+                "INSERT INTO label_semantics(label_id,board_id,description,applies_when,excludes_when,positive_examples,negative_examples,created_at,updated_at) VALUES (:label,:board,:description,:applies,:excludes,:positive,:negative,:now,:now)",
+                turso::named_params! {
+                    ":label": label.id.as_str(),
+                    ":board": board_id.as_str(),
+                    ":description": description.as_deref(),
+                    ":applies": serde_json::to_string(&applies_when).unwrap_or_else(|_| "[]".to_owned()).as_str(),
+                    ":excludes": serde_json::to_string(&excludes_when).unwrap_or_else(|_| "[]".to_owned()).as_str(),
+                    ":positive": serde_json::to_string(&positive_examples).unwrap_or_else(|_| "[]".to_owned()).as_str(),
+                    ":negative": serde_json::to_string(&negative_examples).unwrap_or_else(|_| "[]".to_owned()).as_str(),
+                    ":now": input.now,
+                },
+            )
+            .await?;
+        for atom in &atoms {
+            transaction
+                .execute(
+                    "INSERT INTO label_atoms(id,label_id,board_id,polarity,kind,text,ordinal,content_hash,created_at,updated_at) VALUES (:id,:label,:board,:polarity,:kind,:text,:ordinal,:hash,:created,:updated)",
+                    turso::named_params! {
+                        ":id": atom.id.as_str(),
+                        ":label": atom.label_id.as_str(),
+                        ":board": atom.board_id.as_str(),
+                        ":polarity": atom.polarity.as_str(),
+                        ":kind": atom.kind.as_str(),
+                        ":text": atom.text.as_str(),
+                        ":ordinal": atom.ordinal,
+                        ":hash": atom.content_hash.as_str(),
+                        ":created": atom.created_at,
+                        ":updated": atom.updated_at,
+                    },
+                )
+                .await?;
+        }
+        mark_index_dirty(&transaction, &board_id, input.now).await?;
+        let action_id = insert_action(
+            &transaction,
+            ActionInsertInput {
+                board_id: &board_id,
+                action_type: "bootstrap_label",
+                reason: "direct label bootstrap",
+                signal_ids: &[],
+                target_label_id: None,
+                result_label_id: Some(&label.id),
+                result_atom_id: None,
+                result_atom_content_hash: None,
+                result_proposal_id: None,
+                before_hash: None,
+                after_hash: Some(&after_hash),
+                change_json: &json!({
+                    "before": semantics_snapshot_json(None, &label.id, &label.name, ""),
+                    "after": {
+                        "label_id": label.id,
+                        "label_name": label.name,
+                        "description": description,
+                        "applies_when": applies_when,
+                        "excludes_when": excludes_when,
+                        "positive_examples": positive_examples,
+                        "negative_examples": negative_examples,
+                        "semantics_hash": after_hash,
+                    },
+                }),
+                validation_status: "not_required",
+                validation_json: "{}",
+                now: input.now,
+                created_by: &input.actor,
+                agent_type: None,
+            },
+        )
+        .await?;
+        for atom in &atoms {
+            insert_atom_effect(
+                &transaction,
+                &board_id,
+                &action_id,
+                atom,
+                "added",
+                input.now,
+            )
+            .await?;
+        }
+        transaction
+            .execute(
+                "INSERT INTO task_events(event_id,board_id,task_id,run_id,kind,actor,payload_json,created_at) VALUES (:event,:board,:task,NULL,'label.semantics.updated',:actor,:payload,:now)",
+                turso::named_params! {
+                    ":event": format!("e_ontology_semantics_{}", action_id.trim_start_matches("loa_")),
+                    ":board": board_id.as_str(),
+                    ":task": Option::<&str>::None,
+                    ":actor": input.actor.as_str(),
+                    ":payload": json!({"label_id": label.id, "action_id": action_id, "semantics_hash": after_hash}).to_string(),
+                    ":now": input.now,
+                },
+            )
+            .await?;
+        let changed = transaction
+            .execute(
+                "INSERT INTO task_labels(board_id,task_id,label_id,created_at) VALUES (:board,:task,:label,:now) ON CONFLICT(task_id,label_id) DO NOTHING",
+                turso::named_params! {
+                    ":board": board_id.as_str(),
+                    ":task": task_id,
+                    ":label": label.id.as_str(),
+                    ":now": input.now,
+                },
+            )
+            .await?;
+        if changed > 0 {
+            transaction
+                .execute(
+                    "INSERT INTO task_events(event_id,board_id,task_id,run_id,kind,actor,payload_json,created_at) VALUES (:event,:board,:task,NULL,'task.label.added',:actor,:payload,:now)",
+                    turso::named_params! {
+                        ":event": input.event_id.as_str(),
+                        ":board": board_id.as_str(),
+                        ":task": task_id,
+                        ":actor": input.actor.as_str(),
+                        ":payload": json!({"label_id": label.id, "label": label.name}).to_string(),
+                        ":now": input.now,
+                    },
+                )
+                .await?;
+        }
+        let mut task = task_in_transaction(&transaction, task_id).await?;
+        task.labels = list_task_labels_in_transaction(&transaction, &board_id, task_id).await?;
+        transaction.commit().await?;
+        let semantics = self.get_label_semantics(&board_id, &label.id).await?;
+        Ok(BootstrapTaskLabelStoreRecord { task, semantics })
+    }
+
     pub async fn list_board_labels(
         &self,
         board_selector: &str,
@@ -398,6 +635,48 @@ fn validate_delete_board_label_input(input: &DeleteBoardLabelInput) -> Result<()
         ));
     }
     Ok(())
+}
+
+fn validate_bootstrap_task_label_input(input: &BootstrapTaskLabelInput) -> Result<(), StoreError> {
+    if input.label_id.trim().is_empty() || !input.label_id.trim().starts_with("l_") {
+        return Err(StoreError::InvalidInput(
+            "label id must start with l_".to_owned(),
+        ));
+    }
+    if input.name.trim().is_empty() {
+        return Err(StoreError::InvalidInput(
+            "label name is required".to_owned(),
+        ));
+    }
+    if input.actor.trim().is_empty() {
+        return Err(StoreError::InvalidInput("actor is required".to_owned()));
+    }
+    if input
+        .description
+        .as_deref()
+        .map(str::trim)
+        .is_none_or(str::is_empty)
+        && input
+            .applies_when
+            .iter()
+            .chain(&input.excludes_when)
+            .chain(&input.positive_examples)
+            .chain(&input.negative_examples)
+            .all(|value| value.trim().is_empty())
+    {
+        return Err(StoreError::InvalidInput(
+            "label bootstrap requires description or semantic examples".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn normalize_bootstrap_list(values: &[String]) -> Vec<String> {
+    values
+        .iter()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .collect()
 }
 
 async fn count_label_references(
@@ -1006,6 +1285,89 @@ mod tests {
         assert_eq!(
             store.list_board_labels("default").await.unwrap(),
             vec![default_label]
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_writes_semantics_action_and_idempotent_task_binding() {
+        let (_directory, store, _path) = store("labels-bootstrap").await;
+        store.initialize().await.expect("initialize");
+        store
+            .create_task(
+                "default",
+                create_input("t_labels_bootstrap", Some("labels-bootstrap"), "Bootstrap"),
+            )
+            .await
+            .expect("create task");
+
+        let result = store
+            .bootstrap_task_label(
+                "t_labels_bootstrap",
+                BootstrapTaskLabelInput {
+                    label_id: "l_bootstrap".to_owned(),
+                    event_id: "evt-bootstrap-label".to_owned(),
+                    name: "  backend  ".to_owned(),
+                    description: Some(" Backend implementation ".to_owned()),
+                    applies_when: vec![" touches Rust ".to_owned()],
+                    excludes_when: vec!["  ".to_owned()],
+                    positive_examples: Vec::new(),
+                    negative_examples: vec![" tests fail ".to_owned()],
+                    actor: "label-test".to_owned(),
+                    now: 100,
+                },
+            )
+            .await
+            .expect("bootstrap label");
+        assert_eq!(result.task.labels.len(), 1);
+        assert_eq!(result.task.labels[0].name, "backend");
+        assert_eq!(result.semantics.label_name, "backend");
+        assert_eq!(
+            result.semantics.applies_when,
+            vec!["touches Rust".to_owned()]
+        );
+        assert_eq!(
+            result.semantics.negative_examples,
+            vec!["tests fail".to_owned()]
+        );
+        assert!(!result.semantics.atoms.is_empty());
+
+        let connection = store.connection().await.expect("connection");
+        let row = first_row(
+            connection
+                .query(
+                    "SELECT kind, COUNT(*) FROM task_events WHERE task_id = 't_labels_bootstrap' AND kind = 'task.label.added' GROUP BY kind",
+                    (),
+                )
+                .await
+                .expect("event count query"),
+        )
+        .await
+        .expect("event row");
+        assert_eq!(
+            text_value(row.get_value(0).unwrap(), "event kind").unwrap(),
+            "task.label.added"
+        );
+
+        let replacement = store
+            .bootstrap_task_label(
+                "t_labels_bootstrap",
+                BootstrapTaskLabelInput {
+                    label_id: "l_bootstrap_2".to_owned(),
+                    event_id: "evt-bootstrap-label-2".to_owned(),
+                    name: "backend".to_owned(),
+                    description: Some("replacement".to_owned()),
+                    applies_when: Vec::new(),
+                    excludes_when: Vec::new(),
+                    positive_examples: Vec::new(),
+                    negative_examples: Vec::new(),
+                    actor: "label-test".to_owned(),
+                    now: 101,
+                },
+            )
+            .await
+            .expect_err("bootstrap must not replace existing semantics");
+        assert!(
+            matches!(replacement, StoreError::InvalidInput(message) if message.contains("would replace existing semantics"))
         );
     }
 }

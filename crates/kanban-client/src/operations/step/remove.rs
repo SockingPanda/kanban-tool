@@ -8,12 +8,12 @@ impl KanbanClient {
         let step_id = step_id.trim();
         if !task_id.starts_with("t_") || task_id.len() <= 2 {
             return Err(ClientError::InvalidInput(
-                "task selector 必须解析为全局 t_... ID".to_owned(),
+                "任务选择器必须解析为全局 t_... ID".to_owned(),
             ));
         }
         if !step_id.starts_with("step_") || step_id.len() <= 5 {
             return Err(ClientError::InvalidInput(
-                "step selector 必须解析为全局 step_... ID".to_owned(),
+                "步骤选择器必须解析为全局 step_... ID".to_owned(),
             ));
         }
         let response: RemoveStepResponse = self.delete(&format!(

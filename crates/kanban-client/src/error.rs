@@ -3,11 +3,11 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ClientError {
-    #[error("invalid input: {0}")]
+    #[error("输入无效：{0}")]
     InvalidInput(String),
-    #[error("invalid server URL: {0}")]
+    #[error("服务端 URL 无效：{0}")]
     InvalidServerUrl(String),
-    #[error("server unavailable：请检查 server URL，并确认已运行 `kanban serve`：{0}")]
+    #[error("服务端不可用：请检查服务端 URL，并确认已运行 `kanban serve`：{0}")]
     ServerUnavailable(String),
     #[error("{code:?}: {message}")]
     Api {
@@ -15,7 +15,7 @@ pub enum ClientError {
         code: ApiErrorCode,
         message: String,
     },
-    #[error("invalid server response: {0}")]
+    #[error("服务端响应无效：{0}")]
     InvalidResponse(String),
 }
 
@@ -61,8 +61,8 @@ mod tests {
         let message = error.to_string();
 
         assert_eq!(error.code(), "server_unavailable");
-        assert!(message.contains("server unavailable"));
-        assert!(message.contains("server URL"));
+        assert!(message.contains("服务端不可用"));
+        assert!(message.contains("服务端 URL"));
         assert!(message.contains("kanban serve"));
         assert!(message.contains("http://127.0.0.1:8721"));
     }

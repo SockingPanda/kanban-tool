@@ -79,7 +79,7 @@ fn require_task_id(value: &str) -> Result<&str, ClientError> {
     let value = value.trim();
     if !value.starts_with("t_") || value.len() <= 2 {
         return Err(ClientError::InvalidInput(
-            "task selector must resolve to a global t_... id".to_owned(),
+            "任务选择器必须解析为全局 t_... ID".to_owned(),
         ));
     }
     Ok(value)
@@ -94,7 +94,7 @@ fn require_attachment_id(value: &str) -> Result<&str, ClientError> {
         || value == ".."
     {
         return Err(ClientError::InvalidInput(
-            "attachment id must start with a_".to_owned(),
+            "附件 ID 必须以 a_ 开头".to_owned(),
         ));
     }
     Ok(value)

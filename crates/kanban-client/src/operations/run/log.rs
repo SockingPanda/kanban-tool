@@ -13,7 +13,7 @@ fn run_log_path(run_id: &str) -> Result<String, ClientError> {
     let run_id = run_id.trim();
     if !run_id.starts_with("r_") || run_id.len() <= 2 {
         return Err(ClientError::InvalidInput(
-            "run id must be a global r_... id".to_owned(),
+            "运行记录 ID 必须是全局 r_... ID".to_owned(),
         ));
     }
     Ok(format!("/api/v1/runs/{}/log", encode_path_segment(run_id)))

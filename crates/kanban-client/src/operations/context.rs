@@ -3,7 +3,7 @@ use kanban_protocol::{BuildContextPath, BuildContextQuery, BuildContextResponse}
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 
 impl KanbanClient {
-    /// Build a read-only context pack through the canonical host.
+    /// 通过 canonical host 构建只读上下文包。
     pub fn build_context(
         &self,
         task_id: &str,

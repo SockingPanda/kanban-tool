@@ -1,4 +1,4 @@
-//! Thin synchronous client for the canonical localhost kanban host.
+//! 面向 canonical localhost kanban host 的轻量同步客户端。
 
 mod client;
 mod error;

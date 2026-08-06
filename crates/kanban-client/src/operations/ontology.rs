@@ -1,4 +1,4 @@
-//! Typed localhost client for the label semantics and ontology surfaces.
+//! 面向 label semantics 与 ontology surface 的 typed localhost 客户端。
 
 use serde_json::{Value, json};
 
@@ -8,7 +8,7 @@ fn data<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, ClientError> 
     value
         .get("data")
         .cloned()
-        .ok_or_else(|| ClientError::InvalidResponse("response is missing data".to_owned()))
+        .ok_or_else(|| ClientError::InvalidResponse("响应缺少 data".to_owned()))
         .and_then(|value| {
             serde_json::from_value(value)
                 .map_err(|error| ClientError::InvalidResponse(error.to_string()))

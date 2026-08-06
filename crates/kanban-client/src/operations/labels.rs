@@ -94,7 +94,7 @@ impl KanbanClient {
         let task_id = require_task_id(task_id)?;
         let label_id = label_id.trim();
         if label_id.is_empty() {
-            return Err(ClientError::InvalidInput("label id is required".to_owned()));
+            return Err(ClientError::InvalidInput("必须提供 label ID".to_owned()));
         }
         let response: RemoveTaskLabelResponse = self.delete(&format!(
             "/api/v1/tasks/{}/labels/{}",
@@ -119,7 +119,7 @@ fn require_task_id(task_id: &str) -> Result<&str, ClientError> {
     let task_id = task_id.trim();
     if !task_id.starts_with("t_") || task_id.len() <= 2 {
         return Err(ClientError::InvalidInput(
-            "task selector must resolve to a global t_... id".to_owned(),
+            "任务选择器必须解析为全局 t_... ID".to_owned(),
         ));
     }
     Ok(task_id)

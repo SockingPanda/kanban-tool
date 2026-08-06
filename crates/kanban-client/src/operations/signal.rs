@@ -102,7 +102,7 @@ impl KanbanClient {
 fn required_board(board: &str) -> Result<&str, ClientError> {
     let board = board.trim();
     if board.is_empty() {
-        return Err(ClientError::InvalidInput("board is required".to_owned()));
+        return Err(ClientError::InvalidInput("必须提供 board".to_owned()));
     }
     Ok(board)
 }
@@ -111,7 +111,7 @@ fn required_signal_id(signal_id: &str) -> Result<&str, ClientError> {
     let signal_id = signal_id.trim();
     if !signal_id.starts_with("sig_") || signal_id.len() <= 4 {
         return Err(ClientError::InvalidInput(
-            "signal id must be a global sig_... id".to_owned(),
+            "signal ID 必须是全局 sig_... ID".to_owned(),
         ));
     }
     Ok(signal_id)

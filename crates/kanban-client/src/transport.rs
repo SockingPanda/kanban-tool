@@ -115,9 +115,7 @@ where
             .map_err(|error| ClientError::InvalidResponse(error.to_string())),
         Err(ureq::Error::Status(status, response)) => {
             let envelope = response.into_json::<ErrorEnvelope>().map_err(|error| {
-                ClientError::InvalidResponse(format!(
-                    "HTTP {status} did not contain the error envelope: {error}"
-                ))
+                ClientError::InvalidResponse(format!("HTTP {status} 未包含错误 envelope：{error}"))
             })?;
             Err(ClientError::Api {
                 status,
@@ -177,9 +175,7 @@ fn decode_bytes_response(
         }
         Err(ureq::Error::Status(status, response)) => {
             let envelope = response.into_json::<ErrorEnvelope>().map_err(|error| {
-                ClientError::InvalidResponse(format!(
-                    "HTTP {status} did not contain the error envelope: {error}"
-                ))
+                ClientError::InvalidResponse(format!("HTTP {status} 未包含错误 envelope：{error}"))
             })?;
             Err(ClientError::Api {
                 status,

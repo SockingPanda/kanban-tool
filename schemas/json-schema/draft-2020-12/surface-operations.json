@@ -6,7 +6,6 @@
     ],
     "exclusion": null,
     "key": "GET /health",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -17,7 +16,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -28,7 +26,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -39,7 +36,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -51,7 +47,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/archive",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -62,7 +57,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/columns",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -73,7 +67,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -85,7 +78,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/label-proposals",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -97,7 +89,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/labels",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -110,7 +101,6 @@
     ],
     "exclusion": null,
     "key": "DELETE /api/v1/boards/:board/labels/:label_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -121,7 +111,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/semantics",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -132,7 +121,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/:label_id/semantics",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -144,7 +132,6 @@
     ],
     "exclusion": null,
     "key": "PUT /api/v1/boards/:board/labels/:label_id/semantics",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -156,7 +143,6 @@
     ],
     "exclusion": null,
     "key": "DELETE /api/v1/boards/:board/labels/:label_id/semantics",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -167,7 +153,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/atoms",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -178,7 +163,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/atoms/:atom_ref/explain",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -189,7 +173,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/atom-index/status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -200,7 +183,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/labels/atom-index/rebuild",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -212,7 +194,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/atom-index/query",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -225,7 +206,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/tasks",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -238,7 +218,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/tasks/by-status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -250,7 +229,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/tasks",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -262,7 +240,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/signals",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -274,7 +251,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/signals/review",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -285,7 +261,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/signals/:signal_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -297,7 +272,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/signals",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -309,7 +283,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/signals/confirm",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -321,7 +294,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/signals/reject",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -333,7 +305,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/signals/resolve",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -345,7 +316,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/signals/supersede",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -357,7 +327,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/task-map",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -369,7 +338,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -381,7 +349,6 @@
     ],
     "exclusion": null,
     "key": "PATCH /api/v1/tasks/:task_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -393,7 +360,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/neighborhood",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -405,7 +371,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/labels",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -418,7 +383,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/labels",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -431,7 +395,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -443,7 +406,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/labels/suggestions",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -454,7 +416,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/label-proposals",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -467,7 +428,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/label-proposals",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -479,7 +439,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/label-ontology/observations",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -491,7 +450,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/label-ontology/signals",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -503,7 +461,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/label-ontology/review",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -515,7 +472,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/label-ontology/actions",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -527,7 +483,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/label-ontology/apply/atom",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -539,7 +494,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/label-ontology/revert",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -551,7 +505,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/label-ontology/validate",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -562,7 +515,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/label-ontology/signals/:signal_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -573,7 +525,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/label-proposals/:proposal_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -585,7 +536,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/label-proposals/:proposal_id/accept",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -597,7 +547,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/label-proposals/:proposal_id/reject",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -609,7 +558,6 @@
     ],
     "exclusion": null,
     "key": "DELETE /api/v1/tasks/:task_id/labels/:label_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -621,7 +569,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/specify",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -633,7 +580,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/promote",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -645,7 +591,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/claim",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -657,7 +602,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/reopen",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -669,7 +613,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/reclaim",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -681,7 +624,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/heartbeat",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -693,7 +635,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/release",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -705,7 +646,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/complete",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -717,7 +657,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/submit-review",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -729,7 +668,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/block",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -741,7 +679,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/unblock",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -753,7 +690,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/archive",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -764,7 +700,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/dependencies",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -776,7 +711,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/dependencies",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -787,7 +721,6 @@
     ],
     "exclusion": null,
     "key": "DELETE /api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -798,7 +731,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/steps",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -810,7 +742,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/steps",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -822,7 +753,6 @@
     ],
     "exclusion": null,
     "key": "PATCH /api/v1/tasks/:task_id/steps/:step_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -833,7 +763,6 @@
     ],
     "exclusion": null,
     "key": "DELETE /api/v1/tasks/:task_id/steps/:step_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -845,7 +774,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/steps/:step_id/done",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -857,7 +785,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/steps/:step_id/skip",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -869,7 +796,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/steps/:step_id/reopen",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -881,7 +807,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/execution-plan/not-required",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -893,7 +818,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/runs",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -905,7 +829,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/runs/:run_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -916,7 +839,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/runs/:run_id/log",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -928,7 +850,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/comments",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -941,7 +862,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/comments",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -952,7 +872,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/attachments",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -964,7 +883,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/attachments",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -975,7 +893,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -986,7 +903,6 @@
     ],
     "exclusion": null,
     "key": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -997,7 +913,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/stats",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1008,7 +923,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/search/tasks",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1019,7 +933,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/search/tasks/by-status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1030,7 +943,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/search/status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1041,7 +953,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/search/index/rebuild",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1052,7 +963,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/search/index/sync",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1064,7 +974,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/context",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1075,7 +984,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/graph/status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1086,7 +994,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/graph/neighbors",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1097,7 +1004,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/graph/query",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1108,7 +1014,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/graph/rebuild",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1119,7 +1024,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/graph/sync",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1130,7 +1034,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/entities",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1141,7 +1044,6 @@
     ],
     "exclusion": null,
     "key": "PUT /api/v1/entities",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1152,7 +1054,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/entities/:uri",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1163,7 +1064,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/vector/status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1174,7 +1074,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/vector/configure",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1185,7 +1084,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/vector/rebuild",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1196,7 +1094,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/vector/sync",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1207,7 +1104,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/vector/query-chunks",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1218,7 +1114,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/vector/query-label-atoms",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1229,7 +1124,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/events",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1239,7 +1133,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/stream/events",
-    "migration": "adopted",
     "surface": "sse"
   },
   {
@@ -1249,7 +1142,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/maintenance/doctor",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1259,7 +1151,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/checkpoint",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1270,7 +1161,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/backup",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1281,7 +1171,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/export",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1292,7 +1181,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/import",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1302,7 +1190,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/vacuum",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1312,7 +1199,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/maintenance/status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1323,7 +1209,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/run",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1334,7 +1219,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/rebuild",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1345,7 +1229,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/cleanup",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1356,7 +1239,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/import-v30",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -1365,7 +1247,6 @@
     ],
     "exclusion": null,
     "key": "board list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1374,7 +1255,6 @@
     ],
     "exclusion": null,
     "key": "board create",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1383,7 +1263,6 @@
     ],
     "exclusion": null,
     "key": "board show",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1392,7 +1271,6 @@
     ],
     "exclusion": null,
     "key": "board archive",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1401,7 +1279,6 @@
     ],
     "exclusion": null,
     "key": "board columns",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1411,7 +1288,6 @@
     ],
     "exclusion": null,
     "key": "type=board",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1421,7 +1297,6 @@
     ],
     "exclusion": null,
     "key": "type=column",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1431,7 +1306,6 @@
     ],
     "exclusion": null,
     "key": "type=task",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1441,7 +1315,6 @@
     ],
     "exclusion": null,
     "key": "type=dependency",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1451,7 +1324,6 @@
     ],
     "exclusion": null,
     "key": "type=run",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1461,7 +1333,6 @@
     ],
     "exclusion": null,
     "key": "type=comment",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1471,7 +1342,6 @@
     ],
     "exclusion": null,
     "key": "type=signal_observation",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1481,7 +1351,6 @@
     ],
     "exclusion": null,
     "key": "type=signal",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1491,7 +1360,6 @@
     ],
     "exclusion": null,
     "key": "type=event",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1501,7 +1369,6 @@
     ],
     "exclusion": null,
     "key": "type=attachment",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1511,7 +1378,6 @@
     ],
     "exclusion": null,
     "key": "type=label",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1521,7 +1387,6 @@
     ],
     "exclusion": null,
     "key": "type=label_semantics",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1531,7 +1396,6 @@
     ],
     "exclusion": null,
     "key": "type=label_atom",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1541,7 +1405,6 @@
     ],
     "exclusion": null,
     "key": "type=label_semantic_proposal",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1551,7 +1414,6 @@
     ],
     "exclusion": null,
     "key": "type=label_ontology_observation",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1561,7 +1423,6 @@
     ],
     "exclusion": null,
     "key": "type=label_ontology_signal",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1571,7 +1432,6 @@
     ],
     "exclusion": null,
     "key": "type=label_ontology_action",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1581,7 +1441,6 @@
     ],
     "exclusion": null,
     "key": "type=label_ontology_action_atom_effect",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1591,7 +1450,6 @@
     ],
     "exclusion": null,
     "key": "type=label_ontology_action_signal",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1601,7 +1459,6 @@
     ],
     "exclusion": null,
     "key": "type=task_label",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1611,7 +1468,6 @@
     ],
     "exclusion": null,
     "key": "type=setting",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -1620,7 +1476,6 @@
     ],
     "exclusion": null,
     "key": "structured decision comment metadata input",
-    "migration": "adopted",
     "surface": "metadata"
   },
   {
@@ -1629,7 +1484,6 @@
     ],
     "exclusion": null,
     "key": "generic signal record input",
-    "migration": "adopted",
     "surface": "metadata"
   },
   {
@@ -1638,7 +1492,6 @@
     ],
     "exclusion": null,
     "key": "signal backlink comment metadata output",
-    "migration": "adopted",
     "surface": "metadata"
   },
   {
@@ -1647,7 +1500,6 @@
     ],
     "exclusion": null,
     "key": "label proposal candidate input",
-    "migration": "adopted",
     "surface": "metadata"
   },
   {
@@ -1656,7 +1508,6 @@
     ],
     "exclusion": null,
     "key": "label ontology observation input",
-    "migration": "adopted",
     "surface": "metadata"
   },
   {
@@ -1665,7 +1516,6 @@
     ],
     "exclusion": null,
     "key": "label ontology external validation evidence",
-    "migration": "adopted",
     "surface": "metadata"
   },
   {
@@ -1674,7 +1524,6 @@
     ],
     "exclusion": null,
     "key": "project-local config after TOML decoding",
-    "migration": "adopted",
     "surface": "config"
   },
   {
@@ -1683,7 +1532,6 @@
     ],
     "exclusion": null,
     "key": "selected dispatcher worker profile after TOML decoding",
-    "migration": "adopted",
     "surface": "config"
   },
   {
@@ -1692,7 +1540,6 @@
     ],
     "exclusion": null,
     "key": "label add",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1701,7 +1548,6 @@
     ],
     "exclusion": null,
     "key": "label bootstrap",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1710,7 +1556,6 @@
     ],
     "exclusion": null,
     "key": "label atom-index query",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1719,7 +1564,6 @@
     ],
     "exclusion": null,
     "key": "label atom-index rebuild",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1728,7 +1572,6 @@
     ],
     "exclusion": null,
     "key": "label atom-index status",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1737,7 +1580,6 @@
     ],
     "exclusion": null,
     "key": "label atoms explain",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1746,7 +1588,6 @@
     ],
     "exclusion": null,
     "key": "label atoms list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1755,7 +1596,6 @@
     ],
     "exclusion": null,
     "key": "label create",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1764,7 +1604,6 @@
     ],
     "exclusion": null,
     "key": "label delete",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1773,7 +1612,6 @@
     ],
     "exclusion": null,
     "key": "label list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1782,7 +1620,6 @@
     ],
     "exclusion": null,
     "key": "label ontology apply atom",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1791,7 +1628,6 @@
     ],
     "exclusion": null,
     "key": "label ontology confirm",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1800,7 +1636,6 @@
     ],
     "exclusion": null,
     "key": "label ontology list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1809,7 +1644,6 @@
     ],
     "exclusion": null,
     "key": "label ontology quality",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1818,7 +1652,6 @@
     ],
     "exclusion": null,
     "key": "label ontology record",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1827,7 +1660,6 @@
     ],
     "exclusion": null,
     "key": "label ontology reject",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1836,7 +1668,6 @@
     ],
     "exclusion": null,
     "key": "label ontology resolve",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1845,7 +1676,6 @@
     ],
     "exclusion": null,
     "key": "label ontology revert",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1854,7 +1684,6 @@
     ],
     "exclusion": null,
     "key": "label ontology review",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1863,7 +1692,6 @@
     ],
     "exclusion": null,
     "key": "label ontology show",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1872,7 +1700,6 @@
     ],
     "exclusion": null,
     "key": "label ontology supersede",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1881,7 +1708,6 @@
     ],
     "exclusion": null,
     "key": "label ontology validate",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1890,7 +1716,6 @@
     ],
     "exclusion": null,
     "key": "label proposals accept",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1899,7 +1724,6 @@
     ],
     "exclusion": null,
     "key": "label proposals list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1908,7 +1732,6 @@
     ],
     "exclusion": null,
     "key": "label proposals reject",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1917,7 +1740,6 @@
     ],
     "exclusion": null,
     "key": "label proposals show",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1926,7 +1748,6 @@
     ],
     "exclusion": null,
     "key": "label propose",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1935,7 +1756,6 @@
     ],
     "exclusion": null,
     "key": "label remove",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1944,7 +1764,6 @@
     ],
     "exclusion": null,
     "key": "label semantics delete",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1953,7 +1772,6 @@
     ],
     "exclusion": null,
     "key": "label semantics list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1962,7 +1780,6 @@
     ],
     "exclusion": null,
     "key": "label semantics show",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1971,7 +1788,6 @@
     ],
     "exclusion": null,
     "key": "label semantics upsert",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1980,7 +1796,6 @@
     ],
     "exclusion": null,
     "key": "label suggest",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1989,7 +1804,6 @@
     ],
     "exclusion": null,
     "key": "run logs",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1998,7 +1812,6 @@
     ],
     "exclusion": null,
     "key": "run show",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2007,7 +1820,6 @@
     ],
     "exclusion": null,
     "key": "runs",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2016,14 +1828,12 @@
     ],
     "exclusion": null,
     "key": "search",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
     "contracts": [],
     "exclusion": "daemon lifecycle 不产生有限 JSON document；运行诊断固定写 stderr",
     "key": "serve",
-    "migration": "excluded",
     "surface": "cli"
   },
   {
@@ -2032,7 +1842,6 @@
     ],
     "exclusion": null,
     "key": "signal confirm",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2041,7 +1850,6 @@
     ],
     "exclusion": null,
     "key": "signal list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2050,7 +1858,6 @@
     ],
     "exclusion": null,
     "key": "signal record",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2059,7 +1866,6 @@
     ],
     "exclusion": null,
     "key": "signal reject",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2068,7 +1874,6 @@
     ],
     "exclusion": null,
     "key": "signal resolve",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2077,7 +1882,6 @@
     ],
     "exclusion": null,
     "key": "signal review",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2086,7 +1890,6 @@
     ],
     "exclusion": null,
     "key": "signal show",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2095,14 +1898,12 @@
     ],
     "exclusion": null,
     "key": "signal supersede",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
     "contracts": [],
     "exclusion": "隐藏的动态补全候选使用逐行文本协议，不是 JSON document",
     "key": "__complete",
-    "migration": "excluded",
     "surface": "cli"
   },
   {
@@ -2111,7 +1912,6 @@
     ],
     "exclusion": null,
     "key": "backup",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2120,7 +1920,6 @@
     ],
     "exclusion": null,
     "key": "board current",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2129,7 +1928,6 @@
     ],
     "exclusion": null,
     "key": "board use",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2138,7 +1936,6 @@
     ],
     "exclusion": null,
     "key": "checkpoint",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2147,7 +1944,6 @@
     ],
     "exclusion": null,
     "key": "comment add",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2156,7 +1952,6 @@
     ],
     "exclusion": null,
     "key": "comment list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2165,7 +1960,6 @@
     ],
     "exclusion": null,
     "key": "attachment add",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2174,7 +1968,6 @@
     ],
     "exclusion": null,
     "key": "attachment list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2183,21 +1976,18 @@
     ],
     "exclusion": null,
     "key": "attachment remove",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
     "contracts": [],
     "exclusion": "附件下载输出是原始 bytes 文件，不是 JSON machine envelope",
     "key": "attachment download",
-    "migration": "excluded",
     "surface": "cli"
   },
   {
     "contracts": [],
     "exclusion": "shell completion script 是文本脚本，不是 JSON document",
     "key": "completions",
-    "migration": "excluded",
     "surface": "cli"
   },
   {
@@ -2206,7 +1996,6 @@
     ],
     "exclusion": null,
     "key": "config show",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2215,7 +2004,6 @@
     ],
     "exclusion": null,
     "key": "context build",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2224,7 +2012,6 @@
     ],
     "exclusion": null,
     "key": "doctor",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2233,7 +2020,6 @@
     ],
     "exclusion": null,
     "key": "entity list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2242,7 +2028,6 @@
     ],
     "exclusion": null,
     "key": "entity show",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2251,7 +2036,6 @@
     ],
     "exclusion": null,
     "key": "entity upsert",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2260,7 +2044,6 @@
     ],
     "exclusion": null,
     "key": "events",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2269,7 +2052,6 @@
     ],
     "exclusion": null,
     "key": "export",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2278,7 +2060,6 @@
     ],
     "exclusion": null,
     "key": "graph neighbors",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2287,7 +2068,6 @@
     ],
     "exclusion": null,
     "key": "graph query",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2296,7 +2076,6 @@
     ],
     "exclusion": null,
     "key": "graph neighborhood",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2305,7 +2084,6 @@
     ],
     "exclusion": null,
     "key": "graph map",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2314,7 +2092,6 @@
     ],
     "exclusion": null,
     "key": "graph rebuild",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2323,7 +2100,6 @@
     ],
     "exclusion": null,
     "key": "graph status",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2332,21 +2108,18 @@
     ],
     "exclusion": null,
     "key": "graph sync",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
     "contracts": [],
     "exclusion": "Codex hook handler 使用独立 stdin/stdout protocol，不走通用 CLI JSON envelope",
     "key": "hook codex handle failure",
-    "migration": "excluded",
     "surface": "cli"
   },
   {
     "contracts": [],
     "exclusion": "Codex hook handler 使用独立 stdin/stdout protocol，不走通用 CLI JSON envelope",
     "key": "hook codex handle task-create",
-    "migration": "excluded",
     "surface": "cli"
   },
   {
@@ -2355,7 +2128,6 @@
     ],
     "exclusion": null,
     "key": "hook codex install",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2364,7 +2136,6 @@
     ],
     "exclusion": null,
     "key": "hook codex status",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2373,7 +2144,6 @@
     ],
     "exclusion": null,
     "key": "hook codex uninstall",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2382,7 +2152,6 @@
     ],
     "exclusion": null,
     "key": "import",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2391,7 +2160,6 @@
     ],
     "exclusion": null,
     "key": "index doctor",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2400,7 +2168,6 @@
     ],
     "exclusion": null,
     "key": "index rebuild",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2409,7 +2176,6 @@
     ],
     "exclusion": null,
     "key": "index status",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2418,7 +2184,6 @@
     ],
     "exclusion": null,
     "key": "index sync",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2427,7 +2192,6 @@
     ],
     "exclusion": null,
     "key": "init",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2436,7 +2200,6 @@
     ],
     "exclusion": null,
     "key": "maintenance rebuild",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2445,7 +2208,6 @@
     ],
     "exclusion": null,
     "key": "maintenance run",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2454,7 +2216,6 @@
     ],
     "exclusion": null,
     "key": "maintenance status",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2463,7 +2224,6 @@
     ],
     "exclusion": null,
     "key": "dep add",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2472,7 +2232,6 @@
     ],
     "exclusion": null,
     "key": "dep list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2481,7 +2240,6 @@
     ],
     "exclusion": null,
     "key": "dep remove",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2490,7 +2248,6 @@
     ],
     "exclusion": null,
     "key": "stats",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2499,7 +2256,6 @@
     ],
     "exclusion": null,
     "key": "task archive",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2508,7 +2264,6 @@
     ],
     "exclusion": null,
     "key": "task block",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2517,7 +2272,6 @@
     ],
     "exclusion": null,
     "key": "task claim",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2526,7 +2280,6 @@
     ],
     "exclusion": null,
     "key": "task create",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2535,7 +2288,6 @@
     ],
     "exclusion": null,
     "key": "task done",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2544,7 +2296,6 @@
     ],
     "exclusion": null,
     "key": "task heartbeat",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2553,7 +2304,6 @@
     ],
     "exclusion": null,
     "key": "task release",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2562,7 +2312,6 @@
     ],
     "exclusion": null,
     "key": "task list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2571,7 +2320,6 @@
     ],
     "exclusion": null,
     "key": "task promote",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2580,7 +2328,6 @@
     ],
     "exclusion": null,
     "key": "task reclaim",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2589,7 +2336,6 @@
     ],
     "exclusion": null,
     "key": "task reopen",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2598,7 +2344,6 @@
     ],
     "exclusion": null,
     "key": "task review",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2607,7 +2352,6 @@
     ],
     "exclusion": null,
     "key": "task show",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2616,7 +2360,6 @@
     ],
     "exclusion": null,
     "key": "task specify",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2625,7 +2368,6 @@
     ],
     "exclusion": null,
     "key": "task step add",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2634,7 +2376,6 @@
     ],
     "exclusion": null,
     "key": "task step done",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2643,7 +2384,6 @@
     ],
     "exclusion": null,
     "key": "task step list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2652,7 +2392,6 @@
     ],
     "exclusion": null,
     "key": "task step not-required",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2661,7 +2400,6 @@
     ],
     "exclusion": null,
     "key": "task step remove",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2670,7 +2408,6 @@
     ],
     "exclusion": null,
     "key": "task step reopen",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2679,7 +2416,6 @@
     ],
     "exclusion": null,
     "key": "task step skip",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2688,7 +2424,6 @@
     ],
     "exclusion": null,
     "key": "task step update",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2697,7 +2432,6 @@
     ],
     "exclusion": null,
     "key": "task unblock",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2706,7 +2440,6 @@
     ],
     "exclusion": null,
     "key": "task update",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2715,7 +2448,6 @@
     ],
     "exclusion": null,
     "key": "vacuum",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2724,7 +2456,6 @@
     ],
     "exclusion": null,
     "key": "vector configure",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2733,7 +2464,6 @@
     ],
     "exclusion": null,
     "key": "vector query-chunks",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2742,7 +2472,6 @@
     ],
     "exclusion": null,
     "key": "vector query-label-atoms",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2751,7 +2480,6 @@
     ],
     "exclusion": null,
     "key": "vector rebuild",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2760,7 +2488,6 @@
     ],
     "exclusion": null,
     "key": "vector status",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2769,7 +2496,6 @@
     ],
     "exclusion": null,
     "key": "vector sync",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2778,7 +2504,6 @@
     ],
     "exclusion": null,
     "key": "maintenance cleanup",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2787,7 +2512,6 @@
     ],
     "exclusion": null,
     "key": "import-v30",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -2796,7 +2520,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/{operation}",
-    "migration": "adopted",
     "surface": "api"
   }
 ]

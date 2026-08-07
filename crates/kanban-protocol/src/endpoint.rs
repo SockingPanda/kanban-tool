@@ -45,7 +45,7 @@ pub struct EndpointDescriptor {
 // Endpoint descriptors are projected from the canonical operation declaration source.
 
 // This key-only order preserves the historical endpoint artifact order without duplicating
-// method, path, schema, witness, or obligation facts.
+// method, path, schema, exclusion, or obligation facts.
 const CANONICAL_OPERATION_ORDER: &[&str] = &[
     "api.health",
     "api.list-boards",

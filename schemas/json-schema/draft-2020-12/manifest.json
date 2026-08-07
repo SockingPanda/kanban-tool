@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:b1ecf47b301882d00ff0c6bde7f02df9f11dc9b6cafa0a6cbf2b6b5ff09f6d30"
+    "sha256": "sha256:48e09c90638391c05ce3443fd1cfddb802134e9ca52417e1dd960b1ebcd89cec"
   },
   "roots": [
     {
@@ -5808,6 +5808,6 @@
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "surface_catalog": {
     "path": "surface-operations.json",
-    "sha256": "sha256:2a0dffb325025719181f588c6e16e5de11afca66d5afc99e2cdebc02e11f4074"
+    "sha256": "sha256:adb9aeb7b2107240309a27753d7ce5ffb797a7ecc44ce1aba8ad9e7f6e7590c6"
   }
 }

@@ -8,7 +8,7 @@ fn committed_schema_tree_and_fixtures_match_registry() {
         .parent()
         .expect("xtask crate must live below workspace root");
 
-    xtask::check_contract(repo_root, false)
+    xtask::check_contract(repo_root)
         .expect("committed schema contract should match fresh generation");
 }
 
@@ -99,34 +99,22 @@ fn binary_help_preserves_public_cli_contract() {
     assert!(output.stderr.is_empty());
     assert_eq!(
         String::from_utf8(output.stdout).expect("help output must be UTF-8"),
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|witnesses|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH] [--require-closed]\n"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n"
     );
 }
 
 #[test]
-fn witnesses_json_matches_canonical_inventory_order_and_format() {
+fn unknown_schema_commands_are_rejected() {
     let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
-        .args(["schema", "witnesses"])
+        .args(["schema", "legacy"])
         .output()
         .expect("schema tool binary should execute");
-    assert!(output.status.success());
-    assert!(output.stderr.is_empty());
-
-    let adopted = kanban_protocol::operation_inventory()
-        .iter()
-        .filter(|operation| operation.migration == kanban_protocol::MigrationState::Adopted)
-        .collect::<Vec<_>>();
-    let expected = format!("{}\n", serde_json::to_string_pretty(&adopted).unwrap());
-    assert_eq!(
-        String::from_utf8(output.stdout).expect("witness output must be UTF-8"),
-        expected
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8(output.stderr)
+            .expect("错误输出必须是 UTF-8")
+            .contains("未知 schema command")
     );
-}
-
-#[test]
-fn closure_audit_accepts_closed_inventory() {
-    xtask::audit_inventory(true).expect("contract train must be closed");
-    assert_eq!(xtask::unfinished_contract_count(), 0);
 }
 
 #[test]

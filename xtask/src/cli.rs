@@ -41,10 +41,10 @@ pub(crate) fn run() -> ToolResult<()> {
             None => invalid("affected 缺少子命令"),
         };
     }
-    let (root, options) = parse_options(&arguments[2..])?;
+    let root = parse_options(&arguments[2..])?;
 
     match (group, subcommand) {
-        ("schema", Some(command)) => run_schema(command, &root, options.require_closed),
+        ("schema", Some(command)) => run_schema(command, &root),
         ("docs", Some("check")) => docs::run(&root),
         ("deps", Some("check")) => dependencies::run(&root),
         ("agents", Some("check")) => agents::run(&root),
@@ -91,14 +91,8 @@ fn run_affected(command: &str, arguments: &[String]) -> ToolResult<()> {
     affected::run(&root, command, &base)
 }
 
-#[derive(Default)]
-struct Options {
-    require_closed: bool,
-}
-
-fn parse_options(arguments: &[String]) -> ToolResult<(PathBuf, Options)> {
+fn parse_options(arguments: &[String]) -> ToolResult<PathBuf> {
     let mut root = PathBuf::from(".");
-    let mut options = Options::default();
     let mut index = 0;
     while index < arguments.len() {
         match arguments[index].as_str() {
@@ -109,63 +103,43 @@ fn parse_options(arguments: &[String]) -> ToolResult<(PathBuf, Options)> {
                     .ok_or_else(|| std::io::Error::other("--root 缺少路径"))?;
                 root = PathBuf::from(value);
             }
-            "--require-closed" => options.require_closed = true,
             unknown => return Err(std::io::Error::other(format!("未知参数: {unknown}")).into()),
         }
         index += 1;
     }
-    Ok((root, options))
+    Ok(root)
 }
 
-fn run_schema(command: &str, root: &Path, require_closed: bool) -> ToolResult<()> {
+fn run_schema(command: &str, root: &Path) -> ToolResult<()> {
     match command {
         "generate" => {
             xtask::write_generated(root)?;
-            xtask::check_contract(root, require_closed)?;
+            xtask::check_contract(root)?;
             println!(
-                "已生成并验证 {} 个 schema roots（未闭合项: {}）",
-                kanban_protocol::schema_registry().len(),
-                xtask::unfinished_contract_count()
+                "已生成并验证 {} 个 schema roots",
+                kanban_protocol::schema_registry().len()
             );
             Ok(())
         }
         "check" => {
-            xtask::check_contract(root, require_closed)?;
+            xtask::check_contract(root)?;
             println!(
-                "schema contract 已通过：{} roots，{} 未闭合项",
-                kanban_protocol::schema_registry().len(),
-                xtask::unfinished_contract_count()
+                "schema contract 已通过：{} roots",
+                kanban_protocol::schema_registry().len()
             );
             Ok(())
         }
         "audit" => {
-            xtask::audit_inventory(require_closed)?;
+            xtask::audit_inventory()?;
             println!(
-                "contract/surface catalog 已通过：{} contract entries，{} surface entries，{} 未闭合项",
+                "contract/surface catalog 已通过：{} contract entries，{} surface entries",
                 kanban_protocol::operation_inventory().len(),
-                kanban_protocol::surface_operation_catalog().len(),
-                xtask::unfinished_contract_count()
+                kanban_protocol::surface_operation_catalog().len()
             );
-            Ok(())
-        }
-        "witnesses" => {
-            xtask::audit_inventory(false)?;
-            print_adopted_inventory();
             Ok(())
         }
         other => invalid(format!("未知 schema command: {other}")),
     }
-}
-
-fn print_adopted_inventory() {
-    let adopted = kanban_protocol::operation_inventory()
-        .iter()
-        .filter(|operation| operation.migration == kanban_protocol::MigrationState::Adopted)
-        .collect::<Vec<_>>();
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&adopted).expect("operation inventory 必须可序列化")
-    );
 }
 
 fn invalid(message: impl Into<String>) -> ToolResult<()> {
@@ -175,6 +149,6 @@ fn invalid(message: impl Into<String>) -> ToolResult<()> {
 
 fn print_usage() {
     println!(
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|witnesses|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH] [--require-closed]"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]"
     );
 }

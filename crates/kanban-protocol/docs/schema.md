@@ -18,9 +18,9 @@ JSON Schema 推断。
 HTTP 精确 method/path 来自 protocol/server catalog，CLI 精确 flag 来自 Clap，MCP 精确 tool 来自
 MCP catalog。文档示例只能使用这些当前 source 可核对的字段，不复制完整清单。
 
-label proposal 有 task-scoped 与 board-wide 两种独立的 typed contract；board-wide contract 使用可选
-`status` query，响应复用 `ListBoardLabelProposalsResponse`。两者都经 `kanban-service`，不能在 adapter
-中拼接第二套查询或直接读取 Turso row。
+label proposal 有 task-scoped 与 board-wide 两种独立的 typed contract；board-wide contract 使用
+`ListBoardLabelProposalsQuery` 的可选 `status` query，响应为 `ListBoardLabelProposalsResponse`。两者都经
+`kanban-service`，不能在 adapter 中拼接第二套查询或直接读取 Turso row。
 
 ## 变更流程
 

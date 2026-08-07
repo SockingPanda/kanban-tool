@@ -7,6 +7,5 @@
 第二条 mutation path。精确 tool 名称和输入 schema 以 MCP catalog 与 protocol schema 为准。
 
 MCP 的 domain tool 覆盖任务、labels/ontology/proposals、signals、search、graph、vector、context、
-附件、steps、dependencies、runs/events 和 boards；`label_proposals_list` 同时绑定 task-scoped 与
-board-wide proposal read operation。契约完整性由 protocol catalog、MCP integration tests 和 CI 验证，
-不能由 catalog 条目数量推断。
+附件、steps、dependencies、runs/events 和 boards。契约完整性由 protocol catalog、MCP integration
+tests 和 CI 验证，不能由 catalog 条目数量推断。

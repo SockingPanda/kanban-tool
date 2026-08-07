@@ -6,7 +6,7 @@
 ## 1. 产品边界
 
 - kanban-tool 是本地优先、单机、单用户的看板与 durable work queue。
-- `kanban serve` 是唯一 host 和 canonical Turso owner；其他入口通过 typed localhost HTTP/SSE 工作。
+- `kanban serve` 进程是唯一 canonical host；canonical Turso persistence 由 `kanban-service` crate 持有，其他入口通过 typed localhost HTTP/SSE 工作。
 - CLI、MCP、Desktop 和 dispatcher 共享 application service、状态机、事务和错误语义。
 - 不引入 SaaS、多租户、远程访问、RBAC、云同步或第二条 canonical mutation path。
 
@@ -23,8 +23,8 @@
 
 - `kanban-core`：领域 ID、枚举、状态机、纯校验和领域错误；不依赖内部 crate、HTTP 或 Turso。
 - `kanban-service`：application service、Turso schema/migration、repository、事务、projection、
-  provider 和只读 importer；是唯一直接依赖 `turso` 的 canonical persistence owner。
-- `kanban-server`：唯一 host、进程生命周期、路径准备、Axum routes 和 dispatcher；Turso 打开、初始化、迁移与持久化由 `kanban-service` 负责。
+  provider 和只读 importer；是 canonical persistence crate，也是唯一直接依赖 `turso` 的 owner。
+- `kanban-server`：负责 `kanban serve` host 进程生命周期、路径准备、Axum routes 和 dispatcher；Turso 打开、初始化、迁移与持久化由 `kanban-service` 负责。
 - `kanban-protocol`：当前 active wire DTO、error、schema 和 surface catalog；不承载数据库 row 或 store 规则。
 - `kanban-client`：typed localhost HTTP client；CLI、MCP 和 Desktop 不直连数据库。
 - `kanban-cli`、`kanban-mcp`、`apps/desktop/src-tauri`：薄入口或 shell；`xtask` 仅作离线检查工具。

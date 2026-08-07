@@ -32,8 +32,6 @@ domain 不向 adapter 反向依赖，adapter 不复制 service 状态机。
 
 业务事实包括 board/task/lifecycle、execution plan、依赖、评论、附件 metadata、labels/ontology/
 signals、entities/relations、runs 和 events。`tasks.status` 是唯一状态事实，event 是追加审计事实。
-label proposal 也是 service-owned ontology fact，同时支持 task-scoped 与 board-wide 查询；board-wide
-查询可按 `status` 过滤，accept/reject 仍走共享 proposal decision path。
 
 FTS、vector、graph/context、projection jobs、缓存和 capability probe 是可重建的派生或运行时状态；
 它们可以删除后重建，不能反向写 canonical facts。详细事务和迁移边界归

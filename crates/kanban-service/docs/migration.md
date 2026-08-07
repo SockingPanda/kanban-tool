@@ -25,4 +25,4 @@ service 先做 schema、引用、计数和 board isolation 预检，再把附件
 ## 恢复边界
 
 恢复操作只作用于 host-owned 数据、journal 和 verified backup。历史 release runbook 与已完成迁移记录
-不属于 active documentation tree；它们应通过任务或 Git history 追溯。
+不属于 active documentation tree；历史由 Git/tag、release asset 或 task record 持有。

@@ -4,8 +4,7 @@ Desktop 是本地桌面 shell：前端通过 `kanban-client` 访问 loopback `ka
 托盘和运行时配置。它不直连 Turso，也不复制 server、service 或 protocol 的业务规则。
 
 看板、任务详情、labels/ontology/proposals、signals、attachments、runs/events、search、graph、
-vector/context 和 maintenance 都复用同一 host；board-wide label proposal 列表由 typed API
-请求，不在 Desktop 内部建立第二份状态或数据库查询。
+vector/context 和 maintenance 都复用同一 host；Desktop 不建立第二份状态或数据库查询。
 
 开发和验证：
 

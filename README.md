@@ -54,9 +54,8 @@ kanban task promote default#1
 - host-owned doctor、checkpoint、backup、portable import/export、vacuum、projection rebuild/cleanup
   和可选 `legacy-sqlite-import` v30 importer。
 
-label proposal 同时支持 task scope 和 board scope。CLI 不带 `--task-ref` 的
-`kanban label proposals list` 按当前 board 查询，可用 `--status` 过滤；精确 transport
-contract 见 [`kanban-protocol` schema](crates/kanban-protocol/docs/schema.md)。
+label proposal 同时支持 task scope 和 board scope；CLI `kanban label proposals list` 不带
+`--task-ref` 时按当前 board 查询，详细行为见 [CLI 指南](crates/kanban-cli/README.md)。
 
 FTS、vector、graph、context 和 projection state 都是可重建派生数据，不能反向写 canonical facts。
 

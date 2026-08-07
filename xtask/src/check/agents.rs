@@ -193,7 +193,7 @@ fn check_openai_contract(skill: &str, path: &Path) -> ToolResult<()> {
 fn check_active_maps(root: &Path) -> ToolResult<()> {
     const ACTIVE_MAPS: &[&str] = &[
         "justfile",
-        "scripts/affected-validation.py",
+        "xtask/src/affected.rs",
         "scripts/schema_dependency_policy.py",
         "scripts/check-dependency-owners.py",
         "scripts/test_dependency_owners.py",

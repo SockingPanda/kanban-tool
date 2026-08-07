@@ -5,7 +5,10 @@ use std::{
 
 use xtask::ToolResult;
 
-use crate::check::{agents, dependencies, docs};
+use crate::{
+    affected,
+    check::{agents, dependencies, docs},
+};
 
 pub(crate) fn run() -> ToolResult<()> {
     let arguments = env::args().skip(1).collect::<Vec<_>>();
@@ -23,6 +26,12 @@ pub(crate) fn run() -> ToolResult<()> {
 
     let group = arguments[0].as_str();
     let subcommand = arguments.get(1).map(String::as_str);
+    if group == "affected" {
+        return match subcommand {
+            Some(command) => run_affected(command, &arguments[2..]),
+            None => invalid("affected 缺少子命令"),
+        };
+    }
     let (root, options) = parse_options(&arguments[2..])?;
 
     match (group, subcommand) {
@@ -38,6 +47,36 @@ pub(crate) fn run() -> ToolResult<()> {
         (group, Some(command)) => invalid(format!("未知 command: {group} {command}")),
         (group, None) => invalid(format!("未知 command: {group}")),
     }
+}
+
+fn run_affected(command: &str, arguments: &[String]) -> ToolResult<()> {
+    let mut root = PathBuf::from(".");
+    let mut base = "main".to_owned();
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = &arguments[index];
+        if argument == "--root" {
+            index += 1;
+            let value = arguments
+                .get(index)
+                .ok_or_else(|| std::io::Error::other("--root 缺少路径"))?;
+            root = PathBuf::from(value);
+        } else if argument == "--base" {
+            index += 1;
+            base = arguments
+                .get(index)
+                .ok_or_else(|| std::io::Error::other("--base 缺少引用"))?
+                .clone();
+        } else if let Some(value) = argument.strip_prefix("--base=") {
+            base = value.to_owned();
+        } else if argument.starts_with("base=") {
+            base = argument.clone();
+        } else {
+            return invalid(format!("affected 参数无效: {argument}"));
+        }
+        index += 1;
+    }
+    affected::run(&root, command, &base)
 }
 
 #[derive(Default)]
@@ -124,6 +163,6 @@ fn invalid(message: impl Into<String>) -> ToolResult<()> {
 
 fn print_usage() {
     println!(
-        "用法：xtask <docs check|schema generate|check|audit|witnesses|deps check|agents check> [--root PATH] [--require-closed]"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|witnesses|deps check|agents check> [--base REF] [--root PATH] [--require-closed]"
     );
 }

@@ -154,16 +154,16 @@ diff-check:
     git diff --check
 
 affected-plan base="main":
-    scripts/affected-validation.py --base "{{base}}" --mode plan
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- affected plan --base "{{base}}"
 
 affected-json base="main":
-    scripts/affected-validation.py --base "{{base}}" --mode json
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- affected json --base "{{base}}"
 
 affected base="main":
-    scripts/affected-validation.py --base "{{base}}" --mode run
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- affected run --base "{{base}}"
 
 affected-self-test:
-    scripts/affected-validation.py --self-test
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- affected self-test
 
 feature-p package features:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p {{package}} --features "{{features}}" --no-fail-fast --no-tests pass; else scripts/cargo-build-lock.sh -- cargo test --locked -p {{package}} --features "{{features}}"; fi

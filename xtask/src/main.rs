@@ -1,6 +1,8 @@
+mod affected;
 mod check;
 mod cli;
 mod document;
+mod git;
 mod process;
 mod repository;
 

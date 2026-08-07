@@ -233,6 +233,17 @@ members = [
                 .expect("workspace source should be writable");
         }
 
+        let lockfile_status = Command::new("cargo")
+            .args(["generate-lockfile", "--manifest-path"])
+            .arg(root.join("Cargo.toml"))
+            .current_dir(&root)
+            .status()
+            .expect("cargo generate-lockfile should run");
+        assert!(
+            lockfile_status.success(),
+            "workspace fixture lockfile should be generated"
+        );
+
         assert_eq!(
             workspace_members(&root).expect("workspace members should parse"),
             vec!["crates/one", "apps/two"]

@@ -15,6 +15,8 @@ workspace fingerprint/build/deps 的失效范围由 `cargo metadata` 的当前 w
 dep-info 会解析 makefile continuation/escape 后确认依赖来自当前 canonical `crates/`。
 
 target root、release tree、private temp/staging 目录和最终 `.deb` 发布都以 no-follow regular/directory
-检查、single-linked 文件、private prefix/parent identity 及同 filesystem rename 约束；已有最终包不会被覆盖。
+检查、single-linked 文件、private prefix/parent identity 及同 filesystem rename 约束；已有 single-linked
+regular package 只会在成功构建后通过原子 rename 替换，symlink/hardlink/non-regular destination 和失败
+路径都不会被覆盖。
 这些校验面向 dedicated/cooperative target owner，可防止普通协作式误写和漂移，但不承诺抵抗 hostile
 same-UID、`CAP_DAC_OVERRIDE` 或同 inode ABA 攻击。package 不设置 `CARGO_HOME`，沿用 Cargo 默认 home。

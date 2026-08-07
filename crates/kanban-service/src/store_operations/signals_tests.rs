@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::StoreError;
-    use crate::store_operations::{CreateSignalInput, ReviewSignalsInput, SignalLifecycleInput};
+    use crate::domain::SignalLifecycle;
+    use crate::store_operations::{CreateSignalInput, ReviewSignalsInput};
     use crate::test_support::*;
 
     fn signal_input(
@@ -155,7 +156,7 @@ mod tests {
             .review_signals(ReviewSignalsInput {
                 board: Some("default".to_owned()),
                 signal_ids: vec!["sig_review".to_owned()],
-                lifecycle: SignalLifecycleInput::Confirm,
+                lifecycle: SignalLifecycle::Confirm,
                 replacement_signal_id: None,
                 actor: "reviewer".to_owned(),
                 reason: "confirmed".to_owned(),
@@ -170,7 +171,7 @@ mod tests {
             .review_signals(ReviewSignalsInput {
                 board: Some("default".to_owned()),
                 signal_ids: vec!["sig_review".to_owned()],
-                lifecycle: SignalLifecycleInput::Confirm,
+                lifecycle: SignalLifecycle::Confirm,
                 replacement_signal_id: None,
                 actor: "reviewer".to_owned(),
                 reason: "duplicate".to_owned(),

@@ -2,8 +2,14 @@ use std::collections::HashSet;
 
 use turso::transaction::TransactionBehavior;
 
-use super::SignalLifecycleInput;
-use crate::{db::TursoStore, domain::*, error::StoreError, shared::*};
+use crate::{
+    db::TursoStore,
+    domain::{
+        CommentRecord, SignalLifecycle, SignalObservationRecord, SignalRecord, SignalRecordResult,
+    },
+    error::StoreError,
+    shared::*,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateSignalInput {
@@ -32,7 +38,7 @@ pub struct CreateSignalInput {
 pub struct ReviewSignalsInput {
     pub board: Option<String>,
     pub signal_ids: Vec<String>,
-    pub lifecycle: SignalLifecycleInput,
+    pub lifecycle: SignalLifecycle,
     pub replacement_signal_id: Option<String>,
     pub actor: String,
     pub reason: String,
@@ -435,7 +441,7 @@ fn validate_review_input(input: &ReviewSignalsInput) -> Result<(), StoreError> {
             "actor and reason are required".to_owned(),
         ));
     }
-    if matches!(input.lifecycle, SignalLifecycleInput::Supersede)
+    if matches!(input.lifecycle, SignalLifecycle::Supersede)
         != input.replacement_signal_id.is_some()
     {
         return Err(StoreError::InvalidInput(
@@ -445,12 +451,12 @@ fn validate_review_input(input: &ReviewSignalsInput) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn target_status(lifecycle: &SignalLifecycleInput) -> &'static str {
+fn target_status(lifecycle: &SignalLifecycle) -> &'static str {
     match lifecycle {
-        SignalLifecycleInput::Confirm => "confirmed",
-        SignalLifecycleInput::Reject => "rejected",
-        SignalLifecycleInput::Resolve => "resolved",
-        SignalLifecycleInput::Supersede => "superseded",
+        SignalLifecycle::Confirm => "confirmed",
+        SignalLifecycle::Reject => "rejected",
+        SignalLifecycle::Resolve => "resolved",
+        SignalLifecycle::Supersede => "superseded",
     }
 }
 

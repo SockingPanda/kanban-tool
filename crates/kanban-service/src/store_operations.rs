@@ -1,5 +1,3 @@
-pub(crate) use crate::domain::SignalLifecycle as SignalLifecycleInput;
-
 mod attachments;
 mod boards;
 mod comments;

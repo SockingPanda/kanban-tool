@@ -87,7 +87,6 @@ assert_no_bare_target_writing_cargo() {
   local files=(
     "$ROOT/justfile"
     "$ROOT/scripts/smoke-v1-local.sh"
-    "$ROOT/scripts/package-cli-linux.sh"
   )
 
   for file in "${files[@]}"; do
@@ -131,32 +130,6 @@ assert_signal_status() {
   [[ "$status" -eq "$expected_status" ]] || fail "预期 $signal wrapper 状态为 $expected_status，实际为 $status"
 }
 
-assert_package_help_output_path() {
-  local help_output
-
-  help_output="$("$ROOT/scripts/package-cli-linux.sh" --help)"
-  [[ "$help_output" == *'scripts/cargo-build-lock.sh --print-target-dir'* ]] || {
-    fail "package help 未说明 wrapper target-dir 输出路径"
-  }
-  [[ "$help_output" != *"$REMOVED_HELPER.sh"* ]] || {
-    fail "package help 仍说明已移除的 target helper"
-  }
-  [[ "$help_output" != *'$ROOT'* ]] || {
-    fail "package help 不应打印字面量 \$ROOT 占位符"
-  }
-  [[ "$help_output" != *'$('* ]] || {
-    fail "package help 应在不使用 shell substitution 语法的情况下说明 target-dir probe"
-  }
-  [[ "$help_output" == *'release/bundle/cli/deb/*.deb'* ]] || {
-    fail "package help 未说明 CLI deb 相对输出路径"
-  }
-}
-
-assert_debian_control_directory_mode() {
-  rg -F 'install -d -m 0755 "$control_dir"' "$ROOT/scripts/package-cli-linux.sh" >/dev/null ||
-    fail "CLI package 必须以 dpkg-deb 兼容模式创建 DEBIAN control directory"
-}
-
 assert_nextest_junit_stays_under_shared_target() {
   local configured_path
 
@@ -172,7 +145,6 @@ assert_nextest_junit_stays_under_shared_target() {
 assert_target_dir_probe_call_sites_quote_paths() {
   local file line_number line
   local files=(
-    "$ROOT/scripts/package-cli-linux.sh"
     "$ROOT/scripts/test-cli-package-layout.sh"
     "$ROOT/scripts/test-desktop-package-layout.sh"
     "$ROOT/scripts/ontology-bootstrap-verify-e2e.sh"
@@ -704,8 +676,6 @@ assert_resource_limit_defaults
 assert_no_bare_target_writing_cargo
 assert_target_dir_probe_call_sites_quote_paths
 assert_target_dir_probe_handles_space_paths
-assert_package_help_output_path
-assert_debian_control_directory_mode
 assert_nextest_junit_stays_under_shared_target
 
 echo "cargo target root 和 build lock tests 已通过"

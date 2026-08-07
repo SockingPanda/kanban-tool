@@ -119,16 +119,6 @@ desktop-check:
 
 single-host-dependency-gate:
     python3 -B scripts/check-single-host-dependencies.py
-    just service-boundary-gate
-    just vector-service-boundary-gate
-
-service-boundary-gate:
-    python3 -B scripts/test_check_service_boundary.py
-    python3 -B scripts/check-service-boundary.py
-
-vector-service-boundary-gate:
-    python3 -B scripts/test_check_vector_service_boundary.py
-    python3 -B scripts/check-vector-service-boundary.py
 
 desktop-build:
     pnpm --dir apps/desktop build

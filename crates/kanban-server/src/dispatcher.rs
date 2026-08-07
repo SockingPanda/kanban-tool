@@ -543,7 +543,7 @@ mod tests {
 
     use kanban_service::{
         ClaimTaskCommand, CreateTaskCommand, MarkExecutionPlanNotRequiredCommand,
-        PromoteTaskCommand, SubmitReviewTaskCommand,
+        PromoteTaskCommand, SubmitReviewTaskCommand, VectorConfigureCommand,
     };
 
     use super::*;
@@ -729,6 +729,57 @@ on_success = "blocked"
     }
 
     #[tokio::test]
+    async fn dispatcher_tick_runs_vector_worker_and_publishes_ready_status() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let state = AppState::open(directory.path().join("kanban.db"), "test-host")
+            .await
+            .expect("open state");
+        let application = state.application().clone();
+        application
+            .configure_vector(VectorConfigureCommand {
+                provider: "ollama".to_owned(),
+                endpoint: "http://127.0.0.1:1".to_owned(),
+                model: "dispatcher-vector-model".to_owned(),
+                dimensions: 2,
+            })
+            .await
+            .expect("configure vector provider");
+        let degraded = application
+            .vector_status("default")
+            .await
+            .expect("vector status after configure");
+        assert_eq!(degraded.dirty, Some(true));
+
+        let config = test_config(directory.path());
+        let (shutdown_tx, shutdown_rx) = watch::channel(ShutdownSignal::Running);
+        let dispatcher = tokio::spawn(run_dispatcher(
+            state,
+            config,
+            SocketAddr::from((Ipv4Addr::LOCALHOST, 8722)),
+            shutdown_rx,
+        ));
+
+        wait_for_vector_ready(&application).await;
+        shutdown_tx
+            .send(ShutdownSignal::Graceful)
+            .expect("send graceful shutdown");
+        tokio::time::timeout(Duration::from_secs(3), dispatcher)
+            .await
+            .expect("dispatcher shutdown timeout")
+            .expect("dispatcher join")
+            .expect("dispatcher result");
+
+        let status = application
+            .vector_status("default")
+            .await
+            .expect("vector status");
+        assert_eq!(status.dirty, Some(false));
+        assert_eq!(status.pending_jobs, 0);
+        assert_eq!(status.running_jobs, 0);
+        assert_eq!(status.failed_jobs, 0);
+    }
+
+    #[tokio::test]
     async fn worker_finish_policies_reuse_review_block_and_release_commands() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let state = AppState::open(directory.path().join("kanban.db"), "test-host")
@@ -885,5 +936,25 @@ on_success = "blocked"
         })
         .await
         .expect("task status timeout");
+    }
+
+    async fn wait_for_vector_ready(application: &KanbanService) {
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let status = application
+                    .vector_status("default")
+                    .await
+                    .expect("get vector status while polling");
+                if status.dirty == Some(false)
+                    && status.pending_jobs == 0
+                    && status.running_jobs == 0
+                {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("vector status timeout");
     }
 }

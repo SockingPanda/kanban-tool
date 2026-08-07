@@ -131,7 +131,7 @@ where
     }
 
     /// 为 board 的 canonical task/label atom 事实排队，并返回入队数量。
-    pub async fn enqueue_vector_jobs(&self, board: &str, rebuild: bool) -> Result<u64> {
+    async fn enqueue_vector_jobs(&self, board: &str, rebuild: bool) -> Result<u64> {
         let board = normalize_board(board)?;
         let _mutation = self.mutation_gate.lock().await;
         self.store
@@ -307,6 +307,7 @@ fn vector_store_error(error: crate::StoreError) -> KanbanError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
@@ -315,7 +316,7 @@ mod tests {
         KanbanService, VectorChunkQueryCommand, VectorConfigureCommand, VectorLabelAtomQueryCommand,
     };
     use crate::{
-        BootstrapTaskLabelCommand, TursoStore,
+        BootstrapTaskLabelCommand, CreateTaskCommand, TursoStore,
         test_support::{count_rows, create_input},
         vector::{VectorEmbeddingInput, content_hash, stable_id},
     };
@@ -358,6 +359,64 @@ mod tests {
         let rebuilt = service.rebuild_vector("default").await.expect("rebuild");
         assert!(rebuilt.dirty.unwrap_or(false));
         assert!(rebuilt.pending_jobs > 0 || rebuilt.message.contains("projection"));
+    }
+
+    #[tokio::test]
+    async fn vector_service_worker_tick_publishes_ready_through_service_boundary() {
+        let (_directory, service) = service().await;
+        service
+            .create_task(CreateTaskCommand {
+                task_id: "t_vector_service_worker".to_owned(),
+                board: "default".to_owned(),
+                idempotency_key: None,
+                title: "vector worker task".to_owned(),
+                description: Some("worker transition fixture".to_owned()),
+                requested_status: None,
+                assignee: None,
+                priority: 1,
+                scheduled_at: None,
+                due_at: None,
+                max_retries: None,
+                metadata: BTreeMap::new(),
+                labels: Vec::new(),
+                depends_on: Vec::new(),
+                actor: "vector-test".to_owned(),
+            })
+            .await
+            .expect("create vector worker task");
+        let (endpoint, provider) = mock_ollama();
+        let configured = service
+            .configure_vector(VectorConfigureCommand {
+                provider: "ollama".to_owned(),
+                endpoint,
+                model: "vector-worker-model".to_owned(),
+                dimensions: 2,
+            })
+            .await
+            .expect("configure vector worker provider");
+        assert!(configured.enabled);
+
+        let queued = service
+            .rebuild_vector("default")
+            .await
+            .expect("queue vector job");
+        assert!(queued.pending_jobs > 0);
+
+        let completed = service
+            .vector_worker_tick("vector-service-test-worker")
+            .await
+            .expect("vector worker tick");
+        assert!(completed > 0);
+
+        let ready = service
+            .vector_status("default")
+            .await
+            .expect("ready status");
+        assert_eq!(ready.dirty, Some(false));
+        assert_eq!(ready.pending_jobs, 0);
+        assert_eq!(ready.running_jobs, 0);
+        assert_eq!(ready.failed_jobs, 0);
+        provider.join().expect("mock provider");
     }
 
     #[tokio::test]

@@ -13,6 +13,7 @@ pub(crate) enum Recipe {
     RustFast,
     RustFull,
     DesktopCheck,
+    #[serde(rename = "schema-contract")]
     SchemaCheck,
     DepsCheck,
     ToolingCheck,
@@ -48,6 +49,9 @@ pub(crate) fn run(root: &Path, command: &str, base: &str) -> ToolResult<()> {
         self_test();
         println!("affected planner self-test 已通过");
         return Ok(());
+    }
+    if !matches!(command, "plan" | "json" | "run") {
+        return Err(std::io::Error::other(format!("未知 affected command: {command}")).into());
     }
 
     let base = normalise_base(base)?;
@@ -136,7 +140,7 @@ fn plan_recipes(paths: &[String]) -> Vec<Recipe> {
         if paths.iter().any(|path| is_desktop(path)) {
             recipes.push(Recipe::DesktopCheck);
         }
-        if paths.iter().any(|path| is_rust_product(path)) {
+        if !root_risk && paths.iter().any(|path| is_rust_product(path)) {
             recipes.push(Recipe::RustFast);
         }
     }
@@ -411,6 +415,12 @@ mod tests {
                 "unexpected recipes for {path}"
             );
         }
+
+        let mixed = build_plan(
+            "main".to_owned(),
+            sources(&["Cargo.toml", "crates/kanban-service/src/lib.rs"]),
+        );
+        assert!(!mixed.recipes.contains(&Recipe::RustFast));
     }
 
     #[test]
@@ -459,6 +469,10 @@ mod tests {
         assert_eq!(value["changed_files"], serde_json::json!(["a", "b", "c"]));
         assert_eq!(value["sources"]["base"], serde_json::json!(["a"]));
         assert_eq!(value["sources"]["working_tree"], serde_json::json!(["a"]));
+        assert_eq!(
+            serde_json::to_value(Recipe::SchemaCheck).expect("recipe should serialize"),
+            "schema-contract"
+        );
         assert!(value.get("full_gate_recommended").is_none());
         assert!(value.get("full_gate_commands").is_none());
     }

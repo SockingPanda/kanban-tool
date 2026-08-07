@@ -147,7 +147,7 @@ fn scan_active_file(root: &Path, path: &Path, diagnostics: &mut Vec<Diagnostic>)
     }
     let bytes = fs::read(path)?;
     // 二进制或非 UTF-8 文件不是可执行文本；即使其中偶然出现 python 字节，也不应误报。
-    if bytes.contains(&0) {
+    if is_binary(&bytes) {
         return Ok(());
     }
     let Ok(text) = std::str::from_utf8(&bytes) else {
@@ -255,8 +255,13 @@ fn should_skip_directory(root: &Path, path: &Path) -> bool {
 
 fn has_python_extension(path: &Path) -> bool {
     path.file_name()
-        .and_then(OsStr::to_str)
-        .is_some_and(|name| name.to_ascii_lowercase().ends_with(".py"))
+        .is_some_and(|name| name.to_string_lossy().to_ascii_lowercase().ends_with(".py"))
+}
+
+fn is_binary(bytes: &[u8]) -> bool {
+    bytes
+        .iter()
+        .any(|byte| matches!(byte, 0..=8 | 11..=12 | 14..=31 | 127))
 }
 
 fn relative_path(root: &Path, path: &Path) -> String {
@@ -520,6 +525,11 @@ mod tests {
     fn binary_active_fixture_is_ignored() {
         let root = temp_root("binary");
         write(&root, "scripts/binary.sh", b"\0python3 scripts/binary.py\n");
+        write(
+            &root,
+            "scripts/control.sh",
+            b"\x01python3 scripts/control.py\n",
+        );
         write(&root, "scripts/utf8.sh", b"\xffpython3\n");
         assert!(run(&root).is_ok());
         fs::remove_dir_all(root).expect("temporary root should be removable");

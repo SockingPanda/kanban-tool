@@ -8,6 +8,7 @@ use xtask::ToolResult;
 use crate::{
     affected,
     check::{agents, dependencies, docs, tooling},
+    package,
 };
 
 pub(crate) fn run() -> ToolResult<()> {
@@ -30,6 +31,13 @@ pub(crate) fn run() -> ToolResult<()> {
         return match subcommand {
             Some(command) => run_affected(command, &arguments[2..]),
             None => invalid("affected 缺少子命令"),
+        };
+    }
+    if group == "package" {
+        return match subcommand {
+            Some("cli") => package::run(&arguments[2..]),
+            None => invalid("package 缺少子命令"),
+            Some(command) => invalid(format!("package 不支持子命令: {command}")),
         };
     }
     let (root, options) = parse_options(&arguments[2..])?;
@@ -166,6 +174,6 @@ fn invalid(message: impl Into<String>) -> ToolResult<()> {
 
 fn print_usage() {
     println!(
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|witnesses|deps check|agents check|tooling check> [--base REF] [--root PATH] [--require-closed]"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|witnesses|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH] [--require-closed]"
     );
 }

@@ -13,6 +13,14 @@ use crate::{
 
 pub(crate) fn run() -> ToolResult<()> {
     let arguments = env::args().skip(1).collect::<Vec<_>>();
+    if arguments.first().map(String::as_str) == Some("package") {
+        let subcommand = arguments.get(1).map(String::as_str);
+        return match subcommand {
+            Some("cli") => package::run(&arguments[2..]),
+            None => invalid("package 缺少子命令"),
+            Some(command) => invalid(format!("package 不支持子命令: {command}")),
+        };
+    }
     if arguments.is_empty()
         || arguments
             .iter()
@@ -31,13 +39,6 @@ pub(crate) fn run() -> ToolResult<()> {
         return match subcommand {
             Some(command) => run_affected(command, &arguments[2..]),
             None => invalid("affected 缺少子命令"),
-        };
-    }
-    if group == "package" {
-        return match subcommand {
-            Some("cli") => package::run(&arguments[2..]),
-            None => invalid("package 缺少子命令"),
-            Some(command) => invalid(format!("package 不支持子命令: {command}")),
         };
     }
     let (root, options) = parse_options(&arguments[2..])?;

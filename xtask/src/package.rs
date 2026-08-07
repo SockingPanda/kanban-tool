@@ -177,6 +177,13 @@ impl Drop for OwnedDirectory {
 
 /// 入口：`xtask package cli [options]`。
 pub(crate) fn run(arguments: &[String]) -> ToolResult<()> {
+    if arguments
+        .iter()
+        .any(|argument| argument == "--help" || argument == "-h")
+    {
+        print_usage();
+        return Ok(());
+    }
     let options = parse_options(arguments)?;
     if options.format != "deb" {
         return Err(error("目前仅支持 --format deb"));

@@ -395,14 +395,14 @@ mod tests {
     }
 
     #[test]
-    fn root_manifest_and_release_paths_use_full_dependency_and_tooling_gates() {
+    fn root_manifest_and_package_paths_use_full_dependency_and_tooling_gates() {
         for path in [
             "Cargo.toml",
             "Cargo.lock",
             "rust-toolchain.toml",
             ".github/workflows/ci.yml",
-            "scripts/package-cli.sh",
-            "scripts/release-safe-path.py",
+            "xtask/src/package.rs",
+            "scripts/test-cli-package-layout.sh",
         ] {
             assert_eq!(
                 build_plan("main".to_owned(), sources(&[path])).recipes,

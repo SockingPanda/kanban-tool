@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SMOKE_DIR="$(mktemp -d)"
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
 HOST_PID=""
 SERVER_URL=""
@@ -15,6 +14,8 @@ for tool in curl jq node; do
     exit 1
   }
 done
+
+SMOKE_DIR="$(mktemp -d)"
 
 cleanup_host() {
   if [[ -z "$HOST_PID" ]]; then

@@ -257,13 +257,14 @@ fn parse_options(arguments: &[String]) -> ToolResult<PackageOptions> {
                     .clone();
             }
             "--features" => {
-                index += 1;
                 let value = arguments
-                    .get(index)
+                    .get(index + 1)
                     .ok_or_else(|| error("--features 需要一个值"))?;
                 options
                     .build_args
                     .extend(["--features".to_owned(), value.clone()]);
+                index += 2;
+                continue;
             }
             "--all-features" | "--no-default-features" => {
                 options.build_args.push(arguments[index].clone());
@@ -381,7 +382,7 @@ fn reject_build_environment() -> ToolResult<()> {
         ));
     }
     let inherited = env::var("KANBAN_CARGO_BUILD_LOCK_HELD").ok().as_deref() == Some("1");
-    for (name, value) in env::vars_os() {
+    for (name, _value) in env::vars_os() {
         let name = name.to_string_lossy();
         let reject = match name.as_ref() {
             "RUSTC_WRAPPER"
@@ -429,8 +430,7 @@ fn reject_build_environment() -> ToolResult<()> {
         };
         if reject {
             return Err(error(format!(
-                "release package 拒绝会影响构建的 environment override: {name}={} ",
-                value.to_string_lossy()
+                "release package 拒绝会影响构建的 environment override: {name}"
             )));
         }
     }
@@ -627,13 +627,9 @@ fn verify_dep_info(root: &Path, dep_info: &Path) -> ToolResult<()> {
                 error,
             )
         })?;
-        if !canonical.starts_with(&crates_root) {
-            return Err(error(format!(
-                "artifact provenance 不是当前 canonical crates/: {}",
-                canonical.display()
-            )));
+        if canonical.starts_with(&crates_root) {
+            found = true;
         }
-        found = true;
     }
     if !found {
         return Err(error("dep-info 不包含当前 canonical crates/ prerequisite"));
@@ -732,12 +728,6 @@ fn build_deb(
 
     let output_name = format!("{PACKAGE_NAME}_{version}-{REVISION}_{architecture}.deb");
     let output = output_dir.join(output_name);
-    if path_exists(&output)? {
-        return Err(error(format!(
-            "CLI package destination already exists；拒绝覆盖: {}",
-            output.display()
-        )));
-    }
     let output_parent = regular_directory_metadata(output_dir, "CLI package output directory")?;
     let stage = OwnedDirectory::create(output_dir, STAGE_PREFIX)?;
     let staged = stage.path.join(
@@ -795,18 +785,14 @@ fn publish_staged(
         return Err(error("CLI package staging 与 output 不在同一 filesystem"));
     }
     if path_exists(output)? {
-        return Err(error(format!(
-            "CLI package destination already exists；拒绝覆盖: {}",
-            output.display()
-        )));
+        let metadata = fs::symlink_metadata(output)?;
+        ensure_single_regular(&metadata, output, "CLI package destination")?;
     }
     let staged_metadata = fs::symlink_metadata(staged)?;
     ensure_single_regular(&staged_metadata, staged, "staged CLI package")?;
     if path_exists(output)? {
-        return Err(error(format!(
-            "CLI package destination 在发布前已存在；拒绝覆盖: {}",
-            output.display()
-        )));
+        let metadata = fs::symlink_metadata(output)?;
+        ensure_single_regular(&metadata, output, "CLI package destination")?;
     }
     fs::rename(staged, output)
         .map_err(|error| error_with_path("发布 CLI package 失败", output, error))?;
@@ -1212,6 +1198,48 @@ mod tests {
     }
 
     #[test]
+    fn package_options_forward_feature_values_without_skipping_following_flags() {
+        let options = parse_options(&[
+            "--features".to_owned(),
+            "schema,sqlite".to_owned(),
+            "--all-features".to_owned(),
+            "--no-default-features".to_owned(),
+        ])
+        .expect("package options should parse");
+        assert_eq!(
+            options.build_args,
+            [
+                "--features",
+                "schema,sqlite",
+                "--all-features",
+                "--no-default-features"
+            ]
+        );
+    }
+
+    #[test]
+    fn dep_info_provenance_accepts_other_current_root_prerequisites_when_crates_is_present() {
+        let root = fixture("dep-info-root");
+        fs::create_dir_all(root.join("crates/example/src")).expect("crates fixture");
+        fs::write(root.join("crates/example/src/lib.rs"), b"fn marker() {}")
+            .expect("crate source fixture");
+        fs::write(root.join("README.md"), b"readme").expect("root prerequisite fixture");
+        let dep_info = root.join("kanban.d");
+        fs::write(
+            &dep_info,
+            format!(
+                "{}: {} {}\n",
+                root.join("target/kanban").display(),
+                root.join("README.md").display(),
+                root.join("crates/example/src/lib.rs").display()
+            ),
+        )
+        .expect("dep-info fixture");
+        verify_dep_info(&root, &dep_info).expect("current crates prerequisite should suffice");
+        fs::remove_dir_all(root).expect("fixture should be cleaned");
+    }
+
+    #[test]
     fn target_root_rejects_parent_traversal_and_source_tree() {
         let root = fixture("target-root");
         assert!(validate_target_path(&PathBuf::from("relative"), &root).is_err());
@@ -1249,20 +1277,51 @@ mod tests {
         fs::remove_dir_all(parent).expect("fixture should be cleaned");
     }
 
+    #[cfg(unix)]
     #[test]
-    fn publish_refuses_existing_destination_without_overwrite() {
+    fn publish_replaces_regular_destination_but_rejects_unsafe_entries() {
         let root = fixture("publish");
         let stage = OwnedDirectory::create(&root, STAGE_PREFIX).expect("stage");
         let source = stage.path.join("out.deb");
         fs::write(&source, b"new").expect("source");
         let destination = root.join("out.deb");
         fs::write(&destination, b"old").expect("destination");
-        assert!(publish_staged(&stage, &source, &root, &destination).is_err());
+        publish_staged(&stage, &source, &root, &destination)
+            .expect("single-linked regular destination should be replaced");
         assert_eq!(
-            fs::read(&destination).expect("destination should remain"),
-            b"old"
+            fs::read(&destination).expect("destination should be replaced"),
+            b"new"
         );
+
+        let symlink_target = root.join("symlink-target");
+        fs::write(&symlink_target, b"untouched").expect("symlink target");
+        let symlink = root.join("symlink.deb");
+        std::os::unix::fs::symlink(&symlink_target, &symlink).expect("symlink destination");
+        let symlink_stage = OwnedDirectory::create(&root, STAGE_PREFIX).expect("symlink stage");
+        let symlink_source = symlink_stage.path.join("symlink.deb");
+        fs::write(&symlink_source, b"new").expect("symlink source");
+        assert!(publish_staged(&symlink_stage, &symlink_source, &root, &symlink).is_err());
+        assert_eq!(
+            fs::read(&symlink_target).expect("symlink target should remain"),
+            b"untouched"
+        );
+
+        let hardlink_source = root.join("hardlink-source");
+        fs::write(&hardlink_source, b"hardlink").expect("hardlink source");
+        let hardlink = root.join("hardlink.deb");
+        fs::hard_link(&hardlink_source, &hardlink).expect("hardlink destination");
+        let hardlink_stage = OwnedDirectory::create(&root, STAGE_PREFIX).expect("hardlink stage");
+        let hardlink_staged = hardlink_stage.path.join("hardlink.deb");
+        fs::write(&hardlink_staged, b"new").expect("hardlink staged");
+        assert!(publish_staged(&hardlink_stage, &hardlink_staged, &root, &hardlink).is_err());
+        assert_eq!(
+            fs::read(&hardlink).expect("hardlink should remain"),
+            b"hardlink"
+        );
+
         drop(stage);
+        drop(symlink_stage);
+        drop(hardlink_stage);
         fs::remove_dir_all(root).expect("fixture should be cleaned");
     }
 

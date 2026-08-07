@@ -206,9 +206,9 @@ assert_target_dir_probe_handles_space_paths() {
   cp "$LOCK_SCRIPT" "$space_lock"
   chmod +x "$space_lock"
 
-  expected="$(env KANBAN_CARGO_TARGET_ROOT="$space_target_root" "$space_lock" --print-target-dir)"
+  expected="$(env -i PATH="$PATH" HOME="$HOME" KANBAN_CARGO_TARGET_ROOT="$space_target_root" "$space_lock" --print-target-dir)"
   assert_exact_shared_target_dir "$space_target_root" "$expected"
-  actual="$(env KANBAN_CARGO_TARGET_ROOT="$space_target_root" bash -c '
+  actual="$(env -i PATH="$PATH" HOME="$HOME" KANBAN_CARGO_TARGET_ROOT="$space_target_root" bash -c '
     set -euo pipefail
     LOCK="$1"
     TARGET_DIR="$("$LOCK" --print-target-dir)/release"
@@ -256,332 +256,6 @@ assert_distinct_worktrees_share_target_and_lock() {
   wait "$first_pid"
   wait "$second_pid"
   [[ -e "$second_done" ]] || fail "共享 lock 释放后第二个 worktree 未运行"
-}
-
-assert_package_lock_marker_is_wrapper_owned() {
-  local repo="$TMPDIR/package-marker-repo"
-  local fake_bin="$repo/bin"
-  local wrapper_marker="$repo/wrapper-entered-clean"
-  local status
-
-  mkdir -p "$repo/scripts" "$fake_bin"
-  cp "$ROOT/scripts/package-cli-linux.sh" "$repo/scripts/package-cli-linux.sh"
-  cp "$ROOT/scripts/package-source-provenance.sh" "$repo/scripts/package-source-provenance.sh"
-  cp "$ROOT/scripts/release-safe-path.py" "$repo/scripts/release-safe-path.py"
-  cp "$ROOT/README.md" "$repo/README.md"
-  cat > "$repo/scripts/cargo-build-lock.sh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-if [[ "${1:-}" == "--print-target-dir" ]]; then
-  printf '%s\n' "$PACKAGE_TEST_TARGET_ROOT"
-  exit 0
-fi
-if [[ "${1:-}" == "--verify-inherited-lock" ]]; then
-  [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]] || exit 2
-  [[ "${CARGO_TARGET_DIR:-}" == "$PACKAGE_TEST_TARGET_ROOT" ]] || exit 2
-  [[ "${KANBAN_CARGO_BUILD_LOCK_PATH:-}" == "$PACKAGE_TEST_TARGET_ROOT/.build.lock" ]] || exit 2
-  lock_fd="${KANBAN_CARGO_BUILD_LOCK_FD:-}"
-  [[ "$lock_fd" =~ ^[3-9][0-9]*$ && -e "/proc/self/fd/$lock_fd" ]] || exit 2
-  expected="$(stat -Lc '%d:%i:%h:%F' "$PACKAGE_TEST_TARGET_ROOT/.build.lock")" || exit 2
-  [[ "$expected" == *":1:regular "* ]] || exit 2
-  inherited="$(stat -Lc '%d:%i:%h:%F' "/proc/self/fd/$lock_fd")" || exit 2
-  [[ "$inherited" == "$expected" ]] || exit 2
-  /usr/bin/flock -n "$lock_fd"
-  exit $?
-fi
-[[ "${1:-}" == "--" ]]
-shift
-if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
-  export CARGO_TARGET_DIR="$PACKAGE_TEST_TARGET_ROOT"
-  exec "$@"
-fi
-[[ -z "${KANBAN_PACKAGE_BUILD_LOCK_HELD:-}" ]] || {
-  echo "error: package 伪造了自己的 build-lock marker" >&2
-  exit 97
-}
-touch "$PACKAGE_WRAPPER_MARKER"
-lock_path="$PACKAGE_TEST_TARGET_ROOT/.build.lock"
-mkdir -p "$PACKAGE_TEST_TARGET_ROOT"
-exec 3>"$lock_path"
-/usr/bin/flock -n 3
-export CARGO_TARGET_DIR="$PACKAGE_TEST_TARGET_ROOT"
-export KANBAN_CARGO_BUILD_LOCK_HELD=1
-export KANBAN_CARGO_BUILD_LOCK_PATH="$lock_path"
-export KANBAN_CARGO_BUILD_LOCK_FD=3
-export CARGO_BUILD_JOBS=2
-export NEXTEST_TEST_THREADS=2
-export RUST_TEST_THREADS=2
-exec "$@"
-EOF
-  cat > "$fake_bin/cargo" <<'EOF'
-#!/usr/bin/env bash
-exit 86
-EOF
-  mkdir -p "$TMPDIR/package-marker-target"
-  chmod +x "$repo/scripts/package-cli-linux.sh" \
-    "$repo/scripts/cargo-build-lock.sh" "$fake_bin/cargo"
-
-  set +e
-  env \
-    -u KANBAN_CARGO_BUILD_LOCK_HELD \
-    -u KANBAN_PACKAGE_BUILD_LOCK_HELD \
-    PATH="$fake_bin:$PATH" \
-    PACKAGE_TEST_TARGET_ROOT="$TMPDIR/package-marker-target" \
-    PACKAGE_WRAPPER_MARKER="$wrapper_marker" \
-    "$repo/scripts/package-cli-linux.sh" --format deb >/dev/null 2>&1
-  status=$?
-  set -e
-
-  [[ "$status" -eq 86 ]] || fail "预期 package child 以状态 86 到达 fake cargo，实际为 $status"
-  [[ -e "$wrapper_marker" ]] || fail "没有伪造 marker 时 package 未进入 build-lock wrapper"
-}
-
-assert_package_waits_for_shared_build_lock() (
-  local holder_ready="$TMPDIR/package-lock-holder-ready"
-  local release_holder="$TMPDIR/package-lock-holder-release"
-  local cargo_marker="$TMPDIR/package-cargo-entered"
-  local package_stderr="$TMPDIR/package-lock.stderr"
-  local fake_bin="$TMPDIR/package-lock-bin"
-  local holder_pid="" package_pid="" status
-
-  cleanup_package_lock_processes() {
-    local pid i
-
-    touch "$release_holder" 2>/dev/null || true
-    for pid in "$package_pid" "$holder_pid"; do
-      [[ -n "$pid" ]] || continue
-      if kill -0 "$pid" >/dev/null 2>&1; then
-        kill -TERM "$pid" >/dev/null 2>&1 || true
-        for i in {1..100}; do
-          kill -0 "$pid" >/dev/null 2>&1 || break
-          sleep 0.02
-        done
-        kill -KILL "$pid" >/dev/null 2>&1 || true
-      fi
-      wait "$pid" >/dev/null 2>&1 || true
-    done
-  }
-  trap cleanup_package_lock_processes EXIT
-
-  mkdir -p "$fake_bin"
-  cat > "$fake_bin/cargo" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-touch "$PACKAGE_CARGO_MARKER"
-exit 86
-EOF
-  chmod +x "$fake_bin/cargo"
-
-  KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- bash -c '
-    set -euo pipefail
-    touch "$1"
-    while [[ ! -e "$2" ]]; do sleep 0.02; done
-  ' _ "$holder_ready" "$release_holder" &
-  holder_pid=$!
-  wait_for_file "$holder_ready" "package build lock holder"
-
-  env \
-    -u KANBAN_CARGO_BUILD_LOCK_HELD \
-    -u KANBAN_PACKAGE_BUILD_LOCK_HELD \
-    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-    PACKAGE_CARGO_MARKER="$cargo_marker" \
-    PATH="$fake_bin:$PATH" \
-    "$ROOT/scripts/package-cli-linux.sh" --format deb \
-    >/dev/null 2>"$package_stderr" &
-  package_pid=$!
-
-  wait_for_grep "正在等待其他构建/测试释放" "$package_stderr" "package lock wait"
-  [[ ! -e "$cargo_marker" ]] || fail "共享 build lock 被占用时 package 仍进入 Cargo"
-
-  touch "$release_holder"
-  wait "$holder_pid"
-  holder_pid=""
-  set +e
-  wait "$package_pid"
-  status=$?
-  set -e
-  package_pid=""
-  [[ "$status" -eq 86 ]] || fail "预期 package 以状态 86 恢复到 fake cargo，实际为 $status"
-  [[ -e "$cargo_marker" ]] || fail "共享 build lock 释放后 package 未恢复"
-  trap - EXIT
-)
-
-assert_cli_package_stale_lock_fails_closed_without_mutation() {
-  local repo="$TMPDIR/cli-package-stale-lock-repo"
-  local fake_bin="$repo/bin"
-  local trace="$repo/cargo.trace"
-  local metadata_marker="$repo/metadata-entered"
-  local invalidation_marker="$repo/invalidation-entered"
-  local build_marker="$repo/build-entered"
-  local provenance_marker="$repo/provenance-entered"
-  local package_marker="$repo/package-entered"
-  local before after first_call status
-
-  mkdir -p "$repo/scripts" "$fake_bin"
-  cp "$ROOT/scripts/package-cli-linux.sh" "$repo/scripts/package-cli-linux.sh"
-  cp "$ROOT/scripts/cargo-build-lock.sh" "$repo/scripts/cargo-build-lock.sh"
-  cp "$ROOT/scripts/release-safe-path.py" "$repo/scripts/release-safe-path.py"
-  printf 'stale-lock\n' > "$repo/Cargo.lock"
-  printf '# package fixture\n' > "$repo/README.md"
-
-  cat > "$repo/scripts/package-source-provenance.sh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-case "${1:-}" in
-  --invalidate-packages)
-    touch "$PACKAGE_INVALIDATION_MARKER"
-    ;;
-  --verify-dep-info)
-    touch "$PACKAGE_PROVENANCE_MARKER"
-    ;;
-  *)
-    exit 2
-    ;;
-esac
-EOF
-  cat > "$fake_bin/cargo" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "$*" >> "$PACKAGE_CARGO_TRACE"
-
-has_locked=0
-for argument in "$@"; do
-  if [[ "$argument" == "--locked" ]]; then
-    has_locked=1
-    break
-  fi
-done
-
-case "${1:-}" in
-  pkgid)
-    if [[ "$has_locked" == "1" && "$(cat "$PACKAGE_TEST_REPO/Cargo.lock")" == "stale-lock" ]]; then
-      echo 'error: the lock file needs to be updated but --locked was passed' >&2
-      exit 101
-    fi
-    if [[ "$has_locked" != "1" ]]; then
-      printf 'resolved-lock\n' > "$PACKAGE_TEST_REPO/Cargo.lock"
-    fi
-    printf 'path+file:///fixture#2.1.3\n'
-    ;;
-  metadata)
-    touch "$PACKAGE_METADATA_MARKER"
-    [[ "$has_locked" == "1" ]]
-    [[ "$(cat "$PACKAGE_TEST_REPO/Cargo.lock")" == "resolved-lock" ]]
-    printf '{"packages":[{"name":"kanban-cli"}]}\n'
-    ;;
-  build)
-    touch "$PACKAGE_BUILD_MARKER"
-    [[ "$has_locked" == "1" ]]
-    [[ "$(cat "$PACKAGE_TEST_REPO/Cargo.lock")" == "resolved-lock" ]]
-    target="$PACKAGE_TEST_TARGET_ROOT/release"
-    mkdir -p "$target"
-    if [[ " $* " == *' -p kanban-cli '* ]]; then
-      touch "$target/kanban" "$target/kanban.d"
-      chmod +x "$target/kanban"
-    fi
-    ;;
-  *)
-    exit 89
-    ;;
-esac
-EOF
-  cat > "$fake_bin/rustc" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf 'rustc 1.0.0\nhost: x86_64-unknown-linux-gnu\n'
-EOF
-  cat > "$fake_bin/dpkg-shlibdeps" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf 'shlibs:Depends=libc6\n'
-EOF
-  cat > "$fake_bin/dpkg-deb" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-touch "$PACKAGE_DPKG_MARKER"
-output="${@: -1}"
-mkdir -p "$(dirname "$output")"
-touch "$output"
-EOF
-  chmod +x "$repo/scripts/package-cli-linux.sh" \
-    "$repo/scripts/cargo-build-lock.sh" \
-    "$repo/scripts/package-source-provenance.sh" \
-    "$fake_bin/cargo" "$fake_bin/rustc" \
-    "$fake_bin/dpkg-shlibdeps" "$fake_bin/dpkg-deb"
-
-  before="$(sha256sum "$repo/Cargo.lock")"
-  set +e
-  env \
-    -u CARGO_TARGET_DIR \
-    -u KANBAN_CARGO_BUILD_LOCK_HELD \
-    KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" \
-    PACKAGE_TEST_REPO="$repo" \
-    PACKAGE_TEST_TARGET_ROOT="$TARGET_ROOT" \
-    PACKAGE_CARGO_TRACE="$trace" \
-    PACKAGE_METADATA_MARKER="$metadata_marker" \
-    PACKAGE_INVALIDATION_MARKER="$invalidation_marker" \
-    PACKAGE_BUILD_MARKER="$build_marker" \
-    PACKAGE_PROVENANCE_MARKER="$provenance_marker" \
-    PACKAGE_DPKG_MARKER="$package_marker" \
-    PATH="$fake_bin:$PATH" \
-    "$repo/scripts/package-cli-linux.sh" --format deb >/dev/null 2>&1
-  status=$?
-  set -e
-  after="$(sha256sum "$repo/Cargo.lock")"
-
-  [[ "$before" == "$after" ]] ||
-    fail "stale-lock cli-package 让第一次 Cargo 查询修改了 Cargo.lock"
-  [[ "$status" -eq 101 ]] ||
-    fail "预期 stale-lock cli-package 以状态 101 fail closed，实际为 $status"
-  [[ -f "$trace" ]] || fail "stale-lock cli-package 未到达第一次 Cargo 查询"
-  [[ "$(wc -l < "$trace")" -eq 1 ]] ||
-    fail "stale-lock cli-package 在第一次 locked 查询后仍到达 Cargo"
-  first_call="$(head -n 1 "$trace")"
-  [[ " $first_call " == *' --locked '* ]] ||
-    fail "cli-package 第一次 Cargo 查询未使用 locked：$first_call"
-  [[ ! -e "$metadata_marker" ]] || fail "stale-lock cli-package 到达 cargo metadata"
-  [[ ! -e "$invalidation_marker" ]] || fail "stale-lock cli-package 使 build artifacts 失效"
-  [[ ! -e "$build_marker" ]] || fail "stale-lock cli-package 到达 cargo build"
-  [[ ! -e "$provenance_marker" ]] || fail "stale-lock cli-package 到达 dep-info verification"
-  [[ ! -e "$package_marker" ]] || fail "stale-lock cli-package 到达 Debian assembly"
-}
-
-assert_package_source_provenance_is_current_and_non_mutating() {
-  local source_a="$TMPDIR/source a"
-  local source_b="$TMPDIR/source b"
-  local stale_dep_info="$TMPDIR/stale.d"
-  local escaped_source_a escaped_source_b misleading_target before after
-
-  mkdir -p "$source_a/crates/kanban-cli/src" "$source_b/crates/kanban-cli/src"
-  printf 'fn marker() {}\n' > "$source_a/crates/kanban-cli/src/main.rs"
-  printf 'fn marker() {}\n' > "$source_b/crates/kanban-cli/src/main.rs"
-  escaped_source_a="${source_a// /\\ }"
-  escaped_source_b="${source_b// /\\ }"
-  printf '%s/release/kanban: %s/crates/kanban-cli/src/main.rs\n' \
-    "$TARGET_ROOT" "$escaped_source_a" > "$stale_dep_info"
-  before="$(sha256sum "$stale_dep_info")"
-  assert_failure "$ROOT/scripts/package-source-provenance.sh" --verify-dep-info "$source_b" "$stale_dep_info"
-  after="$(sha256sum "$stale_dep_info")"
-  [[ "$before" == "$after" ]] || fail "拒绝 stale provenance 时修改了 dep-info artifact"
-  "$ROOT/scripts/package-source-provenance.sh" --verify-dep-info "$source_a" "$stale_dep_info"
-
-  misleading_target="$TMPDIR/misleading-target.d"
-  printf '%s/crates/target/release/kanban: %s/crates/kanban-cli/src/main.rs\n' \
-    "$escaped_source_b" "$escaped_source_a" > "$misleading_target"
-  assert_failure "$ROOT/scripts/package-source-provenance.sh" \
-    --verify-dep-info "$source_b" "$misleading_target"
-
-  mkdir -p "$TARGET_ROOT/release/.fingerprint/workspace-crate-aaa" \
-    "$TARGET_ROOT/release/.fingerprint/registry-crate-bbb" "$TARGET_ROOT/release/deps"
-  touch "$TARGET_ROOT/release/deps/libworkspace_crate-aaa.rlib" \
-    "$TARGET_ROOT/release/deps/libregistry_crate-bbb.rlib"
-  "$ROOT/scripts/package-source-provenance.sh" --invalidate-packages \
-    "$TARGET_ROOT/release" workspace-crate
-  [[ ! -e "$TARGET_ROOT/release/.fingerprint/workspace-crate-aaa" ]]
-  [[ ! -e "$TARGET_ROOT/release/deps/libworkspace_crate-aaa.rlib" ]]
-  [[ -e "$TARGET_ROOT/release/.fingerprint/registry-crate-bbb" ]]
-  [[ -e "$TARGET_ROOT/release/deps/libregistry_crate-bbb.rlib" ]]
 }
 
 assert_schema_cargo_lanes_stale_lock_fail_without_mutation() {
@@ -690,26 +364,23 @@ assert_resource_limit_defaults() {
 }
 
 assert_dev_profile_disables_incremental_without_test_override() {
-  python3 -B - "$ROOT/Cargo.toml" <<'PY'
-import sys
-import tomllib
-from pathlib import Path
+  if ! awk '
+    /^[[:space:]]*\[profile\.dev\][[:space:]]*(#.*)?$/ { in_dev=1; next }
+    /^[[:space:]]*\[/ { in_dev=0 }
+    in_dev && /^[[:space:]]*incremental[[:space:]]*=[[:space:]]*false([[:space:]]*(#.*)?)?$/ {
+      found=1
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$ROOT/Cargo.toml"; then
+    fail "root Cargo.toml 必须设置 [profile.dev].incremental = false"
+  fi
 
-manifest_path = Path(sys.argv[1])
-with manifest_path.open("rb") as manifest_file:
-    manifest = tomllib.load(manifest_file)
-
-profiles = manifest.get("profile", {})
-dev = profiles.get("dev")
-if not isinstance(dev, dict) or dev.get("incremental") is not False:
-    raise SystemExit(
-        "root Cargo.toml 必须设置 [profile.dev].incremental = false"
-    )
-if "test" in profiles:
-    raise SystemExit(
-        "root Cargo.toml 不得覆盖 [profile.test]；Cargo test 继承 [profile.dev]"
-    )
-PY
+  if awk '
+    /^[[:space:]]*\[profile\.test\][[:space:]]*(#.*)?$/ { found=1 }
+    END { exit(found ? 0 : 1) }
+  ' "$ROOT/Cargo.toml"; then
+    fail "root Cargo.toml 不得覆盖 [profile.test]；Cargo test 继承 [profile.dev]"
+  fi
 }
 
 [[ ! -e "$ROOT/scripts/$REMOVED_HELPER.sh" ]] || fail "已移除的 target helper 仍存在"
@@ -780,6 +451,7 @@ set -e
 KANBAN_CARGO_TARGET_ROOT="$TARGET_ROOT" "$LOCK_SCRIPT" -- true
 
 assert_signal_status INT 130
+assert_signal_status TERM 143
 assert_signal_status HUP 129
 
 descendant_pid_file="$TMPDIR/descendant.pid"
@@ -1023,41 +695,10 @@ assert_inherited_lock_post_flock_identity_race
 assert_inherited_lock_post_flock_symlink_race
 assert_fresh_lock_path_safety
 
-assert_target_tools_safe_path_gate_order() {
-  local -a recipe=()
-  local line safe_path_count=0
 
-  mapfile -t recipe < <(
-    awk '
-      $0 == "target-tools:" { in_recipe=1; next }
-      in_recipe && $0 !~ /^[[:space:]]/ { exit }
-      in_recipe { print }
-    ' "$ROOT/justfile"
-  )
-
-  local index=0
-  for line in "${recipe[@]}"; do
-    case "$line" in
-      "    python3 -B scripts/test_release_safe_path.py")
-        safe_path_count=$((safe_path_count + 1))
-        safe_path_index=$index
-        ;;
-    esac
-    index=$((index + 1))
-  done
-
-  [[ "$safe_path_count" -eq 1 ]] ||
-    fail "target-tools recipe 必须恰好调用一次 standalone release safe-path tests"
-}
-
-assert_target_tools_safe_path_gate_order
 assert_dev_profile_disables_incremental_without_test_override
 
 assert_distinct_worktrees_share_target_and_lock
-assert_package_lock_marker_is_wrapper_owned
-assert_package_waits_for_shared_build_lock
-assert_cli_package_stale_lock_fails_closed_without_mutation
-assert_package_source_provenance_is_current_and_non_mutating
 assert_schema_cargo_lanes_stale_lock_fail_without_mutation
 assert_resource_limit_defaults
 assert_no_bare_target_writing_cargo

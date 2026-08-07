@@ -7,7 +7,7 @@ use xtask::ToolResult;
 
 use crate::{
     affected,
-    check::{agents, dependencies, docs},
+    check::{agents, dependencies, docs, tooling},
 };
 
 pub(crate) fn run() -> ToolResult<()> {
@@ -39,11 +39,14 @@ pub(crate) fn run() -> ToolResult<()> {
         ("docs", Some("check")) => docs::run(&root),
         ("deps", Some("check")) => dependencies::run(&root),
         ("agents", Some("check")) => agents::run(&root),
+        ("tooling", Some("check")) => tooling::run(&root),
         ("schema", None) => invalid("schema 缺少子命令"),
         ("docs", Some(command)) => invalid(format!("docs 不支持子命令: {command}")),
         ("docs", None) => invalid("docs 缺少子命令"),
         ("deps", Some(command)) => invalid(format!("deps 不支持子命令: {command}")),
         ("agents", Some(command)) => invalid(format!("agents 不支持子命令: {command}")),
+        ("tooling", Some(command)) => invalid(format!("tooling 不支持子命令: {command}")),
+        ("tooling", None) => invalid("tooling 缺少子命令"),
         (group, Some(command)) => invalid(format!("未知 command: {group} {command}")),
         (group, None) => invalid(format!("未知 command: {group}")),
     }
@@ -163,6 +166,6 @@ fn invalid(message: impl Into<String>) -> ToolResult<()> {
 
 fn print_usage() {
     println!(
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|witnesses|deps check|agents check> [--base REF] [--root PATH] [--require-closed]"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|witnesses|deps check|agents check|tooling check> [--base REF] [--root PATH] [--require-closed]"
     );
 }

@@ -99,7 +99,7 @@ fn binary_help_preserves_public_cli_contract() {
     assert!(output.stderr.is_empty());
     assert_eq!(
         String::from_utf8(output.stdout).expect("help output must be UTF-8"),
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|witnesses|deps check|agents check> [--base REF] [--root PATH] [--require-closed]\n"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|witnesses|deps check|agents check|tooling check> [--base REF] [--root PATH] [--require-closed]\n"
     );
 }
 

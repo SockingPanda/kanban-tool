@@ -98,6 +98,9 @@ deps-check:
 agents-check:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- agents check
 
+tooling-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- tooling check
+
 docs-check:
     scripts/cargo-build-lock.sh -- cargo doc --workspace --no-deps
     scripts/cargo-build-lock.sh -- cargo test --doc --workspace

@@ -83,18 +83,25 @@ assert_process_exits() {
 }
 
 assert_no_bare_target_writing_cargo() {
-  local file line_number line
-  local files=(
-    "$ROOT/justfile"
-    "$ROOT/scripts/smoke-v1-local.sh"
-  )
+  local relative_file file line_number line
+  local files=("$ROOT/justfile")
+
+  while IFS= read -r relative_file; do
+    case "$relative_file" in
+      scripts/cargo-build-lock.sh|scripts/test-cargo-target-tools.sh)
+        continue
+        ;;
+    esac
+    files+=("$ROOT/$relative_file")
+  done < <(cd "$ROOT" && rg --files scripts -g '*.sh')
 
   for file in "${files[@]}"; do
     line_number=0
     while IFS= read -r line || [[ -n "$line" ]]; do
       line_number=$((line_number + 1))
       [[ "$line" =~ ^[[:space:]]*# ]] && continue
-      if [[ "$line" =~ (^|[^[:alnum:]_/.-])cargo[[:space:]]+(build|check|clippy|test|run|nextest[[:space:]]+run) ]]; then
+      [[ "$line" =~ ^[[:space:]]*log[[:space:]] ]] && continue
+      if [[ "$line" =~ (^|[^[:alnum:]_/.-])cargo[[:space:]]+(build|check|clippy|doc|fetch|install|test|run|nextest[[:space:]]+run) ]]; then
         if [[ "$line" != *cargo-build-lock.sh* && "$line" != *'"$LOCK"'* ]]; then
           fail "${file#$ROOT/}:$line_number 存在未通过 wrapper 写 target 的 cargo 命令：$line"
         fi

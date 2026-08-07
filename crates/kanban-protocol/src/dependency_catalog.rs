@@ -1,10 +1,10 @@
 //! Dependency API family 的唯一 declaration source。
 
 use crate::{
-    AdoptionLocator, ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection,
-    ContractGranularity, ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod,
-    HttpTransportLocation, McpExposure, McpPolicy, McpToolBinding, MigrationState,
-    OperationContract, OperationDeclaration, SurfaceOperation, WireParameter,
+    ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod, HttpTransportLocation,
+    McpExposure, McpPolicy, McpToolBinding, OperationContract, OperationDeclaration,
+    SurfaceOperation, WireParameter,
 };
 
 const DEPENDENCY_TASK_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
@@ -22,27 +22,6 @@ const REMOVE_DEPENDENCY_PATH_PARAMETERS: &[WireParameter] = &[
     },
 ];
 
-const DEPENDENCY_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_dependencies_adoption_uses_path_body_and_response_fixtures",
-};
-const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_ACTOR_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_ACTOR_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router",
-};
-
 const DOMAIN_INVARIANTS: &[crate::McpOperationInvariant] = &[
     crate::McpOperationInvariant::CanonicalHostOnly,
     crate::McpOperationInvariant::SharedApplicationService,
@@ -53,7 +32,7 @@ macro_rules! api_contract {
     (
         $id:expr, $path:expr, $direction:expr, $location:expr, $parameters:expr,
         $schema_id:expr, $artifact_path:expr, $title:expr, $valid_fixture:expr,
-        $invalid_fixture:expr, $schema_type:ty
+        $invalid_fixture:expr, $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -71,8 +50,7 @@ macro_rules! api_contract {
             $title,
             $valid_fixture,
             $invalid_fixture,
-        )
-        .with_adoption(DEPENDENCY_WITNESS, DEPENDENCY_WITNESS);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -80,13 +58,7 @@ macro_rules! api_contract {
 }
 
 macro_rules! header_contract {
-    ($operation:literal, $path:literal, $profile:expr, $profile_slug:literal) => {{
-        let witness = match $profile {
-            ApiHeaderProfile::Locale => HEADER_LOCALE_WITNESS,
-            ApiHeaderProfile::LocaleActor => HEADER_ACTOR_WITNESS,
-            ApiHeaderProfile::LocaleActorJson => HEADER_ACTOR_JSON_WITNESS,
-            _ => panic!("dependency headers 不支持该 profile"),
-        };
+    ($operation:literal, $path:literal, $profile:expr, $profile_slug:literal $(,)?) => {{
         let contract = ContractDeclaration::new(
             concat!("api.", $operation, ".headers"),
             concat!($path, " headers"),
@@ -111,8 +83,7 @@ macro_rules! header_contract {
                 $profile_slug,
                 ".v1.invalid.json"
             ),
-        )
-        .with_adoption(witness, witness);
+        );
         #[cfg(feature = "schema")]
         let contract = match $profile {
             ApiHeaderProfile::Locale => {
@@ -292,7 +263,6 @@ const DEPENDENCY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/dependencies"),
         "GET /api/v1/tasks/:task_id/dependencies",
         "GET /api/v1/tasks/:task_id/dependencies",
-        MigrationState::Adopted,
         API_LIST_DEPENDENCIES_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -304,7 +274,6 @@ const DEPENDENCY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/dependencies"),
         "POST /api/v1/tasks/:task_id/dependencies",
         "POST /api/v1/tasks/:task_id/dependencies",
-        MigrationState::Adopted,
         API_ADD_DEPENDENCY_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -316,7 +285,6 @@ const DEPENDENCY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:child_task_id/dependencies/:parent_task_id"),
         "DELETE /api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
         "DELETE /api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
-        MigrationState::Adopted,
         API_REMOVE_DEPENDENCY_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActor)

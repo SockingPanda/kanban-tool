@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ApiAttachment, ApiClaim, ApiComment, ApiExecutionPlan, ApiRun, ApiTask, ApiTaskStatus,
     ApiTaskStep, ApiTaskSteps, CheckpointReport, ContractSurface, DataEnvelope, DoctorReport,
-    GetTaskResponse, MigrationState, ProjectionCorpusMetadata, QueueStats, SearchStatus,
-    surface_operation_catalog,
+    GetTaskResponse, ProjectionCorpusMetadata, QueueStats, SearchStatus, surface_operation_catalog,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -834,21 +833,13 @@ pub fn cli_operation_catalog() -> Vec<CliOperationDescriptor> {
         .filter(|operation| operation.surface == ContractSurface::Cli)
         .map(|operation| CliOperationDescriptor {
             key: operation.key,
-            machine_output: match operation.migration {
-                MigrationState::Excluded => CliMachineOutput::Excluded {
-                    reason: operation
-                        .exclusion
-                        .expect("excluded CLI operation must explain its boundary"),
-                },
-                MigrationState::Generated | MigrationState::Adopted => {
-                    let [id] = operation.contracts.as_slice() else {
-                        panic!(
-                            "generated/adopted CLI operation must have one exact output contract"
-                        )
-                    };
-                    CliMachineOutput::Contract { id }
-                }
-                MigrationState::Planned => CliMachineOutput::Todo,
+            machine_output: if let Some(reason) = operation.exclusion {
+                CliMachineOutput::Excluded { reason }
+            } else {
+                let [id] = operation.contracts.as_slice() else {
+                    panic!("active CLI operation must have one exact output contract")
+                };
+                CliMachineOutput::Contract { id }
             },
         })
         .collect()

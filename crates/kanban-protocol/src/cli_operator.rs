@@ -1,7 +1,7 @@
 //! CLI signal、hook、dispatch、export 与 import 机器契约。
 //!
 //! 这些 DTO 只描述公开 machine output；service、状态机与 JSONL record body 仍由原 owner 管理。
-//! 每个 surface 仍由中央 inventory 分别注册 exact root 与 adoption witnesses。
+//! 每个 surface 仍由中央 inventory 分别注册 exact contract root。
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

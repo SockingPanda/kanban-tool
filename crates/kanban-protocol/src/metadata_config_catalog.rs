@@ -1,7 +1,7 @@
 //! Metadata、Config 与 shared API component 的唯一 declaration source。
 //!
 //! Metadata/Config parent 不是 HTTP endpoint；其 `OperationDeclaration` 只冻结 surface、
-//! key、operation、DTO schema、fixture、witness 与迁移状态。`api.error.response` 是
+//! key、operation、DTO schema 与 fixture。`api.error.response` 是
 //! 可被多个 HTTP endpoint 复用的 shared component，因此单独保留一个 declaration parent
 //! 仅用于生成正确的 `HttpTransport::Error` projection，不把 synthetic parent 暴露为
 //! endpoint 或 host-admin operation。
@@ -11,70 +11,13 @@
 //! contract，本模块不重复声明它，避免两个 source 在中央 wiring 时产生冲突。
 
 use crate::{
-    AdoptionLocator, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
     ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod, HttpTransportLocation,
-    MigrationState, OperationContract, OperationDeclaration, SurfaceOperation,
+    OperationContract, OperationDeclaration, SurfaceOperation,
 };
 
 #[cfg(test)]
 use crate::ContractTransport;
-
-const METADATA_DECISION_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-cli",
-    test_target: "cli_history_adoption",
-    exact_test: "history_cli_covers_runs_logs_comments_attachments_events_and_stats",
-};
-const METADATA_DECISION_CONSUMER: AdoptionLocator = METADATA_DECISION_PRODUCER;
-
-const METADATA_SIGNAL_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-cli",
-    test_target: "cli_label_contract_adoption",
-    exact_test: "generic_signals_record_review_and_confirm_flow_through_real_cli",
-};
-const METADATA_SIGNAL_CONSUMER: AdoptionLocator = METADATA_SIGNAL_PRODUCER;
-
-const METADATA_LABEL_PROPOSAL_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-cli",
-    test_target: "cli_label_contract_adoption",
-    exact_test: "labels_semantics_atoms_and_proposals_flow_through_real_cli",
-};
-const METADATA_LABEL_PROPOSAL_CONSUMER: AdoptionLocator = METADATA_LABEL_PROPOSAL_PRODUCER;
-
-const METADATA_ONTOLOGY_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-cli",
-    test_target: "cli_label_contract_adoption",
-    exact_test: "ontology_observation_signal_review_and_action_flow_through_real_cli",
-};
-const METADATA_ONTOLOGY_CONSUMER: AdoptionLocator = METADATA_ONTOLOGY_PRODUCER;
-
-const CONFIG_PROJECT_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-cli",
-    test_target: "cli_config_contract_adoption",
-    exact_test: "config_adoption::project_config_input_fixture_is_produced_by_runtime_config_dto",
-};
-const CONFIG_PROJECT_CONSUMER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-cli",
-    test_target: "cli_queue_adoption",
-    exact_test: "queue_cli_uses_real_host_for_config_board_and_task_commands",
-};
-
-const CONFIG_WORKER_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-cli",
-    test_target: "cli_config_contract_adoption",
-    exact_test: "config_adoption::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto",
-};
-const CONFIG_WORKER_CONSUMER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-cli",
-    test_target: "cli_admin_adoption",
-    exact_test: "dispatcher_profile_is_consumed_by_real_serve_and_only_claims_ready",
-};
-
-const API_ERROR_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_health_and_errors_use_real_router_fixtures",
-};
-const API_ERROR_CONSUMER: AdoptionLocator = API_ERROR_PRODUCER;
 
 macro_rules! structured_contract {
     (
@@ -88,9 +31,7 @@ macro_rules! structured_contract {
         $title:literal,
         $valid_fixture:literal,
         $invalid_fixture:literal,
-        $schema_type:ty,
-        $producer:expr,
-        $consumer:expr
+        $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -107,8 +48,7 @@ macro_rules! structured_contract {
             $title,
             $valid_fixture,
             $invalid_fixture,
-        )
-        .with_adoption($producer, $consumer);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -125,9 +65,7 @@ macro_rules! config_contract {
         $title:literal,
         $valid_fixture:literal,
         $invalid_fixture:literal,
-        $schema_type:ty,
-        $producer:expr,
-        $consumer:expr
+        $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -144,8 +82,7 @@ macro_rules! config_contract {
             $title,
             $valid_fixture,
             $invalid_fixture,
-        )
-        .with_adoption($producer, $consumer);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -163,9 +100,7 @@ const METADATA_DECISION_CONTRACTS: &[ContractDeclaration] = &[structured_contrac
     "Kanban decision metadata v1",
     "schemas/fixtures/metadata/decision.v1.valid.json",
     "schemas/fixtures/metadata/decision.v1.invalid.json",
-    crate::DecisionMetadata,
-    METADATA_DECISION_PRODUCER,
-    METADATA_DECISION_CONSUMER
+    crate::DecisionMetadata
 )];
 
 const METADATA_SIGNAL_RECORD_CONTRACTS: &[ContractDeclaration] = &[structured_contract!(
@@ -179,9 +114,7 @@ const METADATA_SIGNAL_RECORD_CONTRACTS: &[ContractDeclaration] = &[structured_co
     "Kanban signal record metadata input v1",
     "schemas/fixtures/metadata/signal-record-input.v1.valid.json",
     "schemas/fixtures/metadata/signal-record-input.v1.invalid.json",
-    crate::structured_metadata::SignalRecordMetadataInput,
-    METADATA_SIGNAL_PRODUCER,
-    METADATA_SIGNAL_CONSUMER
+    crate::structured_metadata::SignalRecordMetadataInput
 )];
 
 const METADATA_SIGNAL_LINK_CONTRACTS: &[ContractDeclaration] = &[structured_contract!(
@@ -195,9 +128,7 @@ const METADATA_SIGNAL_LINK_CONTRACTS: &[ContractDeclaration] = &[structured_cont
     "Kanban signal backlink metadata output v1",
     "schemas/fixtures/metadata/signal-link-output.v1.valid.json",
     "schemas/fixtures/metadata/signal-link-output.v1.invalid.json",
-    crate::structured_metadata::SignalLinkMetadataOutput,
-    METADATA_SIGNAL_PRODUCER,
-    METADATA_SIGNAL_CONSUMER
+    crate::structured_metadata::SignalLinkMetadataOutput
 )];
 
 const METADATA_LABEL_PROPOSAL_CONTRACTS: &[ContractDeclaration] = &[structured_contract!(
@@ -211,9 +142,7 @@ const METADATA_LABEL_PROPOSAL_CONTRACTS: &[ContractDeclaration] = &[structured_c
     "Kanban label proposal candidate metadata input v1",
     "schemas/fixtures/metadata/label-proposal-candidate-input.v1.valid.json",
     "schemas/fixtures/metadata/label-proposal-candidate-input.v1.invalid.json",
-    crate::structured_metadata::LabelProposalCandidateMetadataInput,
-    METADATA_LABEL_PROPOSAL_PRODUCER,
-    METADATA_LABEL_PROPOSAL_CONSUMER
+    crate::structured_metadata::LabelProposalCandidateMetadataInput
 )];
 
 const METADATA_ONTOLOGY_RECORD_CONTRACTS: &[ContractDeclaration] = &[structured_contract!(
@@ -227,9 +156,7 @@ const METADATA_ONTOLOGY_RECORD_CONTRACTS: &[ContractDeclaration] = &[structured_
     "Kanban label ontology record metadata input v1",
     "schemas/fixtures/metadata/ontology-record-input.v1.valid.json",
     "schemas/fixtures/metadata/ontology-record-input.v1.invalid.json",
-    crate::structured_metadata::OntologyRecordMetadataInput,
-    METADATA_ONTOLOGY_PRODUCER,
-    METADATA_ONTOLOGY_CONSUMER
+    crate::structured_metadata::OntologyRecordMetadataInput
 )];
 
 const METADATA_ONTOLOGY_EVIDENCE_CONTRACTS: &[ContractDeclaration] = &[structured_contract!(
@@ -243,9 +170,7 @@ const METADATA_ONTOLOGY_EVIDENCE_CONTRACTS: &[ContractDeclaration] = &[structure
     "Kanban label ontology validation evidence metadata input v1",
     "schemas/fixtures/metadata/ontology-validation-evidence-input.v1.valid.json",
     "schemas/fixtures/metadata/ontology-validation-evidence-input.v1.invalid.json",
-    crate::structured_metadata::OntologyValidationEvidenceMetadataInput,
-    METADATA_ONTOLOGY_PRODUCER,
-    METADATA_ONTOLOGY_CONSUMER
+    crate::structured_metadata::OntologyValidationEvidenceMetadataInput
 )];
 
 const CONFIG_PROJECT_CONTRACTS: &[ContractDeclaration] = &[config_contract!(
@@ -257,9 +182,7 @@ const CONFIG_PROJECT_CONTRACTS: &[ContractDeclaration] = &[config_contract!(
     "Project Config Input v1",
     "schemas/fixtures/config/project-input.v1.valid.json",
     "schemas/fixtures/config/project-input.v1.invalid.json",
-    crate::ProjectConfigInput,
-    CONFIG_PROJECT_PRODUCER,
-    CONFIG_PROJECT_CONSUMER
+    crate::ProjectConfigInput
 )];
 
 const CONFIG_WORKER_CONTRACTS: &[ContractDeclaration] = &[config_contract!(
@@ -271,9 +194,7 @@ const CONFIG_WORKER_CONTRACTS: &[ContractDeclaration] = &[config_contract!(
     "Selected Worker Profile Input v1",
     "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json",
     "schemas/fixtures/config/selected-worker-profile-input.v1.invalid.json",
-    crate::WorkerProfileInput,
-    CONFIG_WORKER_PRODUCER,
-    CONFIG_WORKER_CONSUMER
+    crate::WorkerProfileInput
 )];
 
 const METADATA_CONFIG_OPERATIONS: &[OperationDeclaration] = &[
@@ -284,7 +205,6 @@ const METADATA_CONFIG_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "structured decision comment metadata input",
         "structured decision comment metadata input",
-        MigrationState::Adopted,
         METADATA_DECISION_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -294,7 +214,6 @@ const METADATA_CONFIG_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "generic signal record input",
         "generic signal record input",
-        MigrationState::Adopted,
         METADATA_SIGNAL_RECORD_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -304,7 +223,6 @@ const METADATA_CONFIG_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "signal backlink comment metadata output",
         "signal backlink comment metadata output",
-        MigrationState::Adopted,
         METADATA_SIGNAL_LINK_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -314,7 +232,6 @@ const METADATA_CONFIG_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "label proposal candidate input",
         "label proposal candidate input",
-        MigrationState::Adopted,
         METADATA_LABEL_PROPOSAL_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -324,7 +241,6 @@ const METADATA_CONFIG_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "label ontology observation input",
         "label ontology observation input",
-        MigrationState::Adopted,
         METADATA_ONTOLOGY_RECORD_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -334,7 +250,6 @@ const METADATA_CONFIG_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "label ontology external validation evidence",
         "label ontology external validation evidence",
-        MigrationState::Adopted,
         METADATA_ONTOLOGY_EVIDENCE_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -344,7 +259,6 @@ const METADATA_CONFIG_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "project-local config after TOML decoding",
         "project-local config after TOML decoding",
-        MigrationState::Adopted,
         CONFIG_PROJECT_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -354,7 +268,6 @@ const METADATA_CONFIG_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "selected dispatcher worker profile after TOML decoding",
         "selected dispatcher worker profile after TOML decoding",
-        MigrationState::Adopted,
         CONFIG_WORKER_CONTRACTS,
     ),
 ];
@@ -377,8 +290,7 @@ const SHARED_API_ERROR_CONTRACTS: &[ContractDeclaration] = &[{
         "Kanban API error response v1",
         "schemas/fixtures/api/error-response.v1.valid.json",
         "schemas/fixtures/api/error-response.v1.invalid.json",
-    )
-    .with_adoption(API_ERROR_PRODUCER, API_ERROR_CONSUMER);
+    );
     #[cfg(feature = "schema")]
     let contract = contract.with_schema_type::<crate::ErrorEnvelope>();
     contract
@@ -393,7 +305,6 @@ const SHARED_API_ERROR_PARENT: OperationDeclaration = OperationDeclaration::new(
     Some("/api/v1/boards/:board/tasks"),
     "GET /api/v1/boards/:board/tasks",
     "GET /api/v1/boards/:board/tasks",
-    MigrationState::Adopted,
     SHARED_API_ERROR_CONTRACTS,
 );
 
@@ -476,11 +387,9 @@ mod tests {
                 ContractSurface::Metadata | ContractSurface::Config
             ));
             assert_eq!(contract.transport, ContractTransport::NoTransport);
-            assert_eq!(contract.migration, MigrationState::Adopted);
             assert_eq!(contract.binding, ContractBinding::ExactSurface);
             assert!(contract.schema_id.is_some());
             assert!(contract.fixture.is_some());
-            assert!(contract.adoption.is_some());
         }
     }
 

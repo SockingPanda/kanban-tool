@@ -1,13 +1,12 @@
 use serde::Serialize;
 
-use crate::{ContractSurface, MigrationState, endpoint_catalog};
+use crate::{ContractSurface, endpoint_catalog};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SurfaceOperation {
     pub key: String,
     pub surface: ContractSurface,
     pub contracts: Vec<&'static str>,
-    pub migration: MigrationState,
     pub exclusion: Option<&'static str>,
 }
 
@@ -27,7 +26,6 @@ fn non_transport_operations() -> Vec<SurfaceOperation> {
         key: "POST /api/v1/maintenance/{operation}".to_owned(),
         surface: ContractSurface::Api,
         contracts: vec!["api.maintenance-path.request"],
-        migration: MigrationState::Adopted,
         exclusion: None,
     });
     operations
@@ -41,7 +39,6 @@ pub fn surface_operation_catalog() -> Vec<SurfaceOperation> {
             // 下方会对 debug 形式做规范化，以保留历史 catalog key。
             surface: endpoint.surface,
             contracts: endpoint_contract_references(endpoint),
-            migration: endpoint.migration,
             exclusion: endpoint.exclusion,
         })
         .collect::<Vec<_>>();

@@ -3,11 +3,10 @@
 //! kanban-tool 的公开 wire contract 与离线 schema catalog。
 //!
 //! 该 crate 只拥有跨 adapter 的机器可读契约，不拥有 SQLite record、service input、
-//! HTTP handler 或 CLI command。operation inventory 明确区分 `Planned`、`Generated`、
-//! `Adopted` 与 `Excluded`：生成 schema 和手写 fixture 只证明离线契约可校验，不代表
-//! 真实 producer/consumer 已迁移；只有绑定双方测试证据的 `Adopted` 才表示运行时采用。
-//! schema model 生成由显式 `schema` feature 启用；离线校验、artifact 管理和 CLI
-//! 位于独立的 `xtask` leaf crate。正常 runtime 依赖图只包含 Serde wire 类型。
+//! HTTP handler 或 CLI command。operation inventory 保存当前公开 surface、contract、
+//! transport、schema、fixture 与明确 exclusion；真实 runtime 行为继续由各 adapter 的
+//! 集成测试验证。schema model 生成由显式 `schema` feature 启用；离线校验、artifact
+//! 管理和 CLI 位于独立的 `xtask` leaf crate。正常 runtime 依赖图只包含 Serde wire 类型。
 // 通用 signal DTO 由 HTTP、client、CLI 和 MCP 共享。
 
 pub mod admin_catalog;
@@ -119,8 +118,7 @@ pub use comments::{
     CreateCommentResponse, ListCommentsPath, ListCommentsResponse,
 };
 pub use contract_catalog::{
-    AdoptionLocator, ContractDeclaration, McpExposure, McpPolicy, McpToolBinding,
-    OperationDeclaration,
+    ContractDeclaration, McpExposure, McpPolicy, McpToolBinding, OperationDeclaration,
 };
 #[cfg(feature = "schema")]
 pub use contract_catalog::{SchemaGenerator, generate_schema_for};
@@ -149,9 +147,9 @@ pub use endpoint::{
 pub use events::ListEventsResponse;
 pub use headers::{ApiHeaderContractSpec, ApiHeaderProfile, api_header_contract_specs};
 pub use inventory::{
-    AdoptionEvidence, AdoptionWitness, ContractBinding, ContractDirection, ContractGranularity,
-    ContractStrictness, ContractSurface, ContractTransport, HttpTransportLocation, MigrationState,
-    OperationContract, WireParameter, WireParameterCardinality, operation_inventory,
+    ContractBinding, ContractDirection, ContractGranularity, ContractStrictness, ContractSurface,
+    ContractTransport, HttpTransportLocation, OperationContract, WireParameter,
+    WireParameterCardinality, operation_inventory,
 };
 pub use label_surfaces::*;
 pub use labels::{

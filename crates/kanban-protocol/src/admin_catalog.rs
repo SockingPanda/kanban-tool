@@ -2,14 +2,13 @@
 //!
 //! 这里同时冻结 portable export/import/replace 与 legacy SQLite v30 import 所使用的
 //! HTTP request/response contract。真实 host、client 和 CLI adapter 仍由各自 crate 持有；
-//! 本模块只描述 wire operation、header profile、schema、fixture、adoption witness 与
-//! host-admin 的 MCP 边界。
+//! 本模块只描述 wire operation、header profile、schema、fixture、host-admin 的 MCP 边界。
 
 use crate::{
-    AdoptionLocator, ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection,
-    ContractGranularity, ContractStrictness, ContractSurface, ContractTransport,
-    EndpointDescriptor, HttpMethod, HttpTransportLocation, McpExposure, McpPolicy, MigrationState,
-    OperationContract, OperationDeclaration, SurfaceOperation, WireParameter,
+    ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, ContractTransport, EndpointDescriptor, HttpMethod,
+    HttpTransportLocation, McpExposure, McpPolicy, OperationContract, OperationDeclaration,
+    SurfaceOperation, WireParameter,
 };
 
 const BOARD_QUERY_PARAMETERS: &[WireParameter] = &[WireParameter {
@@ -50,178 +49,6 @@ const STATS_POLICY: McpPolicy = McpPolicy {
     invariants: DOMAIN_INVARIANTS,
 };
 
-const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_json_header_fixture_is_consumed_by_real_router",
-};
-
-const HEALTH_RESPONSE_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_health_and_errors_use_real_router_fixtures",
-};
-const HEALTH_RESPONSE_CONSUMER: AdoptionLocator = HEALTH_RESPONSE_PRODUCER;
-
-const STATS_QUERY_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
-};
-const STATS_QUERY_CONSUMER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
-};
-const STATS_RESPONSE_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
-};
-const STATS_RESPONSE_CONSUMER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
-};
-
-const DOCTOR_RESPONSE_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "suite::maintenance_adoption::doctor_response_maps_real_non_default_report_before_fixture_normalization",
-};
-const DOCTOR_RESPONSE_CONSUMER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "suite::maintenance_adoption::doctor_response_contract_consumes_producer_fixture",
-};
-const CHECKPOINT_RESPONSE_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "suite::maintenance_adoption::checkpoint_response_reports_real_wal_field_relationships",
-};
-const CHECKPOINT_RESPONSE_CONSUMER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "suite::maintenance_adoption::checkpoint_response_contract_consumes_producer_fixture",
-};
-
-macro_rules! maintenance_witnesses {
-    ($producer_name:ident, $consumer_name:ident, $producer:literal, $consumer:literal) => {
-        const $producer_name: AdoptionLocator = AdoptionLocator {
-            package: "kanban-server",
-            test_target: "lib",
-            exact_test: $producer,
-        };
-        const $consumer_name: AdoptionLocator = AdoptionLocator {
-            package: "kanban-server",
-            test_target: "lib",
-            exact_test: $consumer,
-        };
-    };
-}
-
-maintenance_witnesses!(
-    MAINTENANCE_IMPORT_REQUEST_PRODUCER,
-    MAINTENANCE_IMPORT_REQUEST_CONSUMER,
-    "suite::maintenance_adoption::maintenance_import_request_producer",
-    "suite::maintenance_adoption::maintenance_import_request_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_BACKUP_REQUEST_PRODUCER,
-    MAINTENANCE_BACKUP_REQUEST_CONSUMER,
-    "suite::maintenance_adoption::maintenance_backup_request_producer",
-    "suite::maintenance_adoption::maintenance_backup_request_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_EXPORT_REQUEST_PRODUCER,
-    MAINTENANCE_EXPORT_REQUEST_CONSUMER,
-    "suite::maintenance_adoption::maintenance_export_request_producer",
-    "suite::maintenance_adoption::maintenance_export_request_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_RUN_REQUEST_PRODUCER,
-    MAINTENANCE_RUN_REQUEST_CONSUMER,
-    "suite::maintenance_adoption::maintenance_run_request_producer",
-    "suite::maintenance_adoption::maintenance_run_request_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_REBUILD_REQUEST_PRODUCER,
-    MAINTENANCE_REBUILD_REQUEST_CONSUMER,
-    "suite::maintenance_adoption::maintenance_rebuild_request_producer",
-    "suite::maintenance_adoption::maintenance_rebuild_request_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_CLEANUP_REQUEST_PRODUCER,
-    MAINTENANCE_CLEANUP_REQUEST_CONSUMER,
-    "suite::maintenance_adoption::maintenance_cleanup_request_producer",
-    "suite::maintenance_adoption::maintenance_cleanup_request_consumer"
-);
-maintenance_witnesses!(
-    LEGACY_IMPORT_REQUEST_PRODUCER,
-    LEGACY_IMPORT_REQUEST_CONSUMER,
-    "suite::maintenance_adoption::legacy_import_v30_request_producer",
-    "suite::maintenance_adoption::legacy_import_v30_request_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_BACKUP_RESPONSE_PRODUCER,
-    MAINTENANCE_BACKUP_RESPONSE_CONSUMER,
-    "suite::maintenance_adoption::maintenance_backup_response_producer",
-    "suite::maintenance_adoption::maintenance_backup_response_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_EXPORT_RESPONSE_PRODUCER,
-    MAINTENANCE_EXPORT_RESPONSE_CONSUMER,
-    "suite::maintenance_adoption::maintenance_export_response_producer",
-    "suite::maintenance_adoption::maintenance_export_response_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_IMPORT_RESPONSE_PRODUCER,
-    MAINTENANCE_IMPORT_RESPONSE_CONSUMER,
-    "suite::maintenance_adoption::maintenance_import_response_producer",
-    "suite::maintenance_adoption::maintenance_import_response_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_VACUUM_RESPONSE_PRODUCER,
-    MAINTENANCE_VACUUM_RESPONSE_CONSUMER,
-    "suite::maintenance_adoption::maintenance_vacuum_response_producer",
-    "suite::maintenance_adoption::maintenance_vacuum_response_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_STATUS_RESPONSE_PRODUCER,
-    MAINTENANCE_STATUS_RESPONSE_CONSUMER,
-    "suite::maintenance_adoption::maintenance_status_response_producer",
-    "suite::maintenance_adoption::maintenance_status_response_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_RUN_RESPONSE_PRODUCER,
-    MAINTENANCE_RUN_RESPONSE_CONSUMER,
-    "suite::maintenance_adoption::maintenance_run_response_producer",
-    "suite::maintenance_adoption::maintenance_run_response_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_REBUILD_RESPONSE_PRODUCER,
-    MAINTENANCE_REBUILD_RESPONSE_CONSUMER,
-    "suite::maintenance_adoption::maintenance_rebuild_response_producer",
-    "suite::maintenance_adoption::maintenance_rebuild_response_consumer"
-);
-maintenance_witnesses!(
-    MAINTENANCE_CLEANUP_RESPONSE_PRODUCER,
-    MAINTENANCE_CLEANUP_RESPONSE_CONSUMER,
-    "suite::maintenance_adoption::maintenance_cleanup_response_producer",
-    "suite::maintenance_adoption::maintenance_cleanup_response_consumer"
-);
-maintenance_witnesses!(
-    LEGACY_IMPORT_RESPONSE_PRODUCER,
-    LEGACY_IMPORT_RESPONSE_CONSUMER,
-    "suite::maintenance_adoption::legacy_import_v30_response_producer",
-    "suite::maintenance_adoption::legacy_import_v30_response_consumer"
-);
-
 macro_rules! api_contract {
     (
         $id:literal,
@@ -235,9 +62,7 @@ macro_rules! api_contract {
         $title:literal,
         $valid_fixture:literal,
         $invalid_fixture:literal,
-        $schema_type:ty,
-        $producer:expr,
-        $consumer:expr
+        $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -256,8 +81,7 @@ macro_rules! api_contract {
             $title,
             $valid_fixture,
             $invalid_fixture,
-        )
-        .with_adoption($producer, $consumer);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -273,9 +97,7 @@ macro_rules! header_contract {
         $operation_key:literal,
         $profile:expr,
         $schema_type:ty,
-        $profile_slug:literal,
-        $producer:expr,
-        $consumer:expr
+        $profile_slug:literal $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -302,8 +124,7 @@ macro_rules! header_contract {
                 $profile_slug,
                 ".v1.invalid.json"
             ),
-        )
-        .with_adoption($producer, $consumer);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -320,8 +141,6 @@ const API_HEALTH_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::Locale,
         crate::headers::LocaleHeaders,
         "locale-headers",
-        HEADER_LOCALE_WITNESS,
-        HEADER_LOCALE_WITNESS
     ),
     api_contract!(
         "api.health.response",
@@ -336,8 +155,6 @@ const API_HEALTH_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/health-response.v1.valid.json",
         "schemas/fixtures/api/health-response.v1.invalid.json",
         crate::HealthResponse,
-        HEALTH_RESPONSE_PRODUCER,
-        HEALTH_RESPONSE_CONSUMER
     ),
 ];
 
@@ -355,8 +172,6 @@ const API_STATS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/get-stats-query.v1.valid.json",
         "schemas/fixtures/api/get-stats-query.v1.invalid.json",
         crate::BoardQuery,
-        STATS_QUERY_PRODUCER,
-        STATS_QUERY_CONSUMER
     ),
     header_contract!(
         "api.get-stats.headers",
@@ -367,8 +182,6 @@ const API_STATS_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::Locale,
         crate::headers::LocaleHeaders,
         "locale-headers",
-        HEADER_LOCALE_WITNESS,
-        HEADER_LOCALE_WITNESS
     ),
     api_contract!(
         "api.get-stats.response",
@@ -383,8 +196,6 @@ const API_STATS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/get-stats-response.v1.valid.json",
         "schemas/fixtures/api/get-stats-response.v1.invalid.json",
         crate::StatsResponse,
-        STATS_RESPONSE_PRODUCER,
-        STATS_RESPONSE_CONSUMER
     ),
 ];
 
@@ -398,8 +209,6 @@ const API_DOCTOR_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::Locale,
         crate::headers::LocaleHeaders,
         "locale-headers",
-        HEADER_LOCALE_WITNESS,
-        HEADER_LOCALE_WITNESS
     ),
     api_contract!(
         "api.doctor.response",
@@ -414,8 +223,6 @@ const API_DOCTOR_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/doctor-response.v1.valid.json",
         "schemas/fixtures/api/doctor-response.v1.invalid.json",
         crate::DoctorResponse,
-        DOCTOR_RESPONSE_PRODUCER,
-        DOCTOR_RESPONSE_CONSUMER
     ),
 ];
 
@@ -429,8 +236,6 @@ const API_CHECKPOINT_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::Locale,
         crate::headers::LocaleHeaders,
         "locale-headers",
-        HEADER_LOCALE_WITNESS,
-        HEADER_LOCALE_WITNESS
     ),
     api_contract!(
         "api.checkpoint.response",
@@ -445,8 +250,6 @@ const API_CHECKPOINT_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/checkpoint-response.v1.valid.json",
         "schemas/fixtures/api/checkpoint-response.v1.invalid.json",
         crate::CheckpointResponse,
-        CHECKPOINT_RESPONSE_PRODUCER,
-        CHECKPOINT_RESPONSE_CONSUMER
     ),
 ];
 
@@ -460,8 +263,6 @@ const API_BACKUP_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::LocaleJson,
         crate::headers::LocaleJsonHeaders,
         "locale-json-headers",
-        HEADER_JSON_WITNESS,
-        HEADER_JSON_WITNESS
     ),
     api_contract!(
         "api.maintenance-backup.request",
@@ -476,8 +277,6 @@ const API_BACKUP_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-backup-request.v1.valid.json",
         "schemas/fixtures/api/maintenance-backup-request.v1.invalid.json",
         crate::MaintenancePathRequest,
-        MAINTENANCE_BACKUP_REQUEST_PRODUCER,
-        MAINTENANCE_BACKUP_REQUEST_CONSUMER
     ),
     api_contract!(
         "api.maintenance-backup.response",
@@ -492,8 +291,6 @@ const API_BACKUP_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-backup-response.v1.valid.json",
         "schemas/fixtures/api/maintenance-backup-response.v1.invalid.json",
         crate::BackupResponse,
-        MAINTENANCE_BACKUP_RESPONSE_PRODUCER,
-        MAINTENANCE_BACKUP_RESPONSE_CONSUMER
     ),
 ];
 
@@ -507,8 +304,6 @@ const API_EXPORT_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::LocaleJson,
         crate::headers::LocaleJsonHeaders,
         "locale-json-headers",
-        HEADER_JSON_WITNESS,
-        HEADER_JSON_WITNESS
     ),
     api_contract!(
         "api.maintenance-export.request",
@@ -523,8 +318,6 @@ const API_EXPORT_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-export-request.v1.valid.json",
         "schemas/fixtures/api/maintenance-export-request.v1.invalid.json",
         crate::MaintenancePathRequest,
-        MAINTENANCE_EXPORT_REQUEST_PRODUCER,
-        MAINTENANCE_EXPORT_REQUEST_CONSUMER
     ),
     api_contract!(
         "api.maintenance-export.response",
@@ -539,8 +332,6 @@ const API_EXPORT_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-export-response.v1.valid.json",
         "schemas/fixtures/api/maintenance-export-response.v1.invalid.json",
         crate::ExportResponse,
-        MAINTENANCE_EXPORT_RESPONSE_PRODUCER,
-        MAINTENANCE_EXPORT_RESPONSE_CONSUMER
     ),
 ];
 
@@ -554,8 +345,6 @@ const API_IMPORT_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::LocaleJson,
         crate::headers::LocaleJsonHeaders,
         "locale-json-headers",
-        HEADER_JSON_WITNESS,
-        HEADER_JSON_WITNESS
     ),
     api_contract!(
         "api.maintenance-import.request",
@@ -570,8 +359,6 @@ const API_IMPORT_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-import-request.v1.valid.json",
         "schemas/fixtures/api/maintenance-import-request.v1.invalid.json",
         crate::MaintenanceImportRequest,
-        MAINTENANCE_IMPORT_REQUEST_PRODUCER,
-        MAINTENANCE_IMPORT_REQUEST_CONSUMER
     ),
     api_contract!(
         "api.maintenance-import.response",
@@ -586,8 +373,6 @@ const API_IMPORT_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-import-response.v1.valid.json",
         "schemas/fixtures/api/maintenance-import-response.v1.invalid.json",
         crate::ImportResponse,
-        MAINTENANCE_IMPORT_RESPONSE_PRODUCER,
-        MAINTENANCE_IMPORT_RESPONSE_CONSUMER
     ),
 ];
 
@@ -601,8 +386,6 @@ const API_VACUUM_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::Locale,
         crate::headers::LocaleHeaders,
         "locale-headers",
-        HEADER_LOCALE_WITNESS,
-        HEADER_LOCALE_WITNESS
     ),
     api_contract!(
         "api.maintenance-vacuum.response",
@@ -617,8 +400,6 @@ const API_VACUUM_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-vacuum-response.v1.valid.json",
         "schemas/fixtures/api/maintenance-vacuum-response.v1.invalid.json",
         crate::VacuumResponse,
-        MAINTENANCE_VACUUM_RESPONSE_PRODUCER,
-        MAINTENANCE_VACUUM_RESPONSE_CONSUMER
     ),
 ];
 
@@ -632,8 +413,6 @@ const API_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::Locale,
         crate::headers::LocaleHeaders,
         "locale-headers",
-        HEADER_LOCALE_WITNESS,
-        HEADER_LOCALE_WITNESS
     ),
     api_contract!(
         "api.maintenance-status.response",
@@ -648,8 +427,6 @@ const API_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-status-response.v1.valid.json",
         "schemas/fixtures/api/maintenance-status-response.v1.invalid.json",
         crate::MaintenanceStatusResponse,
-        MAINTENANCE_STATUS_RESPONSE_PRODUCER,
-        MAINTENANCE_STATUS_RESPONSE_CONSUMER
     ),
 ];
 
@@ -663,8 +440,6 @@ const API_RUN_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::LocaleJson,
         crate::headers::LocaleJsonHeaders,
         "locale-json-headers",
-        HEADER_JSON_WITNESS,
-        HEADER_JSON_WITNESS
     ),
     api_contract!(
         "api.maintenance-run.request",
@@ -679,8 +454,6 @@ const API_RUN_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-run-request.v1.valid.json",
         "schemas/fixtures/api/maintenance-run-request.v1.invalid.json",
         crate::MaintenanceRunRequest,
-        MAINTENANCE_RUN_REQUEST_PRODUCER,
-        MAINTENANCE_RUN_REQUEST_CONSUMER
     ),
     api_contract!(
         "api.maintenance-run.response",
@@ -695,8 +468,6 @@ const API_RUN_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-run-response.v1.valid.json",
         "schemas/fixtures/api/maintenance-run-response.v1.invalid.json",
         crate::MaintenanceRunResponse,
-        MAINTENANCE_RUN_RESPONSE_PRODUCER,
-        MAINTENANCE_RUN_RESPONSE_CONSUMER
     ),
 ];
 
@@ -710,8 +481,6 @@ const API_REBUILD_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::LocaleJson,
         crate::headers::LocaleJsonHeaders,
         "locale-json-headers",
-        HEADER_JSON_WITNESS,
-        HEADER_JSON_WITNESS
     ),
     api_contract!(
         "api.maintenance-rebuild.request",
@@ -726,8 +495,6 @@ const API_REBUILD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-rebuild-request.v1.valid.json",
         "schemas/fixtures/api/maintenance-rebuild-request.v1.invalid.json",
         crate::MaintenanceRunRequest,
-        MAINTENANCE_REBUILD_REQUEST_PRODUCER,
-        MAINTENANCE_REBUILD_REQUEST_CONSUMER
     ),
     api_contract!(
         "api.maintenance-rebuild.response",
@@ -742,8 +509,6 @@ const API_REBUILD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-rebuild-response.v1.valid.json",
         "schemas/fixtures/api/maintenance-rebuild-response.v1.invalid.json",
         crate::MaintenanceRunResponse,
-        MAINTENANCE_REBUILD_RESPONSE_PRODUCER,
-        MAINTENANCE_REBUILD_RESPONSE_CONSUMER
     ),
 ];
 
@@ -757,8 +522,6 @@ const API_CLEANUP_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::LocaleJson,
         crate::headers::LocaleJsonHeaders,
         "locale-json-headers",
-        HEADER_JSON_WITNESS,
-        HEADER_JSON_WITNESS
     ),
     api_contract!(
         "api.maintenance-cleanup.request",
@@ -773,8 +536,6 @@ const API_CLEANUP_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-cleanup-request.v1.valid.json",
         "schemas/fixtures/api/maintenance-cleanup-request.v1.invalid.json",
         crate::MaintenanceRunRequest,
-        MAINTENANCE_CLEANUP_REQUEST_PRODUCER,
-        MAINTENANCE_CLEANUP_REQUEST_CONSUMER
     ),
     api_contract!(
         "api.maintenance-cleanup.response",
@@ -789,8 +550,6 @@ const API_CLEANUP_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-cleanup-response.v1.valid.json",
         "schemas/fixtures/api/maintenance-cleanup-response.v1.invalid.json",
         crate::MaintenanceRunResponse,
-        MAINTENANCE_CLEANUP_RESPONSE_PRODUCER,
-        MAINTENANCE_CLEANUP_RESPONSE_CONSUMER
     ),
 ];
 
@@ -804,8 +563,6 @@ const API_LEGACY_IMPORT_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::LocaleJson,
         crate::headers::LocaleJsonHeaders,
         "locale-json-headers",
-        HEADER_JSON_WITNESS,
-        HEADER_JSON_WITNESS
     ),
     api_contract!(
         "api.maintenance-import-v30.request",
@@ -820,8 +577,6 @@ const API_LEGACY_IMPORT_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-import-v30-request.v1.valid.json",
         "schemas/fixtures/api/maintenance-import-v30-request.v1.invalid.json",
         crate::LegacyImportRequest,
-        LEGACY_IMPORT_REQUEST_PRODUCER,
-        LEGACY_IMPORT_REQUEST_CONSUMER
     ),
     api_contract!(
         "api.maintenance-import-v30.response",
@@ -836,8 +591,6 @@ const API_LEGACY_IMPORT_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/maintenance-import-v30-response.v1.valid.json",
         "schemas/fixtures/api/maintenance-import-v30-response.v1.invalid.json",
         crate::LegacyImportResponse,
-        LEGACY_IMPORT_RESPONSE_PRODUCER,
-        LEGACY_IMPORT_RESPONSE_CONSUMER
     ),
 ];
 
@@ -849,7 +602,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/health"),
         "GET /health",
         "GET /health",
-        MigrationState::Adopted,
         API_HEALTH_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -861,7 +613,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/stats"),
         "GET /api/v1/stats",
         "GET /api/v1/stats",
-        MigrationState::Adopted,
         API_STATS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -873,7 +624,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/doctor"),
         "GET /api/v1/maintenance/doctor",
         "GET /api/v1/maintenance/doctor",
-        MigrationState::Adopted,
         API_DOCTOR_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -885,7 +635,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/checkpoint"),
         "POST /api/v1/maintenance/checkpoint",
         "POST /api/v1/maintenance/checkpoint",
-        MigrationState::Adopted,
         API_CHECKPOINT_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -897,7 +646,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/backup"),
         "POST /api/v1/maintenance/backup",
         "POST /api/v1/maintenance/backup",
-        MigrationState::Adopted,
         API_BACKUP_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -909,7 +657,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/export"),
         "POST /api/v1/maintenance/export",
         "POST /api/v1/maintenance/export",
-        MigrationState::Adopted,
         API_EXPORT_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -921,7 +668,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/import"),
         "POST /api/v1/maintenance/import",
         "POST /api/v1/maintenance/import",
-        MigrationState::Adopted,
         API_IMPORT_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -933,7 +679,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/vacuum"),
         "POST /api/v1/maintenance/vacuum",
         "POST /api/v1/maintenance/vacuum",
-        MigrationState::Adopted,
         API_VACUUM_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -945,7 +690,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/status"),
         "GET /api/v1/maintenance/status",
         "GET /api/v1/maintenance/status",
-        MigrationState::Adopted,
         API_STATUS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -957,7 +701,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/run"),
         "POST /api/v1/maintenance/run",
         "POST /api/v1/maintenance/run",
-        MigrationState::Adopted,
         API_RUN_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -969,7 +712,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/rebuild"),
         "POST /api/v1/maintenance/rebuild",
         "POST /api/v1/maintenance/rebuild",
-        MigrationState::Adopted,
         API_REBUILD_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -981,7 +723,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/cleanup"),
         "POST /api/v1/maintenance/cleanup",
         "POST /api/v1/maintenance/cleanup",
-        MigrationState::Adopted,
         API_CLEANUP_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -993,7 +734,6 @@ const ADMIN_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/maintenance/import-v30"),
         "POST /api/v1/maintenance/import-v30",
         "POST /api/v1/maintenance/import-v30",
-        MigrationState::Adopted,
         API_LEGACY_IMPORT_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -1077,29 +817,7 @@ const MAINTENANCE_PATH_OPERATION: OperationContract = OperationContract {
     strictness: ContractStrictness::DenyUnknownFields,
     schema_id: Some("urn:kanban-tool:schema:api:maintenance-path-request:v1"),
     fixture: Some("schemas/fixtures/api/maintenance-path-request.v1.valid.json"),
-    adoption: Some(crate::AdoptionEvidence {
-        producer_fixture: "schemas/fixtures/api/maintenance-path-request.v1.valid.json",
-        producer: crate::AdoptionWitness {
-            operation: "POST /api/v1/maintenance/{operation}",
-            contract_id: "api.maintenance-path.request",
-            surface: ContractSurface::Api,
-            direction: ContractDirection::Deserialize,
-            package: "kanban-server",
-            test_target: "lib",
-            exact_test: "suite::maintenance_adoption::maintenance_path_request_producer",
-        },
-        consumer: crate::AdoptionWitness {
-            operation: "POST /api/v1/maintenance/{operation}",
-            contract_id: "api.maintenance-path.request",
-            surface: ContractSurface::Api,
-            direction: ContractDirection::Deserialize,
-            package: "kanban-server",
-            test_target: "lib",
-            exact_test: "suite::maintenance_adoption::maintenance_path_request_consumer",
-        },
-    }),
     exclusion: None,
-    migration: MigrationState::Adopted,
     transport: ContractTransport::Http {
         operation_key: Some("POST /api/v1/maintenance/{operation}"),
         location: HttpTransportLocation::Body,
@@ -1217,14 +935,6 @@ mod tests {
             .find(|contract| contract.id == "api.health.response")
             .expect("health response contract");
         assert_eq!(contract.operation, "localhost health report");
-        assert_eq!(
-            contract
-                .adoption
-                .expect("health adoption")
-                .producer
-                .operation,
-            "GET /health"
-        );
         assert_eq!(
             contract.transport,
             ContractTransport::Http {

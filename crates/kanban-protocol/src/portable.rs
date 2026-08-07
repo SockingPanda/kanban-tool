@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize, de};
 use serde_json::{Map, Value};
 
 use crate::{
-    AdoptionLocator, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
-    ContractStrictness, ContractSurface, MigrationState, OperationContract, OperationDeclaration,
+    ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, OperationContract, OperationDeclaration,
 };
 
 /// 第 4 阶段的并行实现 lane。这里只冻结 wire contract 的所有权，不表达 SQLite 表语义。
@@ -14,23 +14,20 @@ pub enum PortableContractLane {
     Ledger,
 }
 
-/// 单个 JSONL direction 的稳定 authority locator。
+/// 单个 JSONL direction 的稳定 contract 描述。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct PortableContractSide {
     pub contract_id: &'static str,
     pub schema_id: &'static str,
     pub fixture: &'static str,
     pub invalid_fixture: &'static str,
-    pub test_target: &'static str,
-    pub producer_test: &'static str,
-    pub consumer_test: &'static str,
 }
 
 /// portable JSONL discriminator 的稳定 contract 描述符。
 ///
 /// 这是 `OperationDeclaration`/`ContractDeclaration` source 的 compatibility projection。
 /// SQLite 表、scope 和 import guard 仍由 canonical service 拥有；这里仅提供旧 public
-/// API 所需的 surface operation、contract ID、URN、fixture 与 adoption witness locator。
+/// API 所需的 surface operation、contract ID、URN 与 fixture。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct PortableContractDescriptor {
     pub discriminator: &'static str,
@@ -71,7 +68,7 @@ macro_rules! portable_contract {
         $discriminator:literal,
         $direction:expr,
         $suffix:literal,
-        $schema_type:ty
+        $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             concat!("jsonl.", $discriminator, ".", $suffix),
@@ -106,26 +103,6 @@ macro_rules! portable_contract {
                 $suffix,
                 ".v1.invalid.json"
             ),
-        )
-        .with_adoption(
-            AdoptionLocator {
-                package: "kanban-server",
-                test_target: "lib",
-                exact_test: concat!(
-                    "suite::portable_adoption::",
-                    $discriminator,
-                    "_output_fixture_is_produced_by_real_export"
-                ),
-            },
-            AdoptionLocator {
-                package: "kanban-server",
-                test_target: "lib",
-                exact_test: concat!(
-                    "suite::portable_adoption::",
-                    $discriminator,
-                    "_input_fixture_is_consumed_by_real_import"
-                ),
-            },
         );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
@@ -169,7 +146,6 @@ macro_rules! portable_operations {
                 None,
                 concat!("type=", $discriminator),
                 concat!("type=", $discriminator),
-                MigrationState::Adopted,
                 $contracts,
             );
         )+
@@ -368,12 +344,6 @@ pub fn portable_operation_contracts() -> Vec<OperationContract> {
 }
 
 fn descriptor_side(contract: &ContractDeclaration) -> PortableContractSide {
-    let producer = contract
-        .producer
-        .expect("portable contract declaration must provide producer witness");
-    let consumer = contract
-        .consumer
-        .expect("portable contract declaration must provide consumer witness");
     PortableContractSide {
         contract_id: contract.id,
         schema_id: contract
@@ -385,9 +355,6 @@ fn descriptor_side(contract: &ContractDeclaration) -> PortableContractSide {
         invalid_fixture: contract
             .invalid_fixture
             .expect("portable contract declaration must provide invalid fixture"),
-        test_target: producer.test_target,
-        producer_test: producer.exact_test,
-        consumer_test: consumer.exact_test,
     }
 }
 

@@ -1,14 +1,14 @@
 //! Task read、CRUD 与 lifecycle API family 的唯一 declaration source。
 //!
-//! parent/child declaration 同时描述 endpoint、headers、schema、fixture 和 adoption
-//! locator。真实 router/client/MCP adapter 仍由各自 crate 持有；本模块只提供协议事实
+//! parent/child declaration 同时描述 endpoint、headers、schema 和 fixture。真实
+//! router/client/MCP adapter 仍由各自 crate 持有；本模块只提供协议事实
 //! 及其 deterministic projection。
 
 use crate::{
-    AdoptionLocator, ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection,
-    ContractGranularity, ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod,
-    HttpTransportLocation, McpExposure, McpPolicy, McpToolBinding, MigrationState,
-    OperationContract, OperationDeclaration, SurfaceOperation, WireParameter,
+    ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod, HttpTransportLocation,
+    McpExposure, McpPolicy, McpToolBinding, OperationContract, OperationDeclaration,
+    SurfaceOperation, WireParameter,
 };
 
 const TASK_READ_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
@@ -77,42 +77,6 @@ const DOMAIN_INVARIANTS: &[crate::McpOperationInvariant] = &[
     crate::McpOperationInvariant::NoHostAdminSurface,
 ];
 
-const TASK_READ_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_tasks_crud_and_reads_use_committed_fixtures_through_router",
-};
-const TASK_LIFECYCLE_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_task_lifecycle_adoption_uses_committed_requests_and_typed_responses",
-};
-const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_ACTOR_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_json_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_ACTOR_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_OPTIONAL_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_optional_json_header_fixture_is_consumed_by_real_router",
-};
-
 macro_rules! api_contract {
     (
         $id:expr,
@@ -125,8 +89,7 @@ macro_rules! api_contract {
         $title:expr,
         $valid_fixture:expr,
         $invalid_fixture:expr,
-        $schema_type:ty,
-        $witness:expr
+        $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -144,8 +107,7 @@ macro_rules! api_contract {
             $title,
             $valid_fixture,
             $invalid_fixture,
-        )
-        .with_adoption($witness, $witness);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -153,7 +115,7 @@ macro_rules! api_contract {
 }
 
 macro_rules! header_contract {
-    ($operation:literal, $path:literal, $profile:expr, $profile_slug:literal, $schema_type:ty) => {{
+    ($operation:literal, $path:literal, $profile:expr, $profile_slug:literal, $schema_type:ty $(,)?) => {{
         let contract = ContractDeclaration::new(
             concat!("api.", $operation, ".headers"),
             concat!($path, " headers"),
@@ -178,22 +140,6 @@ macro_rules! header_contract {
                 $profile_slug,
                 ".v1.invalid.json"
             ),
-        )
-        .with_adoption(
-            match $profile {
-                ApiHeaderProfile::Locale => HEADER_LOCALE_WITNESS,
-                ApiHeaderProfile::LocaleActor => HEADER_ACTOR_WITNESS,
-                ApiHeaderProfile::LocaleJson => HEADER_JSON_WITNESS,
-                ApiHeaderProfile::LocaleActorJson => HEADER_ACTOR_JSON_WITNESS,
-                ApiHeaderProfile::LocaleActorOptionalJson => HEADER_OPTIONAL_JSON_WITNESS,
-            },
-            match $profile {
-                ApiHeaderProfile::Locale => HEADER_LOCALE_WITNESS,
-                ApiHeaderProfile::LocaleActor => HEADER_ACTOR_WITNESS,
-                ApiHeaderProfile::LocaleJson => HEADER_JSON_WITNESS,
-                ApiHeaderProfile::LocaleActorJson => HEADER_ACTOR_JSON_WITNESS,
-                ApiHeaderProfile::LocaleActorOptionalJson => HEADER_OPTIONAL_JSON_WITNESS,
-            },
         );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
@@ -311,7 +257,6 @@ const API_LIST_TASKS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-tasks-path.v1.valid.json",
         "schemas/fixtures/api/list-tasks-path.v1.invalid.json",
         crate::ListTasksPath,
-        TASK_READ_WITNESS
     ),
     api_contract!(
         "api.list-tasks.query",
@@ -325,7 +270,6 @@ const API_LIST_TASKS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-tasks-query.v1.valid.json",
         "schemas/fixtures/api/list-tasks-query.v1.invalid.json",
         crate::ListTasksQuery,
-        TASK_READ_WITNESS
     ),
     header_contract!(
         "list-tasks",
@@ -346,7 +290,6 @@ const API_LIST_TASKS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-tasks-response.v1.valid.json",
         "schemas/fixtures/api/list-tasks-response.v1.invalid.json",
         crate::ListTasksResponse,
-        TASK_READ_WITNESS
     ),
 ];
 
@@ -363,7 +306,6 @@ const API_LIST_TASKS_BY_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-tasks-by-status-path.v1.valid.json",
         "schemas/fixtures/api/list-tasks-by-status-path.v1.invalid.json",
         crate::ListTasksByStatusPath,
-        TASK_READ_WITNESS
     ),
     api_contract!(
         "api.list-tasks-by-status.query",
@@ -377,7 +319,6 @@ const API_LIST_TASKS_BY_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-tasks-by-status-query.v1.valid.json",
         "schemas/fixtures/api/list-tasks-by-status-query.v1.invalid.json",
         crate::ListTasksByStatusQuery,
-        TASK_READ_WITNESS
     ),
     header_contract!(
         "list-tasks-by-status",
@@ -398,7 +339,6 @@ const API_LIST_TASKS_BY_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-tasks-by-status-response.v1.valid.json",
         "schemas/fixtures/api/list-tasks-by-status-response.v1.invalid.json",
         crate::ListTasksByStatusResponse,
-        TASK_READ_WITNESS
     ),
 ];
 
@@ -415,7 +355,6 @@ const API_CREATE_TASK_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/create-task-path.v1.valid.json",
         "schemas/fixtures/api/create-task-path.v1.invalid.json",
         crate::CreateTaskPath,
-        TASK_READ_WITNESS
     ),
     header_contract!(
         "create-task",
@@ -436,7 +375,6 @@ const API_CREATE_TASK_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/create-task-request.v1.valid.json",
         "schemas/fixtures/api/create-task-request.v1.invalid.json",
         crate::CreateTaskRequest,
-        TASK_READ_WITNESS
     ),
     api_contract!(
         "api.create-task.response",
@@ -450,7 +388,6 @@ const API_CREATE_TASK_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/create-task-response.v1.valid.json",
         "schemas/fixtures/api/create-task-response.v1.invalid.json",
         crate::CreateTaskResponse,
-        TASK_READ_WITNESS
     ),
 ];
 
@@ -467,7 +404,6 @@ const API_GET_TASK_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/get-task-path.v1.valid.json",
         "schemas/fixtures/api/get-task-path.v1.invalid.json",
         crate::GetTaskPath,
-        TASK_READ_WITNESS
     ),
     api_contract!(
         "api.get-task.query",
@@ -481,7 +417,6 @@ const API_GET_TASK_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/get-task-query.v1.valid.json",
         "schemas/fixtures/api/get-task-query.v1.invalid.json",
         crate::GetTaskQuery,
-        TASK_READ_WITNESS
     ),
     header_contract!(
         "get-task",
@@ -502,7 +437,6 @@ const API_GET_TASK_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/get-task-response.v1.valid.json",
         "schemas/fixtures/api/get-task-response.v1.invalid.json",
         crate::GetTaskResponse,
-        TASK_READ_WITNESS
     ),
 ];
 
@@ -519,7 +453,6 @@ const API_UPDATE_TASK_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/update-task-path.v1.valid.json",
         "schemas/fixtures/api/update-task-path.v1.invalid.json",
         crate::UpdateTaskPath,
-        TASK_READ_WITNESS
     ),
     header_contract!(
         "update-task",
@@ -540,7 +473,6 @@ const API_UPDATE_TASK_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/update-task-request.v1.valid.json",
         "schemas/fixtures/api/update-task-request.v1.invalid.json",
         crate::UpdateTaskRequest,
-        TASK_READ_WITNESS
     ),
     api_contract!(
         "api.update-task.response",
@@ -554,7 +486,6 @@ const API_UPDATE_TASK_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/update-task-response.v1.valid.json",
         "schemas/fixtures/api/update-task-response.v1.invalid.json",
         crate::UpdateTaskResponse,
-        TASK_READ_WITNESS
     ),
 ];
 
@@ -591,7 +522,6 @@ macro_rules! lifecycle_contracts {
                     "-path.v1.invalid.json"
                 ),
                 $path_type,
-                TASK_LIFECYCLE_WITNESS
             ),
             header_contract!(
                 $operation_slug,
@@ -624,7 +554,6 @@ macro_rules! lifecycle_contracts {
                     "-request.v1.invalid.json"
                 ),
                 $request_type,
-                TASK_LIFECYCLE_WITNESS
             ),
             api_contract!(
                 concat!("api.", $operation_slug, ".response"),
@@ -650,7 +579,6 @@ macro_rules! lifecycle_contracts {
                     "-response.v1.invalid.json"
                 ),
                 $response_type,
-                TASK_LIFECYCLE_WITNESS
             ),
         ]
     };
@@ -797,7 +725,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/tasks"),
         "GET /api/v1/boards/:board/tasks",
         "GET /api/v1/boards/:board/tasks",
-        MigrationState::Adopted,
         API_LIST_TASKS_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -810,7 +737,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/tasks/by-status"),
         "GET /api/v1/boards/:board/tasks/by-status",
         "GET /api/v1/boards/:board/tasks/by-status",
-        MigrationState::Adopted,
         API_LIST_TASKS_BY_STATUS_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -823,7 +749,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/tasks"),
         "POST /api/v1/boards/:board/tasks",
         "POST /api/v1/boards/:board/tasks",
-        MigrationState::Adopted,
         API_CREATE_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -835,7 +760,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id"),
         "GET /api/v1/tasks/:task_id",
         "GET /api/v1/tasks/:task_id",
-        MigrationState::Adopted,
         API_GET_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -847,7 +771,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id"),
         "PATCH /api/v1/tasks/:task_id",
         "PATCH /api/v1/tasks/:task_id",
-        MigrationState::Adopted,
         API_UPDATE_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -859,7 +782,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/specify"),
         "POST /api/v1/tasks/:task_id/transitions/specify",
         "POST /api/v1/tasks/:task_id/transitions/specify",
-        MigrationState::Adopted,
         API_SPECIFY_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -871,7 +793,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/promote"),
         "POST /api/v1/tasks/:task_id/transitions/promote",
         "POST /api/v1/tasks/:task_id/transitions/promote",
-        MigrationState::Adopted,
         API_PROMOTE_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorOptionalJson)
@@ -883,7 +804,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/claim"),
         "POST /api/v1/tasks/:task_id/transitions/claim",
         "POST /api/v1/tasks/:task_id/transitions/claim",
-        MigrationState::Adopted,
         API_CLAIM_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -895,7 +815,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/reopen"),
         "POST /api/v1/tasks/:task_id/transitions/reopen",
         "POST /api/v1/tasks/:task_id/transitions/reopen",
-        MigrationState::Adopted,
         API_REOPEN_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -907,7 +826,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/reclaim"),
         "POST /api/v1/tasks/:task_id/transitions/reclaim",
         "POST /api/v1/tasks/:task_id/transitions/reclaim",
-        MigrationState::Adopted,
         API_RECLAIM_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorOptionalJson)
@@ -919,7 +837,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/heartbeat"),
         "POST /api/v1/tasks/:task_id/transitions/heartbeat",
         "POST /api/v1/tasks/:task_id/transitions/heartbeat",
-        MigrationState::Adopted,
         API_HEARTBEAT_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -931,7 +848,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/release"),
         "POST /api/v1/tasks/:task_id/transitions/release",
         "POST /api/v1/tasks/:task_id/transitions/release",
-        MigrationState::Adopted,
         API_RELEASE_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -943,7 +859,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/complete"),
         "POST /api/v1/tasks/:task_id/transitions/complete",
         "POST /api/v1/tasks/:task_id/transitions/complete",
-        MigrationState::Adopted,
         API_COMPLETE_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -955,7 +870,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/submit-review"),
         "POST /api/v1/tasks/:task_id/transitions/submit-review",
         "POST /api/v1/tasks/:task_id/transitions/submit-review",
-        MigrationState::Adopted,
         API_SUBMIT_REVIEW_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -967,7 +881,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/block"),
         "POST /api/v1/tasks/:task_id/transitions/block",
         "POST /api/v1/tasks/:task_id/transitions/block",
-        MigrationState::Adopted,
         API_BLOCK_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -979,7 +892,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/unblock"),
         "POST /api/v1/tasks/:task_id/transitions/unblock",
         "POST /api/v1/tasks/:task_id/transitions/unblock",
-        MigrationState::Adopted,
         API_UNBLOCK_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorOptionalJson)
@@ -991,7 +903,6 @@ const TASK_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/transitions/archive"),
         "POST /api/v1/tasks/:task_id/transitions/archive",
         "POST /api/v1/tasks/:task_id/transitions/archive",
-        MigrationState::Adopted,
         API_ARCHIVE_TASK_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorOptionalJson)

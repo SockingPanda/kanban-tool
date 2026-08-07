@@ -557,7 +557,7 @@ fn validate_descriptor_catalog(catalog: &[McpOperationDescriptor]) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ContractSurface, McpPolicy, McpToolBinding, MigrationState, OperationDeclaration};
+    use crate::{ContractSurface, McpPolicy, McpToolBinding, OperationDeclaration};
 
     #[test]
     fn catalog_is_valid_and_has_unique_sorted_tool_names() {
@@ -659,7 +659,6 @@ mod tests {
         None,
         "example-a",
         "example-a",
-        MigrationState::Adopted,
         &[],
     )
     .with_mcp_policy(DOMAIN_POLICY);
@@ -670,7 +669,6 @@ mod tests {
         None,
         "example-b",
         "example-b",
-        MigrationState::Adopted,
         &[],
     )
     .with_mcp_policy(MERGED_POLICY);
@@ -681,7 +679,6 @@ mod tests {
         None,
         "stats",
         "stats",
-        MigrationState::Adopted,
         &[],
     )
     .with_mcp_policy(STATS_POLICY);
@@ -692,7 +689,6 @@ mod tests {
         None,
         "example-admin",
         "example-admin",
-        MigrationState::Adopted,
         &[],
     )
     .with_mcp_policy(HOST_ADMIN_POLICY);
@@ -703,7 +699,6 @@ mod tests {
         None,
         "example-a-admin",
         "example-a-admin",
-        MigrationState::Adopted,
         &[],
     )
     .with_mcp_policy(HOST_ADMIN_POLICY);
@@ -773,7 +768,6 @@ mod tests {
             None,
             "example-admin-tool",
             "example-admin-tool",
-            MigrationState::Adopted,
             &[],
         )
         .with_mcp_policy(HOST_TOOL_POLICY);
@@ -800,7 +794,6 @@ mod tests {
             None,
             "example-c",
             "example-c",
-            MigrationState::Adopted,
             &[],
         )
         .with_mcp_policy(OTHER_DOMAIN_POLICY);
@@ -834,7 +827,6 @@ mod tests {
             None,
             "empty",
             "empty",
-            MigrationState::Adopted,
             &[],
         )
         .with_mcp_policy(EMPTY_TOOL_POLICY);

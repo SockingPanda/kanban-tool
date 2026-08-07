@@ -7,23 +7,11 @@
 //! 反向依赖 schema registry。
 
 use crate::{
-    AdoptionEvidence, AdoptionWitness, ContractBinding, ContractDirection, ContractGranularity,
-    ContractStrictness, ContractSurface, ContractTransport, EndpointDescriptor, EndpointObligation,
-    EndpointObligationKind, EndpointObligations, HttpMethod, HttpTransportLocation, MigrationState,
-    OperationContract, SurfaceOperation, WireParameter,
+    ContractBinding, ContractDirection, ContractGranularity, ContractStrictness, ContractSurface,
+    ContractTransport, EndpointDescriptor, EndpointObligation, EndpointObligationKind,
+    EndpointObligations, HttpMethod, HttpTransportLocation, OperationContract, SurfaceOperation,
+    WireParameter,
 };
-
-/// producer/consumer 的精确测试定位。
-///
-/// `operation`、`contract_id`、`surface` 和 `direction` 由 parent/child declaration 投影
-/// 生成；locator 只保存具体 adapter/package/test 的边界，避免每个 registry 宏重复拼接
-/// 相同字段。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AdoptionLocator {
-    pub package: &'static str,
-    pub test_target: &'static str,
-    pub exact_test: &'static str,
-}
 
 /// MCP tool 与 operation 的显式多对多绑定。
 ///
@@ -61,8 +49,8 @@ pub type SchemaGenerator = fn(crate::ContractDirection) -> serde_json::Value;
 /// 一个 child contract 的唯一声明。
 ///
 /// `valid_fixture` 同时是现有 `OperationContract::fixture` 的值；invalid fixture 和
-/// artifact path 只用于 schema projection。没有 schema 的 planned/excluded contract
-/// 可以保留 `schema_id`、artifact 和 fixture 全为空。
+/// artifact path 只用于 schema projection。没有 schema 的 contract 可以保留
+/// `schema_id`、artifact 和 fixture 全为空。
 #[derive(Debug, Clone, Copy)]
 pub struct ContractDeclaration {
     pub id: &'static str,
@@ -82,14 +70,11 @@ pub struct ContractDeclaration {
     pub invalid_fixture: Option<&'static str>,
     #[cfg(feature = "schema")]
     pub schema_generator: Option<SchemaGenerator>,
-    pub producer: Option<AdoptionLocator>,
-    pub consumer: Option<AdoptionLocator>,
-    pub migration: Option<MigrationState>,
     pub exclusion: Option<&'static str>,
 }
 
 impl ContractDeclaration {
-    /// 创建一个不带 schema/adoption 的最小声明，供 planned 或 shared component 使用。
+    /// 创建一个不带 schema 的最小声明，供无 artifact 的 contract 或 shared component 使用。
     pub const fn new(
         id: &'static str,
         path: &'static str,
@@ -117,9 +102,6 @@ impl ContractDeclaration {
             invalid_fixture: None,
             #[cfg(feature = "schema")]
             schema_generator: None,
-            producer: None,
-            consumer: None,
-            migration: None,
             exclusion: None,
         }
     }
@@ -152,20 +134,9 @@ impl ContractDeclaration {
         self
     }
 
-    /// 为声明补充 operation/producer/consumer 覆盖。
+    /// 为声明补充 operation 文案。
     pub const fn with_operation(mut self, operation: &'static str) -> Self {
         self.operation = Some(operation);
-        self
-    }
-
-    /// 为声明补充 producer/consumer adoption witness 定位。
-    pub const fn with_adoption(
-        mut self,
-        producer: AdoptionLocator,
-        consumer: AdoptionLocator,
-    ) -> Self {
-        self.producer = Some(producer);
-        self.consumer = Some(consumer);
         self
     }
 
@@ -195,7 +166,6 @@ pub struct OperationDeclaration {
     pub path: Option<&'static str>,
     pub operation: &'static str,
     pub key: &'static str,
-    pub migration: MigrationState,
     pub exclusion: Option<&'static str>,
     pub shared_components: &'static [&'static str],
     pub header_profile: Option<crate::headers::ApiHeaderProfile>,
@@ -206,10 +176,6 @@ pub struct OperationDeclaration {
 
 impl OperationDeclaration {
     /// 创建一个 parent declaration。
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "operation 的标识、surface 与 transport 字段必须在声明点保持显式"
-    )]
     pub const fn new(
         operation_id: &'static str,
         surface: ContractSurface,
@@ -217,7 +183,6 @@ impl OperationDeclaration {
         path: Option<&'static str>,
         operation: &'static str,
         key: &'static str,
-        migration: MigrationState,
         contracts: &'static [ContractDeclaration],
     ) -> Self {
         Self {
@@ -227,7 +192,6 @@ impl OperationDeclaration {
             path,
             operation,
             key,
-            migration,
             exclusion: None,
             shared_components: &[],
             header_profile: None,
@@ -291,7 +255,6 @@ impl OperationDeclaration {
             surface: self.surface,
             method,
             path,
-            migration: self.migration,
             exclusion: self.exclusion,
             shared_components: self.shared_components,
             obligations: EndpointObligations {
@@ -325,7 +288,6 @@ impl OperationDeclaration {
                 .map(|contract| contract.id)
                 .chain(self.shared_components.iter().copied())
                 .collect(),
-            migration: self.migration,
             exclusion: self.exclusion,
         }
     }
@@ -353,7 +315,6 @@ impl OperationDeclaration {
 impl ContractDeclaration {
     /// 将 child declaration 投影为现有 operation inventory row。
     pub fn operation_contract(&self, parent: &OperationDeclaration) -> OperationContract {
-        let migration = self.migration.unwrap_or(parent.migration);
         let operation = self.operation.unwrap_or(parent.operation);
         let transport = match (parent.method, parent.path, self.location) {
             (Some(_), Some(_), Some(location)) => ContractTransport::Http {
@@ -367,15 +328,6 @@ impl ContractDeclaration {
             },
             _ => ContractTransport::NoTransport,
         };
-        let adoption = match (self.valid_fixture, self.producer, self.consumer) {
-            (Some(fixture), Some(producer), Some(consumer)) => Some(AdoptionEvidence {
-                producer_fixture: fixture,
-                producer: self.adoption_witness(parent, producer),
-                consumer: self.adoption_witness(parent, consumer),
-            }),
-            _ => None,
-        };
-
         OperationContract {
             id: self.id,
             path: self.path,
@@ -386,28 +338,9 @@ impl ContractDeclaration {
             strictness: self.strictness,
             schema_id: self.schema_id,
             fixture: self.valid_fixture,
-            adoption,
             exclusion: self.exclusion.or(parent.exclusion),
-            migration,
             transport,
             binding: self.binding,
-        }
-    }
-
-    /// 将 producer/consumer locator 投影为 public `AdoptionWitness`。
-    pub fn adoption_witness(
-        &self,
-        parent: &OperationDeclaration,
-        locator: AdoptionLocator,
-    ) -> AdoptionWitness {
-        AdoptionWitness {
-            operation: self.operation_key.unwrap_or(parent.operation),
-            contract_id: self.id,
-            surface: parent.surface,
-            direction: self.direction,
-            package: locator.package,
-            test_target: locator.test_target,
-            exact_test: locator.exact_test,
         }
     }
 

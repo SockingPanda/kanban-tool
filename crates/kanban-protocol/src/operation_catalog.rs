@@ -149,7 +149,7 @@ mod tests {
     use crate::{
         ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
         ContractStrictness, ContractSurface, EndpointObligation, EndpointObligationKind,
-        HttpMethod, HttpTransportLocation, MigrationState,
+        HttpMethod, HttpTransportLocation,
     };
 
     const QUERY: ContractDeclaration = ContractDeclaration {
@@ -170,9 +170,6 @@ mod tests {
         invalid_fixture: None,
         #[cfg(feature = "schema")]
         schema_generator: None,
-        producer: None,
-        consumer: None,
-        migration: None,
         exclusion: None,
     };
 
@@ -194,9 +191,6 @@ mod tests {
         invalid_fixture: None,
         #[cfg(feature = "schema")]
         schema_generator: None,
-        producer: None,
-        consumer: None,
-        migration: None,
         exclusion: None,
     };
 
@@ -214,7 +208,6 @@ mod tests {
         path: Some("/api/v1/example"),
         operation: "GET /api/v1/example",
         key: "GET /api/v1/example",
-        migration: MigrationState::Adopted,
         exclusion: None,
         shared_components: &[],
         header_profile: None,

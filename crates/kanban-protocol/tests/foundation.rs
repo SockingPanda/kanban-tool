@@ -6,11 +6,10 @@ use std::collections::BTreeSet;
 use kanban_protocol::{
     ApiHeaderProfile, CliMachineOutput, ContractBinding, ContractDirection, ContractGranularity,
     ContractStrictness, ContractSurface, ContractTransport, EndpointDescriptor, EndpointObligation,
-    EndpointObligations, HttpMethod, HttpTransportLocation, MigrationState, OperationContract,
-    WireParameter, WireParameterCardinality, api_header_contract_specs, cli_operation_catalog,
-    endpoint_catalog, endpoint_descriptor, endpoint_obligation_todo_count, generated_artifacts,
-    generated_schema_ids, operation_inventory, surface_operation_catalog,
-    validate_contract_topology, validate_endpoint_catalog,
+    EndpointObligations, HttpMethod, HttpTransportLocation, OperationContract, WireParameter,
+    WireParameterCardinality, api_header_contract_specs, cli_operation_catalog, endpoint_catalog,
+    endpoint_descriptor, generated_artifacts, generated_schema_ids, operation_inventory,
+    surface_operation_catalog, validate_contract_topology, validate_endpoint_catalog,
 };
 
 #[test]
@@ -144,7 +143,6 @@ fn portable_contract_catalog_freezes_all_jsonl_discriminators() {
                 surface.surface == ContractSurface::Jsonl && surface.key == descriptor.operation_key
             })
             .unwrap_or_else(|| panic!("missing JSONL surface {}", descriptor.operation_key));
-        assert_eq!(surface.migration, MigrationState::Adopted);
         assert_eq!(
             surface.contracts,
             vec![descriptor.input.contract_id, descriptor.output.contract_id]
@@ -158,20 +156,12 @@ fn portable_contract_catalog_freezes_all_jsonl_discriminators() {
                 .iter()
                 .find(|contract| contract.id == side.contract_id)
                 .unwrap_or_else(|| panic!("missing JSONL contract {}", side.contract_id));
-            assert_eq!(contract.migration, MigrationState::Adopted);
             assert_eq!(contract.direction, direction);
             assert_eq!(contract.granularity, ContractGranularity::Exact);
             assert_eq!(contract.binding, ContractBinding::ExactSurface);
             assert_eq!(contract.transport, ContractTransport::NoTransport);
             assert_eq!(contract.schema_id, Some(side.schema_id));
             assert_eq!(contract.fixture, Some(side.fixture));
-            let adoption = contract.adoption.expect("adopted JSONL witness");
-            assert_eq!(adoption.producer_fixture, side.fixture);
-            assert_eq!(adoption.producer.test_target, side.test_target);
-            assert_eq!(adoption.producer.exact_test, side.producer_test);
-            assert_eq!(adoption.consumer.test_target, side.test_target);
-            assert_eq!(adoption.consumer.exact_test, side.consumer_test);
-
             let root = roots
                 .iter()
                 .find(|root| root.contract_id == side.contract_id)
@@ -223,7 +213,6 @@ fn portable_contract_catalog_freezes_all_jsonl_discriminators() {
                 .invalid_fixture
                 .ends_with("-output.v1.invalid.json")
         );
-        assert_eq!(descriptor.input.test_target, descriptor.output.test_target);
     }
 
     assert_eq!(
@@ -256,9 +245,11 @@ fn portable_contract_catalog_freezes_all_jsonl_discriminators() {
             .map(|descriptor| descriptor.operation_key)
             .collect::<BTreeSet<_>>()
     );
-    assert!(jsonl_surfaces.iter().all(|operation| {
-        operation.migration == MigrationState::Adopted && operation.contracts.len() == 2
-    }));
+    assert!(
+        jsonl_surfaces
+            .iter()
+            .all(|operation| operation.contracts.len() == 2)
+    );
 }
 
 const B4_C2_LABEL_OPERATION_IDS: &[&str] = &[
@@ -322,7 +313,6 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
         assert_eq!(contract.binding, ContractBinding::ExactSurface);
         assert_eq!(contract.granularity, ContractGranularity::Exact);
         assert_eq!(contract.direction, ContractDirection::Deserialize);
-        assert_eq!(contract.migration, MigrationState::Adopted);
         match contract.transport {
             ContractTransport::Http {
                 operation_key: Some(_),
@@ -458,11 +448,6 @@ fn b4_c2_label_operations_exactly_own_all_non_header_dimensions() {
     for operation_id in B4_C2_LABEL_OPERATION_IDS {
         let endpoint = endpoint_descriptor(operation_id).expect("B4-C2 endpoint descriptor");
         assert_eq!(
-            endpoint.migration,
-            MigrationState::Adopted,
-            "{operation_id}"
-        );
-        assert_eq!(
             endpoint.obligations.headers,
             EndpointObligation::Contract(Box::leak(
                 format!("{operation_id}.headers").into_boxed_str()
@@ -490,7 +475,7 @@ fn b4_c2_label_operations_exactly_own_all_non_header_dimensions() {
 }
 
 #[test]
-fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses() {
+fn structured_metadata_contracts_have_exact_roots_and_surfaces() {
     use kanban_protocol::schema_registry;
 
     let cases = [
@@ -500,10 +485,6 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Deserialize,
             "urn:kanban-tool:schema:metadata:decision:v1",
             "schemas/fixtures/metadata/decision.v1.valid.json",
-            "cli_history_adoption",
-            "history_cli_covers_runs_logs_comments_attachments_events_and_stats",
-            "cli_history_adoption",
-            "history_cli_covers_runs_logs_comments_attachments_events_and_stats",
         ),
         (
             "metadata.signal-record.input",
@@ -511,10 +492,6 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Deserialize,
             "urn:kanban-tool:schema:metadata:signal-record-input:v1",
             "schemas/fixtures/metadata/signal-record-input.v1.valid.json",
-            "cli_label_contract_adoption",
-            "generic_signals_record_review_and_confirm_flow_through_real_cli",
-            "cli_label_contract_adoption",
-            "generic_signals_record_review_and_confirm_flow_through_real_cli",
         ),
         (
             "metadata.signal-link.output",
@@ -522,10 +499,6 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Serialize,
             "urn:kanban-tool:schema:metadata:signal-link-output:v1",
             "schemas/fixtures/metadata/signal-link-output.v1.valid.json",
-            "cli_label_contract_adoption",
-            "generic_signals_record_review_and_confirm_flow_through_real_cli",
-            "cli_label_contract_adoption",
-            "generic_signals_record_review_and_confirm_flow_through_real_cli",
         ),
         (
             "metadata.label-proposal-candidate.input",
@@ -533,10 +506,6 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Deserialize,
             "urn:kanban-tool:schema:metadata:label-proposal-candidate-input:v1",
             "schemas/fixtures/metadata/label-proposal-candidate-input.v1.valid.json",
-            "cli_label_contract_adoption",
-            "labels_semantics_atoms_and_proposals_flow_through_real_cli",
-            "cli_label_contract_adoption",
-            "labels_semantics_atoms_and_proposals_flow_through_real_cli",
         ),
         (
             "metadata.ontology-record.input",
@@ -544,10 +513,6 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Deserialize,
             "urn:kanban-tool:schema:metadata:ontology-record-input:v1",
             "schemas/fixtures/metadata/ontology-record-input.v1.valid.json",
-            "cli_label_contract_adoption",
-            "ontology_observation_signal_review_and_action_flow_through_real_cli",
-            "cli_label_contract_adoption",
-            "ontology_observation_signal_review_and_action_flow_through_real_cli",
         ),
         (
             "metadata.ontology-validation-evidence.input",
@@ -555,25 +520,10 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
             ContractDirection::Deserialize,
             "urn:kanban-tool:schema:metadata:ontology-validation-evidence-input:v1",
             "schemas/fixtures/metadata/ontology-validation-evidence-input.v1.valid.json",
-            "cli_label_contract_adoption",
-            "ontology_observation_signal_review_and_action_flow_through_real_cli",
-            "cli_label_contract_adoption",
-            "ontology_observation_signal_review_and_action_flow_through_real_cli",
         ),
     ];
 
-    for (
-        contract_id,
-        operation,
-        direction,
-        schema_id,
-        fixture,
-        producer_target,
-        producer_test,
-        consumer_target,
-        consumer_test,
-    ) in cases
-    {
+    for (contract_id, operation, direction, schema_id, fixture) in cases {
         let contract = operation_inventory()
             .iter()
             .find(|contract| contract.id == contract_id)
@@ -581,20 +531,11 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
         assert_eq!(contract.operation, operation);
         assert_eq!(contract.surface, ContractSurface::Metadata);
         assert_eq!(contract.direction, direction);
-        assert_eq!(contract.migration, MigrationState::Adopted);
         assert_eq!(contract.granularity, ContractGranularity::Exact);
         assert_eq!(contract.binding, ContractBinding::ExactSurface);
         assert_eq!(contract.transport, ContractTransport::NoTransport);
         assert_eq!(contract.schema_id, Some(schema_id));
         assert_eq!(contract.fixture, Some(fixture));
-        let adoption = contract.adoption.expect("adopted metadata witness");
-        assert_eq!(adoption.producer_fixture, fixture);
-        assert_eq!(adoption.producer.package, "kanban-cli");
-        assert_eq!(adoption.producer.test_target, producer_target);
-        assert_eq!(adoption.producer.exact_test, producer_test);
-        assert_eq!(adoption.consumer.package, "kanban-cli");
-        assert_eq!(adoption.consumer.test_target, consumer_target);
-        assert_eq!(adoption.consumer.exact_test, consumer_test);
 
         let root = schema_registry()
             .iter()
@@ -609,7 +550,6 @@ fn structured_metadata_contracts_have_exact_roots_surfaces_and_adopter_witnesses
                 surface.surface == ContractSurface::Metadata && surface.key == operation
             })
             .unwrap_or_else(|| panic!("missing metadata surface {operation}"));
-        assert_eq!(surface.migration, MigrationState::Adopted);
         assert_eq!(surface.contracts, vec![contract_id]);
     }
 }
@@ -639,6 +579,24 @@ fn public_operation_inventory_covers_every_public_surface() {
     assert_eq!(
         actual, expected,
         "inventory 必须显式覆盖全部公开 JSON surface"
+    );
+}
+
+#[test]
+fn public_catalog_preserves_contract_and_exclusion_counts() {
+    assert_eq!(
+        operation_inventory().len(),
+        580,
+        "public contract inventory 不得静默增删"
+    );
+    let exclusions = surface_operation_catalog()
+        .iter()
+        .filter_map(|operation| operation.exclusion)
+        .collect::<Vec<_>>();
+    assert_eq!(exclusions.len(), 6, "公开 surface exclusion 数量不得漂移");
+    assert!(
+        exclusions.iter().all(|reason| !reason.trim().is_empty()),
+        "每个 exclusion 都必须给出非空理由"
     );
 }
 
@@ -995,7 +953,7 @@ fn foundation_registry_contains_generated_roots() {
         operation_inventory()
             .iter()
             .filter(|contract| matches!(contract.surface, ContractSurface::Config))
-            .map(|contract| contract.schema_id.expect("adopted protocol schema id")),
+            .map(|contract| contract.schema_id.expect("protocol schema id")),
     );
 
     let unexpected = actual.difference(&expected).copied().collect::<Vec<_>>();
@@ -1108,7 +1066,7 @@ fn endpoint_descriptor_validator_rejects_duplicate_operation_and_method_path() {
             ..baseline
         },
     ];
-    assert!(validate_endpoint_catalog(&duplicate_operation, false).is_err());
+    assert!(validate_endpoint_catalog(&duplicate_operation).is_err());
     let duplicate_method_path = [
         baseline,
         EndpointDescriptor {
@@ -1116,13 +1074,12 @@ fn endpoint_descriptor_validator_rejects_duplicate_operation_and_method_path() {
             ..baseline
         },
     ];
-    assert!(validate_endpoint_catalog(&duplicate_method_path, false).is_err());
+    assert!(validate_endpoint_catalog(&duplicate_method_path).is_err());
     let wrong_surface = [EndpointDescriptor {
         surface: ContractSurface::Cli,
         operation_id: "api.test-cli",
         method: HttpMethod::Get,
         path: "/test",
-        migration: MigrationState::Planned,
         exclusion: None,
         shared_components: &[],
         obligations: EndpointObligations {
@@ -1134,26 +1091,7 @@ fn endpoint_descriptor_validator_rejects_duplicate_operation_and_method_path() {
             sse: EndpointObligation::NotApplicable,
         },
     }];
-    assert!(validate_endpoint_catalog(&wrong_surface, false).is_err());
-}
-
-#[test]
-fn endpoint_closure_rejects_residual_todo_and_adopted_todo() {
-    assert!(kanban_protocol::validate_endpoint_catalog(endpoint_catalog(), true).is_ok());
-    let baseline = endpoint_catalog()[0];
-    let adopted_with_todo = [EndpointDescriptor {
-        migration: MigrationState::Adopted,
-        obligations: EndpointObligations {
-            path: EndpointObligation::NotApplicable,
-            query: EndpointObligation::Todo,
-            headers: EndpointObligation::NotApplicable,
-            body: EndpointObligation::NotApplicable,
-            success: EndpointObligation::Contract("api.health.response"),
-            sse: EndpointObligation::NotApplicable,
-        },
-        ..baseline
-    }];
-    assert!(kanban_protocol::validate_endpoint_catalog(&adopted_with_todo, false).is_err());
+    assert!(validate_endpoint_catalog(&wrong_surface).is_err());
 }
 
 #[test]
@@ -1166,7 +1104,7 @@ fn endpoint_obligation_validator_rejects_empty_exclusion_and_contract_identity_d
         },
         ..baseline
     }];
-    assert!(validate_endpoint_catalog(&empty_exclusion, false).is_err());
+    assert!(validate_endpoint_catalog(&empty_exclusion).is_err());
 
     let unknown_contract = [EndpointDescriptor {
         obligations: EndpointObligations {
@@ -1175,7 +1113,7 @@ fn endpoint_obligation_validator_rejects_empty_exclusion_and_contract_identity_d
         },
         ..baseline
     }];
-    assert!(validate_endpoint_catalog(&unknown_contract, false).is_err());
+    assert!(validate_endpoint_catalog(&unknown_contract).is_err());
 
     let wrong_surface = [EndpointDescriptor {
         obligations: EndpointObligations {
@@ -1184,7 +1122,7 @@ fn endpoint_obligation_validator_rejects_empty_exclusion_and_contract_identity_d
         },
         ..baseline
     }];
-    assert!(validate_endpoint_catalog(&wrong_surface, false).is_err());
+    assert!(validate_endpoint_catalog(&wrong_surface).is_err());
 
     let wrong_direction = [EndpointDescriptor {
         obligations: EndpointObligations {
@@ -1193,7 +1131,7 @@ fn endpoint_obligation_validator_rejects_empty_exclusion_and_contract_identity_d
         },
         ..baseline
     }];
-    assert!(validate_endpoint_catalog(&wrong_direction, false).is_err());
+    assert!(validate_endpoint_catalog(&wrong_direction).is_err());
 }
 
 const MISSING_QUERY_CARDINALITY: &[WireParameter] = &[WireParameter {
@@ -1244,7 +1182,6 @@ fn claim_endpoint_with_query_contract() -> EndpointDescriptor {
         .expect("claim endpoint descriptor");
     endpoint.obligations.body = EndpointObligation::Todo;
     endpoint.obligations.query = EndpointObligation::Contract("api.claim-task.request");
-    endpoint.migration = MigrationState::Generated;
     endpoint
 }
 
@@ -1269,7 +1206,7 @@ fn operation_inventory_declares_http_or_explicit_no_transport() {
     let mut missing_http = operation_inventory().to_vec();
     contract_mut(&mut missing_http, "api.health.response").transport =
         ContractTransport::NoTransport;
-    let error = validate_contract_topology(&[], &missing_http, false)
+    let error = validate_contract_topology(&[], &missing_http)
         .expect_err("API contract 缺 HTTP transport 必须失败");
     assert!(error.contains("must declare transport metadata"), "{error}");
 
@@ -1279,7 +1216,7 @@ fn operation_inventory_declares_http_or_explicit_no_transport() {
         location: HttpTransportLocation::Body,
         parameters: &[],
     };
-    let error = validate_contract_topology(&[], &false_http, false)
+    let error = validate_contract_topology(&[], &false_http)
         .expect_err("非 HTTP contract 伪装 HTTP transport 必须失败");
     assert!(error.contains("must declare no_transport"), "{error}");
 
@@ -1290,7 +1227,7 @@ fn operation_inventory_declares_http_or_explicit_no_transport() {
             location: HttpTransportLocation::Success,
             parameters: &[],
         };
-    let error = validate_contract_topology(&[], &missing_operation, false)
+    let error = validate_contract_topology(&[], &missing_operation)
         .expect_err("ExactSurface HTTP contract 缺 operation_key 必须失败");
     assert!(error.contains("must name an operation_key"), "{error}");
 }
@@ -1298,7 +1235,7 @@ fn operation_inventory_declares_http_or_explicit_no_transport() {
 #[test]
 fn topology_rejects_body_contract_in_query_with_location_diagnostic() {
     let endpoint = claim_endpoint_with_query_contract();
-    let error = validate_contract_topology(&[endpoint], operation_inventory(), false)
+    let error = validate_contract_topology(&[endpoint], operation_inventory())
         .expect_err("body contract 放入 query obligation 必须失败");
     assert!(
         error.contains("contract location body does not match obligation query"),
@@ -1316,7 +1253,7 @@ fn topology_rejects_success_deserialize_and_surface_location_drift() {
     let mut wrong_direction = operation_inventory().to_vec();
     contract_mut(&mut wrong_direction, "api.health.response").direction =
         ContractDirection::Deserialize;
-    let error = validate_contract_topology(&[health], &wrong_direction, false)
+    let error = validate_contract_topology(&[health], &wrong_direction)
         .expect_err("success contract 指向 Deserialize 必须失败");
     assert!(
         error.contains("transport direction does not match location success"),
@@ -1329,7 +1266,7 @@ fn topology_rejects_success_deserialize_and_surface_location_drift() {
         location: HttpTransportLocation::Sse,
         parameters: &[],
     };
-    let error = validate_contract_topology(&[health], &wrong_location, false)
+    let error = validate_contract_topology(&[health], &wrong_location)
         .expect_err("API contract 声明 SSE location 必须失败");
     assert!(
         error.contains("transport location sse is incompatible with api surface"),
@@ -1350,7 +1287,7 @@ fn topology_rejects_operation_drift_and_exact_as_shared_conflict() {
             location: HttpTransportLocation::Body,
             parameters: &[],
         };
-    let error = validate_contract_topology(&[claim], &wrong_operation, false)
+    let error = validate_contract_topology(&[claim], &wrong_operation)
         .expect_err("exact contract operation 漂移必须失败");
     assert!(
         error.contains("contract operation does not match endpoint"),
@@ -1359,7 +1296,7 @@ fn topology_rejects_operation_drift_and_exact_as_shared_conflict() {
 
     let mut duplicated = claim;
     duplicated.shared_components = &["api.claim-task.request"];
-    let error = validate_contract_topology(&[duplicated], operation_inventory(), false)
+    let error = validate_contract_topology(&[duplicated], operation_inventory())
         .expect_err("ExactSurface 不得进入 shared_components");
     assert!(
         error.contains("shared component link requires SharedComponent contract"),
@@ -1377,7 +1314,7 @@ fn topology_rejects_missing_wrong_and_conflicting_parameter_cardinality() {
         location: HttpTransportLocation::Query,
         parameters: MISSING_QUERY_CARDINALITY,
     };
-    let error = validate_contract_topology(&[endpoint], &missing, false)
+    let error = validate_contract_topology(&[endpoint], &missing)
         .expect_err("query parameter 缺 cardinality 必须失败");
     assert!(
         error.contains("wire parameter missing cardinality"),
@@ -1393,7 +1330,7 @@ fn topology_rejects_missing_wrong_and_conflicting_parameter_cardinality() {
         location: HttpTransportLocation::Path,
         parameters: OPTIONAL_PATH_CARDINALITY,
     };
-    let error = validate_contract_topology(&[path_endpoint], &wrong, false)
+    let error = validate_contract_topology(&[path_endpoint], &wrong)
         .expect_err("path parameter 非 RequiredOne 必须失败");
     assert!(
         error.contains("path parameter cardinality must be required_one"),
@@ -1406,7 +1343,7 @@ fn topology_rejects_missing_wrong_and_conflicting_parameter_cardinality() {
         location: HttpTransportLocation::Path,
         parameters: REQUIRED_PATH_CARDINALITY,
     };
-    validate_contract_topology(&[path_endpoint], &required, false)
+    validate_contract_topology(&[path_endpoint], &required)
         .expect("path 的 required_one cardinality 必须精确匹配 placeholder");
 
     let mut optional = operation_inventory().to_vec();
@@ -1415,7 +1352,7 @@ fn topology_rejects_missing_wrong_and_conflicting_parameter_cardinality() {
         location: HttpTransportLocation::Query,
         parameters: OPTIONAL_QUERY_CARDINALITY,
     };
-    validate_contract_topology(&[endpoint], &optional, false)
+    validate_contract_topology(&[endpoint], &optional)
         .expect("query 的 optional_one cardinality 必须可精确表达");
 
     let mut conflicting = operation_inventory().to_vec();
@@ -1424,7 +1361,7 @@ fn topology_rejects_missing_wrong_and_conflicting_parameter_cardinality() {
         location: HttpTransportLocation::Query,
         parameters: DUPLICATE_QUERY_CARDINALITY,
     };
-    let error = validate_contract_topology(&[endpoint], &conflicting, false)
+    let error = validate_contract_topology(&[endpoint], &conflicting)
         .expect_err("同一 component 重复 parameter name 必须失败");
     assert!(error.contains("wire parameter name conflict"), "{error}");
 
@@ -1434,7 +1371,7 @@ fn topology_rejects_missing_wrong_and_conflicting_parameter_cardinality() {
         location: HttpTransportLocation::Query,
         parameters: ORDERED_REPEATED_QUERY,
     };
-    validate_contract_topology(&[endpoint], &repeated, false)
+    validate_contract_topology(&[endpoint], &repeated)
         .expect("query 的 repeated_ordered cardinality 必须可精确表达");
 }
 
@@ -1452,61 +1389,14 @@ fn topology_allows_shared_reuse_but_rejects_invalid_shared_references() {
         .find(|endpoint| endpoint.operation_id == "api.list-boards")
         .expect("list boards endpoint descriptor");
     list_boards.shared_components = SHARED_API_ERROR;
-    validate_contract_topology(&[list_tasks, list_boards], operation_inventory(), false)
+    validate_contract_topology(&[list_tasks, list_boards], operation_inventory())
         .expect("同一个 SharedComponent 必须允许被多个 endpoint 显式复用");
 
     let mut unknown = list_boards;
     unknown.shared_components = UNKNOWN_SHARED;
-    let error = validate_contract_topology(&[unknown], operation_inventory(), false)
+    let error = validate_contract_topology(&[unknown], operation_inventory())
         .expect_err("unknown shared reference 必须失败");
     assert!(error.contains("references unknown contract"), "{error}");
-
-    for state in [MigrationState::Planned, MigrationState::Excluded] {
-        let mut inventory = operation_inventory().to_vec();
-        contract_mut(&mut inventory, "api.error.response").migration = state;
-        let error = validate_contract_topology(&[list_boards], &inventory, false)
-            .expect_err("Planned/Excluded shared reference 必须失败");
-        assert!(
-            error.contains(match state {
-                MigrationState::Planned => "references planned contract",
-                MigrationState::Excluded => "references excluded contract",
-                _ => unreachable!(),
-            }),
-            "{error}"
-        );
-    }
-}
-
-#[test]
-fn topology_rejects_unknown_planned_and_excluded_contract_references() {
-    let mut sse = *endpoint_catalog()
-        .iter()
-        .find(|endpoint| endpoint.operation_id == "sse.stream-events")
-        .expect("SSE endpoint descriptor");
-
-    sse.obligations.sse = EndpointObligation::Contract("sse.unknown.data");
-    let error = validate_contract_topology(&[sse], operation_inventory(), false)
-        .expect_err("unknown contract reference 必须失败");
-    assert!(error.contains("references unknown contract"), "{error}");
-
-    sse.obligations.sse = EndpointObligation::Contract("sse.event.data");
-    let mut planned = operation_inventory().to_vec();
-    let contract = contract_mut(&mut planned, "sse.event.data");
-    contract.migration = MigrationState::Planned;
-    contract.schema_id = None;
-    contract.fixture = None;
-    contract.adoption = None;
-    let error = validate_contract_topology(&[sse], &planned, false)
-        .expect_err("Planned contract reference 必须失败");
-    assert!(error.contains("references planned contract"), "{error}");
-
-    let mut excluded = operation_inventory().to_vec();
-    let contract = contract_mut(&mut excluded, "sse.event.data");
-    contract.migration = MigrationState::Excluded;
-    contract.exclusion = Some("test-only exclusion");
-    let error = validate_contract_topology(&[sse], &excluded, false)
-        .expect_err("Excluded contract reference 必须失败");
-    assert!(error.contains("references excluded contract"), "{error}");
 }
 
 const WRONG_PATH_NAME: &[WireParameter] = &[WireParameter {
@@ -1590,8 +1480,7 @@ fn claim_path_mapping_error(parameters: &'static [WireParameter]) -> String {
         location: HttpTransportLocation::Path,
         parameters,
     };
-    validate_contract_topology(&[endpoint], &inventory, false)
-        .expect_err("path placeholder 漂移必须失败")
+    validate_contract_topology(&[endpoint], &inventory).expect_err("path placeholder 漂移必须失败")
 }
 
 #[test]
@@ -1713,7 +1602,6 @@ fn b1_c1_task_read_contracts_are_endpoint_specific_and_exact() {
         "GET /api/v1/boards/:board/tasks",
     );
     let endpoint = endpoint_descriptor(operation_id).expect("缺少 task-read endpoint descriptor");
-    assert_eq!(endpoint.migration, MigrationState::Adopted);
     assert_eq!(
         endpoint.obligations.path,
         EndpointObligation::Contract(path_contract_id)
@@ -1738,7 +1626,6 @@ fn b1_c1_task_read_contracts_are_endpoint_specific_and_exact() {
         .iter()
         .find(|contract| contract.id == path_contract_id)
         .expect("缺少 endpoint-specific path contract");
-    assert_eq!(path_contract.migration, MigrationState::Adopted);
     assert_eq!(path_contract.granularity, ContractGranularity::Exact);
     assert_eq!(path_contract.binding, ContractBinding::ExactSurface);
     let ContractTransport::Http {
@@ -1763,7 +1650,6 @@ fn b1_c1_task_read_contracts_are_endpoint_specific_and_exact() {
         .iter()
         .find(|contract| contract.id == query_contract_id)
         .expect("缺少 endpoint-specific query contract");
-    assert_eq!(query_contract.migration, MigrationState::Adopted);
     assert_eq!(query_contract.granularity, ContractGranularity::Exact);
     assert_eq!(query_contract.binding, ContractBinding::ExactSurface);
     let ContractTransport::Http {
@@ -1793,7 +1679,6 @@ fn b1_c1_task_read_contracts_are_endpoint_specific_and_exact() {
         .iter()
         .find(|contract| contract.id == response_contract_id)
         .expect("缺少 endpoint-specific exact success response contract");
-    assert_eq!(response_contract.migration, MigrationState::Adopted);
     assert_eq!(response_contract.direction, ContractDirection::Serialize);
     assert_eq!(response_contract.granularity, ContractGranularity::Exact);
     assert_eq!(response_contract.binding, ContractBinding::ExactSurface);
@@ -1803,7 +1688,6 @@ fn b1_c1_task_read_contracts_are_endpoint_specific_and_exact() {
     );
     assert!(response_contract.schema_id.is_some());
     assert!(response_contract.fixture.is_some());
-    assert!(response_contract.adoption.is_some());
     let ContractTransport::Http {
         operation_key: actual_operation,
         location,
@@ -1818,119 +1702,13 @@ fn b1_c1_task_read_contracts_are_endpoint_specific_and_exact() {
 }
 
 #[test]
-fn current_train_freeze_requires_closed_authority() {
-    let stream = endpoint_descriptor("sse.stream-events").expect("SSE endpoint descriptor");
-    assert_eq!(
-        stream.obligations.sse,
-        EndpointObligation::Contract("sse.event.data")
-    );
-    assert_eq!(endpoint_obligation_todo_count(endpoint_catalog()), 0);
-    let mut contract = 0;
-    let mut todo = 0;
-    let mut not_applicable = 0;
-    let mut excluded = 0;
-    for obligation in endpoint_catalog()
-        .iter()
-        .flat_map(|endpoint| endpoint.obligations.entries())
-        .map(|(_, obligation)| obligation)
-    {
-        match obligation {
-            EndpointObligation::Contract(_) => contract += 1,
-            EndpointObligation::Todo => todo += 1,
-            EndpointObligation::NotApplicable => not_applicable += 1,
-            EndpointObligation::Excluded { .. } => excluded += 1,
-        }
-    }
-    assert_eq!((contract, todo, not_applicable, excluded), (405, 0, 302, 1));
-    let unfinished_contracts = operation_inventory()
-        .iter()
-        .filter(|contract| {
-            matches!(
-                contract.migration,
-                MigrationState::Planned | MigrationState::Generated
-            )
-        })
-        .count();
-    let unfinished_surfaces = surface_operation_catalog()
-        .iter()
-        .filter(|surface| {
-            matches!(
-                surface.migration,
-                MigrationState::Planned | MigrationState::Generated
-            )
-        })
-        .count();
-    assert_eq!((unfinished_contracts, unfinished_surfaces, todo), (0, 0, 0));
-    assert_eq!(unfinished_contracts + unfinished_surfaces + todo, 0);
-
-    let generated_api = operation_inventory()
-        .iter()
-        .filter(|contract| {
-            contract.surface == ContractSurface::Api
-                && contract.migration == MigrationState::Generated
-        })
-        .map(|contract| contract.id)
-        .collect::<BTreeSet<_>>();
-    assert!(generated_api.is_empty());
-    assert!(
-        endpoint_catalog()
-            .iter()
-            .filter(|endpoint| endpoint.surface == ContractSurface::Api)
-            .all(|endpoint| endpoint.migration == MigrationState::Adopted)
-    );
-}
-
-#[test]
-fn config_protocols_have_exact_roots_surfaces_and_witnesses() {
-    let expected = [
-        "config.project.input",
-        "config.selected-worker-profile.input",
-    ];
-    let inventory = operation_inventory();
-    let roots = kanban_protocol::schema_registry();
-    let surfaces = surface_operation_catalog();
-
-    for contract_id in expected {
-        let contract = inventory
-            .iter()
-            .find(|contract| contract.id == contract_id)
-            .unwrap_or_else(|| panic!("missing protocol contract {contract_id}"));
-        assert_eq!(contract.migration, MigrationState::Adopted, "{contract_id}");
-        assert!(contract.schema_id.is_some(), "{contract_id}");
-        assert!(contract.fixture.is_some(), "{contract_id}");
-        assert!(contract.adoption.is_some(), "{contract_id}");
-        assert!(matches!(contract.transport, ContractTransport::NoTransport));
-        assert_eq!(
-            roots
-                .iter()
-                .filter(|root| root.contract_id == contract_id)
-                .count(),
-            1,
-            "{contract_id}"
-        );
-        assert_eq!(
-            surfaces
-                .iter()
-                .filter(|surface| {
-                    surface.migration == MigrationState::Adopted
-                        && surface.contracts == [contract_id]
-                        && surface.key == contract.operation
-                })
-                .count(),
-            1,
-            "{contract_id}"
-        );
-    }
-}
-
-#[test]
 fn selected_worker_profile_contract_matches_runtime_selection_boundary() {
     let inventory = operation_inventory();
     assert!(
         inventory
             .iter()
             .all(|contract| contract.id != "config.worker-profiles.input"),
-        "whole-document worker profile contract must not survive selected-only runtime adoption"
+        "whole-document worker profile contract must not survive selected-only runtime ownership"
     );
 
     let contract = inventory
@@ -1943,17 +1721,6 @@ fn selected_worker_profile_contract_matches_runtime_selection_boundary() {
         "selected dispatcher worker profile after TOML decoding"
     );
     assert_eq!(contract.strictness, ContractStrictness::DenyUnknownFields);
-    let adoption = contract
-        .adoption
-        .expect("selected profile adoption witness");
-    assert_eq!(
-        adoption.producer.exact_test,
-        "config_adoption::selected_worker_profile_input_fixture_is_produced_by_runtime_config_dto"
-    );
-    assert_eq!(
-        adoption.consumer.exact_test,
-        "dispatcher_profile_is_consumed_by_real_serve_and_only_claims_ready"
-    );
 
     let root = kanban_protocol::schema_registry()
         .iter()
@@ -1967,6 +1734,45 @@ fn selected_worker_profile_contract_matches_runtime_selection_boundary() {
         root.valid_fixture,
         "schemas/fixtures/config/selected-worker-profile-input.v1.valid.json"
     );
+}
+
+#[test]
+fn config_protocols_have_exact_roots_and_surfaces() {
+    let expected = [
+        "config.project.input",
+        "config.selected-worker-profile.input",
+    ];
+    let inventory = operation_inventory();
+    let roots = kanban_protocol::schema_registry();
+    let surfaces = surface_operation_catalog();
+
+    for contract_id in expected {
+        let contract = inventory
+            .iter()
+            .find(|contract| contract.id == contract_id)
+            .unwrap_or_else(|| panic!("missing protocol contract {contract_id}"));
+        assert!(contract.schema_id.is_some(), "{contract_id}");
+        assert!(contract.fixture.is_some(), "{contract_id}");
+        assert!(matches!(contract.transport, ContractTransport::NoTransport));
+        assert_eq!(
+            roots
+                .iter()
+                .filter(|root| root.contract_id == contract_id)
+                .count(),
+            1,
+            "{contract_id}"
+        );
+        assert_eq!(
+            surfaces
+                .iter()
+                .filter(|surface| {
+                    surface.contracts == [contract_id] && surface.key == contract.operation
+                })
+                .count(),
+            1,
+            "{contract_id}"
+        );
+    }
 }
 
 #[test]
@@ -1993,7 +1799,7 @@ fn error_transport_is_serialize_shared_only_and_has_no_endpoint_obligation() {
     let mut wrong_direction = operation_inventory().to_vec();
     contract_mut(&mut wrong_direction, "api.error.response").direction =
         ContractDirection::Deserialize;
-    let error = validate_contract_topology(&[], &wrong_direction, false)
+    let error = validate_contract_topology(&[], &wrong_direction)
         .expect_err("Error transport 必须只允许 Serialize");
     assert_diagnostic(
         &error,
@@ -2013,7 +1819,7 @@ fn error_transport_is_serialize_shared_only_and_has_no_endpoint_obligation() {
         location: HttpTransportLocation::Error,
         parameters: &[],
     };
-    let error = validate_contract_topology(&[], &exact_error, false)
+    let error = validate_contract_topology(&[], &exact_error)
         .expect_err("Error transport 不得伪装 ExactSurface");
     assert_diagnostic(
         &error,
@@ -2027,53 +1833,15 @@ fn error_transport_is_serialize_shared_only_and_has_no_endpoint_obligation() {
 }
 
 #[test]
-fn adopted_and_endpoint_exact_bindings_require_exact_granularity_without_closure() {
-    let mut orphan_adopted = operation_inventory().to_vec();
-    contract_mut(&mut orphan_adopted, "api.claim-task.request").granularity =
-        ContractGranularity::Family;
-    let error = validate_contract_topology(&[], &orphan_adopted, false)
-        .expect_err("普通非 closure audit 也必须拒绝 Adopted Family");
+fn exact_bindings_require_exact_granularity() {
+    let mut orphan = operation_inventory().to_vec();
+    contract_mut(&mut orphan, "api.claim-task.request").granularity = ContractGranularity::Family;
+    let error = validate_contract_topology(&[], &orphan)
+        .expect_err("ExactSurface contract 即使不绑定 endpoint 也必须保持 exact");
     assert_diagnostic(
         &error,
         &[
             "contract=api.claim-task.request",
-            "binding=exact_surface",
-            "expected=exact",
-            "actual=family",
-        ],
-    );
-
-    let claim = *endpoint_descriptor("api.claim-task").expect("claim endpoint descriptor");
-    let mut adopted_family = operation_inventory().to_vec();
-    contract_mut(&mut adopted_family, "api.claim-task.request").granularity =
-        ContractGranularity::Family;
-    let error = validate_contract_topology(&[claim], &adopted_family, false)
-        .expect_err("Adopted ExactSurface+Family obligation 必须失败");
-    assert_diagnostic(
-        &error,
-        &[
-            "endpoint=api.claim-task",
-            "obligation=body",
-            "contract=api.claim-task.request",
-            "binding=exact_surface",
-            "expected=exact",
-            "actual=family",
-        ],
-    );
-
-    let delete = *endpoint_descriptor("api.delete-label-semantics")
-        .expect("delete label semantics endpoint descriptor");
-    let mut generated_family = operation_inventory().to_vec();
-    contract_mut(&mut generated_family, "api.label-semantics-delete.response").granularity =
-        ContractGranularity::Family;
-    let error = validate_contract_topology(&[delete], &generated_family, false)
-        .expect_err("Generated ExactSurface+Family obligation 必须失败");
-    assert_diagnostic(
-        &error,
-        &[
-            "endpoint=api.delete-label-semantics",
-            "obligation=success",
-            "contract=api.label-semantics-delete.response",
             "binding=exact_surface",
             "expected=exact",
             "actual=family",
@@ -2119,7 +1887,7 @@ fn path_placeholder_mapping_rejects_name_missing_extra_order_and_case_drift() {
         location: HttpTransportLocation::Path,
         parameters: REVERSED_LABEL_PATH_NAMES,
     };
-    let error = validate_contract_topology(&[endpoint], &inventory, false)
+    let error = validate_contract_topology(&[endpoint], &inventory)
         .expect_err("path placeholder 顺序漂移必须失败");
     assert_diagnostic(
         &error,
@@ -2145,7 +1913,7 @@ fn cardinality_validation_covers_headers_names_forbidden_locations_and_shared_in
             location: HttpTransportLocation::Headers,
             parameters: HEADER_CASE_CONFLICT,
         };
-    let error = validate_contract_topology(&[headers_endpoint], &header_conflict, false)
+    let error = validate_contract_topology(&[headers_endpoint], &header_conflict)
         .expect_err("header name 必须大小写不敏感地唯一");
     assert_diagnostic(
         &error,
@@ -2172,8 +1940,8 @@ fn cardinality_validation_covers_headers_names_forbidden_locations_and_shared_in
                 location: HttpTransportLocation::Query,
                 parameters,
             };
-        let error = validate_contract_topology(&[], &inventory, false)
-            .expect_err("空白 parameter name 必须失败");
+        let error =
+            validate_contract_topology(&[], &inventory).expect_err("空白 parameter name 必须失败");
         assert_diagnostic(
             &error,
             &[
@@ -2209,7 +1977,7 @@ fn cardinality_validation_covers_headers_names_forbidden_locations_and_shared_in
             location,
             parameters: FORBIDDEN_WIRE_PARAMETER,
         };
-        let error = validate_contract_topology(&[], &inventory, false)
+        let error = validate_contract_topology(&[], &inventory)
             .expect_err("Body/Success/Sse/Error 不得声明 parameters");
         let expected_location = match location {
             HttpTransportLocation::Body => "body",
@@ -2238,7 +2006,7 @@ fn cardinality_validation_covers_headers_names_forbidden_locations_and_shared_in
         location: HttpTransportLocation::Headers,
         parameters: SHARED_HEADER_PARAMETER,
     };
-    validate_contract_topology(&[list_tasks], &valid_shared_header, false)
+    validate_contract_topology(&[list_tasks], &valid_shared_header)
         .expect("SharedComponent input header 可声明 OptionalOne cardinality");
 
     contract_mut(&mut valid_shared_header, "api.error.response").transport =
@@ -2247,7 +2015,7 @@ fn cardinality_validation_covers_headers_names_forbidden_locations_and_shared_in
             location: HttpTransportLocation::Headers,
             parameters: SHARED_HEADER_WITHOUT_CARDINALITY,
         };
-    let error = validate_contract_topology(&[list_tasks], &valid_shared_header, false)
+    let error = validate_contract_topology(&[list_tasks], &valid_shared_header)
         .expect_err("shared header 缺 cardinality 必须失败");
     assert_diagnostic(
         &error,
@@ -2267,7 +2035,7 @@ fn endpoint_drift_and_duplicate_diagnostics_are_actionable() {
 
     let mut wrong_direction = claim;
     wrong_direction.obligations.body = EndpointObligation::Contract("api.health.response");
-    let error = validate_contract_topology(&[wrong_direction], operation_inventory(), false)
+    let error = validate_contract_topology(&[wrong_direction], operation_inventory())
         .expect_err("wrong direction 必须失败");
     assert_diagnostic(
         &error,
@@ -2282,7 +2050,7 @@ fn endpoint_drift_and_duplicate_diagnostics_are_actionable() {
 
     let mut wrong_surface = claim;
     wrong_surface.obligations.body = EndpointObligation::Contract("metadata.decision.input");
-    let error = validate_contract_topology(&[wrong_surface], operation_inventory(), false)
+    let error = validate_contract_topology(&[wrong_surface], operation_inventory())
         .expect_err("wrong surface 必须失败");
     assert_diagnostic(
         &error,
@@ -2302,7 +2070,7 @@ fn endpoint_drift_and_duplicate_diagnostics_are_actionable() {
             location: HttpTransportLocation::Body,
             parameters: &[],
         };
-    let error = validate_contract_topology(&[claim], &wrong_operation_inventory, false)
+    let error = validate_contract_topology(&[claim], &wrong_operation_inventory)
         .expect_err("wrong operation 必须失败");
     assert_diagnostic(
         &error,
@@ -2323,7 +2091,7 @@ fn endpoint_drift_and_duplicate_diagnostics_are_actionable() {
             ..health
         },
     ];
-    let error = validate_contract_topology(&duplicate_operation, operation_inventory(), false)
+    let error = validate_contract_topology(&duplicate_operation, operation_inventory())
         .expect_err("duplicate operation_id 必须失败");
     assert_diagnostic(
         &error,
@@ -2341,7 +2109,7 @@ fn endpoint_drift_and_duplicate_diagnostics_are_actionable() {
             ..health
         },
     ];
-    let error = validate_contract_topology(&duplicate_route, operation_inventory(), false)
+    let error = validate_contract_topology(&duplicate_route, operation_inventory())
         .expect_err("duplicate method/path 必须失败");
     assert_diagnostic(
         &error,
@@ -2365,7 +2133,7 @@ fn exact_endpoint_uniqueness_is_structural_not_a_redundant_global_binding_guard(
             ..claim
         },
     ];
-    let error = validate_contract_topology(&duplicate_route, operation_inventory(), false)
+    let error = validate_contract_topology(&duplicate_route, operation_inventory())
         .expect_err("同 method/path 不能制造第二个 exact binding");
     assert_diagnostic(
         &error,
@@ -2384,7 +2152,7 @@ fn exact_endpoint_uniqueness_is_structural_not_a_redundant_global_binding_guard(
             ..claim
         },
     ];
-    let error = validate_contract_topology(&different_route, operation_inventory(), false)
+    let error = validate_contract_topology(&different_route, operation_inventory())
         .expect_err("不同 method/path 必须被 exact operation_key 拒绝");
     assert_diagnostic(
         &error,
@@ -2399,7 +2167,7 @@ fn exact_endpoint_uniqueness_is_structural_not_a_redundant_global_binding_guard(
 
     let mut two_locations = claim;
     two_locations.obligations.query = EndpointObligation::Contract("api.claim-task.request");
-    let error = validate_contract_topology(&[two_locations], operation_inventory(), false)
+    let error = validate_contract_topology(&[two_locations], operation_inventory())
         .expect_err("同 endpoint 的不同 obligation 必须被 location 拒绝");
     assert_diagnostic(
         &error,
@@ -2414,13 +2182,12 @@ fn exact_endpoint_uniqueness_is_structural_not_a_redundant_global_binding_guard(
 }
 
 #[test]
-fn shared_and_exact_binding_surfaces_cannot_conflict_or_change_adoption() {
+fn shared_and_exact_binding_surfaces_cannot_conflict_or_duplicate() {
     let list_tasks = *endpoint_descriptor("api.list-tasks").expect("list tasks endpoint");
-    assert_eq!(list_tasks.migration, MigrationState::Adopted);
 
     let mut shared_as_obligation = list_tasks;
     shared_as_obligation.obligations.success = EndpointObligation::Contract("api.error.response");
-    let error = validate_contract_topology(&[shared_as_obligation], operation_inventory(), false)
+    let error = validate_contract_topology(&[shared_as_obligation], operation_inventory())
         .expect_err("SharedComponent 不得进入 exact obligation");
     assert_diagnostic(
         &error,
@@ -2435,7 +2202,7 @@ fn shared_and_exact_binding_surfaces_cannot_conflict_or_change_adoption() {
 
     let mut exact_as_shared = *endpoint_descriptor("api.claim-task").expect("claim endpoint");
     exact_as_shared.shared_components = &["api.claim-task.request"];
-    let error = validate_contract_topology(&[exact_as_shared], operation_inventory(), false)
+    let error = validate_contract_topology(&[exact_as_shared], operation_inventory())
         .expect_err("ExactSurface 不得进入 shared_components");
     assert_diagnostic(
         &error,
@@ -2449,7 +2216,7 @@ fn shared_and_exact_binding_surfaces_cannot_conflict_or_change_adoption() {
 
     let mut duplicate_shared = list_tasks;
     duplicate_shared.shared_components = DUPLICATE_SHARED_API_ERROR;
-    let error = validate_contract_topology(&[duplicate_shared], operation_inventory(), false)
+    let error = validate_contract_topology(&[duplicate_shared], operation_inventory())
         .expect_err("同 endpoint 重复 shared linkage 必须失败");
     assert_diagnostic(
         &error,

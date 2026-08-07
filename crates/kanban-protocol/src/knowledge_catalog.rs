@@ -1,15 +1,14 @@
 //! Knowledge substrate、search、graph、vector 与 context API family 的唯一 declaration source。
 //!
-//! parent/child declaration 保存 endpoint、header、schema、fixture、adoption locator 和
-//! MCP binding。真实 handler/client 仍由各自 crate 持有；本模块只提供协议事实及其
+//! parent/child declaration 保存 endpoint、header、schema、fixture、exclusion 和 MCP
+//! binding。真实 handler/client 仍由各自 crate 持有；本模块只提供协议事实及其
 //! deterministic projection。
 
 use crate::{
-    AdoptionLocator, ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection,
-    ContractGranularity, ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod,
-    HttpTransportLocation, McpExposure, McpPolicy, McpToolBinding, MigrationState,
-    OperationContract, OperationDeclaration, SurfaceOperation, WireParameter,
-    WireParameterCardinality,
+    ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod, HttpTransportLocation,
+    McpExposure, McpPolicy, McpToolBinding, OperationContract, OperationDeclaration,
+    SurfaceOperation, WireParameter, WireParameterCardinality,
 };
 
 const TASK_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
@@ -232,48 +231,12 @@ const DOMAIN_INVARIANTS: &[crate::McpOperationInvariant] = &[
     crate::McpOperationInvariant::NoHostAdminSurface,
 ];
 
-const fn server_witness(exact_test: &'static str) -> AdoptionLocator {
-    AdoptionLocator {
-        package: "kanban-server",
-        test_target: "lib",
-        exact_test,
-    }
-}
-
-const fn client_witness(exact_test: &'static str) -> AdoptionLocator {
-    AdoptionLocator {
-        package: "kanban-client",
-        test_target: "lib",
-        exact_test,
-    }
-}
-
-const fn header_witness(profile: ApiHeaderProfile) -> AdoptionLocator {
-    match profile {
-        ApiHeaderProfile::Locale => {
-            server_witness("knowledge_adoption::locale_header_fixture_is_consumed_by_real_router")
-        }
-        ApiHeaderProfile::LocaleActor => server_witness(
-            "knowledge_adoption::locale_actor_header_fixture_is_consumed_by_real_router",
-        ),
-        ApiHeaderProfile::LocaleJson => server_witness(
-            "knowledge_adoption::locale_json_header_fixture_is_consumed_by_real_router",
-        ),
-        ApiHeaderProfile::LocaleActorJson => server_witness(
-            "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router",
-        ),
-        ApiHeaderProfile::LocaleActorOptionalJson => server_witness(
-            "knowledge_adoption::locale_actor_optional_json_header_fixture_is_consumed_by_real_router",
-        ),
-    }
-}
-
 macro_rules! api_contract {
     (
         $id:literal, $path:literal, $operation:literal, $operation_key:literal,
         $direction:expr, $location:expr, $parameters:expr, $schema_id:literal,
         $artifact_path:literal, $schema_title:literal, $valid_fixture:literal,
-        $invalid_fixture:literal, $schema_type:ty, $producer:expr, $consumer:expr
+        $invalid_fixture:literal, $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -292,8 +255,7 @@ macro_rules! api_contract {
             $schema_title,
             $valid_fixture,
             $invalid_fixture,
-        )
-        .with_adoption($producer, $consumer);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -304,7 +266,7 @@ macro_rules! header_contract {
     (
         $id:literal, $path:literal, $operation:literal, $profile:expr,
         $schema_id:literal, $artifact_path:literal, $schema_title:literal,
-        $valid_fixture:literal, $invalid_fixture:literal, $schema_type:ty
+        $valid_fixture:literal, $invalid_fixture:literal, $schema_type:ty $(,)?
     ) => {
         api_contract!(
             $id,
@@ -319,9 +281,7 @@ macro_rules! header_contract {
             $schema_title,
             $valid_fixture,
             $invalid_fixture,
-            $schema_type,
-            header_witness($profile),
-            header_witness($profile)
+            $schema_type
         )
     };
 }
@@ -354,12 +314,6 @@ const API_BOARD_TASK_MAP_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/board-task-map-path.v1.valid.json",
         "schemas/fixtures/api/board-task-map-path.v1.invalid.json",
         crate::BoardTaskMapPath,
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        )
     ),
     header_contract!(
         "api.board-task-map.headers",
@@ -387,12 +341,6 @@ const API_BOARD_TASK_MAP_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/board-task-map-query.v1.valid.json",
         "schemas/fixtures/api/board-task-map-query.v1.invalid.json",
         crate::BoardTaskMapQuery,
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        )
     ),
     api_contract!(
         "api.board-task-map.response",
@@ -408,12 +356,6 @@ const API_BOARD_TASK_MAP_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/board-task-map-response.v1.valid.json",
         "schemas/fixtures/api/board-task-map-response.v1.invalid.json",
         crate::BoardTaskMapResponse,
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        )
     ),
 ];
 
@@ -432,12 +374,6 @@ const API_TASK_NEIGHBORHOOD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/task-neighborhood-path.v1.valid.json",
         "schemas/fixtures/api/task-neighborhood-path.v1.invalid.json",
         crate::TaskNeighborhoodPath,
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        )
     ),
     header_contract!(
         "api.task-neighborhood.headers",
@@ -465,12 +401,6 @@ const API_TASK_NEIGHBORHOOD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/task-neighborhood-query.v1.valid.json",
         "schemas/fixtures/api/task-neighborhood-query.v1.invalid.json",
         crate::TaskNeighborhoodQuery,
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        )
     ),
     api_contract!(
         "api.task-neighborhood.response",
@@ -486,12 +416,6 @@ const API_TASK_NEIGHBORHOOD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/task-neighborhood-response.v1.valid.json",
         "schemas/fixtures/api/task-neighborhood-response.v1.invalid.json",
         crate::TaskNeighborhoodResponse,
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        )
     ),
 ];
 
@@ -510,12 +434,6 @@ const API_SEARCH_TASKS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-tasks-query.v1.valid.json",
         "schemas/fixtures/api/search-tasks-query.v1.invalid.json",
         crate::SearchTasksQuery,
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        ),
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        )
     ),
     header_contract!(
         "api.search-tasks.headers",
@@ -543,12 +461,6 @@ const API_SEARCH_TASKS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-tasks-response.v1.valid.json",
         "schemas/fixtures/api/search-tasks-response.v1.invalid.json",
         crate::SearchTasksResponse,
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        ),
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        )
     ),
 ];
 
@@ -567,12 +479,6 @@ const API_SEARCH_TASKS_BY_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-tasks-by-status-query.v1.valid.json",
         "schemas/fixtures/api/search-tasks-by-status-query.v1.invalid.json",
         crate::SearchTasksQuery,
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        ),
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        )
     ),
     header_contract!(
         "api.search-tasks-by-status.headers",
@@ -600,12 +506,6 @@ const API_SEARCH_TASKS_BY_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-tasks-by-status-response.v1.valid.json",
         "schemas/fixtures/api/search-tasks-by-status-response.v1.invalid.json",
         crate::SearchTasksByStatusResponse,
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        ),
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        )
     ),
 ];
 
@@ -624,12 +524,6 @@ const API_SEARCH_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-status-query.v1.valid.json",
         "schemas/fixtures/api/search-status-query.v1.invalid.json",
         crate::BoardQuery,
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        ),
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        )
     ),
     header_contract!(
         "api.search-status.headers",
@@ -657,12 +551,6 @@ const API_SEARCH_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-status-response.v1.valid.json",
         "schemas/fixtures/api/search-status-response.v1.invalid.json",
         crate::SearchStatusResponse,
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        ),
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        )
     ),
 ];
 
@@ -681,12 +569,6 @@ const API_REBUILD_SEARCH_INDEX_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-status-query.v1.valid.json",
         "schemas/fixtures/api/search-status-query.v1.invalid.json",
         crate::BoardQuery,
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        ),
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        )
     ),
     header_contract!(
         "api.rebuild-search-index.headers",
@@ -714,12 +596,6 @@ const API_REBUILD_SEARCH_INDEX_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-status-response.v1.valid.json",
         "schemas/fixtures/api/search-status-response.v1.invalid.json",
         crate::SearchStatusResponse,
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        ),
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        )
     ),
 ];
 
@@ -738,12 +614,6 @@ const API_SYNC_SEARCH_INDEX_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-status-query.v1.valid.json",
         "schemas/fixtures/api/search-status-query.v1.invalid.json",
         crate::BoardQuery,
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        ),
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        )
     ),
     header_contract!(
         "api.sync-search-index.headers",
@@ -771,12 +641,6 @@ const API_SYNC_SEARCH_INDEX_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/search-status-response.v1.valid.json",
         "schemas/fixtures/api/search-status-response.v1.invalid.json",
         crate::SearchStatusResponse,
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        ),
-        server_witness(
-            "knowledge_adoption::search_routes_consume_query_and_status_fixtures_against_real_index"
-        )
     ),
 ];
 
@@ -795,12 +659,6 @@ const API_BUILD_CONTEXT_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/build-context-path.v1.valid.json",
         "schemas/fixtures/api/build-context-path.v1.invalid.json",
         crate::BuildContextPath,
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        )
     ),
     header_contract!(
         "api.build-context.headers",
@@ -828,12 +686,6 @@ const API_BUILD_CONTEXT_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/build-context-query.v1.valid.json",
         "schemas/fixtures/api/build-context-query.v1.invalid.json",
         crate::BuildContextQuery,
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        )
     ),
     api_contract!(
         "api.build-context.response",
@@ -849,12 +701,6 @@ const API_BUILD_CONTEXT_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/build-context-response.v1.valid.json",
         "schemas/fixtures/api/build-context-response.v1.invalid.json",
         crate::BuildContextResponse,
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        ),
-        server_witness(
-            "knowledge_adoption::context_neighborhood_and_task_map_routes_consume_typed_fixtures"
-        )
     ),
 ];
 
@@ -873,8 +719,6 @@ const API_GRAPH_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-status-query.v1.valid.json",
         "schemas/fixtures/api/graph-status-query.v1.invalid.json",
         crate::BoardQuery,
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
     header_contract!(
         "api.graph-status.headers",
@@ -902,8 +746,6 @@ const API_GRAPH_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-status-response.v1.valid.json",
         "schemas/fixtures/api/graph-status-response.v1.invalid.json",
         crate::GraphStatusResponse,
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
 ];
 
@@ -922,8 +764,6 @@ const API_GRAPH_NEIGHBORS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-neighbors-query.v1.valid.json",
         "schemas/fixtures/api/graph-neighbors-query.v1.invalid.json",
         crate::GraphNeighborsQuery,
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
     header_contract!(
         "api.graph-neighbors.headers",
@@ -951,8 +791,6 @@ const API_GRAPH_NEIGHBORS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-neighbors-response.v1.valid.json",
         "schemas/fixtures/api/graph-neighbors-response.v1.invalid.json",
         crate::GraphNeighborsResponse,
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
 ];
 
@@ -971,8 +809,6 @@ const API_GRAPH_QUERY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-query-query.v1.valid.json",
         "schemas/fixtures/api/graph-query-query.v1.invalid.json",
         crate::GraphQueryQuery,
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
     header_contract!(
         "api.graph-query.headers",
@@ -1000,8 +836,6 @@ const API_GRAPH_QUERY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-query-response.v1.valid.json",
         "schemas/fixtures/api/graph-query-response.v1.invalid.json",
         crate::cli_helpers::CliGraphQueryOutput,
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
 ];
 
@@ -1020,8 +854,6 @@ const API_GRAPH_REBUILD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-rebuild-query.v1.valid.json",
         "schemas/fixtures/api/graph-rebuild-query.v1.invalid.json",
         crate::BoardQuery,
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
     header_contract!(
         "api.graph-rebuild.headers",
@@ -1049,8 +881,6 @@ const API_GRAPH_REBUILD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-rebuild-response.v1.valid.json",
         "schemas/fixtures/api/graph-rebuild-response.v1.invalid.json",
         crate::GraphMaintenanceResponse,
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
 ];
 
@@ -1069,8 +899,6 @@ const API_GRAPH_SYNC_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-sync-query.v1.valid.json",
         "schemas/fixtures/api/graph-sync-query.v1.invalid.json",
         crate::BoardQuery,
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
     header_contract!(
         "api.graph-sync.headers",
@@ -1098,8 +926,6 @@ const API_GRAPH_SYNC_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/graph-sync-response.v1.valid.json",
         "schemas/fixtures/api/graph-sync-response.v1.invalid.json",
         crate::GraphMaintenanceResponse,
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures"),
-        server_witness("knowledge_adoption::graph_routes_consume_query_and_projection_fixtures")
     ),
 ];
 
@@ -1118,8 +944,6 @@ const API_LIST_ENTITIES_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-list-query.v1.valid.json",
         "schemas/fixtures/api/entity-list-query.v1.invalid.json",
         crate::EntityListQuery,
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
     header_contract!(
         "api.entity-list.headers",
@@ -1147,8 +971,6 @@ const API_LIST_ENTITIES_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-list-response.v1.valid.json",
         "schemas/fixtures/api/entity-list-response.v1.invalid.json",
         crate::EntityListResponse,
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
 ];
 
@@ -1179,8 +1001,6 @@ const API_UPSERT_ENTITY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-upsert-request.v1.valid.json",
         "schemas/fixtures/api/entity-upsert-request.v1.invalid.json",
         crate::EntityUpsertRequest,
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
     api_contract!(
         "api.entity-upsert.response",
@@ -1196,8 +1016,6 @@ const API_UPSERT_ENTITY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-upsert-response.v1.valid.json",
         "schemas/fixtures/api/entity-upsert-response.v1.invalid.json",
         crate::EntityResponse,
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
 ];
 
@@ -1216,8 +1034,6 @@ const API_GET_ENTITY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-path.v1.valid.json",
         "schemas/fixtures/api/entity-path.v1.invalid.json",
         crate::EntityPath,
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
     header_contract!(
         "api.entity.headers",
@@ -1245,8 +1061,6 @@ const API_GET_ENTITY_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/entity-response.v1.valid.json",
         "schemas/fixtures/api/entity-response.v1.invalid.json",
         crate::EntityResponse,
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures"),
-        server_witness("knowledge_adoption::entity_routes_consume_upsert_list_and_path_fixtures")
     ),
 ];
 
@@ -1265,12 +1079,6 @@ const API_VECTOR_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-status-query.v1.valid.json",
         "schemas/fixtures/api/vector-status-query.v1.invalid.json",
         crate::VectorStatusQuery,
-        server_witness(
-            "knowledge_adoption::vector_routes_consume_typed_projection_fixtures_and_real_degraded_queries"
-        ),
-        server_witness(
-            "knowledge_adoption::vector_routes_consume_typed_projection_fixtures_and_real_degraded_queries"
-        )
     ),
     header_contract!(
         "api.vector-status.headers",
@@ -1298,12 +1106,6 @@ const API_VECTOR_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-status-response.v1.valid.json",
         "schemas/fixtures/api/vector-status-response.v1.invalid.json",
         crate::VectorStatusResponse,
-        server_witness(
-            "knowledge_adoption::vector_routes_consume_typed_projection_fixtures_and_real_degraded_queries"
-        ),
-        server_witness(
-            "knowledge_adoption::vector_routes_consume_typed_projection_fixtures_and_real_degraded_queries"
-        )
     ),
 ];
 
@@ -1334,10 +1136,6 @@ const API_VECTOR_CONFIGURE_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-configure-request.v1.valid.json",
         "schemas/fixtures/api/vector-configure-request.v1.invalid.json",
         crate::VectorConfigureRequest,
-        client_witness("operations::vector::tests::vector_configure_request_fixture_is_produced"),
-        server_witness(
-            "vector::tests::vector_configure_request_fixture_is_consumed_by_real_router"
-        )
     ),
     api_contract!(
         "api.vector-configure.response",
@@ -1353,12 +1151,6 @@ const API_VECTOR_CONFIGURE_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-configure-response.v1.valid.json",
         "schemas/fixtures/api/vector-configure-response.v1.invalid.json",
         crate::VectorConfigureResponse,
-        server_witness(
-            "vector::tests::vector_configure_response_fixture_is_produced_by_real_router"
-        ),
-        client_witness(
-            "operations::vector::tests::vector_configure_response_fixture_is_consumed_by_client"
-        )
     ),
 ];
 
@@ -1389,8 +1181,6 @@ const API_VECTOR_REBUILD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-rebuild-request.v1.valid.json",
         "schemas/fixtures/api/vector-rebuild-request.v1.invalid.json",
         crate::VectorProjectionRequest,
-        client_witness("operations::vector::tests::vector_rebuild_request_fixture_is_produced"),
-        server_witness("vector::tests::vector_rebuild_request_fixture_is_consumed_by_real_router")
     ),
     api_contract!(
         "api.vector-rebuild.response",
@@ -1406,10 +1196,6 @@ const API_VECTOR_REBUILD_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-rebuild-response.v1.valid.json",
         "schemas/fixtures/api/vector-rebuild-response.v1.invalid.json",
         crate::VectorProjectionResponse,
-        server_witness("vector::tests::vector_rebuild_response_fixture_is_produced_by_real_router"),
-        client_witness(
-            "operations::vector::tests::vector_rebuild_response_fixture_is_consumed_by_client"
-        )
     ),
 ];
 
@@ -1440,8 +1226,6 @@ const API_VECTOR_SYNC_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-sync-request.v1.valid.json",
         "schemas/fixtures/api/vector-sync-request.v1.invalid.json",
         crate::VectorProjectionRequest,
-        client_witness("operations::vector::tests::vector_sync_request_fixture_is_produced"),
-        server_witness("vector::tests::vector_sync_request_fixture_is_consumed_by_real_router")
     ),
     api_contract!(
         "api.vector-sync.response",
@@ -1457,10 +1241,6 @@ const API_VECTOR_SYNC_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-sync-response.v1.valid.json",
         "schemas/fixtures/api/vector-sync-response.v1.invalid.json",
         crate::VectorProjectionResponse,
-        server_witness("vector::tests::vector_sync_response_fixture_is_produced_by_real_router"),
-        client_witness(
-            "operations::vector::tests::vector_sync_response_fixture_is_consumed_by_client"
-        )
     ),
 ];
 
@@ -1479,10 +1259,6 @@ const API_VECTOR_QUERY_CHUNKS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-query-chunks-query.v1.valid.json",
         "schemas/fixtures/api/vector-query-chunks-query.v1.invalid.json",
         crate::VectorQuery,
-        client_witness("operations::vector::tests::vector_query_chunks_query_fixture_is_produced"),
-        server_witness(
-            "vector::tests::vector_query_chunks_query_fixture_is_consumed_by_real_router"
-        )
     ),
     header_contract!(
         "api.vector-query-chunks.headers",
@@ -1510,12 +1286,6 @@ const API_VECTOR_QUERY_CHUNKS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-query-chunks-response.v1.valid.json",
         "schemas/fixtures/api/vector-query-chunks-response.v1.invalid.json",
         crate::VectorQueryChunksResponse,
-        server_witness(
-            "vector::tests::vector_query_chunks_response_fixture_is_produced_by_real_router"
-        ),
-        client_witness(
-            "operations::vector::tests::vector_query_chunks_response_fixture_is_consumed_by_client"
-        )
     ),
 ];
 
@@ -1534,12 +1304,6 @@ const API_VECTOR_QUERY_LABEL_ATOMS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-query-label-atoms-query.v1.valid.json",
         "schemas/fixtures/api/vector-query-label-atoms-query.v1.invalid.json",
         crate::VectorQuery,
-        client_witness(
-            "operations::vector::tests::vector_query_label_atoms_query_fixture_is_produced"
-        ),
-        server_witness(
-            "vector::tests::vector_query_label_atoms_query_fixture_is_consumed_by_real_router"
-        )
     ),
     header_contract!(
         "api.vector-query-label-atoms.headers",
@@ -1567,12 +1331,6 @@ const API_VECTOR_QUERY_LABEL_ATOMS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/vector-query-label-atoms-response.v1.valid.json",
         "schemas/fixtures/api/vector-query-label-atoms-response.v1.invalid.json",
         crate::VectorQueryLabelAtomsResponse,
-        server_witness(
-            "vector::tests::vector_query_label_atoms_response_fixture_is_produced_by_real_router"
-        ),
-        client_witness(
-            "operations::vector::tests::vector_query_label_atoms_response_fixture_is_consumed_by_client"
-        )
     ),
 ];
 
@@ -1584,7 +1342,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/task-map"),
         "GET /api/v1/boards/:board/task-map",
         "GET /api/v1/boards/:board/task-map",
-        MigrationState::Adopted,
         API_BOARD_TASK_MAP_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1596,7 +1353,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/neighborhood"),
         "GET /api/v1/tasks/:task_id/neighborhood",
         "GET /api/v1/tasks/:task_id/neighborhood",
-        MigrationState::Adopted,
         API_TASK_NEIGHBORHOOD_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1608,7 +1364,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/search/tasks"),
         "GET /api/v1/search/tasks",
         "GET /api/v1/search/tasks",
-        MigrationState::Adopted,
         API_SEARCH_TASKS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1620,7 +1375,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/search/tasks/by-status"),
         "GET /api/v1/search/tasks/by-status",
         "GET /api/v1/search/tasks/by-status",
-        MigrationState::Adopted,
         API_SEARCH_TASKS_BY_STATUS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1635,7 +1389,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/search/status"),
         "GET /api/v1/search/status",
         "GET /api/v1/search/status",
-        MigrationState::Adopted,
         API_SEARCH_STATUS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1647,7 +1400,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/search/index/rebuild"),
         "POST /api/v1/search/index/rebuild",
         "POST /api/v1/search/index/rebuild",
-        MigrationState::Adopted,
         API_REBUILD_SEARCH_INDEX_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1659,7 +1411,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/search/index/sync"),
         "POST /api/v1/search/index/sync",
         "POST /api/v1/search/index/sync",
-        MigrationState::Adopted,
         API_SYNC_SEARCH_INDEX_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1671,7 +1422,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/context"),
         "GET /api/v1/tasks/:task_id/context",
         "GET /api/v1/tasks/:task_id/context",
-        MigrationState::Adopted,
         API_BUILD_CONTEXT_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1683,7 +1433,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/graph/status"),
         "GET /api/v1/graph/status",
         "GET /api/v1/graph/status",
-        MigrationState::Adopted,
         API_GRAPH_STATUS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1695,7 +1444,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/graph/neighbors"),
         "GET /api/v1/graph/neighbors",
         "GET /api/v1/graph/neighbors",
-        MigrationState::Adopted,
         API_GRAPH_NEIGHBORS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1707,7 +1455,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/graph/query"),
         "GET /api/v1/graph/query",
         "GET /api/v1/graph/query",
-        MigrationState::Adopted,
         API_GRAPH_QUERY_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1719,7 +1466,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/graph/rebuild"),
         "POST /api/v1/graph/rebuild",
         "POST /api/v1/graph/rebuild",
-        MigrationState::Adopted,
         API_GRAPH_REBUILD_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1731,7 +1477,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/graph/sync"),
         "POST /api/v1/graph/sync",
         "POST /api/v1/graph/sync",
-        MigrationState::Adopted,
         API_GRAPH_SYNC_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1743,7 +1488,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/entities"),
         "GET /api/v1/entities",
         "GET /api/v1/entities",
-        MigrationState::Adopted,
         API_LIST_ENTITIES_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1755,7 +1499,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/entities"),
         "PUT /api/v1/entities",
         "PUT /api/v1/entities",
-        MigrationState::Adopted,
         API_UPSERT_ENTITY_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -1767,7 +1510,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/entities/:uri"),
         "GET /api/v1/entities/:uri",
         "GET /api/v1/entities/:uri",
-        MigrationState::Adopted,
         API_GET_ENTITY_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1779,7 +1521,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/vector/status"),
         "GET /api/v1/vector/status",
         "GET /api/v1/vector/status",
-        MigrationState::Adopted,
         API_VECTOR_STATUS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1791,7 +1532,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/vector/configure"),
         "POST /api/v1/vector/configure",
         "POST /api/v1/vector/configure",
-        MigrationState::Adopted,
         API_VECTOR_CONFIGURE_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -1803,7 +1543,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/vector/rebuild"),
         "POST /api/v1/vector/rebuild",
         "POST /api/v1/vector/rebuild",
-        MigrationState::Adopted,
         API_VECTOR_REBUILD_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -1815,7 +1554,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/vector/sync"),
         "POST /api/v1/vector/sync",
         "POST /api/v1/vector/sync",
-        MigrationState::Adopted,
         API_VECTOR_SYNC_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -1827,7 +1565,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/vector/query-chunks"),
         "GET /api/v1/vector/query-chunks",
         "GET /api/v1/vector/query-chunks",
-        MigrationState::Adopted,
         API_VECTOR_QUERY_CHUNKS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1839,7 +1576,6 @@ const KNOWLEDGE_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/vector/query-label-atoms"),
         "GET /api/v1/vector/query-label-atoms",
         "GET /api/v1/vector/query-label-atoms",
-        MigrationState::Adopted,
         API_VECTOR_QUERY_LABEL_ATOMS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)

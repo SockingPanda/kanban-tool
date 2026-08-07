@@ -1,11 +1,10 @@
 //! Comments、attachments、runs、events API/SSE family 的唯一 declaration source。
 
 use crate::{
-    AdoptionLocator, ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection,
-    ContractGranularity, ContractStrictness, ContractSurface, EndpointDescriptor,
-    EndpointObligation, EndpointObligationKind, HttpMethod, HttpTransportLocation, McpExposure,
-    McpPolicy, McpToolBinding, MigrationState, OperationContract, OperationDeclaration,
-    SurfaceOperation, WireParameter,
+    ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, EndpointDescriptor, EndpointObligation,
+    EndpointObligationKind, HttpMethod, HttpTransportLocation, McpExposure, McpPolicy,
+    McpToolBinding, OperationContract, OperationDeclaration, SurfaceOperation, WireParameter,
 };
 
 const COMMENT_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
@@ -53,37 +52,6 @@ const LIST_EVENTS_QUERY_PARAMETERS: &[WireParameter] = &[
     },
 ];
 
-const RUN_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_runs_and_logs_adoption_uses_real_router_paths_and_fixtures",
-};
-const COMMENT_ATTACHMENT_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_comments_and_attachments_adoption_uses_real_router_fixtures",
-};
-const EVENT_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_events_sse_and_stats_adoption_use_query_fixtures",
-};
-const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_ACTOR_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_ACTOR_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router",
-};
-
 const DOMAIN_INVARIANTS: &[crate::McpOperationInvariant] = &[
     crate::McpOperationInvariant::CanonicalHostOnly,
     crate::McpOperationInvariant::SharedApplicationService,
@@ -92,9 +60,9 @@ const DOMAIN_INVARIANTS: &[crate::McpOperationInvariant] = &[
 
 macro_rules! api_contract {
     (
-        $witness:expr, $id:expr, $path:expr, $direction:expr, $location:expr,
+        $id:expr, $path:expr, $direction:expr, $location:expr,
         $parameters:expr, $schema_id:expr, $artifact_path:expr, $title:expr,
-        $valid_fixture:expr, $invalid_fixture:expr, $schema_type:ty
+        $valid_fixture:expr, $invalid_fixture:expr, $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -112,8 +80,7 @@ macro_rules! api_contract {
             $title,
             $valid_fixture,
             $invalid_fixture,
-        )
-        .with_adoption($witness, $witness);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -122,12 +89,6 @@ macro_rules! api_contract {
 
 macro_rules! header_contract {
     ($operation:literal, $path:literal, $profile:expr, $profile_slug:literal) => {{
-        let witness = match $profile {
-            ApiHeaderProfile::Locale => HEADER_LOCALE_WITNESS,
-            ApiHeaderProfile::LocaleActor => HEADER_ACTOR_WITNESS,
-            ApiHeaderProfile::LocaleActorJson => HEADER_ACTOR_JSON_WITNESS,
-            _ => panic!("history headers 不支持该 profile"),
-        };
         let contract = ContractDeclaration::new(
             concat!("api.", $operation, ".headers"),
             concat!($path, " headers"),
@@ -152,8 +113,7 @@ macro_rules! header_contract {
                 $profile_slug,
                 ".v1.invalid.json"
             ),
-        )
-        .with_adoption(witness, witness);
+        );
         #[cfg(feature = "schema")]
         let contract = match $profile {
             ApiHeaderProfile::Locale => {
@@ -236,7 +196,6 @@ binding!(RUN_SHOW_BINDING, "run_show", ["api.get-run"]);
 
 const API_LIST_RUNS_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        RUN_WITNESS,
         "api.list-runs.path",
         "GET /api/v1/tasks/:task_id/runs path",
         ContractDirection::Deserialize,
@@ -256,7 +215,6 @@ const API_LIST_RUNS_CONTRACTS: &[ContractDeclaration] = &[
         "locale-headers"
     ),
     api_contract!(
-        RUN_WITNESS,
         "api.list-runs.response",
         "GET /api/v1/tasks/:task_id/runs response",
         ContractDirection::Serialize,
@@ -273,7 +231,6 @@ const API_LIST_RUNS_CONTRACTS: &[ContractDeclaration] = &[
 
 const API_GET_RUN_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        RUN_WITNESS,
         "api.get-run.path",
         "GET /api/v1/runs/:run_id path",
         ContractDirection::Deserialize,
@@ -293,7 +250,6 @@ const API_GET_RUN_CONTRACTS: &[ContractDeclaration] = &[
         "locale-headers"
     ),
     api_contract!(
-        RUN_WITNESS,
         "api.get-run.response",
         "GET /api/v1/runs/:run_id response",
         ContractDirection::Serialize,
@@ -310,7 +266,6 @@ const API_GET_RUN_CONTRACTS: &[ContractDeclaration] = &[
 
 const API_GET_RUN_LOG_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        RUN_WITNESS,
         "api.get-run-log.path",
         "GET /api/v1/runs/:run_id/log path",
         ContractDirection::Deserialize,
@@ -330,7 +285,6 @@ const API_GET_RUN_LOG_CONTRACTS: &[ContractDeclaration] = &[
         "locale-headers"
     ),
     api_contract!(
-        RUN_WITNESS,
         "api.get-run-log.response",
         "GET /api/v1/runs/:run_id/log response",
         ContractDirection::Serialize,
@@ -347,7 +301,6 @@ const API_GET_RUN_LOG_CONTRACTS: &[ContractDeclaration] = &[
 
 const API_LIST_COMMENTS_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.list-comments.path",
         "GET /api/v1/tasks/:task_id/comments path",
         ContractDirection::Deserialize,
@@ -367,7 +320,6 @@ const API_LIST_COMMENTS_CONTRACTS: &[ContractDeclaration] = &[
         "locale-headers"
     ),
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.list-comments.response",
         "GET /api/v1/tasks/:task_id/comments response",
         ContractDirection::Serialize,
@@ -384,7 +336,6 @@ const API_LIST_COMMENTS_CONTRACTS: &[ContractDeclaration] = &[
 
 const API_CREATE_COMMENT_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.create-comment.path",
         "POST /api/v1/tasks/:task_id/comments path",
         ContractDirection::Deserialize,
@@ -404,7 +355,6 @@ const API_CREATE_COMMENT_CONTRACTS: &[ContractDeclaration] = &[
         "locale-actor-json-headers"
     ),
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.create-comment.request",
         "POST /api/v1/tasks/:task_id/comments request",
         ContractDirection::Deserialize,
@@ -418,7 +368,6 @@ const API_CREATE_COMMENT_CONTRACTS: &[ContractDeclaration] = &[
         crate::CreateCommentRequest
     ),
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.create-comment.response",
         "POST /api/v1/tasks/:task_id/comments response",
         ContractDirection::Serialize,
@@ -435,7 +384,6 @@ const API_CREATE_COMMENT_CONTRACTS: &[ContractDeclaration] = &[
 
 const API_LIST_ATTACHMENTS_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.list-attachments.path",
         "GET /api/v1/tasks/:task_id/attachments path",
         ContractDirection::Deserialize,
@@ -455,7 +403,6 @@ const API_LIST_ATTACHMENTS_CONTRACTS: &[ContractDeclaration] = &[
         "locale-headers"
     ),
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.list-attachments.response",
         "GET /api/v1/tasks/:task_id/attachments success",
         ContractDirection::Serialize,
@@ -472,7 +419,6 @@ const API_LIST_ATTACHMENTS_CONTRACTS: &[ContractDeclaration] = &[
 
 const API_CREATE_ATTACHMENT_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.create-attachment.path",
         "POST /api/v1/tasks/:task_id/attachments path",
         ContractDirection::Deserialize,
@@ -492,7 +438,6 @@ const API_CREATE_ATTACHMENT_CONTRACTS: &[ContractDeclaration] = &[
         "locale-actor-json-headers"
     ),
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.create-attachment.request",
         "POST /api/v1/tasks/:task_id/attachments body",
         ContractDirection::Deserialize,
@@ -506,7 +451,6 @@ const API_CREATE_ATTACHMENT_CONTRACTS: &[ContractDeclaration] = &[
         crate::CreateAttachmentRequest
     ),
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.create-attachment.response",
         "POST /api/v1/tasks/:task_id/attachments success",
         ContractDirection::Serialize,
@@ -523,7 +467,6 @@ const API_CREATE_ATTACHMENT_CONTRACTS: &[ContractDeclaration] = &[
 
 const API_DOWNLOAD_ATTACHMENT_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.download-attachment.path",
         "GET /api/v1/tasks/:task_id/attachments/:attachment_id path",
         ContractDirection::Deserialize,
@@ -543,7 +486,6 @@ const API_DOWNLOAD_ATTACHMENT_CONTRACTS: &[ContractDeclaration] = &[
         "locale-headers"
     ),
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.download-attachment.response",
         "GET /api/v1/tasks/:task_id/attachments/:attachment_id success",
         ContractDirection::Serialize,
@@ -560,7 +502,6 @@ const API_DOWNLOAD_ATTACHMENT_CONTRACTS: &[ContractDeclaration] = &[
 
 const API_DELETE_ATTACHMENT_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.delete-attachment.path",
         "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id path",
         ContractDirection::Deserialize,
@@ -580,7 +521,6 @@ const API_DELETE_ATTACHMENT_CONTRACTS: &[ContractDeclaration] = &[
         "locale-actor-headers"
     ),
     api_contract!(
-        COMMENT_ATTACHMENT_WITNESS,
         "api.delete-attachment.response",
         "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id success",
         ContractDirection::Serialize,
@@ -597,7 +537,6 @@ const API_DELETE_ATTACHMENT_CONTRACTS: &[ContractDeclaration] = &[
 
 const API_LIST_EVENTS_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        EVENT_WITNESS,
         "api.list-events.query",
         "GET /api/v1/events query",
         ContractDirection::Deserialize,
@@ -617,7 +556,6 @@ const API_LIST_EVENTS_CONTRACTS: &[ContractDeclaration] = &[
         "locale-headers"
     ),
     api_contract!(
-        EVENT_WITNESS,
         "api.list-events.response",
         "GET /api/v1/events response",
         ContractDirection::Serialize,
@@ -634,7 +572,6 @@ const API_LIST_EVENTS_CONTRACTS: &[ContractDeclaration] = &[
 
 const SSE_STREAM_EVENTS_CONTRACTS: &[ContractDeclaration] = &[
     api_contract!(
-        EVENT_WITNESS,
         "sse.stream-events.query",
         "GET /api/v1/stream/events query",
         ContractDirection::Deserialize,
@@ -648,7 +585,6 @@ const SSE_STREAM_EVENTS_CONTRACTS: &[ContractDeclaration] = &[
         crate::StreamEventsQuery
     ),
     api_contract!(
-        EVENT_WITNESS,
         "sse.event.data",
         "GET /api/v1/stream/events data",
         ContractDirection::Serialize,
@@ -671,7 +607,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/runs"),
         "GET /api/v1/tasks/:task_id/runs",
         "GET /api/v1/tasks/:task_id/runs",
-        MigrationState::Adopted,
         API_LIST_RUNS_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -684,7 +619,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/runs/:run_id"),
         "GET /api/v1/runs/:run_id",
         "GET /api/v1/runs/:run_id",
-        MigrationState::Adopted,
         API_GET_RUN_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -697,7 +631,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/runs/:run_id/log"),
         "GET /api/v1/runs/:run_id/log",
         "GET /api/v1/runs/:run_id/log",
-        MigrationState::Adopted,
         API_GET_RUN_LOG_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -709,7 +642,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/comments"),
         "GET /api/v1/tasks/:task_id/comments",
         "GET /api/v1/tasks/:task_id/comments",
-        MigrationState::Adopted,
         API_LIST_COMMENTS_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -722,7 +654,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/comments"),
         "POST /api/v1/tasks/:task_id/comments",
         "POST /api/v1/tasks/:task_id/comments",
-        MigrationState::Adopted,
         API_CREATE_COMMENT_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -735,7 +666,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/attachments"),
         "GET /api/v1/tasks/:task_id/attachments",
         "GET /api/v1/tasks/:task_id/attachments",
-        MigrationState::Adopted,
         API_LIST_ATTACHMENTS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -747,7 +677,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/attachments"),
         "POST /api/v1/tasks/:task_id/attachments",
         "POST /api/v1/tasks/:task_id/attachments",
-        MigrationState::Adopted,
         API_CREATE_ATTACHMENT_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -759,7 +688,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/attachments/:attachment_id"),
         "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
         "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
-        MigrationState::Adopted,
         API_DOWNLOAD_ATTACHMENT_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -771,7 +699,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/attachments/:attachment_id"),
         "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
         "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
-        MigrationState::Adopted,
         API_DELETE_ATTACHMENT_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActor)
@@ -783,7 +710,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/events"),
         "GET /api/v1/events",
         "GET /api/v1/events",
-        MigrationState::Adopted,
         API_LIST_EVENTS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -795,7 +721,6 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/stream/events"),
         "GET /api/v1/stream/events",
         "GET /api/v1/stream/events",
-        MigrationState::Adopted,
         SSE_STREAM_EVENTS_CONTRACTS,
     )
     .with_obligation_overrides(&[(

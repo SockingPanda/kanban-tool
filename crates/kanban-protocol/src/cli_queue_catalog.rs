@@ -1,18 +1,13 @@
 //! Queue、task、step、dependency、stats、vector 与 maintenance CLI 的声明 source。
 //!
 //! 每个 parent 只描述一个 Clap leaf 的 `--json` stdout contract；schema、fixture 和
-//! producer/consumer witness 都在声明点固定。CLI adapter、host、service 与真实测试仍
-//! 由各自 crate 持有；本模块只提供协议事实及其 deterministic projection。
+//! schema 与 fixture 都在声明点固定。CLI adapter、host、service 与真实测试仍由各自
+//! crate 持有；本模块只提供协议事实及其 deterministic projection。
 
 #[cfg(feature = "schema")]
 use crate::cli_helpers::{
     CliVectorConfigureOutput, CliVectorQueryChunksOutput, CliVectorQueryLabelAtomsOutput,
     CliVectorRebuildOutput, CliVectorStatusOutput, CliVectorSyncOutput,
-};
-use crate::{
-    AdoptionLocator, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
-    ContractStrictness, ContractSurface, MigrationState, OperationContract, OperationDeclaration,
-    SurfaceOperation,
 };
 #[cfg(feature = "schema")]
 use crate::{
@@ -25,24 +20,22 @@ use crate::{
     CliTaskStepReopenOutput, CliTaskStepSkipOutput, CliTaskStepUpdateOutput, CliTaskUnblockOutput,
     CliTaskUpdateOutput, LegacyImportResponse, MaintenanceRunResponse, VacuumResponse,
 };
+use crate::{
+    ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, OperationContract, OperationDeclaration, SurfaceOperation,
+};
 
 macro_rules! cli_contract {
     (
         $slug:literal,
         $command:literal,
-        $schema_type:ty,
-        $test_target:literal,
-        $producer:literal,
-        $consumer:literal
+        $schema_type:ty $(,)?
     ) => {{
         cli_contract_with_title!(
             $slug,
             $command,
             concat!("Kanban CLI ", $command, " output v1"),
-            $schema_type,
-            $test_target,
-            $producer,
-            $consumer
+            $schema_type
         )
     }};
 }
@@ -52,10 +45,7 @@ macro_rules! cli_contract_with_title {
         $slug:literal,
         $command:literal,
         $title:expr,
-        $schema_type:ty,
-        $test_target:literal,
-        $producer:literal,
-        $consumer:literal
+        $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             concat!("cli.", $slug, ".output"),
@@ -72,18 +62,6 @@ macro_rules! cli_contract_with_title {
             $title,
             concat!("schemas/fixtures/cli/", $slug, "-output.v1.valid.json"),
             concat!("schemas/fixtures/cli/", $slug, "-output.v1.invalid.json"),
-        )
-        .with_adoption(
-            AdoptionLocator {
-                package: "kanban-cli",
-                test_target: $test_target,
-                exact_test: $producer,
-            },
-            AdoptionLocator {
-                package: "kanban-cli",
-                test_target: $test_target,
-                exact_test: $consumer,
-            },
         );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
@@ -95,10 +73,7 @@ macro_rules! cli_operation {
     (
         $slug:literal,
         $command:literal,
-        $schema_type:ty,
-        $test_target:literal,
-        $producer:literal,
-        $consumer:literal
+        $schema_type:ty $(,)?
     ) => {
         OperationDeclaration::new(
             concat!("cli.", $slug),
@@ -107,17 +82,7 @@ macro_rules! cli_operation {
             None,
             $command,
             $command,
-            MigrationState::Adopted,
-            &[const {
-                cli_contract!(
-                    $slug,
-                    $command,
-                    $schema_type,
-                    $test_target,
-                    $producer,
-                    $consumer
-                )
-            }],
+            &[const { cli_contract!($slug, $command, $schema_type) }],
         )
     };
 }
@@ -127,10 +92,7 @@ macro_rules! cli_operation_with_title {
         $slug:literal,
         $command:literal,
         $title:expr,
-        $schema_type:ty,
-        $test_target:literal,
-        $producer:literal,
-        $consumer:literal
+        $schema_type:ty $(,)?
     ) => {
         OperationDeclaration::new(
             concat!("cli.", $slug),
@@ -139,18 +101,7 @@ macro_rules! cli_operation_with_title {
             None,
             $command,
             $command,
-            MigrationState::Adopted,
-            &[const {
-                cli_contract_with_title!(
-                    $slug,
-                    $command,
-                    $title,
-                    $schema_type,
-                    $test_target,
-                    $producer,
-                    $consumer
-                )
-            }],
+            &[const { cli_contract_with_title!($slug, $command, $title, $schema_type) }],
         )
     };
 }
@@ -160,302 +111,95 @@ const CLI_QUEUE_OPERATIONS: &[OperationDeclaration] = &[
         "dep-add",
         "dep add",
         "Kanban CLI dependency add output v1",
-        CliDependencyAddOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
+        CliDependencyAddOutput
     ),
     cli_operation_with_title!(
         "dep-list",
         "dep list",
         "Kanban CLI dependency list output v1",
-        CliDependencyListOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
+        CliDependencyListOutput
     ),
     cli_operation_with_title!(
         "dep-remove",
         "dep remove",
         "Kanban CLI dependency remove output v1",
-        CliDependencyRemoveOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
+        CliDependencyRemoveOutput
     ),
-    cli_operation!(
-        "stats",
-        "stats",
-        CliStatsOutput,
-        "cli_admin_adoption",
-        "maintenance_admin_commands_use_real_host_and_typed_json",
-        "maintenance_admin_commands_use_real_host_and_typed_json"
-    ),
-    cli_operation!(
-        "task-archive",
-        "task archive",
-        CliTaskArchiveOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-block",
-        "task block",
-        CliTaskBlockOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-claim",
-        "task claim",
-        CliTaskClaimOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-create",
-        "task create",
-        CliTaskCreateOutput,
-        "cli_queue_adoption",
-        "queue_cli_uses_real_host_for_config_board_and_task_commands",
-        "queue_cli_uses_real_host_for_config_board_and_task_commands"
-    ),
-    cli_operation!(
-        "task-done",
-        "task done",
-        CliTaskDoneOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-heartbeat",
-        "task heartbeat",
-        CliTaskHeartbeatOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-release",
-        "task release",
-        CliTaskReleaseOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-list",
-        "task list",
-        CliTaskListOutput,
-        "cli_queue_adoption",
-        "queue_cli_uses_real_host_for_config_board_and_task_commands",
-        "queue_cli_uses_real_host_for_config_board_and_task_commands"
-    ),
-    cli_operation!(
-        "task-promote",
-        "task promote",
-        CliTaskPromoteOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-reclaim",
-        "task reclaim",
-        CliTaskReclaimOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-reopen",
-        "task reopen",
-        CliTaskReopenOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-review",
-        "task review",
-        CliTaskReviewOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-show",
-        "task show",
-        CliTaskShowOutput,
-        "cli_queue_adoption",
-        "queue_cli_uses_real_host_for_config_board_and_task_commands",
-        "queue_cli_uses_real_host_for_config_board_and_task_commands"
-    ),
-    cli_operation!(
-        "task-specify",
-        "task specify",
-        CliTaskSpecifyOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-step-add",
-        "task step add",
-        CliTaskStepAddOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
-    ),
-    cli_operation!(
-        "task-step-done",
-        "task step done",
-        CliTaskStepDoneOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
-    ),
-    cli_operation!(
-        "task-step-list",
-        "task step list",
-        CliTaskStepListOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
-    ),
+    cli_operation!("stats", "stats", CliStatsOutput),
+    cli_operation!("task-archive", "task archive", CliTaskArchiveOutput),
+    cli_operation!("task-block", "task block", CliTaskBlockOutput),
+    cli_operation!("task-claim", "task claim", CliTaskClaimOutput),
+    cli_operation!("task-create", "task create", CliTaskCreateOutput),
+    cli_operation!("task-done", "task done", CliTaskDoneOutput),
+    cli_operation!("task-heartbeat", "task heartbeat", CliTaskHeartbeatOutput),
+    cli_operation!("task-release", "task release", CliTaskReleaseOutput),
+    cli_operation!("task-list", "task list", CliTaskListOutput),
+    cli_operation!("task-promote", "task promote", CliTaskPromoteOutput),
+    cli_operation!("task-reclaim", "task reclaim", CliTaskReclaimOutput),
+    cli_operation!("task-reopen", "task reopen", CliTaskReopenOutput),
+    cli_operation!("task-review", "task review", CliTaskReviewOutput),
+    cli_operation!("task-show", "task show", CliTaskShowOutput),
+    cli_operation!("task-specify", "task specify", CliTaskSpecifyOutput),
+    cli_operation!("task-step-add", "task step add", CliTaskStepAddOutput),
+    cli_operation!("task-step-done", "task step done", CliTaskStepDoneOutput),
+    cli_operation!("task-step-list", "task step list", CliTaskStepListOutput),
     cli_operation!(
         "task-step-not-required",
         "task step not-required",
-        CliTaskStepNotRequiredOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
+        CliTaskStepNotRequiredOutput
     ),
     cli_operation!(
         "task-step-remove",
         "task step remove",
-        CliTaskStepRemoveOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
+        CliTaskStepRemoveOutput
     ),
     cli_operation!(
         "task-step-reopen",
         "task step reopen",
-        CliTaskStepReopenOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
+        CliTaskStepReopenOutput
     ),
-    cli_operation!(
-        "task-step-skip",
-        "task step skip",
-        CliTaskStepSkipOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
-    ),
+    cli_operation!("task-step-skip", "task step skip", CliTaskStepSkipOutput),
     cli_operation!(
         "task-step-update",
         "task step update",
-        CliTaskStepUpdateOutput,
-        "cli_steps_dependencies_adoption",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes",
-        "steps_and_dependencies_cli_use_real_host_and_committed_contract_shapes"
+        CliTaskStepUpdateOutput
     ),
-    cli_operation!(
-        "task-unblock",
-        "task unblock",
-        CliTaskUnblockOutput,
-        "cli_lifecycle_adoption",
-        "lifecycle_cli_runs_each_transition_through_localhost_host",
-        "lifecycle_cli_runs_each_transition_through_localhost_host"
-    ),
-    cli_operation!(
-        "task-update",
-        "task update",
-        CliTaskUpdateOutput,
-        "cli_queue_adoption",
-        "queue_cli_uses_real_host_for_config_board_and_task_commands",
-        "queue_cli_uses_real_host_for_config_board_and_task_commands"
-    ),
+    cli_operation!("task-unblock", "task unblock", CliTaskUnblockOutput),
+    cli_operation!("task-update", "task update", CliTaskUpdateOutput),
     cli_operation_with_title!(
         "maintenance-vacuum",
         "vacuum",
         "Kanban CLI maintenance vacuum output v1",
-        VacuumResponse,
-        "cli_admin_adoption",
-        "maintenance_admin_commands_use_real_host_and_typed_json",
-        "maintenance_admin_commands_use_real_host_and_typed_json"
+        VacuumResponse
     ),
     cli_operation!(
         "vector-configure",
         "vector configure",
-        CliVectorConfigureOutput,
-        "cli_knowledge_adoption",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers"
+        CliVectorConfigureOutput
     ),
     cli_operation!(
         "vector-query-chunks",
         "vector query-chunks",
-        CliVectorQueryChunksOutput,
-        "cli_knowledge_adoption",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers"
+        CliVectorQueryChunksOutput
     ),
     cli_operation!(
         "vector-query-label-atoms",
         "vector query-label-atoms",
-        CliVectorQueryLabelAtomsOutput,
-        "cli_knowledge_adoption",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers"
+        CliVectorQueryLabelAtomsOutput
     ),
-    cli_operation!(
-        "vector-rebuild",
-        "vector rebuild",
-        CliVectorRebuildOutput,
-        "cli_knowledge_adoption",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers"
-    ),
-    cli_operation!(
-        "vector-status",
-        "vector status",
-        CliVectorStatusOutput,
-        "cli_knowledge_adoption",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers"
-    ),
-    cli_operation!(
-        "vector-sync",
-        "vector sync",
-        CliVectorSyncOutput,
-        "cli_knowledge_adoption",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers",
-        "knowledge_commands_use_real_canonical_host_and_preserve_degraded_providers"
-    ),
+    cli_operation!("vector-rebuild", "vector rebuild", CliVectorRebuildOutput),
+    cli_operation!("vector-status", "vector status", CliVectorStatusOutput),
+    cli_operation!("vector-sync", "vector sync", CliVectorSyncOutput),
     cli_operation!(
         "maintenance-cleanup",
         "maintenance cleanup",
-        MaintenanceRunResponse,
-        "cli_admin_adoption",
-        "maintenance_admin_commands_use_real_host_and_typed_json",
-        "maintenance_admin_commands_use_real_host_and_typed_json"
+        MaintenanceRunResponse
     ),
     cli_operation_with_title!(
         "import-v30",
         "import-v30",
         "Kanban CLI legacy SQLite v30 import output v1",
-        LegacyImportResponse,
-        "cli_admin_adoption",
-        "maintenance_admin_commands_use_real_host_and_typed_json",
-        "maintenance_admin_commands_use_real_host_and_typed_json"
+        LegacyImportResponse
     ),
 ];
 
@@ -507,7 +251,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn queue_source_projects_unique_adopted_cli_outputs() {
+    fn queue_source_projects_unique_cli_outputs() {
         assert_eq!(CLI_QUEUE_OPERATIONS.len(), 37);
         let contracts = operation_contracts();
         assert_eq!(contracts.len(), 37);
@@ -522,10 +266,8 @@ mod tests {
         assert_eq!(ids.len(), count);
         assert!(contracts.iter().all(|contract| {
             contract.surface == ContractSurface::Cli
-                && contract.migration == MigrationState::Adopted
                 && contract.schema_id.is_some()
                 && contract.fixture.is_some()
-                && contract.adoption.is_some()
         }));
     }
 
@@ -535,7 +277,6 @@ mod tests {
             let surface = declaration.surface_operation();
             assert_eq!(surface.surface, ContractSurface::Cli);
             assert_eq!(surface.key, declaration.key);
-            assert_eq!(surface.migration, MigrationState::Adopted);
             assert_eq!(surface.contracts, vec![declaration.contracts[0].id]);
         }
     }

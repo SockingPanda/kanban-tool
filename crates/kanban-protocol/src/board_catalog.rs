@@ -2,14 +2,13 @@
 //!
 //! 该文件只持有 board list/create/show/archive/columns 的 parent/child declaration；旧
 //! registry 在 hybrid projection 中继续提供其余 operation。schema type、header profile、
-//! fixture 和 producer/consumer locator 都显式写在 child/parent 上，不从 operation id
-//! 猜测。
+//! fixture 和 wire shape 都显式写在 child/parent 上，不从 operation id 猜测。
 
 use crate::{
-    AdoptionLocator, ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection,
-    ContractGranularity, ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod,
-    HttpTransportLocation, McpExposure, McpPolicy, McpToolBinding, MigrationState,
-    OperationContract, OperationDeclaration, SurfaceOperation, WireParameter,
+    ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod, HttpTransportLocation,
+    McpExposure, McpPolicy, McpToolBinding, OperationContract, OperationDeclaration,
+    SurfaceOperation, WireParameter,
 };
 
 const LIST_BOARDS_QUERY_PARAMETERS: &[WireParameter] = &[WireParameter {
@@ -77,29 +76,6 @@ const BOARD_COLUMNS_POLICY: McpPolicy = McpPolicy {
     invariants: DOMAIN_INVARIANTS,
 };
 
-const BOARD_LIST_QUERY_PRODUCER: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_boards_adoption_uses_request_path_query_and_response_fixtures",
-};
-const BOARD_LIST_QUERY_CONSUMER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-const BOARD_CREATE_REQUEST_PRODUCER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-const BOARD_CREATE_REQUEST_CONSUMER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-const BOARD_GET_PATH_PRODUCER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-const BOARD_GET_PATH_CONSUMER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-const BOARD_ARCHIVE_PATH_PRODUCER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-const BOARD_ARCHIVE_PATH_CONSUMER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-const BOARD_COLUMNS_PATH_PRODUCER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-const BOARD_COLUMNS_PATH_CONSUMER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-const BOARD_RESPONSE_PRODUCER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-const BOARD_RESPONSE_CONSUMER: AdoptionLocator = BOARD_LIST_QUERY_PRODUCER;
-
-const HEADER_TEST: &str = "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router";
-const JSON_HEADER_TEST: &str =
-    "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router";
-const OPTIONAL_JSON_HEADER_TEST: &str =
-    "knowledge_adoption::locale_actor_optional_json_header_fixture_is_consumed_by_real_router";
-
 macro_rules! api_contract {
     (
         $id:literal,
@@ -112,9 +88,7 @@ macro_rules! api_contract {
         $title:literal,
         $valid_fixture:literal,
         $invalid_fixture:literal,
-        $schema_type:ty,
-        $producer:expr,
-        $consumer:expr
+        $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -132,8 +106,7 @@ macro_rules! api_contract {
             $title,
             $valid_fixture,
             $invalid_fixture,
-        )
-        .with_adoption($producer, $consumer);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -146,8 +119,7 @@ macro_rules! header_contract {
         $path:literal,
         $profile:expr,
         $schema_type:ty,
-        $profile_slug:literal,
-        $header_test:expr
+        $profile_slug:literal $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             concat!("api.", $operation, ".headers"),
@@ -173,18 +145,6 @@ macro_rules! header_contract {
                 $profile_slug,
                 ".v1.invalid.json"
             ),
-        )
-        .with_adoption(
-            AdoptionLocator {
-                package: "kanban-server",
-                test_target: "lib",
-                exact_test: $header_test,
-            },
-            AdoptionLocator {
-                package: "kanban-server",
-                test_target: "lib",
-                exact_test: $header_test,
-            },
         );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
@@ -196,9 +156,7 @@ macro_rules! cli_contract {
     (
         $slug:literal,
         $command:literal,
-        $schema_type:ty,
-        $producer:literal,
-        $consumer:literal
+        $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             concat!("cli.", $slug, ".output"),
@@ -215,18 +173,6 @@ macro_rules! cli_contract {
             concat!("Kanban CLI ", $command, " output v1"),
             concat!("schemas/fixtures/cli/", $slug, "-output.v1.valid.json"),
             concat!("schemas/fixtures/cli/", $slug, "-output.v1.invalid.json"),
-        )
-        .with_adoption(
-            AdoptionLocator {
-                package: "kanban-cli",
-                test_target: "cli_queue_adoption",
-                exact_test: $producer,
-            },
-            AdoptionLocator {
-                package: "kanban-cli",
-                test_target: "cli_queue_adoption",
-                exact_test: $consumer,
-            },
         );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
@@ -247,8 +193,6 @@ const API_LIST_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-boards-query.v1.valid.json",
         "schemas/fixtures/api/list-boards-query.v1.invalid.json",
         crate::ListBoardsQuery,
-        BOARD_LIST_QUERY_PRODUCER,
-        BOARD_LIST_QUERY_CONSUMER
     ),
     header_contract!(
         "list-boards",
@@ -256,7 +200,6 @@ const API_LIST_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::Locale,
         crate::headers::LocaleHeaders,
         "locale-headers",
-        HEADER_TEST
     ),
     api_contract!(
         "api.list-boards.response",
@@ -270,8 +213,6 @@ const API_LIST_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-boards-response.v1.valid.json",
         "schemas/fixtures/api/list-boards-response.v1.invalid.json",
         crate::ListBoardsResponse,
-        BOARD_RESPONSE_PRODUCER,
-        BOARD_RESPONSE_CONSUMER
     ),
 ];
 
@@ -282,7 +223,6 @@ const API_CREATE_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::LocaleActorJson,
         crate::headers::LocaleActorJsonHeaders,
         "locale-actor-json-headers",
-        JSON_HEADER_TEST
     ),
     api_contract!(
         "api.create-board.request",
@@ -296,8 +236,6 @@ const API_CREATE_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/create-board-request.v1.valid.json",
         "schemas/fixtures/api/create-board-request.v1.invalid.json",
         crate::CreateBoardRequest,
-        BOARD_CREATE_REQUEST_PRODUCER,
-        BOARD_CREATE_REQUEST_CONSUMER
     ),
     api_contract!(
         "api.create-board.response",
@@ -311,8 +249,6 @@ const API_CREATE_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/create-board-response.v1.valid.json",
         "schemas/fixtures/api/create-board-response.v1.invalid.json",
         crate::CreateBoardResponse,
-        BOARD_RESPONSE_PRODUCER,
-        BOARD_RESPONSE_CONSUMER
     ),
 ];
 
@@ -329,8 +265,6 @@ const API_SHOW_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/get-board-path.v1.valid.json",
         "schemas/fixtures/api/get-board-path.v1.invalid.json",
         crate::GetBoardPath,
-        BOARD_GET_PATH_PRODUCER,
-        BOARD_GET_PATH_CONSUMER
     ),
     header_contract!(
         "get-board",
@@ -338,7 +272,6 @@ const API_SHOW_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::Locale,
         crate::headers::LocaleHeaders,
         "locale-headers",
-        HEADER_TEST
     ),
     api_contract!(
         "api.get-board.response",
@@ -352,8 +285,6 @@ const API_SHOW_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/get-board-response.v1.valid.json",
         "schemas/fixtures/api/get-board-response.v1.invalid.json",
         crate::GetBoardResponse,
-        BOARD_RESPONSE_PRODUCER,
-        BOARD_RESPONSE_CONSUMER
     ),
 ];
 
@@ -370,8 +301,6 @@ const API_ARCHIVE_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/archive-board-path.v1.valid.json",
         "schemas/fixtures/api/archive-board-path.v1.invalid.json",
         crate::ArchiveBoardPath,
-        BOARD_ARCHIVE_PATH_PRODUCER,
-        BOARD_ARCHIVE_PATH_CONSUMER
     ),
     header_contract!(
         "archive-board",
@@ -379,7 +308,6 @@ const API_ARCHIVE_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::LocaleActorOptionalJson,
         crate::headers::LocaleActorOptionalJsonHeaders,
         "locale-actor-optional-json-headers",
-        OPTIONAL_JSON_HEADER_TEST
     ),
     api_contract!(
         "api.archive-board.request",
@@ -393,8 +321,6 @@ const API_ARCHIVE_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/archive-board-request.v1.valid.json",
         "schemas/fixtures/api/archive-board-request.v1.invalid.json",
         crate::ArchiveBoardRequest,
-        BOARD_CREATE_REQUEST_PRODUCER,
-        BOARD_CREATE_REQUEST_CONSUMER
     ),
     api_contract!(
         "api.archive-board.response",
@@ -408,8 +334,6 @@ const API_ARCHIVE_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/archive-board-response.v1.valid.json",
         "schemas/fixtures/api/archive-board-response.v1.invalid.json",
         crate::ArchiveBoardResponse,
-        BOARD_RESPONSE_PRODUCER,
-        BOARD_RESPONSE_CONSUMER
     ),
 ];
 
@@ -426,8 +350,6 @@ const API_COLUMNS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-board-columns-path.v1.valid.json",
         "schemas/fixtures/api/list-board-columns-path.v1.invalid.json",
         crate::ListBoardColumnsPath,
-        BOARD_COLUMNS_PATH_PRODUCER,
-        BOARD_COLUMNS_PATH_CONSUMER
     ),
     header_contract!(
         "list-board-columns",
@@ -435,7 +357,6 @@ const API_COLUMNS_CONTRACTS: &[ContractDeclaration] = &[
         ApiHeaderProfile::Locale,
         crate::headers::LocaleHeaders,
         "locale-headers",
-        HEADER_TEST
     ),
     api_contract!(
         "api.list-board-columns.response",
@@ -449,8 +370,6 @@ const API_COLUMNS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/api/list-board-columns-response.v1.valid.json",
         "schemas/fixtures/api/list-board-columns-response.v1.invalid.json",
         crate::ListBoardColumnsResponse,
-        BOARD_RESPONSE_PRODUCER,
-        BOARD_RESPONSE_CONSUMER
     ),
 ];
 
@@ -458,40 +377,30 @@ const CLI_BOARD_LIST_CONTRACTS: &[ContractDeclaration] = &[cli_contract!(
     "board-list",
     "board list",
     crate::ListBoardsResponse,
-    "queue_cli_uses_real_host_for_config_board_and_task_commands",
-    "queue_cli_uses_real_host_for_config_board_and_task_commands"
 )];
 
 const CLI_BOARD_CREATE_CONTRACTS: &[ContractDeclaration] = &[cli_contract!(
     "board-create",
     "board create",
     crate::CreateBoardResponse,
-    "queue_cli_uses_real_host_for_config_board_and_task_commands",
-    "queue_cli_uses_real_host_for_config_board_and_task_commands"
 )];
 
 const CLI_BOARD_SHOW_CONTRACTS: &[ContractDeclaration] = &[cli_contract!(
     "board-show",
     "board show",
     crate::GetBoardResponse,
-    "queue_cli_uses_real_host_for_config_board_and_task_commands",
-    "queue_cli_uses_real_host_for_config_board_and_task_commands"
 )];
 
 const CLI_BOARD_ARCHIVE_CONTRACTS: &[ContractDeclaration] = &[cli_contract!(
     "board-archive",
     "board archive",
     crate::ArchiveBoardResponse,
-    "queue_cli_uses_real_host_for_config_board_and_task_commands",
-    "queue_cli_uses_real_host_for_config_board_and_task_commands"
 )];
 
 const CLI_BOARD_COLUMNS_CONTRACTS: &[ContractDeclaration] = &[cli_contract!(
     "board-columns",
     "board columns",
     crate::CliBoardColumnsOutput,
-    "queue_cli_uses_real_host_for_config_board_and_task_commands",
-    "queue_cli_uses_real_host_for_config_board_and_task_commands"
 )];
 
 const BOARD_OPERATIONS: &[OperationDeclaration] = &[
@@ -502,7 +411,6 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards"),
         "GET /api/v1/boards",
         "GET /api/v1/boards",
-        MigrationState::Adopted,
         API_LIST_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -514,7 +422,6 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards"),
         "POST /api/v1/boards",
         "POST /api/v1/boards",
-        MigrationState::Adopted,
         API_CREATE_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -526,7 +433,6 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board"),
         "GET /api/v1/boards/:board",
         "GET /api/v1/boards/:board",
-        MigrationState::Adopted,
         API_SHOW_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -538,7 +444,6 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/archive"),
         "POST /api/v1/boards/:board/archive",
         "POST /api/v1/boards/:board/archive",
-        MigrationState::Adopted,
         API_ARCHIVE_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorOptionalJson)
@@ -550,7 +455,6 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/columns"),
         "GET /api/v1/boards/:board/columns",
         "GET /api/v1/boards/:board/columns",
-        MigrationState::Adopted,
         API_COLUMNS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -562,7 +466,6 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "board list",
         "board list",
-        MigrationState::Adopted,
         CLI_BOARD_LIST_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -572,7 +475,6 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "board create",
         "board create",
-        MigrationState::Adopted,
         CLI_BOARD_CREATE_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -582,7 +484,6 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "board show",
         "board show",
-        MigrationState::Adopted,
         CLI_BOARD_SHOW_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -592,7 +493,6 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "board archive",
         "board archive",
-        MigrationState::Adopted,
         CLI_BOARD_ARCHIVE_CONTRACTS,
     ),
     OperationDeclaration::new(
@@ -602,7 +502,6 @@ const BOARD_OPERATIONS: &[OperationDeclaration] = &[
         None,
         "board columns",
         "board columns",
-        MigrationState::Adopted,
         CLI_BOARD_COLUMNS_CONTRACTS,
     ),
 ];
@@ -767,9 +666,11 @@ mod tests {
         ids.dedup();
         assert_eq!(ids.len(), count);
         assert_eq!(contracts.len(), 21);
-        assert!(contracts.iter().all(|contract| {
-            contract.migration == MigrationState::Adopted && contract.schema_id.is_some()
-        }));
+        assert!(
+            contracts
+                .iter()
+                .all(|contract| { contract.schema_id.is_some() })
+        );
     }
 
     #[test]

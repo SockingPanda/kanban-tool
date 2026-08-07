@@ -1,15 +1,14 @@
 //! Labels、ontology 与 signals API family 的唯一 declaration source。
 //!
 //! 该 family 的 parent/child declaration 同时保存 endpoint、header、schema、fixture、
-//! adoption locator 和 MCP binding。真实 handler/client/MCP adapter 仍由各自 crate
-//! 持有；本模块只提供协议事实及其 deterministic projection。
+//! MCP binding。真实 handler/client/MCP adapter 仍由各自 crate 持有；本模块只提供协议
+//! 事实及其 deterministic projection。
 
 use crate::{
-    AdoptionLocator, ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection,
-    ContractGranularity, ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod,
-    HttpTransportLocation, McpExposure, McpPolicy, McpToolBinding, MigrationState,
-    OperationContract, OperationDeclaration, SurfaceOperation, WireParameter,
-    WireParameterCardinality,
+    ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod, HttpTransportLocation,
+    McpExposure, McpPolicy, McpToolBinding, OperationContract, OperationDeclaration,
+    SurfaceOperation, WireParameter, WireParameterCardinality,
 };
 
 const BOARD_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
@@ -85,62 +84,6 @@ const DOMAIN_INVARIANTS: &[crate::McpOperationInvariant] = &[
     crate::McpOperationInvariant::NoHostAdminSurface,
 ];
 
-const LABEL_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::labels_semantics_and_atoms_use_committed_fixtures_through_host",
-};
-const LABEL_DELETE_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "suite::labels_adoption::delete_board_label_response_fixture_is_produced_by_real_router",
-};
-const LABEL_BOOTSTRAP_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::bootstrap_task_label_request_and_response_fixtures_reach_real_host",
-};
-const SIGNAL_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::signal_routes_consume_record_list_show_and_review_fixtures",
-};
-const ONTOLOGY_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::ontology_ledger_routes_consume_observation_and_action_fixtures",
-};
-const PROPOSAL_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::label_proposal_routes_consume_typed_fixtures_and_persist_real_proposal",
-};
-const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_ACTOR_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_json_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_ACTOR_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_OPTIONAL_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_optional_json_header_fixture_is_consumed_by_real_router",
-};
-
 macro_rules! api_contract {
     (
         $id:expr,
@@ -151,8 +94,7 @@ macro_rules! api_contract {
         $parameters:expr,
         $schema_slug:literal,
         $title:literal,
-        $schema_type:ty,
-        $witness:expr
+        $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -171,8 +113,7 @@ macro_rules! api_contract {
             $title,
             concat!("schemas/fixtures/api/", $schema_slug, ".v1.valid.json"),
             concat!("schemas/fixtures/api/", $schema_slug, ".v1.invalid.json"),
-        )
-        .with_adoption($witness, $witness);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -180,7 +121,7 @@ macro_rules! api_contract {
 }
 
 macro_rules! path_contract {
-    ($id:expr, $operation:literal, $schema:literal, $title:literal, $parameters:expr, $ty:ty, $witness:expr) => {
+    ($id:expr, $operation:literal, $schema:literal, $title:literal, $parameters:expr, $ty:ty $(,)?) => {
         api_contract!(
             $id,
             concat!($operation, " path"),
@@ -190,14 +131,13 @@ macro_rules! path_contract {
             $parameters,
             $schema,
             $title,
-            $ty,
-            $witness
+            $ty
         )
     };
 }
 
 macro_rules! query_contract {
-    ($id:expr, $operation:literal, $schema:literal, $title:literal, $ty:ty, $witness:expr) => {
+    ($id:expr, $operation:literal, $schema:literal, $title:literal, $ty:ty $(,)?) => {
         api_contract!(
             $id,
             concat!($operation, " query"),
@@ -207,14 +147,13 @@ macro_rules! query_contract {
             &[],
             $schema,
             $title,
-            $ty,
-            $witness
+            $ty
         )
     };
 }
 
 macro_rules! body_contract {
-    ($id:expr, $operation:literal, $suffix:literal, $schema:literal, $title:literal, $ty:ty, $witness:expr) => {
+    ($id:expr, $operation:literal, $suffix:literal, $schema:literal, $title:literal, $ty:ty $(,)?) => {
         api_contract!(
             $id,
             concat!($operation, " ", $suffix),
@@ -224,14 +163,13 @@ macro_rules! body_contract {
             &[],
             $schema,
             $title,
-            $ty,
-            $witness
+            $ty
         )
     };
 }
 
 macro_rules! response_contract {
-    ($id:expr, $operation:literal, $suffix:literal, $schema:literal, $title:literal, $ty:ty, $witness:expr) => {
+    ($id:expr, $operation:literal, $suffix:literal, $schema:literal, $title:literal, $ty:ty $(,)?) => {
         api_contract!(
             $id,
             concat!($operation, " ", $suffix),
@@ -241,14 +179,13 @@ macro_rules! response_contract {
             &[],
             $schema,
             $title,
-            $ty,
-            $witness
+            $ty
         )
     };
 }
 
 macro_rules! header_contract {
-    ($operation_id:literal, $operation:literal, $profile:expr, $profile_slug:literal, $ty:ty) => {{
+    ($operation_id:literal, $operation:literal, $profile:expr, $profile_slug:literal, $ty:ty $(,)?) => {{
         let contract = ContractDeclaration::new(
             concat!("api.", $operation_id, ".headers"),
             concat!($operation, " headers"),
@@ -273,22 +210,6 @@ macro_rules! header_contract {
                 $profile_slug,
                 ".v1.invalid.json"
             ),
-        )
-        .with_adoption(
-            match $profile {
-                ApiHeaderProfile::Locale => HEADER_LOCALE_WITNESS,
-                ApiHeaderProfile::LocaleActor => HEADER_ACTOR_WITNESS,
-                ApiHeaderProfile::LocaleJson => HEADER_JSON_WITNESS,
-                ApiHeaderProfile::LocaleActorJson => HEADER_ACTOR_JSON_WITNESS,
-                ApiHeaderProfile::LocaleActorOptionalJson => HEADER_OPTIONAL_JSON_WITNESS,
-            },
-            match $profile {
-                ApiHeaderProfile::Locale => HEADER_LOCALE_WITNESS,
-                ApiHeaderProfile::LocaleActor => HEADER_ACTOR_WITNESS,
-                ApiHeaderProfile::LocaleJson => HEADER_JSON_WITNESS,
-                ApiHeaderProfile::LocaleActorJson => HEADER_ACTOR_JSON_WITNESS,
-                ApiHeaderProfile::LocaleActorOptionalJson => HEADER_OPTIONAL_JSON_WITNESS,
-            },
         );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$ty>();
@@ -316,16 +237,6 @@ macro_rules! policy {
     };
 }
 
-macro_rules! label_adoption {
-    ($test:literal) => {
-        AdoptionLocator {
-            package: "kanban-server",
-            test_target: "lib",
-            exact_test: $test,
-        }
-    };
-}
-
 const API_LIST_TASK_LABELS_CONTRACTS: &[ContractDeclaration] = &[
     path_contract!(
         "api.list-task-labels.path",
@@ -334,15 +245,6 @@ const API_LIST_TASK_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         "Kanban task labels path v1",
         TASK_LABEL_PATH_PARAMETERS,
         crate::ListTaskLabelsPath,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::list_task_labels_path_dto_serializes_to_committed_fixture"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::list_task_labels_path_fixture_is_consumed_by_real_router"
-        ),
     ),
     header_contract!(
         "list-task-labels",
@@ -358,15 +260,6 @@ const API_LIST_TASK_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         "list-task-labels-response",
         "Kanban list task labels response v1",
         crate::ListTaskLabelsResponse,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::list_task_labels_response_fixture_is_produced_by_real_router"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::list_task_labels_response_fixture_is_consumed_by_contract_root"
-        ),
     ),
 ];
 
@@ -378,15 +271,6 @@ const API_ADD_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Kanban add task label path v1",
         TASK_LABEL_PATH_PARAMETERS,
         crate::AddTaskLabelPath,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::add_task_label_path_dto_serializes_to_committed_fixture"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::add_task_label_path_fixture_is_consumed_by_real_router"
-        ),
     ),
     header_contract!(
         "add-task-label",
@@ -402,15 +286,6 @@ const API_ADD_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "add-task-label-request",
         "Kanban add task label request v1",
         crate::AddTaskLabelRequest,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::add_task_label_request_dto_serializes_to_committed_fixture"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::add_task_label_request_fixture_is_consumed_by_real_router"
-        ),
     ),
     response_contract!(
         "api.add-task-label.response",
@@ -419,15 +294,6 @@ const API_ADD_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "add-task-label-response",
         "Kanban add task label response v1",
         crate::AddTaskLabelResponse,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::add_task_label_response_fixture_is_produced_by_real_router"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::add_task_label_response_fixture_is_consumed_by_contract_root"
-        ),
     ),
 ];
 
@@ -439,7 +305,6 @@ const API_BOOTSTRAP_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Kanban bootstrap task label path v1",
         TASK_LABEL_PATH_PARAMETERS,
         crate::TaskLabelSurfacePath,
-        LABEL_BOOTSTRAP_WITNESS
     ),
     header_contract!(
         "bootstrap-task-label",
@@ -455,7 +320,6 @@ const API_BOOTSTRAP_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "bootstrap-task-label-request",
         "Kanban bootstrap task label request v1",
         crate::BootstrapTaskLabelRequest,
-        LABEL_BOOTSTRAP_WITNESS
     ),
     response_contract!(
         "api.bootstrap-task-label.response",
@@ -464,7 +328,6 @@ const API_BOOTSTRAP_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "bootstrap-task-label-response",
         "Kanban bootstrap task label response v1",
         crate::BootstrapTaskLabelResponse,
-        LABEL_BOOTSTRAP_WITNESS
     ),
 ];
 
@@ -476,15 +339,6 @@ const API_REMOVE_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Kanban remove task label path v1",
         REMOVE_TASK_LABEL_PATH_PARAMETERS,
         crate::RemoveTaskLabelPath,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::remove_task_label_path_dto_serializes_to_committed_fixture"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::remove_task_label_path_fixture_is_consumed_by_real_router"
-        ),
     ),
     header_contract!(
         "remove-task-label",
@@ -500,15 +354,6 @@ const API_REMOVE_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "remove-task-label-response",
         "Kanban remove task label response v1",
         crate::RemoveTaskLabelResponse,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::remove_task_label_response_fixture_is_produced_by_real_router"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::remove_task_label_response_fixture_is_consumed_by_contract_root"
-        ),
     ),
 ];
 
@@ -520,15 +365,6 @@ const API_LIST_BOARD_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         "List Board Labels Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::list_board_labels_path_dto_serializes_to_committed_fixture"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::list_board_labels_path_fixture_is_consumed_by_real_router"
-        ),
     ),
     header_contract!(
         "list-board-labels",
@@ -544,15 +380,6 @@ const API_LIST_BOARD_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         "list-board-labels-response",
         "List board labels response v1",
         crate::ListBoardLabelsResponse,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::list_board_labels_response_fixture_is_produced_by_real_router"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::list_board_labels_response_fixture_is_consumed_by_contract_root"
-        ),
     ),
 ];
 
@@ -564,15 +391,6 @@ const API_CREATE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Create Board Label Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::create_board_label_path_dto_serializes_to_committed_fixture"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::create_board_label_path_fixture_is_consumed_by_real_router"
-        ),
     ),
     header_contract!(
         "create-board-label",
@@ -588,15 +406,6 @@ const API_CREATE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "create-board-label-request",
         "Create board label request v1",
         crate::CreateBoardLabelRequest,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::create_board_label_request_dto_serializes_to_committed_fixture"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::create_board_label_request_fixture_is_consumed_by_real_router"
-        ),
     ),
     response_contract!(
         "api.create-board-label.response",
@@ -605,15 +414,6 @@ const API_CREATE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "create-board-label-response",
         "Create board label response v1",
         crate::CreateBoardLabelResponse,
-        LABEL_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::create_board_label_response_fixture_is_produced_by_real_router"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::create_board_label_response_fixture_is_consumed_by_contract_root"
-        ),
     ),
 ];
 
@@ -625,15 +425,6 @@ const API_DELETE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Delete Board Label Path v1",
         DELETE_BOARD_LABEL_PATH_PARAMETERS,
         crate::DeleteBoardLabelPath,
-        LABEL_DELETE_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::delete_board_label_path_dto_serializes_to_committed_fixture"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::delete_board_label_path_fixture_is_consumed_by_real_router"
-        ),
     ),
     api_contract!(
         "api.delete-board-label.query",
@@ -648,15 +439,6 @@ const API_DELETE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "delete-board-label-query",
         "Delete Board Label Query v1",
         crate::DeleteBoardLabelQuery,
-        LABEL_DELETE_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::delete_board_label_query_dto_serializes_to_committed_fixture"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::delete_board_label_query_fixture_is_consumed_by_real_router"
-        ),
     ),
     header_contract!(
         "delete-board-label",
@@ -672,15 +454,6 @@ const API_DELETE_BOARD_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "delete-board-label-response",
         "Delete Board Label Response v1",
         crate::DeleteBoardLabelResponse,
-        LABEL_DELETE_WITNESS
-    )
-    .with_adoption(
-        label_adoption!(
-            "suite::labels_adoption::delete_board_label_response_fixture_is_produced_by_real_router"
-        ),
-        label_adoption!(
-            "suite::labels_adoption::delete_board_label_response_fixture_is_consumed_by_contract_root"
-        ),
     ),
 ];
 
@@ -692,7 +465,6 @@ const API_LIST_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         "List Label Semantics Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        LABEL_WITNESS
     ),
     header_contract!(
         "list-label-semantics",
@@ -708,7 +480,6 @@ const API_LIST_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         "list-label-semantics-response",
         "List label semantics response v1",
         crate::ListLabelSemanticsResponse,
-        LABEL_WITNESS
     ),
 ];
 
@@ -720,7 +491,6 @@ const API_GET_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         "Get Label Semantics Path v1",
         LABEL_SEMANTICS_PATH_PARAMETERS,
         crate::LabelSemanticsPath,
-        LABEL_WITNESS
     ),
     header_contract!(
         "get-label-semantics",
@@ -736,7 +506,6 @@ const API_GET_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         "get-label-semantics-response",
         "Get label semantics response v1",
         crate::GetLabelSemanticsResponse,
-        LABEL_WITNESS
     ),
 ];
 
@@ -748,7 +517,6 @@ const API_UPSERT_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         "Upsert Label Semantics Path v1",
         LABEL_SEMANTICS_PATH_PARAMETERS,
         crate::LabelSemanticsPath,
-        LABEL_WITNESS
     ),
     header_contract!(
         "upsert-label-semantics",
@@ -764,7 +532,6 @@ const API_UPSERT_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         "upsert-label-semantics-request",
         "Upsert label semantics request v1",
         crate::UpsertLabelSemanticsRequest,
-        LABEL_WITNESS
     ),
     response_contract!(
         "api.upsert-label-semantics.response",
@@ -773,7 +540,6 @@ const API_UPSERT_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         "upsert-label-semantics-response",
         "Upsert label semantics response v1",
         crate::UpsertLabelSemanticsResponse,
-        LABEL_WITNESS
     ),
 ];
 
@@ -785,7 +551,6 @@ const API_DELETE_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         "Delete Label Semantics Path v1",
         LABEL_SEMANTICS_PATH_PARAMETERS,
         crate::LabelSemanticsPath,
-        LABEL_WITNESS
     ),
     query_contract!(
         "api.delete-label-semantics.query",
@@ -793,7 +558,6 @@ const API_DELETE_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         "delete-label-semantics-query",
         "Delete label semantics query v1",
         crate::DeleteLabelSemanticsQuery,
-        LABEL_WITNESS
     ),
     header_contract!(
         "delete-label-semantics",
@@ -809,7 +573,6 @@ const API_DELETE_LABEL_SEMANTICS_CONTRACTS: &[ContractDeclaration] = &[
         "delete-response",
         "Kanban API delete response v1",
         crate::DeleteResponse,
-        LABEL_WITNESS
     )
     .with_operation("label semantics deletion acknowledgement")
     .with_transport(
@@ -826,7 +589,6 @@ const API_LIST_LABEL_ATOMS_CONTRACTS: &[ContractDeclaration] = &[
         "List Label Atoms Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        LABEL_WITNESS
     ),
     header_contract!(
         "list-label-atoms",
@@ -842,7 +604,6 @@ const API_LIST_LABEL_ATOMS_CONTRACTS: &[ContractDeclaration] = &[
         "list-label-atoms-response",
         "List label atoms response v1",
         crate::ListLabelAtomsResponse,
-        LABEL_WITNESS
     ),
 ];
 
@@ -854,7 +615,6 @@ const API_EXPLAIN_LABEL_ATOM_CONTRACTS: &[ContractDeclaration] = &[
         "Label atom path v1",
         LABEL_ATOM_PATH_PARAMETERS,
         crate::LabelAtomPath,
-        LABEL_WITNESS
     ),
     header_contract!(
         "explain-label-atom",
@@ -870,7 +630,6 @@ const API_EXPLAIN_LABEL_ATOM_CONTRACTS: &[ContractDeclaration] = &[
         "explain-label-atom-response",
         "Explain label atom response v1",
         crate::ExplainLabelAtomResponse,
-        LABEL_WITNESS
     ),
 ];
 
@@ -882,7 +641,6 @@ const API_LABEL_ATOM_INDEX_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "Label Atom Index Status Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        LABEL_WITNESS
     ),
     header_contract!(
         "label-atom-index-status",
@@ -898,7 +656,6 @@ const API_LABEL_ATOM_INDEX_STATUS_CONTRACTS: &[ContractDeclaration] = &[
         "label-atom-index-status-response",
         "Label atom index status response v1",
         crate::LabelAtomIndexStatusResponse,
-        LABEL_WITNESS
     ),
 ];
 
@@ -910,7 +667,6 @@ const API_REBUILD_LABEL_ATOM_INDEX_CONTRACTS: &[ContractDeclaration] = &[
         "Rebuild Label Atom Index Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        LABEL_WITNESS
     ),
     header_contract!(
         "rebuild-label-atom-index",
@@ -926,7 +682,6 @@ const API_REBUILD_LABEL_ATOM_INDEX_CONTRACTS: &[ContractDeclaration] = &[
         "rebuild-label-atom-index-response",
         "Rebuild label atom index response v1",
         crate::RebuildLabelAtomIndexResponse,
-        LABEL_WITNESS
     ),
 ];
 
@@ -938,7 +693,6 @@ const API_QUERY_LABEL_ATOM_INDEX_CONTRACTS: &[ContractDeclaration] = &[
         "Query Label Atom Index Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        LABEL_WITNESS
     ),
     query_contract!(
         "api.query-label-atom-index.query",
@@ -946,7 +700,6 @@ const API_QUERY_LABEL_ATOM_INDEX_CONTRACTS: &[ContractDeclaration] = &[
         "query-label-atom-index-query",
         "Query Label Atom Index Query v1",
         crate::LabelAtomIndexQuery,
-        LABEL_WITNESS
     ),
     header_contract!(
         "query-label-atom-index",
@@ -962,7 +715,6 @@ const API_QUERY_LABEL_ATOM_INDEX_CONTRACTS: &[ContractDeclaration] = &[
         "query-label-atom-index-response",
         "Query label atom index response v1",
         crate::QueryLabelAtomIndexResponse,
-        LABEL_WITNESS
     ),
 ];
 
@@ -974,7 +726,6 @@ const API_LIST_SIGNALS_CONTRACTS: &[ContractDeclaration] = &[
         "List Signals Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        SIGNAL_WITNESS
     ),
     query_contract!(
         "api.list-signals.query",
@@ -982,7 +733,6 @@ const API_LIST_SIGNALS_CONTRACTS: &[ContractDeclaration] = &[
         "list-signals-query",
         "List Signals Query v1",
         crate::SignalQuery,
-        SIGNAL_WITNESS
     ),
     header_contract!(
         "list-signals",
@@ -998,7 +748,6 @@ const API_LIST_SIGNALS_CONTRACTS: &[ContractDeclaration] = &[
         "list-signals-response",
         "List signals response v1",
         crate::ListSignalsResponse,
-        SIGNAL_WITNESS
     ),
 ];
 
@@ -1010,7 +759,6 @@ const API_REVIEW_SIGNALS_CONTRACTS: &[ContractDeclaration] = &[
         "Review Signals Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        SIGNAL_WITNESS
     ),
     query_contract!(
         "api.review-signals.query",
@@ -1018,7 +766,6 @@ const API_REVIEW_SIGNALS_CONTRACTS: &[ContractDeclaration] = &[
         "review-signals-query",
         "Review Signals Query v1",
         crate::SignalQuery,
-        SIGNAL_WITNESS
     ),
     header_contract!(
         "review-signals",
@@ -1034,7 +781,6 @@ const API_REVIEW_SIGNALS_CONTRACTS: &[ContractDeclaration] = &[
         "review-signals-response",
         "Review signals response v1",
         crate::ReviewSignalsResponse,
-        SIGNAL_WITNESS
     ),
 ];
 
@@ -1046,7 +792,6 @@ const API_GET_SIGNAL_CONTRACTS: &[ContractDeclaration] = &[
         "Get Signal Path v1",
         SIGNAL_PATH_PARAMETERS,
         crate::SignalPath,
-        SIGNAL_WITNESS
     ),
     header_contract!(
         "get-signal",
@@ -1062,7 +807,6 @@ const API_GET_SIGNAL_CONTRACTS: &[ContractDeclaration] = &[
         "get-signal-response",
         "Get signal response v1",
         crate::GetSignalResponse,
-        SIGNAL_WITNESS
     ),
 ];
 
@@ -1076,7 +820,6 @@ macro_rules! signal_mutation_contracts {
                 $path_title,
                 BOARD_PATH_PARAMETERS,
                 crate::BoardLabelPath,
-                SIGNAL_WITNESS
             ),
             header_contract!(
                 $slug,
@@ -1092,7 +835,6 @@ macro_rules! signal_mutation_contracts {
                 $request_slug,
                 $request_title,
                 $request_type,
-                SIGNAL_WITNESS
             ),
             response_contract!(
                 concat!("api.", $slug, ".response"),
@@ -1101,7 +843,6 @@ macro_rules! signal_mutation_contracts {
                 $response_slug,
                 $response_title,
                 $response_type,
-                SIGNAL_WITNESS
             ),
         ]
     };
@@ -1176,7 +917,6 @@ const API_SUGGEST_TASK_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         "Suggest Task Labels Path v1",
         TASK_LABEL_PATH_PARAMETERS,
         crate::TaskLabelSurfacePath,
-        LABEL_WITNESS
     ),
     query_contract!(
         "api.label-suggestion.query",
@@ -1184,7 +924,6 @@ const API_SUGGEST_TASK_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         "label-suggestion-query",
         "Label suggestion query v1",
         crate::LabelSuggestionQuery,
-        LABEL_WITNESS
     ),
     header_contract!(
         "suggest-task-labels",
@@ -1200,7 +939,6 @@ const API_SUGGEST_TASK_LABELS_CONTRACTS: &[ContractDeclaration] = &[
         "suggest-task-labels-response",
         "Suggest task labels response v1",
         crate::SuggestTaskLabelsResponse,
-        LABEL_WITNESS
     ),
 ];
 
@@ -1212,7 +950,6 @@ const API_LIST_TASK_LABEL_PROPOSALS_CONTRACTS: &[ContractDeclaration] = &[
         "List Task Label Proposals Path v1",
         TASK_LABEL_PATH_PARAMETERS,
         crate::TaskLabelSurfacePath,
-        PROPOSAL_WITNESS
     ),
     header_contract!(
         "list-task-label-proposals",
@@ -1228,7 +965,6 @@ const API_LIST_TASK_LABEL_PROPOSALS_CONTRACTS: &[ContractDeclaration] = &[
         "list-task-label-proposals-response",
         "List task label proposals response v1",
         crate::ListTaskLabelProposalsResponse,
-        PROPOSAL_WITNESS
     ),
 ];
 
@@ -1240,7 +976,6 @@ const API_LIST_BOARD_LABEL_PROPOSALS_CONTRACTS: &[ContractDeclaration] = &[
         "List Board Label Proposals Path v1",
         BOARD_PATH_PARAMETERS,
         crate::ListBoardLabelProposalsPath,
-        PROPOSAL_WITNESS
     ),
     api_contract!(
         "api.list-board-label-proposals.query",
@@ -1252,7 +987,6 @@ const API_LIST_BOARD_LABEL_PROPOSALS_CONTRACTS: &[ContractDeclaration] = &[
         "list-board-label-proposals-query",
         "List Board Label Proposals Query v1",
         crate::ListBoardLabelProposalsQuery,
-        PROPOSAL_WITNESS
     ),
     {
         let contract = ContractDeclaration::new(
@@ -1272,7 +1006,7 @@ const API_LIST_BOARD_LABEL_PROPOSALS_CONTRACTS: &[ContractDeclaration] = &[
             "schemas/fixtures/api/headers/list-board-label-proposals-locale-headers.v1.valid.json",
             "schemas/fixtures/api/headers/list-board-label-proposals-locale-headers.v1.invalid.json",
         )
-        .with_adoption(HEADER_LOCALE_WITNESS, HEADER_LOCALE_WITNESS);
+        ;
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<crate::headers::LocaleHeaders>();
         contract
@@ -1284,7 +1018,6 @@ const API_LIST_BOARD_LABEL_PROPOSALS_CONTRACTS: &[ContractDeclaration] = &[
         "list-board-label-proposals-response",
         "List board label proposals response v1",
         crate::ListBoardLabelProposalsResponse,
-        PROPOSAL_WITNESS
     ),
 ];
 
@@ -1296,7 +1029,6 @@ const API_PROPOSE_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "Propose Task Label Path v1",
         TASK_LABEL_PATH_PARAMETERS,
         crate::TaskLabelSurfacePath,
-        PROPOSAL_WITNESS
     ),
     query_contract!(
         "api.propose-task-label.query",
@@ -1304,7 +1036,6 @@ const API_PROPOSE_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "propose-task-label-query",
         "Propose task label query v1",
         crate::LabelSuggestionQuery,
-        PROPOSAL_WITNESS
     ),
     header_contract!(
         "propose-task-label",
@@ -1320,7 +1051,6 @@ const API_PROPOSE_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "propose-task-label-request",
         "Propose task label request v1",
         crate::ProposeTaskLabelRequest,
-        PROPOSAL_WITNESS
     ),
     response_contract!(
         "api.propose-task-label.response",
@@ -1329,7 +1059,6 @@ const API_PROPOSE_TASK_LABEL_CONTRACTS: &[ContractDeclaration] = &[
         "propose-task-label-response",
         "Propose task label response v1",
         crate::ProposeTaskLabelResponse,
-        PROPOSAL_WITNESS
     ),
 ];
 
@@ -1341,7 +1070,6 @@ const API_RECORD_LABEL_ONTOLOGY_OBSERVATION_CONTRACTS: &[ContractDeclaration] = 
         "Record Label Ontology Observation Path v1",
         TASK_LABEL_PATH_PARAMETERS,
         crate::TaskLabelSurfacePath,
-        ONTOLOGY_WITNESS
     ),
     header_contract!(
         "record-label-ontology-observation",
@@ -1357,7 +1085,6 @@ const API_RECORD_LABEL_ONTOLOGY_OBSERVATION_CONTRACTS: &[ContractDeclaration] = 
         "record-label-ontology-observation-body",
         "Record label ontology observation request v1",
         crate::RecordLabelOntologyObservationRequest,
-        ONTOLOGY_WITNESS
     ),
     response_contract!(
         "api.record-label-ontology-observation.response",
@@ -1366,7 +1093,6 @@ const API_RECORD_LABEL_ONTOLOGY_OBSERVATION_CONTRACTS: &[ContractDeclaration] = 
         "record-label-ontology-observation-response",
         "Record label ontology observation response v1",
         crate::RecordLabelOntologyObservationResponse,
-        ONTOLOGY_WITNESS
     ),
 ];
 
@@ -1378,7 +1104,6 @@ const API_LIST_LABEL_ONTOLOGY_SIGNALS_CONTRACTS: &[ContractDeclaration] = &[
         "List Label Ontology Signals Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        ONTOLOGY_WITNESS
     ),
     query_contract!(
         "api.label-ontology-signal.query",
@@ -1386,7 +1111,6 @@ const API_LIST_LABEL_ONTOLOGY_SIGNALS_CONTRACTS: &[ContractDeclaration] = &[
         "label-ontology-signal-query",
         "Label ontology signal query v1",
         crate::LabelOntologySignalQuery,
-        ONTOLOGY_WITNESS
     ),
     header_contract!(
         "list-label-ontology-signals",
@@ -1402,7 +1126,6 @@ const API_LIST_LABEL_ONTOLOGY_SIGNALS_CONTRACTS: &[ContractDeclaration] = &[
         "list-label-ontology-signals-response",
         "Kanban API list label ontology signals response v1",
         crate::LabelOntologySignalsResponse,
-        ONTOLOGY_WITNESS
     ),
 ];
 
@@ -1414,7 +1137,6 @@ const API_REVIEW_LABEL_ONTOLOGY_CONTRACTS: &[ContractDeclaration] = &[
         "Review Label Ontology Path v1",
         BOARD_PATH_PARAMETERS,
         crate::BoardLabelPath,
-        ONTOLOGY_WITNESS
     ),
     query_contract!(
         "api.label-ontology-review.query",
@@ -1422,7 +1144,6 @@ const API_REVIEW_LABEL_ONTOLOGY_CONTRACTS: &[ContractDeclaration] = &[
         "label-ontology-review-query",
         "Label ontology review query v1",
         crate::LabelOntologyReviewQuery,
-        ONTOLOGY_WITNESS
     ),
     header_contract!(
         "review-label-ontology",
@@ -1438,7 +1159,6 @@ const API_REVIEW_LABEL_ONTOLOGY_CONTRACTS: &[ContractDeclaration] = &[
         "review-label-ontology-response",
         "Review label ontology response v1",
         crate::ReviewLabelOntologyResponse,
-        ONTOLOGY_WITNESS
     ),
 ];
 
@@ -1452,7 +1172,6 @@ macro_rules! ontology_mutation_contracts {
                 $path_title,
                 BOARD_PATH_PARAMETERS,
                 crate::BoardLabelPath,
-                ONTOLOGY_WITNESS
             ),
             header_contract!(
                 $slug,
@@ -1468,7 +1187,6 @@ macro_rules! ontology_mutation_contracts {
                 $request_slug,
                 $request_title,
                 $request_type,
-                ONTOLOGY_WITNESS
             ),
             response_contract!(
                 concat!("api.", $slug, ".response"),
@@ -1477,7 +1195,6 @@ macro_rules! ontology_mutation_contracts {
                 $response_slug,
                 $response_title,
                 $response_type,
-                ONTOLOGY_WITNESS
             ),
         ]
     };
@@ -1540,7 +1257,6 @@ const API_GET_LABEL_ONTOLOGY_SIGNAL_CONTRACTS: &[ContractDeclaration] = &[
         "Get Label Ontology Signal Path v1",
         SIGNAL_PATH_PARAMETERS,
         crate::SignalPath,
-        ONTOLOGY_WITNESS
     ),
     header_contract!(
         "get-label-ontology-signal",
@@ -1556,7 +1272,6 @@ const API_GET_LABEL_ONTOLOGY_SIGNAL_CONTRACTS: &[ContractDeclaration] = &[
         "get-label-ontology-signal-response",
         "Get label ontology signal response v1",
         crate::GetLabelOntologySignalResponse,
-        ONTOLOGY_WITNESS
     ),
 ];
 
@@ -1568,7 +1283,6 @@ const API_GET_LABEL_PROPOSAL_CONTRACTS: &[ContractDeclaration] = &[
         "Get Label Proposal Path v1",
         PROPOSAL_PATH_PARAMETERS,
         crate::ProposalPath,
-        PROPOSAL_WITNESS
     ),
     header_contract!(
         "get-label-proposal",
@@ -1584,7 +1298,6 @@ const API_GET_LABEL_PROPOSAL_CONTRACTS: &[ContractDeclaration] = &[
         "get-label-proposal-response",
         "Get label proposal response v1",
         crate::GetLabelProposalResponse,
-        PROPOSAL_WITNESS
     ),
 ];
 
@@ -1598,7 +1311,6 @@ macro_rules! label_proposal_decision_contracts {
                 $path_title,
                 PROPOSAL_PATH_PARAMETERS,
                 crate::ProposalPath,
-                PROPOSAL_WITNESS
             ),
             header_contract!(
                 $slug,
@@ -1614,7 +1326,6 @@ macro_rules! label_proposal_decision_contracts {
                 $body_slug,
                 $body_title,
                 crate::LabelProposalDecisionRequest,
-                PROPOSAL_WITNESS
             ),
             response_contract!(
                 concat!("api.", $slug, ".response"),
@@ -1623,7 +1334,6 @@ macro_rules! label_proposal_decision_contracts {
                 $response_slug,
                 $response_title,
                 crate::LabelProposalDecisionResponse,
-                PROPOSAL_WITNESS
             ),
         ]
     };
@@ -1683,7 +1393,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/labels"),
         "GET /api/v1/tasks/:task_id/labels",
         "GET /api/v1/tasks/:task_id/labels",
-        MigrationState::Adopted,
         API_LIST_TASK_LABELS_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -1696,7 +1405,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/labels"),
         "POST /api/v1/tasks/:task_id/labels",
         "POST /api/v1/tasks/:task_id/labels",
-        MigrationState::Adopted,
         API_ADD_TASK_LABEL_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -1709,7 +1417,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/labels/bootstrap"),
         "POST /api/v1/tasks/:task_id/labels/bootstrap",
         "POST /api/v1/tasks/:task_id/labels/bootstrap",
-        MigrationState::Adopted,
         API_BOOTSTRAP_TASK_LABEL_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -1722,7 +1429,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/labels/:label_id"),
         "DELETE /api/v1/tasks/:task_id/labels/:label_id",
         "DELETE /api/v1/tasks/:task_id/labels/:label_id",
-        MigrationState::Adopted,
         API_REMOVE_TASK_LABEL_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -1735,7 +1441,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels"),
         "GET /api/v1/boards/:board/labels",
         "GET /api/v1/boards/:board/labels",
-        MigrationState::Adopted,
         API_LIST_BOARD_LABELS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1747,7 +1452,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/label-proposals"),
         "GET /api/v1/boards/:board/label-proposals",
         "GET /api/v1/boards/:board/label-proposals",
-        MigrationState::Adopted,
         API_LIST_BOARD_LABEL_PROPOSALS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1765,7 +1469,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels"),
         "POST /api/v1/boards/:board/labels",
         "POST /api/v1/boards/:board/labels",
-        MigrationState::Adopted,
         API_CREATE_BOARD_LABEL_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -1777,7 +1480,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels/:label_id"),
         "DELETE /api/v1/boards/:board/labels/:label_id",
         "DELETE /api/v1/boards/:board/labels/:label_id",
-        MigrationState::Adopted,
         API_DELETE_BOARD_LABEL_CONTRACTS,
     )
     .with_shared_components(&["api.error.response"])
@@ -1790,7 +1492,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels/semantics"),
         "GET /api/v1/boards/:board/labels/semantics",
         "GET /api/v1/boards/:board/labels/semantics",
-        MigrationState::Adopted,
         API_LIST_LABEL_SEMANTICS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1805,7 +1506,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels/:label_id/semantics"),
         "GET /api/v1/boards/:board/labels/:label_id/semantics",
         "GET /api/v1/boards/:board/labels/:label_id/semantics",
-        MigrationState::Adopted,
         API_GET_LABEL_SEMANTICS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1817,7 +1517,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels/:label_id/semantics"),
         "PUT /api/v1/boards/:board/labels/:label_id/semantics",
         "PUT /api/v1/boards/:board/labels/:label_id/semantics",
-        MigrationState::Adopted,
         API_UPSERT_LABEL_SEMANTICS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -1832,7 +1531,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels/:label_id/semantics"),
         "DELETE /api/v1/boards/:board/labels/:label_id/semantics",
         "DELETE /api/v1/boards/:board/labels/:label_id/semantics",
-        MigrationState::Adopted,
         API_DELETE_LABEL_SEMANTICS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActor)
@@ -1847,7 +1545,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels/atoms"),
         "GET /api/v1/boards/:board/labels/atoms",
         "GET /api/v1/boards/:board/labels/atoms",
-        MigrationState::Adopted,
         API_LIST_LABEL_ATOMS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1859,7 +1556,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels/atoms/:atom_ref/explain"),
         "GET /api/v1/boards/:board/labels/atoms/:atom_ref/explain",
         "GET /api/v1/boards/:board/labels/atoms/:atom_ref/explain",
-        MigrationState::Adopted,
         API_EXPLAIN_LABEL_ATOM_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1871,7 +1567,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels/atom-index/status"),
         "GET /api/v1/boards/:board/labels/atom-index/status",
         "GET /api/v1/boards/:board/labels/atom-index/status",
-        MigrationState::Adopted,
         API_LABEL_ATOM_INDEX_STATUS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1886,7 +1581,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels/atom-index/rebuild"),
         "POST /api/v1/boards/:board/labels/atom-index/rebuild",
         "POST /api/v1/boards/:board/labels/atom-index/rebuild",
-        MigrationState::Adopted,
         API_REBUILD_LABEL_ATOM_INDEX_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1901,7 +1595,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/labels/atom-index/query"),
         "GET /api/v1/boards/:board/labels/atom-index/query",
         "GET /api/v1/boards/:board/labels/atom-index/query",
-        MigrationState::Adopted,
         API_QUERY_LABEL_ATOM_INDEX_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1916,7 +1609,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/signals"),
         "GET /api/v1/boards/:board/signals",
         "GET /api/v1/boards/:board/signals",
-        MigrationState::Adopted,
         API_LIST_SIGNALS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1928,7 +1620,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/signals/review"),
         "GET /api/v1/boards/:board/signals/review",
         "GET /api/v1/boards/:board/signals/review",
-        MigrationState::Adopted,
         API_REVIEW_SIGNALS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1940,7 +1631,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/signals/:signal_id"),
         "GET /api/v1/signals/:signal_id",
         "GET /api/v1/signals/:signal_id",
-        MigrationState::Adopted,
         API_GET_SIGNAL_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -1952,7 +1642,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/signals"),
         "POST /api/v1/boards/:board/signals",
         "POST /api/v1/boards/:board/signals",
-        MigrationState::Adopted,
         API_RECORD_SIGNAL_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -1964,7 +1653,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/signals/confirm"),
         "POST /api/v1/boards/:board/signals/confirm",
         "POST /api/v1/boards/:board/signals/confirm",
-        MigrationState::Adopted,
         API_CONFIRM_SIGNALS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -1976,7 +1664,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/signals/reject"),
         "POST /api/v1/boards/:board/signals/reject",
         "POST /api/v1/boards/:board/signals/reject",
-        MigrationState::Adopted,
         API_REJECT_SIGNALS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -1988,7 +1675,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/signals/resolve"),
         "POST /api/v1/boards/:board/signals/resolve",
         "POST /api/v1/boards/:board/signals/resolve",
-        MigrationState::Adopted,
         API_RESOLVE_SIGNALS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -2000,7 +1686,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/signals/supersede"),
         "POST /api/v1/boards/:board/signals/supersede",
         "POST /api/v1/boards/:board/signals/supersede",
-        MigrationState::Adopted,
         API_SUPERSEDE_SIGNALS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -2012,7 +1697,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/labels/suggestions"),
         "GET /api/v1/tasks/:task_id/labels/suggestions",
         "GET /api/v1/tasks/:task_id/labels/suggestions",
-        MigrationState::Adopted,
         API_SUGGEST_TASK_LABELS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -2024,7 +1708,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/label-proposals"),
         "GET /api/v1/tasks/:task_id/label-proposals",
         "GET /api/v1/tasks/:task_id/label-proposals",
-        MigrationState::Adopted,
         API_LIST_TASK_LABEL_PROPOSALS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -2042,7 +1725,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/label-proposals"),
         "POST /api/v1/tasks/:task_id/label-proposals",
         "POST /api/v1/tasks/:task_id/label-proposals",
-        MigrationState::Adopted,
         API_PROPOSE_TASK_LABEL_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorOptionalJson)
@@ -2054,7 +1736,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/label-ontology/observations"),
         "POST /api/v1/tasks/:task_id/label-ontology/observations",
         "POST /api/v1/tasks/:task_id/label-ontology/observations",
-        MigrationState::Adopted,
         API_RECORD_LABEL_ONTOLOGY_OBSERVATION_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -2069,7 +1750,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/label-ontology/signals"),
         "GET /api/v1/boards/:board/label-ontology/signals",
         "GET /api/v1/boards/:board/label-ontology/signals",
-        MigrationState::Adopted,
         API_LIST_LABEL_ONTOLOGY_SIGNALS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -2084,7 +1764,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/label-ontology/review"),
         "GET /api/v1/boards/:board/label-ontology/review",
         "GET /api/v1/boards/:board/label-ontology/review",
-        MigrationState::Adopted,
         API_REVIEW_LABEL_ONTOLOGY_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -2096,7 +1775,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/label-ontology/actions"),
         "POST /api/v1/boards/:board/label-ontology/actions",
         "POST /api/v1/boards/:board/label-ontology/actions",
-        MigrationState::Adopted,
         API_CREATE_LABEL_ONTOLOGY_ACTION_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -2111,7 +1789,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/label-ontology/apply/atom"),
         "POST /api/v1/boards/:board/label-ontology/apply/atom",
         "POST /api/v1/boards/:board/label-ontology/apply/atom",
-        MigrationState::Adopted,
         API_APPLY_LABEL_ONTOLOGY_ATOM_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -2126,7 +1803,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/label-ontology/revert"),
         "POST /api/v1/boards/:board/label-ontology/revert",
         "POST /api/v1/boards/:board/label-ontology/revert",
-        MigrationState::Adopted,
         API_REVERT_LABEL_ONTOLOGY_MUTATION_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -2141,7 +1817,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/boards/:board/label-ontology/validate"),
         "POST /api/v1/boards/:board/label-ontology/validate",
         "POST /api/v1/boards/:board/label-ontology/validate",
-        MigrationState::Adopted,
         API_VALIDATE_LABEL_ONTOLOGY_ACTION_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleJson)
@@ -2156,7 +1831,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/label-ontology/signals/:signal_id"),
         "GET /api/v1/label-ontology/signals/:signal_id",
         "GET /api/v1/label-ontology/signals/:signal_id",
-        MigrationState::Adopted,
         API_GET_LABEL_ONTOLOGY_SIGNAL_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -2171,7 +1845,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/label-proposals/:proposal_id"),
         "GET /api/v1/label-proposals/:proposal_id",
         "GET /api/v1/label-proposals/:proposal_id",
-        MigrationState::Adopted,
         API_GET_LABEL_PROPOSAL_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -2183,7 +1856,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/label-proposals/:proposal_id/accept"),
         "POST /api/v1/label-proposals/:proposal_id/accept",
         "POST /api/v1/label-proposals/:proposal_id/accept",
-        MigrationState::Adopted,
         API_ACCEPT_LABEL_PROPOSAL_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorOptionalJson)
@@ -2198,7 +1870,6 @@ const LABEL_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/label-proposals/:proposal_id/reject"),
         "POST /api/v1/label-proposals/:proposal_id/reject",
         "POST /api/v1/label-proposals/:proposal_id/reject",
-        MigrationState::Adopted,
         API_REJECT_LABEL_PROPOSAL_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorOptionalJson)

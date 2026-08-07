@@ -1,10 +1,10 @@
 //! Step 与 execution-plan API family 的唯一 declaration source。
 
 use crate::{
-    AdoptionLocator, ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection,
-    ContractGranularity, ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod,
-    HttpTransportLocation, McpExposure, McpPolicy, McpToolBinding, MigrationState,
-    OperationContract, OperationDeclaration, SurfaceOperation, WireParameter,
+    ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
+    ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod, HttpTransportLocation,
+    McpExposure, McpPolicy, McpToolBinding, OperationContract, OperationDeclaration,
+    SurfaceOperation, WireParameter,
 };
 
 const STEP_TASK_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
@@ -22,32 +22,6 @@ const STEP_ITEM_PATH_PARAMETERS: &[WireParameter] = &[
     },
 ];
 
-const STEP_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "http::operations::contract_adoption::suite_steps_and_plans_adoption_uses_real_router_fixtures",
-};
-const HEADER_LOCALE_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_ACTOR_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_json_header_fixture_is_consumed_by_real_router",
-};
-const HEADER_ACTOR_JSON_WITNESS: AdoptionLocator = AdoptionLocator {
-    package: "kanban-server",
-    test_target: "lib",
-    exact_test: "knowledge_adoption::locale_actor_json_header_fixture_is_consumed_by_real_router",
-};
-
 const DOMAIN_INVARIANTS: &[crate::McpOperationInvariant] = &[
     crate::McpOperationInvariant::CanonicalHostOnly,
     crate::McpOperationInvariant::SharedApplicationService,
@@ -58,7 +32,7 @@ macro_rules! api_contract {
     (
         $id:expr, $path:expr, $direction:expr, $location:expr, $parameters:expr,
         $schema_id:expr, $artifact_path:expr, $title:expr, $valid_fixture:expr,
-        $invalid_fixture:expr, $schema_type:ty
+        $invalid_fixture:expr, $schema_type:ty $(,)?
     ) => {{
         let contract = ContractDeclaration::new(
             $id,
@@ -76,8 +50,7 @@ macro_rules! api_contract {
             $title,
             $valid_fixture,
             $invalid_fixture,
-        )
-        .with_adoption(STEP_WITNESS, STEP_WITNESS);
+        );
         #[cfg(feature = "schema")]
         let contract = contract.with_schema_type::<$schema_type>();
         contract
@@ -85,14 +58,7 @@ macro_rules! api_contract {
 }
 
 macro_rules! header_contract {
-    ($operation:literal, $path:literal, $profile:expr, $profile_slug:literal, $schema_type:ty) => {{
-        let witness = match $profile {
-            ApiHeaderProfile::Locale => HEADER_LOCALE_WITNESS,
-            ApiHeaderProfile::LocaleActor => HEADER_ACTOR_WITNESS,
-            ApiHeaderProfile::LocaleJson => HEADER_JSON_WITNESS,
-            ApiHeaderProfile::LocaleActorJson => HEADER_ACTOR_JSON_WITNESS,
-            _ => panic!("step headers 不支持该 profile"),
-        };
+    ($operation:literal, $path:literal, $profile:expr, $profile_slug:literal, $schema_type:ty $(,)?) => {{
         let contract = ContractDeclaration::new(
             concat!("api.", $operation, ".headers"),
             concat!($path, " headers"),
@@ -117,8 +83,7 @@ macro_rules! header_contract {
                 $profile_slug,
                 ".v1.invalid.json"
             ),
-        )
-        .with_adoption(witness, witness);
+        );
         #[cfg(feature = "schema")]
         let contract = match $profile {
             ApiHeaderProfile::Locale => {
@@ -503,7 +468,6 @@ const STEP_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/steps"),
         "GET /api/v1/tasks/:task_id/steps",
         "GET /api/v1/tasks/:task_id/steps",
-        MigrationState::Adopted,
         API_LIST_STEPS_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::Locale)
@@ -515,7 +479,6 @@ const STEP_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/steps"),
         "POST /api/v1/tasks/:task_id/steps",
         "POST /api/v1/tasks/:task_id/steps",
-        MigrationState::Adopted,
         API_CREATE_STEP_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -527,7 +490,6 @@ const STEP_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/steps/:step_id"),
         "PATCH /api/v1/tasks/:task_id/steps/:step_id",
         "PATCH /api/v1/tasks/:task_id/steps/:step_id",
-        MigrationState::Adopted,
         API_UPDATE_STEP_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -539,7 +501,6 @@ const STEP_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/steps/:step_id"),
         "DELETE /api/v1/tasks/:task_id/steps/:step_id",
         "DELETE /api/v1/tasks/:task_id/steps/:step_id",
-        MigrationState::Adopted,
         API_REMOVE_STEP_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActor)
@@ -551,7 +512,6 @@ const STEP_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/steps/:step_id/done"),
         "POST /api/v1/tasks/:task_id/steps/:step_id/done",
         "POST /api/v1/tasks/:task_id/steps/:step_id/done",
-        MigrationState::Adopted,
         API_COMPLETE_STEP_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -563,7 +523,6 @@ const STEP_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/steps/:step_id/skip"),
         "POST /api/v1/tasks/:task_id/steps/:step_id/skip",
         "POST /api/v1/tasks/:task_id/steps/:step_id/skip",
-        MigrationState::Adopted,
         API_SKIP_STEP_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -575,7 +534,6 @@ const STEP_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/steps/:step_id/reopen"),
         "POST /api/v1/tasks/:task_id/steps/:step_id/reopen",
         "POST /api/v1/tasks/:task_id/steps/:step_id/reopen",
-        MigrationState::Adopted,
         API_REOPEN_STEP_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)
@@ -587,7 +545,6 @@ const STEP_OPERATIONS: &[OperationDeclaration] = &[
         Some("/api/v1/tasks/:task_id/execution-plan/not-required"),
         "POST /api/v1/tasks/:task_id/execution-plan/not-required",
         "POST /api/v1/tasks/:task_id/execution-plan/not-required",
-        MigrationState::Adopted,
         API_PLAN_CONTRACTS,
     )
     .with_header_profile(ApiHeaderProfile::LocaleActorJson)

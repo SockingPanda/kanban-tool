@@ -1,10 +1,10 @@
 use crate::{
     AddDependencyRequest, ArchiveBoardRequest, ArchiveTaskRequest, BlockTaskRequest,
     ClaimTaskRequest, CompleteTaskRequest, ContractBinding, ContractDirection, ContractGranularity,
-    ContractStrictness, EndpointObligation, HeartbeatTaskRequest, MigrationState,
-    PromoteTaskRequest, ReclaimTargetStatus, ReclaimTaskRequest, ReleaseTaskRequest,
-    ReopenTaskRequest, SpecifyTaskRequest, SubmitReviewTaskRequest, UnblockTaskRequest,
-    endpoint_descriptor, operation_inventory,
+    ContractStrictness, EndpointObligation, HeartbeatTaskRequest, PromoteTaskRequest,
+    ReclaimTargetStatus, ReclaimTaskRequest, ReleaseTaskRequest, ReopenTaskRequest,
+    SpecifyTaskRequest, SubmitReviewTaskRequest, UnblockTaskRequest, endpoint_descriptor,
+    operation_inventory,
 };
 use serde_json::json;
 
@@ -246,14 +246,9 @@ const LIFECYCLE_CONTRACTS: &[(&str, &str)] = &[
 ];
 
 #[test]
-fn lifecycle_request_inventory_is_exact_and_adopted() {
+fn lifecycle_request_inventory_is_exact() {
     for (operation_id, contract_id) in LIFECYCLE_CONTRACTS {
         let endpoint = endpoint_descriptor(operation_id).expect("endpoint descriptor");
-        assert_eq!(
-            endpoint.migration,
-            MigrationState::Adopted,
-            "{operation_id}"
-        );
         assert_eq!(
             endpoint.obligations.body,
             EndpointObligation::Contract(contract_id),
@@ -372,12 +367,6 @@ fn lifecycle_request_inventory_is_exact_and_adopted() {
         assert_eq!(contract.granularity, ContractGranularity::Exact);
         assert_eq!(contract.strictness, ContractStrictness::DenyUnknownFields);
         assert_eq!(contract.binding, ContractBinding::ExactSurface);
-        assert_eq!(contract.migration, MigrationState::Adopted);
-        let adoption = contract.adoption.expect("adoption evidence");
-        let operation = format!("{:?} {}", endpoint.method, endpoint.path);
-        let operation = operation.replacen("Post", "POST", 1);
-        assert_eq!(adoption.producer.operation, operation);
-        assert_eq!(adoption.consumer.operation, operation);
     }
 }
 

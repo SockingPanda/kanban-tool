@@ -78,33 +78,6 @@ pub enum ContractTransport {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MigrationState {
-    Planned,
-    Generated,
-    Adopted,
-    Excluded,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct AdoptionWitness {
-    pub operation: &'static str,
-    pub contract_id: &'static str,
-    pub surface: ContractSurface,
-    pub direction: ContractDirection,
-    pub package: &'static str,
-    pub test_target: &'static str,
-    pub exact_test: &'static str,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct AdoptionEvidence {
-    pub producer_fixture: &'static str,
-    pub producer: AdoptionWitness,
-    pub consumer: AdoptionWitness,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct OperationContract {
     pub id: &'static str,
@@ -116,9 +89,7 @@ pub struct OperationContract {
     pub strictness: ContractStrictness,
     pub schema_id: Option<&'static str>,
     pub fixture: Option<&'static str>,
-    pub adoption: Option<AdoptionEvidence>,
     pub exclusion: Option<&'static str>,
-    pub migration: MigrationState,
     pub transport: ContractTransport,
     pub binding: ContractBinding,
 }

@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::{ContractSurface, MigrationState};
+use crate::ContractSurface;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -37,7 +37,6 @@ pub struct EndpointDescriptor {
     pub surface: ContractSurface,
     pub method: HttpMethod,
     pub path: &'static str,
-    pub migration: MigrationState,
     pub exclusion: Option<&'static str>,
     pub shared_components: &'static [&'static str],
     pub obligations: EndpointObligations,
@@ -206,18 +205,14 @@ pub fn endpoint_obligation_todo_count(catalog: &[EndpointDescriptor]) -> usize {
         .count()
 }
 
-pub fn validate_endpoint_catalog(
-    catalog: &[EndpointDescriptor],
-    require_closed: bool,
-) -> Result<(), String> {
-    validate_contract_topology(catalog, crate::operation_inventory(), require_closed)
+pub fn validate_endpoint_catalog(catalog: &[EndpointDescriptor]) -> Result<(), String> {
+    validate_contract_topology(catalog, crate::operation_inventory())
 }
 
 pub fn validate_operation_contracts(
     contract_inventory: &[crate::OperationContract],
 ) -> Result<(), String> {
-    validate_contract_inventory_transport(contract_inventory)?;
-    validate_adopted_contract_granularity(contract_inventory)
+    validate_contract_inventory_transport(contract_inventory)
 }
 
 fn validate_contract_inventory_transport(
@@ -236,31 +231,10 @@ fn validate_contract_inventory_transport(
     Ok(())
 }
 
-fn validate_adopted_contract_granularity(
-    contract_inventory: &[crate::OperationContract],
-) -> Result<(), String> {
-    for contract in contract_inventory {
-        if contract.migration == MigrationState::Adopted
-            && contract.granularity != crate::ContractGranularity::Exact
-        {
-            return Err(format!(
-                "adopted contract granularity mismatch: contract={} binding={} expected=exact actual={}",
-                contract.id,
-                contract_binding_name(contract.binding),
-                contract_granularity_name(contract.granularity)
-            ));
-        }
-    }
-    Ok(())
-}
-
 pub fn validate_contract_topology(
     catalog: &[EndpointDescriptor],
     contract_inventory: &[crate::OperationContract],
-    require_closed: bool,
 ) -> Result<(), String> {
-    // endpoint 专属诊断先于全 catalog Adopted 不变量执行，使被引用的 Family contract
-    // 能精确指出无效的 endpoint obligation。
     validate_contract_inventory_transport(contract_inventory)?;
 
     let mut operation_ids = std::collections::BTreeMap::new();
@@ -318,13 +292,12 @@ pub fn validate_contract_topology(
         }
 
         for (kind, obligation) in endpoint.obligations.entries() {
-            validate_obligation(endpoint, kind, obligation, &contracts, require_closed)?;
+            validate_obligation(endpoint, kind, obligation, &contracts)?;
         }
         validate_shared_component_links(endpoint, &contracts)?;
-        validate_endpoint_migration_honesty(endpoint, &contracts)?;
     }
 
-    validate_adopted_contract_granularity(contract_inventory)
+    Ok(())
 }
 
 fn validate_contract_transport(contract: &crate::OperationContract) -> Result<(), String> {
@@ -332,6 +305,16 @@ fn validate_contract_transport(contract: &crate::OperationContract) -> Result<()
         ContractBinding, ContractDirection, ContractSurface, ContractTransport,
         HttpTransportLocation, WireParameterCardinality,
     };
+
+    if contract.binding == ContractBinding::ExactSurface
+        && contract.granularity != crate::ContractGranularity::Exact
+    {
+        return Err(format!(
+            "ExactSurface contract requires exact granularity: contract={} binding=exact_surface expected=exact actual={}",
+            contract.id,
+            contract_granularity_name(contract.granularity)
+        ));
+    }
 
     let (operation_key, location, parameters) = match contract.transport {
         ContractTransport::NoTransport => {
@@ -494,7 +477,6 @@ fn validate_obligation(
     kind: EndpointObligationKind,
     obligation: EndpointObligation,
     contracts: &std::collections::BTreeMap<&str, &crate::OperationContract>,
-    require_closed: bool,
 ) -> Result<(), String> {
     if matches!(kind, EndpointObligationKind::Path)
         && endpoint.path.contains(':')
@@ -506,22 +488,7 @@ fn validate_obligation(
         ));
     }
     match obligation {
-        EndpointObligation::Todo => {
-            if endpoint.migration == MigrationState::Adopted {
-                return Err(format!(
-                    "adopted endpoint cannot retain Todo: {} {}",
-                    endpoint.operation_id,
-                    kind.name()
-                ));
-            }
-            if require_closed {
-                return Err(format!(
-                    "endpoint obligation Todo prevents closure: {} {}",
-                    endpoint.operation_id,
-                    kind.name()
-                ));
-            }
-        }
+        EndpointObligation::Todo => {}
         EndpointObligation::Excluded { reason } if reason.trim().is_empty() => {
             return Err(format!(
                 "endpoint obligation exclusion reason must be non-empty: {} {}",
@@ -538,18 +505,6 @@ fn validate_obligation(
                     contract_id
                 )
             })?;
-            if matches!(
-                contract.migration,
-                MigrationState::Planned | MigrationState::Excluded
-            ) {
-                return Err(format!(
-                    "endpoint obligation references {} contract: {} {} -> {}",
-                    migration_state_name(contract.migration),
-                    endpoint.operation_id,
-                    kind.name(),
-                    contract_id
-                ));
-            }
             if contract.binding != crate::ContractBinding::ExactSurface {
                 return Err(format!(
                     "endpoint obligation requires ExactSurface contract: endpoint={} obligation={} contract={} expected=exact_surface actual={}",
@@ -687,17 +642,6 @@ fn validate_shared_component_links(
                 endpoint.operation_id, contract_id
             )
         })?;
-        if matches!(
-            contract.migration,
-            MigrationState::Planned | MigrationState::Excluded
-        ) {
-            return Err(format!(
-                "endpoint shared component references {} contract: {} -> {}",
-                migration_state_name(contract.migration),
-                endpoint.operation_id,
-                contract_id
-            ));
-        }
         if contract.binding != crate::ContractBinding::SharedComponent {
             return Err(format!(
                 "shared component link requires SharedComponent contract: endpoint={} contract={} expected=shared_component actual={}",
@@ -723,56 +667,6 @@ fn validate_shared_component_links(
         }
     }
     Ok(())
-}
-
-fn validate_endpoint_migration_honesty(
-    endpoint: &EndpointDescriptor,
-    contracts: &std::collections::BTreeMap<&str, &crate::OperationContract>,
-) -> Result<(), String> {
-    let exact_contracts = endpoint
-        .obligations
-        .entries()
-        .into_iter()
-        .filter_map(|(_, obligation)| match obligation {
-            EndpointObligation::Contract(contract_id) => contracts.get(contract_id).copied(),
-            _ => None,
-        })
-        .filter(|contract| contract.binding == crate::ContractBinding::ExactSurface)
-        .collect::<Vec<_>>();
-
-    match endpoint.migration {
-        MigrationState::Planned if !exact_contracts.is_empty() => Err(format!(
-            "planned endpoint cannot claim exact contract coverage: {}",
-            endpoint.operation_id
-        )),
-        MigrationState::Generated if exact_contracts.is_empty() => Err(format!(
-            "generated endpoint requires at least one ExactSurface contract: {}",
-            endpoint.operation_id
-        )),
-        MigrationState::Adopted if exact_contracts.is_empty() => Err(format!(
-            "adopted endpoint requires at least one ExactSurface contract: {}",
-            endpoint.operation_id
-        )),
-        MigrationState::Adopted
-            if exact_contracts
-                .iter()
-                .any(|contract| contract.migration != MigrationState::Adopted) =>
-        {
-            Err(format!(
-                "adopted endpoint references non-adopted exact contract: {}",
-                endpoint.operation_id
-            ))
-        }
-        MigrationState::Excluded
-            if !endpoint.shared_components.is_empty() || !exact_contracts.is_empty() =>
-        {
-            Err(format!(
-                "excluded endpoint cannot retain contract linkage: {}",
-                endpoint.operation_id
-            ))
-        }
-        _ => Ok(()),
-    }
 }
 
 fn validate_path_parameter_mapping(
@@ -862,15 +756,6 @@ fn wire_parameter_cardinality_name(cardinality: crate::WireParameterCardinality)
         crate::WireParameterCardinality::RequiredOne => "required_one",
         crate::WireParameterCardinality::OptionalOne => "optional_one",
         crate::WireParameterCardinality::RepeatedOrdered => "repeated_ordered",
-    }
-}
-
-fn migration_state_name(state: MigrationState) -> &'static str {
-    match state {
-        MigrationState::Planned => "planned",
-        MigrationState::Generated => "generated",
-        MigrationState::Adopted => "adopted",
-        MigrationState::Excluded => "excluded",
     }
 }
 

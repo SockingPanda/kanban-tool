@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use kanban_contract::{ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse};
+use kanban_protocol::{ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
@@ -13,7 +13,7 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskCreateArgs {
-    /// Board slug or id. Defaults to KB_BOARD/default.
+    /// Board slug 或 ID。默认使用 KB_BOARD/default。
     board: Option<String>,
     title: String,
     description: Option<String>,
@@ -27,6 +27,10 @@ struct TaskCreateArgs {
     metadata: Option<BTreeMap<String, serde_json::Value>>,
     task_id: Option<String>,
     idempotency_key: Option<String>,
+    #[serde(default)]
+    labels: Vec<String>,
+    #[serde(default)]
+    depends_on: Vec<String>,
 }
 
 const fn default_priority() -> i64 {
@@ -37,7 +41,7 @@ const fn default_priority() -> i64 {
 impl KanbanMcp {
     #[tool(
         name = "task_create",
-        description = "Create a task through the canonical kanban application service"
+        description = "通过 canonical kanban application service 创建任务"
     )]
     async fn task_create(
         &self,
@@ -60,8 +64,8 @@ impl KanbanMcp {
                     due_at: args.due_at,
                     max_retries: args.max_retries,
                     metadata: args.metadata,
-                    labels: Vec::new(),
-                    depends_on: Vec::new(),
+                    labels: args.labels,
+                    depends_on: args.depends_on,
                     actor: None,
                 },
             )

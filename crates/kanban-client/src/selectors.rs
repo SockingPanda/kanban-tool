@@ -1,4 +1,4 @@
-use kanban_contract::{ApiErrorCode, ListTasksQuery};
+use kanban_protocol::{ApiErrorCode, ListTasksQuery};
 
 use crate::{KanbanClient, error::ClientError};
 
@@ -10,8 +10,7 @@ impl KanbanClient {
         }
         if !is_board_local_task_selector(selector) {
             return Err(ClientError::InvalidInput(
-                "task selector must be a global t_... id, board#seq, #seq, or numeric seq"
-                    .to_owned(),
+                "任务选择器必须是全局 t_... ID、board#seq、#seq 或数字序号".to_owned(),
             ));
         }
         let response = self.list_tasks(
@@ -28,10 +27,10 @@ impl KanbanClient {
             [] => Err(ClientError::Api {
                 status: 404,
                 code: ApiErrorCode::NotFound,
-                message: format!("task not found: {selector}"),
+                message: format!("未找到任务：{selector}"),
             }),
             _ => Err(ClientError::InvalidResponse(format!(
-                "task selector is ambiguous: {selector}"
+                "任务选择器有歧义：{selector}"
             ))),
         }
     }
@@ -51,9 +50,7 @@ impl KanbanClient {
             .and_then(|value| value.parse::<usize>().ok())
             .filter(|index| *index > 0)
             .ok_or_else(|| {
-                ClientError::InvalidInput(
-                    "step selector must be a global step_... id or S<n>".to_owned(),
-                )
+                ClientError::InvalidInput("步骤选择器必须是全局 step_... ID 或 S<n>".to_owned())
             })?;
         let steps = self.list_steps(task_id)?;
         steps
@@ -63,7 +60,7 @@ impl KanbanClient {
             .ok_or_else(|| ClientError::Api {
                 status: 404,
                 code: ApiErrorCode::NotFound,
-                message: format!("step not found: {selector}"),
+                message: format!("未找到步骤：{selector}"),
             })
     }
 }

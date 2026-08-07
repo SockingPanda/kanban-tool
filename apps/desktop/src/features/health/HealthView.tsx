@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useI18n } from "@/i18n"
 import type { HealthStatus, KanbanApi, RuntimeConfig } from "@/lib/api"
+import { presentApiError } from "@/lib/api/error-presentation"
 
 type MetricTone = "ready" | "blocked" | "secondary"
 
@@ -31,7 +32,7 @@ const identityTranslate: Translate = (key, values = {}) =>
 export function buildHealthRuntimeModel(health: HealthStatus, t: Translate = identityTranslate) {
   const metrics: HealthMetric[] = [
     { id: "ok", label: t("ok"), value: String(health.ok), tone: health.ok ? "ready" : "blocked" },
-    { id: "db", label: t("db"), value: health.db, tone: health.db === "ok" ? "ready" : "blocked" },
+    { id: "db", label: t("db"), value: t(health.db), tone: health.db === "ok" ? "ready" : "blocked" },
     { id: "version", label: t("version"), value: health.version, tone: "secondary" },
     { id: "db-path", label: t("db_path"), value: reportedValue(health.db_path, t), tone: "secondary" },
     { id: "db-fingerprint", label: t("db_fingerprint"), value: reportedValue(health.db_fingerprint, t), tone: "secondary" },
@@ -83,16 +84,16 @@ export function HealthView({ api, config }: { api: KanbanApi | null; config: Run
         )}
         {healthQuery.error ? (
           <Alert className="mt-3 border-destructive/50">
-            <AlertDescription className="text-destructive">{healthQuery.error.message}</AlertDescription>
+            <AlertDescription className="text-destructive">{presentApiError(healthQuery.error, t)}</AlertDescription>
           </Alert>
         ) : null}
       </SectionCard>
 
       <SectionCard title={t("Runtime config")} icon={Database} className="mt-4">
         <div className="space-y-2 text-sm">
-          <InfoRow label="board" value={config?.board ?? "-"} />
-          <InfoRow label="actor" value={config?.actor ?? "-"} />
-          <InfoRow label="api" value={config?.apiBaseUrl || "same-origin"} />
+          <InfoRow label={t("board")} value={config?.board ?? "-"} />
+          <InfoRow label={t("actor")} value={config?.actor ?? "-"} />
+          <InfoRow label={t("API")} value={config?.apiBaseUrl || t("same-origin")} />
         </div>
       </SectionCard>
     </ScrollArea>

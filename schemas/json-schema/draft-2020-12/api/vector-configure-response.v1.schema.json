@@ -1,0 +1,43 @@
+{
+  "$defs": {
+    "VectorConfigureRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "dimensions": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "endpoint": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "endpoint",
+        "model",
+        "dimensions"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:vector-configure-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/VectorConfigureRequest"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban vector configure response v1",
+  "type": "object"
+}

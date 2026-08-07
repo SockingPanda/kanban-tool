@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{ListCommentsPath, ListCommentsResponse};
+use kanban_protocol::{ListCommentsPath, ListCommentsResponse};
 
 pub(crate) async fn list_comments(
     State(state): State<AppState>,
@@ -22,7 +22,13 @@ pub(crate) async fn list_comments(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/comments", get(list_comments))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/tasks/:task_id/comments",
+        ),
+        get(list_comments),
+    )
 }
 #[cfg(test)]
 mod tests {}

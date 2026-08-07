@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::CompleteTaskCommand;
-use kanban_contract::{CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse};
-use kanban_core::KanbanError;
+use kanban_protocol::{CompleteTaskPath, CompleteTaskRequest, CompleteTaskResponse};
+use kanban_service::CompleteTaskCommand;
+use kanban_service::KanbanError;
 
 pub(crate) async fn complete_task(
     State(state): State<AppState>,
@@ -18,7 +18,7 @@ pub(crate) async fn complete_task(
     body: Result<Json<CompleteTaskRequest>, JsonRejection>,
 ) -> Result<Json<CompleteTaskResponse>, ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let task = state
         .application()
@@ -36,7 +36,10 @@ pub(crate) async fn complete_task(
 
 pub(super) fn router() -> Router<AppState> {
     Router::new().route(
-        "/api/v1/tasks/:task_id/transitions/complete",
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/transitions/complete",
+        ),
         post(complete_task),
     )
 }

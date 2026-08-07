@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use clap::{Args, ValueEnum};
 use kanban_client::KanbanClient;
-use kanban_contract::{ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse};
+use kanban_protocol::{ApiCreateTaskStatus, CreateTaskRequest, CreateTaskResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -23,15 +23,21 @@ pub(crate) struct CreateArgs {
     pub(crate) due_at: Option<i64>,
     #[arg(long)]
     pub(crate) max_retries: Option<i64>,
-    /// JSON object stored as task metadata.
+    /// 作为任务 metadata 存储的 JSON 对象。
     #[arg(long)]
     pub(crate) metadata: Option<String>,
-    /// Stable retry key scoped to this board.
+    /// 作用域限定在此看板内的稳定重试 key。
     #[arg(long)]
     pub(crate) idempotency_key: Option<String>,
-    /// Optional client-selected typed task id.
+    /// 可选的、由 client 选择的 typed task ID。
     #[arg(long)]
     pub(crate) task_id: Option<String>,
+    /// 按名称或 ID 绑定已有看板 label（可重复）。
+    #[arg(long = "label")]
+    pub(crate) labels: Vec<String>,
+    /// 按全局 ID 添加已有父任务（可重复）。
+    #[arg(long = "depends-on")]
+    pub(crate) depends_on: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -62,8 +68,8 @@ pub(crate) fn run(
             due_at: args.due_at,
             max_retries: args.max_retries,
             metadata,
-            labels: Vec::new(),
-            depends_on: Vec::new(),
+            labels: args.labels.clone(),
+            depends_on: args.depends_on.clone(),
             actor: None,
         },
     )?;
@@ -91,7 +97,7 @@ fn parse_metadata(
         .map(|metadata| {
             serde_json::from_str(metadata).map_err(|error| CliFailure {
                 code: "invalid_input",
-                message: format!("--metadata must be a JSON object: {error}"),
+                message: format!("--metadata 必须是 JSON 对象：{error}"),
                 exit_code: 2,
             })
         })

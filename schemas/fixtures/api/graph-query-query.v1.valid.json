@@ -1,0 +1,1 @@
+{"board":"default","query":"SELECT ?subject ?predicate ?object WHERE { ?subject ?predicate ?object }","limit":10}

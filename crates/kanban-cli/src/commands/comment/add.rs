@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use clap::{Args, ValueEnum};
-use kanban_contract::{CommentAuthorType, CommentKind, CreateCommentRequest};
+use kanban_protocol::{CommentAuthorType, CommentKind, CreateCommentRequest};
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -17,7 +17,7 @@ pub(crate) struct AddArgs {
     pub(crate) author_type: Option<CommentAuthorTypeArg>,
     #[arg(long)]
     pub(crate) agent_type: Option<String>,
-    /// JSON object stored as comment metadata.
+    /// 作为评论 metadata 存储的 JSON 对象。
     #[arg(long = "metadata-json")]
     pub(crate) metadata_json: Option<String>,
     #[arg(long)]
@@ -55,7 +55,7 @@ pub(crate) fn run(ctx: &CliContext, args: &AddArgs) -> Result<(), CliFailure> {
         },
     )?;
     if ctx.json {
-        output::print_json(&kanban_contract::CliCommentAddOutput::new(comment));
+        output::print_json(&kanban_protocol::CliCommentAddOutput::new(comment));
     } else {
         println!(
             "{} task={} created_at={} [{}] {} ({}): {}",
@@ -93,7 +93,7 @@ fn parse_metadata(
         .map(|metadata| {
             serde_json::from_str(metadata).map_err(|error| CliFailure {
                 code: "invalid_input",
-                message: format!("--metadata must be a JSON object: {error}"),
+                message: format!("--metadata 必须是 JSON 对象：{error}"),
                 exit_code: 2,
             })
         })

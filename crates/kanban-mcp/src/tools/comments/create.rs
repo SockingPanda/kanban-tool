@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use kanban_contract::{
+use kanban_protocol::{
     CommentAuthorType, CommentKind, CreateCommentRequest, CreateCommentResponse,
 };
 use rmcp::{
@@ -15,9 +15,9 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct CommentCreateArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
     body: String,
     kind: Option<CommentKind>,
@@ -32,7 +32,7 @@ struct CommentCreateArgs {
 impl KanbanMcp {
     #[tool(
         name = "comment_create",
-        description = "Create a note or decision comment through the canonical application service"
+        description = "通过 canonical application service 创建 note 或 decision comment"
     )]
     async fn comment_create(
         &self,

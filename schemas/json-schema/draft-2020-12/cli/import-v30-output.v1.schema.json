@@ -1,0 +1,86 @@
+{
+  "$defs": {
+    "LegacyImportReport": {
+      "additionalProperties": false,
+      "properties": {
+        "attachment_count": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "journal_id": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "resumed": {
+          "type": "boolean"
+        },
+        "schema_fingerprint": {
+          "type": "string"
+        },
+        "source_fingerprint": {
+          "type": "string"
+        },
+        "source_path": {
+          "type": "string"
+        },
+        "table_counts": {
+          "items": {
+            "$ref": "#/$defs/LegacyImportTableCount"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "journal_id",
+        "phase",
+        "source_path",
+        "source_fingerprint",
+        "schema_fingerprint",
+        "resumed",
+        "attachment_count",
+        "table_counts"
+      ],
+      "type": "object"
+    },
+    "LegacyImportTableCount": {
+      "additionalProperties": false,
+      "properties": {
+        "source_rows": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "table": {
+          "type": "string"
+        },
+        "target_rows": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "table",
+        "source_rows",
+        "target_rows"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:import-v30-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/LegacyImportReport"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI legacy SQLite v30 import output v1",
+  "type": "object"
+}

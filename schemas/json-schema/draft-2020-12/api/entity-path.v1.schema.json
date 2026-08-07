@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:entity-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "uri": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "uri"
+  ],
+  "title": "Kanban entity path v1",
+  "type": "object"
+}

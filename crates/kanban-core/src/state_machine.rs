@@ -1,3 +1,5 @@
+#![doc = include_str!("../docs/state_machine.md")]
+
 use crate::{KanbanError, Result, TaskStatus};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

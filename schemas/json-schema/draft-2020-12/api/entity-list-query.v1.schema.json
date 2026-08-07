@@ -1,0 +1,29 @@
+{
+  "$id": "urn:kanban-tool:schema:api:entity-list-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "kind": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "limit": {
+      "default": 100,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "title": "Kanban entity list query v1",
+  "type": "object"
+}

@@ -5,20 +5,17 @@ use std::{
 
 use clap::Args;
 
-use crate::{context::CliContext, error::CliFailure};
+use crate::{config, context::CliContext, error::CliFailure};
 
 #[derive(Debug, Args)]
 pub(crate) struct ServeArgs {
-    /// Canonical Turso database owned by this host.
-    #[arg(long, env = "KANBAN_DB")]
-    pub(crate) db: Option<PathBuf>,
-    /// Enable the in-process single-worker dispatcher with a strict TOML profile.
+    /// 使用严格 TOML profile 启用进程内单 worker dispatcher。
     #[arg(long)]
     pub(crate) dispatcher_profile: Option<PathBuf>,
-    /// Loopback address to listen on.
+    /// 要监听的 loopback 地址。
     #[arg(long, default_value_t = IpAddr::V4(Ipv4Addr::LOCALHOST))]
     pub(crate) host: IpAddr,
-    /// Local HTTP port.
+    /// 本地 HTTP 端口。
     #[arg(long, default_value_t = 8721)]
     pub(crate) port: u16,
 }
@@ -27,7 +24,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ServeArgs) -> Result<(), CliFai
     if !args.host.is_loopback() {
         return Err(CliFailure {
             code: "invalid_input",
-            message: "kanban serve only accepts a loopback --host".to_owned(),
+            message: "kanban serve 的 --host 只能是 loopback 地址".to_owned(),
             exit_code: 2,
         });
     }
@@ -42,7 +39,9 @@ pub(crate) async fn run(ctx: &CliContext, args: &ServeArgs) -> Result<(), CliFai
             )?),
             None => None,
         };
-    let db_path = args.db.clone().unwrap_or_else(default_db_path);
+    let db_path = config::resolve_db_path(ctx.db.as_deref())
+        .map_err(CliFailure::from)?
+        .value;
     let state = kanban_server::AppState::open_with_run_log_root(
         &db_path,
         ctx.actor(),
@@ -58,7 +57,7 @@ pub(crate) async fn run(ctx: &CliContext, args: &ServeArgs) -> Result<(), CliFai
     })?;
     let addr = SocketAddr::new(args.host, args.port);
     eprintln!(
-        "kanban serve listening on http://{addr}; database={}; dispatcher={}",
+        "kanban serve 正在监听 http://{addr}；数据库={}；dispatcher={}",
         db_path.display(),
         dispatcher
             .as_ref()
@@ -99,26 +98,10 @@ pub(crate) async fn run(ctx: &CliContext, args: &ServeArgs) -> Result<(), CliFai
     })
 }
 
-pub(crate) fn default_db_path() -> PathBuf {
-    dirs_next::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("kb")
-        .join("kanban.db")
-}
-
 #[cfg(test)]
 mod tests {
-    use super::default_db_path;
     use crate::{Cli, Command};
     use clap::Parser;
-
-    #[test]
-    fn default_database_uses_new_filename() {
-        assert_eq!(
-            default_db_path().file_name().and_then(|name| name.to_str()),
-            Some("kanban.db")
-        );
-    }
 
     #[test]
     fn serve_dispatcher_is_opt_in_by_profile_path() {

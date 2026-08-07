@@ -163,7 +163,7 @@ function MoreActionsMenu({
           const Icon = item.action.icon
           return (
             <div key={item.action.label}>
-              {index === 6 ? <DropdownMenuSeparator /> : null}
+              {index > 0 && item.action.danger && !items[index - 1]?.action.danger ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem
                 disabled={!item.enabled}
                 title={item.disabledReason ? t(item.disabledReason) : undefined}

@@ -1,0 +1,63 @@
+use kanban_core::{Clock, KanbanError, Result, new_event_id, running_claim_is_present};
+
+use crate::{KanbanService, TaskRecord};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubmitReviewTaskCommand {
+    pub task_id: String,
+    pub actor: String,
+    pub claim_token: Option<String>,
+    pub force: bool,
+    pub summary: Option<String>,
+}
+
+impl<C> KanbanService<C>
+where
+    C: Clock,
+{
+    pub async fn submit_review_task(&self, command: SubmitReviewTaskCommand) -> Result<TaskRecord> {
+        let task_id = command.task_id.trim();
+        if !task_id.starts_with("t_") || task_id.len() <= 2 {
+            return Err(KanbanError::InvalidInput(
+                "task_id must be a global t_... id".to_owned(),
+            ));
+        }
+        let actor = command.actor.trim();
+        if actor.is_empty() {
+            return Err(KanbanError::InvalidInput("actor is required".to_owned()));
+        }
+        let _mutation = self.mutation_gate.lock().await;
+        let task = self.get_task(task_id).await?;
+        if !running_claim_is_present(
+            task.status,
+            task.has_claim_token,
+            task.current_run_id.is_some(),
+        ) {
+            return Err(KanbanError::InvalidTransition(
+                "review requires an active running claim".to_owned(),
+            ));
+        }
+        if !command.force && task.claim_owner.as_deref() != Some(actor) {
+            return Err(KanbanError::InvalidTransition(
+                "claim owner mismatch".to_owned(),
+            ));
+        }
+
+        self.store
+            .submit_review_task(
+                task_id,
+                crate::store_operations::SubmitReviewTaskInput {
+                    expected_lock_version: task.lock_version,
+                    actor: actor.to_owned(),
+                    claim_token: command.claim_token,
+                    force: command.force,
+                    summary: command.summary,
+                    event_id: new_event_id(),
+                    now: self.clock.now_ms(),
+                },
+            )
+            .await
+            .map_err(crate::error::store_error)
+            .and_then(super::application_task)
+    }
+}

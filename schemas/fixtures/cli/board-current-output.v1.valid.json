@@ -1,1 +1,1 @@
-{"data":{"board":{"id":"b_fixture","slug":"fixture","name":"Fixture","description":null,"created_at":101,"updated_at":102,"archived_at":null}}}
+{"data":{"board":"fixture","config_path":"/fixture/.kb/config.toml","source":{"kind":"project_config","path":"/fixture/.kb/config.toml","key":"board"},"created":false,"updated":false}}

@@ -47,7 +47,7 @@
       ]
     },
     "idempotency_key": {
-      "description": "Entity-local retry key scoped to the selected board.",
+      "description": "作用域限定在所选看板上的 entity-local 重试 key。",
       "type": [
         "string",
         "null"
@@ -97,7 +97,7 @@
       ]
     },
     "task_id": {
-      "description": "Optional client-generated typed id. The host generates one when omitted.",
+      "description": "可选的 client 生成 typed ID；省略时由 host 生成。",
       "type": [
         "string",
         "null"

@@ -1,4 +1,4 @@
-use kanban_contract::{SubmitReviewTaskRequest, SubmitReviewTaskResponse};
+use kanban_protocol::{SubmitReviewTaskRequest, SubmitReviewTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
@@ -11,16 +11,16 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskReviewArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
-    /// Exact token returned by task_claim. May be omitted only with force.
+    /// task_claim 返回的 exact token。仅在 force 时可省略。
     claim_token: Option<String>,
-    /// Bypass caller credential checks without bypassing running-run consistency.
+    /// 绕过 caller credential checks，但不绕过 running-run consistency。
     #[serde(default)]
     force: bool,
-    /// Optional summary recorded on the task and completed run.
+    /// 可选 summary，会记录在 task 和 completed run 上。
     summary: Option<String>,
 }
 
@@ -28,7 +28,7 @@ struct TaskReviewArgs {
 impl KanbanMcp {
     #[tool(
         name = "task_review",
-        description = "Finish an active run and submit its task for review through the canonical application service"
+        description = "通过 canonical application service 结束 active run，并将其 task 提交 review"
     )]
     async fn task_review(
         &self,

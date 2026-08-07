@@ -52,6 +52,7 @@ export const queryKeys = {
   events: (board: string) => ["events", board] as const,
   stats: (board: string) => ["stats", board] as const,
   searchStatus: (board: string) => ["search-status", board] as const,
+  maintenanceStatus: (board: string) => ["maintenance-status", board] as const,
   boardTasksRoot: (board: string) => ["tasks", board] as const,
   boardTasks: (query: BoardTaskQuery) =>
     [
@@ -77,6 +78,7 @@ export const queryKeys = {
   taskRunLog: (runId: string) => ["task-run-log", runId] as const,
   taskEvents: (taskId: string) => ["task-events", taskId] as const,
   taskComments: (taskId: string) => ["task-comments", taskId] as const,
+  taskAttachments: (taskId: string) => ["task-attachments", taskId] as const,
   boardTaskMapRoot: (board: string) => ["board-task-map", board] as const,
   boardTaskMap: (board: string, options?: { includeDoneContext?: boolean; hideIsolated?: boolean }) =>
     [...queryKeys.boardTaskMapRoot(board), options ?? {}] as const,

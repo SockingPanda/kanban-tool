@@ -1,5 +1,41 @@
 {
   "$defs": {
+    "ApiExecutionPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/ApiExecutionPlanState"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "updated_by": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "board_id",
+        "task_id",
+        "state",
+        "reason",
+        "updated_by",
+        "updated_at"
+      ],
+      "type": "object"
+    },
     "ApiExecutionPlanState": {
       "enum": [
         "unplanned",
@@ -378,6 +414,29 @@
         "updated_at"
       ],
       "type": "object"
+    },
+    "ApiTaskSteps": {
+      "additionalProperties": false,
+      "properties": {
+        "execution_plan": {
+          "$ref": "#/$defs/ApiExecutionPlan"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/ApiTaskStep"
+          },
+          "type": "array"
+        },
+        "task_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "steps",
+        "execution_plan"
+      ],
+      "type": "object"
     }
   },
   "$id": "urn:kanban-tool:schema:cli:task-step-add-output:v1",
@@ -385,7 +444,7 @@
   "additionalProperties": false,
   "properties": {
     "data": {
-      "$ref": "#/$defs/ApiTaskStep"
+      "$ref": "#/$defs/ApiTaskSteps"
     }
   },
   "required": [

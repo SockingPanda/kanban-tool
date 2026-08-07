@@ -3,12 +3,14 @@ import { useQuery } from "@tanstack/react-query"
 import { Braces, CircleDashed, RefreshCcw, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useI18n } from "@/i18n"
 import type { KanbanApi, SignalRecord, SignalStatus } from "@/lib/api"
+import { presentApiError } from "@/lib/api/error-presentation"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
 
@@ -68,10 +70,11 @@ export function SignalsWorkbench({ api }: { api: KanbanApi | null }) {
     queryKey: selectedSignalId ? queryKeys.signal(selectedSignalId) : ["signal", "empty"],
     enabled: Boolean(api && selectedSignalId),
     queryFn: ({ signal }) => {
-      if (!api || !selectedSignalId) throw new Error("missing signal selection")
+      if (!api || !selectedSignalId) throw new Error(t("Missing signal selection"))
       return api.getSignal(selectedSignalId, { signal })
     },
   })
+  const queryError = signalsQuery.error ?? detailQuery.error
 
   function refresh() {
     void signalsQuery.refetch()
@@ -92,6 +95,12 @@ export function SignalsWorkbench({ api }: { api: KanbanApi | null }) {
           {t("Refresh")}
         </Button>
       </div>
+
+      {queryError ? (
+        <Alert className="border-destructive/50">
+          <AlertDescription className="text-destructive">{presentApiError(queryError, t)}</AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-2">
         <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
@@ -180,12 +189,12 @@ export function SignalList({
           onClick={() => onSelectSignal(signal.id)}
         >
           <div className="flex min-w-0 items-center gap-2">
-            <Badge variant={statusVariant(signal.status)}>{signal.status}</Badge>
+            <Badge variant={statusVariant(signal.status)}>{t(signal.status)}</Badge>
             <span className="truncate text-sm font-medium">{signal.title}</span>
           </div>
           <div className="line-clamp-2 text-xs text-muted-foreground">{signal.summary}</div>
           <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-            <span>{signal.kind}</span>
+            <span>{t(signal.kind)}</span>
             <span>{signal.observation.task_ref_snapshot ?? signal.observation.task_id ?? "-"}</span>
             <span>{timeLabel(signal.created_at)}</span>
           </div>
@@ -213,9 +222,9 @@ export function SignalDetail({ loading, signal }: { loading: boolean; signal: Si
   return (
     <div className="min-h-0 overflow-auto p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={statusVariant(signal.status)}>{signal.status}</Badge>
-        <Badge variant="secondary">{signal.severity}</Badge>
-        <Badge variant="secondary">{signal.kind}</Badge>
+        <Badge variant={statusVariant(signal.status)}>{t(signal.status)}</Badge>
+        <Badge variant="secondary">{t(signal.severity)}</Badge>
+        <Badge variant="secondary">{t(signal.kind)}</Badge>
       </div>
       <h2 className="mt-3 text-base font-semibold">{signal.title}</h2>
       <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{signal.summary}</p>

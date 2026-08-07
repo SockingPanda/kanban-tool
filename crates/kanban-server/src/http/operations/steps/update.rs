@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::patch,
 };
-use kanban_application::UpdateStepCommand;
-use kanban_contract::{UpdateStepPath, UpdateStepRequest, UpdateStepResponse};
-use kanban_core::KanbanError;
+use kanban_protocol::{UpdateStepPath, UpdateStepRequest, UpdateStepResponse};
+use kanban_service::KanbanError;
+use kanban_service::UpdateStepCommand;
 
 pub(crate) async fn update_step(
     State(state): State<AppState>,
@@ -18,7 +18,7 @@ pub(crate) async fn update_step(
     body: Result<Json<UpdateStepRequest>, JsonRejection>,
 ) -> Result<Json<UpdateStepResponse>, ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let steps = state
         .application()
@@ -40,7 +40,13 @@ pub(crate) async fn update_step(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/steps/:step_id", patch(update_step))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Patch,
+            "/api/v1/tasks/:task_id/steps/:step_id",
+        ),
+        patch(update_step),
+    )
 }
 #[cfg(test)]
 mod tests {}

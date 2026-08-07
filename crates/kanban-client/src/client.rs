@@ -35,6 +35,10 @@ impl KanbanClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kanban_protocol::{
+        ApiTask, ArchiveTaskRequest, ReclaimTaskRequest, ReopenTaskRequest, SpecifyTaskRequest,
+        UnblockTaskRequest, UpdateTaskRequest,
+    };
 
     #[test]
     fn accepts_only_loopback_base_urls() {
@@ -55,5 +59,21 @@ mod tests {
         ] {
             assert!(KanbanClient::new(value, "test").is_err(), "{value}");
         }
+    }
+
+    #[test]
+    fn task_lifecycle_methods_are_exposed_by_the_typed_client() {
+        let _ = KanbanClient::archive_task
+            as fn(&KanbanClient, &str, &ArchiveTaskRequest) -> Result<ApiTask, ClientError>;
+        let _ = KanbanClient::reclaim_task
+            as fn(&KanbanClient, &str, &ReclaimTaskRequest) -> Result<ApiTask, ClientError>;
+        let _ = KanbanClient::reopen_task
+            as fn(&KanbanClient, &str, &ReopenTaskRequest) -> Result<ApiTask, ClientError>;
+        let _ = KanbanClient::specify_task
+            as fn(&KanbanClient, &str, &SpecifyTaskRequest) -> Result<ApiTask, ClientError>;
+        let _ = KanbanClient::unblock_task
+            as fn(&KanbanClient, &str, &UnblockTaskRequest) -> Result<ApiTask, ClientError>;
+        let _ = KanbanClient::update_task
+            as fn(&KanbanClient, &str, &UpdateTaskRequest) -> Result<ApiTask, ClientError>;
     }
 }

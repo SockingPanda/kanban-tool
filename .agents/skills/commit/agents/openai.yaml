@@ -1,0 +1,4 @@
+interface:
+  display_name: "本地提交"
+  short_description: "仅在明确授权后创建 kanban-tool 本地提交"
+  default_prompt: "使用 $commit 准备一个已获授权的本地 Conventional Commit。"

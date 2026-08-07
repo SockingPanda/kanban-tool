@@ -6,11 +6,11 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
-serde.workspace = true
-strum.workspace = true
+serde = { workspace = true, features = ["derive"] }
+strum = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
-time.workspace = true
+time = { workspace = true, features = ["formatting", "parsing"] }
 ulid.workspace = true
 
 [dev-dependencies]
-proptest = { version = "1.11.0", default-features = false, features = ["std"] }
+proptest = { workspace = true, default-features = false, features = ["std"] }

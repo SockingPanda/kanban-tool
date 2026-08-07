@@ -1,4 +1,4 @@
-use kanban_contract::{ApiTaskSteps, CreateStepRequest, CreateStepResponse};
+use kanban_protocol::{ApiTaskSteps, CreateStepRequest, CreateStepResponse};
 
 use crate::{
     KanbanClient, error::ClientError, shared::prepare_create_step_request,
@@ -14,7 +14,7 @@ impl KanbanClient {
         let task_id = task_id.trim();
         if !task_id.starts_with("t_") || task_id.len() <= 2 {
             return Err(ClientError::InvalidInput(
-                "task selector must resolve to a global t_... id".to_owned(),
+                "任务选择器必须解析为全局 t_... ID".to_owned(),
             ));
         }
         let request = prepare_create_step_request(request.clone());

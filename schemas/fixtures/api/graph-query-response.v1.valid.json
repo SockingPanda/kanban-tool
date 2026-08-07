@@ -1,0 +1,1 @@
+{"data":[{"bindings":[{"name":"subject","value":"kb://task/t_fixture"},{"name":"predicate","value":"depends_on"},{"name":"object","value":"kb://task/t_dependency"}]}]}

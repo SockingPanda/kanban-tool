@@ -46,7 +46,7 @@
       "type": "string"
     },
     "idempotency_key": {
-      "description": "Entity-local retry key scoped to this task.",
+      "description": "作用域限定在此任务上的 entity-local 重试 key。",
       "type": [
         "string",
         "null"

@@ -1,6 +1,6 @@
 use crate::{error::ApiError, state::AppState};
 use axum::{Json, Router, extract::State, routing::get};
-use kanban_contract::{HealthReport, HealthResponse};
+use kanban_protocol::{HealthReport, HealthResponse};
 use std::time::UNIX_EPOCH;
 
 pub(crate) async fn health(
@@ -9,7 +9,7 @@ pub(crate) async fn health(
     state.application().health().await?;
     let metadata = tokio::fs::metadata(state.db_path())
         .await
-        .map_err(|error| kanban_core::KanbanError::Storage(error.to_string()))?;
+        .map_err(|error| kanban_service::KanbanError::Storage(error.to_string()))?;
     let modified_ms = metadata
         .modified()
         .ok()
@@ -26,7 +26,10 @@ pub(crate) async fn health(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/health", get(health))
+    Router::new().route(
+        crate::http::operations::registered_path(kanban_protocol::HttpMethod::Get, "/health"),
+        get(health),
+    )
 }
 
 #[cfg(test)]

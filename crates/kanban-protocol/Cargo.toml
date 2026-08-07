@@ -1,0 +1,33 @@
+[package]
+name = "kanban-protocol"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+autolib = false
+build = false
+
+[lib]
+name = "kanban_protocol"
+path = "src/lib.rs"
+
+[[test]]
+name = "foundation"
+path = "tests/foundation.rs"
+
+[[test]]
+name = "g0_metadata"
+path = "tests/g0_metadata.rs"
+
+[features]
+default = []
+schema = ["dep:schemars"]
+
+[dependencies]
+schemars = { workspace = true, default-features = false, features = ["std", "derive"], optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true

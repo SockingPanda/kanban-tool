@@ -1,0 +1,32 @@
+[package]
+name = "xtask"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+autolib = false
+build = false
+
+[lib]
+name = "xtask"
+path = "src/lib.rs"
+
+[dependencies]
+jsonschema = { workspace = true, default-features = false }
+kanban-protocol = { workspace = true, default-features = false, features = ["schema"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[[test]]
+name = "tooling"
+path = "tests/tooling.rs"

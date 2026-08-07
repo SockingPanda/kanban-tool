@@ -1,4 +1,4 @@
-use kanban_contract::{ReleaseTaskRequest, ReleaseTaskResponse};
+use kanban_protocol::{ReleaseTaskRequest, ReleaseTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
@@ -11,11 +11,11 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskReleaseArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
-    /// Exact token returned by task_claim.
+    /// task_claim 返回的 exact token。
     claim_token: String,
 }
 
@@ -23,7 +23,7 @@ struct TaskReleaseArgs {
 impl KanbanMcp {
     #[tool(
         name = "task_release",
-        description = "Return an actively claimed task to ready through the canonical application service"
+        description = "通过 canonical application service 将 active claim 的 task 返回 ready"
     )]
     async fn task_release(
         &self,

@@ -125,17 +125,16 @@ describe("boardTasksQueryOptions", () => {
 })
 
 describe("loadBoardTasks", () => {
-  it("loads each visible board status through listTasks when search is empty", async () => {
-    const listTasksByStatus = vi.fn()
+  it("loads visible board statuses through the canonical batch endpoint", async () => {
+    const listTasksByStatus = vi.fn(async () => ({
+      statuses: [
+        { status: "triage", tasks: [task("task-triage", "triage")], page: { limit: 50, offset: 0, total: 1 } },
+        { status: "blocked", tasks: [task("task-blocked", "blocked")], page: { limit: 50, offset: 0, total: 1 } },
+      ],
+    }))
     const searchTasksByStatus = vi.fn()
     const searchTasks = vi.fn()
-    const listTasks = vi.fn(async (options: { statuses?: TaskStatus[]; query?: string; limit?: number; offset?: number }) => {
-      const status = options.statuses?.[0] ?? "triage"
-      return {
-        tasks: [task(`task-${status}`, status)],
-        page: { limit: options.limit ?? 0, offset: options.offset ?? 0, total: 1 },
-      } satisfies TaskPageResult
-    })
+    const listTasks = vi.fn()
     const api = { board: "default", listTasks, listTasksByStatus, searchTasksByStatus, searchTasks } as unknown as KanbanApi
     const request = resolveBoardTaskRequest({
       mode: "board",
@@ -149,20 +148,14 @@ describe("loadBoardTasks", () => {
 
     const result = await loadBoardTasks(api, request)
 
-    expect(listTasks).toHaveBeenCalledTimes(2)
-    expect(listTasks).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    expect(listTasksByStatus).toHaveBeenCalledTimes(1)
+    expect(listTasksByStatus).toHaveBeenCalledWith(expect.objectContaining({
       query: "",
-      statuses: ["triage"],
+      statuses: ["triage", "blocked"],
       limit: 50,
       offset: 0,
     }))
-    expect(listTasks).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      query: "",
-      statuses: ["blocked"],
-      limit: 50,
-      offset: 0,
-    }))
-    expect(listTasksByStatus).not.toHaveBeenCalled()
+    expect(listTasks).not.toHaveBeenCalled()
     expect(searchTasksByStatus).not.toHaveBeenCalled()
     expect(searchTasks).not.toHaveBeenCalled()
     expect(result.tasks.map((entry) => entry.status)).toEqual(["triage", "blocked"])
@@ -170,17 +163,16 @@ describe("loadBoardTasks", () => {
     expect(result.searchMeta).toBeNull()
   })
 
-  it("loads each visible board status and query through listTasks when search is present", async () => {
-    const listTasksByStatus = vi.fn()
+  it("passes board search through the canonical batch endpoint", async () => {
+    const listTasksByStatus = vi.fn(async () => ({
+      statuses: [
+        { status: "triage", tasks: [task("search-triage", "triage")], page: { limit: 50, offset: 0, total: 1 } },
+        { status: "blocked", tasks: [task("search-blocked", "blocked")], page: { limit: 50, offset: 0, total: 1 } },
+      ],
+    }))
     const searchTasksByStatus = vi.fn()
     const searchTasks = vi.fn()
-    const listTasks = vi.fn(async (options: { statuses?: TaskStatus[]; query?: string; limit?: number; offset?: number }) => {
-      const status = options.statuses?.[0] ?? "triage"
-      return {
-        tasks: [task(`search-${status}`, status)],
-        page: { limit: options.limit ?? 0, offset: options.offset ?? 0, total: 1 },
-      } satisfies TaskPageResult
-    })
+    const listTasks = vi.fn()
     const api = { board: "default", listTasks, listTasksByStatus, searchTasksByStatus, searchTasks } as unknown as KanbanApi
     const request = resolveBoardTaskRequest({
       mode: "board",
@@ -194,20 +186,14 @@ describe("loadBoardTasks", () => {
 
     const result = await loadBoardTasks(api, request)
 
-    expect(listTasks).toHaveBeenCalledTimes(2)
-    expect(listTasks).toHaveBeenNthCalledWith(1, expect.objectContaining({
+    expect(listTasksByStatus).toHaveBeenCalledTimes(1)
+    expect(listTasksByStatus).toHaveBeenCalledWith(expect.objectContaining({
       query: "blocked parent",
-      statuses: ["triage"],
+      statuses: ["triage", "blocked"],
       limit: 50,
       offset: 0,
     }))
-    expect(listTasks).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      query: "blocked parent",
-      statuses: ["blocked"],
-      limit: 50,
-      offset: 0,
-    }))
-    expect(listTasksByStatus).not.toHaveBeenCalled()
+    expect(listTasks).not.toHaveBeenCalled()
     expect(searchTasksByStatus).not.toHaveBeenCalled()
     expect(searchTasks).not.toHaveBeenCalled()
     expect(result.tasks.map((entry) => entry.status)).toEqual(["triage", "blocked"])

@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse};
+use kanban_protocol::{MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

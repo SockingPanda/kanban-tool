@@ -20,17 +20,73 @@
       ],
       "type": "object"
     },
+    "ContextEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string"
+        },
+        "predicate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "relation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
     "ContextItem": {
       "additionalProperties": false,
       "properties": {
         "entity_uri": {
           "type": "string"
         },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/ContextEvidence"
+          },
+          "type": "array"
+        },
         "provenance": {
           "items": {
             "type": "string"
           },
           "type": "array"
+        },
+        "rank": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string"
         },
         "score": {
           "format": "double",
@@ -88,8 +144,23 @@
         "policy": {
           "$ref": "#/$defs/ContextPolicy"
         },
+        "providers": {
+          "items": {
+            "$ref": "#/$defs/ContextProviderStatus"
+          },
+          "type": "array"
+        },
         "subject": {
           "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "truncation_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -103,6 +174,20 @@
     "ContextPolicy": {
       "additionalProperties": false,
       "properties": {
+        "budget": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "depth": {
+          "default": 1,
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "graph_limit": {
           "format": "uint",
           "minimum": 0,
@@ -125,10 +210,41 @@
         }
       },
       "required": [
+        "depth",
         "lexical_limit",
         "graph_limit",
         "vector_limit",
         "max_items"
+      ],
+      "type": "object"
+    },
+    "ContextProviderStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "capability": {
+          "type": "string"
+        },
+        "degraded": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "provider",
+        "capability",
+        "available",
+        "degraded"
       ],
       "type": "object"
     }

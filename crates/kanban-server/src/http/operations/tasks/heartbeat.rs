@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::HeartbeatTaskCommand;
-use kanban_contract::{HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse};
-use kanban_core::KanbanError;
+use kanban_protocol::{HeartbeatTaskPath, HeartbeatTaskRequest, HeartbeatTaskResponse};
+use kanban_service::HeartbeatTaskCommand;
+use kanban_service::KanbanError;
 
 pub(crate) async fn heartbeat_task(
     State(state): State<AppState>,
@@ -18,7 +18,7 @@ pub(crate) async fn heartbeat_task(
     body: Result<Json<HeartbeatTaskRequest>, JsonRejection>,
 ) -> Result<Json<HeartbeatTaskResponse>, ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let task = state
         .application()
@@ -35,7 +35,10 @@ pub(crate) async fn heartbeat_task(
 
 pub(super) fn router() -> Router<AppState> {
     Router::new().route(
-        "/api/v1/tasks/:task_id/transitions/heartbeat",
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/transitions/heartbeat",
+        ),
         post(heartbeat_task),
     )
 }

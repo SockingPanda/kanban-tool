@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{GetRunPath, GetRunResponse};
+use kanban_protocol::{GetRunPath, GetRunResponse};
 
 pub(crate) async fn get_run(
     State(state): State<AppState>,
@@ -18,7 +18,13 @@ pub(crate) async fn get_run(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/runs/:run_id", get(get_run))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/runs/:run_id",
+        ),
+        get(get_run),
+    )
 }
 
 #[cfg(test)]

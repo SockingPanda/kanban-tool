@@ -1,4 +1,4 @@
-use kanban_contract::GetRunResponse;
+use kanban_protocol::GetRunResponse;
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
@@ -18,7 +18,7 @@ struct RunShowArgs {
 impl KanbanMcp {
     #[tool(
         name = "run_show",
-        description = "Show one execution record through the canonical kanban application service"
+        description = "通过 canonical kanban application service 查看一条执行记录"
     )]
     async fn run_show(
         &self,

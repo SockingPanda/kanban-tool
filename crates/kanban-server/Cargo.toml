@@ -6,20 +6,32 @@ license.workspace = true
 authors.workspace = true
 autotests = false
 
+[features]
+default = []
+legacy-sqlite-import = ["kanban-service/legacy-sqlite-import"]
+
 [dependencies]
 axum.workspace = true
-kanban-application.workspace = true
-kanban-contract.workspace = true
-kanban-core.workspace = true
-kanban-store-turso.workspace = true
-serde.workspace = true
+kanban-service.workspace = true
+kanban-protocol = { workspace = true, default-features = false }
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = [
+    "fs",
+    "io-util",
+    "macros",
+    "net",
+    "process",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
 toml.workspace = true
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { workspace = true, features = ["cors", "trace"] }
 tracing.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true
+kanban-service = { workspace = true, features = ["test-support"] }
 tempfile.workspace = true
-tower.workspace = true
+tower = { workspace = true, features = ["util"] }

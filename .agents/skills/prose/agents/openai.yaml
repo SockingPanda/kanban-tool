@@ -1,0 +1,4 @@
+interface:
+  display_name: "项目文案"
+  short_description: "编写当前且可验证的中文 owner 指南和文案"
+  default_prompt: "使用 $prose 起草描述当前事实的简体中文 README、指南、ADR、错误或示例。"

@@ -107,7 +107,7 @@ export function boardTasksQueryOptions({ api, enabled = true, ...input }: UseBoa
       offset: request.offset,
     }),
     queryFn: async ({ signal }: { signal?: AbortSignal }) => {
-      if (!api) throw new Error("API client is not ready")
+      if (!api) throw new Error("API 客户端尚未就绪")
       return loadBoardTasks(api, request, signal)
     },
     placeholderData: keepPreviousData,
@@ -118,25 +118,21 @@ export async function loadBoardTasks(api: KanbanApi, request: BoardTaskRequest, 
   if (request.mode === "board") {
     if (request.statuses.length === 0) return emptyBoardWindow()
 
-    const results = await Promise.all(
-      request.statuses.map((status) =>
-        api.listTasks({
-          includeArchived: request.showArchived,
-          statuses: [status],
-          priorities: request.priorityFilters,
-          planFilters: request.planFilters,
-          query: request.search,
-          sort: request.sort,
-          limit: request.limit,
-          offset: 0,
-          signal,
-        }),
-      ),
-    )
+    const result = await api.listTasksByStatus({
+      includeArchived: request.showArchived,
+      statuses: request.statuses,
+      priorities: request.priorityFilters,
+      planFilters: request.planFilters,
+      query: request.search,
+      sort: request.sort,
+      limit: request.limit,
+      offset: 0,
+      signal,
+    })
 
     return {
-      tasks: results.flatMap((result) => result.tasks),
-      page: aggregateStatusPages(results.map((result) => result.page)),
+      tasks: result.statuses.flatMap((window) => window.tasks),
+      page: aggregateStatusPages(result.statuses.map((window) => window.page)),
       searchMeta: null,
     } satisfies BoardTasksData
   }

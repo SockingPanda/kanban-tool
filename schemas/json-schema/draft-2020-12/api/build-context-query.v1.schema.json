@@ -7,6 +7,21 @@
       "default": "default",
       "type": "string"
     },
+    "budget": {
+      "description": "条目总预算。`max_items` 仍作为 v1 别名接受。",
+      "format": "uint",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "depth": {
+      "default": 1,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
     "graph_limit": {
       "default": 10,
       "format": "uint",
@@ -24,6 +39,27 @@
       "format": "uint",
       "minimum": 0,
       "type": "integer"
+    },
+    "query": {
+      "description": "用于词法/向量主体解析的自由文本查询。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reference": {
+      "description": "看板内任务引用，例如 `kanban-tool#12`。",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "task": {
+      "description": "可选的全局任务 ID。省略时由 `reference` 或 `query` 选择上下文主体。",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "vector_limit": {
       "default": 5,

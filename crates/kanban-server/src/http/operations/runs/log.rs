@@ -4,10 +4,16 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{ApiRunLog, GetRunLogPath, GetRunLogResponse};
+use kanban_protocol::{ApiRunLog, GetRunLogPath, GetRunLogResponse};
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/runs/:run_id/log", get(get_run_log))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/runs/:run_id/log",
+        ),
+        get(get_run_log),
+    )
 }
 
 pub(crate) async fn get_run_log(
@@ -29,12 +35,12 @@ mod tests {
     use std::{collections::BTreeMap, fs};
 
     use crate::http::operations::test_support::*;
-    use kanban_application::{
+    use kanban_protocol::{ApiErrorCode, ErrorEnvelope, GetRunLogResponse};
+    use kanban_service::TaskStatus;
+    use kanban_service::{
         ClaimTaskCommand, CreateTaskCommand, MarkExecutionPlanNotRequiredCommand,
         PromoteTaskCommand,
     };
-    use kanban_contract::{ApiErrorCode, ErrorEnvelope, GetRunLogResponse};
-    use kanban_core::TaskStatus;
 
     #[tokio::test]
     async fn run_log_route_uses_the_application_and_returns_contract_shape() {
@@ -64,6 +70,8 @@ mod tests {
                 due_at: None,
                 max_retries: None,
                 metadata: BTreeMap::new(),
+                labels: Vec::new(),
+                depends_on: Vec::new(),
                 actor: "test".to_owned(),
             })
             .await

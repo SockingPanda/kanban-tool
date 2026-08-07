@@ -25,7 +25,7 @@
               "type": "null"
             }
           ],
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`."
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。"
         },
         "candidate_atom_polarity": {
           "anyOf": [
@@ -36,24 +36,24 @@
               "type": "null"
             }
           ],
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`."
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。"
         },
         "candidate_content_hash": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
           ]
         },
         "candidate_text": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
           ]
         },
         "closed_at": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "format": "int64",
           "type": [
             "integer",
@@ -61,7 +61,7 @@
           ]
         },
         "confidence": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "format": "double",
           "type": [
             "number",
@@ -92,14 +92,14 @@
           "$ref": "#/$defs/OntologyProposedAction"
         },
         "proposed_label_name": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
           ]
         },
         "proposed_label_name_normalized": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
@@ -113,7 +113,7 @@
           "type": "array"
         },
         "reviewed_at": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "format": "int64",
           "type": [
             "integer",
@@ -127,14 +127,14 @@
           "$ref": "#/$defs/SignalStatus"
         },
         "status_reason": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
           ]
         },
         "suggest_rank": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "format": "int64",
           "type": [
             "integer",
@@ -142,7 +142,7 @@
           ]
         },
         "suggest_score": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "format": "double",
           "type": [
             "number",
@@ -158,24 +158,24 @@
               "type": "null"
             }
           ],
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`."
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。"
         },
         "superseded_by_signal_id": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
           ]
         },
         "target_label_id": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"
           ]
         },
         "target_label_name_snapshot": {
-          "description": "A key that is mandatory on the wire while its value may explicitly be JSON `null`.",
+          "description": "wire 上必须存在的 key，但其值可以明确为 JSON `null`。",
           "type": [
             "string",
             "null"

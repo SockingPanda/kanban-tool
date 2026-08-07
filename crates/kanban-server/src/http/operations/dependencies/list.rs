@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{ListDependenciesPath, ListDependenciesResponse};
+use kanban_protocol::{ListDependenciesPath, ListDependenciesResponse};
 
 pub(crate) async fn list_dependencies(
     State(state): State<AppState>,
@@ -19,7 +19,10 @@ pub(crate) async fn list_dependencies(
 
 pub(super) fn router() -> Router<AppState> {
     Router::new().route(
-        "/api/v1/tasks/:task_id/dependencies",
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/tasks/:task_id/dependencies",
+        ),
         get(list_dependencies),
     )
 }

@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 mod shared;
 mod tools;
 
@@ -15,11 +17,21 @@ impl KanbanMcp {
         Self::board_tools()
             + Self::task_tools()
             + Self::comment_tools()
+            + Self::context_tools()
+            + Self::attachment_tools()
             + Self::dependency_tools()
+            + Self::entity_tools()
             + Self::event_tools()
+            + Self::label_tools()
+            + Self::graph_tools()
             + Self::run_tools()
+            + Self::search_tools()
+            + Self::signal_tools()
             + Self::step_tools()
             + Self::lifecycle_tools()
+            + Self::ontology_tools()
+            + Self::stats_tools()
+            + Self::vector_tools()
     }
 }
 
@@ -33,6 +45,9 @@ async fn main() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::KanbanMcp;
+    use kanban_protocol::{
+        McpOperationClass, operation_catalog, project_mcp_policy, validate_mcp_policy_projection,
+    };
 
     #[test]
     fn tool_inventory_is_stable() {
@@ -42,34 +57,55 @@ mod tests {
             .map(|tool| tool.name.to_string())
             .collect();
 
-        assert_eq!(
-            names,
-            vec![
-                "board_list",
-                "comment_create",
-                "comment_list",
-                "dependency_create",
-                "dependency_list",
-                "dependency_remove",
-                "event_list",
-                "run_list",
-                "run_log",
-                "run_show",
-                "step_create",
-                "step_list",
-                "step_update",
-                "task_block",
-                "task_claim",
-                "task_create",
-                "task_done",
-                "task_heartbeat",
-                "task_list",
-                "task_plan_not_required",
-                "task_promote",
-                "task_release",
-                "task_review",
-                "task_show",
-            ]
-        );
+        let projection = project_mcp_policy(operation_catalog()).expect("MCP policy projection");
+        let mut catalog_names: Vec<_> = projection
+            .tool_bindings()
+            .iter()
+            .map(|binding| binding.tool_name)
+            .collect();
+        catalog_names.sort_unstable();
+        assert_eq!(names, catalog_names);
+        validate_mcp_policy_projection(&projection)
+            .expect("MCP projection 只能绑定已存在的领域 endpoint");
+        assert_eq!(catalog_names.len(), 105);
+    }
+
+    #[test]
+    fn host_admin_operations_are_not_exposed_by_catalog_or_router() {
+        let projection = project_mcp_policy(operation_catalog()).expect("MCP policy projection");
+        let bound_operations = projection
+            .tool_bindings()
+            .iter()
+            .filter(|binding| binding.class == McpOperationClass::Domain)
+            .flat_map(|binding| binding.http_operations.iter().copied())
+            .collect::<std::collections::BTreeSet<_>>();
+        for operation_id in projection.operations(McpOperationClass::HostAdmin) {
+            assert!(
+                !bound_operations.contains(operation_id),
+                "MCP catalog 意外绑定了 host-admin operation：{operation_id}"
+            );
+        }
+
+        let names: Vec<_> = KanbanMcp::tool_router()
+            .list_all()
+            .into_iter()
+            .map(|tool| tool.name.to_string())
+            .collect();
+        for forbidden in [
+            "backup",
+            "checkpoint",
+            "doctor",
+            "export",
+            "import",
+            "maintenance",
+            "migration",
+            "vacuum",
+            "database_replace",
+        ] {
+            assert!(
+                names.iter().all(|name| !name.contains(forbidden)),
+                "MCP 意外暴露了 host-admin tool：{forbidden}"
+            );
+        }
     }
 }

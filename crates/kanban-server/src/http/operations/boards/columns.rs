@@ -4,7 +4,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{ApiBoardColumn, ListBoardColumnsResponse};
+use kanban_protocol::{ApiBoardColumn, ListBoardColumnsResponse};
 
 pub(crate) async fn list_board_columns(
     State(state): State<AppState>,
@@ -19,15 +19,15 @@ pub(crate) async fn list_board_columns(
             id: column.id,
             board_id: column.board_id,
             status: match column.status {
-                kanban_core::TaskStatus::Triage => kanban_contract::ApiTaskStatus::Triage,
-                kanban_core::TaskStatus::Todo => kanban_contract::ApiTaskStatus::Todo,
-                kanban_core::TaskStatus::Scheduled => kanban_contract::ApiTaskStatus::Scheduled,
-                kanban_core::TaskStatus::Ready => kanban_contract::ApiTaskStatus::Ready,
-                kanban_core::TaskStatus::Running => kanban_contract::ApiTaskStatus::Running,
-                kanban_core::TaskStatus::Blocked => kanban_contract::ApiTaskStatus::Blocked,
-                kanban_core::TaskStatus::Review => kanban_contract::ApiTaskStatus::Review,
-                kanban_core::TaskStatus::Done => kanban_contract::ApiTaskStatus::Done,
-                kanban_core::TaskStatus::Archived => kanban_contract::ApiTaskStatus::Archived,
+                kanban_service::TaskStatus::Triage => kanban_protocol::ApiTaskStatus::Triage,
+                kanban_service::TaskStatus::Todo => kanban_protocol::ApiTaskStatus::Todo,
+                kanban_service::TaskStatus::Scheduled => kanban_protocol::ApiTaskStatus::Scheduled,
+                kanban_service::TaskStatus::Ready => kanban_protocol::ApiTaskStatus::Ready,
+                kanban_service::TaskStatus::Running => kanban_protocol::ApiTaskStatus::Running,
+                kanban_service::TaskStatus::Blocked => kanban_protocol::ApiTaskStatus::Blocked,
+                kanban_service::TaskStatus::Review => kanban_protocol::ApiTaskStatus::Review,
+                kanban_service::TaskStatus::Done => kanban_protocol::ApiTaskStatus::Done,
+                kanban_service::TaskStatus::Archived => kanban_protocol::ApiTaskStatus::Archived,
             },
             title: column.title,
             position: column.position,
@@ -41,7 +41,13 @@ pub(crate) async fn list_board_columns(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/boards/:board/columns", get(list_board_columns))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/boards/:board/columns",
+        ),
+        get(list_board_columns),
+    )
 }
 
 #[cfg(test)]

@@ -1,0 +1,16 @@
+{
+  "data": {
+    "archived_at": null,
+    "board_id": "b_BOARD",
+    "content_hash": null,
+    "created_at": 100,
+    "kind": "task",
+    "source_id": "t_FIXTURE",
+    "source_table": "tasks",
+    "summary": null,
+    "task_id": "t_FIXTURE",
+    "title": "entity fixture",
+    "updated_at": 100,
+    "uri": "kb://task/t_FIXTURE"
+  }
+}

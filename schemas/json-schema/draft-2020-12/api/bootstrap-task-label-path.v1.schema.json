@@ -10,6 +10,6 @@
   "required": [
     "task_id"
   ],
-  "title": "Bootstrap Task Label Path v1",
+  "title": "Kanban bootstrap task label path v1",
   "type": "object"
 }

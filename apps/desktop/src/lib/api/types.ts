@@ -88,6 +88,37 @@ export type LabelRecord = {
   updated_at: number
 }
 
+/** 规范附件元数据；字节内容只能通过下载操作获取。 */
+export type Attachment = {
+  id: string
+  board_id: string
+  task_id: string
+  filename: string
+  rel_path: string
+  content_type: string | null
+  size_bytes: number
+  sha256: string | null
+  created_by: string
+  created_at: number
+}
+
+export type CreateAttachmentInput = {
+  id?: string
+  filename: string
+  content: number[]
+  content_type?: string | null
+  rel_path?: string | null
+  sha256?: string | null
+  actor?: string | null
+}
+
+export type DownloadedAttachment = {
+  content_type: string | null
+  attachment_id: string | null
+  sha256: string | null
+  content: Uint8Array
+}
+
 export type LabelSuggestionEvidenceAtom = {
   atom_id: string
   label_id: string
@@ -479,6 +510,104 @@ export type BlockedReason = {
   count: number
 }
 
+export type BackupReport = {
+  out_path: string
+  checksum_sha256: string
+  bytes: number
+  source_fingerprint: string
+}
+
+export type ExportReport = {
+  out_path: string
+  checksum_sha256: string
+  bytes: number
+  record_count: number
+  source_fingerprint: string
+}
+
+export type ImportReport = {
+  in_path: string
+  source_fingerprint: string
+  imported_records: number
+  skipped_records: number
+  rebuild_jobs_enqueued: number
+  journal_id: string
+}
+
+export type VacuumReport = {
+  ok: boolean
+  before_bytes: number
+  after_bytes: number
+  source_fingerprint: string
+}
+
+export type MaintenanceOwnerStatus = {
+  owner: string | null
+  mode: string | null
+  lease_expires_at: number | null
+  fence_epoch: number
+  build_identity: string | null
+  last_heartbeat_at: number | null
+  active: boolean
+}
+
+export type ProjectionStoreStatus = {
+  store_name: string
+  active_generation: string | null
+  active_fingerprint: string | null
+  previous_generation: string | null
+  building_generation: string | null
+  lifecycle_status: string
+  fence_epoch: number
+  last_event_id: number
+  dirty: boolean
+  pending: number
+  running: number
+  failed: number
+  last_error: string | null
+  phase: string
+  degraded: boolean
+  errors: string[]
+  updated_at: number
+}
+
+export type MaintenanceStatusReport = {
+  database_instance_id: string
+  protocol_version: number
+  owner: MaintenanceOwnerStatus
+  stores: ProjectionStoreStatus[]
+}
+
+export type MaintenanceRunReport = {
+  database_instance_id: string
+  protocol_version: number
+  owner: string
+  mode: string
+  action: string
+  processed: number
+  phase: string
+  degraded: boolean
+  errors: string[]
+  stores: ProjectionStoreStatus[]
+}
+
+export type LegacyImportTableCount = {
+  table: string
+  source_rows: number
+  target_rows: number
+}
+
+export type LegacyImportReport = {
+  journal_id: string
+  phase: string
+  source_path: string
+  source_fingerprint: string
+  schema_fingerprint: string
+  resumed: boolean
+  attachment_count: number
+  table_counts: LegacyImportTableCount[]
+}
+
 export type DoctorDerivedStore = {
   store_name: string
   schema_version: number
@@ -854,3 +983,71 @@ export type LabelOntologyActionCreateInput = {
 }
 
 export type PageEnvelopeMeta = Partial<PageMeta>
+
+export type ContextBuildOptions = RequestOptions & {
+  board?: string
+  task?: string
+  reference?: string
+  query?: string
+  depth?: number
+  lexicalLimit?: number
+  graphLimit?: number
+  vectorLimit?: number
+  maxItems?: number
+  budget?: number
+}
+
+export type ContextEvidence = {
+  kind: string
+  entity_uri?: string
+  task_id?: string
+  relation_id?: string
+  predicate?: string
+  summary?: string
+}
+
+export type ContextItem = {
+  entity_uri: string
+  source: string
+  provenance: string[]
+  score: number | null
+  title: string | null
+  snippet: string | null
+  rank?: number
+  reason?: string
+  evidence?: ContextEvidence[]
+}
+
+export type ContextPolicy = {
+  depth: number
+  lexical_limit: number
+  graph_limit: number
+  vector_limit: number
+  max_items: number
+  budget?: number
+}
+
+export type ContextDiagnostic = {
+  source: string
+  code: string
+  message: string
+}
+
+export type ContextProviderStatus = {
+  provider: string
+  capability: string
+  available: boolean
+  degraded: boolean
+  reason?: string
+}
+
+export type ContextPack = {
+  subject: string
+  policy: ContextPolicy
+  items: ContextItem[]
+  degraded: string[]
+  diagnostics?: ContextDiagnostic[]
+  providers?: ContextProviderStatus[]
+  truncated?: boolean
+  truncation_reason?: string
+}

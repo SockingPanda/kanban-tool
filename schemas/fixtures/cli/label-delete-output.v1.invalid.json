@@ -1,17 +1,17 @@
 {
   "data": {
-    "forced": false,
     "label": {
+      "id": "l_FIXTURE_1",
       "board_id": "b_FIXTURE_1",
+      "name": "backend",
       "color": "blue",
       "created_at": 100,
-      "id": "l_FIXTURE_1",
-      "name": "backend",
       "updated_at": 100
     },
-    "removed_atoms": 0,
+    "forced": true,
+    "removed_task_bindings": 1,
     "removed_semantics": false,
-    "removed_task_bindings": 0
+    "removed_atoms": 0
   },
   "unexpected": true
 }

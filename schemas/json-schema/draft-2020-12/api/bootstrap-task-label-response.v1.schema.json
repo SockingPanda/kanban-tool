@@ -288,11 +288,58 @@
         },
         "task": {
           "$ref": "#/$defs/ApiTask"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BootstrapTaskLabelVerification"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "task",
         "semantics"
+      ],
+      "type": "object"
+    },
+    "BootstrapTaskLabelVerification": {
+      "additionalProperties": false,
+      "properties": {
+        "degraded": {
+          "type": "boolean"
+        },
+        "diagnostics": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "label_name": {
+          "type": "string"
+        },
+        "min_score": {
+          "format": "float",
+          "type": "number"
+        },
+        "score": {
+          "format": "float",
+          "type": "number"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "label_name",
+        "score",
+        "source",
+        "min_score",
+        "degraded",
+        "diagnostics"
       ],
       "type": "object"
     },
@@ -439,6 +486,6 @@
   "required": [
     "data"
   ],
-  "title": "Bootstrap task label response v1",
+  "title": "Kanban bootstrap task label response v1",
   "type": "object"
 }

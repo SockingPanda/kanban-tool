@@ -168,7 +168,7 @@ export const DecisionComment = memo(function DecisionComment({ comment }: { comm
     return (
       <Alert className="mt-2 border-destructive/50 bg-destructive/5">
         <AlertTitle className="text-destructive">{t("Invalid decision metadata")}</AlertTitle>
-        <AlertDescription className="text-destructive">{decision.error}</AlertDescription>
+        <AlertDescription className="text-destructive">{t(decision.error)}</AlertDescription>
       </Alert>
     )
   }
@@ -266,13 +266,14 @@ type SignalLinkMetadata = {
 }
 
 function SignalLinkComment({ comment }: { comment: CommentRecord }) {
+  const { t } = useI18n()
   const metadata = parseSignalLinkMetadata(comment.metadata)
   if (!metadata) return null
   return (
     <div className="mt-2 grid gap-1 rounded-md border border-border bg-muted/30 p-2 text-xs">
-      <DecisionField label="signal" value={metadata.signal_id} />
-      <DecisionField label="kind" value={metadata.signal_kind} />
-      <DecisionField label="status" value={metadata.signal_status} />
+      <DecisionField label={t("signal")} value={metadata.signal_id} />
+      <DecisionField label={t("kind")} value={metadata.signal_kind} />
+      <DecisionField label={t("status")} value={t(metadata.signal_status)} />
     </div>
   )
 }

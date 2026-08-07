@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{CompleteTaskRequest, CompleteTaskResponse};
+use kanban_protocol::{CompleteTaskRequest, CompleteTaskResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -41,7 +41,7 @@ pub(crate) fn run(
 mod tests {
     use crate::{Cli, Command};
     use clap::Parser;
-    use kanban_contract::CompleteTaskResponse;
+    use kanban_protocol::CompleteTaskResponse;
 
     #[test]
     fn parses_task_done_and_complete_commands() {
@@ -71,19 +71,7 @@ mod tests {
     fn task_done_output_contract() {
         let fixture =
             include_str!("../../../../../schemas/fixtures/cli/task-done-output.v1.valid.json");
-        let output: kanban_contract::CliTaskDoneOutput = serde_json::from_str(fixture).unwrap();
-        assert_eq!(output.data.status.as_str(), "done");
-        assert_eq!(
-            serde_json::to_value(CompleteTaskResponse::new(output.data.clone())).unwrap(),
-            serde_json::from_str::<serde_json::Value>(fixture).unwrap()
-        );
-    }
-
-    #[test]
-    fn task_complete_output_contract() {
-        let fixture =
-            include_str!("../../../../../schemas/fixtures/cli/task-complete-output.v1.valid.json");
-        let output: kanban_contract::CliTaskCompleteOutput = serde_json::from_str(fixture).unwrap();
+        let output: kanban_protocol::CliTaskDoneOutput = serde_json::from_str(fixture).unwrap();
         assert_eq!(output.data.status.as_str(), "done");
         assert_eq!(
             serde_json::to_value(CompleteTaskResponse::new(output.data.clone())).unwrap(),

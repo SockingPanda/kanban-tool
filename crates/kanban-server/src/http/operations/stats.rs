@@ -4,18 +4,18 @@ use axum::{
     extract::{Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_contract::{
+use kanban_protocol::{
     ApiTaskStatus, BlockedReasonCount, BoardQuery, DataEnvelope, QueueStats, StaleClaim,
     StatsResponse, StatusCount,
 };
-use kanban_core::{KanbanError, TaskStatus};
+use kanban_service::{KanbanError, TaskStatus};
 
 pub(crate) async fn stats(
     State(state): State<AppState>,
     query: Result<Query<BoardQuery>, QueryRejection>,
 ) -> Result<Json<StatsResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let value = state.application().get_stats(&query.board).await?;
     Ok(Json(DataEnvelope::new(QueueStats {
         board_id: value.board_id,
@@ -72,7 +72,10 @@ fn api_task_status(status: TaskStatus) -> ApiTaskStatus {
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/stats", get(stats))
+    Router::new().route(
+        crate::http::operations::registered_path(kanban_protocol::HttpMethod::Get, "/api/v1/stats"),
+        get(stats),
+    )
 }
 
 #[cfg(test)]

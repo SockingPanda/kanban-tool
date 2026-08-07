@@ -1,4 +1,4 @@
-use kanban_contract::{CompleteTaskRequest, CompleteTaskResponse};
+use kanban_protocol::{CompleteTaskRequest, CompleteTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
@@ -11,18 +11,18 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskDoneArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
-    /// Exact token returned by task_claim when completing from running.
+    /// 从 running 阶段完成时由 task_claim 返回的 exact token。
     claim_token: Option<String>,
-    /// Bypass running caller credentials without bypassing required-step guards.
+    /// 绕过 running caller credentials，但不绕过 required-step guards。
     #[serde(default)]
     force: bool,
-    /// Optional summary stored on the task and active run.
+    /// 可选 summary，会存储在 task 和 active run 上。
     summary: Option<String>,
-    /// Optional opaque JSON result stored on the task and completion event.
+    /// 可选的不透明 JSON result，会存储在 task 和 completion event 上。
     result: Option<serde_json::Value>,
 }
 
@@ -30,7 +30,7 @@ struct TaskDoneArgs {
 impl KanbanMcp {
     #[tool(
         name = "task_done",
-        description = "Complete a running or reviewed task through the canonical application service"
+        description = "通过 canonical application service 完成 running 或 reviewed task"
     )]
     async fn task_done(
         &self,

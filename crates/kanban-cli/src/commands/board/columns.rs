@@ -1,5 +1,5 @@
 use clap::Args;
-use kanban_contract::ListBoardColumnsResponse;
+use kanban_protocol::ListBoardColumnsResponse;
 
 use crate::{context::CliContext, error::CliFailure, output};
 

@@ -7,9 +7,9 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
-use kanban_application::CreateStepCommand;
-use kanban_contract::{CreateStepPath, CreateStepRequest, CreateStepResponse};
-use kanban_core::KanbanError;
+use kanban_protocol::{CreateStepPath, CreateStepRequest, CreateStepResponse};
+use kanban_service::CreateStepCommand;
+use kanban_service::KanbanError;
 
 pub(crate) async fn create_step(
     State(state): State<AppState>,
@@ -18,7 +18,7 @@ pub(crate) async fn create_step(
     body: Result<Json<CreateStepRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<CreateStepResponse>), ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let steps = state
         .application()
@@ -42,7 +42,13 @@ pub(crate) async fn create_step(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/steps", post(create_step))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/steps",
+        ),
+        post(create_step),
+    )
 }
 #[cfg(test)]
 mod tests {
@@ -145,7 +151,7 @@ mod tests {
             .unwrap();
         assert_eq!(updated.status(), StatusCode::OK);
         let updated_body = updated.into_body().collect().await.unwrap().to_bytes();
-        let updated: kanban_contract::UpdateStepResponse =
+        let updated: kanban_protocol::UpdateStepResponse =
             serde_json::from_slice(&updated_body).unwrap();
         assert_eq!(updated.data.steps[0].title, "updated step");
         assert_eq!(updated.data.steps[0].body.as_deref(), Some("step body"));

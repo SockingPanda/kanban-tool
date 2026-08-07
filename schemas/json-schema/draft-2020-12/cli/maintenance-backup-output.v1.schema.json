@@ -1,0 +1,43 @@
+{
+  "$defs": {
+    "BackupReport": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "checksum_sha256": {
+          "type": "string"
+        },
+        "out_path": {
+          "type": "string"
+        },
+        "source_fingerprint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "out_path",
+        "checksum_sha256",
+        "bytes",
+        "source_fingerprint"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:maintenance-backup-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/BackupReport"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI maintenance backup output v1",
+  "type": "object"
+}

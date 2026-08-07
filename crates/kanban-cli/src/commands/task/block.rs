@@ -2,7 +2,7 @@ use std::{io::Read, path::PathBuf};
 
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{BlockTaskRequest, BlockTaskResponse};
+use kanban_protocol::{BlockTaskRequest, BlockTaskResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 
@@ -63,7 +63,7 @@ pub(crate) fn block_reason(args: &BlockArgs) -> Result<String, CliFailure> {
         (None, Some(path)) => {
             let file = std::fs::File::open(path).map_err(|error| CliFailure {
                 code: "invalid_input",
-                message: format!("failed to read --reason-file {}: {error}", path.display()),
+                message: format!("读取 --reason-file {} 失败：{error}", path.display()),
                 exit_code: 2,
             })?;
             read_limited_text(file, &format!("--reason-file {}", path.display()))?
@@ -71,7 +71,7 @@ pub(crate) fn block_reason(args: &BlockArgs) -> Result<String, CliFailure> {
         _ => {
             return Err(CliFailure {
                 code: "invalid_input",
-                message: "block requires exactly one reason or --reason-file".to_owned(),
+                message: "必须且只能提供一个阻塞原因或 --reason-file".to_owned(),
                 exit_code: 2,
             });
         }
@@ -80,7 +80,7 @@ pub(crate) fn block_reason(args: &BlockArgs) -> Result<String, CliFailure> {
     if reason.is_empty() {
         return Err(CliFailure {
             code: "invalid_input",
-            message: "block reason is required".to_owned(),
+            message: "必须提供阻塞原因".to_owned(),
             exit_code: 2,
         });
     }
@@ -94,19 +94,19 @@ fn read_limited_text(reader: impl Read, label: &str) -> Result<String, CliFailur
         .read_to_end(&mut bytes)
         .map_err(|error| CliFailure {
             code: "invalid_input",
-            message: format!("failed to read {label}: {error}"),
+            message: format!("读取 {label} 失败：{error}"),
             exit_code: 2,
         })?;
     if bytes.len() > MAX_TEXT_INPUT_BYTES {
         return Err(CliFailure {
             code: "invalid_input",
-            message: format!("{label} exceeds the 1 MiB input limit"),
+            message: format!("{label} 超过 1 MiB 输入限制"),
             exit_code: 2,
         });
     }
     String::from_utf8(bytes).map_err(|error| CliFailure {
         code: "invalid_input",
-        message: format!("{label} must be UTF-8: {error}"),
+        message: format!("{label} 必须是 UTF-8：{error}"),
         exit_code: 2,
     })
 }
@@ -116,7 +116,7 @@ mod tests {
     use super::{MAX_TEXT_INPUT_BYTES, block_reason, read_limited_text};
     use crate::{Cli, Command};
     use clap::Parser;
-    use kanban_contract::BlockTaskResponse;
+    use kanban_protocol::BlockTaskResponse;
 
     #[test]
     fn parses_task_block_command() {
@@ -163,7 +163,7 @@ mod tests {
     fn task_block_output_contract() {
         let fixture =
             include_str!("../../../../../schemas/fixtures/cli/task-block-output.v1.valid.json");
-        let output: kanban_contract::CliTaskBlockOutput = serde_json::from_str(fixture).unwrap();
+        let output: kanban_protocol::CliTaskBlockOutput = serde_json::from_str(fixture).unwrap();
         assert_eq!(output.data.status.as_str(), "blocked");
         assert_eq!(
             serde_json::to_value(BlockTaskResponse::new(output.data.clone())).unwrap(),

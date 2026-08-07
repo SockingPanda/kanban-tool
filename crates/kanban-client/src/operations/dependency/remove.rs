@@ -1,4 +1,4 @@
-use kanban_contract::{ApiDependencies, RemoveDependencyResponse};
+use kanban_protocol::{ApiDependencies, RemoveDependencyResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 
@@ -12,12 +12,12 @@ impl KanbanClient {
         let parent_task_id = parent_task_id.trim();
         if !child_task_id.starts_with("t_") || child_task_id.len() <= 2 {
             return Err(ClientError::InvalidInput(
-                "task selector must resolve to a global t_... id".to_owned(),
+                "任务选择器必须解析为全局 t_... ID".to_owned(),
             ));
         }
         if !parent_task_id.starts_with("t_") || parent_task_id.len() <= 2 {
             return Err(ClientError::InvalidInput(
-                "task selector must resolve to a global t_... id".to_owned(),
+                "任务选择器必须解析为全局 t_... ID".to_owned(),
             ));
         }
         let response: RemoveDependencyResponse = self.delete(&format!(

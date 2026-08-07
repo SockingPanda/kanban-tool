@@ -1,0 +1,16 @@
+{
+  "data": {
+    "label": {
+      "id": "l_fixture",
+      "board_id": "fixture",
+      "name": "fixture",
+      "color": null,
+      "created_at": 1,
+      "updated_at": 2
+    },
+    "forced": true,
+    "removed_task_bindings": 1,
+    "removed_semantics": false,
+    "removed_atoms": 0
+  }
+}

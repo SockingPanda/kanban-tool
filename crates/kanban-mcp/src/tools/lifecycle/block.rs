@@ -1,4 +1,4 @@
-use kanban_contract::{BlockTaskRequest, BlockTaskResponse};
+use kanban_protocol::{BlockTaskRequest, BlockTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
@@ -11,15 +11,15 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskBlockArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
-    /// Required reason recorded on the task, failed run, and event.
+    /// 必填 reason，会记录在 task、failed run 和 event 上。
     reason: String,
-    /// Exact token returned by task_claim when blocking from running.
+    /// 从 running 阶段阻塞时由 task_claim 返回的 exact token。
     claim_token: Option<String>,
-    /// Bypass running caller credentials without bypassing task/run consistency.
+    /// 绕过 running caller credentials，但不绕过 task/run consistency。
     #[serde(default)]
     force: bool,
 }
@@ -28,7 +28,7 @@ struct TaskBlockArgs {
 impl KanbanMcp {
     #[tool(
         name = "task_block",
-        description = "Block an active task through the canonical application service"
+        description = "通过 canonical application service 阻塞 active task"
     )]
     async fn task_block(
         &self,

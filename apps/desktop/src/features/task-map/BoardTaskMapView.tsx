@@ -11,6 +11,7 @@ import { useI18n } from "@/i18n"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { BoardTaskMap, KanbanApi, Task, TaskGraphNode as ApiTaskGraphNode } from "@/lib/api"
+import { presentApiError } from "@/lib/api/error-presentation"
 import { cn } from "@/lib/utils"
 
 import { apiTaskGraphToCanvasGraph } from "./task-graph-adapter"
@@ -157,7 +158,7 @@ export function BoardTaskMapView({
             <Alert className="border-destructive/50 bg-destructive/5">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>{t("Map failed")}</AlertTitle>
-              <AlertDescription>{errorMessage(mapQuery.error)}</AlertDescription>
+              <AlertDescription>{presentApiError(mapQuery.error, t)}</AlertDescription>
             </Alert>
           ) : null}
           {sourceGraph?.meta.truncated ? (
@@ -296,7 +297,7 @@ function MapInspector({
             <MetricStrip
               className="grid-cols-2 text-sm"
               items={[
-                { id: "plan", label: t("Plan"), value: task.execution_plan_state },
+                { id: "plan", label: t("Plan"), value: t(task.execution_plan_state) },
                 { id: "required-open", label: t("Required open"), value: String(incompleteRequiredSteps(task)) },
                 { id: "parents", label: t("Parents"), value: String(counts.parents) },
                 { id: "children", label: t("Children"), value: String(counts.children) },
@@ -355,10 +356,6 @@ function TaskMapSkeleton({ label, className }: { label: string; className?: stri
 
 function incompleteRequiredSteps(task: Task) {
   return Math.max(0, task.required_step_count - task.completed_required_step_count)
-}
-
-function errorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err)
 }
 
 export const __test = { buildRelationCountIndex, clampMapZoom, filterBoardMap, resolveBoardMapSelectedNode, stepMapZoom }

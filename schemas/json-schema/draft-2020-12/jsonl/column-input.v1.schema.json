@@ -68,7 +68,7 @@
       "type": "string"
     },
     "RequiredNullableSchema": {
-      "description": "Schema-only marker for a key that must be present but may contain JSON null.\n\nA bare `Option<T>` is considered omittable by schemars, while\n`#[schemars(required)]` deliberately removes its null branch. This\ntransparent non-Option wrapper preserves both halves of the wire contract.",
+      "description": "仅供 schema 使用的标记，表示 key 必须存在但可以包含 JSON null。\n\nschemars 会把裸 `Option<T>` 视为可省略，而 `#[schemars(required)]` 会有意移除\nnull 分支。这个透明的非 Option wrapper 保留 wire contract 的两部分。",
       "format": "int64",
       "type": [
         "integer",

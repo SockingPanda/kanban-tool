@@ -90,12 +90,12 @@ main() {
 
   if ! command -v just >/dev/null 2>&1 || [[ "$(just --version)" != "just $JUST_VERSION" ]]; then
     log "Installing just $JUST_VERSION"
-    cargo install just --version "$JUST_VERSION" --locked --force
+    "$ROOT/scripts/cargo-build-lock.sh" -- cargo install just --version "$JUST_VERSION" --locked --force
   fi
 
   if [[ "${CODEX_CLOUD_INSTALL_NEXTEST:-1}" == "1" ]] && ! command -v cargo-nextest >/dev/null 2>&1; then
     log "Installing cargo-nextest"
-    cargo install cargo-nextest --locked
+    "$ROOT/scripts/cargo-build-lock.sh" -- cargo install cargo-nextest --locked
   fi
 
   if command -v corepack >/dev/null 2>&1; then
@@ -110,7 +110,7 @@ main() {
   log "Refreshing Rust dependency cache"
   (
     cd "$ROOT"
-    cargo fetch --locked
+    "$ROOT/scripts/cargo-build-lock.sh" -- cargo fetch --locked
   )
 
   log "Codex Cloud maintenance complete"

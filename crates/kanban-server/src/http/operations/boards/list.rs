@@ -1,10 +1,11 @@
+use super::api_board;
 use crate::{error::ApiError, state::AppState};
 use axum::{
     Json, Router,
     extract::{Query, State},
     routing::get,
 };
-use kanban_contract::{ApiBoard, ListBoardsQuery, ListBoardsResponse};
+use kanban_protocol::{ListBoardsQuery, ListBoardsResponse};
 
 pub(crate) async fn list_boards(
     State(state): State<AppState>,
@@ -15,21 +16,19 @@ pub(crate) async fn list_boards(
         .list_boards(query.include_archived)
         .await?
         .into_iter()
-        .map(|board| ApiBoard {
-            id: board.id,
-            slug: board.slug,
-            name: board.name,
-            description: board.description,
-            created_at: board.created_at,
-            updated_at: board.updated_at,
-            archived_at: board.archived_at,
-        })
+        .map(api_board)
         .collect();
     Ok(Json(ListBoardsResponse { data }))
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/boards", get(list_boards))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/boards",
+        ),
+        get(list_boards),
+    )
 }
 
 #[cfg(test)]

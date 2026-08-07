@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     routing::get,
 };
-use kanban_contract::{ListRunsPath, ListRunsResponse};
+use kanban_protocol::{ListRunsPath, ListRunsResponse};
 
 pub(crate) async fn list_runs(
     State(state): State<AppState>,
@@ -20,13 +20,19 @@ pub(crate) async fn list_runs(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/runs", get(list_runs))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/tasks/:task_id/runs",
+        ),
+        get(list_runs),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use crate::http::operations::test_support::*;
-    use kanban_application::ClaimTaskCommand;
+    use kanban_service::ClaimTaskCommand;
 
     #[tokio::test]
     async fn run_list_uses_application_path_and_preserves_run_contract() {

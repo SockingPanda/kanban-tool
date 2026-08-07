@@ -4,12 +4,12 @@ use axum::{
     extract::{Query, State, rejection::QueryRejection},
     routing::get,
 };
-use kanban_application::{EventListOptions as ApplicationEventListOptions, EventRecord};
-use kanban_contract::{
+use kanban_protocol::{
     ListEventsQuery, ListEventsResponse, NextAfterMeta, StreamEventData,
     event_payload::EventPayload,
 };
-use kanban_core::KanbanError;
+use kanban_service::KanbanError;
+use kanban_service::{EventListOptions as ApplicationEventListOptions, EventRecord};
 use serde_json::Value;
 
 pub(crate) async fn list_events(
@@ -17,7 +17,7 @@ pub(crate) async fn list_events(
     query: Result<Query<ListEventsQuery>, QueryRejection>,
 ) -> Result<Json<ListEventsResponse>, ApiError> {
     let Query(query) =
-        query.map_err(|error| KanbanError::InvalidInput(format!("invalid query: {error}")))?;
+        query.map_err(|error| KanbanError::InvalidInput(format!("query 无效：{error}")))?;
     let page = state
         .application()
         .list_events(
@@ -42,17 +42,17 @@ pub(crate) async fn list_events(
     )))
 }
 
-fn api_event(event: EventRecord) -> Result<StreamEventData, ApiError> {
+pub(crate) fn api_event(event: EventRecord) -> Result<StreamEventData, ApiError> {
     let payload_value: Value = serde_json::from_str(&event.payload_json).map_err(|error| {
         KanbanError::Storage(format!(
-            "stored event payload is invalid JSON for {}: {error}",
+            "存储的 event payload 对 {} 不是有效 JSON：{error}",
             event.event_id
         ))
     })?;
     let payload =
         EventPayload::from_kind_and_value(&event.kind, payload_value).map_err(|error| {
             KanbanError::Storage(format!(
-                "stored event payload is invalid for {}: {error}",
+                "存储的 event payload 对 {} 无效：{error}",
                 event.kind
             ))
         })?;
@@ -70,14 +70,20 @@ fn api_event(event: EventRecord) -> Result<StreamEventData, ApiError> {
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/events", get(list_events))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Get,
+            "/api/v1/events",
+        ),
+        get(list_events),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::http::operations::test_support::*;
-    use kanban_contract::{ApiErrorCode, ErrorEnvelope, event_payload::TaskStatus};
+    use kanban_protocol::{ApiErrorCode, ErrorEnvelope, event_payload::TaskStatus};
 
     #[tokio::test]
     async fn list_events_returns_typed_task_event_and_cursor() {

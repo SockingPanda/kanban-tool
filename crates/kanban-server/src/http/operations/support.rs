@@ -1,12 +1,12 @@
 use crate::error::ApiError;
 use axum::http::HeaderMap;
-use kanban_application::{RunRecord, RunStatus};
-use kanban_contract::{ApiRun, ApiRunStatus};
-use kanban_core::KanbanError;
+use kanban_protocol::{ApiRun, ApiRunStatus};
+use kanban_service::KanbanError;
+use kanban_service::{RunRecord, RunStatus};
 
 pub(crate) fn api_run(run: RunRecord) -> Result<ApiRun, ApiError> {
     let metadata = serde_json::from_str(&run.metadata_json).map_err(|error| {
-        KanbanError::Storage(format!("stored run metadata is invalid JSON: {error}"))
+        KanbanError::Storage(format!("存储的 run metadata 不是有效 JSON：{error}"))
     })?;
     Ok(ApiRun {
         id: run.id,
@@ -42,7 +42,7 @@ pub(super) fn request_actor(
             .get("x-kb-actor")
             .map(|value| {
                 value.to_str().map_err(|_| {
-                    KanbanError::InvalidInput("x-kb-actor must contain valid text".to_owned())
+                    KanbanError::InvalidInput("x-kb-actor 必须包含有效文本".to_owned())
                 })
             })
             .transpose()?
@@ -50,7 +50,7 @@ pub(super) fn request_actor(
     };
     let actor = actor.trim();
     if actor.is_empty() {
-        return Err(KanbanError::InvalidInput("actor is required".to_owned()).into());
+        return Err(KanbanError::InvalidInput("必须提供 actor".to_owned()).into());
     }
     Ok(actor.to_owned())
 }

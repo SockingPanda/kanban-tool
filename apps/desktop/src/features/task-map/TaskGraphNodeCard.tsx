@@ -48,7 +48,7 @@ export function TaskGraphNodeCard({ node, selected, onSelectTask, onOpenTask, cl
       <span className="relative z-10 flex min-h-0 flex-1 flex-col">
         <span className="flex min-w-0 items-center justify-between gap-2">
           <span className="truncate text-xs font-medium text-muted-foreground">{node.ref}</span>
-          <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px]">{node.status}</Badge>
+          <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[10px]">{t(node.status)}</Badge>
         </span>
         <span className="mt-1 flex min-w-0 items-start gap-1.5">
           <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />

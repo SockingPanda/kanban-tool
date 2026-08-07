@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:record-signal-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "board"
+  ],
+  "title": "Record Signal Path v1",
+  "type": "object"
+}

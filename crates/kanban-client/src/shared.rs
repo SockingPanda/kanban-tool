@@ -1,4 +1,8 @@
-use kanban_contract::{CreateCommentRequest, CreateStepRequest, CreateTaskRequest, ListTasksQuery};
+use kanban_protocol::{
+    ApiTaskPriority, ApiTaskStatus, CreateCommentRequest, CreateStepRequest, CreateTaskRequest,
+    ListTasksByStatusQuery, ListTasksQuery, SearchTasksQuery, TaskReadLabel, TaskReadPlanFilter,
+    TaskReadSort,
+};
 
 pub(crate) fn prepare_create_request(mut request: CreateTaskRequest) -> CreateTaskRequest {
     let task_id = request.task_id.get_or_insert_with(kanban_core::new_task_id);
@@ -26,44 +30,137 @@ pub(crate) fn prepare_create_step_request(mut request: CreateStepRequest) -> Cre
 }
 
 pub(crate) fn list_tasks_path(board: &str, query: &ListTasksQuery) -> String {
+    task_read_path(TaskReadPath {
+        route: "/api/v1/boards/{board}/tasks",
+        board,
+        statuses: &query.status,
+        priorities: &query.priority,
+        labels: &query.label,
+        plan_filters: &query.plan_filter,
+        assignee: query.assignee.as_deref(),
+        search: query.q.as_deref(),
+        include_archived: query.include_archived,
+        limit: query.limit,
+        offset: query.offset,
+        sort: &query.sort,
+    })
+}
+
+pub(crate) fn list_tasks_by_status_path(board: &str, query: &ListTasksByStatusQuery) -> String {
+    task_read_path(TaskReadPath {
+        route: "/api/v1/boards/{board}/tasks/by-status",
+        board,
+        statuses: &query.status,
+        priorities: &query.priority,
+        labels: &query.label,
+        plan_filters: &query.plan_filter,
+        assignee: query.assignee.as_deref(),
+        search: query.q.as_deref(),
+        include_archived: query.include_archived,
+        limit: query.limit,
+        offset: query.offset,
+        sort: &query.sort,
+    })
+}
+
+struct TaskReadPath<'a> {
+    route: &'a str,
+    board: &'a str,
+    statuses: &'a [ApiTaskStatus],
+    priorities: &'a [ApiTaskPriority],
+    labels: &'a [TaskReadLabel],
+    plan_filters: &'a [TaskReadPlanFilter],
+    assignee: Option<&'a str>,
+    search: Option<&'a str>,
+    include_archived: bool,
+    limit: usize,
+    offset: usize,
+    sort: &'a TaskReadSort,
+}
+
+fn task_read_path(input: TaskReadPath<'_>) -> String {
+    let TaskReadPath {
+        route,
+        board,
+        statuses,
+        priorities,
+        labels,
+        plan_filters,
+        assignee,
+        search,
+        include_archived,
+        limit,
+        offset,
+        sort,
+    } = input;
     let mut pairs = Vec::new();
-    for status in &query.status {
+    for status in statuses {
         pairs.push(("status", status.as_str().to_owned()));
     }
-    for priority in &query.priority {
+    for priority in priorities {
         pairs.push(("priority", priority.get().to_string()));
     }
-    for label in &query.label {
+    for label in labels {
         pairs.push(("label", label.as_str().to_owned()));
     }
-    for filter in &query.plan_filter {
+    for filter in plan_filters {
         pairs.push(("plan_filter", filter.as_str().to_owned()));
     }
-    if let Some(assignee) = query.assignee.as_deref() {
+    if let Some(assignee) = assignee {
         pairs.push(("assignee", assignee.to_owned()));
     }
-    if let Some(search) = query.q.as_deref() {
+    if let Some(search) = search {
         pairs.push(("q", search.to_owned()));
     }
-    pairs.push(("include_archived", query.include_archived.to_string()));
-    pairs.push(("limit", query.limit.to_string()));
-    pairs.push(("offset", query.offset.to_string()));
-    pairs.push(("sort", query.sort.as_str().to_owned()));
+    pairs.push(("include_archived", include_archived.to_string()));
+    pairs.push(("limit", limit.to_string()));
+    pairs.push(("offset", offset.to_string()));
+    pairs.push(("sort", sort.as_str().to_owned()));
     let query = pairs
         .into_iter()
         .map(|(key, value)| format!("{key}={}", crate::transport::encode_path_segment(&value)))
         .collect::<Vec<_>>()
         .join("&");
     format!(
-        "/api/v1/boards/{}/tasks?{query}",
-        crate::transport::encode_path_segment(board)
+        "{}?{query}",
+        route.replace("{board}", &crate::transport::encode_path_segment(board)),
     )
+}
+
+pub(crate) fn search_tasks_path(query: &SearchTasksQuery, by_status: bool) -> String {
+    let mut pairs = vec![("board", query.board.clone())];
+    if let Some(value) = query.q.as_deref() {
+        pairs.push(("q", value.to_owned()));
+    }
+    for status in &query.status {
+        pairs.push(("status", status.as_str().to_owned()));
+    }
+    for label in &query.label {
+        pairs.push(("label", label.clone()));
+    }
+    if let Some(value) = query.assignee.as_deref() {
+        pairs.push(("assignee", value.to_owned()));
+    }
+    pairs.push(("include_archived", query.include_archived.to_string()));
+    pairs.push(("limit", query.limit.to_string()));
+    pairs.push(("offset", query.offset.to_string()));
+    let query = pairs
+        .into_iter()
+        .map(|(key, value)| format!("{key}={}", crate::transport::encode_path_segment(&value)))
+        .collect::<Vec<_>>()
+        .join("&");
+    let route = if by_status {
+        "/api/v1/search/tasks/by-status"
+    } else {
+        "/api/v1/search/tasks"
+    };
+    format!("{route}?{query}")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kanban_contract::{ApiTaskPriority, ApiTaskStatus, TaskReadSort};
+    use kanban_protocol::{ApiTaskPriority, ApiTaskStatus, TaskReadSort};
 
     #[test]
     fn create_request_gets_stable_entity_local_identifiers() {
@@ -93,7 +190,7 @@ mod tests {
 
     #[test]
     fn comment_request_gets_unique_entity_local_idempotency_keys() {
-        let request = kanban_contract::CreateCommentRequest {
+        let request = kanban_protocol::CreateCommentRequest {
             idempotency_key: None,
             author: None,
             body: " handoff ".into(),
@@ -114,7 +211,7 @@ mod tests {
     #[test]
     fn comment_request_preserves_explicit_entity_local_idempotency_key() {
         let request = prepare_create_comment_request(
-            kanban_contract::CreateCommentRequest {
+            kanban_protocol::CreateCommentRequest {
                 idempotency_key: Some("comment.retry:fixed".into()),
                 author: None,
                 body: "handoff".into(),
@@ -148,6 +245,44 @@ mod tests {
         assert_eq!(
             list_tasks_path("team/one", &query),
             "/api/v1/boards/team%2Fone/tasks?status=ready&status=blocked&priority=0&priority=2&q=a%20%26%20b&include_archived=false&limit=25&offset=50&sort=-updated_at"
+        );
+    }
+
+    #[test]
+    fn list_tasks_by_status_query_uses_the_canonical_route_and_filters() {
+        let query = ListTasksByStatusQuery {
+            status: vec![ApiTaskStatus::Ready, ApiTaskStatus::Blocked],
+            q: Some("a & b".into()),
+            limit: 25,
+            offset: 50,
+            sort: TaskReadSort::UpdatedAtDesc,
+            ..ListTasksByStatusQuery::default()
+        };
+        assert_eq!(
+            list_tasks_by_status_path("team/one", &query),
+            "/api/v1/boards/team%2Fone/tasks/by-status?status=ready&status=blocked&q=a%20%26%20b&include_archived=false&limit=25&offset=50&sort=-updated_at"
+        );
+    }
+
+    #[test]
+    fn search_query_path_preserves_repeated_filters_and_escaping() {
+        let query = SearchTasksQuery {
+            board: "team/one".into(),
+            q: Some("a & b".into()),
+            status: vec![ApiTaskStatus::Ready, ApiTaskStatus::Blocked],
+            label: vec!["needs review".into(), "ops".into()],
+            include_archived: true,
+            limit: 25,
+            offset: 50,
+            assignee: Some("a/b".into()),
+        };
+        assert_eq!(
+            search_tasks_path(&query, false),
+            "/api/v1/search/tasks?board=team%2Fone&q=a%20%26%20b&status=ready&status=blocked&label=needs%20review&label=ops&assignee=a%2Fb&include_archived=true&limit=25&offset=50"
+        );
+        assert_eq!(
+            search_tasks_path(&query, true),
+            "/api/v1/search/tasks/by-status?board=team%2Fone&q=a%20%26%20b&status=ready&status=blocked&label=needs%20review&label=ops&assignee=a%2Fb&include_archived=true&limit=25&offset=50"
         );
     }
 }

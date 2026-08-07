@@ -1,0 +1,32 @@
+[package]
+name = "kanban-service"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+legacy-sqlite-import = ["dep:rusqlite"]
+# 仅供 host adoption 测试使用；与 legacy importer 分离，不改变默认运行时。
+test-support = ["dep:rusqlite"]
+
+[dependencies]
+kanban-core.workspace = true
+sha2.workspace = true
+rusqlite = { workspace = true, optional = true, features = ["bundled"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+ulid.workspace = true
+turso = { workspace = true, default-features = false, features = ["fts"] }
+tokio = { workspace = true, features = [
+    "fs",
+    "io-util",
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+
+[dev-dependencies]
+tempfile.workspace = true

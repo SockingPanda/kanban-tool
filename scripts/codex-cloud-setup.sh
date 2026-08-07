@@ -119,6 +119,7 @@ install_system_packages() {
     curl
     dpkg-dev
     file
+    jq
     libayatana-appindicator3-dev
     libgtk-3-dev
     libprotobuf-dev
@@ -128,6 +129,7 @@ install_system_packages() {
     patchelf
     pkg-config
     protobuf-compiler
+    sqlite3
     wget
   )
 
@@ -165,7 +167,7 @@ install_cargo_tool() {
   fi
 
   log "Installing $crate"
-  cargo install "$crate" --locked
+  "$ROOT/scripts/cargo-build-lock.sh" -- cargo install "$crate" --locked
 }
 
 install_rust_tools() {
@@ -173,7 +175,7 @@ install_rust_tools() {
     log "just $JUST_VERSION already installed"
   else
     log "Installing just $JUST_VERSION"
-    cargo install just --version "$JUST_VERSION" --locked --force
+    "$ROOT/scripts/cargo-build-lock.sh" -- cargo install just --version "$JUST_VERSION" --locked --force
   fi
 
   if [[ "${CODEX_CLOUD_INSTALL_NEXTEST:-1}" == "1" ]]; then
@@ -213,7 +215,7 @@ prewarm_rust_dependencies() {
   log "Fetching Rust dependencies"
   (
     cd "$ROOT"
-    cargo fetch --locked
+    "$ROOT/scripts/cargo-build-lock.sh" -- cargo fetch --locked
   )
 }
 

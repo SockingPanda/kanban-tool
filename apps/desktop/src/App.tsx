@@ -50,7 +50,7 @@ function App() {
 
   const runtimeState = useRuntimeConfigState(locale)
   const { api, config, error, setConfig, setError } = runtimeState
-  const reportError = useCallback((err: unknown) => setError(errorMessage(err)), [setError])
+  const reportError = useCallback((err: unknown) => setError(errorMessage(err, locale)), [locale, setError])
 
   useEventPoller({
     api,
@@ -329,7 +329,7 @@ function App() {
     () => ({
       api,
       boards: boardsQuery.data ?? [],
-      boardsError: boardsQuery.error ? errorMessage(boardsQuery.error) : null,
+      boardsError: boardsQuery.error ? errorMessage(boardsQuery.error, locale) : null,
       boardsLoading: boardsQuery.isLoading,
       config,
       error,
@@ -408,7 +408,7 @@ function App() {
       editDraft: draftState?.draft ?? null,
       labelSuggestions: labelSuggestionsQuery.data ?? null,
       labelSuggestionsError: labelSuggestionsQuery.error
-        ? errorMessage(labelSuggestionsQuery.error)
+        ? errorMessage(labelSuggestionsQuery.error, locale)
         : null,
       labelSuggestionsLoading: labelSuggestionsQuery.isFetching,
       labelSuggestionsRequested,

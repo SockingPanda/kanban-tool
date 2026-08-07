@@ -1,4 +1,4 @@
-use kanban_contract::{ClaimTaskRequest, ClaimTaskResponse};
+use kanban_protocol::{ClaimTaskRequest, ClaimTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
@@ -11,16 +11,16 @@ use crate::shared::{KanbanMcp, call_client};
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskClaimArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
-    /// Claim lease duration in milliseconds.
+    /// claim lease 时长，单位为毫秒。
     #[serde(default = "default_claim_ttl_ms")]
     ttl_ms: i64,
-    /// Worker configuration recorded on the run. Defaults to manual.
+    /// 记录在 run 上的 worker configuration。默认值为 manual。
     worker_profile: Option<String>,
-    /// JSON metadata recorded on the run and claimed event.
+    /// 记录在 run 和 claimed event 上的 JSON metadata。
     metadata: Option<serde_json::Value>,
 }
 
@@ -32,7 +32,7 @@ const fn default_claim_ttl_ms() -> i64 {
 impl KanbanMcp {
     #[tool(
         name = "task_claim",
-        description = "Atomically claim a ready task and create its run through the canonical application service"
+        description = "通过 canonical application service 原子 claim ready task 并创建其 run"
     )]
     async fn task_claim(
         &self,

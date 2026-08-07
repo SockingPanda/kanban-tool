@@ -8,6 +8,10 @@ COMMAND=()
 NEXTEST_RUN=0
 LOCK_FD=9
 
+# Bash 后台 job 可能继承父 shell 的 ignored SIGINT；先恢复默认 disposition，
+# 之后的 wrapper trap 才能把 INT/TERM/HUP 转发到 setsid 建立的 child group。
+trap - INT TERM HUP
+
 usage() {
   cat <<'USAGE'
 Usage:
@@ -155,7 +159,7 @@ target_root() {
 
 lock_proof_is_valid() {
   local expected_lock="$1" expected_target="$2"
-  local lock_fd expected_identity inherited_identity metadata status
+  local lock_fd status
 
   [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]] || return 1
   [[ "${CARGO_TARGET_DIR:-}" == "$expected_target" ]] || return 1
@@ -164,17 +168,11 @@ lock_proof_is_valid() {
   [[ "$lock_fd" =~ ^[3-9][0-9]*$ ]] || return 1
   [[ -e "/proc/self/fd/$lock_fd" ]] || return 1
 
-  [[ -f "$expected_lock" && ! -L "$expected_lock" ]] || return 1
-  metadata="$(/usr/bin/stat -Lc '%d:%i:%h:%F' -- "$expected_lock" 2>/dev/null)" || return 1
-  [[ "$metadata" == *":1:regular "* ]] || return 1
-  expected_identity="${metadata%:*:*}"
-  inherited_identity="$(/usr/bin/stat -Lc '%d:%i:%h:%F' -- "/proc/self/fd/$lock_fd" 2>/dev/null)" || return 1
-  [[ "$inherited_identity" == "$expected_identity:1:regular "* ]] || return 1
+  lock_identity_is_valid "$expected_lock" "$lock_fd" || return 1
 
-  # `flock -n <fd>` operates on the inherited open file description.  It is
-  # successful for the lock owner and atomically acquires the same canonical
-  # lock if a caller supplied an otherwise-unlocked descriptor; either way the
-  # proof leaves this process holding the exclusive lock for its lifetime.
+  # `flock -n <fd>` 作用于继承的 open file description。锁持有者会成功；
+  # 如果调用方提供了尚未加锁的 descriptor，它也会原子地获取同一个 canonical
+  # lock；无论哪种情况，该 proof 都会让本进程在整个生命周期持有 exclusive lock。
   if [[ "${KANBAN_CARGO_BUILD_LOCK_TEST_PAUSE_BEFORE_FLOCK:-0}" == "1" ]]; then
     local pause_marker="${KANBAN_CARGO_BUILD_LOCK_TEST_PAUSE_MARKER:-}"
     local pause_continue="${KANBAN_CARGO_BUILD_LOCK_TEST_CONTINUE:-}"
@@ -188,14 +186,38 @@ lock_proof_is_valid() {
   status=$?
   [[ "$status" -eq 0 ]] || return "$status"
 
-  # Re-check the absolute path without following it: a symlink to the
-  # original inode must not be accepted after the descriptor was flocked.
-  [[ -f "$expected_lock" && ! -L "$expected_lock" ]] || return 1
-  metadata="$(/usr/bin/stat -c '%d:%i:%h:%F' -- "$expected_lock" 2>/dev/null)" || return 1
-  [[ "$metadata" == *":1:regular "* ]] || return 1
-  [[ "${metadata%:*:*}" == "$expected_identity" ]] || return 1
-  inherited_identity="$(/usr/bin/stat -Lc '%d:%i:%h:%F' -- "/proc/self/fd/$lock_fd" 2>/dev/null)" || return 1
-  [[ "$inherited_identity" == "$expected_identity:1:regular "* ]] || return 1
+  # 不跟随 symlink 重新检查绝对路径：descriptor 完成 flock 后，不得接受
+  # 指向原始 inode 的 symlink。
+  lock_identity_is_valid "$expected_lock" "$lock_fd" || return 1
+}
+
+lock_identity_is_valid() {
+  local lock_path="$1" lock_fd="$2"
+  local path_metadata descriptor_metadata expected_identity
+
+  [[ -f "$lock_path" && ! -L "$lock_path" ]] || return 1
+  path_metadata="$(/usr/bin/stat -Lc '%d:%i:%h:%F' -- "$lock_path" 2>/dev/null)" || return 1
+  [[ "$path_metadata" == *":1:regular "* ]] || return 1
+  expected_identity="${path_metadata%:*:*}"
+
+  [[ -e "/proc/self/fd/$lock_fd" ]] || return 1
+  descriptor_metadata="$(/usr/bin/stat -Lc '%d:%i:%h:%F' -- "/proc/self/fd/$lock_fd" 2>/dev/null)" || return 1
+  [[ "$descriptor_metadata" == "$expected_identity:1:regular "* ]] || return 1
+}
+
+lock_path_is_cooperative_before_open() {
+  local lock_path="$1" metadata
+
+  # Bash 的 pathname redirection 没有 O_NOFOLLOW；这里的 pre/post 检查只在
+  # dedicated、cooperative target owner 模型下提供路径身份护栏，不声称抵抗
+  # hostile same-UID 在检查与 open 之间的 TOCTOU。更强的 adversarial 文件系统
+  # 模型需要保留具备 openat(O_NOFOLLOW) syscall 语义的独立 owner。
+  [[ ! -L "$lock_path" ]] || return 1
+  if [[ -e "$lock_path" ]]; then
+    [[ -f "$lock_path" ]] || return 1
+    metadata="$(/usr/bin/stat -Lc '%d:%i:%h:%F' -- "$lock_path" 2>/dev/null)" || return 1
+    [[ "$metadata" == *":1:regular "* ]] || return 1
+  fi
 }
 
 
@@ -315,11 +337,6 @@ main() {
     error "/usr/bin/setsid is required for kanban-tool Cargo build locking"
     exit 1
   fi
-  if [[ ! -x /usr/bin/python3 ]]; then
-    error "/usr/bin/python3 is required for kanban-tool Cargo build locking"
-    exit 1
-  fi
-
   if [[ "${KANBAN_CARGO_BUILD_LOCK_HELD:-}" == "1" ]]; then
     if ! lock_proof_is_valid "$lock_file" "$target_root_dir"; then
       error "KANBAN_CARGO_BUILD_LOCK_HELD requires an inherited lock proof"
@@ -337,138 +354,52 @@ main() {
   mkdir -p "$lock_dir" "$target_dir"
   configure_resource_limits
 
+  if ! lock_path_is_cooperative_before_open "$lock_file"; then
+    error "Cargo build lock 必须是 single-linked regular file 且不得是 symlink：$lock_file"
+    exit 1
+  fi
+  # Shell redirection 不能原子地表达 O_NOFOLLOW；在 dedicated/cooperative
+  # target owner 约束内，以 fixed FD9 打开后立即做 inode、regular、nlink 和
+  # /proc/self/fd identity 的 post-check。该降级不抵抗 hostile same-UID TOCTOU。
+  if ! exec 9<> "$lock_file"; then
+    error "无法打开 Cargo build lock：$lock_file"
+    exit 1
+  fi
+  if ! lock_identity_is_valid "$lock_file" "$LOCK_FD"; then
+    error "Cargo build lock open 后身份校验失败：$lock_file"
+    exit 1
+  fi
+
+  set +e
+  /usr/bin/flock -n "$LOCK_FD" >/dev/null 2>&1
+  status=$?
+  set -e
+  case "$status" in
+    0)
+      ;;
+    1)
+      echo "正在等待其他构建/测试释放 Cargo target 锁：$lock_file" >&2
+      /usr/bin/flock "$LOCK_FD"
+      ;;
+    *)
+      error "无法获取 Cargo target 锁：$lock_file (flock status $status)"
+      exit 1
+      ;;
+  esac
+  if ! lock_identity_is_valid "$lock_file" "$LOCK_FD"; then
+    error "Cargo build lock flock 后身份校验失败：$lock_file"
+    exit 1
+  fi
+
+  if [[ "$NEXTEST_RUN" == "1" ]]; then
+    prepare_nextest_command
+  fi
   export CARGO_TARGET_DIR="$target_dir"
   export KANBAN_CARGO_BUILD_LOCK_HELD=1
   export KANBAN_CARGO_BUILD_LOCK_FD="$LOCK_FD"
   export KANBAN_CARGO_BUILD_LOCK_PATH="$lock_file"
-  /usr/bin/setsid /usr/bin/python3 - "$lock_file" "$LOCK_FD" \
-    "$NEXTEST_RUN" "${COMMAND[@]}" <<'PY' &
-import fcntl
-import os
-import stat
-import sys
-import tempfile
 
-
-def fail(message: str) -> "NoReturn":
-    print(f"error: {message}", file=sys.stderr)
-    raise SystemExit(2)
-
-
-lock_path = sys.argv[1]
-requested_fd = int(sys.argv[2])
-nextest_run = sys.argv[3] == "1"
-command = sys.argv[4:]
-if not command:
-    fail("missing command for Cargo build lock")
-
-flags = (
-    os.O_RDWR
-    | os.O_CREAT
-    | os.O_CLOEXEC
-    | os.O_NOFOLLOW
-    | os.O_NONBLOCK
-)
-descriptor = -1
-try:
-    try:
-        descriptor = os.open(lock_path, flags, 0o666)
-    except OSError as error:
-        fail(f"cannot open Cargo build lock without following symlinks: {lock_path}: {error}")
-
-    def assert_identity() -> None:
-        try:
-            path_metadata = os.lstat(lock_path)
-        except OSError as error:
-            fail(f"cannot inspect Cargo build lock safely: {lock_path}: {error}")
-        descriptor_metadata = os.fstat(descriptor)
-        try:
-            proc_metadata = os.stat(f"/proc/self/fd/{descriptor}")
-        except OSError as error:
-            fail(f"cannot inspect inherited Cargo build lock descriptor: {error}")
-        for label, metadata in (
-            ("path", path_metadata),
-            ("descriptor", descriptor_metadata),
-            ("proc descriptor", proc_metadata),
-        ):
-            if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
-                fail(
-                    "Cargo build lock must be a single-linked regular file "
-                    f"({label}): {lock_path}"
-                )
-        expected = (path_metadata.st_dev, path_metadata.st_ino)
-        if any(
-            (metadata.st_dev, metadata.st_ino) != expected
-            for metadata in (descriptor_metadata, proc_metadata)
-        ):
-            fail(f"Cargo build lock path and descriptor identity differ: {lock_path}")
-
-    assert_identity()
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        print(f"正在等待其他构建/测试释放 Cargo target 锁：{lock_path}", file=sys.stderr)
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-    assert_identity()
-
-    if descriptor != requested_fd:
-        os.dup2(descriptor, requested_fd, inheritable=True)
-        os.close(descriptor)
-        descriptor = requested_fd
-    else:
-        os.set_inheritable(descriptor, True)
-    assert_identity()
-
-    if nextest_run:
-        target_dir = os.environ["CARGO_TARGET_DIR"]
-        config_path = os.path.join(target_dir, ".nextest.toml")
-        store_dir = os.path.join(target_dir, "nextest")
-        store_dir = store_dir.replace("\\", "\\\\").replace('"', '\\"')
-        with open(".config/nextest.toml", encoding="utf-8") as source:
-            config = f'[store]\ndir = "{store_dir}"\n\n' + source.read()
-        temporary_fd, temporary_path = tempfile.mkstemp(
-            prefix=".nextest.toml.", dir=target_dir
-        )
-        try:
-            with os.fdopen(temporary_fd, "w", encoding="utf-8") as output:
-                output.write(config)
-            os.replace(temporary_path, config_path)
-        except BaseException:
-            try:
-                os.unlink(temporary_path)
-            except FileNotFoundError:
-                pass
-            raise
-        command = [
-            "cargo",
-            "nextest",
-            "run",
-            "--config-file",
-            config_path,
-            "--target-dir",
-            target_dir,
-            *command[3:],
-        ]
-
-    try:
-        child_pid = os.fork()
-    except OSError as error:
-        fail(f"cannot fork Cargo build command: {error}")
-    if child_pid == 0:
-        try:
-            os.execvpe(command[0], command, os.environ)
-        except OSError as error:
-            fail(f"cannot execute Cargo build command: {command[0]}: {error}")
-    _, child_status = os.waitpid(child_pid, 0)
-    if os.WIFEXITED(child_status):
-        raise SystemExit(os.WEXITSTATUS(child_status))
-    if os.WIFSIGNALED(child_status):
-        raise SystemExit(128 + os.WTERMSIG(child_status))
-    fail("Cargo build command ended with an unknown wait status")
-finally:
-    if descriptor >= 0:
-        os.close(descriptor)
-PY
+  /usr/bin/setsid "${COMMAND[@]}" &
   CHILD_PID=$!
   CHILD_PGID=$CHILD_PID
 

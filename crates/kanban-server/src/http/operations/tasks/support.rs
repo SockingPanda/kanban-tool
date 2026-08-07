@@ -1,20 +1,18 @@
 use crate::error::ApiError;
-use kanban_application::{ExecutionPlanRecord, ExecutionPlanState, TaskRecord};
-use kanban_contract::{
+use kanban_protocol::{
     ApiExecutionPlan, ApiExecutionPlanState, ApiStepStatus, ApiTask, ApiTaskPriority,
     ApiTaskStatus, ApiTaskStep,
 };
-use kanban_core::{KanbanError, TaskStatus};
+use kanban_service::{ExecutionPlanRecord, ExecutionPlanState, LabelRecord, TaskRecord};
+use kanban_service::{KanbanError, TaskStatus};
 
-pub(crate) fn api_task_step(step: kanban_application::StepRecord) -> Result<ApiTaskStep, ApiError> {
+pub(crate) fn api_task_step(step: kanban_service::StepRecord) -> Result<ApiTaskStep, ApiError> {
     let status = match step.status.as_str() {
         "todo" => ApiStepStatus::Todo,
         "done" => ApiStepStatus::Done,
         "skipped" => ApiStepStatus::Skipped,
         other => {
-            return Err(
-                KanbanError::Storage(format!("stored step status is invalid: {other}")).into(),
-            );
+            return Err(KanbanError::Storage(format!("存储的 step status 无效：{other}")).into());
         }
     };
     Ok(ApiTaskStep {
@@ -38,10 +36,10 @@ pub(crate) fn api_task_step(step: kanban_application::StepRecord) -> Result<ApiT
 
 pub(crate) fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
     let priority = ApiTaskPriority::try_from(task.priority).map_err(|priority| {
-        KanbanError::Storage(format!("stored task priority is outside 0..=3: {priority}"))
+        KanbanError::Storage(format!("存储的 task priority 超出 0..=3：{priority}"))
     })?;
     let metadata = serde_json::from_str(&task.metadata_json).map_err(|error| {
-        KanbanError::Storage(format!("stored task metadata is invalid JSON: {error}"))
+        KanbanError::Storage(format!("存储的 task metadata 不是有效 JSON：{error}"))
     })?;
     let result = task
         .result_json
@@ -49,7 +47,7 @@ pub(crate) fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
         .map(serde_json::from_str)
         .transpose()
         .map_err(|error| {
-            KanbanError::Storage(format!("stored task result is invalid JSON: {error}"))
+            KanbanError::Storage(format!("存储的 task result 不是有效 JSON：{error}"))
         })?;
     Ok(ApiTask {
         id: task.id,
@@ -92,8 +90,19 @@ pub(crate) fn api_task(task: TaskRecord) -> Result<ApiTask, ApiError> {
         required_step_count: task.required_step_count,
         completed_required_step_count: task.completed_required_step_count,
         optional_step_count: task.optional_step_count,
-        labels: Vec::new(),
+        labels: task.labels.into_iter().map(api_label).collect(),
     })
+}
+
+pub(crate) fn api_label(label: LabelRecord) -> kanban_protocol::ApiLabel {
+    kanban_protocol::ApiLabel {
+        id: label.id,
+        board_id: label.board_id,
+        name: label.name,
+        color: label.color,
+        created_at: label.created_at,
+        updated_at: label.updated_at,
+    }
 }
 
 pub(crate) fn api_execution_plan(plan: ExecutionPlanRecord) -> ApiExecutionPlan {

@@ -85,7 +85,7 @@ pub fn set_current_locale(locale: Locale) {
 }
 
 pub fn unsupported_locale(value: &str) -> String {
-    format!("unsupported locale: {value}; expected auto, zh-CN, or en")
+    format!("不支持的语言区域：{value}；预期为 auto、zh-CN 或 en")
 }
 
 pub fn dep_added(locale: Locale, parent_ref: &str, child_ref: &str) -> String {
@@ -133,6 +133,18 @@ fn render_error_zh(error: &KanbanError) -> String {
 }
 
 fn detail_zh(detail: &str) -> Cow<'_, str> {
+    if detail == "initial status must be triage/todo/scheduled/ready" {
+        return Cow::Borrowed("初始状态必须是 triage、todo、scheduled 或 ready");
+    }
+    if detail == "scheduled initial status requires scheduled_at" {
+        return Cow::Borrowed("初始状态为 scheduled 时必须提供 scheduled_at");
+    }
+    if detail == "ready requires description" {
+        return Cow::Borrowed("ready 状态需要 description");
+    }
+    if detail == "ready requires scheduled_at to be due" {
+        return Cow::Borrowed("ready 状态要求 scheduled_at 已到期");
+    }
     if let Some(max) = detail.strip_prefix("limit must be <= ") {
         return Cow::Owned(format!("limit 必须小于等于 {max}"));
     }

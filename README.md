@@ -1,128 +1,94 @@
 # Kanban Tool
 
-Kanban Tool 是一个本地优先、单用户的看板与 durable work queue。任务、依赖、评论、执行记录和事件保存在本机的 canonical Turso 数据库中；CLI、MCP 和 Desktop 看到的是同一份事实。
+Kanban Tool 是本地优先、单机、单用户的看板与 durable work queue。任务、执行记录、评论、附件、
+labels、ontology、signals、entities、relations、检索、上下文和可重建投影都在同一个 canonical
+Turso host 边界内协作。
 
-当前产品刻意只有一条执行路径：
+产品只有一条运行路径：
 
 ```text
 CLI / MCP / Desktop
-        ↓ typed localhost HTTP
-    kanban serve
-        ↓
-ApplicationService + state machine
-        ↓
-  kanban-store-turso
-        ↓
-~/.local/share/kb/kanban.db
+        │ typed localhost HTTP/SSE
+        ▼
+kanban serve（唯一 host）
+        │ KanbanService application path
+        ▼
+kanban-service（唯一 Turso owner）
+        │
+        ▼
+canonical Turso database + 可重建 projection
 ```
 
-只有 `kanban serve` 可以打开、初始化和关闭数据库。其他入口永远通过本机 typed client 调用 host；server 不可用时返回 `server_unavailable`，不会退回直开数据库，也不会创建数据库文件。
+只有 `kanban serve` 可以打开、初始化、迁移、备份、替换和关闭 Turso。CLI、MCP、Desktop 和
+dispatcher 通过 typed localhost contract 访问 host；host 不可用时返回稳定错误，不会直开数据库、
+创建第二个 backend 或切换到 embedded/SQLite fallback。
 
 ## 快速开始
-
-从源码安装 CLI：
-
-```bash
-cargo install --path crates/kanban-cli --bin kanban
-```
-
-先启动唯一的 application host：
 
 ```bash
 kanban serve
 ```
 
-默认数据库是 `~/.local/share/kb/kanban.db`，可以只在 host 上通过 `--db <path>` 或 `KANBAN_DB` 覆盖。默认 HTTP 地址为 `http://127.0.0.1:8721`；客户端命令可以用 `--server-url` 或 `KANBAN_SERVER_URL` 指定地址。
-
-在另一个终端完成第一条 walking-skeleton 链路：
+另一个终端可以创建任务并查看队列：
 
 ```bash
 kanban board list
-kanban task create "整理项目首页" --description "让第一次访问的人看懂项目"
+kanban task create "准备发布说明"
 kanban task list
 kanban task step not-required default#1 --reason "单步任务"
 kanban task promote default#1
-kanban task show default#1
 ```
 
-所有 mutation 都由 host 的 `ApplicationService` 校验并写入同一事务。任务状态由状态机决定，不能从 CLI、MCP 或 Desktop 直接修改数据库列。
+需要稳定脚本输出时使用 `--json`；精确 flags、alias 和 leaf command 以 Clap help 与各自 owner
+文档为准。
 
-## 三个入口
+## 当前功能
 
-- **CLI**：通过 `kanban-client` 使用 localhost HTTP。`kanban init` 以及尚未迁移的旧命令会稳定返回 `feature_not_available`。
-- **MCP**：`kanban-mcp` 是最小 stdio server，只提供 tools；它不会拉起 `kanban serve`，所有 `tools/call` 都调用同一个 typed client。
-- **Desktop**：Tauri 应用是外部 host 的薄前端。`RuntimeConfig` 只包含 `apiBaseUrl`、`actor` 和 `board`，不包含 `dbPath`，也不内嵌 SQLite 或 Axum server。可通过 `KANBAN_SERVER_URL` 指向 host。
+所有 mutation/query 都经过共享 `kanban-service::KanbanService`、`kanban-core` 状态机和 service-owned
+事务。当前功能面包括：
 
-## 当前能力
+- boards、tasks、execution plans、steps、dependencies、comments、attachments、runs 和 events；
+- board/task labels、label semantics、atoms、atom-index、suggestions、proposals 和 ontology ledger；
+- 通用 signals、entities/relations、bounded graph BFS、Turso FTS search、`vector32`/Ollama vector
+  provider 以及 bounded context pack；
+- host-owned doctor、checkpoint、backup、portable import/export、vacuum、projection rebuild/cleanup
+  和可选 `legacy-sqlite-import` v30 importer。
 
-能力按纵向 operation 切片推进；每条切片都闭合 store、application、HTTP、client 和入口适配器。
+label proposal 同时支持 task scope 和 board scope；canonical ontology fact 与事务由
+[`kanban-service`](crates/kanban-service/README.md) 持有，精确 typed contract 见
+[`kanban-protocol` schema](crates/kanban-protocol/docs/schema.md)。
 
-| 阶段 | operation |
-| --- | --- |
-| Walking skeleton | `board.list`、`task.create`、`task.list`、`task.show`、`task.plan.not_required`、`task.promote` |
-| Durable queue | `task.claim`、`task.heartbeat`、`task.release`、`task.review`、`task.done`、`task.block`；可选单 worker dispatcher |
-| 协作信息 | `comment.create/list`、`step.create/list/update`、`dependency.create/list/remove`、`run.list/show/log`、`event.list` |
-
-健康检查、board columns、stats 和 task selector 是 Desktop 支持所需的只读 query，也通过同一个 application path 提供。Run 不是独立 mutation surface：claim 创建 run，heartbeat/release/review/done/block 在同一事务中更新 run 和事件；入口只读 run。
+FTS、vector、graph、context 和 projection state 都是可重建派生数据，不能反向写 canonical facts。
 
 ## 状态与一致性
 
-任务的 canonical status 为：
+`tasks.status` 是唯一状态事实，`board_columns` 只是展示映射。`ready -> running` 只能通过原子
+claim，并与 active run、lease 和 event 同事务提交；heartbeat、release、review、done、block、
+specify、unblock、reopen、reclaim 和 archive 都是显式 service command，不提供任意
+`transition(target_status)`。dispatcher 只 claim `ready`，不会自动 claim `review`、`todo` 或
+`scheduled`。
 
-```text
-triage → todo / scheduled → ready → running → review → done
-                         ↘ blocked ↗
-```
+## 入口边界
 
-`board_columns` 只是展示映射，不能形成第二套状态机。关键边界包括：
+- **CLI**：除 `serve`、配置/init、completion 和 hook 外，通过 `kanban-client` 请求 host；不直接开库。
+- **MCP**：stdio tools 只调用 typed client，不启动 host，也不暴露 host-admin 数据库管理操作。
+- **Desktop**：Tauri/React shell 只调用 loopback API，不直连 Turso、不复制状态机。
 
-- `ready → running` 通过原子 claim 完成；同一任务最多一个 active run。
-- claim、heartbeat、release、review、done、block 复用同一状态机和 application transaction。
-- 外键、board isolation、唯一约束、依赖环检查和 `task_events` 由 canonical store 保证。
-- `task.create`、`comment.create`、`step.create` 支持实体范围内的 `idempotency_key`；dependency create 由复合唯一约束自然幂等。
-- server 重启后 task、plan、run 和 event 仍从同一数据库恢复。
+## 深入阅读
 
-## Dispatcher
+- [跨 crate 架构与 ownership](docs/architecture.md)
+- [`kanban-core` 状态机](crates/kanban-core/docs/state_machine.md)
+- [`kanban-service` 持久化](crates/kanban-service/docs/persistence.md)
+- [`kanban-service` 迁移与导入](crates/kanban-service/docs/migration.md)
+- [`kanban-service` 维护](crates/kanban-service/docs/maintenance.md)
+- [`kanban-protocol` schema/wire 契约](crates/kanban-protocol/docs/schema.md)
+- [CLI](crates/kanban-cli/README.md)、[HTTP host](crates/kanban-server/README.md)、[MCP](crates/kanban-mcp/README.md)、[Desktop](apps/desktop/README.md)
 
-`kanban serve` 默认不消费队列。只有显式传入 `--dispatcher-profile <path>` 才会在同一 host 进程中运行最小单 worker loop。profile 固定声明 board、worker command、poll interval、claim TTL、heartbeat interval、success/failure policy 和 log directory。
+## 范围
 
-dispatcher 只扫描 `ready`，并通过 `ApplicationService` 完成 claim、heartbeat 和 finish；不会自动 claim `review`、`todo` 或 `scheduled`。没有 daemon 注册、named pipe、Job Object 或自动 server supervision。
-
-## 数据与配置
-
-canonical 数据库：
-
-```text
-~/.local/share/kb/kanban.db
-```
-
-Host 启动时幂等执行 embedded schema migration，并 seed `default` board 与固定 status columns。当前 baseline 包含 boards、board_columns、tasks、task_execution_plans、task_steps、task_dependencies、task_runs、task_comments 和 task_events。
-
-actor 是审计字符串，不是用户或权限模型。HTTP 只绑定 loopback，不提供公网、多用户、RBAC 或远程 worker。
-
-## 明确非目标
-
-本轮不提供，也不会以 fallback 形式重新引入：
-
-- SQLite/Turso 双 backend、CLI/MCP/Desktop 直开数据库；
-- `kanban-runtime*`、framed IPC、named pipe、capability negotiation 或通用 mutation receipt；
-- 自动 server supervision、跨进程/跨机器数据库写入和 `multiprocess_wal`；
-- SQLite importer、旧 API 完整兼容和 v2/v3 runtime 恢复协议；
-- labels、signals、semantic search、graph、vector、Tantivy/LanceDB/Oxigraph projection 以及 derived control plane；
-- 这些能力未来可以单独设计，但不属于当前 canonical path。
-
-## 文档与开发
-
-- 产品范围和阶段能力：[`docs/SPEC.md`](docs/SPEC.md)
-- 进程、crate 和数据流：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- 状态机：[`docs/STATE_MACHINE.md`](docs/STATE_MACHINE.md)
-- HTTP contract：[`docs/API_SPEC.md`](docs/API_SPEC.md)
-- CLI contract：[`docs/CLI_SPEC.md`](docs/CLI_SPEC.md)
-- 数据模型：[`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)
-- 架构决策：[`docs/ADR.md`](docs/ADR.md)
-
-修改前请阅读 [`AGENTS.md`](AGENTS.md)，并按受影响的 package 运行最小 `just` 检查。项目只做本地 commit，不自动 push 或创建 PR。
+产品面向本机 loopback 和单一用户，不提供 SaaS、多租户、RBAC、公网访问、云同步、第二 canonical
+backend 或第二 mutation path。
 
 ## 许可证
 
-Kanban Tool 使用 [Apache License 2.0](LICENSE) 开源。
+Apache-2.0，见 [`LICENSE`](LICENSE)。

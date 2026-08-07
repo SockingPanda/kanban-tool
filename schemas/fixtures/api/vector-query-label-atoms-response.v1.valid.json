@@ -1,0 +1,1 @@
+{"data":[{"atom_id":"la_fixture","label_id":"l_fixture","label_name":"Fixture label","board_id":"b_default","polarity":"positive","kind":"description","text":"Label semantics","ordinal":0,"content_hash":"sha256:fixture-atom","embedding_model":"nomic-embed-text","distance":0.20000000298023224,"vector":[0.10000000149011612,0.20000000298023224]}]}

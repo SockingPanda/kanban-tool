@@ -25,6 +25,7 @@ import type {
   LabelOntologySignalRecord,
   LabelOntologySignalStatus,
 } from "@/lib/api"
+import { presentApiError } from "@/lib/api/error-presentation"
 import { queryKeys } from "@/lib/query-keys"
 import { cn } from "@/lib/utils"
 
@@ -144,20 +145,20 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
   }, [selectedSignalId, signals])
 
   useEffect(() => {
-    if (signalsQuery.error) setLocalError(errorText(signalsQuery.error))
-  }, [signalsQuery.error])
+    if (signalsQuery.error) setLocalError(presentApiError(signalsQuery.error, t))
+  }, [signalsQuery.error, t])
 
   useEffect(() => {
-    if (reviewQuery.error) setLocalError(errorText(reviewQuery.error))
-  }, [reviewQuery.error])
+    if (reviewQuery.error) setLocalError(presentApiError(reviewQuery.error, t))
+  }, [reviewQuery.error, t])
 
   useEffect(() => {
-    if (signalDetailQuery.error) setLocalError(errorText(signalDetailQuery.error))
-  }, [signalDetailQuery.error])
+    if (signalDetailQuery.error) setLocalError(presentApiError(signalDetailQuery.error, t))
+  }, [signalDetailQuery.error, t])
 
   useEffect(() => {
-    if (atomExplainQuery.error) setLocalError(errorText(atomExplainQuery.error))
-  }, [atomExplainQuery.error])
+    if (atomExplainQuery.error) setLocalError(presentApiError(atomExplainQuery.error, t))
+  }, [atomExplainQuery.error, t])
 
   async function refreshAll() {
     setLocalError(null)
@@ -191,7 +192,7 @@ export function OntologyReviewWorkbench({ api }: { api: KanbanApi | null }) {
         reason: actionReason.trim(),
       })
     } catch (err) {
-      setLocalError(errorText(err))
+      setLocalError(presentApiError(err, t))
     }
   }
 
@@ -364,11 +365,11 @@ export function SignalList({
               <div className="truncate font-medium">{signalTitle(signal)}</div>
               <div className="mt-1 truncate text-xs text-muted-foreground">{signal.id}</div>
             </div>
-            <Badge variant={signalStatusTone(signal.status)}>{signal.status}</Badge>
+            <Badge variant={signalStatusTone(signal.status)}>{t(signal.status)}</Badge>
           </div>
           <div className="mt-2 flex flex-wrap gap-1">
-            <Badge variant="secondary">{signal.kind}</Badge>
-            <Badge variant="secondary">{signal.proposed_action}</Badge>
+            <Badge variant="secondary">{t(signal.kind)}</Badge>
+            <Badge variant="secondary">{t(signal.proposed_action)}</Badge>
             {signal.suggest_score !== null ? (
               <Badge variant="secondary">{t("recorded score {score}", { score: formatScore(signal.suggest_score) })}</Badge>
             ) : null}
@@ -468,9 +469,9 @@ export function SignalDetail({
   return (
     <div className="space-y-4 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={signalStatusTone(signal.status)}>{signal.status}</Badge>
-        <Badge variant="secondary">{signal.kind}</Badge>
-        <Badge variant="secondary">{signal.proposed_action}</Badge>
+        <Badge variant={signalStatusTone(signal.status)}>{t(signal.status)}</Badge>
+        <Badge variant="secondary">{t(signal.kind)}</Badge>
+        <Badge variant="secondary">{t(signal.proposed_action)}</Badge>
         {detail.observation.suggest_degraded ? <Badge variant="review">{t("observation degraded")}</Badge> : null}
       </div>
       <div>
@@ -480,7 +481,7 @@ export function SignalDetail({
       <div className="grid grid-cols-2 gap-2">
         <Info label={t("source task")} value={detail.observation.task_ref_snapshot} />
         <Info label={t("target")} value={signal.target_label_name_snapshot ?? signal.proposed_label_name ?? "-"} />
-        <Info label={t("suggest")} value={signal.suggest_state ?? "-"} />
+        <Info label={t("suggest")} value={signal.suggest_state ? t(signal.suggest_state) : "-"} />
         <Info label={t("recorded score")} value={signal.suggest_score === null ? "-" : formatScore(signal.suggest_score)} />
         <Info label={t("rank")} value={signal.suggest_rank === null ? "-" : String(signal.suggest_rank)} />
         <Info label={t("recorded confidence")} value={signal.confidence === null ? "-" : formatScore(signal.confidence)} />
@@ -548,9 +549,9 @@ function ActionHistory({
       {actions.map((action) => (
         <div key={action.id} className="rounded-md border border-border bg-card p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{action.action_type}</Badge>
-            <Badge variant="secondary">{t("requires {requirement}", { requirement: action.validation_requirement })}</Badge>
-            <Badge variant={validationTone(action.validation_effective_outcome)}>{action.validation_effective_outcome}</Badge>
+            <Badge variant="secondary">{t(action.action_type)}</Badge>
+            <Badge variant="secondary">{t("requires {requirement}", { requirement: t(action.validation_requirement) })}</Badge>
+            <Badge variant={validationTone(action.validation_effective_outcome)}>{t(action.validation_effective_outcome)}</Badge>
             <span className="text-xs text-muted-foreground">{shortId(action.id)}</span>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">{action.reason}</p>
@@ -611,7 +612,7 @@ export function AtomExplain({ t = englishT, loading, explain }: { t?: Translate;
       {explain.provenance_actions.slice(0, 4).map((entry) => (
         <div key={entry.action.id} className="rounded-md border border-border bg-card p-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{entry.action.action_type}</Badge>
+            <Badge variant="secondary">{t(entry.action.action_type)}</Badge>
             <span className="text-xs text-muted-foreground">{entry.matched_by}</span>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{entry.action.reason}</p>
@@ -620,7 +621,7 @@ export function AtomExplain({ t = englishT, loading, explain }: { t?: Translate;
       {explain.validation_history.slice(0, 4).map((entry) => (
         <div key={entry.action.id} className="rounded-md border border-border bg-card p-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={validationTone(entry.validation_status)}>{entry.validation_status}</Badge>
+            <Badge variant={validationTone(entry.validation_status)}>{t(entry.validation_status)}</Badge>
             <span className="text-xs text-muted-foreground">{t("parent {id}", { id: shortId(entry.parent_action_id) })}</span>
           </div>
           {entry.warnings.length ? <p className="mt-1 text-xs text-muted-foreground">{entry.warnings.join("; ")}</p> : null}
@@ -668,9 +669,4 @@ function formatScore(value: number) {
 function shortId(value: string | null | undefined) {
   if (!value) return "-"
   return value.length > 12 ? `${value.slice(0, 10)}...` : value
-}
-
-function errorText(err: unknown) {
-  if (err instanceof Error) return err.message
-  return String(err)
 }

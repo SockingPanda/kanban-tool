@@ -7,9 +7,9 @@ use axum::{
     http::HeaderMap,
     routing::post,
 };
-use kanban_application::BlockTaskCommand;
-use kanban_contract::{BlockTaskPath, BlockTaskRequest, BlockTaskResponse};
-use kanban_core::KanbanError;
+use kanban_protocol::{BlockTaskPath, BlockTaskRequest, BlockTaskResponse};
+use kanban_service::BlockTaskCommand;
+use kanban_service::KanbanError;
 
 pub(crate) async fn block_task(
     State(state): State<AppState>,
@@ -18,7 +18,7 @@ pub(crate) async fn block_task(
     body: Result<Json<BlockTaskRequest>, JsonRejection>,
 ) -> Result<Json<BlockTaskResponse>, ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let task = state
         .application()
@@ -34,7 +34,13 @@ pub(crate) async fn block_task(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/transitions/block", post(block_task))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/transitions/block",
+        ),
+        post(block_task),
+    )
 }
 
 #[cfg(test)]

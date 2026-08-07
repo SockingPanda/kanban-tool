@@ -81,7 +81,7 @@ function RunSummary({ activeRun, detail }: { activeRun?: Run; detail: DetailStat
   return (
     <div className="space-y-2 text-sm">
       <InfoRow label={t("run")} value={shortId(activeRun.id)} />
-      <InfoRow label={t("status")} value={activeRun.status} />
+      <InfoRow label={t("status")} value={t(activeRun.status)} />
       <InfoRow label={t("worker")} value={activeRun.worker_profile ?? t("manual")} />
       <InfoRow label={t("owner")} value={activeRun.claim_owner} />
       <InfoRow label={t("started")} value={formatRelativeTime(activeRun.started_at)} />

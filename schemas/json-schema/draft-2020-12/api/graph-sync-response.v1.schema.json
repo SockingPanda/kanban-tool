@@ -1,0 +1,75 @@
+{
+  "$defs": {
+    "GraphMaintenance": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "consumed_jobs": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "pending_jobs": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "validated_entities": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "validated_relations": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "validated_tasks": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "mode",
+        "board_id",
+        "generation",
+        "fingerprint",
+        "validated_tasks",
+        "validated_entities",
+        "validated_relations",
+        "pending_jobs",
+        "consumed_jobs",
+        "updated_at",
+        "message"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:graph-sync-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/GraphMaintenance"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban graph sync response v1",
+  "type": "object"
+}

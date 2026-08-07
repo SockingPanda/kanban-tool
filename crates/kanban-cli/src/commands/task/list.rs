@@ -2,8 +2,8 @@ use std::str::FromStr;
 
 use clap::{Args, ValueEnum};
 use kanban_client::KanbanClient;
-use kanban_contract::{
-    ApiTaskPriority, ApiTaskStatus, ListTasksQuery, TaskReadPlanFilter, TaskReadSort,
+use kanban_protocol::{
+    ApiTaskPriority, ApiTaskStatus, ListTasksQuery, TaskReadLabel, TaskReadPlanFilter, TaskReadSort,
 };
 
 use crate::{context::CliContext, error::CliFailure, output};
@@ -14,6 +14,8 @@ pub(crate) struct ListArgs {
     pub(crate) status: Vec<ListStatus>,
     #[arg(long)]
     pub(crate) priority: Vec<i64>,
+    #[arg(long = "label")]
+    pub(crate) label: Vec<String>,
     #[arg(long = "plan-filter")]
     pub(crate) plan_filter: Vec<String>,
     #[arg(long)]
@@ -51,7 +53,7 @@ pub(crate) fn run(
     let query = list_tasks_query(args)?;
     let response = client.list_tasks(&ctx.board, &query)?;
     if ctx.json {
-        output::print_json(&kanban_contract::CliTaskListOutput::new(response.data));
+        output::print_json(&kanban_protocol::CliTaskListOutput::new(response.data));
     } else {
         for task in response.data {
             println!("{} {} {}", task.task_ref, task.status.as_str(), task.title);
@@ -68,7 +70,7 @@ fn list_tasks_query(args: &ListArgs) -> Result<ListTasksQuery, CliFailure> {
         .map(|value| {
             ApiTaskPriority::try_from(value).map_err(|value| CliFailure {
                 code: "invalid_input",
-                message: format!("priority must be between 0 and 3, got {value}"),
+                message: format!("priority 必须在 0 到 3 之间，实际为 {value}"),
                 exit_code: 2,
             })
         })
@@ -79,20 +81,30 @@ fn list_tasks_query(args: &ListArgs) -> Result<ListTasksQuery, CliFailure> {
         .map(|value| {
             TaskReadPlanFilter::from_str(value).map_err(|()| CliFailure {
                 code: "invalid_input",
-                message: format!("unsupported --plan-filter: {value}"),
+                message: format!("不支持的 --plan-filter：{value}"),
                 exit_code: 2,
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
     let sort = TaskReadSort::from_str(&args.sort).map_err(|()| CliFailure {
         code: "invalid_input",
-        message: format!("unsupported --sort: {}", args.sort),
+        message: format!("不支持的 --sort：{}", args.sort),
         exit_code: 2,
     })?;
     Ok(ListTasksQuery {
         status: args.status.iter().copied().map(api_list_status).collect(),
         priority: priorities,
-        label: Vec::new(),
+        label: args
+            .label
+            .iter()
+            .map(|value| {
+                TaskReadLabel::new(value.clone()).ok_or_else(|| CliFailure {
+                    code: "invalid_input",
+                    message: format!("--label 无效：{value}"),
+                    exit_code: 2,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
         plan_filter,
         assignee: args.assignee.clone(),
         q: args.query.clone(),

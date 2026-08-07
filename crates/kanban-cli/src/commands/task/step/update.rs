@@ -1,6 +1,6 @@
 use clap::Args;
 use kanban_client::KanbanClient;
-use kanban_contract::{UpdateStepRequest, UpdateStepResponse};
+use kanban_protocol::{UpdateStepRequest, UpdateStepResponse};
 
 use crate::{context::CliContext, error::CliFailure, output};
 

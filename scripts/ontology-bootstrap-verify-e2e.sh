@@ -21,8 +21,12 @@ command -v jq >/dev/null 2>&1 || {
   echo "error: jq is required" >&2
   exit 1
 }
-command -v python3 >/dev/null 2>&1 || {
-  echo "error: python3 is required" >&2
+command -v node >/dev/null 2>&1 || {
+  echo "error: node is required" >&2
+  exit 1
+}
+command -v sqlite3 >/dev/null 2>&1 || {
+  echo "error: sqlite3 is required" >&2
   exit 1
 }
 
@@ -59,52 +63,68 @@ ensure_kanban_bin() {
 }
 
 start_mock_ollama() {
-  python3 -u - "$PORT_FILE" >"$MOCK_LOG" 2>&1 <<'PY' &
-import json
-import sys
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+  node - "$PORT_FILE" >"$MOCK_LOG" 2>&1 <<'NODE' &
+const fs = require("node:fs");
+const http = require("node:http");
 
-port_file = sys.argv[1]
+const portFile = process.argv[2];
 
-def vector_for(text, dimensions):
-    lower = str(text).lower()
-    if "matching-bootstrap" in lower or "crash-safe" in lower:
-        base = [1.0, 0.0, 0.0, 0.0]
-    elif "unrelated-bootstrap" in lower:
-        base = [0.2, 1.0, 0.0, 0.0]
-    else:
-        base = [0.0, 0.0, 1.0, 0.0]
-    if dimensions <= len(base):
-        return base[:dimensions]
-    return base + [0.0] * (dimensions - len(base))
+function vectorFor(text, dimensions) {
+  const lower = String(text).toLowerCase();
+  let base;
+  if (lower.includes("matching-bootstrap") || lower.includes("crash-safe")) {
+    base = [1.0, 0.0, 0.0, 0.0];
+  } else if (lower.includes("unrelated-bootstrap")) {
+    base = [0.2, 1.0, 0.0, 0.0];
+  } else {
+    base = [0.0, 0.0, 1.0, 0.0];
+  }
+  if (dimensions <= base.length) {
+    return base.slice(0, dimensions);
+  }
+  return base.concat(Array(dimensions - base.length).fill(0.0));
+}
 
-class Handler(BaseHTTPRequestHandler):
-    def log_message(self, format, *args):
-        return
+const server = http.createServer((request, response) => {
+  if (request.method !== "POST" || request.url !== "/api/embed") {
+    response.writeHead(404);
+    response.end();
+    return;
+  }
+  let body = "";
+  request.setEncoding("utf8");
+  request.on("data", chunk => {
+    body += chunk;
+  });
+  request.on("end", () => {
+    try {
+      const payload = JSON.parse(body || "{}");
+      const dimensions = Number(payload.dimensions || 4);
+      const value = payload.input ?? "";
+      const inputs = Array.isArray(value) ? value : [value];
+      const responseBody = JSON.stringify({
+        embeddings: inputs.map(item => vectorFor(item, dimensions)),
+      });
+      response.writeHead(200, {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(responseBody),
+      });
+      response.end(responseBody);
+    } catch (error) {
+      response.writeHead(400, {"Content-Type": "text/plain; charset=utf-8"});
+      response.end(String(error));
+    }
+  });
+});
 
-    def do_POST(self):
-        if self.path != "/api/embed":
-            self.send_response(404)
-            self.end_headers()
-            return
-        length = int(self.headers.get("Content-Length", "0"))
-        payload = json.loads(self.rfile.read(length) or b"{}")
-        dimensions = int(payload.get("dimensions") or 4)
-        value = payload.get("input", "")
-        inputs = value if isinstance(value, list) else [value]
-        response = {"embeddings": [vector_for(item, dimensions) for item in inputs]}
-        body = json.dumps(response).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-with open(port_file, "w", encoding="utf-8") as handle:
-    handle.write(str(server.server_address[1]))
-server.serve_forever()
-PY
+server.on("error", error => {
+  console.error(error);
+  process.exitCode = 1;
+});
+server.listen(0, "127.0.0.1", () => {
+  fs.writeFileSync(portFile, String(server.address().port), "utf8");
+});
+NODE
   MOCK_PID=$!
   for _ in $(seq 1 100); do
     [[ -s "$PORT_FILE" ]] && return 0
@@ -140,33 +160,21 @@ assert_jq() {
 counts_json() {
   local db="$1"
   local output="$2"
-  python3 - "$db" >"$output" <<'PY'
-import json
-import sqlite3
-import sys
-
-db = sys.argv[1]
-conn = sqlite3.connect(db)
-
-def one(sql, args=()):
-    return conn.execute(sql, args).fetchone()[0]
-
-data = {
-    "labels": one("SELECT COUNT(*) FROM labels"),
-    "target_label_count": one("SELECT COUNT(*) FROM labels WHERE name='database'"),
-    "label_semantics": one("SELECT COUNT(*) FROM label_semantics"),
-    "label_atoms": one("SELECT COUNT(*) FROM label_atoms"),
-    "task_labels": one("SELECT COUNT(*) FROM task_labels"),
-    "task_events": one("SELECT COUNT(*) FROM task_events"),
-    "label_created_events": one("SELECT COUNT(*) FROM task_events WHERE kind='label.created'"),
-    "task_label_added_events": one("SELECT COUNT(*) FROM task_events WHERE kind='task.label.added'"),
-    "compensation_events": one("SELECT COUNT(*) FROM task_events WHERE payload_json LIKE '%bootstrap verification compensation%'"),
-    "actions": one("SELECT COUNT(*) FROM label_ontology_actions"),
-    "bootstrap_actions": one("SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='bootstrap_label'"),
-    "effects": one("SELECT COUNT(*) FROM label_ontology_action_atom_effects"),
-}
-print(json.dumps(data, sort_keys=True))
-PY
+  sqlite3 -readonly -json "$db" <<'SQL' | jq -S '.[0]' >"$output"
+SELECT
+  (SELECT COUNT(*) FROM labels) AS labels,
+  (SELECT COUNT(*) FROM labels WHERE name='database') AS target_label_count,
+  (SELECT COUNT(*) FROM label_semantics) AS label_semantics,
+  (SELECT COUNT(*) FROM label_atoms) AS label_atoms,
+  (SELECT COUNT(*) FROM task_labels) AS task_labels,
+  (SELECT COUNT(*) FROM task_events) AS task_events,
+  (SELECT COUNT(*) FROM task_events WHERE kind='label.created') AS label_created_events,
+  (SELECT COUNT(*) FROM task_events WHERE kind='task.label.added') AS task_label_added_events,
+  (SELECT COUNT(*) FROM task_events WHERE payload_json LIKE '%bootstrap verification compensation%') AS compensation_events,
+  (SELECT COUNT(*) FROM label_ontology_actions) AS actions,
+  (SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='bootstrap_label') AS bootstrap_actions,
+  (SELECT COUNT(*) FROM label_ontology_action_atom_effects) AS effects;
+SQL
 }
 
 init_case() {

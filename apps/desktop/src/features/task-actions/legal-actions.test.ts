@@ -5,10 +5,52 @@ import type { KanbanApi, Task } from "@/lib/api"
 import { legalActions } from "./legal-actions"
 
 describe("legal task actions", () => {
-  it("does not expose unsupported transition actions", () => {
-    const labels = legalActions(task({ status: "blocked" }), null, "waiting").map((action) => action.label)
+  it("只在 triage 暴露 Specify，并通过 typed API 发送现有描述", async () => {
+    const unsupported = legalActions(task({ status: "ready" }), null, "waiting").map((action) => action.label)
+    expect(unsupported).not.toContain("Specify")
 
-    expect(labels).not.toEqual(expect.arrayContaining(["Specify", "Unblock", "Archive"]))
+    const api = apiStub()
+    const item = task({ status: "triage", description: " ready enough " })
+    const action = actionFor(item, "Specify")
+
+    expect(action.enabled).toBe(true)
+    await action.run(api, item)
+
+    expect(api.transition).toHaveBeenCalledWith(item, "specify", { description: "ready enough" })
+  })
+
+  it("要求 triage 任务有真实描述后才启用 Specify", () => {
+    expect(actionFor(task({ status: "triage", description: null }), "Specify").enabled).toBe(false)
+    expect(actionFor(task({ status: "triage", description: "" }), "Specify").enabled).toBe(false)
+    expect(actionFor(task({ status: "triage", description: " ready enough " }), "Specify").enabled).toBe(true)
+  })
+
+  it("只在 blocked 暴露 Unblock，并通过 typed API 请求服务重算", async () => {
+    const unsupported = legalActions(task({ status: "ready" }), null, "waiting").map((action) => action.label)
+    expect(unsupported).not.toContain("Unblock")
+
+    const api = apiStub()
+    const item = task({ status: "blocked" })
+    const action = actionFor(item, "Unblock")
+
+    expect(action.enabled).toBe(true)
+    await action.run(api, item)
+
+    expect(api.transition).toHaveBeenCalledWith(item, "unblock")
+  })
+
+  it("仅从非 archived 源状态暴露 Archive，并为 running 使用 force", async () => {
+    expect(legalActions(task({ status: "archived" }), null, "waiting")).toEqual([])
+
+    const api = apiStub()
+    const item = task({ status: "running" })
+    const action = actionFor(item, "Archive", "claim_123")
+
+    expect(action.enabled).toBe(true)
+    expect(action.confirmation).toEqual({ key: "Force archive running task #{seq}?", values: { seq: 1 } })
+    await action.run(api, item)
+
+    expect(api.transition).toHaveBeenCalledWith(item, "archive", { force: true })
   })
 
   it("enables non-running block actions with a reason body and no force confirmation", async () => {

@@ -1,9 +1,7 @@
 {
   "data": {
     "semantics": {
-      "applies_when": [
-        "touches Rust service code"
-      ],
+      "applies_when": ["touches Rust service code"],
       "atoms": [
         {
           "board_id": "b_FIXTURE_1",
@@ -52,9 +50,7 @@
       "label_id": "l_FIXTURE_1",
       "label_name": "backend",
       "negative_examples": [],
-      "positive_examples": [
-        "add a service command"
-      ],
+      "positive_examples": ["add a service command"],
       "semantics_hash": "hash_fixture",
       "updated_at": 100
     },
@@ -88,7 +84,7 @@
       "last_heartbeat_at": null,
       "lock_version": 0,
       "max_retries": null,
-      "metadata": {},
+      "metadata": null,
       "optional_step_count": 0,
       "position": 1024,
       "priority": 3,

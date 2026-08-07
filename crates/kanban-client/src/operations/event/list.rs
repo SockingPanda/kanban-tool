@@ -1,4 +1,4 @@
-use kanban_contract::{ListEventsQuery, ListEventsResponse};
+use kanban_protocol::{ListEventsQuery, ListEventsResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 
@@ -6,18 +6,16 @@ impl KanbanClient {
     pub fn list_events(&self, query: &ListEventsQuery) -> Result<ListEventsResponse, ClientError> {
         let board = query.board.trim();
         if board.is_empty() {
-            return Err(ClientError::InvalidInput("board is required".to_owned()));
+            return Err(ClientError::InvalidInput("必须提供 board".to_owned()));
         }
         if query.after < 0 {
-            return Err(ClientError::InvalidInput(
-                "after must be non-negative".to_owned(),
-            ));
+            return Err(ClientError::InvalidInput("after 必须是非负数".to_owned()));
         }
 
         let task_id = query.task_id.as_deref().map(str::trim);
         if task_id.is_some_and(|task_id| !task_id.starts_with("t_") || task_id.len() <= 2) {
             return Err(ClientError::InvalidInput(
-                "task_id must be a global t_... id".to_owned(),
+                "task_id 必须是全局 t_... ID".to_owned(),
             ));
         }
 
@@ -37,7 +35,7 @@ fn list_events_path(board: &str, task_id: Option<&str>, after: i64, limit: usize
 
 #[cfg(test)]
 mod tests {
-    use kanban_contract::ListEventsQuery;
+    use kanban_protocol::ListEventsQuery;
 
     use super::*;
 

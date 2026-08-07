@@ -7,9 +7,9 @@ use axum::{
     http::{HeaderMap, StatusCode},
     routing::post,
 };
-use kanban_application::AddDependencyCommand;
-use kanban_contract::{AddDependencyPath, AddDependencyRequest, AddDependencyResponse};
-use kanban_core::KanbanError;
+use kanban_protocol::{AddDependencyPath, AddDependencyRequest, AddDependencyResponse};
+use kanban_service::AddDependencyCommand;
+use kanban_service::KanbanError;
 
 pub(crate) async fn add_dependency(
     State(state): State<AppState>,
@@ -18,7 +18,7 @@ pub(crate) async fn add_dependency(
     body: Result<Json<AddDependencyRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<AddDependencyResponse>), ApiError> {
     let Json(body) =
-        body.map_err(|error| KanbanError::InvalidInput(format!("invalid JSON body: {error}")))?;
+        body.map_err(|error| KanbanError::InvalidInput(format!("JSON 请求体无效：{error}")))?;
     let actor = request_actor(body.actor.as_deref(), &headers, state.default_actor())?;
     let result = state
         .application()
@@ -42,7 +42,13 @@ pub(crate) async fn add_dependency(
 }
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v1/tasks/:task_id/dependencies", post(add_dependency))
+    Router::new().route(
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Post,
+            "/api/v1/tasks/:task_id/dependencies",
+        ),
+        post(add_dependency),
+    )
 }
 #[cfg(test)]
 mod tests {
@@ -187,7 +193,7 @@ mod tests {
             .unwrap();
         assert_eq!(removed.status(), StatusCode::OK);
         let removed_body = removed.into_body().collect().await.unwrap().to_bytes();
-        let removed: kanban_contract::RemoveDependencyResponse =
+        let removed: kanban_protocol::RemoveDependencyResponse =
             serde_json::from_slice(&removed_body).unwrap();
         assert!(removed.data.parents.is_empty());
         assert!(removed.data.edges.is_empty());

@@ -1,0 +1,40 @@
+{
+  "$id": "urn:kanban-tool:schema:api:vector-query-label-atoms-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "default": "default",
+      "type": "string"
+    },
+    "embedding_model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "include_vector": {
+      "type": "boolean"
+    },
+    "limit": {
+      "default": 20,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "polarity": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "q": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "q"
+  ],
+  "title": "Kanban vector query label atoms query v1",
+  "type": "object"
+}

@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "VectorLabelAtomResult": {
+      "additionalProperties": false,
+      "properties": {
+        "atom_id": {
+          "type": "string"
+        },
+        "board_id": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "distance": {
+          "format": "float",
+          "type": "number"
+        },
+        "embedding_model": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "label_id": {
+          "type": "string"
+        },
+        "label_name": {
+          "type": "string"
+        },
+        "ordinal": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "polarity": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "vector": {
+          "items": {
+            "format": "float",
+            "type": "number"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "atom_id",
+        "label_id",
+        "label_name",
+        "board_id",
+        "polarity",
+        "kind",
+        "text",
+        "ordinal",
+        "content_hash",
+        "embedding_model",
+        "distance"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:vector-query-label-atoms-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/$defs/VectorLabelAtomResult"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban vector query label atoms response v1",
+  "type": "object"
+}

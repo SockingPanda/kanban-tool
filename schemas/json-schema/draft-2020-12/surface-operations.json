@@ -6,7 +6,6 @@
     ],
     "exclusion": null,
     "key": "GET /health",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -17,7 +16,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -28,7 +26,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -39,7 +36,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -51,7 +47,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/archive",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -62,7 +57,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/columns",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -73,7 +67,17 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels",
-    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.list-board-label-proposals.path",
+      "api.list-board-label-proposals.query",
+      "api.list-board-label-proposals.headers",
+      "api.list-board-label-proposals.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/label-proposals",
     "surface": "api"
   },
   {
@@ -85,7 +89,18 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/labels",
-    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.delete-board-label.path",
+      "api.delete-board-label.query",
+      "api.delete-board-label.headers",
+      "api.delete-board-label.response",
+      "api.error.response"
+    ],
+    "exclusion": null,
+    "key": "DELETE /api/v1/boards/:board/labels/:label_id",
     "surface": "api"
   },
   {
@@ -96,7 +111,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/semantics",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -107,7 +121,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/:label_id/semantics",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -119,7 +132,6 @@
     ],
     "exclusion": null,
     "key": "PUT /api/v1/boards/:board/labels/:label_id/semantics",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -131,7 +143,6 @@
     ],
     "exclusion": null,
     "key": "DELETE /api/v1/boards/:board/labels/:label_id/semantics",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -142,7 +153,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/atoms",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -153,7 +163,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/atoms/:atom_ref/explain",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -164,7 +173,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/atom-index/status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -175,7 +183,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/labels/atom-index/rebuild",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -187,7 +194,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/labels/atom-index/query",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -200,7 +206,18 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/tasks",
-    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.list-tasks-by-status.path",
+      "api.list-tasks-by-status.query",
+      "api.list-tasks-by-status.headers",
+      "api.list-tasks-by-status.response",
+      "api.error.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/boards/:board/tasks/by-status",
     "surface": "api"
   },
   {
@@ -212,19 +229,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/tasks",
-    "migration": "adopted",
-    "surface": "api"
-  },
-  {
-    "contracts": [
-      "api.list-tasks-by-status.path",
-      "api.list-tasks-by-status.query",
-      "api.list-tasks-by-status.headers",
-      "api.list-tasks-by-status.response"
-    ],
-    "exclusion": null,
-    "key": "GET /api/v1/boards/:board/tasks/by-status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -236,7 +240,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/signals",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -248,7 +251,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/signals/review",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -259,7 +261,61 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/signals/:signal_id",
-    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.record-signal.path",
+      "api.record-signal.headers",
+      "api.record-signal.request",
+      "api.record-signal.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/signals",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.confirm-signals.path",
+      "api.confirm-signals.headers",
+      "api.confirm-signals.request",
+      "api.confirm-signals.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/signals/confirm",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.reject-signals.path",
+      "api.reject-signals.headers",
+      "api.reject-signals.request",
+      "api.reject-signals.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/signals/reject",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.resolve-signals.path",
+      "api.resolve-signals.headers",
+      "api.resolve-signals.request",
+      "api.resolve-signals.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/signals/resolve",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.supersede-signals.path",
+      "api.supersede-signals.headers",
+      "api.supersede-signals.request",
+      "api.supersede-signals.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/boards/:board/signals/supersede",
     "surface": "api"
   },
   {
@@ -271,7 +327,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/task-map",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -283,7 +338,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -295,7 +349,6 @@
     ],
     "exclusion": null,
     "key": "PATCH /api/v1/tasks/:task_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -307,7 +360,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/neighborhood",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -319,7 +371,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/labels",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -332,7 +383,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/labels",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -340,11 +390,11 @@
       "api.bootstrap-task-label.path",
       "api.bootstrap-task-label.headers",
       "api.bootstrap-task-label.request",
-      "api.bootstrap-task-label.response"
+      "api.bootstrap-task-label.response",
+      "api.error.response"
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/labels/bootstrap",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -356,7 +406,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/labels/suggestions",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -367,7 +416,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/label-proposals",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -380,7 +428,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/label-proposals",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -392,7 +439,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/label-ontology/observations",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -404,7 +450,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/label-ontology/signals",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -416,7 +461,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/boards/:board/label-ontology/review",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -428,7 +472,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/label-ontology/actions",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -440,7 +483,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/label-ontology/apply/atom",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -452,7 +494,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/label-ontology/revert",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -464,7 +505,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/boards/:board/label-ontology/validate",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -475,7 +515,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/label-ontology/signals/:signal_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -486,7 +525,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/label-proposals/:proposal_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -498,7 +536,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/label-proposals/:proposal_id/accept",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -510,7 +547,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/label-proposals/:proposal_id/reject",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -522,7 +558,6 @@
     ],
     "exclusion": null,
     "key": "DELETE /api/v1/tasks/:task_id/labels/:label_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -534,7 +569,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/specify",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -546,7 +580,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/promote",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -558,7 +591,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/claim",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -570,7 +602,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/reopen",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -582,7 +613,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/reclaim",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -594,7 +624,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/heartbeat",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -606,7 +635,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/release",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -618,7 +646,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/complete",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -630,7 +657,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/submit-review",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -642,7 +668,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/block",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -654,7 +679,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/unblock",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -666,7 +690,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/transitions/archive",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -677,7 +700,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/dependencies",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -689,7 +711,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/dependencies",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -700,7 +721,6 @@
     ],
     "exclusion": null,
     "key": "DELETE /api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -711,7 +731,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/steps",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -723,7 +742,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/steps",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -735,7 +753,6 @@
     ],
     "exclusion": null,
     "key": "PATCH /api/v1/tasks/:task_id/steps/:step_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -746,7 +763,6 @@
     ],
     "exclusion": null,
     "key": "DELETE /api/v1/tasks/:task_id/steps/:step_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -758,7 +774,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/steps/:step_id/done",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -770,7 +785,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/steps/:step_id/skip",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -782,7 +796,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/steps/:step_id/reopen",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -794,7 +807,6 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/execution-plan/not-required",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -806,7 +818,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/runs",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -818,7 +829,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/runs/:run_id",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -829,7 +839,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/runs/:run_id/log",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -841,7 +850,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/comments",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -854,7 +862,47 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/tasks/:task_id/comments",
-    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.list-attachments.path",
+      "api.list-attachments.headers",
+      "api.list-attachments.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/tasks/:task_id/attachments",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.create-attachment.path",
+      "api.create-attachment.headers",
+      "api.create-attachment.request",
+      "api.create-attachment.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/tasks/:task_id/attachments",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.download-attachment.path",
+      "api.download-attachment.headers",
+      "api.download-attachment.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/tasks/:task_id/attachments/:attachment_id",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.delete-attachment.path",
+      "api.delete-attachment.headers",
+      "api.delete-attachment.response"
+    ],
+    "exclusion": null,
+    "key": "DELETE /api/v1/tasks/:task_id/attachments/:attachment_id",
     "surface": "api"
   },
   {
@@ -865,7 +913,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/stats",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -876,7 +923,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/search/tasks",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -887,7 +933,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/search/tasks/by-status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -898,7 +943,26 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/search/status",
-    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.rebuild-search-index.query",
+      "api.rebuild-search-index.headers",
+      "api.rebuild-search-index.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/search/index/rebuild",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.sync-search-index.query",
+      "api.sync-search-index.headers",
+      "api.sync-search-index.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/search/index/sync",
     "surface": "api"
   },
   {
@@ -910,7 +974,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/tasks/:task_id/context",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -921,7 +984,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/graph/status",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -932,7 +994,66 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/graph/neighbors",
-    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.graph-query.query",
+      "api.graph-query.headers",
+      "api.graph-query.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/graph/query",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.graph-rebuild.query",
+      "api.graph-rebuild.headers",
+      "api.graph-rebuild.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/graph/rebuild",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.graph-sync.query",
+      "api.graph-sync.headers",
+      "api.graph-sync.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/graph/sync",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.entity-list.query",
+      "api.entity-list.headers",
+      "api.entity-list.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/entities",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.upsert-entity.headers",
+      "api.entity-upsert.request",
+      "api.entity-upsert.response"
+    ],
+    "exclusion": null,
+    "key": "PUT /api/v1/entities",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.entity.path",
+      "api.entity.headers",
+      "api.entity.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/entities/:uri",
     "surface": "api"
   },
   {
@@ -943,7 +1064,56 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/vector/status",
-    "migration": "adopted",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.vector-configure.headers",
+      "api.vector-configure.request",
+      "api.vector-configure.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/vector/configure",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.vector-rebuild.headers",
+      "api.vector-rebuild.request",
+      "api.vector-rebuild.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/vector/rebuild",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.vector-sync.headers",
+      "api.vector-sync.request",
+      "api.vector-sync.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/vector/sync",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.vector-query-chunks.query",
+      "api.vector-query-chunks.headers",
+      "api.vector-query-chunks.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/vector/query-chunks",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.vector-query-label-atoms.query",
+      "api.vector-query-label-atoms.headers",
+      "api.vector-query-label-atoms.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/vector/query-label-atoms",
     "surface": "api"
   },
   {
@@ -954,7 +1124,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/events",
-    "migration": "adopted",
     "surface": "api"
   },
   {
@@ -964,7 +1133,6 @@
     ],
     "exclusion": null,
     "key": "GET /api/v1/stream/events",
-    "migration": "adopted",
     "surface": "sse"
   },
   {
@@ -973,8 +1141,7 @@
       "api.doctor.response"
     ],
     "exclusion": null,
-    "key": "POST /api/v1/maintenance/doctor",
-    "migration": "adopted",
+    "key": "GET /api/v1/maintenance/doctor",
     "surface": "api"
   },
   {
@@ -984,32 +1151,102 @@
     ],
     "exclusion": null,
     "key": "POST /api/v1/maintenance/checkpoint",
-    "migration": "adopted",
     "surface": "api"
   },
   {
-    "contracts": [],
-    "exclusion": "隐藏的动态补全候选使用逐行文本协议，不是 JSON document",
-    "key": "__complete",
-    "migration": "excluded",
-    "surface": "cli"
+    "contracts": [
+      "api.maintenance-backup.headers",
+      "api.maintenance-backup.request",
+      "api.maintenance-backup.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/backup",
+    "surface": "api"
   },
   {
     "contracts": [
-      "cli.backup.output"
+      "api.maintenance-export.headers",
+      "api.maintenance-export.request",
+      "api.maintenance-export.response"
     ],
     "exclusion": null,
-    "key": "backup",
-    "migration": "adopted",
-    "surface": "cli"
+    "key": "POST /api/v1/maintenance/export",
+    "surface": "api"
   },
   {
     "contracts": [
-      "cli.board-archive.output"
+      "api.maintenance-import.headers",
+      "api.maintenance-import.request",
+      "api.maintenance-import.response"
     ],
     "exclusion": null,
-    "key": "board archive",
-    "migration": "adopted",
+    "key": "POST /api/v1/maintenance/import",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-vacuum.headers",
+      "api.maintenance-vacuum.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/vacuum",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-status.headers",
+      "api.maintenance-status.response"
+    ],
+    "exclusion": null,
+    "key": "GET /api/v1/maintenance/status",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-run.headers",
+      "api.maintenance-run.request",
+      "api.maintenance-run.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/run",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-rebuild.headers",
+      "api.maintenance-rebuild.request",
+      "api.maintenance-rebuild.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/rebuild",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-cleanup.headers",
+      "api.maintenance-cleanup.request",
+      "api.maintenance-cleanup.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/cleanup",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "api.maintenance-import-v30.headers",
+      "api.maintenance-import-v30.request",
+      "api.maintenance-import-v30.response"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/import-v30",
+    "surface": "api"
+  },
+  {
+    "contracts": [
+      "cli.board-list.output"
+    ],
+    "exclusion": null,
+    "key": "board list",
     "surface": "cli"
   },
   {
@@ -1018,25 +1255,6 @@
     ],
     "exclusion": null,
     "key": "board create",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.board-current.output"
-    ],
-    "exclusion": null,
-    "key": "board current",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.board-list.output"
-    ],
-    "exclusion": null,
-    "key": "board list",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
@@ -1045,1333 +1263,23 @@
     ],
     "exclusion": null,
     "key": "board show",
-    "migration": "adopted",
     "surface": "cli"
   },
   {
     "contracts": [
-      "cli.board-use.output"
+      "cli.board-archive.output"
     ],
     "exclusion": null,
-    "key": "board use",
-    "migration": "adopted",
+    "key": "board archive",
     "surface": "cli"
   },
   {
     "contracts": [
-      "cli.checkpoint.output"
+      "cli.board-columns.output"
     ],
     "exclusion": null,
-    "key": "checkpoint",
-    "migration": "adopted",
+    "key": "board columns",
     "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.comment-add.output"
-    ],
-    "exclusion": null,
-    "key": "comment add",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.comment-list.output"
-    ],
-    "exclusion": null,
-    "key": "comment list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [],
-    "exclusion": "shell completion script 是文本脚本，不是 JSON document",
-    "key": "completions",
-    "migration": "excluded",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.config-show.output"
-    ],
-    "exclusion": null,
-    "key": "config show",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.context-build.output"
-    ],
-    "exclusion": null,
-    "key": "context build",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.dep-add.output"
-    ],
-    "exclusion": null,
-    "key": "dep add",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.dep-list.output"
-    ],
-    "exclusion": null,
-    "key": "dep list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.dep-remove.output"
-    ],
-    "exclusion": null,
-    "key": "dep remove",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.derived-status.output"
-    ],
-    "exclusion": null,
-    "key": "derived status",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.dispatch.output"
-    ],
-    "exclusion": null,
-    "key": "dispatch",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.doctor.output"
-    ],
-    "exclusion": null,
-    "key": "doctor",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.entity-list.output"
-    ],
-    "exclusion": null,
-    "key": "entity list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.entity-show.output"
-    ],
-    "exclusion": null,
-    "key": "entity show",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.events.output"
-    ],
-    "exclusion": null,
-    "key": "events",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.export.output"
-    ],
-    "exclusion": null,
-    "key": "export",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.graph-neighbors.output"
-    ],
-    "exclusion": null,
-    "key": "graph neighbors",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.graph-query.output"
-    ],
-    "exclusion": null,
-    "key": "graph query",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.graph-rebuild.output"
-    ],
-    "exclusion": null,
-    "key": "graph rebuild",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.graph-status.output"
-    ],
-    "exclusion": null,
-    "key": "graph status",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.graph-sync.output"
-    ],
-    "exclusion": null,
-    "key": "graph sync",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Codex hook handler 使用独立 stdin/stdout protocol，不走通用 CLI JSON envelope",
-    "key": "hook codex handle failure",
-    "migration": "excluded",
-    "surface": "cli"
-  },
-  {
-    "contracts": [],
-    "exclusion": "Codex hook handler 使用独立 stdin/stdout protocol，不走通用 CLI JSON envelope",
-    "key": "hook codex handle task-create",
-    "migration": "excluded",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.hook-codex-install.output"
-    ],
-    "exclusion": null,
-    "key": "hook codex install",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.hook-codex-status.output"
-    ],
-    "exclusion": null,
-    "key": "hook codex status",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.hook-codex-uninstall.output"
-    ],
-    "exclusion": null,
-    "key": "hook codex uninstall",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.import.output"
-    ],
-    "exclusion": null,
-    "key": "import",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.index-doctor.output"
-    ],
-    "exclusion": null,
-    "key": "index doctor",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.index-rebuild.output"
-    ],
-    "exclusion": null,
-    "key": "index rebuild",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.index-status.output"
-    ],
-    "exclusion": null,
-    "key": "index status",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.index-sync.output"
-    ],
-    "exclusion": null,
-    "key": "index sync",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.init.output"
-    ],
-    "exclusion": null,
-    "key": "init",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-cleanup-legacy-apply.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance cleanup-legacy apply",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-cleanup-legacy-inventory.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance cleanup-legacy inventory",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-cleanup-legacy-restore.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance cleanup-legacy restore",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-cleanup-legacy-verify.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance cleanup-legacy verify",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-rebuild.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance rebuild",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-run.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance run",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.maintenance-status.output"
-    ],
-    "exclusion": null,
-    "key": "maintenance status",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-add.output"
-    ],
-    "exclusion": null,
-    "key": "label add",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-atom-index-query.output"
-    ],
-    "exclusion": null,
-    "key": "label atom-index query",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-atom-index-rebuild.output"
-    ],
-    "exclusion": null,
-    "key": "label atom-index rebuild",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-atom-index-status.output"
-    ],
-    "exclusion": null,
-    "key": "label atom-index status",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-atoms-explain.output"
-    ],
-    "exclusion": null,
-    "key": "label atoms explain",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-atoms-list.output"
-    ],
-    "exclusion": null,
-    "key": "label atoms list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-bootstrap.output"
-    ],
-    "exclusion": null,
-    "key": "label bootstrap",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-create.output"
-    ],
-    "exclusion": null,
-    "key": "label create",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-delete.output"
-    ],
-    "exclusion": null,
-    "key": "label delete",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-list.output"
-    ],
-    "exclusion": null,
-    "key": "label list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-apply-atom.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology apply atom",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-confirm.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology confirm",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-list.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-quality.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology quality",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-record.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology record",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-reject.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology reject",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-resolve.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology resolve",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-revert.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology revert",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-review.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology review",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-show.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology show",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-supersede.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology supersede",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-ontology-validate.output"
-    ],
-    "exclusion": null,
-    "key": "label ontology validate",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-proposals-accept.output"
-    ],
-    "exclusion": null,
-    "key": "label proposals accept",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-proposals-list.output"
-    ],
-    "exclusion": null,
-    "key": "label proposals list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-proposals-reject.output"
-    ],
-    "exclusion": null,
-    "key": "label proposals reject",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-proposals-show.output"
-    ],
-    "exclusion": null,
-    "key": "label proposals show",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-propose.output"
-    ],
-    "exclusion": null,
-    "key": "label propose",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-remove.output"
-    ],
-    "exclusion": null,
-    "key": "label remove",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-semantics-delete.output"
-    ],
-    "exclusion": null,
-    "key": "label semantics delete",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-semantics-list.output"
-    ],
-    "exclusion": null,
-    "key": "label semantics list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-semantics-show.output"
-    ],
-    "exclusion": null,
-    "key": "label semantics show",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-semantics-upsert.output"
-    ],
-    "exclusion": null,
-    "key": "label semantics upsert",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.label-suggest.output"
-    ],
-    "exclusion": null,
-    "key": "label suggest",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.outbox-list.output"
-    ],
-    "exclusion": null,
-    "key": "outbox list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.run-logs.output"
-    ],
-    "exclusion": null,
-    "key": "run logs",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.run-show.output"
-    ],
-    "exclusion": null,
-    "key": "run show",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.runs.output"
-    ],
-    "exclusion": null,
-    "key": "runs",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.search.output"
-    ],
-    "exclusion": null,
-    "key": "search",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [],
-    "exclusion": "daemon lifecycle 不产生有限 JSON document；运行诊断固定写 stderr",
-    "key": "serve",
-    "migration": "excluded",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.signal-confirm.output"
-    ],
-    "exclusion": null,
-    "key": "signal confirm",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.signal-list.output"
-    ],
-    "exclusion": null,
-    "key": "signal list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.signal-record.output"
-    ],
-    "exclusion": null,
-    "key": "signal record",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.signal-reject.output"
-    ],
-    "exclusion": null,
-    "key": "signal reject",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.signal-resolve.output"
-    ],
-    "exclusion": null,
-    "key": "signal resolve",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.signal-review.output"
-    ],
-    "exclusion": null,
-    "key": "signal review",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.signal-show.output"
-    ],
-    "exclusion": null,
-    "key": "signal show",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.signal-supersede.output"
-    ],
-    "exclusion": null,
-    "key": "signal supersede",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.stats.output"
-    ],
-    "exclusion": null,
-    "key": "stats",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-archive.output"
-    ],
-    "exclusion": null,
-    "key": "task archive",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-block.output"
-    ],
-    "exclusion": null,
-    "key": "task block",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-claim.output"
-    ],
-    "exclusion": null,
-    "key": "task claim",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-complete.output"
-    ],
-    "exclusion": null,
-    "key": "task complete",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-create.output"
-    ],
-    "exclusion": null,
-    "key": "task create",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-done.output"
-    ],
-    "exclusion": null,
-    "key": "task done",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-heartbeat.output"
-    ],
-    "exclusion": null,
-    "key": "task heartbeat",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-release.output"
-    ],
-    "exclusion": null,
-    "key": "task release",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-list.output"
-    ],
-    "exclusion": null,
-    "key": "task list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-promote.output"
-    ],
-    "exclusion": null,
-    "key": "task promote",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-reclaim.output"
-    ],
-    "exclusion": null,
-    "key": "task reclaim",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-reopen.output"
-    ],
-    "exclusion": null,
-    "key": "task reopen",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-review.output"
-    ],
-    "exclusion": null,
-    "key": "task review",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-show.output"
-    ],
-    "exclusion": null,
-    "key": "task show",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-start.output"
-    ],
-    "exclusion": null,
-    "key": "task start",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-step-add.output"
-    ],
-    "exclusion": null,
-    "key": "task step add",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-step-done.output"
-    ],
-    "exclusion": null,
-    "key": "task step done",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-step-list.output"
-    ],
-    "exclusion": null,
-    "key": "task step list",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-step-not-required.output"
-    ],
-    "exclusion": null,
-    "key": "task step not-required",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-step-remove.output"
-    ],
-    "exclusion": null,
-    "key": "task step remove",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-step-reopen.output"
-    ],
-    "exclusion": null,
-    "key": "task step reopen",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-step-skip.output"
-    ],
-    "exclusion": null,
-    "key": "task step skip",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-step-update.output"
-    ],
-    "exclusion": null,
-    "key": "task step update",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-unblock.output"
-    ],
-    "exclusion": null,
-    "key": "task unblock",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.task-update.output"
-    ],
-    "exclusion": null,
-    "key": "task update",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.vacuum.output"
-    ],
-    "exclusion": null,
-    "key": "vacuum",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.vector-configure.output"
-    ],
-    "exclusion": null,
-    "key": "vector configure",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.vector-query-chunks.output"
-    ],
-    "exclusion": null,
-    "key": "vector query-chunks",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.vector-query-label-atoms.output"
-    ],
-    "exclusion": null,
-    "key": "vector query-label-atoms",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.vector-rebuild.output"
-    ],
-    "exclusion": null,
-    "key": "vector rebuild",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.vector-status.output"
-    ],
-    "exclusion": null,
-    "key": "vector status",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "cli.vector-sync.output"
-    ],
-    "exclusion": null,
-    "key": "vector sync",
-    "migration": "adopted",
-    "surface": "cli"
-  },
-  {
-    "contracts": [
-      "metadata.decision.input"
-    ],
-    "exclusion": null,
-    "key": "structured decision comment metadata input",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "metadata.signal-record.input"
-    ],
-    "exclusion": null,
-    "key": "generic signal record input",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "metadata.signal-link.output"
-    ],
-    "exclusion": null,
-    "key": "signal backlink comment metadata output",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "metadata.label-proposal-candidate.input"
-    ],
-    "exclusion": null,
-    "key": "label proposal candidate input",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "metadata.ontology-record.input"
-    ],
-    "exclusion": null,
-    "key": "label ontology observation input",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "metadata.ontology-validation-evidence.input"
-    ],
-    "exclusion": null,
-    "key": "label ontology external validation evidence",
-    "migration": "adopted",
-    "surface": "metadata"
-  },
-  {
-    "contracts": [
-      "config.project.input"
-    ],
-    "exclusion": null,
-    "key": "project-local config after TOML decoding",
-    "migration": "adopted",
-    "surface": "config"
-  },
-  {
-    "contracts": [
-      "config.selected-worker-profile.input"
-    ],
-    "exclusion": null,
-    "key": "selected dispatcher worker profile after TOML decoding",
-    "migration": "adopted",
-    "surface": "config"
-  },
-  {
-    "contracts": [
-      "helper.graph.handshake.response"
-    ],
-    "exclusion": null,
-    "key": "graph helper handshake response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.graph.error.response"
-    ],
-    "exclusion": null,
-    "key": "graph helper error response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.graph.status.response"
-    ],
-    "exclusion": null,
-    "key": "graph helper status response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.graph.rebuild.response"
-    ],
-    "exclusion": null,
-    "key": "graph helper rebuild response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.graph.sync.response"
-    ],
-    "exclusion": null,
-    "key": "graph helper sync response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.graph.neighbors.response"
-    ],
-    "exclusion": null,
-    "key": "graph helper neighbors response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.graph.query.response"
-    ],
-    "exclusion": null,
-    "key": "graph helper query response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.handshake.response"
-    ],
-    "exclusion": null,
-    "key": "vector helper handshake response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.error.response"
-    ],
-    "exclusion": null,
-    "key": "vector helper error response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.check-provider.response"
-    ],
-    "exclusion": null,
-    "key": "vector provider availability response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.status.response"
-    ],
-    "exclusion": null,
-    "key": "vector helper status response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.rebuild.response"
-    ],
-    "exclusion": null,
-    "key": "vector helper rebuild response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.sync.response"
-    ],
-    "exclusion": null,
-    "key": "vector helper sync response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.label-atoms-status.response"
-    ],
-    "exclusion": null,
-    "key": "label atom vector status response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.rebuild-label-atoms.response"
-    ],
-    "exclusion": null,
-    "key": "label atom vector rebuild response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.sync-label-atoms.response"
-    ],
-    "exclusion": null,
-    "key": "label atom vector sync response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.query-chunks.response"
-    ],
-    "exclusion": null,
-    "key": "vector chunk query response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.query-label-atoms.response"
-    ],
-    "exclusion": null,
-    "key": "label atom vector query response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector.embed-query.response"
-    ],
-    "exclusion": null,
-    "key": "vector embedding response",
-    "migration": "adopted",
-    "surface": "helper"
-  },
-  {
-    "contracts": [
-      "helper.vector-projection.request",
-      "helper.vector-projection.response"
-    ],
-    "exclusion": null,
-    "key": "vector projection helper protocol",
-    "migration": "adopted",
-    "surface": "helper"
   },
   {
     "contracts": [
@@ -2380,7 +1288,6 @@
     ],
     "exclusion": null,
     "key": "type=board",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2390,7 +1297,6 @@
     ],
     "exclusion": null,
     "key": "type=column",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2400,7 +1306,6 @@
     ],
     "exclusion": null,
     "key": "type=task",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2410,7 +1315,6 @@
     ],
     "exclusion": null,
     "key": "type=dependency",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2420,7 +1324,6 @@
     ],
     "exclusion": null,
     "key": "type=run",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2430,7 +1333,6 @@
     ],
     "exclusion": null,
     "key": "type=comment",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2440,7 +1342,6 @@
     ],
     "exclusion": null,
     "key": "type=signal_observation",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2450,7 +1351,6 @@
     ],
     "exclusion": null,
     "key": "type=signal",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2460,7 +1360,6 @@
     ],
     "exclusion": null,
     "key": "type=event",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2470,7 +1369,6 @@
     ],
     "exclusion": null,
     "key": "type=attachment",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2480,7 +1378,6 @@
     ],
     "exclusion": null,
     "key": "type=label",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2490,7 +1387,6 @@
     ],
     "exclusion": null,
     "key": "type=label_semantics",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2500,7 +1396,6 @@
     ],
     "exclusion": null,
     "key": "type=label_atom",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2510,7 +1405,6 @@
     ],
     "exclusion": null,
     "key": "type=label_semantic_proposal",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2520,7 +1414,6 @@
     ],
     "exclusion": null,
     "key": "type=label_ontology_observation",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2530,7 +1423,6 @@
     ],
     "exclusion": null,
     "key": "type=label_ontology_signal",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2540,7 +1432,6 @@
     ],
     "exclusion": null,
     "key": "type=label_ontology_action",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2550,7 +1441,6 @@
     ],
     "exclusion": null,
     "key": "type=label_ontology_action_atom_effect",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2560,7 +1450,6 @@
     ],
     "exclusion": null,
     "key": "type=label_ontology_action_signal",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2570,7 +1459,6 @@
     ],
     "exclusion": null,
     "key": "type=task_label",
-    "migration": "adopted",
     "surface": "jsonl"
   },
   {
@@ -2580,7 +1468,1058 @@
     ],
     "exclusion": null,
     "key": "type=setting",
-    "migration": "adopted",
     "surface": "jsonl"
+  },
+  {
+    "contracts": [
+      "metadata.decision.input"
+    ],
+    "exclusion": null,
+    "key": "structured decision comment metadata input",
+    "surface": "metadata"
+  },
+  {
+    "contracts": [
+      "metadata.signal-record.input"
+    ],
+    "exclusion": null,
+    "key": "generic signal record input",
+    "surface": "metadata"
+  },
+  {
+    "contracts": [
+      "metadata.signal-link.output"
+    ],
+    "exclusion": null,
+    "key": "signal backlink comment metadata output",
+    "surface": "metadata"
+  },
+  {
+    "contracts": [
+      "metadata.label-proposal-candidate.input"
+    ],
+    "exclusion": null,
+    "key": "label proposal candidate input",
+    "surface": "metadata"
+  },
+  {
+    "contracts": [
+      "metadata.ontology-record.input"
+    ],
+    "exclusion": null,
+    "key": "label ontology observation input",
+    "surface": "metadata"
+  },
+  {
+    "contracts": [
+      "metadata.ontology-validation-evidence.input"
+    ],
+    "exclusion": null,
+    "key": "label ontology external validation evidence",
+    "surface": "metadata"
+  },
+  {
+    "contracts": [
+      "config.project.input"
+    ],
+    "exclusion": null,
+    "key": "project-local config after TOML decoding",
+    "surface": "config"
+  },
+  {
+    "contracts": [
+      "config.selected-worker-profile.input"
+    ],
+    "exclusion": null,
+    "key": "selected dispatcher worker profile after TOML decoding",
+    "surface": "config"
+  },
+  {
+    "contracts": [
+      "cli.label-add.output"
+    ],
+    "exclusion": null,
+    "key": "label add",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-bootstrap.output"
+    ],
+    "exclusion": null,
+    "key": "label bootstrap",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-atom-index-query.output"
+    ],
+    "exclusion": null,
+    "key": "label atom-index query",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-atom-index-rebuild.output"
+    ],
+    "exclusion": null,
+    "key": "label atom-index rebuild",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-atom-index-status.output"
+    ],
+    "exclusion": null,
+    "key": "label atom-index status",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-atoms-explain.output"
+    ],
+    "exclusion": null,
+    "key": "label atoms explain",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-atoms-list.output"
+    ],
+    "exclusion": null,
+    "key": "label atoms list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-create.output"
+    ],
+    "exclusion": null,
+    "key": "label create",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-delete.output"
+    ],
+    "exclusion": null,
+    "key": "label delete",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-list.output"
+    ],
+    "exclusion": null,
+    "key": "label list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-apply-atom.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology apply atom",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-confirm.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology confirm",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-list.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-quality.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology quality",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-record.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology record",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-reject.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology reject",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-resolve.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology resolve",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-revert.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology revert",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-review.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology review",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-show.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology show",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-supersede.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology supersede",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-ontology-validate.output"
+    ],
+    "exclusion": null,
+    "key": "label ontology validate",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-proposals-accept.output"
+    ],
+    "exclusion": null,
+    "key": "label proposals accept",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-proposals-list.output"
+    ],
+    "exclusion": null,
+    "key": "label proposals list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-proposals-reject.output"
+    ],
+    "exclusion": null,
+    "key": "label proposals reject",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-proposals-show.output"
+    ],
+    "exclusion": null,
+    "key": "label proposals show",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-propose.output"
+    ],
+    "exclusion": null,
+    "key": "label propose",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-remove.output"
+    ],
+    "exclusion": null,
+    "key": "label remove",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-semantics-delete.output"
+    ],
+    "exclusion": null,
+    "key": "label semantics delete",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-semantics-list.output"
+    ],
+    "exclusion": null,
+    "key": "label semantics list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-semantics-show.output"
+    ],
+    "exclusion": null,
+    "key": "label semantics show",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-semantics-upsert.output"
+    ],
+    "exclusion": null,
+    "key": "label semantics upsert",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.label-suggest.output"
+    ],
+    "exclusion": null,
+    "key": "label suggest",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.run-logs.output"
+    ],
+    "exclusion": null,
+    "key": "run logs",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.run-show.output"
+    ],
+    "exclusion": null,
+    "key": "run show",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.runs.output"
+    ],
+    "exclusion": null,
+    "key": "runs",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.search.output"
+    ],
+    "exclusion": null,
+    "key": "search",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "daemon lifecycle 不产生有限 JSON document；运行诊断固定写 stderr",
+    "key": "serve",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.signal-confirm.output"
+    ],
+    "exclusion": null,
+    "key": "signal confirm",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.signal-list.output"
+    ],
+    "exclusion": null,
+    "key": "signal list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.signal-record.output"
+    ],
+    "exclusion": null,
+    "key": "signal record",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.signal-reject.output"
+    ],
+    "exclusion": null,
+    "key": "signal reject",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.signal-resolve.output"
+    ],
+    "exclusion": null,
+    "key": "signal resolve",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.signal-review.output"
+    ],
+    "exclusion": null,
+    "key": "signal review",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.signal-show.output"
+    ],
+    "exclusion": null,
+    "key": "signal show",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.signal-supersede.output"
+    ],
+    "exclusion": null,
+    "key": "signal supersede",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "隐藏的动态补全候选使用逐行文本协议，不是 JSON document",
+    "key": "__complete",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-backup.output"
+    ],
+    "exclusion": null,
+    "key": "backup",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.board-current.output"
+    ],
+    "exclusion": null,
+    "key": "board current",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.board-use.output"
+    ],
+    "exclusion": null,
+    "key": "board use",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.checkpoint.output"
+    ],
+    "exclusion": null,
+    "key": "checkpoint",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.comment-add.output"
+    ],
+    "exclusion": null,
+    "key": "comment add",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.comment-list.output"
+    ],
+    "exclusion": null,
+    "key": "comment list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.attachment-add.output"
+    ],
+    "exclusion": null,
+    "key": "attachment add",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.attachment-list.output"
+    ],
+    "exclusion": null,
+    "key": "attachment list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.attachment-remove.output"
+    ],
+    "exclusion": null,
+    "key": "attachment remove",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "附件下载输出是原始 bytes 文件，不是 JSON machine envelope",
+    "key": "attachment download",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "shell completion script 是文本脚本，不是 JSON document",
+    "key": "completions",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.config-show.output"
+    ],
+    "exclusion": null,
+    "key": "config show",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.context-build.output"
+    ],
+    "exclusion": null,
+    "key": "context build",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.doctor.output"
+    ],
+    "exclusion": null,
+    "key": "doctor",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.entity-list.output"
+    ],
+    "exclusion": null,
+    "key": "entity list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.entity-show.output"
+    ],
+    "exclusion": null,
+    "key": "entity show",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.entity-upsert.output"
+    ],
+    "exclusion": null,
+    "key": "entity upsert",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.events.output"
+    ],
+    "exclusion": null,
+    "key": "events",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-export.output"
+    ],
+    "exclusion": null,
+    "key": "export",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-neighbors.output"
+    ],
+    "exclusion": null,
+    "key": "graph neighbors",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-query.output"
+    ],
+    "exclusion": null,
+    "key": "graph query",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-neighborhood.output"
+    ],
+    "exclusion": null,
+    "key": "graph neighborhood",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-map.output"
+    ],
+    "exclusion": null,
+    "key": "graph map",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-rebuild.output"
+    ],
+    "exclusion": null,
+    "key": "graph rebuild",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-status.output"
+    ],
+    "exclusion": null,
+    "key": "graph status",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.graph-sync.output"
+    ],
+    "exclusion": null,
+    "key": "graph sync",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "Codex hook handler 使用独立 stdin/stdout protocol，不走通用 CLI JSON envelope",
+    "key": "hook codex handle failure",
+    "surface": "cli"
+  },
+  {
+    "contracts": [],
+    "exclusion": "Codex hook handler 使用独立 stdin/stdout protocol，不走通用 CLI JSON envelope",
+    "key": "hook codex handle task-create",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.hook-codex-install.output"
+    ],
+    "exclusion": null,
+    "key": "hook codex install",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.hook-codex-status.output"
+    ],
+    "exclusion": null,
+    "key": "hook codex status",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.hook-codex-uninstall.output"
+    ],
+    "exclusion": null,
+    "key": "hook codex uninstall",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-import.output"
+    ],
+    "exclusion": null,
+    "key": "import",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.index-doctor.output"
+    ],
+    "exclusion": null,
+    "key": "index doctor",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.index-rebuild.output"
+    ],
+    "exclusion": null,
+    "key": "index rebuild",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.index-status.output"
+    ],
+    "exclusion": null,
+    "key": "index status",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.index-sync.output"
+    ],
+    "exclusion": null,
+    "key": "index sync",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.init.output"
+    ],
+    "exclusion": null,
+    "key": "init",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-rebuild-v1.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance rebuild",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-run-v1.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance run",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-status-v1.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance status",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.dep-add.output"
+    ],
+    "exclusion": null,
+    "key": "dep add",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.dep-list.output"
+    ],
+    "exclusion": null,
+    "key": "dep list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.dep-remove.output"
+    ],
+    "exclusion": null,
+    "key": "dep remove",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.stats.output"
+    ],
+    "exclusion": null,
+    "key": "stats",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-archive.output"
+    ],
+    "exclusion": null,
+    "key": "task archive",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-block.output"
+    ],
+    "exclusion": null,
+    "key": "task block",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-claim.output"
+    ],
+    "exclusion": null,
+    "key": "task claim",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-create.output"
+    ],
+    "exclusion": null,
+    "key": "task create",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-done.output"
+    ],
+    "exclusion": null,
+    "key": "task done",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-heartbeat.output"
+    ],
+    "exclusion": null,
+    "key": "task heartbeat",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-release.output"
+    ],
+    "exclusion": null,
+    "key": "task release",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-list.output"
+    ],
+    "exclusion": null,
+    "key": "task list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-promote.output"
+    ],
+    "exclusion": null,
+    "key": "task promote",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-reclaim.output"
+    ],
+    "exclusion": null,
+    "key": "task reclaim",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-reopen.output"
+    ],
+    "exclusion": null,
+    "key": "task reopen",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-review.output"
+    ],
+    "exclusion": null,
+    "key": "task review",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-show.output"
+    ],
+    "exclusion": null,
+    "key": "task show",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-specify.output"
+    ],
+    "exclusion": null,
+    "key": "task specify",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-step-add.output"
+    ],
+    "exclusion": null,
+    "key": "task step add",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-step-done.output"
+    ],
+    "exclusion": null,
+    "key": "task step done",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-step-list.output"
+    ],
+    "exclusion": null,
+    "key": "task step list",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-step-not-required.output"
+    ],
+    "exclusion": null,
+    "key": "task step not-required",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-step-remove.output"
+    ],
+    "exclusion": null,
+    "key": "task step remove",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-step-reopen.output"
+    ],
+    "exclusion": null,
+    "key": "task step reopen",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-step-skip.output"
+    ],
+    "exclusion": null,
+    "key": "task step skip",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-step-update.output"
+    ],
+    "exclusion": null,
+    "key": "task step update",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-unblock.output"
+    ],
+    "exclusion": null,
+    "key": "task unblock",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.task-update.output"
+    ],
+    "exclusion": null,
+    "key": "task update",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-vacuum.output"
+    ],
+    "exclusion": null,
+    "key": "vacuum",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.vector-configure.output"
+    ],
+    "exclusion": null,
+    "key": "vector configure",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.vector-query-chunks.output"
+    ],
+    "exclusion": null,
+    "key": "vector query-chunks",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.vector-query-label-atoms.output"
+    ],
+    "exclusion": null,
+    "key": "vector query-label-atoms",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.vector-rebuild.output"
+    ],
+    "exclusion": null,
+    "key": "vector rebuild",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.vector-status.output"
+    ],
+    "exclusion": null,
+    "key": "vector status",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.vector-sync.output"
+    ],
+    "exclusion": null,
+    "key": "vector sync",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.maintenance-cleanup.output"
+    ],
+    "exclusion": null,
+    "key": "maintenance cleanup",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "cli.import-v30.output"
+    ],
+    "exclusion": null,
+    "key": "import-v30",
+    "surface": "cli"
+  },
+  {
+    "contracts": [
+      "api.maintenance-path.request"
+    ],
+    "exclusion": null,
+    "key": "POST /api/v1/maintenance/{operation}",
+    "surface": "api"
   }
 ]

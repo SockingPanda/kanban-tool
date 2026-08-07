@@ -1,36 +1,51 @@
-use kanban_contract::GetTaskResponse;
+use kanban_protocol::{GetTaskDetailsResponse, GetTaskResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
     schemars, tool, tool_router,
 };
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::shared::{KanbanMcp, call_client};
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct TaskShowArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: String,
+    #[serde(default)]
+    include_details: bool,
 }
 
 #[tool_router(router = task_show_tools, vis = "pub(crate)")]
 impl KanbanMcp {
     #[tool(
         name = "task_show",
-        description = "Show one task through the canonical kanban application service"
+        description = "通过 canonical kanban application service 查看一条任务"
     )]
     async fn task_show(
         &self,
         Parameters(args): Parameters<TaskShowArgs>,
-    ) -> Result<Json<GetTaskResponse>, McpError> {
+    ) -> Result<Json<Value>, McpError> {
         let board = self.board(args.board);
         let client = self.client.clone();
+        if args.include_details {
+            let detail =
+                call_client(move || client.get_task_details_by_selector(&board, &args.task_ref))
+                    .await?;
+            return Ok(Json(
+                serde_json::to_value(GetTaskDetailsResponse { data: detail })
+                    .map_err(|error| McpError::internal_error(error.to_string(), None))?,
+            ));
+        }
         let task = call_client(move || client.get_task_by_selector(&board, &args.task_ref)).await?;
-        Ok(Json(GetTaskResponse::new(task, None)))
+        Ok(Json(
+            serde_json::to_value(GetTaskResponse::new(task, None))
+                .map_err(|error| McpError::internal_error(error.to_string(), None))?,
+        ))
     }
 }
 

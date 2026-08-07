@@ -7,8 +7,8 @@ use axum::{
     http::HeaderMap,
     routing::delete,
 };
-use kanban_application::RemoveDependencyCommand;
-use kanban_contract::{RemoveDependencyPath, RemoveDependencyResponse};
+use kanban_protocol::{RemoveDependencyPath, RemoveDependencyResponse};
+use kanban_service::RemoveDependencyCommand;
 
 pub(crate) async fn remove_dependency(
     State(state): State<AppState>,
@@ -34,7 +34,10 @@ pub(crate) async fn remove_dependency(
 
 pub(super) fn router() -> Router<AppState> {
     Router::new().route(
-        "/api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
+        crate::http::operations::registered_path(
+            kanban_protocol::HttpMethod::Delete,
+            "/api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
+        ),
         delete(remove_dependency),
     )
 }

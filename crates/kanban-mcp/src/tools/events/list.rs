@@ -1,4 +1,4 @@
-use kanban_contract::{ListEventsQuery, ListEventsResponse};
+use kanban_protocol::{ListEventsQuery, ListEventsResponse};
 use rmcp::{
     ErrorData as McpError,
     handler::server::wrapper::{Json, Parameters},
@@ -19,9 +19,9 @@ fn default_limit() -> usize {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct EventListArgs {
-    /// Board used when task_ref is board-local. Defaults to KB_BOARD/default.
+    /// task_ref 使用 board-local 值时采用的 board。默认使用 KB_BOARD/default。
     board: Option<String>,
-    /// Global t_... id, board#seq, #seq, or numeric board-local sequence.
+    /// 全局 t_... ID、board#seq、#seq 或数字 board-local 序号。
     task_ref: Option<String>,
     #[serde(default = "default_after")]
     after: i64,
@@ -33,7 +33,7 @@ struct EventListArgs {
 impl KanbanMcp {
     #[tool(
         name = "event_list",
-        description = "List canonical task events through the application service"
+        description = "通过 application service 列出 canonical task events"
     )]
     async fn event_list(
         &self,

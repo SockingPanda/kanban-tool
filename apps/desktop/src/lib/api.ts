@@ -2,7 +2,9 @@ export * from "./api/types"
 import { ApiTransport } from "./api/transport"
 import { ApiError, loadRuntimeConfig } from "./api/transport"
 import * as boards from "./api/boards"
+import * as attachments from "./api/attachments"
 import * as comments from "./api/comments"
+import * as context from "./api/context"
 import * as events from "./api/events"
 import * as health from "./api/health"
 import * as labels from "./api/labels"
@@ -17,9 +19,11 @@ import type { DesktopLocale } from "@/i18n"
 import type {
   BoardListOptions,
   ClaimResponse,
+  CreateAttachmentInput,
   CreateBoardInput,
   CreateStepInput,
   CreateTaskInput,
+  ContextBuildOptions,
   LabelOntologyActionCreateInput,
   LabelOntologyReviewOptions,
   LabelOntologySignalListOptions,
@@ -30,6 +34,7 @@ import type {
   Task,
   TaskListOptions,
   UpdateStepInput,
+  DownloadedAttachment,
 } from "./api/types"
 
 export { ApiError, loadRuntimeConfig }
@@ -54,10 +59,36 @@ export class KanbanApi {
   createBoard(input: CreateBoardInput, options: RequestOptions = {}) { return boards.createBoard(this.transport, input, options) }
   getBoard(board: string, options: RequestOptions = {}) { return boards.getBoard(this.transport, board, options) }
   archiveBoard(board: string, options: RequestOptions = {}) { return boards.archiveBoard(this.transport, board, options) }
+  listAttachments(taskId: string, options: RequestOptions = {}) { return attachments.listAttachments(this.transport, taskId, options) }
+  createAttachment(taskId: string, input: CreateAttachmentInput, options: RequestOptions = {}) { return attachments.createAttachment(this.transport, taskId, input, options) }
+  downloadAttachment(taskId: string, attachmentId: string, options: RequestOptions = {}): Promise<DownloadedAttachment> { return attachments.downloadAttachment(this.transport, taskId, attachmentId, options) }
+  deleteAttachment(taskId: string, attachmentId: string, options: RequestOptions = {}) { return attachments.deleteAttachment(this.transport, taskId, attachmentId, options) }
   stats(options: RequestOptions = {}) { return health.stats(this.transport, options) }
   searchStatus(options: RequestOptions = {}) { return health.searchStatus(this.transport, options) }
   doctor(options: RequestOptions = {}) { return maintenance.doctor(this.transport, options) }
   checkpoint(options: RequestOptions = {}) { return maintenance.checkpoint(this.transport, options) }
+  backup(path: string, options: RequestOptions = {}) { return maintenance.backup(this.transport, path, options) }
+  exportData(path: string, options: RequestOptions = {}) { return maintenance.exportData(this.transport, path, options) }
+  export(path: string, options: RequestOptions = {}) { return this.exportData(path, options) }
+  importData(path: string, replace = false, options: RequestOptions = {}) { return maintenance.importData(this.transport, path, replace, options) }
+  import(path: string, replace = false, options: RequestOptions = {}) { return this.importData(path, replace, options) }
+  importLegacySqliteV30(path: string, canonicalAttachmentRoot: string | null = null, options: RequestOptions = {}) {
+    return maintenance.importLegacySqliteV30(this.transport, path, canonicalAttachmentRoot, options)
+  }
+  importV30(path: string, canonicalAttachmentRoot: string | null = null, options: RequestOptions = {}) {
+    return this.importLegacySqliteV30(path, canonicalAttachmentRoot, options)
+  }
+  vacuum(options: RequestOptions = {}) { return maintenance.vacuum(this.transport, options) }
+  maintenanceStatus(options: RequestOptions = {}) { return maintenance.maintenanceStatus(this.transport, options) }
+  maintenanceRun(owner: string | null = null, action: string | null = null, options: RequestOptions = {}) {
+    return maintenance.maintenanceRun(this.transport, owner, action, options)
+  }
+  maintenanceRebuild(owner: string | null = null, options: RequestOptions = {}) {
+    return maintenance.maintenanceRebuild(this.transport, owner, options)
+  }
+  maintenanceCleanup(owner: string | null = null, options: RequestOptions = {}) {
+    return maintenance.maintenanceCleanup(this.transport, owner, options)
+  }
   listBoardColumns(options: RequestOptions = {}) { return boards.listBoardColumns(this.transport, options) }
   listTasks(options: TaskListOptions = {}) { return tasks.listTasks(this.transport, options) }
   listTasksByStatus(options: TaskListOptions & { statuses: import("./api/types").TaskStatus[] }) { return tasks.listTasksByStatus(this.transport, options) }
@@ -71,6 +102,7 @@ export class KanbanApi {
   removeDependency(taskId: string, parentTaskId: string, options: RequestOptions = {}) { return tasks.removeDependency(this.transport, taskId, parentTaskId, options) }
   getTaskNeighborhood(taskId: string, options: RequestOptions & { depth?: number; limitNodes?: number } = {}) { return tasks.getTaskNeighborhood(this.transport, taskId, options) }
   getBoardTaskMap(board = this.board, options: RequestOptions & { activeOnly?: boolean; contextDepth?: number; includeDoneContext?: boolean; includeArchivedContext?: boolean; hideIsolated?: boolean; limitNodes?: number } = {}) { return tasks.getBoardTaskMap(this.transport, board, options) }
+  buildContext(taskId: string, options: ContextBuildOptions = {}) { return context.buildContext(this.transport, taskId, options) }
   listSteps(taskId: string, options: RequestOptions = {}) { return steps.listSteps(this.transport, taskId, options) }
   createStep(taskId: string, input: CreateStepInput, options: RequestOptions = {}) { return steps.createStep(this.transport, taskId, input, options) }
   updateStep(taskId: string, stepId: string, input: UpdateStepInput, options: RequestOptions = {}) { return steps.updateStep(this.transport, taskId, stepId, input, options) }

@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "ApiBoardColumn": {
+      "additionalProperties": false,
+      "properties": {
+        "board_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "position": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/$defs/ApiTaskStatus"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "wip_limit": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "board_id",
+        "status",
+        "title",
+        "position",
+        "hidden",
+        "wip_limit",
+        "created_at",
+        "updated_at"
+      ],
+      "type": "object"
+    },
+    "ApiTaskStatus": {
+      "enum": [
+        "triage",
+        "todo",
+        "scheduled",
+        "ready",
+        "running",
+        "blocked",
+        "review",
+        "done",
+        "archived"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:cli:board-columns-output:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "items": {
+        "$ref": "#/$defs/ApiBoardColumn"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban CLI board columns output v1",
+  "type": "object"
+}

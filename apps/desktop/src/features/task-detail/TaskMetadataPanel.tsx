@@ -9,10 +9,10 @@ export function TaskMetadataPanel({ task }: { task: Task }) {
   return (
     <Section title={t("Metadata")}>
       <div className="space-y-2 text-sm">
-        <InfoRow label="ref" value={task.ref} />
-        <InfoRow label={t("status")} value={task.status} />
+        <InfoRow label={t("Ref")} value={task.ref} />
+        <InfoRow label={t("status")} value={t(task.status)} />
         <InfoRow label={t("assignee")} value={task.assignee ?? "-"} />
-        <InfoRow label={t("plan")} value={task.execution_plan_state} />
+        <InfoRow label={t("plan")} value={t(task.execution_plan_state)} />
         <InfoRow label={t("created")} value={formatRelativeTime(task.created_at)} />
         <InfoRow label={t("updated")} value={formatRelativeTime(task.updated_at)} />
       </div>

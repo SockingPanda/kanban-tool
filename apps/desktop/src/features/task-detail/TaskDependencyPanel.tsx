@@ -32,6 +32,7 @@ export function TaskDependencyPanel({
       <DependencyGroup
         title={t("Parents")}
         kind="parent"
+        t={t}
         tasks={parents}
         pending={pending}
         onSelect={onSelectTask}
@@ -44,6 +45,7 @@ export function TaskDependencyPanel({
       <DependencyGroup
         title={t("Children")}
         kind="child"
+        t={t}
         tasks={children}
         onSelect={onSelectTask}
         noneLabel={t("none")}
@@ -78,6 +80,7 @@ export function DependencyGroup({
   title,
   tasks,
   pending = false,
+  t = englishTranslate,
   onSelect,
   onRemove,
   kind,
@@ -89,6 +92,7 @@ export function DependencyGroup({
   title: string
   tasks: Task[]
   pending?: boolean
+  t?: (key: string, values?: Record<string, string | number>) => string
   onSelect?: (taskId: string) => void
   onRemove?: (taskId: string) => void
   kind?: "parent" | "child"
@@ -110,12 +114,12 @@ export function DependencyGroup({
                 type="button"
                 variant="ghost"
                 className="h-auto border-0 bg-transparent p-0 text-left"
-                aria-label={openLabel?.(task) ?? `Open ${dependencyKind} dependency #${task.seq} ${task.title}`}
-                title={`Open ${task.title}`}
+                aria-label={openLabel?.(task) ?? t("Open {kind} dependency #{seq} {title}", { kind: t(dependencyKind), seq: task.seq, title: task.title })}
+                title={t("Open {title}", { title: task.title })}
                 onClick={() => onSelect?.(task.id)}
               >
                 <Badge variant={dependencyBadgeVariant(task.status)}>
-                  #{task.seq} {task.status}
+                  #{task.seq} {t(task.status)}
                 </Badge>
               </Button>
               {onRemove ? (
@@ -124,8 +128,8 @@ export function DependencyGroup({
                   variant="ghost"
                   className="h-auto rounded-none px-1.5 text-muted-foreground hover:text-destructive"
                   disabled={pending}
-                  aria-label={removeLabel?.(task) ?? `Remove parent dependency #${task.seq} ${task.title}`}
-                  title={removeTitle}
+                  aria-label={removeLabel?.(task) ?? t("Remove parent dependency #{seq} {title}", { seq: task.seq, title: task.title })}
+                  title={removeTitle === "Remove parent dependency" ? t(removeTitle) : removeTitle}
                   onClick={() => onRemove(task.id)}
                 >
                   <X className="h-3.5 w-3.5" />
@@ -145,4 +149,11 @@ function dependencyBadgeVariant(status: TaskStatus): "ready" | "blocked" | "seco
   if (status === "done") return "ready"
   if (status === "blocked") return "blocked"
   return "secondary"
+}
+
+function englishTranslate(key: string, values: Record<string, string | number> = {}) {
+  return key.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => {
+    const value = values[name]
+    return value === undefined ? match : String(value)
+  })
 }

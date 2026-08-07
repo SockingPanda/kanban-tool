@@ -2,6 +2,7 @@ import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 import * as React from "react"
 
+import { useI18n } from "@/i18n"
 import { cn } from "@/lib/utils"
 
 import { sheetContentClassName, sheetOverlayClassName } from "./sheet-motion"
@@ -28,6 +29,7 @@ function SheetContent({
 }: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
 }) {
+  const { t } = useI18n()
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -46,7 +48,7 @@ function SheetContent({
         {children}
         <SheetPrimitive.Close className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
           <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{t("Close")}</span>
         </SheetPrimitive.Close>
       </SheetPrimitive.Content>
     </SheetPortal>

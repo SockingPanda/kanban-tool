@@ -1,4 +1,6 @@
-//! Thin synchronous client for the canonical localhost kanban host.
+#![doc = include_str!("../README.md")]
+
+//! 面向 canonical localhost kanban host 的轻量同步客户端。
 
 mod client;
 mod error;
@@ -8,6 +10,8 @@ mod shared;
 mod transport;
 
 pub use error::ClientError;
+pub use operations::EntityUpsertRequest;
+pub use operations::attachment::DownloadedAttachment;
 
 pub const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:8721";
 

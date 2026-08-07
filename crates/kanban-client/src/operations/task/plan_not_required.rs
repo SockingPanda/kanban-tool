@@ -1,4 +1,4 @@
-use kanban_contract::{
+use kanban_protocol::{
     ApiExecutionPlan, MarkExecutionPlanNotRequiredRequest, MarkExecutionPlanNotRequiredResponse,
 };
 

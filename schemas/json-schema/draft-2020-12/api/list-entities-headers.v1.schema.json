@@ -1,0 +1,15 @@
+{
+  "$id": "urn:kanban-tool:schema:api:list-entities-headers:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "Accept-Language": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "Kanban api.list-entities request headers v1",
+  "type": "object"
+}

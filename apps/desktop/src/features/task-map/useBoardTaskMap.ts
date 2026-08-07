@@ -21,7 +21,7 @@ export function boardTaskMapQueryOptions(api: KanbanApi | null, options: BoardTa
       hideIsolated: Boolean(options.hideIsolated),
     }),
     queryFn: ({ signal }: { signal?: AbortSignal }) => {
-      if (!api) throw new Error("Board task map query is not ready")
+      if (!api) throw new Error("任务关系图查询尚未就绪")
       return api.getBoardTaskMap(api.board, {
         activeOnly: true,
         contextDepth: 1,

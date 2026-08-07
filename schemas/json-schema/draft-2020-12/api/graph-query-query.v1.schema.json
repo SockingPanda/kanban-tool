@@ -1,0 +1,23 @@
+{
+  "$id": "urn:kanban-tool:schema:api:graph-query-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "board": {
+      "default": "default",
+      "type": "string"
+    },
+    "limit": {
+      "default": 100,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "query": {
+      "default": "SELECT ?subject ?predicate ?object WHERE { ?subject ?predicate ?object }",
+      "type": "string"
+    }
+  },
+  "title": "Kanban graph query query v1",
+  "type": "object"
+}

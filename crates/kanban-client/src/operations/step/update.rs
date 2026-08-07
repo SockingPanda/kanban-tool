@@ -1,4 +1,4 @@
-use kanban_contract::{ApiTaskSteps, UpdateStepRequest, UpdateStepResponse};
+use kanban_protocol::{ApiTaskSteps, UpdateStepRequest, UpdateStepResponse};
 
 use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
 
@@ -13,12 +13,12 @@ impl KanbanClient {
         let step_id = step_id.trim();
         if !task_id.starts_with("t_") || task_id.len() <= 2 {
             return Err(ClientError::InvalidInput(
-                "task selector must resolve to a global t_... id".to_owned(),
+                "任务选择器必须解析为全局 t_... ID".to_owned(),
             ));
         }
         if !step_id.starts_with("step_") || step_id.len() <= 5 {
             return Err(ClientError::InvalidInput(
-                "step selector must resolve to a global step_... id".to_owned(),
+                "步骤选择器必须解析为全局 step_... ID".to_owned(),
             ));
         }
         let mut request = request.clone();

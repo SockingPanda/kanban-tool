@@ -3,23 +3,19 @@ use std::{
     sync::Arc,
 };
 
-use kanban_application::ApplicationService;
-use kanban_core::{KanbanError, Result};
-use kanban_store_turso::TursoStore;
-
-use crate::adapter::TursoApplicationStore;
-
-pub(crate) type HostApplicationService = ApplicationService<TursoApplicationStore>;
+pub(crate) use kanban_service::KanbanService;
+use kanban_service::{KanbanError, Result};
 
 #[derive(Clone)]
 pub struct AppState {
-    application: HostApplicationService,
+    application: KanbanService,
     db_path: Arc<PathBuf>,
+    attachment_root: Arc<PathBuf>,
     default_actor: Arc<str>,
 }
 
 impl AppState {
-    /// Open and initialize the canonical Turso database owned by this host.
+    /// 打开并初始化此 host 所有的 canonical Turso 数据库。
     pub async fn open(
         db_path: impl Into<PathBuf>,
         default_actor: impl Into<String>,
@@ -27,7 +23,7 @@ impl AppState {
         Self::open_with_run_log_root(db_path, default_actor, None).await
     }
 
-    /// Open the canonical database and optionally configure the trusted run-log root.
+    /// 打开 canonical 数据库，并可选配置受信任的 run-log root。
     pub async fn open_with_run_log_root(
         db_path: impl Into<PathBuf>,
         default_actor: impl Into<String>,
@@ -39,30 +35,27 @@ impl AppState {
             Some(path) => Some(Arc::new(ensure_run_log_root(&path).await?)),
             None => None,
         };
-        let store = TursoStore::open(&db_path)
-            .await
-            .map_err(|error| KanbanError::Storage(error.to_string()))?;
-        store
-            .initialize()
-            .await
-            .map_err(|error| KanbanError::Storage(error.to_string()))?;
-        let application_store = match run_log_root.as_ref() {
-            Some(root) => TursoApplicationStore::with_run_log_root(store, root.clone()),
-            None => TursoApplicationStore::new(store),
-        };
+        let attachment_root = Arc::new(ensure_attachment_root(&db_path).await?);
+        let application =
+            KanbanService::open_with_roots(&db_path, run_log_root, attachment_root.clone()).await?;
         Ok(Self {
-            application: ApplicationService::new(application_store),
+            application,
             db_path: Arc::new(db_path),
+            attachment_root,
             default_actor: Arc::from(default_actor.into()),
         })
     }
 
-    pub(crate) fn application(&self) -> &HostApplicationService {
+    pub(crate) fn application(&self) -> &KanbanService {
         &self.application
     }
 
     pub fn db_path(&self) -> &Path {
         self.db_path.as_path()
+    }
+
+    pub fn attachment_root(&self) -> &Path {
+        self.attachment_root.as_path()
     }
 
     pub fn default_actor(&self) -> &str {
@@ -72,10 +65,7 @@ impl AppState {
 
 async fn ensure_parent_directory(db_path: &Path) -> Result<()> {
     let parent = db_path.parent().ok_or_else(|| {
-        KanbanError::InvalidInput(format!(
-            "database path has no parent directory: {}",
-            db_path.display()
-        ))
+        KanbanError::InvalidInput(format!("数据库路径没有父目录：{}", db_path.display()))
     })?;
     tokio::fs::create_dir_all(parent)
         .await
@@ -87,6 +77,22 @@ async fn ensure_run_log_root(path: &Path) -> Result<PathBuf> {
         .await
         .map_err(|error| KanbanError::Storage(error.to_string()))?;
     tokio::fs::canonicalize(path)
+        .await
+        .map_err(|error| KanbanError::Storage(error.to_string()))
+}
+
+async fn ensure_attachment_root(db_path: &Path) -> Result<PathBuf> {
+    let parent = db_path.parent().ok_or_else(|| {
+        KanbanError::InvalidInput(format!("数据库路径没有父目录：{}", db_path.display()))
+    })?;
+    let root = parent.join("attachments");
+    tokio::fs::create_dir_all(&root)
+        .await
+        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+    tokio::fs::create_dir_all(root.join(".trash"))
+        .await
+        .map_err(|error| KanbanError::Storage(error.to_string()))?;
+    tokio::fs::canonicalize(root)
         .await
         .map_err(|error| KanbanError::Storage(error.to_string()))
 }

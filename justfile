@@ -130,7 +130,7 @@ desktop-package:
     scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build
 
 cli-package:
-    scripts/package-cli-linux.sh --format deb
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- package cli --format deb
 
 cli-package-layout:
     scripts/test-cli-package-layout.sh
@@ -150,8 +150,8 @@ audit:
 
 target-tools:
     scripts/test-cargo-target-tools.sh
-    python3 -B scripts/test_release_safe_path.py
-    scripts/test-package-cli-linux-safe.sh
+    scripts/cargo-build-lock.sh -- cargo test --locked -p xtask package::tests
+    scripts/cargo-build-lock.sh -- cargo clippy --locked -p xtask --all-targets -- -D warnings
 
 diff-check:
     git diff --check

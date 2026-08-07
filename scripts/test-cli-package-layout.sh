@@ -11,7 +11,7 @@ if [[ -z "$deb_path" ]]; then
 fi
 
 [[ -n "$deb_path" && -f "$deb_path" ]] || {
-  echo "error: no CLI deb found; run scripts/package-cli-linux.sh --format deb first" >&2
+  echo "error: no CLI deb found; run just cli-package first" >&2
   exit 1
 }
 

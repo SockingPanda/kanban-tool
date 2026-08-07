@@ -753,11 +753,6 @@ fn build_deb(
     {
         return Err(error("CLI package output directory identity 发生漂移"));
     }
-    let stage_dev = metadata_dev(&stage.path)?;
-    let output_dev = metadata_dev(output_dir)?;
-    if stage_dev != output_dev {
-        return Err(error("CLI package staging 与 output 不在同一 filesystem"));
-    }
     let status = Command::new("dpkg-deb")
         .args(["--root-owner-group", "--build"])
         .arg(&package_root)
@@ -768,21 +763,54 @@ fn build_deb(
     }
     let staged_metadata = fs::symlink_metadata(&staged)?;
     ensure_single_regular(&staged_metadata, &staged, "staged CLI package")?;
-    stage.verify()?;
-    if path_exists(&output)? {
-        return Err(error(format!(
-            "CLI package destination 在发布前已存在；拒绝覆盖: {}",
-            output.display()
-        )));
-    }
-    fs::rename(&staged, &output)
-        .map_err(|error| error_with_path("发布 CLI package 失败", &output, error))?;
+    publish_staged(&stage, &staged, output_dir, &output)?;
     // stage 目录只含刚刚发布的文件，且是本进程创建；显式校验后清理，避免
     // 出错路径误删同名的其他目录。
     stage.cleanup()?;
     let final_metadata = fs::symlink_metadata(&output)?;
     ensure_single_regular(&final_metadata, &output, "published CLI package")?;
     Ok(output)
+}
+
+fn publish_staged(
+    stage: &OwnedDirectory,
+    staged: &Path,
+    output_dir: &Path,
+    output: &Path,
+) -> ToolResult<()> {
+    if staged.parent() != Some(stage.path.as_path()) {
+        return Err(error(format!(
+            "staged package 不在 owned stage 根下: {}",
+            staged.display()
+        )));
+    }
+    if output.parent() != Some(output_dir) {
+        return Err(error(format!(
+            "package destination 不在 output directory 下: {}",
+            output.display()
+        )));
+    }
+    stage.verify()?;
+    if metadata_dev(&stage.path)? != metadata_dev(output_dir)? {
+        return Err(error("CLI package staging 与 output 不在同一 filesystem"));
+    }
+    if path_exists(output)? {
+        return Err(error(format!(
+            "CLI package destination already exists；拒绝覆盖: {}",
+            output.display()
+        )));
+    }
+    let staged_metadata = fs::symlink_metadata(staged)?;
+    ensure_single_regular(&staged_metadata, staged, "staged CLI package")?;
+    if path_exists(output)? {
+        return Err(error(format!(
+            "CLI package destination 在发布前已存在；拒绝覆盖: {}",
+            output.display()
+        )));
+    }
+    fs::rename(staged, output)
+        .map_err(|error| error_with_path("发布 CLI package 失败", output, error))?;
+    Ok(())
 }
 
 fn install_payload(root: &Path, binary: &Path, package_root: &Path) -> ToolResult<()> {
@@ -1201,6 +1229,10 @@ mod tests {
         fs::hard_link(root.join("regular"), root.join("hardlink")).expect("hardlink fixture");
         assert!(validate_tree(&root, "tree").is_err());
         fs::remove_file(root.join("hardlink")).expect("remove hardlink");
+        let directory = root.join("directory-entry");
+        fs::create_dir(&directory).expect("directory fixture");
+        let directory_metadata = fs::symlink_metadata(&directory).expect("directory metadata");
+        assert!(ensure_single_regular(&directory_metadata, &directory, "file").is_err());
         std::os::unix::fs::symlink(&outside, root.join("linked")).expect("symlink fixture");
         assert!(validate_tree(&root, "tree").is_err());
         fs::remove_dir_all(root).expect("fixture should be cleaned");
@@ -1225,7 +1257,7 @@ mod tests {
         fs::write(&source, b"new").expect("source");
         let destination = root.join("out.deb");
         fs::write(&destination, b"old").expect("destination");
-        assert!(path_exists(&destination).expect("destination should be inspectable"));
+        assert!(publish_staged(&stage, &source, &root, &destination).is_err());
         assert_eq!(
             fs::read(&destination).expect("destination should remain"),
             b"old"

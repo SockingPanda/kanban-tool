@@ -197,7 +197,7 @@ pub(crate) fn run(arguments: &[String]) -> ToolResult<()> {
     reject_build_environment()?;
 
     let release = target_root.join("release");
-    validate_tree_if_present(&release, "Cargo release tree")?;
+    validate_cargo_tree_if_present(&release, "Cargo release tree")?;
     ensure_directory(&release, 0o755)?;
     for path in [
         release.join(".fingerprint"),
@@ -206,7 +206,7 @@ pub(crate) fn run(arguments: &[String]) -> ToolResult<()> {
     ] {
         ensure_directory(&path, 0o755)?;
     }
-    validate_tree(&release, "Cargo release tree")?;
+    validate_cargo_tree(&release, "Cargo release tree")?;
 
     let temp_parent = env::var_os("TMPDIR")
         .map(PathBuf::from)
@@ -225,8 +225,8 @@ pub(crate) fn run(arguments: &[String]) -> ToolResult<()> {
     let binary = release.join(BINARY_NAME);
     let dep_info = release.join(format!("{BINARY_NAME}.d"));
     invalidate_workspace_artifacts(&release, &workspace)?;
-    remove_owned_file_if_present(&binary, "旧 CLI binary")?;
-    remove_owned_file_if_present(&dep_info, "旧 CLI dep-info")?;
+    remove_cargo_file_if_present(&binary, "旧 CLI binary")?;
+    remove_cargo_file_if_present(&dep_info, "旧 CLI dep-info")?;
     build_binary(&root, &options.build_args)?;
     validate_executable(&binary, "CLI binary")?;
     verify_dep_info(&root, &dep_info)?;
@@ -418,10 +418,42 @@ fn validate_target_path(target: &Path, root: &Path) -> ToolResult<()> {
 }
 
 fn reject_build_environment() -> ToolResult<()> {
-    if env::var_os("CARGO_HOME").is_some() {
-        return Err(error(
-            "release package 拒绝 CARGO_HOME override；沿用默认 Cargo home",
-        ));
+    let cargo_home = env::var_os("CARGO_HOME");
+    let home = env::var_os("HOME");
+    if !tool_home_is_default(cargo_home.as_deref(), home.as_deref(), ".cargo") {
+        let actual = cargo_home
+            .as_deref()
+            .map(Path::new)
+            .map_or_else(|| "<unset>".to_owned(), |path| path.display().to_string());
+        let expected = home
+            .as_deref()
+            .map(Path::new)
+            .map(|path| path.join(".cargo"))
+            .map_or_else(
+                || "<HOME unavailable>".to_owned(),
+                |path| path.display().to_string(),
+            );
+        return Err(error(format!(
+            "release package 拒绝非默认 CARGO_HOME: actual={actual} expected={expected}"
+        )));
+    }
+    let rustup_home = env::var_os("RUSTUP_HOME");
+    if !tool_home_is_default(rustup_home.as_deref(), home.as_deref(), ".rustup") {
+        let actual = rustup_home
+            .as_deref()
+            .map(Path::new)
+            .map_or_else(|| "<unset>".to_owned(), |path| path.display().to_string());
+        let expected = home
+            .as_deref()
+            .map(Path::new)
+            .map(|path| path.join(".rustup"))
+            .map_or_else(
+                || "<HOME unavailable>".to_owned(),
+                |path| path.display().to_string(),
+            );
+        return Err(error(format!(
+            "release package 拒绝非默认 RUSTUP_HOME: actual={actual} expected={expected}"
+        )));
     }
     let inherited = env::var("KANBAN_CARGO_BUILD_LOCK_HELD").ok().as_deref() == Some("1");
     for (name, _value) in env::vars_os() {
@@ -435,8 +467,6 @@ fn reject_build_environment() -> ToolResult<()> {
             | "CARGO_ENCODED_RUSTDOCFLAGS"
             | "RUSTC_BOOTSTRAP"
             | "SOURCE_DATE_EPOCH"
-            | "RUSTUP_TOOLCHAIN"
-            | "RUSTUP_HOME"
             | "RUSTUP_DIST_SERVER"
             | "RUSTUP_UPDATE_ROOT"
             | "CARGO_BUILD_RUSTC"
@@ -453,6 +483,7 @@ fn reject_build_environment() -> ToolResult<()> {
             | "PKG_CONFIG_LIBDIR" => true,
             "CARGO_BUILD_JOBS" | "NEXTEST_TEST_THREADS" | "RUST_TEST_THREADS" => !inherited,
             "CARGO_TARGET_DIR" => false,
+            "CARGO_HOME" | "RUSTUP_HOME" | "RUSTUP_TOOLCHAIN" | "RUSTUP_TOOLCHAIN_SOURCE" => false,
             value if value.starts_with("CARGO_TARGET_") => true,
             value
                 if value.starts_with("CARGO_BUILD_")
@@ -477,6 +508,20 @@ fn reject_build_environment() -> ToolResult<()> {
         }
     }
     Ok(())
+}
+
+fn tool_home_is_default(
+    tool_home: Option<&OsStr>,
+    home: Option<&OsStr>,
+    default_directory: &str,
+) -> bool {
+    let Some(tool_home) = tool_home else {
+        return true;
+    };
+    let Some(home) = home else {
+        return false;
+    };
+    Path::new(tool_home) == Path::new(home).join(default_directory)
 }
 
 fn workspace_metadata(root: &Path) -> ToolResult<Vec<CargoPackage>> {
@@ -530,9 +575,9 @@ fn invalidate_workspace_artifacts(release: &Path, packages: &[CargoPackage]) -> 
     let fingerprint = release.join(".fingerprint");
     let build = release.join("build");
     let deps = release.join("deps");
-    validate_tree(&fingerprint, "Cargo fingerprint tree")?;
-    validate_tree(&build, "Cargo build tree")?;
-    validate_tree(&deps, "Cargo deps tree")?;
+    validate_cargo_tree(&fingerprint, "Cargo fingerprint tree")?;
+    validate_cargo_tree(&build, "Cargo build tree")?;
+    validate_cargo_tree(&deps, "Cargo deps tree")?;
 
     let package_names = packages
         .iter()
@@ -568,7 +613,7 @@ fn invalidate_workspace_artifacts(release: &Path, packages: &[CargoPackage]) -> 
                 path.display()
             )));
         }
-        remove_owned_stale_directory(&path, "workspace fingerprint")?;
+        remove_cargo_stale_directory(&path, "workspace fingerprint")?;
 
         let build_path = build.join(name);
         if path_exists(&build_path)? {
@@ -579,7 +624,7 @@ fn invalidate_workspace_artifacts(release: &Path, packages: &[CargoPackage]) -> 
                     build_path.display()
                 )));
             }
-            remove_owned_stale_directory(&build_path, "workspace build")?;
+            remove_cargo_stale_directory(&build_path, "workspace build")?;
         }
         let crate_name = package.replace('-', "_");
         for dep in fs::read_dir(&deps)? {
@@ -591,7 +636,7 @@ fn invalidate_workspace_artifacts(release: &Path, packages: &[CargoPackage]) -> 
             }
             let dep_path = dep.path();
             let metadata = fs::symlink_metadata(&dep_path)?;
-            ensure_single_regular(&metadata, &dep_path, "workspace deps stale entry")?;
+            ensure_regular(&metadata, &dep_path, "workspace deps stale entry")?;
             fs::remove_file(&dep_path).map_err(|error| {
                 error_with_path("删除 workspace deps stale entry 失败", &dep_path, error)
             })?;
@@ -610,19 +655,19 @@ fn dependency_artifact_matches(name: &str, crate_name: &str, hash: &str) -> bool
         })
 }
 
-fn remove_owned_stale_directory(path: &Path, label: &str) -> ToolResult<()> {
-    validate_tree(path, label)?;
+fn remove_cargo_stale_directory(path: &Path, label: &str) -> ToolResult<()> {
+    validate_cargo_tree(path, label)?;
     fs::remove_dir_all(path)
         .map_err(|error| error_with_path("删除 stale directory 失败", path, error))?;
     Ok(())
 }
 
-fn remove_owned_file_if_present(path: &Path, label: &str) -> ToolResult<()> {
+fn remove_cargo_file_if_present(path: &Path, label: &str) -> ToolResult<()> {
     if !path_exists(path)? {
         return Ok(());
     }
     let metadata = fs::symlink_metadata(path)?;
-    ensure_single_regular(&metadata, path, label)?;
+    ensure_regular(&metadata, path, label)?;
     fs::remove_file(path).map_err(|error| error_with_path("删除旧 artifact 失败", path, error))?;
     Ok(())
 }
@@ -849,7 +894,7 @@ fn install_payload(root: &Path, binary: &Path, package_root: &Path) -> ToolResul
         .join("README.md");
     ensure_directory(bin.parent().expect("binary parent exists"), 0o755)?;
     ensure_directory(readme.parent().expect("README parent exists"), 0o755)?;
-    copy_regular(binary, &bin, 0o755)?;
+    copy_cargo_artifact(binary, &bin, 0o755)?;
     copy_regular(&root.join("README.md"), &readme, 0o644)
 }
 
@@ -938,6 +983,21 @@ fn installed_bytes(root: &Path) -> ToolResult<u64> {
 fn copy_regular(source: &Path, destination: &Path, mode: u32) -> ToolResult<()> {
     let source_metadata = fs::symlink_metadata(source)?;
     ensure_single_regular(&source_metadata, source, "package source file")?;
+    copy_checked(source, destination, mode, &source_metadata)
+}
+
+fn copy_cargo_artifact(source: &Path, destination: &Path, mode: u32) -> ToolResult<()> {
+    let source_metadata = fs::symlink_metadata(source)?;
+    ensure_regular(&source_metadata, source, "Cargo package source file")?;
+    copy_checked(source, destination, mode, &source_metadata)
+}
+
+fn copy_checked(
+    source: &Path,
+    destination: &Path,
+    mode: u32,
+    source_metadata: &Metadata,
+) -> ToolResult<()> {
     let mut input = File::open(source)?;
     let mut output = OpenOptions::new();
     output.write(true).create_new(true);
@@ -948,7 +1008,7 @@ fn copy_regular(source: &Path, destination: &Path, mode: u32) -> ToolResult<()> 
     output.flush()?;
     set_mode(destination, mode)?;
     let current = fs::symlink_metadata(source)?;
-    if identity(&source_metadata) != identity(&current) || source_metadata.len() != current.len() {
+    if identity(source_metadata) != identity(&current) || source_metadata.len() != current.len() {
         return Err(error(format!(
             "package source 在复制期间发生变化: {}",
             source.display()
@@ -988,11 +1048,29 @@ fn ensure_directory(path: &Path, mode: u32) -> ToolResult<()> {
     Ok(())
 }
 
-fn validate_tree_if_present(path: &Path, label: &str) -> ToolResult<()> {
+fn validate_cargo_tree_if_present(path: &Path, label: &str) -> ToolResult<()> {
     if path_exists(path)? {
-        validate_tree(path, label)?;
+        validate_cargo_tree(path, label)?;
     }
     Ok(())
+}
+
+fn validate_cargo_tree(path: &Path, label: &str) -> ToolResult<()> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| error_with_path("无法检查 Cargo tree", path, error))?;
+    if metadata.is_symlink() {
+        return Err(error(format!("{label} 包含 symlink: {}", path.display())));
+    }
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path)? {
+            validate_cargo_tree(&entry?.path(), label)?;
+        }
+        return Ok(());
+    }
+    // Cargo 会为 build script 和顶层 binary 创建同一 target tree 内的 hardlink。
+    // 该 tree 由共享 build lock 保护，因此这里只要求 no-follow regular file；
+    // package staging、payload 和最终产物仍继续要求 single-linked。
+    ensure_regular(&metadata, path, label)
 }
 
 fn validate_tree(path: &Path, label: &str) -> ToolResult<()> {
@@ -1094,12 +1172,7 @@ fn regular_directory_metadata(path: &Path, label: &str) -> ToolResult<Metadata> 
 }
 
 fn ensure_single_regular(metadata: &Metadata, path: &Path, label: &str) -> ToolResult<()> {
-    if metadata.is_symlink() || !metadata.is_file() {
-        return Err(error(format!(
-            "{label} 不是 no-follow regular file: {}",
-            path.display()
-        )));
-    }
+    ensure_regular(metadata, path, label)?;
     #[cfg(unix)]
     if metadata.nlink() != 1 {
         return Err(error(format!(
@@ -1110,9 +1183,19 @@ fn ensure_single_regular(metadata: &Metadata, path: &Path, label: &str) -> ToolR
     Ok(())
 }
 
+fn ensure_regular(metadata: &Metadata, path: &Path, label: &str) -> ToolResult<()> {
+    if metadata.is_symlink() || !metadata.is_file() {
+        return Err(error(format!(
+            "{label} 不是 no-follow regular file: {}",
+            path.display()
+        )));
+    }
+    Ok(())
+}
+
 fn validate_executable(path: &Path, label: &str) -> ToolResult<()> {
     let metadata = fs::symlink_metadata(path)?;
-    ensure_single_regular(&metadata, path, label)?;
+    ensure_regular(&metadata, path, label)?;
     #[cfg(unix)]
     if metadata.mode() & 0o111 == 0 {
         return Err(error(format!("{label} 不可执行: {}", path.display())));
@@ -1260,6 +1343,35 @@ mod tests {
     }
 
     #[test]
+    fn tool_home_accepts_unset_or_default_and_rejects_redirects() {
+        assert!(tool_home_is_default(
+            None,
+            Some(OsStr::new("/home/test")),
+            ".cargo"
+        ));
+        assert!(tool_home_is_default(
+            Some(OsStr::new("/home/test/.cargo")),
+            Some(OsStr::new("/home/test")),
+            ".cargo"
+        ));
+        assert!(tool_home_is_default(
+            Some(OsStr::new("/home/test/.rustup")),
+            Some(OsStr::new("/home/test")),
+            ".rustup"
+        ));
+        assert!(!tool_home_is_default(
+            Some(OsStr::new("/root/data/cargo-home")),
+            Some(OsStr::new("/home/test")),
+            ".cargo"
+        ));
+        assert!(!tool_home_is_default(
+            Some(OsStr::new("/home/test/.cargo")),
+            None,
+            ".cargo"
+        ));
+    }
+
+    #[test]
     fn dep_info_provenance_accepts_other_current_root_prerequisites_when_crates_is_present() {
         let root = fixture("dep-info-root");
         fs::create_dir_all(root.join("crates/example/src")).expect("crates fixture");
@@ -1305,6 +1417,23 @@ mod tests {
         assert!(ensure_single_regular(&directory_metadata, &directory, "file").is_err());
         std::os::unix::fs::symlink(&outside, root.join("linked")).expect("symlink fixture");
         assert!(validate_tree(&root, "tree").is_err());
+        fs::remove_dir_all(root).expect("fixture should be cleaned");
+        fs::remove_dir_all(outside).expect("fixture should be cleaned");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cargo_tree_accepts_hardlinks_but_rejects_symlinks() {
+        let root = fixture("cargo-tree");
+        let outside = fixture("cargo-tree-outside");
+        let artifact = root.join("artifact");
+        fs::write(&artifact, b"binary").expect("Cargo artifact fixture");
+        fs::hard_link(&artifact, root.join("artifact-hash")).expect("Cargo hardlink fixture");
+        validate_cargo_tree(&root, "Cargo tree")
+            .expect("共享 build lock 下的 Cargo hardlink 必须允许");
+
+        std::os::unix::fs::symlink(&outside, root.join("linked")).expect("symlink fixture");
+        assert!(validate_cargo_tree(&root, "Cargo tree").is_err());
         fs::remove_dir_all(root).expect("fixture should be cleaned");
         fs::remove_dir_all(outside).expect("fixture should be cleaned");
     }

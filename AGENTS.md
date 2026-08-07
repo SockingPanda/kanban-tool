@@ -50,12 +50,15 @@
 - `$style`：Rust、Cargo、模块组织、依赖边界、错误和测试位置。
 - `$prose`：用户可见简体中文文案、README、指南和 ADR 表达。
 - `$docs`：事实源、owner placement、文档同步和历史退出边界。
+- `$domain-modeling`：维护领域术语、`CONTEXT.md` 和需要记录的长期决策。
 - `$check`：根据当前 `justfile` 选择并报告最小充分验证。
 - `$commit`：仅在用户明确授权后创建本地 Conventional Commit。
 
 ## 6. 文档地图
 
 - 产品首页、最小使用路径和指南索引：[`README.md`](README.md)。
+- 文档治理、事实源、owner placement 和同步清单：[`docs/documentation.md`](docs/documentation.md)。
+- 跨文档共享的领域语言：[`CONTEXT.md`](CONTEXT.md)；术语需要确认或变更时使用 `$domain-modeling`。
 - 跨 crate 拓扑、依赖方向和 canonical/derived 原则：[`docs/architecture.md`](docs/architecture.md)。
 - 状态、readiness、claim、lease 和 dispatcher：[`crates/kanban-core/docs/state_machine.md`](crates/kanban-core/docs/state_machine.md)。
 - persistence、migration、maintenance：[`crates/kanban-service/docs/`](crates/kanban-service/docs/)。
@@ -84,5 +87,6 @@
 ## 9. 维护
 
 - 根文件只做入口和路由；领域行为跟随 owner crate/app，机器 inventory 跟随代码或生成 artifact。
+- `CONTEXT.md` 只保留领域语言；文档事实源和同步边界遵循 [`docs/documentation.md`](docs/documentation.md)。
 - 修改文档源后直接运行相应 owner/docs gate；不生成聚合快照，不手工维护派生规格。
 - 任何长期架构取舍落在对应 ADR；实现进度、review finding 和一次性 workaround 留在任务或 runbook。

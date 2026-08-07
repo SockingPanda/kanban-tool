@@ -13,7 +13,7 @@ description: 在 kanban-tool 新写或修改 Rust、Cargo manifest、模块、�
 
 - `kanban-core` 不依赖内部 crate、HTTP、Turso 或 UI；protocol/client/MCP/Desktop 不直连 canonical database。
 - 只有 service 直接依赖 `turso`、server 直接依赖 `axum`、client 直接依赖 `ureq`、MCP 直接依赖 `rmcp`、Desktop 直接依赖 `tauri`。
-- 新增第三方依赖放在最窄使用 crate；workspace 只统一 version/source/path，feature 由实际 leaf 选择。
+- 新增第三方依赖放在最窄使用 crate；workspace 只统一 version/source/path 和 `default-features` baseline，leaf 直接声明自身所需 positive features，不依赖其他 workspace member 偶然启用的 feature。
 - 状态、事务和错误语义放在共享 core/service path；adapter 不复制 SQL、状态机或 fallback。
 - 项目 Rust 注释/rustdoc 以简体中文为主，机器标识和协议 literal 保持原文。
 - owner guide 接入 rustdoc 时使用准确 `#[doc = include_str!(...)]`，不改变现有 crate/module attrs 和行为。

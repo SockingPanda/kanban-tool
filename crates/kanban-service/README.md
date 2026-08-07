@@ -11,9 +11,8 @@ host、CLI、MCP 和 Desktop 不能绕过这条路径写数据库。
 - Turso schema、migration、repository、projection、search/vector provider 和只读 legacy importer
   在本 crate 内维护。
 - `KanbanService` 是唯一 application mutation/query 入口；Turso row model 不跨出 persistence 边界。
-- labels/ontology/proposals 属于同一 canonical service path。proposal 同时支持 task scope 和 board
-  scope，board-wide 查询可按 `status` 过滤；proposal accept/reject 与 ontology action ledger 由
-  service transaction 保护。
+- labels/ontology/proposals 属于同一 canonical service path；proposal 是 canonical ontology fact，
+  proposal accept/reject 与 ontology action ledger 由同一 service transaction 保护。
 
 行为指南：
 

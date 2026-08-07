@@ -12,8 +12,8 @@ canonical mutation path，也不存在并行 SQLite runtime backend。
 
 业务事实包括 board/task/lifecycle、执行计划和步骤、依赖、评论、附件 metadata、labels/ontology/
 signals、entities/relations、runs 与 append-only events。`tasks.status` 是状态事实，event 是审计事实。
-`label_semantic_proposals` 也是 service-owned ontology fact；它同时支持 task scope 与 board scope，
-board-wide 列表由 host 的 typed contract 暴露，精确 endpoint 由 `kanban-protocol` catalog 持有。
+`label_semantic_proposals` 是 service-owned canonical ontology fact；proposal accept/reject 与 ontology
+action ledger 由同一 service transaction 保护。
 
 ## 派生数据
 

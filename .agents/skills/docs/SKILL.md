@@ -34,12 +34,14 @@ wire/schema/catalog；`kanban-client` → typed transport；`kanban-server` → 
 
 ## 历史与证据
 
-当前指南只描述当前行为；已完成 ledger、旧 recovery runbook 和聚合快照不作为 active 指南的事实源。
-若它们仍保留在 `docs/migration/` 或 `docs/release/`，仅按任务或发布证据追溯。修改前先核对 owner
-source，冲突时报告 current implementation 与既有承诺，不静默创造第二份规范。
+当前指南只描述当前行为；已完成 ledger、旧 recovery runbook 和聚合快照必须退出 active 文档树，不
+作为 active 指南的事实源。它们的历史由 Git history/tag、release asset 或 task record 持有；需要
+追溯时沿这些证据回到 owner source，不在 active 文档复制归档正文。修改前先核对 owner source，冲突
+时报告 current implementation 与既有承诺，不静默创造第二份规范。
 
 ## 验证案例
 
 - canonical：新增 wire 字段时更新 protocol owner 与生成 artifact，README 只保留使用语义。
 - near-miss：私有函数重命名且公开事实不变时不新增长期文档。
+- historical：完成 ledger、旧 recovery runbook 和聚合快照退出 active 文档树，历史只由 Git/tag、release asset 或 task record 追溯。
 - failure：不得只改派生文件；应回到 owner source 并验证本地链接和 `include_str!`。

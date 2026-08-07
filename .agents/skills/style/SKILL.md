@@ -35,7 +35,7 @@ description: 在 kanban-tool 新写或修改 Rust、Cargo manifest、模块、�
 
 ## Dependencies
 
-- 新增第三方依赖放在实际使用它的最窄 crate；workspace 只统一 version/source/path，positive features 由 leaf crate 选择。不要为方便跨层调用而扩大 dependency owner。
+- 新增第三方依赖放在实际使用它的最窄 crate；workspace 只统一 version/source/path 和 `default-features` baseline，positive features 由实际使用它的 leaf crate 显式选择。leaf 不得依赖其他 workspace member 偶然启用的 feature；需要的 feature 必须在自身 manifest 直接声明。不要为方便跨层调用而扩大 dependency owner。
 - 第三方类型需要 re-export 时使用显式 named re-export（例如 `pub use dep::{TypeA, TypeB};`），不要用 glob 让依赖升级悄然扩大公开 API；项目内部聚合仍遵循上面的 barrel 规则。
 - 保持现有专用 owner：`turso` → `kanban-service`、`axum` → `kanban-server`、`ureq` → `kanban-client`、`rmcp` → `kanban-mcp`、`tauri` → Desktop；adapter 不绕过共享 application/service path。
 
@@ -53,5 +53,6 @@ item docs 面向调用者，描述当前行为和边界，避免 exhaustive inve
 - 类型新增或重排时应能看出定义、主要 inherent `impl`、trait `impl` 和底部测试的关系；条件编译、宏生成或清晰度需要时，合理拆分不应被机械拒绝。
 - 新的嵌套模块与机械迁移后的 active module tree 应采用 `foo.rs` + `foo/`；内部 barrel 可用 glob 聚合，第三方 re-export 仍列出明确名称，peer 共享内容进入同级 `common`。
 - 新增依赖应由真实 crate 使用并通过依赖 owner 检查。
+- workspace 只提供 version/source/path 与 `default-features` baseline；leaf manifest 直接声明所需 positive features，不得依赖其他 member 偶然启用的 feature。
 - 文档 include 路径失效属于错误，应在 docs gate 中暴露，而不是删除 include 规避。
 - 私有重命名且公开边界不变时不扩写根规格或新增抽象。

@@ -411,7 +411,7 @@ fn reject_build_environment() -> ToolResult<()> {
             | "PKG_CONFIG_LIBDIR" => true,
             "CARGO_BUILD_JOBS" | "NEXTEST_TEST_THREADS" | "RUST_TEST_THREADS" => !inherited,
             "CARGO_TARGET_DIR" => false,
-            value if value.starts_with("CARGO_TARGET_") => !inherited,
+            value if value.starts_with("CARGO_TARGET_") => true,
             value
                 if value.starts_with("CARGO_BUILD_")
                     || value.starts_with("CARGO_HTTP_")

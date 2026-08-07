@@ -27,8 +27,15 @@
 - `kanban-server`：负责 `kanban serve` host 进程生命周期、database/attachment/run-log 路径准备、Axum router、dispatcher 调度与 graceful/force shutdown 编排；Turso 打开、初始化、迁移与持久化由 `kanban-service` 负责。
 - `kanban-protocol`：当前 active wire DTO、error、schema 和 surface catalog；不承载数据库 row 或 store 规则。
 - `kanban-client`：typed localhost HTTP client；CLI、MCP 和 Desktop 不直连数据库。
-- `kanban-cli`、`kanban-mcp`、`apps/desktop/src-tauri`：薄入口或 shell；`xtask` 仅作离线检查工具。
+- `kanban-cli`、`kanban-mcp`、`apps/desktop/src-tauri`：薄入口或 shell；`xtask` 负责离线仓库工具。
 - 依赖 ownership 和模块边界见 [`docs/architecture.md`](docs/architecture.md) 及 `$style`。
+
+### 仓库工具边界
+
+- 根 `justfile` 是仓库工具的稳定入口；recipe 只负责把 Rust/`xtask`、Shell、前端和外部平台命令编排到当前 gate，不形成第二套仓库语义。
+- Rust 与 `xtask` 负责仓库语义校验、生成、依赖图、affected 规划、benchmark、package 和 provenance 证据；新的仓库不变量优先落在 Rust 类型、测试或 `xtask`，不在 Shell 中复制。
+- Shell 只负责平台工具、环境准备和进程编排。active repository tooling 不得新增或调用 `.py` 文件、`python`/`python3`，也不得在 Shell 中内嵌 Python。
+- 该边界不误伤 frontend TypeScript 或外部平台命令；它们按各自 owner 维护，但仍不能借由 active repository tooling 引入 Python 入口。
 
 ## 4. 任务边界与停止
 

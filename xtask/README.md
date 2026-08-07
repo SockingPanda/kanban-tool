@@ -1,10 +1,22 @@
 # xtask
 
-`xtask` 保存离线的 schema、依赖、文档结构检查和 CLI release package 工具。它读取 workspace metadata、
-protocol catalog 和提交的 artifact，不拥有产品运行时、canonical database 或第二条 mutation path。
+`xtask` 是 Rust 编写的离线仓库工具。它负责仓库语义校验与生成、依赖图、affected 规划、benchmark、
+package 和 provenance 证据，读取 workspace metadata、protocol catalog 和提交的 artifact；它不拥有
+产品运行时、canonical database 或第二条 mutation path。
 
-常规开发通过根 `justfile` 调用它。`docs check` 只验证文档链接、`include_str!` 目标、crate map 和
-ADR index；`schema check` 才在 protocol/schema contract 发生变化时校验机器 artifact。
+常规开发通过根 `justfile` 调用它，`justfile` 是稳定入口。当前命令组如下：
+
+- `affected`：根据基线和工作树变更规划、输出并执行受影响的仓库 gate。
+- `docs check`：验证文档链接、`include_str!` 目标、crate map 和 ADR index。
+- `schema generate|check|audit`：生成并校验 protocol/schema artifact，以及 contract/surface inventory。
+- `deps check`：根据 Cargo workspace metadata 校验依赖 graph 和 owner 边界。
+- `agents check`：校验仓库契约、技能包结构和 active recipe/package map。
+- `tooling check`：校验 active repository tooling 不含 `.py`、`python`/`python3` 或 Shell 内嵌 Python 入口。
+- `package cli`：构建 standalone `kanban` Debian package。
+
+仓库工具的 ownership 是：Rust/`xtask` 持有语义校验、生成、依赖图、affected、benchmark、package 和
+provenance；Shell 只负责编排平台工具、环境与进程；frontend TypeScript 与外部平台命令按各自 owner
+维护。新增仓库不变量优先放入 Rust 类型、测试或 `xtask`。
 
 ## CLI package
 

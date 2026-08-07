@@ -17,6 +17,9 @@ description: 在 kanban-tool 新写或修改 Rust、Cargo manifest、模块、�
 - 状态、事务和错误语义放在共享 core/service path；adapter 不复制 SQL、状态机或 fallback。
 - 项目 Rust 注释/rustdoc 以简体中文为主，机器标识和协议 literal 保持原文。
 - owner guide 接入 rustdoc 时使用准确 `#[doc = include_str!(...)]`，不改变现有 crate/module attrs 和行为。
+- 根 `justfile` 是仓库工具的稳定入口；Rust 与 `xtask` 负责仓库语义校验、生成、依赖图、affected、benchmark、package 和 provenance，新的仓库不变量优先使用 Rust 类型、测试或 `xtask` 表达。
+- Shell 只负责平台工具、环境与进程编排；active repository tooling 不得新增或调用 `.py` 文件、`python`/`python3`，也不得在 Shell 中内嵌 Python。
+- frontend TypeScript 与外部平台命令不属于上述禁用面；按各自 owner 维护，不为满足仓库工具边界而重写它们。
 
 下面四个 section 是可执行的组织默认和条件规则；除上面明确列出的边界外，不把排版偏好当作无条件 hard invariant。
 

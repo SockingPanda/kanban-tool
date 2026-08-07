@@ -120,9 +120,6 @@ desktop-check:
     pnpm --dir apps/desktop typecheck
     pnpm --dir apps/desktop test
 
-single-host-dependency-gate:
-    python3 -B scripts/check-single-host-dependencies.py
-
 desktop-build:
     pnpm --dir apps/desktop build
 
@@ -199,15 +196,6 @@ schema-tool:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p xtask --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p xtask; fi
     scripts/cargo-build-lock.sh -- cargo clippy --locked -p xtask --all-targets -- -D warnings
 
-schema-dependency-isolation-self-test:
-    python3 -B scripts/test_schema_dependency_isolation.py
-    python3 -B scripts/test_schema_recipe_witness.py
-
-schema-dependency-isolation:
-    just schema-dependency-isolation-self-test
-    python3 -B scripts/schema_dependency_policy.py
-    scripts/test-schema-cargo-tree.sh
-
 schema-adoption-witness-self-test:
     python3 -B scripts/test_schema_adoption_witnesses.py
 
@@ -220,7 +208,7 @@ schema-surface-audit:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog; fi
 
 schema-contract:
-    just schema-dependency-isolation
+    just deps-check
     just schema-fmt
     just feature-p kanban-protocol schema
     just schema-tool

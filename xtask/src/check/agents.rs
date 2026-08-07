@@ -191,15 +191,7 @@ fn check_openai_contract(skill: &str, path: &Path) -> ToolResult<()> {
 }
 
 fn check_active_maps(root: &Path) -> ToolResult<()> {
-    const ACTIVE_MAPS: &[&str] = &[
-        "justfile",
-        "xtask/src/affected.rs",
-        "scripts/schema_dependency_policy.py",
-        "scripts/check-dependency-owners.py",
-        "scripts/test_dependency_owners.py",
-        "scripts/test-schema-cargo-tree.sh",
-        "scripts/test_schema_recipe_witness.py",
-    ];
+    const ACTIVE_MAPS: &[&str] = &["justfile", "xtask/src/affected.rs"];
     const STALE_REFERENCES: &[&str] = &["kanban-schema-tool", "kanban-sqlite", "kanban-local"];
     for relative in ACTIVE_MAPS {
         let path = root.join(relative);

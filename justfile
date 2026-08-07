@@ -184,6 +184,7 @@ ci-full:
     just schema-contract
     just deps-check
     just agents-check
+    just tooling-check
     just audit
     just smoke
     just diff-check

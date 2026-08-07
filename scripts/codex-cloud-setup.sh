@@ -119,6 +119,7 @@ install_system_packages() {
     curl
     dpkg-dev
     file
+    jq
     libayatana-appindicator3-dev
     libgtk-3-dev
     libprotobuf-dev
@@ -128,6 +129,7 @@ install_system_packages() {
     patchelf
     pkg-config
     protobuf-compiler
+    sqlite3
     wget
   )
 

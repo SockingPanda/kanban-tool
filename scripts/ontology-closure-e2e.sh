@@ -18,8 +18,12 @@ command -v jq >/dev/null 2>&1 || {
   echo "error: jq is required" >&2
   exit 1
 }
-command -v python3 >/dev/null 2>&1 || {
-  echo "error: python3 is required" >&2
+command -v node >/dev/null 2>&1 || {
+  echo "error: node is required" >&2
+  exit 1
+}
+command -v sqlite3 >/dev/null 2>&1 || {
+  echo "error: sqlite3 is required" >&2
   exit 1
 }
 command -v pnpm >/dev/null 2>&1 || {
@@ -117,46 +121,26 @@ assert_file_contains() {
 sql_scalar() {
   local db="$1"
   local sql="$2"
-  python3 - "$db" "$sql" <<'PY'
-import sqlite3
-import sys
-
-db, sql = sys.argv[1], sys.argv[2]
-conn = sqlite3.connect(db)
-value = conn.execute(sql).fetchone()[0]
-print("" if value is None else value)
-PY
+  sqlite3 -readonly -batch -noheader "$db" "$sql"
 }
 
 write_counts() {
   local db="$1"
   local output="$2"
-  python3 - "$db" >"$output" <<'PY'
-import json
-import sqlite3
-import sys
-
-db = sys.argv[1]
-conn = sqlite3.connect(db)
-
-def one(sql):
-    return conn.execute(sql).fetchone()[0]
-
-data = {
-    "tasks": one("SELECT COUNT(*) FROM tasks"),
-    "labels": one("SELECT COUNT(*) FROM labels"),
-    "task_labels": one("SELECT COUNT(*) FROM task_labels"),
-    "task_events": one("SELECT COUNT(*) FROM task_events"),
-    "label_semantics": one("SELECT COUNT(*) FROM label_semantics"),
-    "label_atoms": one("SELECT COUNT(*) FROM label_atoms"),
-    "actions": one("SELECT COUNT(*) FROM label_ontology_actions"),
-    "effects": one("SELECT COUNT(*) FROM label_ontology_action_atom_effects"),
-    "update_semantics_actions": one("SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='update_semantics'"),
-    "revert_actions": one("SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='revert_ontology_mutation'"),
-    "confirm_actions": one("SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='confirm'"),
-}
-print(json.dumps(data, sort_keys=True))
-PY
+  sqlite3 -readonly -json "$db" <<'SQL' | jq -S '.[0]' >"$output"
+SELECT
+  (SELECT COUNT(*) FROM tasks) AS tasks,
+  (SELECT COUNT(*) FROM labels) AS labels,
+  (SELECT COUNT(*) FROM task_labels) AS task_labels,
+  (SELECT COUNT(*) FROM task_events) AS task_events,
+  (SELECT COUNT(*) FROM label_semantics) AS label_semantics,
+  (SELECT COUNT(*) FROM label_atoms) AS label_atoms,
+  (SELECT COUNT(*) FROM label_ontology_actions) AS actions,
+  (SELECT COUNT(*) FROM label_ontology_action_atom_effects) AS effects,
+  (SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='update_semantics') AS update_semantics_actions,
+  (SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='revert_ontology_mutation') AS revert_actions,
+  (SELECT COUNT(*) FROM label_ontology_actions WHERE action_type='confirm') AS confirm_actions;
+SQL
 }
 
 assert_counts_equal() {
@@ -187,13 +171,7 @@ latest_action_effect_count() {
 
 foreign_key_check_count() {
   local db="$1"
-  python3 - "$db" <<'PY'
-import sqlite3
-import sys
-
-conn = sqlite3.connect(sys.argv[1])
-print(len(conn.execute("PRAGMA foreign_key_check").fetchall()))
-PY
+  sqlite3 -readonly -json "$db" 'PRAGMA foreign_key_check;' | jq 'length'
 }
 
 assert_no_foreign_key_violations() {
@@ -307,28 +285,17 @@ run_json "$RUN_DIR/doctor.imported.json" kb_imported doctor
 assert_jq "$RUN_DIR/doctor.imported.json" '.data.ok == true' "imported closure DB doctor must pass"
 assert_no_foreign_key_violations "$IMPORTED_DB"
 
-python3 - "$DB" "$IMPORTED_DB" <<'PY'
-import sqlite3
-import sys
-
-source, imported = sys.argv[1], sys.argv[2]
-tables = [
-    "label_ontology_actions",
-    "label_ontology_action_atom_effects",
-    "label_ontology_action_signals",
-]
-for table in tables:
-    src = sqlite3.connect(source).execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-    dst = sqlite3.connect(imported).execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-    if src != dst:
-        raise SystemExit(f"{table} count mismatch after import: {src} != {dst}")
-conn = sqlite3.connect(imported)
-missing = conn.execute(
-    "SELECT COUNT(*) FROM label_ontology_actions WHERE validation_requirement IS NULL OR validation_requirement=''"
-).fetchone()[0]
-if missing:
-    raise SystemExit("imported actions must preserve validation_requirement")
-PY
+for table in label_ontology_actions label_ontology_action_atom_effects label_ontology_action_signals; do
+  source_count="$(sql_scalar "$DB" "SELECT COUNT(*) FROM $table")"
+  imported_count="$(sql_scalar "$IMPORTED_DB" "SELECT COUNT(*) FROM $table")"
+  [[ "$source_count" == "$imported_count" ]] || {
+    fail "$table count mismatch after import: $source_count != $imported_count"
+  }
+done
+missing_validation_requirement="$(sql_scalar "$IMPORTED_DB" "SELECT COUNT(*) FROM label_ontology_actions WHERE validation_requirement IS NULL OR validation_requirement=''")"
+[[ "$missing_validation_requirement" == "0" ]] || {
+  fail "imported actions must preserve validation_requirement"
+}
 
 run_desktop_boundary_tests
 

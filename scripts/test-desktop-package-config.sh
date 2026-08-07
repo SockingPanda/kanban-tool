@@ -11,13 +11,16 @@ for path in "$TAURI_CONF" "$DESKTOP_MANIFEST" "$JUSTFILE" "$PACKAGE_LAYOUT_SCRIP
   [[ -f "$path" ]] || { echo "error: missing expected file: $path" >&2; exit 1; }
 done
 
-python3 - "$TAURI_CONF" <<'PYCONF'
-import json, pathlib, sys
-conf = json.loads(pathlib.Path(sys.argv[1]).read_text())
-external = conf.get("bundle", {}).get("externalBin")
-if external is not None:
-    raise SystemExit(f"error: retired helper externalBin remains configured: {external!r}")
-PYCONF
+command -v jq >/dev/null 2>&1 || {
+  echo "error: jq is required" >&2
+  exit 1
+}
+
+if ! jq -e '(.bundle.externalBin? // null) == null' "$TAURI_CONF" >/dev/null; then
+  external="$(jq -c '.bundle.externalBin' "$TAURI_CONF")"
+  echo "error: retired helper externalBin remains configured: $external" >&2
+  exit 1
+fi
 
 if rg -n 'kanban-(vector-lancedb|graph-oxigraph)|prepare-desktop-helper|test-desktop-helper' \
   "$TAURI_CONF" "$DESKTOP_MANIFEST" "$JUSTFILE" "$PACKAGE_LAYOUT_SCRIPT"; then

@@ -9,6 +9,13 @@ SERVER_URL=""
 TARGET_DIR=""
 KANBAN_BIN=""
 
+for tool in curl jq node; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "error: $tool is required" >&2
+    exit 1
+  }
+done
+
 cleanup_host() {
   if [[ -z "$HOST_PID" ]]; then
     return 0
@@ -46,13 +53,18 @@ KANBAN_BIN="$TARGET_DIR/debug/kanban"
 }
 
 free_loopback_port() {
-  python3 - <<'PY'
-import socket
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    sock.bind(("127.0.0.1", 0))
-    print(sock.getsockname()[1])
-PY
+  node -e '
+    const net = require("node:net");
+    const server = net.createServer();
+    server.on("error", error => {
+      console.error(error);
+      process.exitCode = 1;
+    });
+    server.listen(0, "127.0.0.1", () => {
+      process.stdout.write(`${server.address().port}\n`);
+      server.close();
+    });
+  '
 }
 
 wait_for_health() {
@@ -67,28 +79,12 @@ wait_for_health() {
       sed -n '1,240p' "$SMOKE_DIR/serve.log" >&2 || true
       return 1
     fi
-    if python3 - "$port" "$expected_db" <<'PY'
-import json
-import sys
-import urllib.request
-
-try:
-    with urllib.request.urlopen(
-        f"http://127.0.0.1:{int(sys.argv[1])}/health", timeout=0.5
-    ) as response:
-        payload = json.load(response)
-    report = payload.get("data", {})
-    if (
-        response.status == 200
-        and report.get("ok") is True
-        and report.get("db") == "turso"
-        and report.get("db_path") == sys.argv[2]
-    ):
-        raise SystemExit(0)
-except (OSError, ValueError, AttributeError, TypeError, json.JSONDecodeError):
-    pass
-raise SystemExit(1)
-PY
+    if curl --silent --show-error --fail --max-time 0.5 "http://127.0.0.1:$port/health" 2>/dev/null |
+      jq -e --arg expected_db "$expected_db" '
+        .data.ok == true
+        and .data.db == "turso"
+        and .data.db_path == $expected_db
+      ' >/dev/null
     then
       return 0
     fi
@@ -152,12 +148,12 @@ kb init >/dev/null
 kb board list >/dev/null
 
 task_json="$(kb task create "v1 smoke task" --description "ready spec" --status todo --max-retries 2)"
-task_id="$(printf '%s' "$task_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["id"])')"
+task_id="$(jq -r '.data.id' <<<"$task_json")"
 kb task step not-required "$task_id" --reason "smoke task has no execution plan steps" >/dev/null
 kb task promote "$task_id" >/dev/null
 
 for _ in {1..120}; do
-  task_status="$(kb task show "$task_id" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["status"])')"
+  task_status="$(kb task show "$task_id" | jq -r '.data.status')"
   if [[ "$task_status" == "done" ]]; then
     break
   fi
@@ -169,13 +165,9 @@ done
 }
 
 runs_json="$(kb runs "$task_id")"
-run_id="$(printf '%s' "$runs_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])')"
+run_id="$(jq -r '.data[0].id' <<<"$runs_json")"
 logs_json="$(kb run logs "$run_id")"
-printf '%s' "$logs_json" | python3 -c '
-import json,sys
-payload=json.load(sys.stdin)
-assert "smoke log" in payload["data"]["content"]
-'
+jq -e '.data.content | contains("smoke log")' <<<"$logs_json" >/dev/null
 
 # dispatcher 完成后释放其持续轮询；维护操作由同一 canonical DB 的无 dispatcher host 执行。
 cleanup_host
@@ -191,20 +183,9 @@ kb export --path "$SMOKE_DIR/board.jsonl" >/dev/null
 cleanup_host
 start_host "$SMOKE_DIR/imported.db"
 import_json="$(kb import --path "$SMOKE_DIR/board.jsonl")"
-printf '%s' "$import_json" | python3 -c '
-import json,sys
-report=json.load(sys.stdin)["data"]
-assert report["phase"] == "completed"
-assert report["restart_required"] is False
-'
+jq -e '.data.phase == "completed" and .data.restart_required == false' <<<"$import_json" >/dev/null
 imported_task_json="$(kb task show "$task_id")"
-printf '%s' "$imported_task_json" | python3 -c '
-import json
-import sys
-
-task = json.load(sys.stdin)["data"]
-assert task["id"] == sys.argv[1]
-assert task["status"] == "done"
-' "$task_id"
+jq -e --arg task_id "$task_id" '.data.id == $task_id and .data.status == "done"' \
+  <<<"$imported_task_json" >/dev/null
 
 echo "v1 本地单 Host smoke 通过：$ROOT"

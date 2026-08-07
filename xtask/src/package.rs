@@ -366,6 +366,9 @@ fn validate_target_path(target: &Path, root: &Path) -> ToolResult<()> {
         return Err(error("Cargo target root 不得是 filesystem root"));
     }
     let target = lexical_normalize(target);
+    if target == Path::new("/") {
+        return Err(error("Cargo target root 不得是 filesystem root"));
+    }
     if target == *root || target.starts_with(root) {
         return Err(error(
             "CLI package 拒绝位于 source tree 内的 Cargo target root",

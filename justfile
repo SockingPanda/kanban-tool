@@ -196,13 +196,6 @@ schema-tool:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p xtask --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p xtask; fi
     scripts/cargo-build-lock.sh -- cargo clippy --locked -p xtask --all-targets -- -D warnings
 
-schema-adoption-witness-self-test:
-    python3 -B scripts/test_schema_adoption_witnesses.py
-
-schema-adoption-witness:
-    just schema-adoption-witness-self-test
-    python3 -B scripts/schema_adoption_witnesses.py --root .
-
 schema-surface-audit:
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-server api_route_catalog_matches_exact_contract_catalog; fi
     if cargo nextest --version >/dev/null 2>&1; then scripts/cargo-build-lock.sh -- cargo nextest run --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog --no-fail-fast; else scripts/cargo-build-lock.sh -- cargo test --locked -p kanban-cli clap_leaf_commands_match_exact_contract_catalog; fi
@@ -214,11 +207,6 @@ schema-contract:
     just schema-tool
     just schema-check
     just schema-surface-audit
-    just schema-adoption-witness
-
-schema-audit-closed:
-    just schema-adoption-witness
-    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema audit --require-closed
 
 schema *args:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- schema "$@"

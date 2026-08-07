@@ -364,7 +364,39 @@ fn verify_inherited_build_lock(root: &Path) -> ToolResult<PathBuf> {
             String::from_utf8_lossy(&output.stderr).trim()
         )));
     }
+    if !resource_environment_is_internal() {
+        return Err(error(
+            "inherited Cargo build lock 的 resource environment policy 无效",
+        ));
+    }
     Ok(target)
+}
+
+fn resource_environment_is_internal() -> bool {
+    let build_policy = env::var("KANBAN_CARGO_BUILD_JOBS").unwrap_or_default();
+    let test_policy = env::var("KANBAN_TEST_THREADS").unwrap_or_default();
+    if !matches!(build_policy.as_str(), "" | "2" | "auto" | "AUTO")
+        || !matches!(test_policy.as_str(), "" | "2" | "auto" | "AUTO")
+    {
+        return false;
+    }
+
+    let build_set = env::var_os("CARGO_BUILD_JOBS").is_some();
+    let nextest_set = env::var_os("NEXTEST_TEST_THREADS").is_some();
+    let rust_set = env::var_os("RUST_TEST_THREADS").is_some();
+    if !build_set && !nextest_set && !rust_set {
+        return build_policy != "2" && test_policy != "2";
+    }
+    build_set
+        && nextest_set
+        && rust_set
+        && env::var("CARGO_BUILD_JOBS").ok().as_deref() == Some("2")
+        && env::var("NEXTEST_TEST_THREADS").ok().as_deref() == Some("2")
+        && env::var("RUST_TEST_THREADS").ok().as_deref() == Some("2")
+        && build_policy != "auto"
+        && build_policy != "AUTO"
+        && test_policy != "auto"
+        && test_policy != "AUTO"
 }
 
 fn validate_target_path(target: &Path, root: &Path) -> ToolResult<()> {

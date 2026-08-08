@@ -38,6 +38,8 @@ export interface SignalsScreenProps {
   readonly online?: boolean
   readonly onFiltersChange?: (filters: SignalsRouteFilters) => void
   readonly onSelectSignal?: (signalId: string | null) => void
+  /** Parent-owned history seam for closing the selected detail. */
+  readonly onCloseDetail?: () => void
 }
 
 function emptyListState(): ReadState<readonly SignalRecord[]> {
@@ -140,6 +142,7 @@ export function SignalsScreen({
   online = typeof navigator === "undefined" || navigator.onLine,
   onFiltersChange,
   onSelectSignal: onSelectSignalProp,
+  onCloseDetail: onCloseDetailProp,
 }: SignalsScreenProps) {
   const [localFilters, setLocalFilters] = useState<SignalsRouteFilters>(filters)
   const [localSelectedSignalId, setLocalSelectedSignalId] = useState<string | null>(selectedSignalIdProp ?? null)
@@ -177,6 +180,10 @@ export function SignalsScreen({
     onSelectSignalProp?.(signalId)
   }
   const refresh = () => setRefreshToken((value) => value + 1)
+  const closeDetail = () => {
+    selectSignal(null)
+    onCloseDetailProp?.()
+  }
   const selectedFromList = selectedSignalId === null ? null : visibleSignals.find((signal) => signal.id === selectedSignalId) ?? null
 
   return (
@@ -194,6 +201,7 @@ export function SignalsScreen({
       onRefresh={refresh}
       onFiltersChange={updateFilters}
       onSelectSignal={selectSignal}
+      onCloseDetail={closeDetail}
     />
   )
 }
@@ -208,6 +216,7 @@ export interface SignalsScreenViewProps {
   readonly onRefresh: () => void
   readonly onFiltersChange: (filters: SignalsRouteFilters) => void
   readonly onSelectSignal: (signalId: string | null) => void
+  readonly onCloseDetail?: () => void
 }
 
 export function SignalsScreenView({
@@ -220,6 +229,7 @@ export function SignalsScreenView({
   onRefresh,
   onFiltersChange,
   onSelectSignal,
+  onCloseDetail,
 }: SignalsScreenViewProps) {
   const stale = list.phase === "error" && list.data.length > 0
   const status = (filters.status ?? "review") as SignalStatusFilter
@@ -304,6 +314,7 @@ export function SignalsScreenView({
               <Heading level={2}>Signal detail</Heading>
               <Text as="p" type="supporting">{selectedSignalId ?? "none selected"}</Text>
             </div>
+            {selectedSignalId !== null && onCloseDetail ? <Button label="Close detail" variant="ghost" size="sm" onClick={onCloseDetail} /> : null}
             {detail.phase === "refreshing" ? <Badge variant="warning" label="refreshing" /> : null}
           </div>
           <SignalDetailView loading={detail.phase === "loading"} signal={detail.data} error={detail.error} />

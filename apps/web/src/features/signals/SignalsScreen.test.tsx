@@ -57,6 +57,7 @@ describe("Signals screen presentation", () => {
         onRefresh={() => undefined}
         onFiltersChange={() => undefined}
         onSelectSignal={() => undefined}
+        onCloseDetail={() => undefined}
       />,
     )
 
@@ -66,6 +67,7 @@ describe("Signals screen presentation", () => {
     expect(html).toContain("CLI friction")
     expect(html).toContain("Evidence JSON")
     expect(html).toContain("default#1")
+    expect(html).toContain("Close detail")
   })
 
   test("keeps stale rows visible while a refresh fails", () => {

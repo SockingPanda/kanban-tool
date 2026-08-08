@@ -203,6 +203,63 @@ describe("same-origin Web HTTP transport", () => {
     }))
   })
 
+  test("forwards generated actor headers while keeping Accept transport-owned", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: { deleted: true } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))
+    const transport = createHttpTransport(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await transport.request({
+      method: "DELETE",
+      path: "/api/v1/tasks/t_1/attachments/a_1",
+      headers: { "X-KB-Actor": "test-actor" },
+    })
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://kanban.test/__kb_api__/api/v1/tasks/t_1/attachments/a_1",
+      expect.objectContaining({
+        headers: { Accept: "application/json", "X-KB-Actor": "test-actor" },
+      }),
+    )
+  })
+
+  test("rejects unknown, duplicate, and invalid JSON headers before fetch", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+    const transport = createHttpTransport(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await expect(transport.request({
+      method: "POST",
+      path: "/api/v1/tasks/t_1",
+      body: { title: "new" },
+      headers: { Accept: "application/json" },
+    })).rejects.toMatchObject({ kind: "invalid_headers" })
+    await expect(transport.request({
+      method: "POST",
+      path: "/api/v1/tasks/t_1",
+      body: { title: "new" },
+      headers: { "Content-Type": "application/json", "content-type": "application/json" },
+    })).rejects.toMatchObject({ kind: "invalid_headers" })
+    await expect(transport.request({
+      method: "POST",
+      path: "/api/v1/tasks/t_1",
+      body: { title: "new" },
+      headers: { "Content-Type": "text/plain" },
+    })).rejects.toMatchObject({ kind: "invalid_headers" })
+    await expect(transport.request({
+      method: "DELETE",
+      path: "/api/v1/tasks/t_1",
+      headers: { "Content-Type": "application/json" },
+    })).rejects.toMatchObject({ kind: "invalid_headers" })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
   test("raw mutation requests preserve generated API errors", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(
       JSON.stringify({ error: { code: "invalid_transition", message: "task cannot be blocked" } }),

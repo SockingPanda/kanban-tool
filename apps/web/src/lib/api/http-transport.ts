@@ -11,6 +11,7 @@ export type HttpTransportErrorKind =
   | "offline"
   | "http"
   | "invalid_json"
+  | "invalid_headers"
   | "invalid_content_type"
   | "response_too_large"
 
@@ -54,6 +55,7 @@ export interface HttpTransport extends HttpReadTransport {
     readonly method: HttpRequestMethod
     readonly path: string
     readonly body?: unknown
+    readonly headers?: Readonly<Record<string, string | null>>
     readonly signal?: AbortSignal
   }): Promise<HttpTransportResponse>
 }
@@ -327,6 +329,50 @@ function validateFinalOrigin(response: Response, requestOrigin: string): void {
   }
 }
 
+const REQUEST_HEADER_NAMES = new Set(["Accept-Language", "Content-Type", "X-KB-Actor"])
+
+function requestHeaders(
+  provided: Readonly<Record<string, string | null>> | undefined,
+  hasBody: boolean,
+): Record<string, string> {
+  const headers: Record<string, string> = { Accept: "application/json" }
+  if (provided === undefined) {
+    if (hasBody) headers["Content-Type"] = "application/json"
+    return headers
+  }
+
+  const seen = new Set<string>()
+  for (const [name, value] of Object.entries(provided)) {
+    if (!REQUEST_HEADER_NAMES.has(name)) {
+      throw new HttpTransportError("invalid_headers", `Web API 请求包含不支持的 header：${name}。`)
+    }
+    const canonicalName = name
+    if (seen.has(canonicalName)) {
+      throw new HttpTransportError("invalid_headers", `Web API 请求重复设置 header：${canonicalName}。`)
+    }
+    seen.add(canonicalName)
+    if (value === null) continue
+    if (typeof value !== "string") {
+      throw new HttpTransportError("invalid_headers", `Web API 请求 header ${canonicalName} 必须是字符串或 null。`)
+    }
+    if (canonicalName === "Content-Type" && value !== "application/json") {
+      throw new HttpTransportError("invalid_headers", "Web API JSON 请求的 Content-Type 必须是 application/json。")
+    }
+    headers[canonicalName] = value
+  }
+
+  if (hasBody) {
+    if (Object.hasOwn(provided, "Content-Type") && (provided["Content-Type"] === null || headers["Content-Type"] !== "application/json")) {
+      throw new HttpTransportError("invalid_headers", "带 body 的 Web API 请求必须使用 application/json Content-Type。")
+    }
+    headers["Content-Type"] = "application/json"
+  } else if (provided["Content-Type"] !== undefined && provided["Content-Type"] !== null) {
+    throw new HttpTransportError("invalid_headers", "无 body 的 Web API 请求不得设置 Content-Type。")
+  }
+
+  return headers
+}
+
 export function createHttpTransport(
   runtime: WebRuntimeConfig,
   options: HttpTransportOptions = {},
@@ -338,11 +384,12 @@ export function createHttpTransport(
     readonly method: HttpRequestMethod
     readonly path: string
     readonly body?: unknown
+    readonly headers?: Readonly<Record<string, string | null>>
     readonly signal?: AbortSignal
   }): Promise<HttpTransportResponse> {
-    const { method, path, body: bodyValue, signal } = options
+    const { method, path, body: bodyValue, headers: requestHeaderValues, signal } = options
     const url = requestURL(base, path)
-    const headers: Record<string, string> = { Accept: "application/json" }
+    const headers = requestHeaders(requestHeaderValues, bodyValue !== undefined)
     let body: string | undefined
     if (bodyValue !== undefined) {
       try {

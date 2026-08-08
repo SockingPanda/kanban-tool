@@ -70,6 +70,7 @@ export type BoardReadErrorKind =
   | "anomaly"
   | "cross_origin"
   | "malformed_url"
+  | "invalid_headers"
   | "invalid_content_type"
   | "response_too_large"
 

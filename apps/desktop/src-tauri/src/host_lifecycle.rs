@@ -169,12 +169,21 @@ fn probe_host_with_timeouts(
     endpoint: SocketAddr,
     timeouts: ProbeTimeouts,
 ) -> Result<HostCompatibility, ProbeError> {
+    let deadline = Instant::now() + timeouts.total;
+    probe_host_until(endpoint, timeouts, deadline)
+}
+
+fn probe_host_until(
+    endpoint: SocketAddr,
+    timeouts: ProbeTimeouts,
+    deadline: Instant,
+) -> Result<HostCompatibility, ProbeError> {
     if !endpoint.ip().is_loopback() {
         return Err(ProbeError::incompatible(
             "Desktop host probe 只允许 loopback 地址",
         ));
     }
-    let health = get_json::<HealthResponse>(endpoint, "/health", timeouts)?;
+    let health = get_json::<HealthResponse>(endpoint, "/health", timeouts, deadline)?;
     if !health.data.ok {
         return Err(ProbeError::incompatible("host health.ok=false"));
     }
@@ -186,17 +195,29 @@ fn probe_host_with_timeouts(
         )));
     }
 
-    let runtime = get_json::<WebRuntimeConfig>(endpoint, "/app/runtime.json", timeouts)?;
-    let manifest = get_json::<WebArtifactManifest>(endpoint, "/app/manifest.json", timeouts)?;
-    HostCompatibility::verify(runtime, manifest, env!("CARGO_PKG_VERSION"))
-        .map_err(|error| ProbeError::incompatible(error.to_string()))
+    let runtime = get_json::<WebRuntimeConfig>(endpoint, "/app/runtime.json", timeouts, deadline)?;
+    let manifest =
+        get_json::<WebArtifactManifest>(endpoint, "/app/manifest.json", timeouts, deadline)?;
+    let compatibility = HostCompatibility::verify(runtime, manifest, env!("CARGO_PKG_VERSION"))
+        .map_err(|error| ProbeError::incompatible(error.to_string()))?;
+    if Instant::now() >= deadline {
+        return Err(ProbeError::incompatible(
+            "host probe total deadline exceeded",
+        ));
+    }
+    Ok(compatibility)
 }
 
-fn get_json<T>(endpoint: SocketAddr, path: &str, timeouts: ProbeTimeouts) -> Result<T, ProbeError>
+fn get_json<T>(
+    endpoint: SocketAddr,
+    path: &str,
+    timeouts: ProbeTimeouts,
+    deadline: Instant,
+) -> Result<T, ProbeError>
 where
     T: serde::de::DeserializeOwned,
 {
-    let response = get(endpoint, path, timeouts)?;
+    let response = get(endpoint, path, timeouts, deadline)?;
     if response.status != 200 {
         return Err(ProbeError::incompatible(format!(
             "host {path} 返回 HTTP {}，需要 200",
@@ -223,8 +244,8 @@ fn get(
     endpoint: SocketAddr,
     path: &str,
     timeouts: ProbeTimeouts,
+    deadline: Instant,
 ) -> Result<HttpResponse, ProbeError> {
-    let deadline = Instant::now() + timeouts.total;
     let mut stream = TcpStream::connect_timeout(
         &endpoint,
         remaining_timeout(deadline, timeouts.connect).map_err(|error| {
@@ -547,6 +568,7 @@ struct OwnedChild {
     process: Child,
     stderr: Arc<Mutex<VecDeque<u8>>>,
     drain: Option<thread::JoinHandle<()>>,
+    drop_cleanup: bool,
 }
 
 impl OwnedChild {
@@ -571,6 +593,30 @@ impl OwnedChild {
             let _ = drain.join();
         }
     }
+
+    /// Drop 路径只做不会等待的 best-effort 重试；无法确认退出时放弃 join，避免悬死。
+    fn best_effort_drop_retry(&mut self) {
+        if matches!(self.process.try_wait(), Ok(Some(_))) {
+            self.finish_drain();
+            return;
+        }
+        let _ = self.process.kill();
+        if matches!(self.process.try_wait(), Ok(Some(_))) {
+            self.finish_drain();
+        }
+    }
+
+    fn disarm_drop_cleanup(&mut self) {
+        self.drop_cleanup = false;
+    }
+}
+
+impl Drop for OwnedChild {
+    fn drop(&mut self) {
+        if self.drop_cleanup {
+            self.best_effort_drop_retry();
+        }
+    }
 }
 
 impl HostHandle {
@@ -580,62 +626,77 @@ impl HostHandle {
 
     pub fn shutdown(&mut self) -> Result<ShutdownResult, ShutdownError> {
         if self.ownership == HostOwnership::External {
+            if let Some(child) = self.child.as_mut() {
+                child.disarm_drop_cleanup();
+            }
             return Ok(ShutdownResult::ExternalHostKept);
         }
-        let Some(mut child) = self.child.take() else {
+        let Some(child) = self.child.as_mut() else {
             return Ok(ShutdownResult::AlreadyExited);
         };
         match child.process.try_wait() {
             Ok(Some(_)) => {
                 child.finish_drain();
+                self.child.take();
                 return Ok(ShutdownResult::AlreadyExited);
             }
             Ok(None) => {}
             Err(error) => {
                 let first_error = ShutdownError::Io(error.to_string());
-                let cleanup_error = force_stop(&mut child).err();
-                if let Some(cleanup_error) = cleanup_error {
-                    eprintln!("kanban owned host cleanup 失败：{cleanup_error}");
-                }
-                return Err(first_error);
+                return self.cleanup_after_error(first_error);
             }
         }
 
         if let Err(error) = request_graceful_stop(&child.process) {
             let first_error = ShutdownError::GracefulRequest(error.to_string());
-            let cleanup_error = force_stop(&mut child).err();
-            if let Some(cleanup_error) = cleanup_error {
-                eprintln!("kanban owned host cleanup 失败：{cleanup_error}");
-            }
-            return Err(first_error);
+            return self.cleanup_after_error(first_error);
         }
         let deadline = Instant::now() + GRACEFUL_SHUTDOWN_TIMEOUT;
         loop {
             match child.process.try_wait() {
                 Ok(Some(_)) => {
                     child.finish_drain();
+                    self.child.take();
                     return Ok(ShutdownResult::Graceful);
                 }
                 Ok(None) if Instant::now() < deadline => {
                     thread::sleep(HOST_POLL_INTERVAL);
                 }
                 Ok(None) => {
-                    let cleanup_error = force_stop(&mut child).err();
-                    if let Some(cleanup_error) = cleanup_error {
-                        return Err(ShutdownError::Io(cleanup_error.to_string()));
+                    let cleanup = force_stop(child);
+                    let ownership = cleanup.ownership();
+                    let cleanup_error = cleanup
+                        .first_error
+                        .map(|error| ShutdownError::Io(error.to_string()));
+                    if ownership == CleanupOwnership::Release {
+                        self.child.take();
                     }
-                    return Ok(ShutdownResult::Forced);
+                    return cleanup_error.map_or(Ok(ShutdownResult::Forced), Err);
                 }
                 Err(error) => {
                     let first_error = ShutdownError::Io(error.to_string());
-                    let cleanup_error = force_stop(&mut child).err();
-                    if let Some(cleanup_error) = cleanup_error {
-                        eprintln!("kanban owned host cleanup 失败：{cleanup_error}");
-                    }
-                    return Err(first_error);
+                    return self.cleanup_after_error(first_error);
                 }
             }
         }
+    }
+
+    fn cleanup_after_error(
+        &mut self,
+        first_error: ShutdownError,
+    ) -> Result<ShutdownResult, ShutdownError> {
+        let cleanup = self
+            .child
+            .as_mut()
+            .expect("owned host child disappeared during shutdown");
+        let cleanup = force_stop(cleanup);
+        if cleanup.ownership() == CleanupOwnership::Release {
+            self.child.take();
+        }
+        if let Some(cleanup_error) = cleanup.first_error {
+            eprintln!("kanban owned host cleanup 失败：{cleanup_error}");
+        }
+        Err(first_error)
     }
 }
 
@@ -690,7 +751,8 @@ pub fn connect_or_spawn(config: &HostLaunchConfig) -> Result<HostHandle, HostSta
                     child: Some(child),
                 }),
                 Err(error) => {
-                    if let Err(cleanup_error) = force_stop(&mut child) {
+                    let cleanup = force_stop(&mut child);
+                    if let Some(cleanup_error) = cleanup.first_error {
                         eprintln!("kanban sidecar cleanup 失败：{cleanup_error}");
                     }
                     Err(error)
@@ -764,6 +826,7 @@ fn spawn_sidecar(config: &HostLaunchConfig) -> Result<OwnedChild, HostStartupErr
         process,
         stderr: diagnostics,
         drain: Some(drain),
+        drop_cleanup: true,
     })
 }
 
@@ -774,10 +837,19 @@ fn wait_for_sidecar(
 ) -> Result<HostCompatibility, HostStartupError> {
     let deadline = Instant::now() + config.startup_timeout;
     loop {
-        let latest_error = match probe_host_with_timeouts(config.endpoint, config.probe_timeouts) {
-            Ok(compatibility) => return Ok(compatibility),
-            Err(error) => error,
-        };
+        if Instant::now() >= deadline {
+            return Err(HostStartupError::StartupTimeout {
+                endpoint: config.endpoint,
+                message: "startup 总 deadline 已耗尽".to_owned(),
+            });
+        }
+        let probe_deadline =
+            capped_probe_deadline(Instant::now(), deadline, config.probe_timeouts.total);
+        let latest_error =
+            match probe_host_until(config.endpoint, config.probe_timeouts, probe_deadline) {
+                Ok(compatibility) => return Ok(compatibility),
+                Err(error) => error,
+            };
         if let Some(status) =
             child
                 .process
@@ -814,8 +886,19 @@ fn wait_for_sidecar(
                 },
             });
         }
-        thread::sleep(HOST_POLL_INTERVAL);
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if !remaining.is_zero() {
+            thread::sleep(remaining.min(HOST_POLL_INTERVAL));
+        }
     }
+}
+
+fn capped_probe_deadline(
+    started_at: Instant,
+    startup_deadline: Instant,
+    probe_total: Duration,
+) -> Instant {
+    (started_at + probe_total).min(startup_deadline)
 }
 
 fn drain_stderr(mut stderr: impl Read, diagnostics: Arc<Mutex<VecDeque<u8>>>) {
@@ -835,30 +918,94 @@ fn drain_stderr(mut stderr: impl Read, diagnostics: Arc<Mutex<VecDeque<u8>>>) {
     }
 }
 
-fn force_stop(child: &mut OwnedChild) -> io::Result<()> {
-    let mut first_error = None;
-    let needs_wait = match child.process.try_wait() {
-        Ok(Some(_)) => false,
-        Ok(None) => true,
-        Err(error) => {
-            first_error = Some(error);
-            true
-        }
-    };
-    if needs_wait {
-        if let Err(error) = child.process.kill()
-            && first_error.is_none()
-        {
-            first_error = Some(error);
-        }
-        if let Err(error) = child.process.wait()
-            && first_error.is_none()
-        {
-            first_error = Some(error);
+trait ProcessCleanup {
+    fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>>;
+    fn kill(&mut self) -> io::Result<()>;
+    fn wait(&mut self) -> io::Result<std::process::ExitStatus>;
+}
+
+impl ProcessCleanup for Child {
+    fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+        Child::try_wait(self)
+    }
+
+    fn kill(&mut self) -> io::Result<()> {
+        Child::kill(self)
+    }
+
+    fn wait(&mut self) -> io::Result<std::process::ExitStatus> {
+        Child::wait(self)
+    }
+}
+
+#[derive(Debug)]
+struct CleanupOutcome {
+    first_error: Option<io::Error>,
+    process_reaped: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CleanupOwnership {
+    RetainForRetry,
+    Release,
+}
+
+impl CleanupOutcome {
+    fn ownership(&self) -> CleanupOwnership {
+        if self.process_reaped {
+            CleanupOwnership::Release
+        } else {
+            CleanupOwnership::RetainForRetry
         }
     }
-    child.finish_drain();
-    first_error.map_or(Ok(()), Err)
+
+    fn should_join_drain(&self) -> bool {
+        self.process_reaped
+    }
+}
+
+/// 以 fake process 实现覆盖 cleanup 错误组合，避免测试依赖真实 OS wait error。
+fn force_stop_with<P: ProcessCleanup>(process: &mut P) -> CleanupOutcome {
+    let mut first_error = None;
+    let process_reaped = match process.try_wait() {
+        Ok(Some(_)) => true,
+        Ok(None) => stop_and_wait(process, &mut first_error),
+        Err(error) => {
+            first_error = Some(error);
+            stop_and_wait(process, &mut first_error)
+        }
+    };
+    CleanupOutcome {
+        first_error,
+        process_reaped,
+    }
+}
+
+fn stop_and_wait<P: ProcessCleanup>(process: &mut P, first_error: &mut Option<io::Error>) -> bool {
+    if let Err(error) = process.kill() {
+        if first_error.is_none() {
+            *first_error = Some(error);
+        }
+        // kill 失败时不调用可能无限等待的 wait；只用一次非阻塞 try_wait 争取确认。
+        return matches!(process.try_wait(), Ok(Some(_)));
+    }
+    match process.wait() {
+        Ok(_) => true,
+        Err(error) => {
+            if first_error.is_none() {
+                *first_error = Some(error);
+            }
+            false
+        }
+    }
+}
+
+fn force_stop(child: &mut OwnedChild) -> CleanupOutcome {
+    let outcome = force_stop_with(&mut child.process);
+    if outcome.should_join_drain() {
+        child.finish_drain();
+    }
+    outcome
 }
 
 #[cfg(unix)]
@@ -882,7 +1029,7 @@ fn request_graceful_stop(_child: &Child) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use std::{
-        io::{Read, Write},
+        io::{self, Read, Write},
         net::TcpListener,
         sync::atomic::{AtomicUsize, Ordering},
         thread,
@@ -890,6 +1037,8 @@ mod tests {
 
     #[cfg(unix)]
     use std::os::unix::process::CommandExt;
+    #[cfg(unix)]
+    use std::os::unix::process::ExitStatusExt;
 
     use kanban_protocol::{
         HealthReport, HealthResponse, WEB_ARTIFACT_ENTRYPOINT, WEB_ARTIFACT_FORMAT_VERSION,
@@ -1094,6 +1243,131 @@ mod tests {
         assert_no_sidecar_spawn(spawn_slow_drip_host());
     }
 
+    #[test]
+    fn probe_total_timeout_is_configured_once_for_the_full_probe() {
+        let timeouts = ProbeTimeouts::with_single_timeout(Duration::from_millis(37));
+        assert_eq!(timeouts.connect, Duration::from_millis(37));
+        assert_eq!(timeouts.io, Duration::from_millis(37));
+        assert_eq!(timeouts.total, Duration::from_millis(37));
+    }
+
+    #[test]
+    fn probe_deadline_caps_to_startup_deadline() {
+        let started_at = Instant::now();
+        let startup_deadline = started_at + Duration::from_millis(20);
+        let deadline = capped_probe_deadline(started_at, startup_deadline, Duration::from_secs(2));
+        assert_eq!(deadline, startup_deadline);
+    }
+
+    #[test]
+    fn probe_deadline_uses_probe_total_before_startup_cap() {
+        let started_at = Instant::now();
+        let startup_deadline = started_at + Duration::from_secs(2);
+        let deadline =
+            capped_probe_deadline(started_at, startup_deadline, Duration::from_millis(20));
+        assert_eq!(deadline, started_at + Duration::from_millis(20));
+    }
+
+    #[test]
+    fn probe_deadline_never_rebases_after_elapsed_round_time() {
+        let started_at = Instant::now();
+        let startup_deadline = started_at + Duration::from_millis(80);
+        let first = capped_probe_deadline(started_at, startup_deadline, Duration::from_secs(2));
+        thread::sleep(Duration::from_millis(20));
+        let second = capped_probe_deadline(
+            started_at + Duration::from_millis(20),
+            startup_deadline,
+            Duration::from_secs(2),
+        );
+        assert_eq!(first, startup_deadline);
+        assert_eq!(second, startup_deadline);
+    }
+
+    #[test]
+    fn remaining_timeout_rejects_expired_probe_deadline() {
+        let deadline = Instant::now();
+        let error = remaining_timeout(deadline, Duration::from_secs(1))
+            .expect_err("expired probe deadline must fail closed");
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    }
+
+    #[test]
+    fn remaining_timeout_never_exceeds_probe_io_budget() {
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let timeout = remaining_timeout(deadline, Duration::from_millis(25))
+            .expect("future probe deadline should be usable");
+        assert!(timeout <= Duration::from_millis(25));
+    }
+
+    #[test]
+    fn probe_health_runtime_manifest_share_one_total_deadline() {
+        let (runtime, manifest) = compatible_values();
+        let health = HealthResponse::new(HealthReport {
+            ok: true,
+            db: "turso".to_owned(),
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+            db_path: "private".to_owned(),
+            db_fingerprint: "private".to_owned(),
+        });
+        let endpoint = spawn_delayed_json_host(
+            [
+                serde_json::to_vec(&health).expect("health JSON"),
+                serde_json::to_vec(&runtime).expect("runtime JSON"),
+                serde_json::to_vec(&manifest).expect("manifest JSON"),
+            ],
+            Duration::from_millis(80),
+        );
+        let started_at = Instant::now();
+        let error = probe_host_with_timeouts(
+            endpoint,
+            ProbeTimeouts {
+                connect: Duration::from_millis(200),
+                io: Duration::from_millis(200),
+                total: Duration::from_millis(120),
+            },
+        )
+        .expect_err("three delayed responses must exceed one shared deadline");
+        let elapsed = started_at.elapsed();
+        assert!(
+            elapsed < Duration::from_millis(200),
+            "probe drifted: {elapsed:?}"
+        );
+        assert!(matches!(error, ProbeError::Incompatible(_)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn wait_for_sidecar_caps_a_slow_probe_to_startup_deadline() {
+        let process = test_sleep_child(false);
+        let mut child = test_owned_child(process);
+        let mut config = HostLaunchConfig::new("sidecar", "web", "db", "actor", "board");
+        config.endpoint = spawn_stalled_host();
+        config.startup_timeout = Duration::from_millis(100);
+        config.probe_timeouts = ProbeTimeouts {
+            connect: Duration::from_millis(500),
+            io: Duration::from_millis(500),
+            total: Duration::from_secs(2),
+        };
+        let started_at = Instant::now();
+        let error = wait_for_sidecar(
+            &config,
+            &mut child,
+            ProbeError::unavailable("preflight unavailable"),
+        )
+        .expect_err("stalled sidecar must hit startup deadline");
+        let elapsed = started_at.elapsed();
+        assert!(
+            elapsed < Duration::from_millis(250),
+            "startup drifted: {elapsed:?}"
+        );
+        assert!(matches!(
+            error,
+            HostStartupError::SidecarIncompatible { .. }
+        ));
+        let cleanup = force_stop(&mut child);
+        assert!(cleanup.process_reaped, "test sidecar must be reaped");
+    }
+
     fn assert_no_sidecar_spawn(endpoint: SocketAddr) {
         let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
         let marker = std::env::temp_dir().join(format!(
@@ -1246,6 +1520,239 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[derive(Clone, Copy)]
+    enum FakeTryWait {
+        Running,
+        Reaped,
+        Error(&'static str),
+    }
+
+    #[cfg(unix)]
+    #[derive(Clone, Copy)]
+    enum FakeResult {
+        Ok,
+        Error(&'static str),
+    }
+
+    #[cfg(unix)]
+    struct FakeCleanupProcess {
+        try_wait_results: VecDeque<FakeTryWait>,
+        kill_results: VecDeque<FakeResult>,
+        wait_results: VecDeque<FakeResult>,
+        kill_calls: usize,
+        wait_calls: usize,
+    }
+
+    #[cfg(unix)]
+    impl FakeCleanupProcess {
+        fn new(
+            try_wait_results: impl IntoIterator<Item = FakeTryWait>,
+            kill_results: impl IntoIterator<Item = FakeResult>,
+            wait_results: impl IntoIterator<Item = FakeResult>,
+        ) -> Self {
+            Self {
+                try_wait_results: try_wait_results.into_iter().collect(),
+                kill_results: kill_results.into_iter().collect(),
+                wait_results: wait_results.into_iter().collect(),
+                kill_calls: 0,
+                wait_calls: 0,
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    impl ProcessCleanup for FakeCleanupProcess {
+        fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>> {
+            match self
+                .try_wait_results
+                .pop_front()
+                .unwrap_or(FakeTryWait::Running)
+            {
+                FakeTryWait::Running => Ok(None),
+                FakeTryWait::Reaped => Ok(Some(std::process::ExitStatus::from_raw(0))),
+                FakeTryWait::Error(message) => Err(io::Error::other(message)),
+            }
+        }
+
+        fn kill(&mut self) -> io::Result<()> {
+            self.kill_calls += 1;
+            match self.kill_results.pop_front().unwrap_or(FakeResult::Ok) {
+                FakeResult::Ok => Ok(()),
+                FakeResult::Error(message) => Err(io::Error::other(message)),
+            }
+        }
+
+        fn wait(&mut self) -> io::Result<std::process::ExitStatus> {
+            self.wait_calls += 1;
+            match self.wait_results.pop_front().unwrap_or(FakeResult::Ok) {
+                FakeResult::Ok => Ok(std::process::ExitStatus::from_raw(0)),
+                FakeResult::Error(message) => Err(io::Error::other(message)),
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_reaps_already_exited_without_kill_or_wait() {
+        let mut process = FakeCleanupProcess::new([FakeTryWait::Reaped], [], []);
+        let outcome = force_stop_with(&mut process);
+        assert!(outcome.process_reaped);
+        assert!(outcome.first_error.is_none());
+        assert_eq!(process.kill_calls, 0);
+        assert_eq!(process.wait_calls, 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_kills_and_waits_running_process() {
+        let mut process =
+            FakeCleanupProcess::new([FakeTryWait::Running], [FakeResult::Ok], [FakeResult::Ok]);
+        let outcome = force_stop_with(&mut process);
+        assert!(outcome.process_reaped);
+        assert_eq!(process.kill_calls, 1);
+        assert_eq!(process.wait_calls, 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_wait_error_does_not_confirm_exit_or_join_drain() {
+        let mut process = FakeCleanupProcess::new(
+            [FakeTryWait::Running],
+            [FakeResult::Ok],
+            [FakeResult::Error("wait failed")],
+        );
+        let outcome = force_stop_with(&mut process);
+        assert!(!outcome.process_reaped);
+        assert!(!outcome.should_join_drain());
+        assert_eq!(
+            outcome.first_error.expect("wait error").to_string(),
+            "wait failed"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_kill_error_does_not_call_blocking_wait() {
+        let mut process = FakeCleanupProcess::new(
+            [FakeTryWait::Running, FakeTryWait::Running],
+            [FakeResult::Error("kill failed")],
+            [FakeResult::Error("wait must not run")],
+        );
+        let outcome = force_stop_with(&mut process);
+        assert!(!outcome.process_reaped);
+        assert_eq!(
+            outcome.first_error.expect("kill error").to_string(),
+            "kill failed"
+        );
+        assert_eq!(process.wait_calls, 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_kill_error_can_confirm_exit_with_nonblocking_retry() {
+        let mut process = FakeCleanupProcess::new(
+            [FakeTryWait::Running, FakeTryWait::Reaped],
+            [FakeResult::Error("kill failed")],
+            [],
+        );
+        let outcome = force_stop_with(&mut process);
+        assert!(outcome.process_reaped);
+        assert_eq!(
+            outcome.first_error.expect("kill error").to_string(),
+            "kill failed"
+        );
+        assert_eq!(process.wait_calls, 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_try_wait_error_is_preserved_as_first_error() {
+        let mut process = FakeCleanupProcess::new(
+            [FakeTryWait::Error("try_wait failed"), FakeTryWait::Running],
+            [FakeResult::Error("kill failed")],
+            [FakeResult::Error("wait failed")],
+        );
+        let outcome = force_stop_with(&mut process);
+        assert!(!outcome.process_reaped);
+        assert_eq!(
+            outcome.first_error.expect("try_wait error").to_string(),
+            "try_wait failed"
+        );
+        assert_eq!(process.wait_calls, 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_wait_error_is_preserved_after_successful_kill() {
+        let mut process = FakeCleanupProcess::new(
+            [FakeTryWait::Running],
+            [FakeResult::Ok],
+            [FakeResult::Error("wait failed")],
+        );
+        let outcome = force_stop_with(&mut process);
+        assert_eq!(
+            outcome.first_error.expect("wait error").to_string(),
+            "wait failed"
+        );
+        assert!(!outcome.process_reaped);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_reaped_outcome_releases_child_ownership() {
+        let mut process = FakeCleanupProcess::new([FakeTryWait::Reaped], [], []);
+        let outcome = force_stop_with(&mut process);
+        assert_eq!(outcome.ownership(), CleanupOwnership::Release);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_unconfirmed_outcome_retains_child_ownership_for_retry() {
+        let mut process = FakeCleanupProcess::new(
+            [FakeTryWait::Running, FakeTryWait::Running],
+            [FakeResult::Error("kill failed")],
+            [],
+        );
+        let outcome = force_stop_with(&mut process);
+        assert_eq!(outcome.ownership(), CleanupOwnership::RetainForRetry);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_retry_can_reap_after_unconfirmed_first_attempt() {
+        let mut process = FakeCleanupProcess::new(
+            [
+                FakeTryWait::Running,
+                FakeTryWait::Running,
+                FakeTryWait::Running,
+            ],
+            [FakeResult::Error("kill failed"), FakeResult::Ok],
+            [FakeResult::Ok],
+        );
+        let first = force_stop_with(&mut process);
+        assert_eq!(first.ownership(), CleanupOwnership::RetainForRetry);
+        let second = force_stop_with(&mut process);
+        assert_eq!(second.ownership(), CleanupOwnership::Release);
+        assert!(second.first_error.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_drain_join_is_gated_by_confirmed_reap() {
+        let mut running = FakeCleanupProcess::new(
+            [FakeTryWait::Running],
+            [FakeResult::Ok],
+            [FakeResult::Error("wait failed")],
+        );
+        let running_outcome = force_stop_with(&mut running);
+        assert!(!running_outcome.should_join_drain());
+
+        let mut reaped = FakeCleanupProcess::new([FakeTryWait::Reaped], [], []);
+        let reaped_outcome = force_stop_with(&mut reaped);
+        assert!(reaped_outcome.should_join_drain());
+    }
+
+    #[cfg(unix)]
     fn test_owned_child(mut process: Child) -> OwnedChild {
         let stderr = process.stderr.take().expect("stderr fixture pipe");
         let diagnostics = Arc::new(Mutex::new(VecDeque::with_capacity(
@@ -1257,6 +1764,7 @@ mod tests {
             process,
             stderr: diagnostics,
             drain: Some(drain),
+            drop_cleanup: true,
         }
     }
 
@@ -1294,8 +1802,47 @@ mod tests {
                     .into_iter()
                     .chain(body)
                     .collect::<Vec<_>>()
-            });
+        });
         spawn_raw_host(responses)
+    }
+
+    fn spawn_delayed_json_host<const N: usize>(
+        bodies: [Vec<u8>; N],
+        delay: Duration,
+    ) -> std::net::SocketAddr {
+        let responses = bodies.map(|body| {
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .into_bytes()
+            .into_iter()
+            .chain(body)
+            .collect::<Vec<_>>()
+        });
+        let listener = TcpListener::bind((DEFAULT_HOST, 0)).expect("delayed probe listener");
+        let endpoint = listener.local_addr().expect("delayed fixture address");
+        thread::spawn(move || {
+            for response in responses {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
+                let mut request = Vec::new();
+                let mut chunk = [0_u8; 1024];
+                while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    let Ok(count) = stream.read(&mut chunk) else {
+                        return;
+                    };
+                    if count == 0 {
+                        return;
+                    }
+                    request.extend_from_slice(&chunk[..count]);
+                }
+                thread::sleep(delay);
+                let _ = stream.write_all(&response);
+            }
+        });
+        endpoint
     }
 
     fn spawn_raw_host<const N: usize>(responses: [Vec<u8>; N]) -> std::net::SocketAddr {

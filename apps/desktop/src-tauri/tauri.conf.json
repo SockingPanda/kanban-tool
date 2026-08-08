@@ -7,9 +7,10 @@
     "beforeDevCommand": "pnpm dev --host 127.0.0.1",
     "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "pnpm vite-build",
-    "frontendDist": "../dist"
+    "frontendDist": "../bootstrap"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Kanban Tool",
@@ -20,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src http://127.0.0.1:* http://localhost:*"
+      "csp": "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; img-src 'self' data: asset: http://asset.localhost; style-src 'self'; script-src 'self'; connect-src 'self' http://127.0.0.1:8721; font-src 'self'"
     }
   },
   "bundle": {

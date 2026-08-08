@@ -8,6 +8,7 @@ import { VStack } from "@astryxdesign/core/VStack"
 import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 
 import styles from "./foundation.module.css"
+import { useWebRuntime } from "./lib/runtime-context"
 
 type ThemeMode = "light" | "dark"
 type Locale = "zh" | "en"
@@ -26,6 +27,7 @@ function platformFeatures() {
 }
 
 export default function App() {
+  const runtime = useWebRuntime()
   const [mode, setMode] = useState<ThemeMode>("light")
   const [locale, setLocale] = useState<Locale>("zh")
   const [query, setQuery] = useState("")
@@ -118,7 +120,18 @@ export default function App() {
       <a className={styles.skipLink} href="#main-content">
         跳转到主要内容
       </a>
-      <main id="main-content" className={styles.shell} tabIndex={-1}>
+      <main
+        id="main-content"
+        className={styles.shell}
+        tabIndex={-1}
+        data-runtime-api-base-url={runtime.apiBaseUrl}
+        data-runtime-actor={runtime.actor}
+        data-runtime-default-board={runtime.defaultBoard}
+        data-runtime-server-version={runtime.serverVersion}
+        data-runtime-protocol-version={runtime.protocolVersion}
+        data-runtime-web-build-id={runtime.webBuildId}
+        data-runtime-web-base-path={runtime.webBasePath}
+      >
         <header className={styles.header}>
           <div>
             <p className={styles.eyebrow}>KANBAN TOOL / ASTRYX FOUNDATION</p>

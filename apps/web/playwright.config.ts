@@ -31,14 +31,5 @@ export default defineConfig({
       name: "firefox",
       use: { ...devices["Desktop Firefox"], viewport: foundationViewport },
     },
-    {
-      // 这里只是上游 WebKit 引擎代理，不是已打包的 Linux WebKitGTK/Tauri smoke test。
-      name: "webkit",
-      use: { ...devices["Desktop Safari"], viewport: foundationViewport },
-      metadata: {
-        engineProxyOnly: true,
-        packagedWebKitGtk: false,
-      },
-    },
   ],
 })

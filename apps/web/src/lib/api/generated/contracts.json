@@ -1141,6 +1141,16 @@
   },
   {
     "direction": "deserialize",
+    "id": "sse.stream-events.headers",
+    "invalidFixture": "fixtures/sse-stream-events-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:sse:stream-events-headers:v1",
+    "schemaPath": "schemas/sse-stream-events-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "sse",
+    "validFixture": "fixtures/sse-stream-events-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
     "id": "sse.stream-events.query",
     "invalidFixture": "fixtures/sse-stream-events-query.invalid.json",
     "schemaId": "urn:kanban-tool:schema:sse:stream-events-query:v1",
@@ -1158,6 +1168,16 @@
     "strictness": "deny_unknown_fields",
     "surface": "sse",
     "validFixture": "fixtures/sse-event-data.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "sse.event.heartbeat",
+    "invalidFixture": "fixtures/sse-event-heartbeat.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:sse:event-heartbeat:v1",
+    "schemaPath": "schemas/sse-event-heartbeat.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "sse",
+    "validFixture": "fixtures/sse-event-heartbeat.valid.json"
   },
   {
     "direction": "deserialize",

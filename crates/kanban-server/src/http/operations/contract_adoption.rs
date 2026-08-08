@@ -1576,15 +1576,24 @@ async fn suite_events_sse_and_stats_adoption_use_query_fixtures() {
         normalize_events,
     );
 
-    let (status, body) = response(
-        &router,
-        get_request("/api/v1/stream/events?board=default&after=0&limit=100"),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let sse = String::from_utf8(body).unwrap();
+    let stream_response = router
+        .clone()
+        .oneshot(get_request(
+            "/api/v1/stream/events?board=default&after=0&limit=100",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(stream_response.status(), StatusCode::OK);
+    let mut body = stream_response.into_body();
+    let frame = tokio::time::timeout(std::time::Duration::from_secs(2), body.frame())
+        .await
+        .expect("SSE frame timeout")
+        .expect("SSE stream ended")
+        .expect("SSE body error");
+    let sse = String::from_utf8(frame.into_data().expect("SSE data frame").to_vec()).unwrap();
     assert!(sse.contains("event: task.created"));
     assert!(sse.contains("\ndata: {") && sse.ends_with("\n\n"));
+    drop(body);
 
     let stats_query = query_fixture("get-stats-query.v1.valid.json", &["board"]);
     let (status, body) = response(

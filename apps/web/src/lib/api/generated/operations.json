@@ -1381,8 +1381,8 @@
         "kind": "not_applicable"
       },
       "headers": {
-        "kind": "excluded",
-        "reason": "V1 finite snapshot intentionally ignores Last-Event-ID; after query owns the cursor"
+        "contractId": "sse.stream-events.headers",
+        "kind": "contract"
       },
       "path": {
         "kind": "not_applicable"
@@ -1400,7 +1400,9 @@
       }
     },
     "path": "/api/v1/stream/events",
-    "sharedComponents": []
+    "sharedComponents": [
+      "sse.event.heartbeat"
+    ]
   },
   {
     "id": "api.doctor",

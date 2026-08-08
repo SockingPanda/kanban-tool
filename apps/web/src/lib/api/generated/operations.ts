@@ -1387,8 +1387,8 @@ export const operations = [
         "contractId": "sse.stream-events.query"
       },
       "headers": {
-        "kind": "excluded",
-        "reason": "V1 finite snapshot intentionally ignores Last-Event-ID; after query owns the cursor"
+        "kind": "contract",
+        "contractId": "sse.stream-events.headers"
       },
       "body": {
         "kind": "not_applicable"
@@ -1401,7 +1401,9 @@ export const operations = [
         "contractId": "sse.event.data"
       }
     },
-    "sharedComponents": []
+    "sharedComponents": [
+      "sse.event.heartbeat"
+    ]
   },
   {
     "id": "api.doctor",

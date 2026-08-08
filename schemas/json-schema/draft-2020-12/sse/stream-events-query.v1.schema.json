@@ -6,6 +6,8 @@
     "after": {
       "default": 0,
       "format": "int64",
+      "maximum": 9007199254740991,
+      "minimum": 0,
       "type": "integer"
     },
     "board": {
@@ -15,7 +17,7 @@
     "limit": {
       "default": 100,
       "format": "uint",
-      "minimum": 0,
+      "minimum": 1,
       "type": "integer"
     },
     "task_id": {

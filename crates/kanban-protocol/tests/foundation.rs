@@ -334,6 +334,63 @@ fn b7_exact_header_contracts_cover_every_non_sse_endpoint() {
 }
 
 #[test]
+fn sse_contract_freezes_cursor_header_heartbeat_and_scope_metadata() {
+    let endpoint = endpoint_descriptor("sse.stream-events").expect("SSE endpoint descriptor");
+    assert_eq!(
+        endpoint.obligations.headers,
+        EndpointObligation::Contract("sse.stream-events.headers")
+    );
+    assert_eq!(
+        endpoint.obligations.sse,
+        EndpointObligation::Contract("sse.event.data")
+    );
+    assert_eq!(endpoint.shared_components, &["sse.event.heartbeat"]);
+
+    let headers = operation_inventory()
+        .iter()
+        .find(|contract| contract.id == "sse.stream-events.headers")
+        .expect("SSE header contract");
+    assert_eq!(headers.binding, ContractBinding::ExactSurface);
+    assert_eq!(headers.direction, ContractDirection::Deserialize);
+    assert_eq!(
+        headers.transport,
+        ContractTransport::Http {
+            operation_key: Some("GET /api/v1/stream/events"),
+            location: HttpTransportLocation::Headers,
+            parameters: &[
+                WireParameter {
+                    name: "Accept-Language",
+                    cardinality: Some(WireParameterCardinality::OptionalOne),
+                },
+                WireParameter {
+                    name: "Last-Event-ID",
+                    cardinality: Some(WireParameterCardinality::OptionalOne),
+                },
+            ],
+        }
+    );
+
+    let heartbeat = operation_inventory()
+        .iter()
+        .find(|contract| contract.id == "sse.event.heartbeat")
+        .expect("SSE heartbeat contract");
+    assert_eq!(heartbeat.binding, ContractBinding::SharedComponent);
+    assert!(matches!(
+        heartbeat.transport,
+        ContractTransport::Http {
+            location: HttpTransportLocation::Sse,
+            ..
+        }
+    ));
+    assert_eq!(kanban_protocol::SSE_HEARTBEAT_EVENT, "kb-heartbeat");
+    assert!(
+        kanban_protocol::TASK_SCOPED_EVENT_KINDS
+            .iter()
+            .all(|kind| kanban_protocol::event_payload::KNOWN_EVENT_KINDS.contains(kind))
+    );
+}
+
+#[test]
 fn b7_header_profiles_fail_closed_over_actor_and_body_cardinality() {
     let specs = api_header_contract_specs();
     let actor_operations = specs
@@ -586,7 +643,7 @@ fn public_operation_inventory_covers_every_public_surface() {
 fn public_catalog_preserves_contract_and_exclusion_counts() {
     assert_eq!(
         operation_inventory().len(),
-        581,
+        583,
         "public contract inventory 不得静默增删"
     );
     let exclusions = surface_operation_catalog()
@@ -943,6 +1000,8 @@ fn foundation_registry_contains_generated_roots() {
         "urn:kanban-tool:schema:api:vector-sync-response:v1",
         "urn:kanban-tool:schema:api:list-events-query:v1",
         "urn:kanban-tool:schema:sse:stream-events-query:v1",
+        "urn:kanban-tool:schema:sse:stream-events-headers:v1",
+        "urn:kanban-tool:schema:sse:event-heartbeat:v1",
     ]);
     expected.extend(
         kanban_protocol::portable_contract_catalog()

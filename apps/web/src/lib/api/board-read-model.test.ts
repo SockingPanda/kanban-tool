@@ -17,10 +17,12 @@ const runtime = {
 type ResponseBody = Record<string, unknown>
 
 function jsonResponse(body: ResponseBody, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+  const response = new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
   })
+  Object.defineProperty(response, "url", { value: "http://127.0.0.1/api/v1/boards" })
+  return response
 }
 
 function board(id: string, slug: string, name: string, archivedAt: number | null = null) {

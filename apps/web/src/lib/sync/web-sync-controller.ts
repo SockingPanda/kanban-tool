@@ -682,9 +682,14 @@ export class WebSyncController {
       this.armLiveness(token)
       return
     }
+    if (this.state === "live") {
+      this.armLiveness(token)
+      return
+    }
     this.state = "live"
     this.stopPolling()
     this.armLiveness(token)
+    this.emit("connection-live")
   }
 
   private armLiveness(token: SyncToken): void {
@@ -951,7 +956,10 @@ export class WebSyncController {
       if (signal.aborted || !this.isRecoveryCurrent(token)) return
       const hasCurrentConnection = allowSse && this.connection !== null && !this.connection.closed && this.connectionAbort !== null && !this.connectionAbort.signal.aborted
       if (allowSse && !hasCurrentConnection) this.openConnection()
-      this.state = allowSse ? (this.recoverySawLiveFrame && hasCurrentConnection ? "live" : "connecting") : "circuit-open"
+      const nextState = allowSse ? (this.recoverySawLiveFrame && hasCurrentConnection ? "live" : "connecting") : "circuit-open"
+      const wasLive = this.state === "live"
+      this.state = nextState
+      if (nextState === "live" && !wasLive) this.emit("connection-live")
       this.recovery = null
       this.recoveryBuffer = []
       this.recoveryBufferBytes = 0

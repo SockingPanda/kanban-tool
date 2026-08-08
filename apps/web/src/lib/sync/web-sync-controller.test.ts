@@ -214,6 +214,29 @@ describe("WebSyncController", () => {
     expect(applied?.details?.latencyMs).toBeTypeOf("number")
   })
 
+  test("records one connection-live transition across repeated heartbeats and events", async () => {
+    const telemetry: { type: string }[] = []
+    const querySink = sink()
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const event = businessEvent()
+    const controller = new WebSyncController({
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(event),
+      sink: querySink,
+      telemetry: { record: (entry) => telemetry.push({ type: entry.type }) },
+    })
+
+    controller.start()
+    await controller.processFrame({ eventName: "kb-heartbeat", id: null, data: "{}" })
+    await controller.processFrame({ eventName: "kb-heartbeat", id: null, data: "{}" })
+    await controller.processFrame({ eventName: event.kind, id: String(event.id), data: "{}" })
+
+    expect(telemetry.filter((entry) => entry.type === "connection-live")).toHaveLength(1)
+  })
+
   test("keeps the runtime selector separate from canonical board isolation", async () => {
     const event = businessEvent({ boardId: "b_default" })
     const querySink = sink()
@@ -481,6 +504,7 @@ describe("WebSyncController", () => {
 
   test("starts the next SSE epoch before R barrier settles and replays a buffered frame", async () => {
     const querySink = sink()
+    const telemetry: { type: string }[] = []
     let resolveBarrier: (result: RecoveryResult) => void = () => undefined
     querySink.refetchObserved.mockImplementationOnce((_mode, token) => new Promise<RecoveryResult>((resolve) => {
       resolveBarrier = () => resolve({
@@ -505,6 +529,7 @@ describe("WebSyncController", () => {
       transport,
       adapter: adapterFor(businessEvent()),
       sink: querySink,
+      telemetry: { record: (entry) => telemetry.push({ type: entry.type }) },
     })
 
     controller.start()
@@ -535,6 +560,8 @@ describe("WebSyncController", () => {
     })
     await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledTimes(2))
     expect(controller.snapshot().lastConfirmedCursor).toBe(2)
+    expect(controller.snapshot().state).toBe("live")
+    expect(telemetry.filter((entry) => entry.type === "connection-live")).toHaveLength(1)
   })
 
   test("fences a failed overlapping connection and restarts the recovery barrier", async () => {

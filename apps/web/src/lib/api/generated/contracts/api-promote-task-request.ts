@@ -1,13 +1,14 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
 import type { FromSchema } from "json-schema-to-ts";
 import { ContractValidationError, createContractValidator } from "../runtime";
+import staticValidator from "virtual:kanban-contract-validator/api-promote-task-request";
 
 export const ApiPromoteTaskRequestSchema = {"$id":"urn:kanban-tool:schema:api:promote-task-request:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"actor":{"type":["string","null"]}},"title":"Kanban promote task request v1","type":"object"} as const;
 export type ApiPromoteTaskRequestContract = FromSchema<typeof ApiPromoteTaskRequestSchema>;
 
 export const apiPromoteTaskRequestValidator: ReturnType<typeof createContractValidator<ApiPromoteTaskRequestContract>> = createContractValidator<ApiPromoteTaskRequestContract>(
   "api.promote-task.request",
-  ApiPromoteTaskRequestSchema,
+  staticValidator,
 );
 
 export function parseApiPromoteTaskRequest(value: unknown): ApiPromoteTaskRequestContract {

@@ -9,6 +9,8 @@ import {
   validateContract,
   validators,
 } from "./generated/test-only"
+import { parseApiBoardTaskMapResponse } from "./generated/contracts/api-board-task-map-response"
+import { parseApiHealthResponse } from "./generated/contracts/api-health-response"
 import {
   getOperation,
   operationById,
@@ -95,6 +97,18 @@ describe("generated Web contracts", () => {
       if (!(error instanceof ContractValidationError)) throw error
       expect(error.errors?.length).toBeGreaterThan(0)
     }
+  })
+
+  test("parses generated health and board responses with valid and invalid fixtures", () => {
+    const validHealth = fixture("fixtures/api-health-response.valid.json")
+    const invalidHealth = fixture("fixtures/api-health-response.invalid.json")
+    const validBoard = fixture("fixtures/api-board-task-map-response.valid.json")
+    const invalidBoard = fixture("fixtures/api-board-task-map-response.invalid.json")
+
+    expect(parseApiHealthResponse(validHealth)).toBe(validHealth)
+    expect(() => parseApiHealthResponse(invalidHealth)).toThrow(ContractValidationError)
+    expect(parseApiBoardTaskMapResponse(validBoard)).toBe(validBoard)
+    expect(() => parseApiBoardTaskMapResponse(invalidBoard)).toThrow(ContractValidationError)
   })
 
   test("rejects unsafe JSON numbers before AJV while accepting safe bounds", () => {

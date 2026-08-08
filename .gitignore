@@ -5,9 +5,12 @@
 *.db-wal
 .DS_Store
 
-# Node/Vite desktop app
-apps/desktop/node_modules/
+# Node/Vite apps
+node_modules/
 apps/desktop/dist/
+apps/web/dist/
+apps/web/playwright-report/
+apps/web/test-results/
 apps/desktop/src-tauri/gen/
 
 # Local browser automation artifacts

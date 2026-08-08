@@ -1,0 +1,33 @@
+@layer reset, product;
+
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+  }
+}
+
+@layer product {
+  body {
+    background: Canvas;
+    color: CanvasText;
+    font-family: system-ui, sans-serif;
+  }
+
+  main {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 4rem;
+  }
+}

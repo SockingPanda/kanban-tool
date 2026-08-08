@@ -1,0 +1,20 @@
+{
+  "name": "kanban-tool-workspace",
+  "private": true,
+  "license": "Apache-2.0",
+  "version": "3.0.0",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "web:dev": "pnpm --filter @kanban-tool/web dev",
+    "web:typecheck": "pnpm --filter @kanban-tool/web typecheck",
+    "web:lint": "pnpm --filter @kanban-tool/web lint",
+    "web:test": "pnpm --filter @kanban-tool/web test",
+    "web:build": "pnpm --filter @kanban-tool/web build",
+    "desktop:typecheck": "pnpm --filter @kanban-tool/desktop typecheck",
+    "desktop:test": "pnpm --filter @kanban-tool/desktop test",
+    "desktop:build": "pnpm --filter @kanban-tool/desktop build"
+  }
+}

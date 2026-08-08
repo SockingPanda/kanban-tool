@@ -183,8 +183,8 @@ assert_no_foreign_key_violations() {
 
 run_desktop_boundary_tests() {
   local output="$RUN_DIR/desktop-boundary-tests.log"
-  log "+ pnpm --dir $ROOT/apps/desktop test -- OntologyReviewWorkbench.test.tsx api.test.ts > $output"
-  if ! pnpm --dir "$ROOT/apps/desktop" test -- OntologyReviewWorkbench.test.tsx api.test.ts >"$output" 2>&1; then
+  log "+ pnpm --dir $ROOT --filter @kanban-tool/desktop test OntologyReviewWorkbench.test.tsx api.test.ts > $output"
+  if ! pnpm --dir "$ROOT" --filter @kanban-tool/desktop test OntologyReviewWorkbench.test.tsx api.test.ts >"$output" 2>&1; then
     cat "$output" >&2 || true
     fail "Desktop lifecycle boundary tests failed"
   fi

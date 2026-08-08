@@ -106,25 +106,39 @@ docs-check:
     scripts/cargo-build-lock.sh -- cargo test --doc --workspace
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- docs check
 
+node-lock-check:
+    pnpm install --frozen-lockfile --lockfile-only --ignore-scripts
+
 web-test:
-    pnpm --dir apps/desktop test
+    pnpm --filter @kanban-tool/web test
 
 web-typecheck:
-    pnpm --dir apps/desktop typecheck
+    pnpm --filter @kanban-tool/web typecheck
+
+web-lint:
+    pnpm --filter @kanban-tool/web lint
 
 web-build:
-    pnpm --dir apps/desktop build
+    pnpm --filter @kanban-tool/web build
+
+web-check:
+    just node-lock-check
+    just web-typecheck
+    just web-lint
+    just web-test
+    just web-build
 
 desktop-check:
+    just node-lock-check
     scripts/cargo-build-lock.sh -- cargo check -p kanban-desktop --tests
-    pnpm --dir apps/desktop typecheck
-    pnpm --dir apps/desktop test
+    pnpm --filter @kanban-tool/desktop typecheck
+    pnpm --filter @kanban-tool/desktop test
 
 desktop-build:
-    pnpm --dir apps/desktop build
+    pnpm --filter @kanban-tool/desktop build
 
 desktop-package:
-    scripts/cargo-build-lock.sh -- pnpm --dir apps/desktop tauri build
+    scripts/cargo-build-lock.sh -- pnpm --filter @kanban-tool/desktop tauri build
 
 cli-package:
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- package cli --format deb
@@ -179,7 +193,7 @@ schema-check:
 ci-full:
     just rust-full
     just desktop-check
-    just web-build
+    just web-check
     just docs-check
     just schema-contract
     just deps-check

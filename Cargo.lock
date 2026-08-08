@@ -2801,8 +2801,10 @@ dependencies = [
 name = "kanban-desktop"
 version = "3.0.0"
 dependencies = [
+ "kanban-protocol",
  "ksni",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-single-instance",

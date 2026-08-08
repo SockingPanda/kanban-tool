@@ -16,6 +16,7 @@ use tauri::{
 };
 
 mod tray_lifecycle;
+mod host_lifecycle;
 use tray_lifecycle::{
     CloseRequestAction, RestoreWindowAction, SingleInstanceAction, TRAY_QUIT_ID, TRAY_SHOW_ID,
     TrayBackendKind, TrayIconAction, TrayMenuAction, close_request_action, restore_window_action,

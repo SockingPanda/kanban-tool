@@ -14,6 +14,7 @@ import type {
   RecoveryResult,
   PollEventsPage,
 } from "./contracts"
+import { asCanonicalBoardId } from "./contracts"
 import { WebSyncController } from "./web-sync-controller"
 import type { ApiListEventsQueryContract } from "../api/generated/contracts/api-list-events-query"
 
@@ -21,7 +22,7 @@ function businessEvent(overrides: Partial<ValidatedBusinessEvent> = {}): Validat
   return {
     id: 1,
     eventId: "e-1",
-    boardId: "board-a",
+    boardId: asCanonicalBoardId("board-a"),
     taskId: "task-a",
     runId: null,
     kind: "task.updated",
@@ -41,7 +42,7 @@ function adapterFor(event: ValidatedBusinessEvent): StreamContractAdapter {
       envelope: {
         id: Number(frame.id),
         eventId: `e-${frame.id}`,
-        boardId: "board-a",
+        boardId: event.boardId,
         taskId: event.taskId,
         runId: event.runId,
         kind: frame.eventName,
@@ -149,7 +150,8 @@ function sink(): TestSink {
 describe("WebSyncController", () => {
   test("keeps production buffer/budget/timing invariants unless an explicit test seam is enabled", () => {
     const base = {
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport: vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() })),
       adapter: adapterFor(businessEvent()),
@@ -174,7 +176,8 @@ describe("WebSyncController", () => {
       return { closed: false, close: vi.fn() }
     })
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -194,7 +197,8 @@ describe("WebSyncController", () => {
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const { clock } = fakeClock()
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent({ createdAt: 1_700_000_000 })),
@@ -210,6 +214,47 @@ describe("WebSyncController", () => {
     expect(applied?.details?.latencyMs).toBeTypeOf("number")
   })
 
+  test("keeps the runtime selector separate from canonical board isolation", async () => {
+    const event = businessEvent({ boardId: "b_default" })
+    const querySink = sink()
+    const urls: string[] = []
+    const transport = vi.fn<SseTransport>((request) => {
+      urls.push(request.url)
+      return { closed: false, close: vi.fn() }
+    })
+    const controller = new WebSyncController({
+      boardSelector: "default",
+      canonicalBoardId: asCanonicalBoardId("b_default"),
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(event),
+      sink: querySink,
+    })
+
+    controller.start()
+    await controller.processFrame({ eventName: event.kind, id: String(event.id), data: "{}" })
+    await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledOnce())
+    expect(urls[0]).toContain("board=default")
+    expect(controller.snapshot()).toMatchObject({ boardSelector: "default", boardId: "b_default", canonicalBoardId: asCanonicalBoardId("b_default") })
+
+    const foreign = businessEvent({ boardId: "b_other", id: 2, eventId: "e-2", canonicalFingerprint: "fp-2" })
+    const anomalies: string[] = []
+    const isolated = new WebSyncController({
+      boardSelector: "default",
+      canonicalBoardId: asCanonicalBoardId("b_default"),
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport: vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() })),
+      adapter: adapterFor(foreign),
+      sink: sink(),
+      telemetry: { record: (entry) => { if (entry.type === "protocol-anomaly") anomalies.push(String(entry.details?.reason)) } },
+    })
+    isolated.start()
+    await isolated.processFrame({ eventName: foreign.kind, id: String(foreign.id), data: "{}" })
+    expect(anomalies).toContain("board-isolation")
+    controller.stop()
+    isolated.stop()
+  })
+
   test("serializes frames and EOF so transport recovery starts after the committed cursor", async () => {
     const querySink = sink()
     let releaseFirst: () => void = () => undefined
@@ -221,7 +266,8 @@ describe("WebSyncController", () => {
     })
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -248,7 +294,8 @@ describe("WebSyncController", () => {
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const { clock, advance } = fakeClock()
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -275,7 +322,8 @@ describe("WebSyncController", () => {
     const unknown = businessEvent({ kind: "task.attachment.created", known: false })
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(unknown),
@@ -296,7 +344,8 @@ describe("WebSyncController", () => {
     querySink.onEvent.mockRejectedValueOnce(new Error("projection failed"))
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -332,7 +381,8 @@ describe("WebSyncController", () => {
     }))
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(unknown),
@@ -359,7 +409,7 @@ describe("WebSyncController", () => {
         byEventId: new Map([["e-1", "fp-1"]]),
         events: [unknown],
         token: {
-          boardId: "board-a",
+          boardId: asCanonicalBoardId("board-a"),
           connectionEpoch: controller.snapshot().connectionEpoch,
           generation: controller.snapshot().generation,
         },
@@ -375,7 +425,8 @@ describe("WebSyncController", () => {
     const querySink = sink()
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -384,7 +435,7 @@ describe("WebSyncController", () => {
 
     controller.start()
     const oldFrame = transport.mock.calls[0]?.[0]
-    controller.switchBoard("board-b")
+    controller.switchBoard("board-b", asCanonicalBoardId("board-b"))
     oldFrame?.onFrame({ eventName: "task.updated", id: "1", data: "{}" })
     await Promise.resolve()
     expect(querySink.onEvent).not.toHaveBeenCalled()
@@ -395,7 +446,8 @@ describe("WebSyncController", () => {
     const firstSink = sink()
     const firstTransport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const stopped = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport: firstTransport,
       adapter: adapterFor(businessEvent()),
@@ -411,7 +463,8 @@ describe("WebSyncController", () => {
     const switchedSink = sink()
     const switchedTransport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const switched = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport: switchedTransport,
       adapter: adapterFor(businessEvent()),
@@ -420,7 +473,7 @@ describe("WebSyncController", () => {
     switched.start()
     const switchedProcessing = switched.processFrame(frame)
     await Promise.resolve()
-    switched.switchBoard("board-b")
+    switched.switchBoard("board-b", asCanonicalBoardId("board-b"))
     await switchedProcessing
     expect(switchedSink.onEvent).not.toHaveBeenCalled()
     switched.stop()
@@ -446,7 +499,8 @@ describe("WebSyncController", () => {
     }))
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -471,7 +525,7 @@ describe("WebSyncController", () => {
         byEventId: new Map([["e-1", "fp-1"]]),
         events: [businessEvent()],
         token: {
-          boardId: "board-a",
+          boardId: asCanonicalBoardId("board-a"),
           connectionEpoch: controller.snapshot().connectionEpoch,
           generation: controller.snapshot().generation,
         },
@@ -483,9 +537,10 @@ describe("WebSyncController", () => {
     expect(controller.snapshot().lastConfirmedCursor).toBe(2)
   })
 
-  test("fences only the failed overlapping connection while preserving the in-flight barrier", async () => {
+  test("fences a failed overlapping connection and restarts the recovery barrier", async () => {
     const querySink = sink()
     let resolveBarrier: (result: RecoveryResult) => void = () => undefined
+    const catchUp = businessEvent({ id: 2, eventId: "e-2", canonicalFingerprint: "fp-2" })
     querySink.refetchObserved.mockImplementationOnce((_mode, token) => new Promise<RecoveryResult>((resolve) => {
       resolveBarrier = () => resolve({
         confirmedCursor: 1,
@@ -501,9 +556,23 @@ describe("WebSyncController", () => {
         },
       })
     }))
+    querySink.refetchObserved.mockImplementationOnce(async (_mode, token, _after, expectedRevision) => ({
+      confirmedCursor: 2,
+      noGap: true,
+      boundary: {
+        highWatermark: 2,
+        byId: new Map([[1, "fp-1"], [2, catchUp.canonicalFingerprint]]),
+        byEventId: new Map([["e-1", "fp-1"], [catchUp.eventId, catchUp.canonicalFingerprint]]),
+        events: [businessEvent(), catchUp],
+        token,
+        revision: expectedRevision,
+        published: true,
+      },
+    }))
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -526,7 +595,7 @@ describe("WebSyncController", () => {
         byEventId: new Map([["e-1", "fp-1"]]),
         events: [businessEvent()],
         token: {
-          boardId: "board-a",
+          boardId: asCanonicalBoardId("board-a"),
           connectionEpoch: controller.snapshot().connectionEpoch - 1,
           generation: controller.snapshot().generation,
         },
@@ -535,8 +604,9 @@ describe("WebSyncController", () => {
       },
     })
     await vi.waitFor(() => expect(controller.snapshot().lastConfirmedCursor).toBe(3))
-    expect(querySink.refetchObserved).toHaveBeenCalledOnce()
+    expect(querySink.refetchObserved).toHaveBeenCalledTimes(2)
     expect(querySink.onEvent.mock.calls.map((call) => call[0].id)).toEqual([1, 2, 3])
+    expect(querySink.onEvent.mock.calls.map((call) => call[0].id)).toContain(2)
   })
 
   test("aggregates active-recovery protocol anomalies by cursor with bounded epoch backoff", async () => {
@@ -550,7 +620,8 @@ describe("WebSyncController", () => {
     }
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter,
@@ -577,8 +648,46 @@ describe("WebSyncController", () => {
     await vi.waitFor(() => expect(anomalies).toHaveLength(3))
     await vi.waitFor(() => expect(controller.snapshot().circuitOpen).toBe(true))
 
-    expect(querySink.refetchObserved).toHaveBeenCalledOnce()
+    expect(querySink.refetchObserved).toHaveBeenCalledTimes(3)
     expect(controller.snapshot().lastConfirmedCursor).toBe(0)
+    controller.stop()
+  })
+
+  test("fences queued frames when opening the anomaly circuit", async () => {
+    const querySink = sink()
+    const baseAdapter = adapterFor(businessEvent())
+    let parseCalls = 0
+    const adapter: StreamContractAdapter = {
+      ...baseAdapter,
+      parseEnvelope: (frame) => {
+        parseCalls += 1
+        return parseCalls === 1 ? { status: "invalid", code: "malformed-envelope" } : baseAdapter.parseEnvelope(frame)
+      },
+    }
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter,
+      sink: querySink,
+      maxAnomalyAttempts: 1,
+      testOnlyLimits: true,
+    })
+
+    controller.start()
+    const initialEpoch = controller.snapshot().connectionEpoch
+    const invalidFrame = controller.processFrame({ eventName: "task.updated", id: "1", data: "{}" })
+    const lateKnownFrame = controller.processFrame({ eventName: "task.updated", id: "2", data: "{}" })
+    await Promise.all([invalidFrame, lateKnownFrame])
+    expect(controller.snapshot().state).toBe("circuit-open")
+    expect(controller.snapshot().circuitOpen).toBe(true)
+    expect(controller.snapshot().polling).toBe(true)
+    expect(controller.snapshot().connectionEpoch).toBeGreaterThan(initialEpoch)
+    expect(controller.snapshot().lastConfirmedCursor).toBe(0)
+    expect(controller.snapshot().seenIds).toBe(0)
+    expect(querySink.onEvent).not.toHaveBeenCalled()
     controller.stop()
   })
 
@@ -588,7 +697,8 @@ describe("WebSyncController", () => {
     const { clock, advance } = fakeClock()
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -620,7 +730,7 @@ describe("WebSyncController", () => {
     expect(transport).toHaveBeenCalledTimes(2)
     advance(1)
     await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(3))
-    expect(querySink.refetchObserved).toHaveBeenCalledOnce()
+    expect(querySink.refetchObserved).toHaveBeenCalledTimes(2)
     controller.stop()
   })
 
@@ -637,7 +747,8 @@ describe("WebSyncController", () => {
     const { clock, advance } = fakeClock()
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -674,7 +785,8 @@ describe("WebSyncController", () => {
       return { closed: false, close: vi.fn() }
     })
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -696,7 +808,7 @@ describe("WebSyncController", () => {
     expect(transport).toHaveBeenCalledTimes(3)
     advance(1)
     await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(4))
-    expect(querySink.refetchObserved).toHaveBeenCalledOnce()
+    expect(querySink.refetchObserved).toHaveBeenCalledTimes(3)
     expect(failures).toEqual([])
     controller.stop()
   })
@@ -719,7 +831,8 @@ describe("WebSyncController", () => {
     }))
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(accepted),
@@ -738,7 +851,8 @@ describe("WebSyncController", () => {
     const failures: string[] = []
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -781,7 +895,8 @@ describe("WebSyncController", () => {
     }
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter,
@@ -812,7 +927,7 @@ describe("WebSyncController", () => {
     expect(querySink.onEvent.mock.calls.map((call) => call[0].eventId)).toEqual([known.eventId, unknown.eventId])
     expect(controller.snapshot().lastConfirmedCursor).toBe(1)
 
-    controller.switchBoard("board-b")
+    controller.switchBoard("board-b", asCanonicalBoardId("board-b"))
     expect(controller.snapshot().seenIds).toBe(0)
     expect(controller.snapshot().seenEventIds).toBe(0)
     controller.stop()
@@ -841,7 +956,8 @@ describe("WebSyncController", () => {
     }))
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(events[0] ?? businessEvent()),
@@ -863,7 +979,8 @@ describe("WebSyncController", () => {
     const failures: string[] = []
     const oversizedTransport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const oversizedController = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport: oversizedTransport,
       adapter: adapterFor(businessEvent()),
@@ -911,7 +1028,8 @@ describe("WebSyncController", () => {
     }
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter,
@@ -923,7 +1041,7 @@ describe("WebSyncController", () => {
     await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledWith("R", expect.anything(), 0, 1, expect.any(AbortSignal)))
     await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(2))
     await controller.processFrame({ eventName: unknown.kind, id: "2", data: "{}" }, {
-      boardId: "board-a",
+      boardId: asCanonicalBoardId("board-a"),
       connectionEpoch: controller.snapshot().connectionEpoch,
       generation: controller.snapshot().generation,
     })
@@ -945,7 +1063,7 @@ describe("WebSyncController", () => {
     expect(querySink.onEvent.mock.calls.map((entry) => entry[0].eventId)).toEqual([known.eventId, unknown.eventId])
   })
 
-  test("discards a stale recovery revision and reissues under a new token", async () => {
+  test("discards a stale recovery token and reissues under a new token", async () => {
     const querySink = sink()
     const telemetry: { type: string; details?: Readonly<Record<string, unknown>> }[] = []
     let call = 0
@@ -959,15 +1077,16 @@ describe("WebSyncController", () => {
           byId: new Map(),
           byEventId: new Map(),
           events: [],
-          token,
-          revision: call === 1 ? 99 : 2,
+          token: call === 1 ? { ...token, connectionEpoch: token.connectionEpoch - 1 } : token,
+          revision: call === 1 ? 1 : 2,
           published: true,
         },
       }
     })
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -980,6 +1099,153 @@ describe("WebSyncController", () => {
     await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledTimes(2))
     expect(telemetry.map((entry) => entry.type)).not.toContain("protocol-anomaly")
     expect(telemetry.map((entry) => entry.type)).not.toContain("recovery-failure")
+  })
+
+  test("budgets a cross-board recovery boundary instead of silently retrying", async () => {
+    const querySink = sink()
+    const modes: string[] = []
+    const failures: string[] = []
+    const { clock, advance } = fakeClock()
+    querySink.refetchObserved.mockImplementationOnce((_mode, token, _after, expectedRevision) => Promise.resolve({
+      confirmedCursor: 0,
+      noGap: true,
+      boundary: {
+        highWatermark: 0,
+        byId: new Map(),
+        byEventId: new Map(),
+        events: [],
+        token: { ...token, boardId: asCanonicalBoardId("board-other") },
+        revision: expectedRevision,
+        published: true,
+      },
+    }))
+    querySink.refetchObserved.mockImplementation(async (mode) => {
+      modes.push(mode)
+      return new Promise<RecoveryResult>(() => undefined)
+    })
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(businessEvent()),
+      sink: querySink,
+      clock,
+      telemetry: { record: (entry) => { if (entry.type === "recovery-failure") failures.push(String(entry.details?.message)) } },
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(failures).toHaveLength(1))
+    await Promise.resolve()
+    advance(250)
+    await vi.waitFor(() => expect(modes).toContain("F"))
+    expect(controller.snapshot().lastConfirmedCursor).toBe(0)
+    expect(controller.snapshot().state).toBe("recovering")
+    controller.stop()
+  })
+
+  test("upgrades an R no-gap failure to a budgeted F recovery", async () => {
+    const querySink = sink()
+    const modes: string[] = []
+    const { clock, advance } = fakeClock()
+    querySink.refetchObserved.mockImplementation(async (mode, token, _after, revision) => {
+      modes.push(mode)
+      if (mode === "R") {
+        return {
+          confirmedCursor: 0,
+          noGap: false,
+          boundary: { highWatermark: 0, byId: new Map(), byEventId: new Map(), events: [], token, revision, published: true },
+        }
+      }
+      return new Promise<RecoveryResult>(() => undefined)
+    })
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(businessEvent()),
+      sink: querySink,
+      clock,
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(modes).toContain("R"))
+    await Promise.resolve()
+    advance(1_000)
+    await vi.waitFor(() => expect(modes).toEqual(expect.arrayContaining(["R", "F"])))
+    controller.stop()
+  })
+
+  test("upgrades a recovery-buffer fingerprint conflict to a budgeted F recovery", async () => {
+    const querySink = sink()
+    const boundaryEvent = businessEvent()
+    const conflicting = businessEvent({ eventId: "e-conflict", canonicalFingerprint: "fp-conflict" })
+    const modes: string[] = []
+    const failures: string[] = []
+    const { clock, advance } = fakeClock()
+    let resolveBarrier: (result: RecoveryResult) => void = () => undefined
+    querySink.refetchObserved.mockImplementationOnce((_mode, token, _after, expectedRevision) => new Promise<RecoveryResult>((resolve) => {
+      resolveBarrier = () => resolve({
+        confirmedCursor: 1,
+        noGap: true,
+        boundary: {
+          highWatermark: 1,
+          byId: new Map([[1, boundaryEvent.canonicalFingerprint]]),
+          byEventId: new Map([[boundaryEvent.eventId, boundaryEvent.canonicalFingerprint]]),
+          events: [boundaryEvent],
+          token,
+          revision: expectedRevision,
+          published: true,
+        },
+      })
+    }))
+    querySink.refetchObserved.mockImplementation(async (mode) => {
+      modes.push(mode)
+      return new Promise<RecoveryResult>(() => undefined)
+    })
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(conflicting),
+      sink: querySink,
+      clock,
+      telemetry: { record: (entry) => { if (entry.type === "recovery-failure") failures.push(String(entry.details?.message)) } },
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(2))
+    transport.mock.calls[1]?.[0].onFrame({ eventName: conflicting.kind, id: "1", data: "{}" })
+    await Promise.resolve()
+    resolveBarrier({
+      confirmedCursor: 1,
+      noGap: true,
+      boundary: {
+        highWatermark: 1,
+        byId: new Map([[1, boundaryEvent.canonicalFingerprint]]),
+        byEventId: new Map([[boundaryEvent.eventId, boundaryEvent.canonicalFingerprint]]),
+        events: [boundaryEvent],
+        token: querySink.refetchObserved.mock.calls[0]?.[1] ?? controller.snapshot(),
+        revision: querySink.refetchObserved.mock.calls[0]?.[3] ?? 1,
+        published: true,
+      },
+    })
+    await vi.waitFor(() => expect(failures).toHaveLength(1))
+    await Promise.resolve()
+    advance(250)
+    await vi.waitFor(() => expect(modes).toContain("F"))
+    expect(querySink.onEvent).not.toHaveBeenCalled()
+    expect(controller.snapshot().lastConfirmedCursor).toBe(0)
+    controller.stop()
   })
 
   test("prevalidates the complete boundary before replaying any projection effect", async () => {
@@ -1002,7 +1268,8 @@ describe("WebSyncController", () => {
     }))
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(first),
@@ -1038,7 +1305,8 @@ describe("WebSyncController", () => {
     }))
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(first),
@@ -1079,7 +1347,8 @@ describe("WebSyncController", () => {
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const { clock, advance } = fakeClock()
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -1116,7 +1385,8 @@ describe("WebSyncController", () => {
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const { clock, advance } = fakeClock()
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -1148,8 +1418,9 @@ describe("WebSyncController", () => {
       const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
       const { clock, advance } = fakeClock()
       const controller = new WebSyncController({
-        boardId: "board-a",
-        streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
         transport,
         adapter: adapterFor(event),
         sink: querySink,
@@ -1178,7 +1449,7 @@ describe("WebSyncController", () => {
       ;(controller as unknown as { openCircuit: (reason: string) => void }).openCircuit("test-poll-race")
       advance(5_000)
       await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledOnce())
-      controller.switchBoard("board-b")
+      controller.switchBoard("board-b", asCanonicalBoardId("board-b"))
       releaseEffect()
       await Promise.resolve()
       await Promise.resolve()
@@ -1200,7 +1471,8 @@ describe("WebSyncController", () => {
     querySink.onEvent.mockImplementation(async () => effect)
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -1260,7 +1532,8 @@ describe("WebSyncController", () => {
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const { clock, advance } = fakeClock()
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter: adapterFor(businessEvent()),
@@ -1286,7 +1559,7 @@ describe("WebSyncController", () => {
         byEventId: new Map([["e-1", "fp-1"]]),
         events: [businessEvent()],
         token: {
-          boardId: "board-a",
+          boardId: asCanonicalBoardId("board-a"),
           connectionEpoch: controller.snapshot().connectionEpoch,
           generation: controller.snapshot().generation,
         },
@@ -1313,7 +1586,8 @@ describe("WebSyncController", () => {
       parseEnvelope: () => ({ status: "invalid", code: "malformed" }),
     }
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter,
@@ -1380,12 +1654,15 @@ describe("WebSyncController", () => {
       }
     })
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    let rejectSse = true
+    const baseAdapter = adapterFor(businessEvent())
     const adapter: StreamContractAdapter = {
-      ...adapterFor(businessEvent()),
-      parseEnvelope: () => ({ status: "invalid", code: "malformed" }),
+      ...baseAdapter,
+      parseEnvelope: (frame) => rejectSse ? { status: "invalid", code: "malformed" } : baseAdapter.parseEnvelope(frame),
     }
     const controller = new WebSyncController({
-      boardId: "board-a",
+      boardSelector: "board-a",
+      canonicalBoardId: asCanonicalBoardId("board-a"),
       streamUrl: "http://127.0.0.1/api/v1/stream/events",
       transport,
       adapter,
@@ -1422,5 +1699,9 @@ describe("WebSyncController", () => {
     await vi.waitFor(() => expect(controller.snapshot().circuitOpen).toBe(false))
     expect(controller.snapshot().circuitOpen).toBe(false)
     expect(controller.snapshot().lastConfirmedCursor).toBe(1)
+    rejectSse = false
+    transport.mock.calls[transport.mock.calls.length - 1]?.[0].onFrame({ eventName: "task.updated", id: "2", data: "{}" })
+    await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledTimes(2))
+    expect(controller.snapshot().lastConfirmedCursor).toBe(2)
   })
 })

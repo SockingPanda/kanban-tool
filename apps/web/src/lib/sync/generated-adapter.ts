@@ -33,8 +33,12 @@ function isUnknownEvent(value: ParsedSseEvent): value is UnknownSseEvent {
   return "reason" in value
 }
 
+function safeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value)
+}
+
 function safeCursor(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+  return safeInteger(value) && value >= 0
 }
 
 function parseHeaderCursor(value: string | null): number | null {
@@ -95,7 +99,7 @@ function envelopeFromValue(value: unknown, frame: RawSseFrame | null): EnvelopeP
   if (typeof runId !== "string" && runId !== null) return { status: "invalid", code: "envelope-invalid-run-id" }
   if (typeof kind !== "string" || kind.length === 0) return { status: "invalid", code: "envelope-invalid-kind" }
   if (typeof actor !== "string" && actor !== null) return { status: "invalid", code: "envelope-invalid-actor" }
-  if (!safeCursor(createdAt)) return { status: "invalid", code: "envelope-invalid-created-at" }
+  if (!safeInteger(createdAt)) return { status: "invalid", code: "envelope-invalid-created-at" }
 
   if (frame !== null) {
     const headerId = parseHeaderCursor(frame.id)

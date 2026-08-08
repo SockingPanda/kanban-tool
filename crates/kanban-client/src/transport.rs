@@ -88,8 +88,7 @@ impl KanbanClient {
         let mut request = self
             .agent
             .get(&format!("{}{path}", self.base_url))
-            .set("Accept", accept)
-            .set("X-KB-Actor", &self.actor);
+            .set("Accept", accept);
         if let Some(last_event_id) = last_event_id {
             request = request.set("Last-Event-ID", &last_event_id.to_string());
         }

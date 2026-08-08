@@ -112,11 +112,6 @@ export function createSseParser(options: SseParserOptions = {}): SseParser {
       }
       fail(new SseParseError("missing_event", "SSE frame is missing event"))
     }
-    if (!pending.sawData) {
-      pending = newPendingFrame()
-      return null
-    }
-
     const frame: SseFrame = {
       eventName: pending.eventName,
       id: pending.id,

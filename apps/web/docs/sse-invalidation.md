@@ -497,6 +497,12 @@ observed-scope 子集，不得退化成“先 GET、再随意接受 live frame�
 - `events(board)` 和 `task-events(task_id)` 的显示排序按 `id`/server order，不能按客户端收到
   时间排序。`created_at` 仅用于显示。
 
+Web sync controller 同时接收 URL 使用的 runtime board selector（通常是 slug）和由 `boards` query
+解析出的 canonical `boards.id`。selector 只进入 `/api/v1/stream/events` 与 HTTP query；isolation、
+recovery token、cursor budget、boundary 和 telemetry 的 board identity 一律使用 canonical ID。
+在 selector 完成到 canonical ID 的 query boundary 之前不得启动 controller，也不能把 selector 当作
+事件 `board_id` 的替代值。
+
 `boards` 是唯一的低频 global freshness 例外：active-board SSE 按 isolation 只看当前 board，
 因此无法可靠观察 inactive board 的 `board.created`/`board.archived`。board switcher 在 window
 focus 时 refetch，并在页面可见期间以不超过 15 秒的 polling 维护新鲜度；该路径与 active-board
@@ -556,7 +562,8 @@ Stage 02 必须用跨 board fixture 验证这一点；若服务端改为 active-
 1. 首次连接和客户端主动重建连接都发送 `?board=<active>&after=<lastCursor>`。浏览器原生
    `EventSource` 的自动重连会把固定 URL 中旧的 `after` 与新的 `Last-Event-ID` 一起送回；这是
    正常恢复，不应因二者不同而拒绝。server 必须接受两个合法 cursor 并选择较新的值（通常取
-   `Last-Event-ID`）；只有格式非法、倒退，或与已确认状态矛盾时才走 conservative recovery。
+   `Last-Event-ID`）；较低但格式合法的 header 由 `max` 选择较新的 cursor，不单独拒绝；只有格式非法
+   或与已确认状态矛盾时才走 conservative recovery。
    客户端主动关闭后重新 `new EventSource` 不能依赖自定义 header，只依赖已经更新的
    `after=<lastCursor>`。
 2. server 必须先取得 high-watermark 并原子建立 live subscription/buffer（或使用等价的原子
@@ -643,23 +650,26 @@ health/runtime query 不属于 event projection；SSE 断线不能用旧 health 
 
 | 指标 | 采样与通过条件 | Pass/Fail gate |
 |---|---|---|
-| live event commit → active query/UI invalidation | 记录 server event commit、browser 收到并完成 query invalidation 的时间戳；p95 ≤ 1s，p99 ≤ 2s | Stage 02 host/SSE integration 先建立样本；Stage 09 browser/Tauri gate 复测并判定 |
+| live event commit → active query/UI invalidation | 通过 `SyncTelemetry.record` collector seam 记录 server event commit、browser 收到并完成 query invalidation 的时间戳；只有闭合 host→browser 样本后才能计算 p95 ≤ 1s、p99 ≤ 2s | Stage 09 browser/Tauri gate 采样并判定；本阶段不宣称 percentile 结果 |
 | named heartbeat control frame / liveness | 精确 `event: kb-heartbeat` 间隔 ≤ 15s；任一合法 active-board business/control frame 重置 timer；连续 35s 无可观测 frame 判 stalled：仅当 circuit 未打开时经 §3.6 `R` barrier 做 observed-scope refetch + 5s polling + reconnect，circuit-open 只保留 HTTP polling 且不得自动 SSE；comment 不计入样本 | Stage 02 protocol/host contract + fake-clock timer test；Stage 09 runtime smoke |
 | reconnect attempt | circuit 未打开的 ordinary transport transient，断线到发起 SSE reconnect ≤ 5s；记录固定 URL/`after` 与自动 `Last-Event-ID` 恢复路径；circuit-open 不计入此 SLO | Stage 02 reconnect integration + Stage 09 Playwright |
 | 1000-event catch-up | 注入 1000 条 active-board events，验证无丢失、无重排、无重复应用，且 fingerprint/dedupe 结果可审计 | Stage 02 catch-up fixture；Stage 09 browser evidence 复测 |
 
-Stage 02 负责协议、server publisher、cursor 和 transport-control 的原始采样；Stage 09 负责
-Chromium/Firefox/Tauri 端到端复测、保存样本和明确 Pass/Fail。未采样或只通过单元测试的指标不得
-标记为 SLO 已达成。
+`SyncTelemetry.record` 是 Web 侧采集 seam，host SSE response、browser frame 接收和 query
+invalidation 完成时间戳必须在同一集成样本中关联。Chromium/Firefox/Tauri 端到端 gate 负责保存样本
+并明确 Pass/Fail；未闭合 host→browser 样本或只通过单元测试的指标不得标记为 SLO 已达成，也不得
+伪造 p95/p99。
 
 ## 7. Stage 02 必须实测或确认的假设
 
 本页刻意不把尚未实现的 host 行为写成既成事实。Stage 02/后续测试必须至少证明：
 
-- `kanban serve` 的 persistent `/api/v1/stream/events` 是否在 high-watermark/subscribe boundary
-  下先安全补发 `(after, watermark]`、再 drain buffered events 后进入 live，是否兼容并校验
-  `Last-Event-ID` 与 `after`，以及断线期间是否不丢事件；当前 server 还是有限快照并且测试显示
-  会忽略 `Last-Event-ID`，不能把现状当成完成证据。
+- `kanban serve` 的 persistent `/api/v1/stream/events` 以
+  `max(after, Last-Event-ID)` 初始化 exclusive cursor，先补发该 cursor 之后的分页事件，再持续
+  轮询新事件并发送 `event: kb-heartbeat`；malformed/unsafe 或与已确认状态矛盾的
+  `Last-Event-ID` 在响应提交前拒绝，较低但合法的值由 `max` 选择较新的 cursor。
+  仍需在 host/browser 集成边界验证 high-watermark/subscribe 的 no-gap 证明、断线期间的完整补发
+  和真实端到端采样，不能把单元测试或静态审阅当成这些证据。
 - `id` 是否全局递增、board-filter 后是否允许跳号；若不是全局 cursor，更新本页 gap 判定和
   fixture；不能仅凭单 board 测试决定。
 - live publisher 是否保证 active-board order、catch-up/live 原子切换和 1000 条无丢失/无重排；

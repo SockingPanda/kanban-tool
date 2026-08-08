@@ -32,6 +32,14 @@ describe("generated StreamContractAdapter", () => {
     expect(result.event.scope.taskId).toBe("task-a")
   })
 
+  test("accepts any safe integer created_at while keeping cursor ids non-negative", () => {
+    const createdAt = adapter.parsePollingEnvelope(rawEvent({ created_at: -1 }))
+    expect(createdAt.status).toBe("valid")
+
+    const negativeId = adapter.parsePollingEnvelope(rawEvent({ id: -1 }))
+    expect(negativeId).toEqual({ status: "invalid", code: "envelope-invalid-id" })
+  })
+
   test("keeps future kinds lossless and canonicalizes payload key order", () => {
     const first = rawEvent({ kind: "task.attachment.created", payload: { z: 1, a: 2 } })
     const second = rawEvent({ kind: "task.attachment.created", payload: { a: 2, z: 1 } })
@@ -88,5 +96,7 @@ describe("generated StreamContractAdapter", () => {
     expect(adapter.validateControl({ eventName: "kb-heartbeat", id: null, data: "{}" }).status).toBe("valid")
     expect(adapter.validateControl({ eventName: "kb-heartbeat", id: "1", data: "{}" })).toEqual({ status: "invalid", code: "heartbeat-id-forbidden" })
     expect(adapter.validateControl({ eventName: "kb-heartbeat", id: null, data: '{"id":1}' })).toEqual({ status: "invalid", code: "heartbeat-invalid-data" })
+    expect(adapter.validateControl({ eventName: "kb-heartbeat", id: null, data: "" })).toEqual({ status: "invalid", code: "heartbeat-invalid-data" })
+    expect(adapter.parseEnvelope({ eventName: "task.created", id: "7", data: "" })).toEqual({ status: "invalid", code: "envelope-not-object" })
   })
 })

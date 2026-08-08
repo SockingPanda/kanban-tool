@@ -57,6 +57,10 @@ describe("literal event invalidation plans", () => {
     expect(created.targets.map(targetKey)).not.toContain("boards(board-a)")
     expect(created.targets.map(targetKey)).toContain('columns(board="board-a")|observed=false')
     expect(created.targets.map(targetKey)).not.toContain('maintenance-status(board="board-a")|observed=false')
+
+    const archived = classifyEvent(event({ kind: "board.archived", taskId: null, scope: { taskId: null } }))
+    expect(archived.targets).toContainEqual({ root: "boards" })
+    expect(archived.targets.map(targetKey)).not.toContain('boards(board="board-a")|observed=false')
   })
 
   test("only uses run_id-bearing run targets", () => {
@@ -86,6 +90,7 @@ describe("literal event invalidation plans", () => {
         expect.stringContaining('task-neighborhood(task="parent")'),
       ]),
     )
+    expect(dependency.targets.some((target) => target.root === "stats")).toBe(false)
 
     const step = classifyEvent(
       event({

@@ -130,6 +130,14 @@ describe("explorer canonical board identity", () => {
     })
   })
 
+  test("rejects path-like server identity values before any board request path is built", async () => {
+    const transport = {
+      get: async (): Promise<HttpTransportResponse> => ({ payload: { data: [board("b_/escape", "../escape")] }, bytes: 1 }),
+    }
+
+    await expect(loadExplorerBoardIdentity(runtime, "../escape", { transport })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+
   test("rejects duplicate canonical board id or slug before selecting a board", async () => {
     const duplicateSlugTransport = {
       get: async (): Promise<HttpTransportResponse> => ({ payload: { data: [board("b_one", "same"), board("b_two", "same")] }, bytes: 1 }),

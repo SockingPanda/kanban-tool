@@ -303,12 +303,21 @@ function boardListPath(includeArchived: boolean): string {
 }
 
 function validBoardId(value: string): CanonicalBoardId | null {
-  if (value.trim() !== value || value.length === 0 || /[\u0000-\u001f\u007f\\/?#]/.test(value)) return null
+  if (value.trim() !== value || value.length === 0 || hasUnsafeIdentityCharacters(value)) return null
   try {
     return asCanonicalBoardId(value)
   } catch {
     return null
   }
+}
+
+function hasUnsafeIdentityCharacters(value: string): boolean {
+  if (/[\\/?#]/.test(value)) return true
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0
+    if (codePoint <= 0x1f || codePoint === 0x7f) return true
+  }
+  return false
 }
 
 function resolveBoard(boards: ApiListBoardsResponseContract["data"], selector: string): ExplorerBoardIdentity {

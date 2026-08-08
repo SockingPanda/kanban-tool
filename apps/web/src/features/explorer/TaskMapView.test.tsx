@@ -1,9 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test } from "vitest"
 
-import type { ExplorerTaskMap, ExplorerTaskMapReadModel, TaskMapReadState } from "../../lib/api/explorer-read-model"
+import type { ExplorerTaskMap, ExplorerTaskMapReadModel } from "../../lib/api/explorer-read-model"
+import { assertCanonicalBoardSlug } from "../../lib/board-slug"
 import { asCanonicalBoardId } from "../../lib/sync/contracts"
-import { TaskMapPresentation, __test } from "./TaskMapView"
+import { TaskMapPresentation, type TaskMapReadState } from "./TaskMapView"
+import { __test } from "./TaskMapView.logic"
 
 type MapTask = ExplorerTaskMap["nodes"][number]["task"]
 
@@ -76,7 +78,7 @@ const graph: ExplorerTaskMap = {
 }
 
 const model: ExplorerTaskMapReadModel = {
-  board: { selector: "default", id: asCanonicalBoardId("b_1"), slug: "default", name: "Default" },
+  board: { selector: "default", id: asCanonicalBoardId("b_1"), slug: assertCanonicalBoardSlug("default"), name: "Default" },
   map: graph,
 }
 
@@ -89,6 +91,10 @@ describe("TaskMapView", () => {
     expect(filtered.nodes.map((node) => node.task.id)).toEqual(["ready"])
     expect(filtered.edges).toEqual([])
     expect(graph.nodes).toHaveLength(3)
+    expect(__test.filterTaskMap(graph, "all", true).nodes.map((node) => node.task.id).sort()).toEqual(["done", "ready"])
+    expect(__test.clampMapZoom(0)).toBe(0.65)
+    expect(__test.clampMapZoom(2)).toBe(1.5)
+    expect(__test.stepMapZoom(1, 1)).toBe(1.15)
   })
 
   test("renders keyboard-accessible graph region, nodes, edges and selected inspector", () => {
@@ -103,6 +109,15 @@ describe("TaskMapView", () => {
     expect(markup).toContain('data-task-id="ready"')
     expect(markup).toContain("dep:done:ready")
     expect(markup).toContain("当前选择")
+  })
+
+  test("keeps a selected node inspectable when a filter hides it", () => {
+    const markup = renderToStaticMarkup(
+      <TaskMapPresentation board="default" taskId="done" state={ready} filter="ready" onSelectTask={() => undefined} />,
+    )
+
+    expect(markup).toContain("当前节点被筛选隐藏")
+    expect(markup).toContain("default#done")
   })
 
   test("exposes loading, empty, error and board-not-found states", () => {

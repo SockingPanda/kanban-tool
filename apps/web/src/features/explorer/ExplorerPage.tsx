@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
 
 import { BoardView } from "../board/BoardView"
 import type { BoardViewModel } from "../board/types"
@@ -18,6 +18,8 @@ import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
 import { TaskListView, type TaskListRow } from "./TaskListView"
 import styles from "./ExplorerPage.module.css"
+
+const LazyTaskMapView = lazy(() => import("./TaskMapView").then((module) => ({ default: module.TaskMapView })))
 
 export interface ExplorerPageProps {
   readonly runtime: WebRuntimeConfig
@@ -253,7 +255,11 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
               onRetry={listRead.retry}
             />
           ) : null}
-          {view === "map" ? <MapPlaceholder board={route.boardSlug} taskId={taskId} onSelectTask={selectTask} /> : null}
+          {view === "map" ? (
+            <Suspense fallback={<div className={styles.boundary} data-testid="task-map-route-loading" role="status">正在加载关系图页面…</div>}>
+              <LazyTaskMapView runtime={runtime} board={route.boardSlug} taskId={taskId} onSelectTask={selectTask} />
+            </Suspense>
+          ) : null}
           {view === "runs" ? <RunsPlaceholder taskId={taskId} inspector={inspectorRead.data} /> : null}
           {view === "events" ? <EventsPlaceholder taskId={taskId} inspector={inspectorRead.data} /> : null}
         </main>
@@ -263,10 +269,6 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
       </div>
     </section>
   )
-}
-
-function MapPlaceholder({ board, taskId, onSelectTask }: { readonly board: string; readonly taskId: string | null; readonly onSelectTask: (taskId: string) => void }) {
-  return <section className={styles.boundary} data-testid="map-placeholder"><h2>Map</h2><p>关系图将在进入 Map 页面时加载。</p>{taskId ? <button type="button" onClick={() => onSelectTask(taskId)}>检查当前任务</button> : null}<span translate="no">{board}</span></section>
 }
 
 function RunsPlaceholder({ taskId, inspector }: { readonly taskId: string | null; readonly inspector: TaskInspectorReadModel | null }) {

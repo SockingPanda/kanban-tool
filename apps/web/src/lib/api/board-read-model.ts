@@ -72,7 +72,6 @@ export type BoardReadErrorKind =
   | "malformed_url"
   | "invalid_headers"
   | "invalid_content_type"
-  | "invalid_bytes"
   | "response_too_large"
 
 export class BoardReadError extends Error {
@@ -215,7 +214,8 @@ function wrapTransportError(error: unknown): never {
   if (isAbortError(error)) throw error
   if (error instanceof BoardReadError) throw error
   if (error instanceof HttpTransportError) {
-    throw new BoardReadError(error.kind, error.message, {
+    const kind = error.kind === "invalid_bytes" ? "anomaly" : error.kind
+    throw new BoardReadError(kind, error.message, {
       status: error.status ?? undefined,
       apiError: error.apiError,
       cause: error,

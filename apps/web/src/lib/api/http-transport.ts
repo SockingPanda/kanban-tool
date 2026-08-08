@@ -128,30 +128,28 @@ function hasDotSegmentOrBackslash(path: string): boolean {
   const segments = pathOnly.split("/")
   for (const segment of segments) {
     if (segment === "." || segment === "..") return true
+    let decoded: string
     try {
-      let decoded = segment
-      for (let pass = 0; pass < 64; pass += 1) {
-        if (
-          decoded === "."
-          || decoded === ".."
-          || decoded.includes("\\")
-          || decoded.includes("/")
-          || decoded.includes("\u0000")
-        ) return true
-        const next = decodeURIComponent(decoded)
-        if (next === decoded) break
-        decoded = next
-      }
+      decoded = decodeURIComponent(segment)
+    } catch {
+      return true
+    }
+
+    while (true) {
       if (
         decoded === "."
         || decoded === ".."
         || decoded.includes("\\")
         || decoded.includes("/")
         || decoded.includes("\u0000")
-        || decoded.includes("%")
       ) return true
-    } catch {
-      return true
+      if (!decoded.includes("%")) break
+      try {
+        decoded = decodeURIComponent(decoded)
+      } catch {
+        // A residual literal percent was encoded by the previous successful pass.
+        break
+      }
     }
   }
   return false

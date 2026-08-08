@@ -2,7 +2,7 @@ import { describe, expect, test, vi } from "vitest"
 
 import type { WebRuntimeConfig } from "../runtime"
 import { BoardReadError, createBoardReadQuery, loadBoardReadModel } from "./board-read-model"
-import type { HttpTransportResponse } from "./http-transport"
+import { HttpTransportError, type HttpTransportResponse } from "./http-transport"
 
 const runtime = {
   apiBaseUrl: "",
@@ -288,6 +288,17 @@ describe("board read model", () => {
         return { payload: { data: [] }, bytes: 0 }
       }),
     }
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport } })).rejects.toMatchObject({
+      name: "BoardReadError",
+      kind: "anomaly",
+    })
+  })
+
+  test("maps attachment-only invalid byte transport errors to anomaly", async () => {
+    const transport = {
+      get: vi.fn().mockRejectedValue(new HttpTransportError("invalid_bytes", "attachment body invalid")),
+    }
+
     await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "anomaly",

@@ -69,6 +69,32 @@ describe("same-origin Web HTTP transport", () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
+  test.each([
+    { path: "/api/v1/tasks/t_1/attachments/a_%25", allowed: true },
+    { path: "/api/v1/tasks/t_1/attachments/a_%2525", allowed: true },
+    { path: "/api/v1/tasks/t_1/attachments/a_%", allowed: false },
+    { path: "/api/v1/tasks/t_1/attachments/a_%2", allowed: false },
+    { path: "/api/v1/tasks/t_1/attachments/a_%252f", allowed: false },
+    { path: "/api/v1/tasks/t_1/attachments/%252e%252e", allowed: false },
+    { path: "/api/v1/tasks/t_1/attachments/a_%25255c", allowed: false },
+    { path: "/api/v1/tasks/t_1/attachments/a_%252500", allowed: false },
+  ])("handles encoded attachment percent layers safely: $path", async ({ path, allowed }) => {
+    const response = sameOriginResponse(JSON.stringify({ data: [] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }, "/api/v1/tasks/t_1/attachments/a_%25")
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+
+    if (allowed) {
+      await expect(transport.get(path)).resolves.toMatchObject({ payload: { data: [] } })
+      expect(fetcher).toHaveBeenCalledTimes(1)
+    } else {
+      await expect(transport.get(path)).rejects.toMatchObject({ kind: "cross_origin" })
+      expect(fetcher).not.toHaveBeenCalled()
+    }
+  })
+
   test("rejects malformed runtime URL and a final cross-origin response URL", async () => {
     const fetcher = vi.fn<typeof fetch>()
     expect(() => createHttpTransport({ ...runtime, apiBaseUrl: "http://[bad" }, { fetcher })).toThrow(

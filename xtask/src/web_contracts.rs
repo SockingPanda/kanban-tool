@@ -1223,6 +1223,12 @@ mod tests {
                 .any(|endpoint| endpoint.operation_id == "api.update-step")
         );
         assert!(
+            !resolved
+                .endpoints
+                .iter()
+                .any(|endpoint| endpoint.operation_id == "api.list-task-labels")
+        );
+        assert!(
             resolved
                 .contracts
                 .iter()

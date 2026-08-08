@@ -117,9 +117,6 @@ import { ApiListEventsHeadersSchema, apiListEventsHeadersValidator } from "./con
 import { ApiListEventsResponseSchema, apiListEventsResponseValidator } from "./contracts/api-list-events-response";
 import { SseStreamEventsQuerySchema, sseStreamEventsQueryValidator } from "./contracts/sse-stream-events-query";
 import { SseEventDataSchema, sseEventDataValidator } from "./contracts/sse-event-data";
-import { ApiListTaskLabelsPathSchema, apiListTaskLabelsPathValidator } from "./contracts/api-list-task-labels-path";
-import { ApiListTaskLabelsHeadersSchema, apiListTaskLabelsHeadersValidator } from "./contracts/api-list-task-labels-headers";
-import { ApiListTaskLabelsResponseSchema, apiListTaskLabelsResponseValidator } from "./contracts/api-list-task-labels-response";
 import { ApiAddTaskLabelPathSchema, apiAddTaskLabelPathValidator } from "./contracts/api-add-task-label-path";
 import { ApiAddTaskLabelHeadersSchema, apiAddTaskLabelHeadersValidator } from "./contracts/api-add-task-label-headers";
 import { ApiAddTaskLabelRequestSchema, apiAddTaskLabelRequestValidator } from "./contracts/api-add-task-label-request";
@@ -321,9 +318,6 @@ export const schemas = {
   "api.list-events.response": ApiListEventsResponseSchema,
   "sse.stream-events.query": SseStreamEventsQuerySchema,
   "sse.event.data": SseEventDataSchema,
-  "api.list-task-labels.path": ApiListTaskLabelsPathSchema,
-  "api.list-task-labels.headers": ApiListTaskLabelsHeadersSchema,
-  "api.list-task-labels.response": ApiListTaskLabelsResponseSchema,
   "api.add-task-label.path": ApiAddTaskLabelPathSchema,
   "api.add-task-label.headers": ApiAddTaskLabelHeadersSchema,
   "api.add-task-label.request": ApiAddTaskLabelRequestSchema,
@@ -524,9 +518,6 @@ export const validators = {
   "api.list-events.response": apiListEventsResponseValidator,
   "sse.stream-events.query": sseStreamEventsQueryValidator,
   "sse.event.data": sseEventDataValidator,
-  "api.list-task-labels.path": apiListTaskLabelsPathValidator,
-  "api.list-task-labels.headers": apiListTaskLabelsHeadersValidator,
-  "api.list-task-labels.response": apiListTaskLabelsResponseValidator,
   "api.add-task-label.path": apiAddTaskLabelPathValidator,
   "api.add-task-label.headers": apiAddTaskLabelHeadersValidator,
   "api.add-task-label.request": apiAddTaskLabelRequestValidator,
@@ -737,9 +728,6 @@ export { parseApiListEventsHeaders } from "./contracts/api-list-events-headers";
 export { parseApiListEventsResponse } from "./contracts/api-list-events-response";
 export { parseSseStreamEventsQuery } from "./contracts/sse-stream-events-query";
 export { parseSseEventData } from "./contracts/sse-event-data";
-export { parseApiListTaskLabelsPath } from "./contracts/api-list-task-labels-path";
-export { parseApiListTaskLabelsHeaders } from "./contracts/api-list-task-labels-headers";
-export { parseApiListTaskLabelsResponse } from "./contracts/api-list-task-labels-response";
 export { parseApiAddTaskLabelPath } from "./contracts/api-add-task-label-path";
 export { parseApiAddTaskLabelHeaders } from "./contracts/api-add-task-label-headers";
 export { parseApiAddTaskLabelRequest } from "./contracts/api-add-task-label-request";

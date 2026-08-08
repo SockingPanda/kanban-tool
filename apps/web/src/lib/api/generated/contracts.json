@@ -1161,36 +1161,6 @@
   },
   {
     "direction": "deserialize",
-    "id": "api.list-task-labels.path",
-    "invalidFixture": "fixtures/api-list-task-labels-path.invalid.json",
-    "schemaId": "urn:kanban-tool:schema:api:list-task-labels-path:v1",
-    "schemaPath": "schemas/api-list-task-labels-path.schema.json",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "validFixture": "fixtures/api-list-task-labels-path.valid.json"
-  },
-  {
-    "direction": "deserialize",
-    "id": "api.list-task-labels.headers",
-    "invalidFixture": "fixtures/api-list-task-labels-headers.invalid.json",
-    "schemaId": "urn:kanban-tool:schema:api:list-task-labels-headers:v1",
-    "schemaPath": "schemas/api-list-task-labels-headers.schema.json",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "validFixture": "fixtures/api-list-task-labels-headers.valid.json"
-  },
-  {
-    "direction": "serialize",
-    "id": "api.list-task-labels.response",
-    "invalidFixture": "fixtures/api-list-task-labels-response.invalid.json",
-    "schemaId": "urn:kanban-tool:schema:api:list-task-labels-response:v1",
-    "schemaPath": "schemas/api-list-task-labels-response.schema.json",
-    "strictness": "deny_unknown_fields",
-    "surface": "api",
-    "validFixture": "fixtures/api-list-task-labels-response.valid.json"
-  },
-  {
-    "direction": "deserialize",
     "id": "api.add-task-label.path",
     "invalidFixture": "fixtures/api-add-task-label-path.invalid.json",
     "schemaId": "urn:kanban-tool:schema:api:add-task-label-path:v1",

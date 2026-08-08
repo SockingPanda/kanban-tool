@@ -37,7 +37,6 @@
     "api.delete-attachment",
     "api.list-events",
     "sse.stream-events",
-    "api.list-task-labels",
     "api.add-task-label",
     "api.remove-task-label",
     "api.suggest-task-labels",

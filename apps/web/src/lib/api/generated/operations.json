@@ -388,37 +388,6 @@
     "sharedComponents": []
   },
   {
-    "id": "api.list-task-labels",
-    "method": "GET",
-    "obligations": {
-      "body": {
-        "kind": "not_applicable"
-      },
-      "headers": {
-        "contractId": "api.list-task-labels.headers",
-        "kind": "contract"
-      },
-      "path": {
-        "contractId": "api.list-task-labels.path",
-        "kind": "contract"
-      },
-      "query": {
-        "kind": "not_applicable"
-      },
-      "sse": {
-        "kind": "not_applicable"
-      },
-      "success": {
-        "contractId": "api.list-task-labels.response",
-        "kind": "contract"
-      }
-    },
-    "path": "/api/v1/tasks/:task_id/labels",
-    "sharedComponents": [
-      "api.error.response"
-    ]
-  },
-  {
     "id": "api.add-task-label",
     "method": "POST",
     "obligations": {

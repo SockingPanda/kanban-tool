@@ -153,6 +153,7 @@ fn web_contract_generation_is_selection_scoped() {
     assert!(operation_ids.contains("sse.stream-events"));
     assert!(!operation_ids.contains("api.create-board"));
     assert!(!operation_ids.contains("api.update-step"));
+    assert!(!operation_ids.contains("api.list-task-labels"));
     let contracts: Value =
         serde_json::from_slice(files.get("contracts.json").expect("contracts manifest"))
             .expect("contracts manifest should be JSON");

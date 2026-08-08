@@ -64,7 +64,7 @@ describe("generated Web contracts", () => {
       checked += 1
     }
 
-    expect(checked).toBe(200)
+    expect(checked).toBe(197)
   })
 
   test("keeps unknown contract ids out of the validation boundary", () => {

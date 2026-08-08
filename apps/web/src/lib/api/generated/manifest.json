@@ -1162,36 +1162,6 @@
     },
     {
       "direction": "deserialize",
-      "id": "api.list-task-labels.path",
-      "invalidFixture": "fixtures/api-list-task-labels-path.invalid.json",
-      "schemaId": "urn:kanban-tool:schema:api:list-task-labels-path:v1",
-      "schemaPath": "schemas/api-list-task-labels-path.schema.json",
-      "strictness": "deny_unknown_fields",
-      "surface": "api",
-      "validFixture": "fixtures/api-list-task-labels-path.valid.json"
-    },
-    {
-      "direction": "deserialize",
-      "id": "api.list-task-labels.headers",
-      "invalidFixture": "fixtures/api-list-task-labels-headers.invalid.json",
-      "schemaId": "urn:kanban-tool:schema:api:list-task-labels-headers:v1",
-      "schemaPath": "schemas/api-list-task-labels-headers.schema.json",
-      "strictness": "deny_unknown_fields",
-      "surface": "api",
-      "validFixture": "fixtures/api-list-task-labels-headers.valid.json"
-    },
-    {
-      "direction": "serialize",
-      "id": "api.list-task-labels.response",
-      "invalidFixture": "fixtures/api-list-task-labels-response.invalid.json",
-      "schemaId": "urn:kanban-tool:schema:api:list-task-labels-response:v1",
-      "schemaPath": "schemas/api-list-task-labels-response.schema.json",
-      "strictness": "deny_unknown_fields",
-      "surface": "api",
-      "validFixture": "fixtures/api-list-task-labels-response.valid.json"
-    },
-    {
-      "direction": "deserialize",
       "id": "api.add-task-label.path",
       "invalidFixture": "fixtures/api-add-task-label-path.invalid.json",
       "schemaId": "urn:kanban-tool:schema:api:add-task-label-path:v1",
@@ -2117,9 +2087,6 @@
     "contracts/api-list-steps-headers.ts",
     "contracts/api-list-steps-path.ts",
     "contracts/api-list-steps-response.ts",
-    "contracts/api-list-task-labels-headers.ts",
-    "contracts/api-list-task-labels-path.ts",
-    "contracts/api-list-task-labels-response.ts",
     "contracts/api-list-tasks-by-status-headers.ts",
     "contracts/api-list-tasks-by-status-path.ts",
     "contracts/api-list-tasks-by-status-query.ts",
@@ -2431,12 +2398,6 @@
     "fixtures/api-list-steps-path.valid.json",
     "fixtures/api-list-steps-response.invalid.json",
     "fixtures/api-list-steps-response.valid.json",
-    "fixtures/api-list-task-labels-headers.invalid.json",
-    "fixtures/api-list-task-labels-headers.valid.json",
-    "fixtures/api-list-task-labels-path.invalid.json",
-    "fixtures/api-list-task-labels-path.valid.json",
-    "fixtures/api-list-task-labels-response.invalid.json",
-    "fixtures/api-list-task-labels-response.valid.json",
     "fixtures/api-list-tasks-by-status-headers.invalid.json",
     "fixtures/api-list-tasks-by-status-headers.valid.json",
     "fixtures/api-list-tasks-by-status-path.invalid.json",
@@ -2723,9 +2684,6 @@
     "schemas/api-list-steps-headers.schema.json",
     "schemas/api-list-steps-path.schema.json",
     "schemas/api-list-steps-response.schema.json",
-    "schemas/api-list-task-labels-headers.schema.json",
-    "schemas/api-list-task-labels-path.schema.json",
-    "schemas/api-list-task-labels-response.schema.json",
     "schemas/api-list-tasks-by-status-headers.schema.json",
     "schemas/api-list-tasks-by-status-path.schema.json",
     "schemas/api-list-tasks-by-status-query.schema.json",
@@ -3202,37 +3160,6 @@
       },
       "path": "/api/v1/tasks/:task_id/neighborhood",
       "sharedComponents": []
-    },
-    {
-      "id": "api.list-task-labels",
-      "method": "GET",
-      "obligations": {
-        "body": {
-          "kind": "not_applicable"
-        },
-        "headers": {
-          "contractId": "api.list-task-labels.headers",
-          "kind": "contract"
-        },
-        "path": {
-          "contractId": "api.list-task-labels.path",
-          "kind": "contract"
-        },
-        "query": {
-          "kind": "not_applicable"
-        },
-        "sse": {
-          "kind": "not_applicable"
-        },
-        "success": {
-          "contractId": "api.list-task-labels.response",
-          "kind": "contract"
-        }
-      },
-      "path": "/api/v1/tasks/:task_id/labels",
-      "sharedComponents": [
-        "api.error.response"
-      ]
     },
     {
       "id": "api.add-task-label",
@@ -4568,9 +4495,9 @@
   "schemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "selectionPath": "apps/web/web-contracts.json",
   "sourceHashes": {
-    "protocolEndpoints": "sha256:e03dd388fcfe28e850f851c571d445ec6227c4a1042bb98133eb3fb8a98ddd08",
+    "protocolEndpoints": "sha256:4e4e5f9e483040fa4e8323038b6ca52c560982ad05e81f560efef8cf673e0a97",
     "protocolOperations": "sha256:c6a58d18da419a0408c8da37e2fd259da842d826203f89b0e1c341087e94804e",
-    "protocolSchemas": "sha256:a14cd4d5750af7b0c29a65036c91afe67a00f4791fbfeac7909d78a44e16b591",
-    "selection": "sha256:6066f6706712bd31669357ef1c93962dda912a6e570a7c4fb7ddf601f5ec7a0f"
+    "protocolSchemas": "sha256:a46739da30598befdcbd6a86ce71bc97c203a869a9e1f781a80385ce4bc9dc05",
+    "selection": "sha256:a767a0d80a64ff8eb1844be0dca2c6ae1a91cc5f900b1f2c2a80f11787f78c04"
   }
 }

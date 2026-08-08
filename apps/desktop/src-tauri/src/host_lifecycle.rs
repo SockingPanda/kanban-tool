@@ -241,11 +241,25 @@ fn read_http_response(stream: &mut TcpStream) -> io::Result<HttpResponse> {
         )
     })?;
     let mut lines = header_text.split("\r\n");
-    let status = lines
+    let status_line = lines
         .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .and_then(|value| value.parse::<u16>().ok())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "host probe 状态行无效"))?;
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "host probe 状态行缺失"))?;
+    let mut status_parts = status_line.split_whitespace();
+    if status_parts.next() != Some("HTTP/1.1") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "host probe 只支持 HTTP/1.1 状态行",
+        ));
+    }
+    let status_code = status_parts
+        .next()
+        .filter(|value| value.len() == 3 && value.bytes().all(|byte| byte.is_ascii_digit()))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "host probe 状态码无效"))?;
+    let status = status_code
+        .parse::<u16>()
+        .ok()
+        .filter(|status| (100..=599).contains(status))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "host probe 状态码超出范围"))?;
     let mut content_length = None;
     let mut content_type = None;
     for line in lines {
@@ -307,6 +321,12 @@ fn read_http_response(stream: &mut TcpStream) -> io::Result<HttpResponse> {
         ));
     }
     let mut body = bytes.split_off(header_end);
+    if body.len() > content_length {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "host probe body 超过 content-length",
+        ));
+    }
     while body.len() < content_length {
         let remaining = content_length - body.len();
         let mut chunk = vec![0_u8; remaining.min(4096)];
@@ -865,6 +885,35 @@ mod tests {
         let endpoint = spawn_raw_host([response.into_bytes()]);
         let error = probe_host(endpoint).expect_err("oversized body must fail closed");
         assert!(matches!(error, ProbeError::Unavailable(message) if message.contains("body 过大")));
+    }
+
+    #[test]
+    fn probe_rejects_malformed_http_status_lines() {
+        let endpoint = spawn_raw_host([
+            b"NOTHTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
+                .to_vec(),
+        ]);
+        let error = probe_host(endpoint).expect_err("non-HTTP status line must fail closed");
+        assert!(matches!(error, ProbeError::Unavailable(message) if message.contains("HTTP/1.1")));
+
+        let endpoint = spawn_raw_host([
+            b"HTTP/1.1 20 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
+                .to_vec(),
+        ]);
+        let error = probe_host(endpoint).expect_err("two-digit status must fail closed");
+        assert!(matches!(error, ProbeError::Unavailable(message) if message.contains("状态码")));
+    }
+
+    #[test]
+    fn probe_rejects_body_bytes_beyond_content_length() {
+        let endpoint = spawn_raw_host([
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}x"
+                .to_vec(),
+        ]);
+        let error = probe_host(endpoint).expect_err("trailing body bytes must fail closed");
+        assert!(
+            matches!(error, ProbeError::Unavailable(message) if message.contains("超过 content-length"))
+        );
     }
 
     #[test]

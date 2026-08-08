@@ -6,6 +6,7 @@ import type { ApiErrorResponseContract } from "./generated/contracts/api-error-r
 export const MAX_JSON_RESPONSE_BYTES = 16 * 1024 * 1024
 /** Maximum attachment body size accepted by the browser transport. */
 export const MAX_BINARY_RESPONSE_BYTES = 256 * 1024 * 1024
+const MAX_PATH_DECODE_LAYERS = 64
 
 export type HttpTransportErrorKind =
   | "cross_origin"
@@ -135,6 +136,7 @@ function hasDotSegmentOrBackslash(path: string): boolean {
       return true
     }
 
+    let decodeLayers = 1
     while (true) {
       if (
         decoded === "."
@@ -144,8 +146,19 @@ function hasDotSegmentOrBackslash(path: string): boolean {
         || decoded.includes("\u0000")
       ) return true
       if (!decoded.includes("%")) break
+      if (decodeLayers >= MAX_PATH_DECODE_LAYERS) {
+        try {
+          decodeURIComponent(decoded)
+        } catch {
+          // A residual literal percent was encoded by the previous successful pass.
+          break
+        }
+        // A further successful decode would exceed the bounded scan budget.
+        return true
+      }
       try {
         decoded = decodeURIComponent(decoded)
+        decodeLayers += 1
       } catch {
         // A residual literal percent was encoded by the previous successful pass.
         break

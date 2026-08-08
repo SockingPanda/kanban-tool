@@ -95,6 +95,31 @@ describe("same-origin Web HTTP transport", () => {
     }
   })
 
+  test("bounds nested literal percent decoding without rejecting reasonable depth", async () => {
+    const nestedPercent = (layers: number): string => {
+      let value = "%"
+      for (let index = 0; index < layers; index += 1) value = encodeURIComponent(value)
+      return value
+    }
+
+    for (const layers of [1, 2, 64]) {
+      const path = `/api/v1/tasks/t_1/attachments/a_${nestedPercent(layers)}`
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(sameOriginResponse(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }))
+      const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+      await expect(transport.get(path)).resolves.toMatchObject({ payload: { data: [] } })
+      expect(fetcher).toHaveBeenCalledTimes(1)
+    }
+
+    const tooDeepPath = `/api/v1/tasks/t_1/attachments/a_${nestedPercent(65)}`
+    const fetcher = vi.fn<typeof fetch>()
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+    await expect(transport.get(tooDeepPath)).rejects.toMatchObject({ kind: "cross_origin" })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
   test("rejects malformed runtime URL and a final cross-origin response URL", async () => {
     const fetcher = vi.fn<typeof fetch>()
     expect(() => createHttpTransport({ ...runtime, apiBaseUrl: "http://[bad" }, { fetcher })).toThrow(

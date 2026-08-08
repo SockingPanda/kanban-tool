@@ -1,0 +1,306 @@
+@layer product {
+  .board {
+    display: grid;
+    gap: 1.25rem;
+    min-width: 0;
+    color: var(--color-text-primary);
+  }
+
+  .skipLink {
+    position: absolute;
+    z-index: 2;
+    top: 0.75rem;
+    left: 0.75rem;
+    transform: translateY(-200%);
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.5rem 0.75rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    text-decoration: none;
+  }
+
+  .skipLink:focus-visible {
+    transform: translateY(0);
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 2rem;
+    border-bottom: 1px solid var(--color-border);
+    padding-block-end: 1.25rem;
+  }
+
+  .header h1,
+  .column h2,
+  .emptyBoard h2 {
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .eyebrow {
+    margin: 0 0 0.45rem;
+    color: var(--color-text-secondary);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .identity {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+    align-items: baseline;
+    margin: 0.75rem 0 0;
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .identity code,
+  .taskRef {
+    overflow-wrap: anywhere;
+    color: var(--color-text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .identityLabel {
+    font-weight: 650;
+  }
+
+  .columnNavigation {
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+  }
+
+  .columnNavigationList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    min-width: max-content;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .columnNavigation a {
+    display: inline-flex;
+    min-height: 2rem;
+    align-items: center;
+    border-bottom: 1px solid var(--color-border-emphasized);
+    padding: 0.3rem 0.15rem;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+  }
+
+  .columnNavigation a:hover {
+    color: var(--color-text-primary);
+    border-bottom-color: var(--color-accent);
+  }
+
+  .columnNavigation a:focus-visible,
+  .taskCard:focus-within {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .boardColumns {
+    min-width: 0;
+    overflow-x: auto;
+    padding-block-end: 0.5rem;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+  }
+
+  .columnsGrid {
+    display: grid;
+    grid-auto-columns: minmax(18rem, 24rem);
+    grid-auto-flow: column;
+    align-items: start;
+    gap: 1rem;
+    min-width: max-content;
+  }
+
+  .column {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 18rem;
+    scroll-margin-top: 1.5rem;
+  }
+
+  .columnHeader {
+    display: grid;
+    gap: 0.3rem;
+    min-height: 3.75rem;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0.7rem 0.15rem 0.8rem;
+  }
+
+  .columnHeader h2 {
+    overflow-wrap: anywhere;
+  }
+
+  .columnCount {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .taskList {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .taskListItem {
+    min-width: 0;
+    content-visibility: auto;
+    contain-intrinsic-size: 8rem;
+  }
+
+  .taskCard {
+    min-width: 0;
+    border-color: var(--color-border-emphasized);
+  }
+
+  .taskCard:hover {
+    border-color: var(--color-accent);
+  }
+
+  .taskHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .taskRef {
+    min-width: 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  .taskTitle {
+    margin-block: 0.65rem 0;
+    overflow-wrap: anywhere;
+  }
+
+  .taskDetails {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.85rem 0 0;
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+  }
+
+  .taskDetailsRow {
+    display: grid;
+    grid-template-columns: minmax(5.25rem, auto) minmax(0, 1fr);
+    gap: 0.65rem;
+    min-width: 0;
+  }
+
+  .taskDetails dt {
+    font-weight: 650;
+  }
+
+  .taskDetails dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--color-text-primary);
+  }
+
+  .readinessFacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.55rem;
+  }
+
+  .readinessFact {
+    border-inline-start: 0.15rem solid var(--color-border-emphasized);
+    padding-inline-start: 0.4rem;
+  }
+
+  .emptyColumn {
+    min-height: 5.5rem;
+    border: 1px dashed var(--color-border);
+    padding: 1rem;
+    color: var(--color-text-secondary);
+  }
+
+  .emptyColumn p {
+    margin: 0;
+  }
+
+  .statusPanel {
+    display: grid;
+    gap: 0.45rem;
+    min-height: 8rem;
+    align-content: center;
+    justify-items: start;
+    border: 1px solid var(--color-border);
+    padding: 1.25rem;
+    background: var(--color-background-surface);
+  }
+
+  .statusPanel p {
+    margin: 0;
+  }
+
+  .loadingMarker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-text-secondary);
+  }
+
+  .loadingMarker::before {
+    width: 0.65rem;
+    height: 0.65rem;
+    border: 0.15rem solid var(--color-border-emphasized);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    content: "";
+    animation: board-spin 0.9s linear infinite;
+  }
+
+  .emptyBoard {
+    display: grid;
+    gap: 0.45rem;
+    min-height: 9rem;
+    align-content: center;
+    border: 1px dashed var(--color-border-emphasized);
+    padding: 1.5rem;
+    background: var(--color-background-surface);
+  }
+
+  .emptyBoard p {
+    max-width: 42rem;
+    margin: 0;
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+  }
+
+  @keyframes board-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loadingMarker::before {
+      animation: none;
+    }
+  }
+}

@@ -12,6 +12,9 @@ import { usePreferences } from "../../lib/use-preferences"
 import {
   defaultTaskMapUrlState,
   filterTaskMap,
+  clampMapZoom,
+  fenceTaskMapReadModel,
+  hasTaskMapSelection,
   MAX_MAP_ZOOM,
   MIN_MAP_ZOOM,
   resolveSelectedNode,
@@ -27,6 +30,10 @@ export type TaskMapReadState = {
   readonly error: ExplorerReadError | Error | null
 }
 
+export type TaskMapUrlStateChangeOptions = {
+  readonly replace?: boolean
+}
+
 export interface TaskMapViewProps {
   readonly runtime: WebRuntimeConfig
   readonly board: string
@@ -37,7 +44,7 @@ export interface TaskMapViewProps {
   readonly taskId: string | null
   readonly onSelectTask: (taskId: string) => void
   readonly urlState?: TaskMapUrlState
-  readonly onUrlStateChange?: (state: TaskMapUrlState) => void
+  readonly onUrlStateChange?: (state: TaskMapUrlState, options?: TaskMapUrlStateChangeOptions) => void
 }
 
 export interface TaskMapPresentationProps {
@@ -62,6 +69,26 @@ export interface TaskMapPresentationProps {
 type MapNode = NonNullable<ReturnType<typeof resolveSelectedNode>>
 
 const MAP_LIMIT_NODES = 240
+
+const zoomClassByValue: Readonly<Record<string, string>> = {
+  "0.65": styles.zoom65,
+  "0.7": styles.zoom70,
+  "0.8": styles.zoom80,
+  "0.85": styles.zoom85,
+  "0.95": styles.zoom95,
+  "1": styles.zoom100,
+  "1.1": styles.zoom110,
+  "1.15": styles.zoom115,
+  "1.25": styles.zoom125,
+  "1.3": styles.zoom130,
+  "1.4": styles.zoom140,
+  "1.45": styles.zoom145,
+  "1.5": styles.zoom150,
+}
+
+function zoomClassName(zoom: number): string {
+  return zoomClassByValue[String(clampMapZoom(zoom))] ?? styles.zoom100
+}
 
 type MapCopy = {
   readonly kicker: string
@@ -433,7 +460,7 @@ export function TaskMapPresentation({
           <section className={styles.graphPanel} aria-labelledby="task-map-graph-heading">
             <h3 id="task-map-graph-heading" className={styles.visuallyHidden}>{copy.graphHeading}</h3>
             <div className={styles.graphScroll} data-testid="task-map-graph" role="region" aria-label={copy.graphRegion} tabIndex={0}>
-              <div className={styles.graphCanvas} style={{ transform: `scale(${zoom})`, transformOrigin: "top left" }}>
+              <div className={`${styles.graphCanvas} ${zoomClassName(zoom)}`} data-zoom={clampMapZoom(zoom)}>
                 <div className={styles.nodesGrid}>
                   {visibleGraph.nodes.map((node) => {
                     const selected = selectedNode?.task.id === node.task.id
@@ -479,15 +506,32 @@ export function TaskMapView({
   onUrlStateChange,
 }: TaskMapViewProps) {
   const { locale } = usePreferences()
-  const mapRead = useTaskMapRead(runtime, board, boardIdentity, urlState.showDoneContext, urlState.hideIsolated)
+  const routeIdentity = boardIdentity && boardIdentity.slug === board ? boardIdentity : null
+  const mapRead = useTaskMapRead(runtime, board, routeIdentity, urlState.showDoneContext, urlState.hideIsolated)
+  const fencedData = fenceTaskMapReadModel(board, routeIdentity, mapRead.data)
   const state = useMemo<TaskMapReadState>(() => {
     if (identityError) return { data: null, loading: false, error: identityError }
-    if (!boardIdentity) return { data: null, loading: identityLoading, error: null }
-    return { data: mapRead.data, loading: mapRead.loading || (!mapRead.data && !mapRead.error), error: mapRead.error }
-  }, [boardIdentity, identityError, identityLoading, mapRead.data, mapRead.error, mapRead.loading])
+    if (!routeIdentity) return { data: null, loading: identityLoading, error: null }
+    return { data: fencedData, loading: mapRead.loading || (!fencedData && !mapRead.error), error: mapRead.error }
+  }, [fencedData, identityError, identityLoading, mapRead.error, mapRead.loading, routeIdentity])
   const selectedTaskId = urlState.taskId ?? taskId
+  const invalidTaskRef = useRef<string | null>(null)
+  useEffect(() => {
+    const selectedTaskId = urlState.taskId
+    if (!selectedTaskId || !fencedData || !onUrlStateChange) {
+      if (!selectedTaskId) invalidTaskRef.current = null
+      return
+    }
+    if (hasTaskMapSelection(fencedData, selectedTaskId)) {
+      invalidTaskRef.current = null
+      return
+    }
+    if (invalidTaskRef.current === selectedTaskId) return
+    invalidTaskRef.current = selectedTaskId
+    onUrlStateChange({ ...urlState, taskId: null }, { replace: true })
+  }, [fencedData, onUrlStateChange, urlState])
   const updateUrlState = (next: Partial<TaskMapUrlState>) => onUrlStateChange?.({ ...urlState, ...next })
-  const retry = identityError || !boardIdentity ? onRetryIdentity : mapRead.retry
+  const retry = identityError || !routeIdentity ? onRetryIdentity : mapRead.retry
 
   return (
     <TaskMapPresentation

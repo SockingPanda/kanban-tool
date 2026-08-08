@@ -5,7 +5,7 @@ import type { ExplorerTaskMap, ExplorerTaskMapReadModel } from "../../lib/api/ex
 import { assertCanonicalBoardSlug } from "../../lib/board-slug"
 import { asCanonicalBoardId } from "../../lib/sync/contracts"
 import { TaskMapPresentation, type TaskMapReadState } from "./TaskMapView"
-import { __test, defaultTaskMapUrlState, parseTaskMapUrlState, serializeTaskMapUrlState } from "./TaskMapView.logic"
+import { __test, defaultTaskMapUrlState, fenceTaskMapReadModel, hasTaskMapSelection, parseTaskMapUrlState, serializeTaskMapUrlState } from "./TaskMapView.logic"
 
 type MapTask = ExplorerTaskMap["nodes"][number]["task"]
 
@@ -111,6 +111,40 @@ describe("TaskMapView", () => {
     expect(__test.clampMapZoom(0)).toBe(0.65)
     expect(__test.clampMapZoom(2)).toBe(1.5)
     expect(__test.stepMapZoom(1, 1)).toBe(1.15)
+  })
+
+  test("renders each discrete zoom level through static CSP-safe classes", () => {
+    for (const zoom of [0.65, 0.7, 0.8, 0.85, 0.95, 1, 1.1, 1.15, 1.25, 1.3, 1.4, 1.45, 1.5]) {
+      const markup = renderToStaticMarkup(
+        <TaskMapPresentation board="default" taskId={null} state={ready} zoom={zoom} onSelectTask={() => undefined} />,
+      )
+
+      expect(markup).toContain(`data-zoom="${zoom}"`)
+      expect(markup).not.toContain(" style=")
+    }
+  })
+
+  test("fences stale board data and clears missing task selections", () => {
+    const identity = model.board
+    const otherIdentity = {
+      ...identity,
+      id: asCanonicalBoardId("b_other"),
+      slug: assertCanonicalBoardSlug("other"),
+    }
+
+    expect(fenceTaskMapReadModel("default", identity, model)).toBe(model)
+    expect(fenceTaskMapReadModel("other", null, model)).toBeNull()
+    expect(fenceTaskMapReadModel("other", identity, model)).toBeNull()
+    expect(fenceTaskMapReadModel("other", otherIdentity, model)).toBeNull()
+    expect(hasTaskMapSelection(model, "ready")).toBe(true)
+    expect(hasTaskMapSelection(model, "t_missing")).toBe(false)
+    expect(hasTaskMapSelection(fenceTaskMapReadModel("other", identity, model), "ready")).toBe(false)
+
+    const hidden = renderToStaticMarkup(
+      <TaskMapPresentation board="other" taskId="ready" state={{ data: fenceTaskMapReadModel("other", identity, model), loading: true, error: null }} onSelectTask={() => undefined} />,
+    )
+    expect(hidden).not.toContain('data-task-id="ready"')
+    expect(__test.resolveSelectedNode(graph, "t_missing", "t_missing")).toBeNull()
   })
 
   test("renders keyboard-accessible graph region, nodes, edges and selected inspector", () => {

@@ -1,4 +1,4 @@
-import type { ExplorerTaskMap } from "../../lib/api/explorer-read-model"
+import type { ExplorerBoardIdentity, ExplorerTaskMap, ExplorerTaskMapReadModel } from "../../lib/api/explorer-read-model"
 
 export type BoardMapFilter = "all" | "blocked" | "ready" | "running" | "unplanned" | "incomplete-steps"
 
@@ -6,6 +6,7 @@ type MapNode = ExplorerTaskMap["nodes"][number]
 
 export const MIN_MAP_ZOOM = 0.65
 export const MAX_MAP_ZOOM = 1.5
+export const MAP_ZOOM_LEVELS = [0.65, 0.7, 0.8, 0.85, 0.95, 1, 1.1, 1.15, 1.25, 1.3, 1.4, 1.45, 1.5] as const
 const MAP_ZOOM_STEP = 0.15
 
 export interface TaskMapUrlState {
@@ -116,11 +117,30 @@ export function resolveSelectedNode(
 
 export function clampMapZoom(value: number): number {
   if (!Number.isFinite(value)) return 1
-  return Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, value))
+  return MAP_ZOOM_LEVELS.reduce((closest, level) =>
+    Math.abs(level - value) < Math.abs(closest - value) ? level : closest,
+  )
 }
 
 export function stepMapZoom(current: number, direction: -1 | 1): number {
   return clampMapZoom(Number((current + direction * MAP_ZOOM_STEP).toFixed(2)))
+}
+
+export function taskMapIdentityKey(identity: Pick<ExplorerBoardIdentity, "id" | "slug">): string {
+  return `${identity.id}|${identity.slug}`
+}
+
+export function fenceTaskMapReadModel(
+  board: string,
+  identity: ExplorerBoardIdentity | null,
+  model: ExplorerTaskMapReadModel | null,
+): ExplorerTaskMapReadModel | null {
+  if (!identity || !model || identity.slug !== board || model.board.slug !== board) return null
+  return taskMapIdentityKey(identity) === taskMapIdentityKey(model.board) ? model : null
+}
+
+export function hasTaskMapSelection(model: ExplorerTaskMapReadModel | null, taskId: string | null): boolean {
+  return Boolean(model && taskId && model.map.nodes.some((node) => node.task.id === taskId))
 }
 
 export const __test = { clampMapZoom, filterTaskMap, resolveSelectedNode, stepMapZoom }

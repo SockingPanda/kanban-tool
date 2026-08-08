@@ -1,14 +1,14 @@
-import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import { BoardView } from "../board/BoardView"
 import type { BoardViewModel } from "../board/types"
 import {
+  ExplorerReadError,
   loadTaskInspector,
   loadExplorerBoardIdentity,
   loadTaskListPage,
   parseTaskListQuery,
   serializeTaskListQuery,
-  type ExplorerReadError,
   type TaskInspectorReadModel,
   type TaskListQueryState,
 } from "../../lib/api/explorer-read-model"
@@ -56,7 +56,7 @@ class TaskMapChunkBoundary extends Component<{ readonly locale: "zh" | "en"; rea
 export interface ExplorerPageProps {
   readonly runtime: WebRuntimeConfig
   readonly route: Extract<AppRoute, { kind: "board" }>
-  readonly onNavigate?: (target: AppNavigationTarget) => void | Promise<unknown>
+  readonly onNavigate?: (target: AppNavigationTarget, options?: { readonly replace?: boolean }) => void | Promise<unknown>
 }
 
 type AsyncState<T> = {
@@ -245,13 +245,13 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
   const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal }) : Promise.reject(new Error("Task Inspector 尚未选择任务")))
 
-  const navigate = (target: string) => {
-    if (onNavigate) void onNavigate(target)
-  }
-  const updateMapUrlState = (next: TaskMapUrlState) => {
+  const navigate = useCallback((target: string, options?: { readonly replace?: boolean }) => {
+    if (onNavigate) void onNavigate(target, options)
+  }, [onNavigate])
+  const updateMapUrlState = useCallback((next: TaskMapUrlState, options?: { readonly replace?: boolean }) => {
     const query = new URLSearchParams(serializeTaskMapUrlState(next))
-    navigate(routeTarget(route.boardSlug, "map", query, runtime.webBasePath))
-  }
+    navigate(routeTarget(route.boardSlug, "map", query, runtime.webBasePath), options)
+  }, [navigate, route.boardSlug, runtime.webBasePath])
   const updateListQuery = (next: TaskListQueryState) => {
     const nextParams = new URLSearchParams(serializeTaskListQuery(next))
     if (taskId) nextParams.set("task", taskId)
@@ -275,6 +275,18 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
     nextParams.delete("task")
     navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
   }
+
+  const clearedTaskIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    const error = inspectorRead.error
+    if (view !== "map" || !taskId || !(error instanceof ExplorerReadError) || error.reason !== "task-not-found") {
+      if (!taskId) clearedTaskIdRef.current = null
+      return
+    }
+    if (clearedTaskIdRef.current === taskId) return
+    clearedTaskIdRef.current = taskId
+    updateMapUrlState({ ...mapUrlState, taskId: null }, { replace: true })
+  }, [inspectorRead.error, mapUrlState, taskId, updateMapUrlState, view])
 
   return (
     <section className={styles.explorer} data-testid="explorer-page">

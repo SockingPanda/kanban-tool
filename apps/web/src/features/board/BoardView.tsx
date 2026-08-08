@@ -14,6 +14,7 @@ import {
   type BoardTaskViewModel,
   type BoardViewModel,
   type BoardViewState,
+  type BoardSyncStatus,
   validateBoardViewModel,
 } from "./types"
 
@@ -21,6 +22,8 @@ export interface BoardViewProps {
   readonly state: BoardViewState
   readonly messages?: BoardMessagesOverrides
   readonly onRetry?: () => void
+  /** Sync state is rendered as an independent banner and never replaces a ready board. */
+  readonly syncStatus?: BoardSyncStatus
   readonly id?: string
   readonly className?: string
 }
@@ -98,6 +101,32 @@ function EmptyBoard({ title, description }: { readonly title: string; readonly d
   )
 }
 
+function SyncBanner({ status, copy, onRetry }: { readonly status: BoardSyncStatus; readonly copy: BoardMessages; readonly onRetry?: () => void }) {
+  const title = status === "connecting"
+    ? copy.syncConnecting
+    : status === "live"
+      ? copy.syncLive
+      : status === "recovering"
+        ? copy.syncRecovering
+        : status === "circuit-open"
+          ? copy.syncCircuitOpen
+          : copy.syncStale
+  const isHealthy = status === "live"
+  return (
+    <div
+      className={`${styles.syncBanner} ${isHealthy ? styles.syncBannerLive : styles.syncBannerStale}`}
+      role="status"
+      aria-live="polite"
+      data-testid="board-sync-banner"
+      data-sync-state={status}
+    >
+      <strong>{title}</strong>
+      {!isHealthy ? <span>{copy.syncStaleDescription}</span> : null}
+      {!isHealthy && onRetry ? <Button label={copy.retry} variant="secondary" onClick={onRetry} /> : null}
+    </div>
+  )
+}
+
 function StateContent({ state, copy, onRetry }: { readonly state: BoardViewState; readonly copy: BoardMessages; readonly onRetry?: () => void }) {
   if (state.kind === "loading") {
     return (
@@ -108,7 +137,13 @@ function StateContent({ state, copy, onRetry }: { readonly state: BoardViewState
   }
 
   if (state.kind === "empty") {
-    return <EmptyBoard title={copy.emptyBoardTitle} description={state.detail ?? copy.emptyBoardDescription} />
+    const noBoards = state.board === undefined
+    return (
+      <EmptyBoard
+        title={noBoards ? copy.noBoardsTitle : copy.emptyBoardTitle}
+        description={state.detail ?? (noBoards ? copy.noBoardsDescription : copy.emptyBoardDescription)}
+      />
+    )
   }
 
   if (state.kind === "error" || state.kind === "offline") {
@@ -246,7 +281,7 @@ function BoardColumns({ model, copy, rootId }: { readonly model: BoardViewModel;
   )
 }
 
-export function BoardView({ state, messages: messageOverrides, onRetry, id = "astryx-board", className }: BoardViewProps) {
+export function BoardView({ state, messages: messageOverrides, onRetry, syncStatus, id = "astryx-board", className }: BoardViewProps) {
   const copy = mergeMessages(messageOverrides)
   const titleId = `${id}-title`
   const validation = state.kind === "ready" ? validateBoardViewModel(state.model) : { valid: true as const }
@@ -271,6 +306,7 @@ export function BoardView({ state, messages: messageOverrides, onRetry, id = "as
         {copy.skipToColumns}
       </a>
       <BoardHeader board={board} titleId={titleId} copy={copy} />
+      {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
       <div id={`${id}-columns`} tabIndex={-1}>
         {renderedState.kind === "ready" ? (
           <BoardColumns model={renderedState.model} copy={copy} rootId={id} />

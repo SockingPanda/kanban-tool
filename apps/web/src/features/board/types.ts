@@ -127,10 +127,16 @@ function hasText(value: unknown): value is string {
 
 export type BoardViewState =
   | { readonly kind: "loading" }
-  | { readonly kind: "empty"; readonly board: BoardIdentity; readonly detail?: string }
+  /**
+   * Empty is also the explicit no-board state. The identity is optional so the
+   * UI never has to invent a board just to render an empty response.
+   */
+  | { readonly kind: "empty"; readonly board?: BoardIdentity; readonly detail?: string }
   | { readonly kind: "error"; readonly message: string }
   | { readonly kind: "offline"; readonly message?: string }
   | { readonly kind: "ready"; readonly model: BoardViewModel }
+
+export type BoardSyncStatus = "connecting" | "live" | "stale" | "recovering" | "circuit-open"
 
 export interface BoardMessages {
   readonly boardEyebrow: string
@@ -142,12 +148,20 @@ export interface BoardMessages {
   readonly columnTaskCount: (count: number) => string
   readonly emptyBoardTitle: string
   readonly emptyBoardDescription: string
+  readonly noBoardsTitle: string
+  readonly noBoardsDescription: string
   readonly emptyVisibleColumnsTitle: string
   readonly emptyVisibleColumnsDescription: string
   readonly emptyColumn: string
   readonly loading: string
   readonly errorTitle: string
   readonly offlineTitle: string
+  readonly syncConnecting: string
+  readonly syncLive: string
+  readonly syncStale: string
+  readonly syncRecovering: string
+  readonly syncCircuitOpen: string
+  readonly syncStaleDescription: string
   readonly retry: string
   readonly statusLabel: string
   readonly priorityLabel: (priority: number) => string
@@ -177,12 +191,20 @@ export const defaultBoardMessages: BoardMessages = {
   columnTaskCount: (count) => `${count} 个任务`,
   emptyBoardTitle: "看板暂无列",
   emptyBoardDescription: "服务端还没有提供可见列。看板不会创建本地默认列。",
+  noBoardsTitle: "暂无看板",
+  noBoardsDescription: "服务端没有返回可用看板；看板不会创建本地默认看板。",
   emptyVisibleColumnsTitle: "看板没有可见列",
   emptyVisibleColumnsDescription: "服务端提供的列都标记为隐藏；看板不会创建本地默认列。",
   emptyColumn: "此列暂无任务。",
   loading: "正在加载看板…",
   errorTitle: "看板加载失败",
   offlineTitle: "当前处于离线状态",
+  syncConnecting: "正在连接实时同步…",
+  syncLive: "实时同步已连接",
+  syncStale: "同步暂时中断",
+  syncRecovering: "正在恢复同步",
+  syncCircuitOpen: "同步暂时不可用",
+  syncStaleDescription: "仍显示最近一次成功读取的看板数据。",
   retry: "重试",
   statusLabel: "状态",
   priorityLabel: (priority) => `优先级 P${priority}`,
@@ -200,4 +222,51 @@ export const defaultBoardMessages: BoardMessages = {
   },
   requiredStepsLabel: "必需步骤",
   optionalStepsLabel: "可选步骤",
+}
+
+export const englishBoardMessages: BoardMessages = {
+  boardEyebrow: "ASTRYX BOARD",
+  boardTitle: "Board",
+  boardIdentityLabel: "Board identity",
+  boardColumnsLabel: "Board columns",
+  skipToColumns: "Skip to board columns",
+  columnNavigationLabel: "Board column navigation",
+  columnTaskCount: (count) => `${count} tasks`,
+  emptyBoardTitle: "This board has no columns",
+  emptyBoardDescription: "The server has not provided any visible columns. No local default columns are created.",
+  noBoardsTitle: "No boards available",
+  noBoardsDescription: "The server returned no available boards. No local default board is created.",
+  emptyVisibleColumnsTitle: "No visible columns",
+  emptyVisibleColumnsDescription: "All server-provided columns are hidden. No local default columns are created.",
+  emptyColumn: "No tasks in this column.",
+  loading: "Loading board…",
+  errorTitle: "Board could not be loaded",
+  offlineTitle: "You are offline",
+  syncConnecting: "Connecting to live sync…",
+  syncLive: "Live sync connected",
+  syncStale: "Sync is temporarily interrupted",
+  syncRecovering: "Recovering sync",
+  syncCircuitOpen: "Sync is temporarily unavailable",
+  syncStaleDescription: "The most recently loaded board data is still displayed.",
+  retry: "Retry",
+  statusLabel: "Status",
+  priorityLabel: (priority) => `Priority P${priority}`,
+  assigneeLabel: "Assignee",
+  unassigned: "Unassigned",
+  readinessLabel: "Readiness facts",
+  dependencyLabel: "Dependencies",
+  dependencyBlocked: "Blocked by dependencies",
+  dependencyClear: "Dependencies clear",
+  planLabel: "Execution plan",
+  planState: {
+    unplanned: "Unplanned",
+    planned: "Planned",
+    not_required: "Not required",
+  },
+  requiredStepsLabel: "Required steps",
+  optionalStepsLabel: "Optional steps",
+}
+
+export function boardMessagesForLocale(locale: "zh" | "en"): BoardMessages {
+  return locale === "en" ? englishBoardMessages : defaultBoardMessages
 }

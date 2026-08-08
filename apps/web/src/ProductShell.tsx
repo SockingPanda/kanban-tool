@@ -310,6 +310,11 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
       </section>
     )
   }
+  // A live Board owns its loading, empty, stale and offline states. Keep it
+  // mounted when the browser reports offline so the last ready snapshot stays
+  // visible; the generic shell boundary is reserved for routes without a
+  // route-owned child.
+  if ((route.kind === "home" || route.kind === "board") && children) return <>{children}</>
   if (effectiveBoundary === "offline") {
     return (
       <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-offline">
@@ -350,7 +355,6 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
     )
   }
   if (route.kind === "settings") return <SettingsPage runtime={runtime} />
-  if (children) return <>{children}</>
 
   return (
     <section className={styles.page} aria-labelledby="board-placeholder-heading" data-testid="board-placeholder">

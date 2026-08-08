@@ -306,10 +306,7 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
             const viewModel = toBoardViewModel(readModel)
             const candidateIdentityKey = modelIdentityKey(viewModel, runtime, selector)
             if (candidateIdentityKey !== sessionIdentityKey || candidateIdentityKey !== readyResourceKeyRef.current || !modelMatchesRoute(viewModel, candidateIdentityKey, runtime, selector, route.kind, routeBoardSlug)) return
-            const identityKey = bindBoardResourceIdentity(runtime, resource, readModel)
-            if (identityKey !== sessionIdentityKey) return
             retainResourceKey(resourcesRef.current, resource)
-            readyResourceKeyRef.current = identityKey
             modelRef.current = viewModel
             stateContextKeyRef.current = contextKey
             setState({ kind: "ready", model: viewModel })

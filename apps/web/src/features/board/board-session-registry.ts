@@ -64,6 +64,11 @@ export function resourceIdentityKey(
   return `${runtimeIdentityKey(runtime)}\u0000${selector}\u0000${canonicalBoardId ?? "?"}`
 }
 
+/** Canonical session ownership is independent from the selector used to read a board. */
+function sessionKey(runtime: WebRuntimeConfig, canonicalBoardId: CanonicalBoardId): string {
+  return `${runtimeIdentityKey(runtime)}\u0000${canonicalBoardId}`
+}
+
 export function routeResourceContextKey(runtime: WebRuntimeConfig, selector: string, routeKind: string, boardSlug = ""): string {
   return `${resourceIdentityKey(runtime, selector, null)}\u0000${routeKind}\u0000${boardSlug}`
 }
@@ -128,7 +133,7 @@ export function acquireBoardSession(
   ) {
     throw new Error("board session resource identity mismatch")
   }
-  const key = expectedKey
+  const key = sessionKey(runtime, boardId)
   let session = sessions.get(key)
   if (session?.disposed === true) {
     if (sessions.get(key) === session) sessions.delete(key)

@@ -150,6 +150,39 @@ describe("Board canonical session registry", () => {
     expect(queryTwo.invalidate).not.toHaveBeenCalled()
   })
 
+  test("shares one canonical session across slug and canonical-id selectors", () => {
+    const queryBySlug = {
+      load: vi.fn(async () => readModel),
+      reload: vi.fn(async () => readModel),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const queryById = {
+      load: vi.fn(async () => ({ ...readModel, identity: { ...readModel.identity, selector: "b_default" } })),
+      reload: vi.fn(async () => ({ ...readModel, identity: { ...readModel.identity, selector: "b_default" } })),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const start = vi.fn()
+    const stop = vi.fn()
+    const createController = vi.fn(() => ({ start, stop, retry: vi.fn() }))
+    const idResource = resource(queryById, runtime, "b_default")
+    const idModel = { ...model, board: { ...model.board, slug: "default" } }
+
+    const slugHandle = acquireBoardSession(runtime, model, resource(queryBySlug, runtime, "default"), vi.fn(), vi.fn(), { createController })
+    const idHandle = acquireBoardSession(runtime, idModel, idResource, vi.fn(), vi.fn(), { createController })
+
+    expect(createController).toHaveBeenCalledTimes(1)
+    expect(activeBoardSessionCount()).toBe(1)
+    expect(start).toHaveBeenCalledTimes(2)
+
+    slugHandle.release()
+    expect(stop).not.toHaveBeenCalled()
+    expect(queryBySlug.invalidate).not.toHaveBeenCalled()
+    idHandle.release()
+    expect(stop).toHaveBeenCalledTimes(1)
+    expect(queryBySlug.invalidate).toHaveBeenCalledTimes(1)
+    expect(queryById.invalidate).not.toHaveBeenCalled()
+  })
+
   test("old reset handles cannot release or retry a replacement same-key session", () => {
     const query = {
       load: vi.fn(async () => readModel),

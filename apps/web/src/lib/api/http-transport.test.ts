@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest"
 
 import type { WebRuntimeConfig } from "../runtime"
-import { createHttpTransport, HttpTransportError } from "./http-transport"
+import { createHttpTransport, HttpTransportError, MAX_BINARY_RESPONSE_BYTES } from "./http-transport"
 
 const runtime = {
   apiBaseUrl: "/__kb_api__",
@@ -12,6 +12,11 @@ const runtime = {
   protocolVersion: "v1",
   webBuildId: "sha256:test",
 } satisfies WebRuntimeConfig
+
+function withSameOriginURL(response: Response, path: string): Response {
+  Object.defineProperty(response, "url", { value: `https://kanban.test/__kb_api__${path}` })
+  return response
+}
 
 describe("same-origin Web HTTP transport", () => {
   test("applies a same-origin runtime API path prefix and credentials", async () => {
@@ -298,5 +303,152 @@ describe("same-origin Web HTTP transport", () => {
       headers: { Accept: "application/json" },
     }))
     await expect(transport.request({ method: "POST", path: "/api/v1/tasks" })).rejects.toMatchObject({ name: "AbortError" })
+  })
+
+  test("downloads an exact bounded byte body and forwards safe attachment metadata", async () => {
+    const response = new Response(new Uint8Array([104, 105]), {
+      status: 200,
+      headers: {
+        "content-type": "text/plain",
+        "content-length": "2",
+        "x-kb-attachment-id": "a_1",
+        "x-kb-attachment-sha256": "sha256-fixture",
+      },
+    })
+    withSameOriginURL(response, "/api/v1/tasks/t_1/attachments/a_1")
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+    const transport = createHttpTransport(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await expect(transport.requestBytes({
+      method: "GET",
+      path: "/api/v1/tasks/t_1/attachments/a_1",
+      headers: { "Accept-Language": "en" },
+    })).resolves.toMatchObject({
+      bytes: new Uint8Array([104, 105]),
+      contentType: "text/plain",
+      attachmentId: "a_1",
+      sha256: "sha256-fixture",
+    })
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://kanban.test/__kb_api__/api/v1/tasks/t_1/attachments/a_1",
+      expect.objectContaining({
+        method: "GET",
+        headers: { Accept: "application/octet-stream", "Accept-Language": "en" },
+        credentials: "same-origin",
+        mode: "same-origin",
+        redirect: "error",
+        cache: "no-store",
+      }),
+    )
+  })
+
+  test("fails closed for missing, invalid, and merged duplicate Content-Length", async () => {
+    const canceled: boolean[] = []
+    const response = (contentLengthValue: string | null, index: number) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1]))
+        },
+        cancel() {
+          canceled[index] = true
+        },
+      })
+      const headers: Record<string, string> = { "content-type": "application/octet-stream" }
+      if (contentLengthValue !== null) headers["content-length"] = contentLengthValue
+      return withSameOriginURL(new Response(stream, { status: 200, headers }), "/api/v1/tasks/t_1/attachments/a_1")
+    }
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(response(null, 0))
+      .mockResolvedValueOnce(response("not-a-number", 1))
+      .mockResolvedValueOnce(response("1, 1", 2))
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+
+    for (let index = 0; index < 3; index += 1) {
+      await expect(transport.requestBytes({ method: "GET", path: "/api/v1/tasks/t_1/attachments/a_1" })).rejects.toMatchObject({ kind: "invalid_bytes" })
+    }
+    expect(canceled).toEqual([true, true, true])
+  })
+
+  test("rejects declared over-limit and actual length mismatch while canceling the stream", async () => {
+    let declaredCanceled = false
+    const declaredResponse = withSameOriginURL(new Response(new ReadableStream<Uint8Array>({
+      cancel() {
+        declaredCanceled = true
+      },
+    }), { status: 200, headers: { "content-length": String(MAX_BINARY_RESPONSE_BYTES + 1) } }), "/api/v1/tasks/t_1/attachments/a_1")
+    let mismatchCanceled = false
+    const mismatchResponse = withSameOriginURL(new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]))
+      },
+      cancel() {
+        mismatchCanceled = true
+      },
+    }), { status: 200, headers: { "content-length": "1" } }), "/api/v1/tasks/t_1/attachments/a_1")
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(declaredResponse).mockResolvedValueOnce(mismatchResponse)
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+
+    await expect(transport.requestBytes({ method: "GET", path: "/api/v1/tasks/t_1/attachments/a_1" })).rejects.toMatchObject({ kind: "response_too_large" })
+    await expect(transport.requestBytes({ method: "GET", path: "/api/v1/tasks/t_1/attachments/a_1" })).rejects.toMatchObject({ kind: "invalid_bytes" })
+    expect(declaredCanceled).toBe(true)
+    expect(mismatchCanceled).toBe(true)
+  })
+
+  test("parses bounded generated API errors for non-success byte responses", async () => {
+    const body = JSON.stringify({ error: { code: "not_found", message: "attachment missing" } })
+    const response = new Response(body, {
+      status: 404,
+      headers: { "content-type": "application/json", "content-length": String(new TextEncoder().encode(body).byteLength) },
+    })
+    withSameOriginURL(response, "/api/v1/tasks/t_1/attachments/missing")
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+
+    await expect(transport.requestBytes({ method: "GET", path: "/api/v1/tasks/t_1/attachments/missing" })).rejects.toMatchObject({
+      kind: "http",
+      status: 404,
+      apiError: { code: "not_found", message: "attachment missing" },
+    })
+  })
+
+  test("turns non-JSON byte errors into bounded generic HTTP failures and cancels", async () => {
+    let canceled = false
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]))
+      },
+      cancel() {
+        canceled = true
+      },
+    }), { status: 502, headers: { "content-type": "text/plain" } })
+    withSameOriginURL(response, "/api/v1/tasks/t_1/attachments/a_1")
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+
+    await expect(transport.requestBytes({ method: "GET", path: "/api/v1/tasks/t_1/attachments/a_1" })).rejects.toMatchObject({
+      kind: "http",
+      status: 502,
+      apiError: null,
+    })
+    expect(canceled).toBe(true)
+  })
+
+  test("turns malformed JSON byte errors into generic HTTP failures", async () => {
+    const response = new Response("not-json", {
+      status: 502,
+      headers: { "content-type": "application/json", "content-length": "8" },
+    })
+    withSameOriginURL(response, "/api/v1/tasks/t_1/attachments/a_1")
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+
+    await expect(transport.requestBytes({ method: "GET", path: "/api/v1/tasks/t_1/attachments/a_1" })).rejects.toMatchObject({
+      kind: "http",
+      status: 502,
+      apiError: null,
+    })
   })
 })

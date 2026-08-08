@@ -4,6 +4,8 @@ import type { ApiErrorResponseContract } from "./generated/contracts/api-error-r
 
 /** Per-response JSON byte cap. A response must fit before it reaches a generated parser. */
 export const MAX_JSON_RESPONSE_BYTES = 16 * 1024 * 1024
+/** Maximum attachment body size accepted by the browser transport. */
+export const MAX_BINARY_RESPONSE_BYTES = 256 * 1024 * 1024
 
 export type HttpTransportErrorKind =
   | "cross_origin"
@@ -13,6 +15,7 @@ export type HttpTransportErrorKind =
   | "invalid_json"
   | "invalid_headers"
   | "invalid_content_type"
+  | "invalid_bytes"
   | "response_too_large"
 
 export class HttpTransportError extends Error {
@@ -43,6 +46,14 @@ export interface HttpTransportResponse {
   readonly bytes: number
 }
 
+/** Raw attachment bytes plus the response metadata allowed by the web API. */
+export interface HttpTransportBytesResponse {
+  readonly bytes: Uint8Array
+  readonly contentType: string | null
+  readonly attachmentId: string | null
+  readonly sha256: string | null
+}
+
 export interface HttpReadTransport {
   get(path: string, signal?: AbortSignal): Promise<HttpTransportResponse>
 }
@@ -58,6 +69,13 @@ export interface HttpTransport extends HttpReadTransport {
     readonly headers?: Readonly<Record<string, string | null>>
     readonly signal?: AbortSignal
   }): Promise<HttpTransportResponse>
+  /** Download a bounded raw byte response without converting it through JSON. */
+  requestBytes(options: {
+    readonly method: "GET"
+    readonly path: string
+    readonly headers?: Readonly<Record<string, string | null>>
+    readonly signal?: AbortSignal
+  }): Promise<HttpTransportBytesResponse>
 }
 
 export interface HttpTransportOptions {
@@ -316,6 +334,181 @@ async function readJSON(response: Response): Promise<JSONPayload> {
   }
 }
 
+function binaryContentLength(response: Response): number {
+  const value = response.headers.get("content-length")
+  if (value === null) {
+    throw new HttpTransportError(
+      "invalid_bytes",
+      "Web API 二进制响应必须声明 Content-Length。",
+      { status: response.status },
+    )
+  }
+  const normalized = value.trim()
+  if (!/^\d+$/.test(normalized)) {
+    throw new HttpTransportError(
+      "invalid_bytes",
+      "Web API 二进制响应的 Content-Length 无效或重复。",
+      { status: response.status },
+    )
+  }
+  const length = Number(normalized)
+  if (!Number.isSafeInteger(length) || length > MAX_BINARY_RESPONSE_BYTES) {
+    throw new HttpTransportError(
+      "response_too_large",
+      `Web API 二进制响应超过 ${MAX_BINARY_RESPONSE_BYTES} 字节上限。`,
+      { status: response.status },
+    )
+  }
+  return length
+}
+
+async function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+  try {
+    await reader.cancel()
+  } catch {
+    // The typed bytes error remains authoritative if cancellation races the network.
+  }
+}
+
+async function readBytes(response: Response, declaredLength: number): Promise<Uint8Array> {
+  if (response.body === null) {
+    if (declaredLength === 0) return new Uint8Array(0)
+    throw new HttpTransportError(
+      "invalid_bytes",
+      "Web API 二进制响应没有可读取的 body。",
+      { status: response.status },
+    )
+  }
+
+  let reader: ReadableStreamDefaultReader<Uint8Array>
+  try {
+    reader = response.body.getReader()
+  } catch (cause) {
+    await cancelResponseBody(response)
+    throw new HttpTransportError(
+      "invalid_bytes",
+      "Web API 二进制响应没有可读取的 body。",
+      { status: response.status, cause },
+    )
+  }
+
+  let bytes: Uint8Array
+  try {
+    bytes = new Uint8Array(declaredLength)
+  } catch (cause) {
+    await cancelReader(reader)
+    try {
+      reader.releaseLock()
+    } catch {
+      // Release is best effort after an allocation failure.
+    }
+    throw new HttpTransportError(
+      "response_too_large",
+      `Web API 二进制响应超过 ${MAX_BINARY_RESPONSE_BYTES} 字节上限。`,
+      { status: response.status, cause },
+    )
+  }
+
+  let offset = 0
+  try {
+    while (true) {
+      const next = await reader.read()
+      if (next.done) {
+        if (offset !== declaredLength) {
+          throw new HttpTransportError(
+            "invalid_bytes",
+            "Web API 二进制响应的实际长度与 Content-Length 不一致。",
+            { status: response.status },
+          )
+        }
+        return bytes
+      }
+
+      const chunk = next.value
+      if (!(chunk instanceof Uint8Array)) {
+        throw new HttpTransportError(
+          "invalid_bytes",
+          "Web API 二进制响应包含无效 body chunk。",
+          { status: response.status },
+        )
+      }
+      if (chunk.byteLength > MAX_BINARY_RESPONSE_BYTES - offset) {
+        throw new HttpTransportError(
+          "response_too_large",
+          `Web API 二进制响应超过 ${MAX_BINARY_RESPONSE_BYTES} 字节上限。`,
+          { status: response.status },
+        )
+      }
+      if (chunk.byteLength > declaredLength - offset) {
+        throw new HttpTransportError(
+          "invalid_bytes",
+          "Web API 二进制响应的实际长度与 Content-Length 不一致。",
+          { status: response.status },
+        )
+      }
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+  } catch (cause) {
+    await cancelReader(reader)
+    if (cause instanceof HttpTransportError || isAbortError(cause)) throw cause
+    throw new HttpTransportError(
+      "invalid_bytes",
+      "Web API 二进制响应 body 无法读取。",
+      { status: response.status, cause },
+    )
+  } finally {
+    try {
+      reader.releaseLock()
+    } catch {
+      // Release is best effort after cancellation or an aborted stream.
+    }
+  }
+}
+
+function genericHTTPError(response: Response, cause?: unknown): HttpTransportError {
+  return new HttpTransportError(
+    "http",
+    `Web API 请求失败：HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
+    { status: response.status, cause },
+  )
+}
+
+async function throwByteHTTPError(response: Response): Promise<never> {
+  const contentType = responseContentType(response)
+  if (contentType === null || !isJSONContentType(contentType)) {
+    await cancelResponseBody(response)
+    throw genericHTTPError(
+      response,
+      new HttpTransportError(
+        "invalid_content_type",
+        "Web API 错误响应必须使用 application/json 或 +json Content-Type。",
+        { status: response.status },
+      ),
+    )
+  }
+
+  let responseBody: JSONPayload
+  try {
+    responseBody = await readJSON(response)
+  } catch (cause) {
+    if (cause instanceof HttpTransportError && cause.kind === "response_too_large") throw cause
+    throw genericHTTPError(response, cause)
+  }
+
+  try {
+    const apiError = parseApiErrorResponse(responseBody.payload)
+    throw new HttpTransportError(
+      "http",
+      apiError.error.message,
+      { status: response.status, apiError: apiError.error },
+    )
+  } catch (cause) {
+    if (cause instanceof HttpTransportError) throw cause
+    throw genericHTTPError(response, cause)
+  }
+}
+
 function validateFinalOrigin(response: Response, requestOrigin: string): void {
   if (response.url.length === 0) return
   let finalURL: URL
@@ -334,8 +527,9 @@ const REQUEST_HEADER_NAMES = new Set(["Accept-Language", "Content-Type", "X-KB-A
 function requestHeaders(
   provided: Readonly<Record<string, string | null>> | undefined,
   hasBody: boolean,
+  accept = "application/json",
 ): Record<string, string> {
-  const headers: Record<string, string> = { Accept: "application/json" }
+  const headers: Record<string, string> = { Accept: accept }
   if (provided === undefined) {
     if (hasBody) headers["Content-Type"] = "application/json"
     return headers
@@ -482,8 +676,66 @@ export function createHttpTransport(
     return responseBody
   }
 
+  async function requestBytes(options: {
+    readonly method: "GET"
+    readonly path: string
+    readonly headers?: Readonly<Record<string, string | null>>
+    readonly signal?: AbortSignal
+  }): Promise<HttpTransportBytesResponse> {
+    const { path, headers: requestHeaderValues, signal } = options
+    const url = requestURL(base, path)
+    const headers = requestHeaders(requestHeaderValues, false, "application/octet-stream")
+
+    let response: Response
+    try {
+      response = await fetcher(url, {
+        method: "GET",
+        headers,
+        credentials: "same-origin",
+        mode: "same-origin",
+        redirect: "error",
+        cache: "no-store",
+        signal,
+      })
+    } catch (cause) {
+      if (isAbortError(cause)) throw cause
+      throw new HttpTransportError(
+        "offline",
+        "无法连接 kanban serve，请确认本地服务正在运行。",
+        { cause },
+      )
+    }
+
+    try {
+      validateFinalOrigin(response, base.origin)
+    } catch (error) {
+      await cancelResponseBody(response)
+      throw error
+    }
+
+    if (!response.ok) {
+      return throwByteHTTPError(response)
+    }
+
+    let declaredLength: number
+    try {
+      declaredLength = binaryContentLength(response)
+    } catch (error) {
+      await cancelResponseBody(response)
+      throw error
+    }
+    const bytes = await readBytes(response, declaredLength)
+    return {
+      bytes,
+      contentType: response.headers.get("content-type"),
+      attachmentId: response.headers.get("x-kb-attachment-id"),
+      sha256: response.headers.get("x-kb-attachment-sha256"),
+    }
+  }
+
   return {
     get: (path, signal) => request({ method: "GET", path, signal }),
     request,
+    requestBytes,
   }
 }

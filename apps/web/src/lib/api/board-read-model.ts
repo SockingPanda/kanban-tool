@@ -72,6 +72,7 @@ export type BoardReadErrorKind =
   | "malformed_url"
   | "invalid_headers"
   | "invalid_content_type"
+  | "invalid_bytes"
   | "response_too_large"
 
 export class BoardReadError extends Error {

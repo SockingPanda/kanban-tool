@@ -352,9 +352,8 @@ export function createHttpTransport(
       }
       const contentType = responseContentType(response)
       if (!response.ok && !isJSONContentType(contentType)) {
-        let body: JSONPayload
         try {
-          body = await readJSON(response)
+          await readJSON(response)
         } catch (error) {
           if (error instanceof HttpTransportError && error.kind === "invalid_json") {
             throw new HttpTransportError(

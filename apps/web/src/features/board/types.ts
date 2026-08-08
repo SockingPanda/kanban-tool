@@ -155,6 +155,7 @@ export interface BoardMessages {
   readonly emptyColumn: string
   readonly loading: string
   readonly errorTitle: string
+  readonly invalidModelDescription: string
   readonly offlineTitle: string
   readonly syncConnecting: string
   readonly syncLive: string
@@ -198,6 +199,7 @@ export const defaultBoardMessages: BoardMessages = {
   emptyColumn: "此列暂无任务。",
   loading: "正在加载看板…",
   errorTitle: "看板加载失败",
+  invalidModelDescription: "服务端返回的看板数据暂时无法显示，请重试。",
   offlineTitle: "当前处于离线状态",
   syncConnecting: "正在连接实时同步…",
   syncLive: "实时同步已连接",
@@ -241,6 +243,7 @@ export const englishBoardMessages: BoardMessages = {
   emptyColumn: "No tasks in this column.",
   loading: "Loading board…",
   errorTitle: "Board could not be loaded",
+  invalidModelDescription: "The server returned board data that cannot be displayed. Try again.",
   offlineTitle: "You are offline",
   syncConnecting: "Connecting to live sync…",
   syncLive: "Live sync connected",

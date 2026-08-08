@@ -5,11 +5,12 @@ import { parseCanonicalBoardSlug } from "../../lib/board-slug"
 import {
   BoardReadError,
   createBoardReadQuery,
+  type BoardReadModel,
 } from "../../lib/api/board-read-model"
 import { createHttpTransport } from "../../lib/api/http-transport"
 import { createTranslator } from "../../lib/i18n"
 import { usePreferences } from "../../lib/use-preferences"
-import { createGeneratedStreamContractAdapter } from "../../lib/sync"
+import { createGeneratedStreamContractAdapter, asCanonicalBoardId } from "../../lib/sync"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { BoardView } from "./BoardView"
 import {
@@ -22,7 +23,12 @@ import { toBoardViewModel } from "./board-adapter"
 import { boardSyncStatusForTelemetry } from "./board-live-state"
 import {
   acquireBoardSession,
+  bindBoardResourceIdentity,
+  resourceIdentityKey,
+  routeResourceContextKey,
+  runtimeIdentityKey,
   type BoardReadResource,
+  type BoardSessionHandle,
 } from "./board-session-registry"
 
 type BoardRoute = Extract<AppRoute, { kind: "home" | "board" }>
@@ -41,6 +47,11 @@ function makeResource(runtime: WebRuntimeConfig, selector: string): BoardReadRes
     transport,
     query,
     adapter: createGeneratedStreamContractAdapter(),
+    runtimeKey: runtimeIdentityKey(runtime),
+    identityKey: resourceIdentityKey(runtime, selector, null),
+    canonicalBoardId: null,
+    resolvedSlug: null,
+    sessionGeneration: 0,
   }
 }
 
@@ -54,8 +65,47 @@ function errorState(error: unknown, translator: ReturnType<typeof createTranslat
   return { kind: "error", message: translator("boardLoadErrorDescription") }
 }
 
-function modelForRoute(model: BoardViewModel | null, route: BoardRoute): boolean {
-  return route.kind === "board" && model?.board.slug === route.boardSlug
+function modelIdentityKey(model: BoardViewModel, runtime: WebRuntimeConfig, selector: string): string | null {
+  try {
+    return resourceIdentityKey(runtime, selector, asCanonicalBoardId(model.board.id))
+  } catch {
+    return null
+  }
+}
+
+/** Route and resource identity are checked together at every render seam. */
+function modelMatchesRoute(
+  model: BoardViewModel | null,
+  identityKey: string | null,
+  runtime: WebRuntimeConfig,
+  selector: string,
+  routeKind: BoardRoute["kind"],
+  routeBoardSlug = "",
+): boolean {
+  if (model === null || identityKey === null || modelIdentityKey(model, runtime, selector) !== identityKey) return false
+  return routeKind !== "board" || model.board.slug === routeBoardSlug
+}
+
+function findResource(
+  resources: Map<string, BoardReadResource>,
+  runtime: WebRuntimeConfig,
+  selector: string,
+): BoardReadResource | undefined {
+  const provisionalKey = resourceIdentityKey(runtime, selector, null)
+  const direct = resources.get(provisionalKey)
+  if (direct !== undefined) return direct
+  const runtimeKey = runtimeIdentityKey(runtime)
+  for (const resource of resources.values()) {
+    if (resource.runtimeKey === runtimeKey && resource.selector === selector) return resource
+  }
+  return undefined
+}
+
+function retainResourceKey(resources: Map<string, BoardReadResource>, resource: BoardReadResource): void {
+  for (const [key, value] of resources) {
+    if (value === resource && key !== resource.identityKey) resources.delete(key)
+  }
+  resources.set(resource.identityKey, resource)
 }
 
 export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
@@ -63,17 +113,27 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
   const translator = useMemo(() => createTranslator(preferences.locale), [preferences.locale])
   const boardMessages = boardMessagesForLocale(preferences.locale)
   const selector = route.kind === "board" ? route.boardSlug : runtime.defaultBoard
+  const runtimeKey = runtimeIdentityKey(runtime)
+  const contextKey = routeResourceContextKey(runtime, selector, route.kind, route.kind === "board" ? route.boardSlug : "")
+  const routeBoardSlug = route.kind === "board" ? route.boardSlug : ""
   const resourcesRef = useRef(new Map<string, BoardReadResource>())
   const modelRef = useRef<BoardViewModel | null>(null)
   const resourceRef = useRef<BoardReadResource | null>(null)
   const loadAbortRef = useRef<AbortController | null>(null)
   const retryRequestedRef = useRef(false)
   const activeRef = useRef(true)
+  const activeContextRef = useRef(contextKey)
+  const stateContextKeyRef = useRef(contextKey)
+  const readyResourceKeyRef = useRef<string | null>(null)
   const redirectedBoardRef = useRef<string | null>(null)
+  const sessionHandleRef = useRef<BoardSessionHandle | null>(null)
   const sessionRetryRef = useRef<(() => void) | null>(null)
   const [retryVersion, setRetryVersion] = useState(0)
   const [state, setState] = useState<BoardViewState>({ kind: "loading" })
   const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
+
+  // This render-time fence closes the A → B gap before effects have a chance to run.
+  activeContextRef.current = contextKey
 
   useEffect(() => {
     activeRef.current = true
@@ -82,66 +142,101 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
       activeRef.current = false
       loadAbortRef.current?.abort()
       loadAbortRef.current = null
-      for (const resource of resources.values()) resource.query.invalidate()
+      sessionHandleRef.current?.release()
+      sessionHandleRef.current = null
+      sessionRetryRef.current = null
+      // BoardLive owns only its request abort. Registry-owned queries stay alive
+      // while another mount still references their canonical session.
       resources.clear()
     }
   }, [])
 
   useEffect(() => {
+    if (route.kind !== "home") redirectedBoardRef.current = null
+  }, [route.kind, runtimeKey])
+
+  useEffect(() => {
+    const contextAtStart = contextKey
     const retained = modelRef.current
     const retryRequested = retryRequestedRef.current
     retryRequestedRef.current = false
-    if (!retryRequested && retained !== null && modelForRoute(retained, route)) {
-      setState({ kind: "ready", model: retained })
-      return
-    }
 
-    const resourceKey = `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}\u0000${selector}`
-    let resource = resourcesRef.current.get(resourceKey)
+    let resource = findResource(resourcesRef.current, runtime, selector)
     if (resource === undefined) {
       try {
         resource = makeResource(runtime, selector)
-        resourcesRef.current.set(resourceKey, resource)
+        resourcesRef.current.set(resource.identityKey, resource)
       } catch (error) {
+        stateContextKeyRef.current = contextAtStart
         setState(errorState(error, translator))
         return
       }
     }
     resourceRef.current = resource
-    for (const [key, cached] of resourcesRef.current) {
-      if (key !== resourceKey) {
-        cached.query.invalidate()
-        resourcesRef.current.delete(key)
-      }
+
+    const retainedIdentityKey = retained === null ? null : modelIdentityKey(retained, runtime, selector)
+    const retainedForRoute = modelMatchesRoute(retained, readyResourceKeyRef.current, runtime, selector, route.kind, routeBoardSlug)
+    if (!retryRequested && retained !== null && retainedForRoute && retainedIdentityKey === readyResourceKeyRef.current) {
+      stateContextKeyRef.current = contextAtStart
+      setState({ kind: "ready", model: retained })
+      return
     }
+
     const abort = new AbortController()
     loadAbortRef.current?.abort()
     loadAbortRef.current = abort
     let current = true
-    const preserveReadyBoard = retryRequested && retained !== null && modelForRoute(retained, route)
-    if (!preserveReadyBoard) setState({ kind: "loading" })
+    const preserveReadyBoard = retryRequested && retainedForRoute && retained !== null
+    if (!preserveReadyBoard) {
+      stateContextKeyRef.current = contextAtStart
+      setState({ kind: "loading" })
+    }
 
     const read = retryRequested ? resource.query.reload(abort.signal) : resource.query.load(abort.signal)
     void read.then(
       (readModel) => {
-        if (!current || !activeRef.current || abort.signal.aborted) return
+        if (!current || !activeRef.current || abort.signal.aborted || activeContextRef.current !== contextAtStart) return
         try {
           const viewModel = toBoardViewModel(readModel)
+          const candidateIdentityKey = modelIdentityKey(viewModel, runtime, selector)
+          if (!modelMatchesRoute(viewModel, candidateIdentityKey, runtime, selector, route.kind, routeBoardSlug)) {
+            if (preserveReadyBoard && retained !== null) {
+              stateContextKeyRef.current = contextAtStart
+              setState({ kind: "ready", model: retained })
+              setSyncStatus("stale")
+            } else {
+              stateContextKeyRef.current = contextAtStart
+              setState(errorState(new BoardReadError("anomaly", "board read identity mismatch"), translator))
+            }
+            return
+          }
+          const identityKey = bindBoardResourceIdentity(runtime, resource!, readModel)
+          retainResourceKey(resourcesRef.current, resource!)
+          readyResourceKeyRef.current = identityKey
           modelRef.current = viewModel
+          stateContextKeyRef.current = contextAtStart
           setState({ kind: "ready", model: viewModel })
         } catch (error) {
           if (preserveReadyBoard && retained !== null) {
+            stateContextKeyRef.current = contextAtStart
             setState({ kind: "ready", model: retained })
             setSyncStatus("stale")
-          } else setState(errorState(error, translator))
+          } else {
+            stateContextKeyRef.current = contextAtStart
+            setState(errorState(error, translator))
+          }
         }
       },
       (error: unknown) => {
-        if (!current || !activeRef.current || abort.signal.aborted) return
+        if (!current || !activeRef.current || abort.signal.aborted || activeContextRef.current !== contextAtStart) return
         if (preserveReadyBoard && retained !== null) {
+          stateContextKeyRef.current = contextAtStart
           setState({ kind: "ready", model: retained })
           setSyncStatus(boardSyncStatusForTelemetry(error instanceof BoardReadError && error.kind === "offline" ? "transport-failure" : "recovery-failure") ?? "stale")
-        } else setState(errorState(error, translator))
+        } else {
+          stateContextKeyRef.current = contextAtStart
+          setState(errorState(error, translator))
+        }
       },
     )
 
@@ -150,55 +245,109 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
       abort.abort()
       if (loadAbortRef.current === abort) loadAbortRef.current = null
     }
-  }, [retryVersion, route, runtime, selector, translator])
+  }, [contextKey, retryVersion, route.kind, routeBoardSlug, runtime, selector, translator])
 
   useEffect(() => {
     setSyncStatus("connecting")
-  }, [selector])
+  }, [contextKey])
+
+  const contextState = stateContextKeyRef.current === contextKey ? state : null
+  const visibleState = useMemo<BoardViewState>(() => {
+    if (contextState === null) return { kind: "loading" }
+    if (contextState.kind === "ready" && !modelMatchesRoute(contextState.model, readyResourceKeyRef.current, runtime, selector, route.kind, routeBoardSlug)) {
+      return { kind: "loading" }
+    }
+    return contextState
+  }, [contextState, route.kind, routeBoardSlug, runtime, selector])
+  const visibleStateKind = visibleState.kind
+  const visibleBoardSlug = visibleState.kind === "ready" ? visibleState.model.board.slug : null
 
   useEffect(() => {
-    if (route.kind !== "home" || state.kind !== "ready") return
-    const slug = parseCanonicalBoardSlug(state.model.board.slug)
+    if (route.kind !== "home" || visibleStateKind !== "ready" || stateContextKeyRef.current !== contextKey || visibleBoardSlug === null) return
+    const slug = parseCanonicalBoardSlug(visibleBoardSlug)
     if (slug === null) return
     if (redirectedBoardRef.current === slug) return
     redirectedBoardRef.current = slug
     void Promise.resolve(onNavigate({ kind: "board", boardSlug: slug }, { replace: true })).catch(() => {
       redirectedBoardRef.current = null
     })
-  }, [onNavigate, route.kind, state])
+  }, [contextKey, onNavigate, route.kind, visibleBoardSlug, visibleStateKind])
 
-  const canonicalBoardId = state.kind === "ready" ? state.model.board.id : null
+  const canonicalBoardId = visibleState.kind === "ready" ? visibleState.model.board.id : null
   useEffect(() => {
-    if (canonicalBoardId === null || resourceRef.current === null || modelRef.current === null) return
-    const handle = acquireBoardSession(
-      runtime,
-      modelRef.current,
-      resourceRef.current,
-      (readModel) => {
-        if (!activeRef.current) return
-        try {
-          const viewModel = toBoardViewModel(readModel)
-          modelRef.current = viewModel
-          setState({ kind: "ready", model: viewModel })
-        } catch {
-          setSyncStatus("stale")
-        }
-      },
-      (entry) => {
-        if (!activeRef.current) return
-        const nextStatus = boardSyncStatusForTelemetry(entry.type)
-        if (nextStatus !== null) setSyncStatus(nextStatus)
-      },
-    )
+    if (
+      canonicalBoardId === null
+      || visibleStateKind !== "ready"
+      || stateContextKeyRef.current !== contextKey
+      || resourceRef.current === null
+    ) return
+    const resource = resourceRef.current
+    const model = modelRef.current
+    if (model === null || !modelMatchesRoute(model, readyResourceKeyRef.current, runtime, selector, route.kind, routeBoardSlug)) return
+    const sessionIdentityKey = resource.identityKey
+    let sessionGeneration: number | null = null
+    let handle: BoardSessionHandle
+    try {
+      handle = acquireBoardSession(
+        runtime,
+        model,
+        resource,
+        (readModel: BoardReadModel) => {
+          if (
+            !activeRef.current
+            || activeContextRef.current !== contextKey
+            || stateContextKeyRef.current !== contextKey
+            || resourceRef.current !== resource
+            || resource.identityKey !== sessionIdentityKey
+            || sessionGeneration === null
+            || resource.sessionGeneration !== sessionGeneration
+          ) return
+          try {
+            const viewModel = toBoardViewModel(readModel)
+            const candidateIdentityKey = modelIdentityKey(viewModel, runtime, selector)
+            if (candidateIdentityKey !== sessionIdentityKey || candidateIdentityKey !== readyResourceKeyRef.current || !modelMatchesRoute(viewModel, candidateIdentityKey, runtime, selector, route.kind, routeBoardSlug)) return
+            const identityKey = bindBoardResourceIdentity(runtime, resource, readModel)
+            if (identityKey !== sessionIdentityKey) return
+            retainResourceKey(resourcesRef.current, resource)
+            readyResourceKeyRef.current = identityKey
+            modelRef.current = viewModel
+            stateContextKeyRef.current = contextKey
+            setState({ kind: "ready", model: viewModel })
+          } catch {
+            setSyncStatus("stale")
+          }
+        },
+        (entry) => {
+          if (
+            !activeRef.current
+            || activeContextRef.current !== contextKey
+            || stateContextKeyRef.current !== contextKey
+            || resourceRef.current !== resource
+            || resource.identityKey !== sessionIdentityKey
+            || sessionGeneration === null
+            || resource.sessionGeneration !== sessionGeneration
+          ) return
+          const nextStatus = boardSyncStatusForTelemetry(entry.type)
+          if (nextStatus !== null) setSyncStatus(nextStatus)
+        },
+      )
+    } catch {
+      return
+    }
+    sessionGeneration = handle.generation
+    sessionHandleRef.current = handle
     sessionRetryRef.current = handle.retry
     return () => {
       handle.release()
-      if (sessionRetryRef.current === handle.retry) sessionRetryRef.current = null
+      if (sessionHandleRef.current === handle) {
+        sessionHandleRef.current = null
+        sessionRetryRef.current = null
+      }
     }
-  }, [canonicalBoardId, runtime])
+  }, [canonicalBoardId, contextKey, route.kind, routeBoardSlug, runtime, selector, visibleStateKind])
 
   useEffect(() => {
-    if (state.kind !== "ready") return
+    if (visibleStateKind !== "ready") return
     const onOffline = () => setSyncStatus("stale")
     const onOnline = () => {
       setSyncStatus("recovering")
@@ -210,23 +359,20 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
       window.removeEventListener("offline", onOffline)
       window.removeEventListener("online", onOnline)
     }
-  }, [canonicalBoardId, state.kind])
+  }, [contextKey, visibleStateKind])
 
   const retry = useCallback(() => {
-    const circuitOpen = syncStatus === "circuit-open"
     setSyncStatus("recovering")
     sessionRetryRef.current?.()
-    if (!circuitOpen) {
-      retryRequestedRef.current = true
-      setRetryVersion((version) => version + 1)
-    }
-  }, [syncStatus])
+    retryRequestedRef.current = true
+    setRetryVersion((version) => version + 1)
+  }, [])
 
   return (
     <BoardView
-      state={state}
+      state={visibleState}
       messages={boardMessages}
-      syncStatus={state.kind === "ready" ? syncStatus : undefined}
+      syncStatus={visibleState.kind === "ready" ? syncStatus : undefined}
       onRetry={retry}
       id="astryx-board"
     />

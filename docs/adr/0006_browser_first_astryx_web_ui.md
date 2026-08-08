@@ -19,8 +19,9 @@ Accepted
 - UI 采用 browser-first 架构，由 `kanban serve` 同源托管 `/app/`；浏览器和 Tauri 都加载同一份
   Web artifact，不维护两套渲染实现。Tauri 只负责窗口、sidecar 生命周期和本机连接，不复制业务
   状态机。
-- Web 只使用当前 HTTP API 边界：同源 `/api/v1` 作为业务 API，根路径只保留 `/health` 健康检查。
-  `/app` 资源路由与 protocol API catalog 分开，SPA fallback 不得吞掉 API 或静态资源错误。
+- Web 只使用当前 HTTP API 边界：同源 `/api/v1` 作为业务 API，根健康端点是 `/health`；`GET /`
+  可以以 `307` 重定向到 `/app/`，但其他 UI 与 API 路由仍保持隔离。`/app` 资源路由与 protocol
+  API catalog 分开，SPA fallback 不得吞掉 API 或静态资源错误。
 - `kanban-protocol` 是 Web wire 的唯一事实源。Rust DTO、catalog 和生成的 Draft 2020 schema 生成
   Web 所需的 rendered API、error、runtime 和 SSE 类型、运行时 validator、fixture 与 contract hash。
   transport、路径/query 组装、SSE 生命周期、query invalidation 和 UI intent 保持手写，但任何跨

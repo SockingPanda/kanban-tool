@@ -65,6 +65,7 @@ mod task_core;
 mod task_graph;
 mod task_read;
 mod transitions;
+pub mod web_artifact;
 mod wire;
 
 #[cfg(all(test, feature = "schema"))]
@@ -224,6 +225,12 @@ pub use transitions::{
     ReclaimTaskResponse, ReleaseTaskPath, ReleaseTaskResponse, ReopenTaskPath, ReopenTaskResponse,
     SpecifyTaskPath, SpecifyTaskResponse, SubmitReviewTaskPath, SubmitReviewTaskResponse,
     UnblockTaskPath, UnblockTaskResponse,
+};
+pub use web_artifact::{
+    WEB_ARTIFACT_BASE_PATH, WEB_ARTIFACT_ENTRYPOINT, WEB_ARTIFACT_FORMAT_VERSION,
+    WEB_ARTIFACT_MANIFEST_PATH, WEB_PROTOCOL_VERSION, WebArtifactError, WebArtifactFile,
+    WebArtifactManifest, validate_web_artifact_manifest, web_artifact_build_id_for,
+    web_artifact_build_preimage,
 };
 pub use wire::{
     ApiErrorCode, CreatedLabelsMeta, DataEnvelope, DecisionMetadata, DecisionOption,

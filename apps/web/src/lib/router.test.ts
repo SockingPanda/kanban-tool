@@ -43,6 +43,21 @@ describe("App route parser", () => {
       pathname: "/app/boards/alpha/list",
     })
   })
+
+  test("parses canonical board health and maintenance routes", () => {
+    expect(parseAppRoute("/app/boards/alpha/health")).toEqual({
+      kind: "health",
+      boardSlug: assertCanonicalBoardSlug("alpha"),
+      pathname: "/app/boards/alpha/health",
+    })
+    expect(parseAppRoute("/app/boards/alpha/maintenance/")).toEqual({
+      kind: "maintenance",
+      boardSlug: assertCanonicalBoardSlug("alpha"),
+      pathname: "/app/boards/alpha/maintenance",
+    })
+    expect(routePath({ kind: "health", boardSlug: assertCanonicalBoardSlug("alpha") })).toBe("/app/boards/alpha/health")
+    expect(routePath({ kind: "maintenance", boardSlug: assertCanonicalBoardSlug("alpha") })).toBe("/app/boards/alpha/maintenance")
+  })
 })
 
 describe("History API navigation", () => {

@@ -21,6 +21,7 @@ export interface BoardViewProps {
   readonly state: BoardViewState
   readonly messages?: BoardMessagesOverrides
   readonly onRetry?: () => void
+  readonly onSelectTask?: (taskId: string) => void
   readonly id?: string
   readonly className?: string
 }
@@ -128,7 +129,7 @@ function StateContent({ state, copy, onRetry }: { readonly state: BoardViewState
   return null
 }
 
-function TaskCard({ task, copy }: { readonly task: BoardTaskViewModel; readonly copy: BoardMessages }) {
+function TaskCard({ task, copy, onSelectTask }: { readonly task: BoardTaskViewModel; readonly copy: BoardMessages; readonly onSelectTask?: (taskId: string) => void }) {
   const dependencyText = task.readiness.dependencyBlocked
     ? `${copy.dependencyBlocked}（${task.readiness.unfinishedParentCount}）`
     : copy.dependencyClear
@@ -148,7 +149,11 @@ function TaskCard({ task, copy }: { readonly task: BoardTaskViewModel; readonly 
         <Badge variant={priorityVariant(task.priority)} label={copy.priorityLabel(task.priority)} />
       </div>
       <Heading level={3} className={styles.taskTitle}>
-        {task.title}
+        {onSelectTask ? (
+          <button type="button" className={styles.taskTitleButton} onClick={() => onSelectTask(task.id)}>
+            {task.title}
+          </button>
+        ) : task.title}
       </Heading>
       <dl className={styles.taskDetails}>
         <div className={styles.taskDetailsRow}>
@@ -181,7 +186,7 @@ function TaskCard({ task, copy }: { readonly task: BoardTaskViewModel; readonly 
   )
 }
 
-function BoardColumns({ model, copy, rootId }: { readonly model: BoardViewModel; readonly copy: BoardMessages; readonly rootId: string }) {
+function BoardColumns({ model, copy, rootId, onSelectTask }: { readonly model: BoardViewModel; readonly copy: BoardMessages; readonly rootId: string; readonly onSelectTask?: (taskId: string) => void }) {
   const columns = orderedVisibleColumns(model.columns)
 
   if (columns.length === 0) {
@@ -232,7 +237,7 @@ function BoardColumns({ model, copy, rootId }: { readonly model: BoardViewModel;
                   ) : (
                     tasks.map((task) => (
                       <li className={styles.taskListItem} key={task.id}>
-                        <TaskCard task={task} copy={copy} />
+                        <TaskCard task={task} copy={copy} onSelectTask={onSelectTask} />
                       </li>
                     ))
                   )}
@@ -246,7 +251,7 @@ function BoardColumns({ model, copy, rootId }: { readonly model: BoardViewModel;
   )
 }
 
-export function BoardView({ state, messages: messageOverrides, onRetry, id = "astryx-board", className }: BoardViewProps) {
+export function BoardView({ state, messages: messageOverrides, onRetry, onSelectTask, id = "astryx-board", className }: BoardViewProps) {
   const copy = mergeMessages(messageOverrides)
   const titleId = `${id}-title`
   const validation = state.kind === "ready" ? validateBoardViewModel(state.model) : { valid: true as const }
@@ -273,7 +278,7 @@ export function BoardView({ state, messages: messageOverrides, onRetry, id = "as
       <BoardHeader board={board} titleId={titleId} copy={copy} />
       <div id={`${id}-columns`} tabIndex={-1}>
         {renderedState.kind === "ready" ? (
-          <BoardColumns model={renderedState.model} copy={copy} rootId={id} />
+          <BoardColumns model={renderedState.model} copy={copy} rootId={id} onSelectTask={onSelectTask} />
         ) : (
           <StateContent state={renderedState} copy={copy} onRetry={onRetry} />
         )}

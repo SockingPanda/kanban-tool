@@ -12,6 +12,7 @@ import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router
 import { parseLocalePreference, parseThemePreference } from "./lib/preferences"
 import { usePreferences } from "./lib/use-preferences"
 import { createTranslator, type MessageKey } from "./lib/i18n"
+import { ExplorerPage } from "./features/explorer/ExplorerPage"
 import styles from "./shell.module.css"
 
 export type ShellBoundary = "ready" | "loading" | "error" | "offline"
@@ -29,6 +30,10 @@ export type ProductShellProps = {
 
 function safeText(value: string): string {
   return value.trim() || "—"
+}
+
+function appRoutePathname(route: AppRoute): string {
+  return route.pathname
 }
 
 function navPath(runtime: WebRuntimeConfig, boardSlug?: CanonicalBoardSlug): string {
@@ -275,7 +280,7 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
   )
 }
 
-function RouteContent({ runtime, route, children, boundary, error, onRetry }: Omit<ProductShellProps, "onNavigate">) {
+function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -351,6 +356,7 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
   }
   if (route.kind === "settings") return <SettingsPage runtime={runtime} />
   if (children) return <>{children}</>
+  if (route.kind === "board") return <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} />
 
   return (
     <section className={styles.page} aria-labelledby="board-placeholder-heading" data-testid="board-placeholder">
@@ -359,7 +365,7 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
         <h1 id="board-placeholder-heading">{t("boardPlaceholder")}</h1>
         <p className={styles.lede}>{t("boardPlaceholderDescription")}</p>
       </div>
-      <p className={styles.routePath} translate="no">{route.pathname}</p>
+      <p className={styles.routePath} translate="no">{appRoutePathname(route)}</p>
     </section>
   )
 }
@@ -391,7 +397,7 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
                 data-runtime-web-build-id={runtime.webBuildId}
                 data-runtime-web-base-path={runtime.webBasePath}
               >
-                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onRetry={onRetry}>
+                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry}>
                   {children}
                 </RouteContent>
               </div>

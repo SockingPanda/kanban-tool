@@ -25,7 +25,7 @@ export interface TaskListViewProps {
   readonly state: TaskListViewState
   readonly rows: readonly TaskListRow[]
   readonly loading: boolean
-  readonly error?: ExplorerReadError | null
+  readonly error?: ExplorerReadError | Error | null
   readonly onQueryChange: (query: TaskListQueryState) => void
   readonly onSelectTask: (taskId: string) => void
   readonly onRetry?: () => void

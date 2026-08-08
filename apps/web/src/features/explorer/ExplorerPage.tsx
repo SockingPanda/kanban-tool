@@ -1,0 +1,279 @@
+import { useEffect, useMemo, useRef, useState } from "react"
+
+import { BoardView } from "../board/BoardView"
+import type { BoardViewModel } from "../board/types"
+import {
+  loadTaskInspector,
+  loadTaskListPage,
+  parseTaskListQuery,
+  serializeTaskListQuery,
+  type ExplorerReadError,
+  type TaskInspectorReadModel,
+  type TaskListQueryState,
+} from "../../lib/api/explorer-read-model"
+import type { CanonicalBoardSlug } from "../../lib/board-slug"
+import type { BoardReadModel } from "../../lib/api/board-read-model"
+import type { WebRuntimeConfig } from "../../lib/runtime"
+import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView } from "../../lib/router"
+import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
+import { TaskListView, type TaskListRow } from "./TaskListView"
+import styles from "./ExplorerPage.module.css"
+
+export interface ExplorerPageProps {
+  readonly runtime: WebRuntimeConfig
+  readonly route: Extract<AppRoute, { kind: "board" }>
+  readonly onNavigate?: (target: AppNavigationTarget) => void | Promise<unknown>
+}
+
+type AsyncState<T> = {
+  readonly data: T | null
+  readonly error: ExplorerReadError | Error | null
+  readonly loading: boolean
+}
+
+function useAsyncRead<T>(
+  enabled: boolean,
+  key: string,
+  load: (signal: AbortSignal) => Promise<T>,
+): AsyncState<T> & { readonly retry: () => void } {
+  const loadRef = useRef(load)
+  loadRef.current = load
+  const [generation, setGeneration] = useState(0)
+  const [state, setState] = useState<AsyncState<T>>({ data: null, error: null, loading: false })
+
+  useEffect(() => {
+    if (!enabled) {
+      setState({ data: null, error: null, loading: false })
+      return
+    }
+    const controller = new AbortController()
+    let active = true
+    setState((current) => ({ data: current.data, error: null, loading: true }))
+    void loadRef.current(controller.signal).then(
+      (data) => {
+        if (active) setState({ data, error: null, loading: false })
+      },
+      (error: unknown) => {
+        if (active && !(error instanceof Error && error.name === "AbortError")) {
+          setState({ data: null, error: error instanceof Error ? error : new Error(String(error)), loading: false })
+        }
+      },
+    )
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [enabled, generation, key])
+
+  return { ...state, retry: () => setGeneration((current) => current + 1) }
+}
+
+function queryParams(route: Extract<AppRoute, { kind: "board" }>): URLSearchParams {
+  return new URLSearchParams(route.query ?? "")
+}
+
+function routeTarget(
+  boardSlug: CanonicalBoardSlug,
+  view: BoardRouteView,
+  params: URLSearchParams,
+  basePath?: string,
+): string {
+  const query = params.toString()
+  return routePath({ kind: "board", boardSlug, view, ...(query ? { query } : {}) }, { basePath })
+}
+
+function boardPriority(value: number): 0 | 1 | 2 | 3 {
+  if (value === 0 || value === 1 || value === 2 || value === 3) return value
+  throw new Error(`服务端任务 ${String(value)} 的 priority 超出 board contract。`)
+}
+
+function taskListRow(task: NonNullable<Awaited<ReturnType<typeof loadTaskListPage>>>["tasks"][number]): TaskListRow {
+  return {
+    id: task.id,
+    ref: task.ref,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    assignee: task.assignee,
+    executionPlanState: task.execution_plan_state,
+    dependencyBlocked: task.dependency_blocked,
+    requiredStepCount: task.required_step_count,
+    completedRequiredStepCount: task.completed_required_step_count,
+    optionalStepCount: task.optional_step_count,
+    updatedAt: task.updated_at,
+  }
+}
+
+function boardViewModel(model: BoardReadModel): BoardViewModel {
+  const tasksByStatus: Record<string, BoardViewModel["tasksByStatus"][string]> = {}
+  for (const [status, tasks] of Object.entries(model.tasksByStatus)) {
+    tasksByStatus[status] = (tasks ?? []).map((task) => ({
+      id: task.id,
+      ref: task.ref,
+      title: task.title,
+      status: task.status,
+      position: task.position,
+      priority: boardPriority(task.priority),
+      assignee: task.assignee,
+      readiness: {
+        dependencyBlocked: task.dependency_blocked,
+        unfinishedParentCount: task.unfinished_parent_count,
+        executionPlanState: task.execution_plan_state,
+        requiredStepCount: task.required_step_count,
+        completedRequiredStepCount: task.completed_required_step_count,
+        optionalStepCount: task.optional_step_count,
+      },
+    }))
+  }
+  return {
+    board: { id: model.identity.canonicalBoardId, slug: model.identity.slug, name: model.identity.name },
+    columns: model.columns.map((column) => ({ id: column.id, status: column.status, title: column.title, position: column.position, hidden: column.hidden })),
+    tasksByStatus,
+  }
+}
+
+function dependencyView(task: NonNullable<TaskInspectorReadModel["dependencies"]["parents"]>[number]): InspectorDependency {
+  return { id: task.id, ref: task.ref, title: task.title, status: task.status }
+}
+
+function inspectorViewModel(model: TaskInspectorReadModel): TaskInspectorViewModel {
+  const task = model.task
+  return {
+    task: {
+      id: task.id,
+      ref: task.ref,
+      title: task.title,
+      status: task.status,
+      priority: boardPriority(task.priority),
+      description: task.description,
+      statusReason: task.status_reason,
+      assignee: task.assignee,
+      executionPlanState: task.execution_plan_state,
+      dependencyBlocked: task.dependency_blocked,
+      unfinishedParentCount: task.unfinished_parent_count,
+      requiredStepCount: task.required_step_count,
+      completedRequiredStepCount: task.completed_required_step_count,
+      optionalStepCount: task.optional_step_count,
+      metadata: task.metadata,
+      claimOwner: task.claim_owner,
+      claimExpiresAt: task.claim_expires_at,
+      lastHeartbeatAt: task.last_heartbeat_at,
+      currentRunId: task.current_run_id,
+      retryCount: task.retry_count,
+      maxRetries: task.max_retries,
+      createdAt: task.created_at,
+      updatedAt: task.updated_at,
+    },
+    steps: model.steps.steps.map((step) => ({ id: step.id, title: step.title, status: step.status, required: step.required, body: step.body })),
+    parents: model.dependencies.parents.map(dependencyView),
+    children: model.dependencies.children.map(dependencyView),
+    comments: model.comments.map((comment) => ({ id: comment.id, author: comment.author, kind: comment.kind, body: comment.body, createdAt: comment.created_at })),
+    runs: model.runs.map((run) => ({ id: run.id, status: run.status, workerProfile: run.worker_profile, claimOwner: run.claim_owner, startedAt: run.started_at, finishedAt: run.finished_at, exitCode: run.exit_code, error: run.error, hasLog: run.has_log })),
+    events: model.events.map((event) => ({ id: event.id, kind: event.kind, actor: event.actor, createdAt: event.created_at })),
+    runtime: model.runtime,
+  }
+}
+
+function InspectorBoundary({ loading, error, onRetry }: { readonly loading: boolean; readonly error: Error | null; readonly onRetry: () => void }) {
+  if (loading) return <aside className={styles.inspectorBoundary} data-testid="task-inspector-loading" role="status">正在加载 Task Inspector…</aside>
+  if (error) return <aside className={styles.inspectorBoundary} data-testid="task-inspector-error" role="alert"><strong>Task Inspector 加载失败</strong><p>{error.message}</p><button type="button" onClick={onRetry}>重试</button></aside>
+  return null
+}
+
+function ExplorerTabs({ route, basePath, taskId, onNavigate }: { readonly route: Extract<AppRoute, { kind: "board" }>; readonly basePath: string; readonly taskId: string | null; readonly onNavigate?: ExplorerPageProps["onNavigate"] }) {
+  const params = queryParams(route)
+  const views: readonly [BoardRouteView, string][] = [["board", "Board"], ["list", "List"], ["map", "Map"], ["runs", "Runs"], ["events", "Events"]]
+  return (
+    <nav className={styles.tabs} aria-label="Board explorer views">
+      {views.map(([view, label]) => {
+        const next = new URLSearchParams(params)
+        if (taskId) next.set("task", taskId)
+        const href = routeTarget(route.boardSlug, view, next, basePath)
+        return <a key={view} href={href} aria-current={(route.view ?? "board") === view ? "page" : undefined} onClick={(event) => { if (!onNavigate) return; event.preventDefault(); void onNavigate(href) }}>{label}</a>
+      })}
+    </nav>
+  )
+}
+
+export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) {
+  const view = route.view ?? "board"
+  const params = queryParams(route)
+  const taskId = params.get("task")?.trim() || null
+  const listQuery = useMemo(() => parseTaskListQuery(new URLSearchParams(route.query ?? "")), [route.query])
+  const listKey = `${route.boardSlug}|${serializeTaskListQuery(listQuery)}`
+  const boardRead = useAsyncRead(view === "board", route.boardSlug, (signal) => import("../../lib/api/board-read-model").then(({ loadBoardReadModel }) => loadBoardReadModel(runtime, route.boardSlug, { signal })))
+  const listRead = useAsyncRead(view === "list", listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }))
+  const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
+  const inspectorRead = useAsyncRead(Boolean(taskId), inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal }) : Promise.reject(new Error("Task Inspector 尚未选择任务")))
+
+  const navigate = (target: string) => {
+    if (onNavigate) void onNavigate(target)
+  }
+  const updateListQuery = (next: TaskListQueryState) => {
+    const nextParams = new URLSearchParams(serializeTaskListQuery(next))
+    if (taskId) nextParams.set("task", taskId)
+    navigate(routeTarget(route.boardSlug, "list", nextParams, runtime.webBasePath))
+  }
+  const selectTask = (nextTaskId: string) => {
+    const nextParams = new URLSearchParams(params)
+    nextParams.set("task", nextTaskId)
+    navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
+  }
+  const closeInspector = () => {
+    const nextParams = new URLSearchParams(params)
+    nextParams.delete("task")
+    navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
+  }
+
+  return (
+    <section className={styles.explorer} data-testid="explorer-page">
+      <header className={styles.explorerHeader}>
+        <div>
+          <p className={styles.eyebrow}>ASTRYX EXPLORER</p>
+          <h1>{route.boardSlug}</h1>
+        </div>
+        {taskId ? <button type="button" className={styles.closeInspector} onClick={closeInspector}>关闭 Inspector</button> : null}
+      </header>
+      <ExplorerTabs route={route} basePath={runtime.webBasePath} taskId={taskId} onNavigate={onNavigate} />
+      <div className={taskId ? styles.contentWithInspector : styles.content}>
+        <main className={styles.primaryContent}>
+          {view === "board" ? (
+            boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status">正在加载看板…</div>
+              : boardRead.error ? <div className={styles.boundary} data-testid="board-error" role="alert"><p>{boardRead.error.message}</p><button type="button" onClick={boardRead.retry}>重试</button></div>
+                : boardRead.data ? <BoardView state={{ kind: "ready", model: boardViewModel(boardRead.data) }} onRetry={boardRead.retry} onSelectTask={selectTask} /> : null
+          ) : null}
+          {view === "list" ? (
+            <TaskListView
+              state={{ query: listQuery, meta: listRead.data?.meta ?? { offset: (listQuery.page - 1) * listQuery.limit, limit: listQuery.limit, total: 0 } }}
+              rows={listRead.data?.tasks.map(taskListRow) ?? []}
+              loading={listRead.loading}
+              error={listRead.error instanceof Error ? listRead.error : null}
+              onQueryChange={updateListQuery}
+              onSelectTask={selectTask}
+              onRetry={listRead.retry}
+            />
+          ) : null}
+          {view === "map" ? <MapPlaceholder board={route.boardSlug} taskId={taskId} onSelectTask={selectTask} /> : null}
+          {view === "runs" ? <RunsPlaceholder taskId={taskId} inspector={inspectorRead.data} /> : null}
+          {view === "events" ? <EventsPlaceholder taskId={taskId} inspector={inspectorRead.data} /> : null}
+        </main>
+        {taskId ? (
+          inspectorRead.data ? <TaskInspector model={inspectorViewModel(inspectorRead.data)} onSelectTask={selectTask} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} />
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+function MapPlaceholder({ board, taskId, onSelectTask }: { readonly board: string; readonly taskId: string | null; readonly onSelectTask: (taskId: string) => void }) {
+  return <section className={styles.boundary} data-testid="map-placeholder"><h2>Map</h2><p>关系图将在进入 Map 页面时加载。</p>{taskId ? <button type="button" onClick={() => onSelectTask(taskId)}>检查当前任务</button> : null}<span translate="no">{board}</span></section>
+}
+
+function RunsPlaceholder({ taskId, inspector }: { readonly taskId: string | null; readonly inspector: TaskInspectorReadModel | null }) {
+  if (!taskId) return <section className={styles.boundary} data-testid="runs-empty" role="status"><h2>Runs</h2><p>选择任务后查看运行记录。</p></section>
+  return <section className={styles.boundary} data-testid="runs-view"><h2>Runs</h2><p>{inspector ? `${inspector.runs.length} 条运行记录` : "正在加载运行记录…"}</p></section>
+}
+
+function EventsPlaceholder({ taskId, inspector }: { readonly taskId: string | null; readonly inspector: TaskInspectorReadModel | null }) {
+  return <section className={styles.boundary} data-testid="events-view"><h2>Events</h2><p>{taskId ? inspector ? `${inspector.events.length} 条任务事件` : "正在加载事件…" : "选择任务后查看事件。"}</p></section>
+}

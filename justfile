@@ -131,6 +131,9 @@ web-lint:
 web-build:
     pnpm --filter @kanban-tool/web build
 
+web-artifact-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- web-assets check --root .
+
 web-e2e:
     just node-lock-check
     pnpm --filter @kanban-tool/web e2e
@@ -142,6 +145,7 @@ web-check:
     just web-lint
     just web-test
     just web-build
+    just web-artifact-check
 
 desktop-check:
     just node-lock-check

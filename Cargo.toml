@@ -71,6 +71,6 @@ ksni = { version = "0.3.5", default-features = false }
 kanban-core = { path = "crates/kanban-core" }
 kanban-service = { path = "crates/kanban-service" }
 kanban-protocol = { path = "crates/kanban-protocol", default-features = false }
-kanban-web-artifact = { path = "crates/kanban-web-artifact" }
+kanban-web-artifact = { path = "crates/kanban-web-artifact", default-features = false }
 kanban-client = { path = "crates/kanban-client" }
 kanban-server = { path = "crates/kanban-server" }

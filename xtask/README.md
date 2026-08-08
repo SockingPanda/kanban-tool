@@ -12,6 +12,10 @@ package 和 provenance 证据，读取 workspace metadata、protocol catalog 和
 - `deps check`：根据 Cargo workspace metadata 校验依赖 graph 和 owner 边界。
 - `agents check`：校验仓库契约、技能包结构和 active recipe/package map。
 - `tooling check`：校验 active repository tooling 不含 `.py`、`python`/`python3` 或 Shell 内嵌 Python 入口。
+- `web-assets check --root PATH [--dir apps/web/dist]`：使用共享 `kanban-web-artifact` verifier
+  校验当前 Web dist；默认读取 `apps/web/dist`，输出 build ID、payload 数量和总 bytes。
+  `just web-artifact-check` 只执行此检查，`just web-check` 按 `web-build → web-artifact-check`
+  顺序先生成 fresh dist 再校验。
 - `package cli`：构建 standalone `kanban` Debian package。
 
 仓库工具的 ownership 是：Rust/`xtask` 持有语义校验、生成、依赖图、affected、benchmark、package 和

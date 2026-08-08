@@ -7335,6 +7335,7 @@ dependencies = [
  "fs4",
  "jsonschema",
  "kanban-protocol",
+ "kanban-web-artifact",
  "serde",
  "serde_json",
  "sha2",

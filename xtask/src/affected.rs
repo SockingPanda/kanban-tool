@@ -209,7 +209,10 @@ fn is_desktop(path: &str) -> bool {
 }
 
 fn is_web(path: &str) -> bool {
-    path.starts_with("apps/web/") || is_root_node_workspace_file(path)
+    path.starts_with("apps/web/")
+        || path == "xtask/src/web_assets.rs"
+        || path.starts_with("crates/kanban-web-artifact/")
+        || is_root_node_workspace_file(path)
 }
 
 fn is_root_node_workspace_file(path: &str) -> bool {
@@ -425,6 +428,48 @@ mod tests {
         assert_eq!(plan.classifications["web"], ["apps/web/src/App.tsx"]);
         assert!(!plan.classifications.contains_key("desktop"));
         assert_eq!(recipes, ["web-check", "diff-check"]);
+    }
+
+    #[test]
+    fn web_artifact_tooling_and_verifier_paths_use_web_and_owner_gates() {
+        let tooling = build_plan("main".to_owned(), sources(&["xtask/src/web_assets.rs"]));
+        assert_eq!(
+            tooling.recipes,
+            vec![Recipe::ToolingCheck, Recipe::WebCheck, Recipe::DiffCheck]
+        );
+        assert_eq!(tooling.classifications["web"], ["xtask/src/web_assets.rs"]);
+
+        let verifier = build_plan(
+            "main".to_owned(),
+            sources(&["crates/kanban-web-artifact/src/lib.rs"]),
+        );
+        assert_eq!(
+            verifier.recipes,
+            vec![Recipe::WebCheck, Recipe::RustFast, Recipe::DiffCheck]
+        );
+        assert_eq!(
+            verifier.classifications["web"],
+            ["crates/kanban-web-artifact/src/lib.rs"]
+        );
+
+        let manifest = build_plan(
+            "main".to_owned(),
+            sources(&["crates/kanban-web-artifact/Cargo.toml"]),
+        );
+        assert_eq!(
+            manifest.recipes,
+            vec![
+                Recipe::RustFull,
+                Recipe::DepsCheck,
+                Recipe::ToolingCheck,
+                Recipe::WebCheck,
+                Recipe::DiffCheck,
+            ]
+        );
+        assert_eq!(
+            manifest.classifications["web"],
+            ["crates/kanban-web-artifact/Cargo.toml"]
+        );
     }
 
     #[test]

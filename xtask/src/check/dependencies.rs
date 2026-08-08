@@ -93,6 +93,7 @@ const TOOL_DEPENDENCIES: &[&str] = &[
     FS4_PACKAGE,
     JSONSCHEMA_PACKAGE,
     CONTRACT_PACKAGE,
+    WEB_ARTIFACT_PACKAGE,
     "serde",
     "serde_json",
     "sha2",
@@ -1120,6 +1121,17 @@ fn validate_tool_and_contract(
                     )));
                 }
             }
+            WEB_ARTIFACT_PACKAGE => {
+                if dependency.get("source") != Some(&Value::Null)
+                    || dependency.get("path").and_then(Value::as_str).is_none()
+                    || bool_field(dependency, "uses_default_features", &context)?
+                    || !feature_set(dependency, &context)?.is_empty()
+                {
+                    return Err(error(format!(
+                        "{context} 必须是 path + default-features=false 且不启用额外 feature"
+                    )));
+                }
+            }
             "serde" => check_registry_declaration(dependency, "^1.0", true, &["derive"], &context)?,
             "serde_json" => check_registry_declaration(dependency, "^1.0", true, &[], &context)?,
             "sha2" => check_registry_declaration(dependency, "^0.10", true, &[], &context)?,
@@ -1702,6 +1714,7 @@ mod tests {
                 registry_dependency(FS4_PACKAGE, "^0.13.1", true, &[]),
                 registry_dependency(JSONSCHEMA_PACKAGE, "^0.47.0", false, &[]),
                 local_dependency(CONTRACT_PACKAGE, &["schema"]),
+                local_dependency(WEB_ARTIFACT_PACKAGE, &[]),
                 registry_dependency("serde", "^1.0", true, &["derive"]),
                 registry_dependency("serde_json", "^1.0", true, &[]),
                 registry_dependency("sha2", "^0.10", true, &[]),
@@ -1788,6 +1801,7 @@ mod tests {
                     &registry_id(JSONSCHEMA_PACKAGE, "0.47.0"),
                 ),
                 edge(CONTRACT_PACKAGE, &id(CONTRACT_PACKAGE)),
+                edge(WEB_ARTIFACT_PACKAGE, &id(WEB_ARTIFACT_PACKAGE)),
                 edge("serde", &registry_id("serde", "1.0.228")),
                 edge("serde_json", &registry_id("serde_json", "1.0.150")),
                 edge("sha2", &registry_id("sha2", "0.10.9")),

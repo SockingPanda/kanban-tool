@@ -1,4 +1,5 @@
 import type { WebRuntimeConfig } from "../runtime"
+import { parseCanonicalBoardSlug, type CanonicalBoardSlug } from "../board-slug"
 import { asCanonicalBoardId, type CanonicalBoardId } from "../sync/contracts"
 import { parseApiListBoardsQuery } from "./generated/contracts/api-list-boards-query"
 import { parseApiListBoardsResponse, type ApiListBoardsResponseContract } from "./generated/contracts/api-list-boards-response"
@@ -242,7 +243,7 @@ export interface ExplorerReadOptions extends ExplorerReadDependencies {
 export interface ExplorerBoardIdentity {
   readonly selector: string
   readonly id: CanonicalBoardId
-  readonly slug: string
+  readonly slug: CanonicalBoardSlug
   readonly name: string
 }
 
@@ -302,6 +303,7 @@ function boardListPath(includeArchived: boolean): string {
 }
 
 function validBoardId(value: string): CanonicalBoardId | null {
+  if (value.trim() !== value || value.length === 0 || /[\u0000-\u001f\u007f\\/?#]/.test(value)) return null
   try {
     return asCanonicalBoardId(value)
   } catch {
@@ -311,17 +313,30 @@ function validBoardId(value: string): CanonicalBoardId | null {
 
 function resolveBoard(boards: ApiListBoardsResponseContract["data"], selector: string): ExplorerBoardIdentity {
   const requested = selector.trim()
-  const board = boards.find((candidate) => candidate.id === requested || candidate.slug === requested)
-  if (!board) {
+  const identities = boards.map((candidate) => {
+    const id = validBoardId(candidate.id)
+    const slug = parseCanonicalBoardSlug(candidate.slug)
+    if (!id || !slug || candidate.name.trim().length === 0) {
+      throw new ExplorerReadError("anomaly", "看板列表包含无效 canonical identity。")
+    }
+    return { candidate, id, slug }
+  })
+  const ids = new Set<string>()
+  const slugs = new Set<string>()
+  for (const identity of identities) {
+    if (ids.has(identity.id) || slugs.has(identity.slug)) {
+      throw new ExplorerReadError("anomaly", "看板列表包含重复 canonical identity。")
+    }
+    ids.add(identity.id)
+    slugs.add(identity.slug)
+  }
+  const identity = identities.find(({ candidate }) => candidate.id === requested || candidate.slug === requested)
+  if (!identity) {
     throw new ExplorerReadError("empty", "请求的看板 selector 未在看板列表中精确匹配。", {
       reason: "board-not-found",
     })
   }
-  const id = validBoardId(board.id)
-  if (!id || board.slug.trim().length === 0 || board.name.trim().length === 0) {
-    throw new ExplorerReadError("anomaly", "看板列表包含无效 canonical identity。")
-  }
-  return Object.freeze({ selector: requested, id, slug: board.slug, name: board.name.trim() })
+  return Object.freeze({ selector: requested, id: identity.id, slug: identity.slug, name: identity.candidate.name.trim() })
 }
 
 export async function loadExplorerBoardIdentity(

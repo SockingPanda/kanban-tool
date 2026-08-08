@@ -3,7 +3,6 @@ import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, use
 import { BoardView } from "../board/BoardView"
 import type { BoardViewModel } from "../board/types"
 import {
-  ExplorerReadError,
   loadTaskInspector,
   loadExplorerBoardIdentity,
   loadTaskListPage,
@@ -20,7 +19,13 @@ import { usePreferences } from "../../lib/use-preferences"
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
 import { TaskListView, type TaskListRow } from "./TaskListView"
 import { TaskRunsView } from "./TaskRunsView"
-import { shouldClearMapTaskFromInspector } from "./ExplorerPage.logic"
+import {
+  asyncReadToken,
+  shouldClearMapTaskFromInspector,
+  type AsyncReadInternalState,
+  type AsyncReadState,
+  visibleAsyncReadState,
+} from "./ExplorerPage.logic"
 import { parseTaskMapUrlState, serializeTaskMapUrlState, type TaskMapUrlState } from "./TaskMapView.logic"
 import styles from "./ExplorerPage.module.css"
 
@@ -60,37 +65,50 @@ export interface ExplorerPageProps {
   readonly onNavigate?: (target: AppNavigationTarget, options?: { readonly replace?: boolean }) => void | Promise<unknown>
 }
 
-type AsyncState<T> = {
-  readonly data: T | null
-  readonly error: ExplorerReadError | Error | null
-  readonly loading: boolean
-}
-
 function useAsyncRead<T>(
   enabled: boolean,
   key: string,
   load: (signal: AbortSignal) => Promise<T>,
-): AsyncState<T> & { readonly retry: () => void } {
+): AsyncReadState<T> & { readonly retry: () => void } {
   const loadRef = useRef(load)
   loadRef.current = load
   const [generation, setGeneration] = useState(0)
-  const [state, setState] = useState<AsyncState<T>>({ data: null, error: null, loading: false })
+  const { identityKey, requestKey } = asyncReadToken(enabled, key, generation)
+  const [state, setState] = useState<AsyncReadInternalState<T>>(() => ({
+    data: null,
+    error: null,
+    loading: false,
+    identityKey,
+    requestKey,
+  }))
 
   useEffect(() => {
     if (!enabled) {
-      setState({ data: null, error: null, loading: false })
+      setState({ data: null, error: null, loading: false, identityKey, requestKey })
       return
     }
     const controller = new AbortController()
     let active = true
-    setState((current) => ({ data: current.data, error: null, loading: true }))
+    setState((current) => ({
+      data: current.identityKey === identityKey ? current.data : null,
+      error: null,
+      loading: true,
+      identityKey,
+      requestKey,
+    }))
     void loadRef.current(controller.signal).then(
       (data) => {
-        if (active) setState({ data, error: null, loading: false })
+        if (active) setState({ data, error: null, loading: false, identityKey, requestKey })
       },
       (error: unknown) => {
         if (active && !(error instanceof Error && error.name === "AbortError")) {
-          setState({ data: null, error: error instanceof Error ? error : new Error(String(error)), loading: false })
+          setState((current) => ({
+            data: current.identityKey === identityKey ? current.data : null,
+            error: error instanceof Error ? error : new Error(String(error)),
+            loading: false,
+            identityKey,
+            requestKey,
+          }))
         }
       },
     )
@@ -98,9 +116,12 @@ function useAsyncRead<T>(
       active = false
       controller.abort()
     }
-  }, [enabled, generation, key])
+  }, [enabled, generation, identityKey, key, requestKey])
 
-  return { ...state, retry: () => setGeneration((current) => current + 1) }
+  return {
+    ...visibleAsyncReadState(state, { identityKey, requestKey }, enabled),
+    retry: () => setGeneration((current) => current + 1),
+  }
 }
 
 function queryParams(route: Extract<AppRoute, { kind: "board" }>): URLSearchParams {

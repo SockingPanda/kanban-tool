@@ -110,10 +110,11 @@ fn resolve_cursor(headers: &HeaderMap, after: i64) -> Result<i64, ApiError> {
     Ok(after.max(header_cursor))
 }
 
-/// Headers are committed before the first database poll. A storage or event
-/// conversion failure therefore terminates the body, allowing the client to
-/// reconnect from its last received exclusive cursor instead of receiving a
-/// misleading success frame.
+/// Board lookup, the initial event page, and its frame conversion run before
+/// the `200` response is committed, so their typed failures remain HTTP
+/// errors. Later poll or frame failures occur after headers are committed and
+/// therefore terminate the body; clients can reconnect from their last
+/// received exclusive cursor instead of receiving a misleading success frame.
 struct EventStreamState {
     state: AppState,
     board: String,

@@ -43,6 +43,30 @@ describe("App route parser", () => {
       pathname: "/app/boards/alpha/list",
     })
   })
+
+  test("parses explorer views and preserves URL query state", () => {
+    expect(parseAppRoute("http://kanban.test/app/boards/default/list?status=ready&sort=-updated_at&page=2&q=needle")).toMatchObject({
+      kind: "board",
+      boardSlug: "default",
+      view: "list",
+      query: "status=ready&sort=-updated_at&page=2&q=needle",
+    })
+    expect(parseAppRoute("http://kanban.test/app/boards/default/map?task=t_1")).toMatchObject({
+      kind: "board",
+      view: "map",
+      query: "task=t_1",
+    })
+    expect(parseAppRoute("http://kanban.test/app/boards/default/runs?task=t_1")).toMatchObject({
+      kind: "board",
+      view: "runs",
+      query: "task=t_1",
+    })
+    expect(parseAppRoute("http://kanban.test/app/boards/default/events?after=10")).toMatchObject({
+      kind: "board",
+      view: "events",
+      query: "after=10",
+    })
+  })
 })
 
 describe("History API navigation", () => {

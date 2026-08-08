@@ -1,8 +1,10 @@
 use std::{
+    collections::VecDeque,
     io::{self, Read, Write},
     net::{SocketAddr, TcpStream},
     path::PathBuf,
     process::{Child, Command, Stdio},
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -21,6 +23,7 @@ const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 const HTTP_READ_TIMEOUT: Duration = Duration::from_millis(750);
 const HOST_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MAX_HTTP_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_STDERR_DIAGNOSTIC_BYTES: usize = 16 * 1024;
 
 pub fn default_endpoint() -> SocketAddr {
     SocketAddr::from(([127, 0, 0, 1], DEFAULT_PORT))
@@ -39,7 +42,7 @@ impl HostCompatibility {
         manifest: WebArtifactManifest,
         expected_server_version: &str,
     ) -> Result<Self, CompatibilityError> {
-        if runtime.api_base_url != "" {
+        if !runtime.api_base_url.is_empty() {
             return Err(CompatibilityError::new(
                 "host runtime apiBaseUrl 必须为空并使用同源 API",
             ));
@@ -130,6 +133,11 @@ impl std::error::Error for ProbeError {}
 
 /// 探测固定 loopback host 的 health、runtime 与 Web artifact manifest。
 pub fn probe_host(endpoint: SocketAddr) -> Result<HostCompatibility, ProbeError> {
+    if !endpoint.ip().is_loopback() {
+        return Err(ProbeError::incompatible(
+            "Desktop host probe 只允许 loopback 地址",
+        ));
+    }
     let health = get_json::<HealthResponse>(endpoint, "/health")?;
     if !health.data.ok {
         return Err(ProbeError::incompatible("host health.ok=false"));
@@ -157,6 +165,18 @@ where
         return Err(ProbeError::incompatible(format!(
             "host {path} 返回 HTTP {}，需要 200",
             response.status
+        )));
+    }
+    let media_type = response
+        .content_type
+        .split(';')
+        .next()
+        .map(str::trim)
+        .unwrap_or_default();
+    if !media_type.eq_ignore_ascii_case("application/json") {
+        return Err(ProbeError::incompatible(format!(
+            "host {path} Content-Type 必须为 application/json，实际为 {}",
+            response.content_type
         )));
     }
     serde_json::from_slice(&response.body)
@@ -187,6 +207,7 @@ fn get(endpoint: SocketAddr, path: &str) -> Result<HttpResponse, ProbeError> {
 #[derive(Debug)]
 struct HttpResponse {
     status: u16,
+    content_type: String,
     body: Vec<u8>,
 }
 
@@ -225,38 +246,85 @@ fn read_http_response(stream: &mut TcpStream) -> io::Result<HttpResponse> {
         .and_then(|line| line.split_whitespace().nth(1))
         .and_then(|value| value.parse::<u16>().ok())
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "host probe 状态行无效"))?;
-    let content_length = lines.find_map(|line| {
-        let (name, value) = line.split_once(':')?;
-        name.eq_ignore_ascii_case("content-length")
-            .then(|| value.trim().parse::<usize>().ok())
-            .flatten()
-    });
-
-    let mut body = bytes.split_off(header_end);
-    if let Some(content_length) = content_length {
-        if content_length > MAX_HTTP_RESPONSE_BYTES {
+    let mut content_length = None;
+    let mut content_type = None;
+    for line in lines {
+        if line.is_empty() {
+            continue;
+        }
+        let (name, value) = line.split_once(':').ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "host probe 响应头字段无效")
+        })?;
+        if name.trim().is_empty() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "host probe body 过大",
+                "host probe 响应头字段名为空",
             ));
         }
-        while body.len() < content_length {
-            let remaining = content_length - body.len();
-            let mut chunk = vec![0_u8; remaining.min(4096)];
-            let count = stream.read(&mut chunk)?;
-            if count == 0 {
+        if name.eq_ignore_ascii_case("transfer-encoding") {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "host probe 拒绝 transfer-encoding 响应",
+            ));
+        }
+        if name.eq_ignore_ascii_case("content-length") {
+            if content_length.is_some() {
                 return Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "host probe body 不完整",
+                    io::ErrorKind::InvalidData,
+                    "host probe 拒绝重复 content-length",
                 ));
             }
-            body.extend_from_slice(&chunk[..count]);
+            content_length = Some(value.trim().parse::<usize>().map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "host probe content-length 无效")
+            })?);
+        } else if name.eq_ignore_ascii_case("content-type") {
+            if content_type.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "host probe 拒绝重复 content-type",
+                ));
+            }
+            content_type = Some(value.trim().to_owned());
         }
-        body.truncate(content_length);
-    } else {
-        stream.read_to_end(&mut body)?;
     }
-    Ok(HttpResponse { status, body })
+    let content_length = content_length.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "host probe 响应必须提供 content-length",
+        )
+    })?;
+    let content_type = content_type.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "host probe 响应必须提供 content-type",
+        )
+    })?;
+
+    if content_length > MAX_HTTP_RESPONSE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "host probe body 过大",
+        ));
+    }
+    let mut body = bytes.split_off(header_end);
+    while body.len() < content_length {
+        let remaining = content_length - body.len();
+        let mut chunk = vec![0_u8; remaining.min(4096)];
+        let count = stream.read(&mut chunk)?;
+        if count == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "host probe body 不完整",
+            ));
+        }
+        body.extend_from_slice(&chunk[..count]);
+    }
+    body.truncate(content_length);
+    Ok(HttpResponse {
+        status,
+        content_type,
+        body,
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -353,7 +421,38 @@ pub enum HostOwnership {
 pub struct HostHandle {
     endpoint: SocketAddr,
     ownership: HostOwnership,
-    child: Option<Child>,
+    child: Option<OwnedChild>,
+}
+
+#[derive(Debug)]
+struct OwnedChild {
+    process: Child,
+    stderr: Arc<Mutex<VecDeque<u8>>>,
+    drain: Option<thread::JoinHandle<()>>,
+}
+
+impl OwnedChild {
+    fn diagnostic(&self, status: std::process::ExitStatus) -> String {
+        let bytes = self
+            .stderr
+            .lock()
+            .expect("sidecar stderr 诊断锁已失效")
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        let output = String::from_utf8_lossy(&bytes).trim().to_owned();
+        if output.is_empty() {
+            format!("exit status {status}")
+        } else {
+            format!("exit status {status}: {output}")
+        }
+    }
+
+    fn finish_drain(&mut self) {
+        if let Some(drain) = self.drain.take() {
+            let _ = drain.join();
+        }
+    }
 }
 
 impl HostHandle {
@@ -369,37 +468,45 @@ impl HostHandle {
             return Ok(ShutdownResult::AlreadyExited);
         };
         if child
+            .process
             .try_wait()
             .map_err(|error| ShutdownError::Io(error.to_string()))?
             .is_some()
         {
+            child.finish_drain();
             self.child = None;
             return Ok(ShutdownResult::AlreadyExited);
         }
 
-        if let Err(error) = request_graceful_stop(child) {
-            let _ = child.kill();
-            let _ = child.wait();
+        if let Err(error) = request_graceful_stop(&child.process) {
+            let _ = child.process.kill();
+            let _ = child.process.wait();
+            child.finish_drain();
             self.child = None;
             return Err(ShutdownError::GracefulRequest(error.to_string()));
         }
         let deadline = Instant::now() + GRACEFUL_SHUTDOWN_TIMEOUT;
         loop {
             if child
+                .process
                 .try_wait()
                 .map_err(|error| ShutdownError::Io(error.to_string()))?
                 .is_some()
             {
+                child.finish_drain();
                 self.child = None;
                 return Ok(ShutdownResult::Graceful);
             }
             if Instant::now() >= deadline {
                 child
+                    .process
                     .kill()
                     .map_err(|error| ShutdownError::Io(error.to_string()))?;
                 child
+                    .process
                     .wait()
                     .map_err(|error| ShutdownError::Io(error.to_string()))?;
+                child.finish_drain();
                 self.child = None;
                 return Ok(ShutdownResult::Forced);
             }
@@ -440,14 +547,16 @@ impl std::error::Error for ShutdownError {}
 
 pub fn connect_or_spawn(config: &HostLaunchConfig) -> Result<HostHandle, HostStartupError> {
     match probe_host(config.endpoint) {
-        Ok(_) => {
-            return Ok(HostHandle {
-                endpoint: config.endpoint,
-                ownership: HostOwnership::External,
-                child: None,
-            });
-        }
-        Err(initial_probe) => {
+        Ok(_) => Ok(HostHandle {
+            endpoint: config.endpoint,
+            ownership: HostOwnership::External,
+            child: None,
+        }),
+        Err(ProbeError::Incompatible(message)) => Err(HostStartupError::PortConflict {
+            endpoint: config.endpoint,
+            message,
+        }),
+        Err(initial_probe @ ProbeError::Unavailable(_)) => {
             let mut child = spawn_sidecar(config)?;
             let result = wait_for_sidecar(config, &mut child, initial_probe);
             match result {
@@ -465,7 +574,7 @@ pub fn connect_or_spawn(config: &HostLaunchConfig) -> Result<HostHandle, HostSta
     }
 }
 
-fn spawn_sidecar(config: &HostLaunchConfig) -> Result<Child, HostStartupError> {
+fn spawn_sidecar(config: &HostLaunchConfig) -> Result<OwnedChild, HostStartupError> {
     if !config.sidecar_path.is_file() {
         return Err(HostStartupError::SidecarSpawn {
             path: config.sidecar_path.clone(),
@@ -490,17 +599,51 @@ fn spawn_sidecar(config: &HostLaunchConfig) -> Result<Child, HostStartupError> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
-    command
+    let mut process = command
         .spawn()
         .map_err(|error| HostStartupError::SidecarSpawn {
             path: config.sidecar_path.clone(),
             message: error.to_string(),
-        })
+        })?;
+    let stderr = match process.stderr.take() {
+        Some(stderr) => stderr,
+        None => {
+            let _ = process.kill();
+            let _ = process.wait();
+            return Err(HostStartupError::SidecarSpawn {
+                path: config.sidecar_path.clone(),
+                message: "sidecar stderr 管道创建失败".to_owned(),
+            });
+        }
+    };
+    let diagnostics = Arc::new(Mutex::new(VecDeque::with_capacity(
+        MAX_STDERR_DIAGNOSTIC_BYTES,
+    )));
+    let diagnostics_for_thread = Arc::clone(&diagnostics);
+    let drain = match thread::Builder::new()
+        .name("kanban-desktop-sidecar-stderr".to_owned())
+        .spawn(move || drain_stderr(stderr, diagnostics_for_thread))
+    {
+        Ok(drain) => drain,
+        Err(error) => {
+            let _ = process.kill();
+            let _ = process.wait();
+            return Err(HostStartupError::SidecarSpawn {
+                path: config.sidecar_path.clone(),
+                message: format!("sidecar stderr drain 启动失败: {error}"),
+            });
+        }
+    };
+    Ok(OwnedChild {
+        process,
+        stderr: diagnostics,
+        drain: Some(drain),
+    })
 }
 
 fn wait_for_sidecar(
     config: &HostLaunchConfig,
-    child: &mut Child,
+    child: &mut OwnedChild,
     initial_probe: ProbeError,
 ) -> Result<HostCompatibility, HostStartupError> {
     let deadline = Instant::now() + config.startup_timeout;
@@ -509,13 +652,16 @@ fn wait_for_sidecar(
             Ok(compatibility) => return Ok(compatibility),
             Err(error) => error,
         };
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|error| HostStartupError::SidecarExited {
-                message: error.to_string(),
-            })?
+        if let Some(status) =
+            child
+                .process
+                .try_wait()
+                .map_err(|error| HostStartupError::SidecarExited {
+                    message: error.to_string(),
+                })?
         {
-            let diagnostic = child_diagnostic(child, status);
+            child.finish_drain();
+            let diagnostic = child.diagnostic(status);
             if !initial_probe.is_unavailable()
                 || diagnostic
                     .to_ascii_lowercase()
@@ -546,25 +692,29 @@ fn wait_for_sidecar(
     }
 }
 
-fn child_diagnostic(child: &mut Child, status: std::process::ExitStatus) -> String {
-    let mut output = String::new();
-    if let Some(mut stderr) = child.stderr.take() {
-        let mut bytes = Vec::new();
-        let _ = stderr.by_ref().take(16 * 1024).read_to_end(&mut bytes);
-        output = String::from_utf8_lossy(&bytes).trim().to_owned();
-    }
-    if output.is_empty() {
-        format!("exit status {status}")
-    } else {
-        format!("exit status {status}: {output}")
+fn drain_stderr(mut stderr: impl Read, diagnostics: Arc<Mutex<VecDeque<u8>>>) {
+    let mut chunk = [0_u8; 4096];
+    loop {
+        let count = match stderr.read(&mut chunk) {
+            Ok(0) | Err(_) => return,
+            Ok(count) => count,
+        };
+        let mut buffer = diagnostics.lock().expect("sidecar stderr 诊断锁已失效");
+        for byte in &chunk[..count] {
+            if buffer.len() == MAX_STDERR_DIAGNOSTIC_BYTES {
+                buffer.pop_front();
+            }
+            buffer.push_back(*byte);
+        }
     }
 }
 
-fn force_stop(child: &mut Child) -> io::Result<()> {
-    if child.try_wait()?.is_none() {
-        child.kill()?;
+fn force_stop(child: &mut OwnedChild) -> io::Result<()> {
+    if child.process.try_wait()?.is_none() {
+        child.process.kill()?;
     }
-    let _ = child.wait();
+    let _ = child.process.wait();
+    child.finish_drain();
     Ok(())
 }
 
@@ -593,6 +743,9 @@ mod tests {
         net::TcpListener,
         thread,
     };
+
+    #[cfg(unix)]
+    use std::os::unix::process::CommandExt;
 
     use kanban_protocol::{
         HealthReport, HealthResponse, WEB_ARTIFACT_ENTRYPOINT, WEB_ARTIFACT_FORMAT_VERSION,
@@ -696,6 +849,72 @@ mod tests {
     }
 
     #[test]
+    fn probe_rejects_unbounded_http_response_headers() {
+        let endpoint = spawn_raw_host([
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{}".to_vec(),
+        ]);
+        let error = probe_host(endpoint).expect_err("missing content-length must fail closed");
+        assert!(
+            matches!(error, ProbeError::Unavailable(message) if message.contains("content-length"))
+        );
+
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            MAX_HTTP_RESPONSE_BYTES + 1
+        );
+        let endpoint = spawn_raw_host([response.into_bytes()]);
+        let error = probe_host(endpoint).expect_err("oversized body must fail closed");
+        assert!(matches!(error, ProbeError::Unavailable(message) if message.contains("body 过大")));
+    }
+
+    #[test]
+    fn incompatible_occupied_port_does_not_spawn_sidecar() {
+        let health = HealthResponse::new(HealthReport {
+            ok: true,
+            db: "turso".to_owned(),
+            version: "0.0.0".to_owned(),
+            db_path: "private".to_owned(),
+            db_fingerprint: "private".to_owned(),
+        });
+        let endpoint = spawn_json_host([serde_json::to_vec(&health).expect("health JSON")]);
+        let marker = std::env::temp_dir().join(format!(
+            "kanban-desktop-no-spawn-marker-{}",
+            std::process::id()
+        ));
+        let sidecar = std::env::temp_dir().join(format!(
+            "kanban-desktop-no-spawn-sidecar-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&marker);
+        let _ = std::fs::remove_file(&sidecar);
+        let script = format!(
+            "#!/bin/sh\nprintf spawned > {}\nsleep 5\n",
+            marker.display()
+        );
+        std::fs::write(&sidecar, script).expect("sidecar fixture");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&sidecar)
+                .expect("sidecar metadata")
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&sidecar, permissions).expect("sidecar executable");
+        }
+
+        let mut config = HostLaunchConfig::new(sidecar.clone(), "web", "db", "actor", "board");
+        config.endpoint = endpoint;
+        let error = connect_or_spawn(&config).expect_err("incompatible host must block spawn");
+        assert!(matches!(error, HostStartupError::PortConflict { .. }));
+        assert!(
+            !marker.exists(),
+            "sidecar marker proves an unexpected spawn"
+        );
+        let _ = std::fs::remove_file(marker);
+        let _ = std::fs::remove_file(sidecar);
+    }
+
+    #[test]
     fn external_host_shutdown_is_a_noop() {
         let mut handle = HostHandle {
             endpoint: default_endpoint(),
@@ -708,11 +927,114 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn owned_host_shutdown_gracefully_stops_child() {
+        let process = test_sleep_child(false);
+        let mut handle = HostHandle {
+            endpoint: default_endpoint(),
+            ownership: HostOwnership::Owned,
+            child: Some(test_owned_child(process)),
+        };
+        assert_eq!(
+            handle.shutdown().expect("owned graceful shutdown"),
+            ShutdownResult::Graceful
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn owned_host_shutdown_forces_child_after_graceful_timeout() {
+        let process = test_sleep_child(true);
+        let mut handle = HostHandle {
+            endpoint: default_endpoint(),
+            ownership: HostOwnership::Owned,
+            child: Some(test_owned_child(process)),
+        };
+        assert_eq!(
+            handle.shutdown().expect("owned force shutdown"),
+            ShutdownResult::Forced
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn external_host_shutdown_never_kills_process() {
+        let process = test_sleep_child(false);
+        let mut handle = HostHandle {
+            endpoint: default_endpoint(),
+            ownership: HostOwnership::External,
+            child: Some(test_owned_child(process)),
+        };
+        assert_eq!(
+            handle.shutdown().expect("external shutdown"),
+            ShutdownResult::ExternalHostKept
+        );
+        let child = handle.child.as_mut().expect("external process retained");
+        assert!(child.process.try_wait().expect("external status").is_none());
+        child.process.kill().expect("cleanup external fixture");
+        child.process.wait().expect("wait external fixture");
+        child.finish_drain();
+    }
+
+    #[cfg(unix)]
+    fn test_owned_child(mut process: Child) -> OwnedChild {
+        let stderr = process.stderr.take().expect("stderr fixture pipe");
+        let diagnostics = Arc::new(Mutex::new(VecDeque::with_capacity(
+            MAX_STDERR_DIAGNOSTIC_BYTES,
+        )));
+        let diagnostics_for_thread = Arc::clone(&diagnostics);
+        let drain = thread::spawn(move || drain_stderr(stderr, diagnostics_for_thread));
+        OwnedChild {
+            process,
+            stderr: diagnostics,
+            drain: Some(drain),
+        }
+    }
+
+    #[cfg(unix)]
+    fn test_sleep_child(ignore_sigint: bool) -> Child {
+        let mut command = Command::new("sleep");
+        command
+            .arg("10")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
+        unsafe {
+            command.pre_exec(move || {
+                let handler = if ignore_sigint {
+                    libc::SIG_IGN
+                } else {
+                    libc::SIG_DFL
+                };
+                if libc::signal(libc::SIGINT, handler) == libc::SIG_ERR {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        command.spawn().expect("sleep fixture")
+    }
+
     fn spawn_json_host<const N: usize>(responses: [Vec<u8>; N]) -> std::net::SocketAddr {
+        let responses = responses.map(|body| {
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                )
+                .into_bytes()
+                    .into_iter()
+                    .chain(body)
+                    .collect::<Vec<_>>()
+            });
+        spawn_raw_host(responses)
+    }
+
+    fn spawn_raw_host<const N: usize>(responses: [Vec<u8>; N]) -> std::net::SocketAddr {
         let listener = TcpListener::bind((DEFAULT_HOST, 0)).expect("probe fixture listener");
         let endpoint = listener.local_addr().expect("fixture address");
         thread::spawn(move || {
-            for body in responses {
+            for response in responses {
                 let (mut stream, _) = listener.accept().expect("fixture connection");
                 let mut request = Vec::new();
                 let mut chunk = [0_u8; 1024];
@@ -723,13 +1045,7 @@ mod tests {
                     }
                     request.extend_from_slice(&chunk[..count]);
                 }
-                write!(
-                    stream,
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    body.len()
-                )
-                .expect("fixture response headers");
-                stream.write_all(&body).expect("fixture response body");
+                stream.write_all(&response).expect("fixture response");
             }
         });
         endpoint

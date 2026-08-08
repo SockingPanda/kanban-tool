@@ -97,38 +97,15 @@ fn start_desktop_host(app: &tauri::App) -> tauri::Result<HostHandle> {
 }
 
 fn resolve_sidecar_path(resource_dir: &std::path::Path) -> tauri::Result<PathBuf> {
-    if let Some(path) = first_non_empty_env(&["KANBAN_DESKTOP_SIDECAR"]) {
-        let path = PathBuf::from(path);
-        if path.is_file() {
-            return Ok(path);
-        }
-        return Err(setup_error_message(format!(
-            "KANBAN_DESKTOP_SIDECAR 不是文件: {}",
+    let path = resource_dir.join("kanban");
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err(setup_error_message(format!(
+            "bundled kanban serve sidecar 不存在于精确路径 {}",
             path.display()
-        )));
+        )))
     }
-    let mut candidates = vec![resource_dir.join("kanban"), resource_dir.join("bin/kanban")];
-    if let Ok(entries) = fs::read_dir(resource_dir) {
-        candidates.extend(
-            entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| {
-                    path.file_name()
-                        .and_then(|name| name.to_str())
-                        .is_some_and(|name| name.starts_with("kanban-"))
-                }),
-        );
-    }
-    candidates
-        .into_iter()
-        .find(|path| path.is_file())
-        .ok_or_else(|| {
-            setup_error_message(format!(
-                "bundled kanban serve sidecar 不存在于 {}",
-                resource_dir.display()
-            ))
-        })
 }
 
 fn navigate_main_window(app: &tauri::App, app_url: &str) -> tauri::Result<()> {
@@ -333,10 +310,10 @@ fn show_main_window(app: &tauri::AppHandle) {
 }
 
 fn quit_app(app: &tauri::AppHandle) {
-    if let Some(host) = app.try_state::<DesktopHost>() {
-        if let Err(error) = host.shutdown() {
-            eprintln!("kanban owned host graceful shutdown 失败：{error}");
-        }
+    if let Some(host) = app.try_state::<DesktopHost>()
+        && let Err(error) = host.shutdown()
+    {
+        eprintln!("kanban owned host graceful shutdown 失败：{error}");
     }
     app.exit(0);
 }

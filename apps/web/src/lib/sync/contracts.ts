@@ -103,6 +103,8 @@ export interface StreamContractAdapter {
   /** Parse a canonical JSON event returned by polling/catch-up without SSE headers. */
   parsePollingEnvelope(value: unknown): EnvelopeParseResult
   validateBusiness(envelope: EnvelopeCandidate): BusinessValidationResult
+  /** Return true only for generated protocol control event names. */
+  isControlFrame(frame: RawSseFrame): boolean
   validateControl(frame: RawSseFrame): ControlValidationResult
 }
 
@@ -137,6 +139,8 @@ export interface RecoveryBoundary {
   readonly highWatermark: number
   readonly byId: ReadonlyMap<number, string>
   readonly byEventId: ReadonlyMap<string, string>
+  /** Validated accepted events in server order, used to replay query effects. */
+  readonly events: readonly ValidatedBusinessEvent[]
   readonly token: SyncToken
   readonly revision: number
   readonly published: boolean
@@ -153,11 +157,14 @@ export interface PollEventsPage {
   readonly nextAfter: number
   readonly hasMore: boolean
   readonly noGap: boolean
+  /** Optional published boundary returned by catch-up polling. */
+  readonly boundary?: RecoveryBoundary
+  readonly confirmedCursor?: number
 }
 
 export interface SyncQuerySink<TEvent = ValidatedBusinessEvent> {
   onEvent(event: TEvent, plan: InvalidationPlan, token: SyncToken): Promise<void>
-  refetchObserved(mode: RecoveryMode, token: SyncToken, after: number): Promise<RecoveryResult>
+  refetchObserved(mode: RecoveryMode, token: SyncToken, after: number, expectedRevision: number): Promise<RecoveryResult>
   pollEvents(query: unknown, signal: AbortSignal): Promise<PollEventsPage>
 }
 

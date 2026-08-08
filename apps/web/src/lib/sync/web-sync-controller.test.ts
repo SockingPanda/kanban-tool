@@ -64,6 +64,7 @@ function adapterFor(event: ValidatedBusinessEvent): StreamContractAdapter {
         : { ...event, id: envelope.id, eventId: envelope.eventId, kind: envelope.kind, raw: envelope.raw, canonicalFingerprint: `fp-${envelope.id}` }
       return currentEvent.known ? { status: "known", event: currentEvent } : { status: "unknown", event: currentEvent }
     },
+    isControlFrame: (frame): boolean => frame.eventName === "kb-heartbeat",
     validateControl: (): ControlValidationResult => ({ status: "valid", control: { raw: {} } }),
   }
 }
@@ -98,7 +99,7 @@ function fakeClock(): { clock: SyncClock; advance: (ms: number) => void } {
 }
 
 type EventHandler = (event: ValidatedBusinessEvent, plan: InvalidationPlan, token: SyncToken) => Promise<void>
-type RecoveryHandler = (mode: "F" | "R", token: SyncToken, after: number) => Promise<RecoveryResult>
+type RecoveryHandler = (mode: "F" | "R", token: SyncToken, after: number, expectedRevision: number) => Promise<RecoveryResult>
 type PollHandler = (query: unknown, signal: AbortSignal) => Promise<PollEventsPage>
 
 interface TestSink {
@@ -121,7 +122,7 @@ function sink(): TestSink {
     onEvent: vi.fn<EventHandler>(async (event) => {
       state.events.push(event)
     }),
-    refetchObserved: vi.fn<RecoveryHandler>(async (mode, token) => {
+    refetchObserved: vi.fn<RecoveryHandler>(async (mode, token, _after, expectedRevision) => {
       state.recoveries.push(mode)
       return {
         confirmedCursor: 1,
@@ -130,8 +131,9 @@ function sink(): TestSink {
           highWatermark: 1,
           byId: new Map([[1, "fp-1"]]),
           byEventId: new Map([["e-1", "fp-1"]]),
+          events: [],
           token,
-          revision: 1,
+          revision: expectedRevision,
           published: true,
         },
       }
@@ -165,6 +167,39 @@ describe("WebSyncController", () => {
     expect(controller.snapshot().seenIds).toBe(1)
   })
 
+  test("serializes frames and EOF so transport recovery starts after the committed cursor", async () => {
+    const querySink = sink()
+    let releaseFirst: () => void = () => undefined
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    querySink.onEvent.mockImplementation(async (event) => {
+      if (event.id === 1) await firstGate
+    })
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(businessEvent()),
+      sink: querySink,
+    })
+
+    controller.start()
+    const request = transport.mock.calls[0]?.[0]
+    request?.onFrame({ eventName: "task.updated", id: "1", data: "{}" })
+    request?.onFrame({ eventName: "task.updated", id: "2", data: "{}" })
+    request?.onEof()
+    await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledOnce())
+    expect(querySink.refetchObserved).not.toHaveBeenCalled()
+    expect(controller.snapshot().lastConfirmedCursor).toBe(0)
+
+    releaseFirst()
+    await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledWith("R", expect.anything(), 2, expect.any(Number)))
+    expect(controller.snapshot().lastConfirmedCursor).toBe(2)
+  })
+
   test("routes named heartbeat to liveness only", async () => {
     const querySink = sink()
     const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
@@ -182,11 +217,12 @@ describe("WebSyncController", () => {
     controller.start()
     const frame = transport.mock.calls[0]?.[0]
     frame?.onFrame({ eventName: "kb-heartbeat", id: null, data: "{}" })
+    await Promise.resolve()
     advance(34)
     await Promise.resolve()
     expect(querySink.refetchObserved).not.toHaveBeenCalled()
     advance(1)
-    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledWith("R", expect.anything(), 0))
+    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledWith("R", expect.anything(), 0, expect.any(Number)))
     expect(querySink.onEvent).not.toHaveBeenCalled()
   })
 
@@ -205,9 +241,69 @@ describe("WebSyncController", () => {
     controller.start()
     const frame = transport.mock.calls[0]?.[0]
     frame?.onFrame({ eventName: unknown.kind, id: String(unknown.id), data: "{}" })
-    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledWith("F", expect.anything(), 0))
+    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledWith("F", expect.anything(), 0, expect.any(Number)))
     expect(querySink.onEvent).toHaveBeenCalledOnce()
     expect(controller.snapshot().lastConfirmedCursor).toBe(1)
+  })
+
+  test("does not repeat unknown E while its F barrier is in flight", async () => {
+    const querySink = sink()
+    const unknown = businessEvent({ kind: "task.attachment.created", known: false })
+    let resolveBarrier: (result: RecoveryResult) => void = () => undefined
+    querySink.refetchObserved.mockImplementationOnce((_mode, token) => new Promise<RecoveryResult>((resolve) => {
+      resolveBarrier = () => resolve({
+        confirmedCursor: 1,
+        noGap: true,
+        boundary: {
+          highWatermark: 1,
+          byId: new Map([[1, "fp-1"]]),
+          byEventId: new Map([["e-1", "fp-1"]]),
+          events: [unknown],
+          token,
+          revision: 1,
+          published: true,
+        },
+      })
+    }))
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(unknown),
+      sink: querySink,
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onFrame({ eventName: unknown.kind, id: String(unknown.id), data: "{}" })
+    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledWith("F", expect.anything(), 0, expect.any(Number)))
+    expect(controller.snapshot().lastConfirmedCursor).toBe(0)
+    expect(controller.snapshot().seenIds).toBe(0)
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(2))
+    transport.mock.calls[1]?.[0].onFrame({ eventName: unknown.kind, id: String(unknown.id), data: "{}" })
+    await Promise.resolve()
+    expect(querySink.onEvent).toHaveBeenCalledOnce()
+    expect(querySink.refetchObserved).toHaveBeenCalledOnce()
+
+    resolveBarrier({
+      confirmedCursor: 1,
+      noGap: true,
+      boundary: {
+        highWatermark: 1,
+        byId: new Map([[1, "fp-1"]]),
+        byEventId: new Map([["e-1", "fp-1"]]),
+        events: [unknown],
+        token: {
+          boardId: "board-a",
+          connectionEpoch: controller.snapshot().connectionEpoch,
+          generation: controller.snapshot().generation,
+        },
+        revision: 1,
+        published: true,
+      },
+    })
+    await vi.waitFor(() => expect(controller.snapshot().lastConfirmedCursor).toBe(1))
+    expect(querySink.onEvent).toHaveBeenCalledOnce()
   })
 
   test("fences old epoch frames after board switch", async () => {
@@ -240,6 +336,7 @@ describe("WebSyncController", () => {
           highWatermark: 1,
           byId: new Map([[1, "fp-1"]]),
           byEventId: new Map([["e-1", "fp-1"]]),
+          events: [],
           token,
           revision: 1,
           published: true,
@@ -261,6 +358,8 @@ describe("WebSyncController", () => {
     transport.mock.calls[1]?.[0].onFrame({ eventName: "task.updated", id: "2", data: "{}" })
     await Promise.resolve()
     expect(querySink.onEvent).not.toHaveBeenCalled()
+    expect(controller.snapshot().lastConfirmedCursor).toBe(0)
+    expect(controller.snapshot().seenIds).toBe(0)
 
     resolveBarrier({
       confirmedCursor: 1,
@@ -269,9 +368,12 @@ describe("WebSyncController", () => {
         highWatermark: 1,
         byId: new Map([[1, "fp-1"]]),
         byEventId: new Map([["e-1", "fp-1"]]),
-        token: controller.snapshot().connectionEpoch === 2
-          ? { boardId: "board-a", connectionEpoch: 2, generation: 0 }
-          : { boardId: "board-a", connectionEpoch: 1, generation: 0 },
+        events: [],
+        token: {
+          boardId: "board-a",
+          connectionEpoch: controller.snapshot().connectionEpoch,
+          generation: controller.snapshot().generation,
+        },
         revision: 1,
         published: true,
       },
@@ -280,20 +382,194 @@ describe("WebSyncController", () => {
     expect(controller.snapshot().lastConfirmedCursor).toBe(2)
   })
 
+  test("replays accepted boundary events before publishing its cursor", async () => {
+    const querySink = sink()
+    const accepted = businessEvent({ id: 1, eventId: "e-1", canonicalFingerprint: "fp-1" })
+    querySink.refetchObserved.mockImplementationOnce((_mode, token) => Promise.resolve({
+      confirmedCursor: 1,
+      noGap: true,
+      boundary: {
+        highWatermark: 1,
+        byId: new Map([[1, accepted.canonicalFingerprint]]),
+        byEventId: new Map([[accepted.eventId, accepted.canonicalFingerprint]]),
+        events: [accepted],
+        token,
+        revision: 1,
+        published: true,
+      },
+    }))
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(accepted),
+      sink: querySink,
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledOnce())
+    expect(querySink.onEvent.mock.calls[0]?.[0]).toEqual(accepted)
+    expect(controller.snapshot().lastConfirmedCursor).toBe(1)
+  })
+
+  test("starts a fresh non-budgeted F when an unknown event arrives during recovery", async () => {
+    const querySink = sink()
+    const known = businessEvent()
+    const unknown = businessEvent({ id: 2, eventId: "e-2", kind: "task.attachment.created", canonicalFingerprint: "fp-2", known: false })
+    let resolveBarrier: (result: RecoveryResult) => void = () => undefined
+    let firstRecoveryToken: SyncToken | null = null
+    querySink.refetchObserved.mockImplementationOnce((_mode, token) => new Promise<RecoveryResult>((resolve) => {
+      firstRecoveryToken = token
+      resolveBarrier = () => resolve({
+        confirmedCursor: 1,
+        noGap: true,
+        boundary: {
+          highWatermark: 1,
+          byId: new Map([[1, known.canonicalFingerprint]]),
+          byEventId: new Map([[known.eventId, known.canonicalFingerprint]]),
+          events: [known],
+          token,
+          revision: 1,
+          published: true,
+        },
+      })
+    }))
+    const baseAdapter = adapterFor(known)
+    const adapter: StreamContractAdapter = {
+      ...baseAdapter,
+      validateBusiness: (envelope) => envelope.id === unknown.id
+        ? { status: "unknown", event: { ...unknown, raw: envelope.raw, kind: envelope.kind } }
+        : baseAdapter.validateBusiness(envelope),
+    }
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter,
+      sink: querySink,
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledWith("R", expect.anything(), 0, 1))
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(2))
+    await controller.processFrame({ eventName: unknown.kind, id: "2", data: "{}" }, {
+      boardId: "board-a",
+      connectionEpoch: controller.snapshot().connectionEpoch,
+      generation: controller.snapshot().generation,
+    })
+    resolveBarrier({
+      confirmedCursor: 1,
+      noGap: true,
+      boundary: {
+        highWatermark: 1,
+        byId: new Map([[1, known.canonicalFingerprint]]),
+        byEventId: new Map([[known.eventId, known.canonicalFingerprint]]),
+        events: [known],
+        token: firstRecoveryToken ?? controller.snapshot(),
+        revision: 1,
+        published: true,
+      },
+    })
+    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledWith("F", expect.anything(), 0, 2))
+    expect(querySink.onEvent).toHaveBeenCalledTimes(2)
+    expect(querySink.onEvent.mock.calls.map((entry) => entry[0].eventId)).toEqual([known.eventId, unknown.eventId])
+  })
+
+  test("discards a stale recovery revision and reissues under a new token", async () => {
+    const querySink = sink()
+    const telemetry: { type: string }[] = []
+    let call = 0
+    querySink.refetchObserved.mockImplementation(async (_mode, token) => {
+      call += 1
+      return {
+        confirmedCursor: 0,
+        noGap: true,
+        boundary: {
+          highWatermark: 0,
+          byId: new Map(),
+          byEventId: new Map(),
+          events: [],
+          token,
+          revision: call === 1 ? 99 : 2,
+          published: true,
+        },
+      }
+    })
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(businessEvent()),
+      sink: querySink,
+      telemetry: { record: (entry) => telemetry.push({ type: entry.type }) },
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledTimes(2))
+    expect(telemetry.map((entry) => entry.type)).not.toContain("protocol-anomaly")
+    expect(telemetry.map((entry) => entry.type)).not.toContain("recovery-failure")
+  })
+
+  test("prevalidates the complete boundary before replaying any projection effect", async () => {
+    const querySink = sink()
+    const first = businessEvent({ id: 1, eventId: "e-1", canonicalFingerprint: "fp-1" })
+    const conflicting = businessEvent({ id: 2, eventId: "e-2", canonicalFingerprint: "fp-2" })
+    const failures: string[] = []
+    querySink.refetchObserved.mockImplementationOnce((_mode, token, _after, expectedRevision) => Promise.resolve({
+      confirmedCursor: 2,
+      noGap: true,
+      boundary: {
+        highWatermark: 2,
+        byId: new Map([[1, first.canonicalFingerprint], [2, "wrong-id-fingerprint"]]),
+        byEventId: new Map([[first.eventId, first.canonicalFingerprint], [conflicting.eventId, "wrong-event-fingerprint"]]),
+        events: [first, conflicting],
+        token,
+        revision: expectedRevision,
+        published: true,
+      },
+    }))
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(first),
+      sink: querySink,
+      telemetry: { record: (entry) => { if (entry.type === "recovery-failure") failures.push(entry.type) } },
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(failures).toHaveLength(1))
+    expect(querySink.onEvent).not.toHaveBeenCalled()
+    expect(controller.snapshot().lastConfirmedCursor).toBe(0)
+    expect(controller.snapshot().seenIds).toBe(0)
+  })
+
   test("runs polling through the adapter pipeline while SSE is recovering", async () => {
     const querySink = sink()
-    querySink.refetchObserved.mockImplementation(async (_mode, token) => ({
+    querySink.refetchObserved.mockImplementation(async (mode, token, _after, expectedRevision) => {
+      querySink.recoveries.push(mode)
+      return {
       confirmedCursor: 0,
       noGap: true,
       boundary: {
         highWatermark: 0,
         byId: new Map(),
         byEventId: new Map(),
+        events: [],
         token,
-        revision: 1,
+        revision: expectedRevision,
         published: true,
       },
-    }))
+      }
+    })
     querySink.pollEvents.mockResolvedValue({
       events: [{ id: 1 }],
       nextAfter: 1,
@@ -314,28 +590,82 @@ describe("WebSyncController", () => {
 
     controller.start()
     transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await Promise.resolve()
     advance(5)
     await vi.waitFor(() => expect(querySink.pollEvents).toHaveBeenCalledOnce())
     await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledOnce())
     expect(querySink.onEvent.mock.calls[0]?.[0].id).toBe(1)
   })
 
-  test("opens an anomaly circuit after three retries and keeps only polling", async () => {
+  test("dedupes the same event when SSE and polling overlap", async () => {
     const querySink = sink()
-    querySink.refetchObserved.mockImplementation(async (_mode, token) => ({
-      confirmedCursor: 0,
+    let resolveBarrier: (result: RecoveryResult) => void = () => undefined
+    querySink.refetchObserved.mockImplementationOnce((_mode, token) => new Promise<RecoveryResult>((resolve) => {
+      resolveBarrier = () => resolve({
+        confirmedCursor: 1,
+        noGap: true,
+        boundary: {
+          highWatermark: 1,
+          byId: new Map([[1, "fp-1"]]),
+          byEventId: new Map([["e-1", "fp-1"]]),
+          events: [],
+          token,
+          revision: 1,
+          published: true,
+        },
+      })
+    }))
+    querySink.pollEvents.mockResolvedValue({ events: [{ id: 1 }], nextAfter: 1, hasMore: false, noGap: true })
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const { clock, advance } = fakeClock()
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(businessEvent()),
+      sink: querySink,
+      clock,
+      pollingIntervalMs: 5,
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(2))
+    transport.mock.calls[1]?.[0].onFrame({ eventName: "task.updated", id: "1", data: "{}" })
+    await Promise.resolve()
+    advance(5)
+    await vi.waitFor(() => expect(querySink.pollEvents).toHaveBeenCalledOnce())
+    resolveBarrier({
+      confirmedCursor: 1,
       noGap: true,
       boundary: {
-        highWatermark: 0,
-        byId: new Map(),
-        byEventId: new Map(),
-        token,
+        highWatermark: 1,
+        byId: new Map([[1, "fp-1"]]),
+        byEventId: new Map([["e-1", "fp-1"]]),
+        events: [],
+        token: {
+          boardId: "board-a",
+          connectionEpoch: controller.snapshot().connectionEpoch,
+          generation: controller.snapshot().generation,
+        },
         revision: 1,
         published: true,
       },
-    }))
-    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    })
+    await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledOnce())
+    expect(controller.snapshot().lastConfirmedCursor).toBe(1)
+  })
+
+  test("opens an anomaly circuit after three retries and keeps only polling", async () => {
+    const querySink = sink()
     const { clock, advance } = fakeClock()
+    const recoveryStarts: number[] = []
+    querySink.refetchObserved.mockImplementation(async (mode) => {
+      querySink.recoveries.push(mode)
+      recoveryStarts.push(clock.now())
+      throw new Error("boundary unavailable")
+    })
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
     const adapter: StreamContractAdapter = {
       ...adapterFor(businessEvent()),
       parseEnvelope: () => ({ status: "invalid", code: "malformed" }),
@@ -351,15 +681,101 @@ describe("WebSyncController", () => {
     })
 
     controller.start()
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      await vi.waitFor(() => expect(transport.mock.calls.length).toBeGreaterThan(attempt))
-      transport.mock.calls[attempt]?.[0].onFrame({ eventName: "task.updated", id: String(attempt + 1), data: "{}" })
-      await Promise.resolve()
-    }
+    transport.mock.calls[0]?.[0].onFrame({ eventName: "task.updated", id: "1", data: "{}" })
+    await Promise.resolve()
+    advance(250)
+    await Promise.resolve()
+    advance(1_000)
+    await Promise.resolve()
+    advance(5_000)
     await vi.waitFor(() => expect(controller.snapshot().circuitOpen).toBe(true))
+    expect(querySink.refetchObserved).toHaveBeenCalledTimes(3)
+    expect(recoveryStarts).toEqual([250, 1_250, 6_250])
     const streamCalls = transport.mock.calls.length
     advance(5)
     await vi.waitFor(() => expect(querySink.pollEvents).toHaveBeenCalled())
     expect(transport.mock.calls.length).toBe(streamCalls)
+  })
+
+  test("keeps circuit polling fail-closed until a compatible boundary is committed", async () => {
+    const querySink = sink()
+    const { clock, advance } = fakeClock()
+    const recoveryStarts: number[] = []
+    querySink.refetchObserved.mockImplementation(async (mode) => {
+      querySink.recoveries.push(mode)
+      recoveryStarts.push(clock.now())
+      throw new Error("boundary unavailable")
+    })
+    let circuitPolls = 0
+    let allowBoundary = false
+    const pollAnomalies: string[] = []
+    querySink.pollEvents.mockImplementation(async () => {
+      if (!controller.snapshot().circuitOpen) return { events: [], nextAfter: 0, hasMore: false, noGap: true }
+      circuitPolls += 1
+      if (!allowBoundary) return { events: [{ id: 1 }], nextAfter: 1, hasMore: false, noGap: true }
+      const event = businessEvent()
+      const token: SyncToken = {
+        boardId: controller.snapshot().boardId,
+        connectionEpoch: controller.snapshot().connectionEpoch,
+        generation: controller.snapshot().generation,
+      }
+      return {
+        events: [],
+        nextAfter: 1,
+        hasMore: false,
+        noGap: true,
+        confirmedCursor: 1,
+        boundary: {
+          highWatermark: 1,
+          byId: new Map([[1, event.canonicalFingerprint]]),
+          byEventId: new Map([[event.eventId, event.canonicalFingerprint]]),
+          events: [event],
+          token,
+          revision: 1,
+          published: true,
+        },
+      }
+    })
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const adapter: StreamContractAdapter = {
+      ...adapterFor(businessEvent()),
+      parseEnvelope: () => ({ status: "invalid", code: "malformed" }),
+    }
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter,
+      sink: querySink,
+      clock,
+      pollingIntervalMs: 5,
+      telemetry: { record: (entry) => { if (entry.type === "poll-protocol-anomaly") pollAnomalies.push(String(entry.details?.reason)) } },
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onFrame({ eventName: "task.updated", id: "1", data: "{}" })
+    await Promise.resolve()
+    advance(250)
+    await Promise.resolve()
+    advance(1_000)
+    await Promise.resolve()
+    advance(5_000)
+    await vi.waitFor(() => expect(controller.snapshot().circuitOpen).toBe(true))
+    advance(5)
+    await vi.waitFor(() => expect(circuitPolls).toBeGreaterThan(0))
+    expect(controller.snapshot().lastConfirmedCursor).toBe(0)
+    expect(querySink.onEvent).not.toHaveBeenCalled()
+    const pollCountBeforeBoundary = circuitPolls
+    const anomalyCountBeforeBoundary = pollAnomalies.length
+    allowBoundary = true
+    for (let step = 0; step < 20 && querySink.onEvent.mock.calls.length === 0; step += 1) {
+      await Promise.resolve()
+      advance(5)
+    }
+    await vi.waitFor(() => expect(circuitPolls).toBeGreaterThan(pollCountBeforeBoundary))
+    expect(pollAnomalies).toHaveLength(anomalyCountBeforeBoundary)
+    await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledOnce())
+    expect(controller.snapshot().circuitOpen).toBe(false)
+    expect(controller.snapshot().lastConfirmedCursor).toBe(1)
   })
 })

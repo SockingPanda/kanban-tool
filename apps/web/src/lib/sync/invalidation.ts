@@ -88,7 +88,7 @@ export function targetKey(target: QueryTarget): string {
   return target.root
 }
 
-export function fullRefetchPlan(eventKind: string, kind: "known" | "unknown" = "unknown", boardId = "active"): InvalidationPlan {
+export function fullRefetchPlan(eventKind: string, kind: "known" | "unknown", boardId: string): InvalidationPlan {
   const targets: QueryTarget[] = FULL_BOARD_ROOTS.map((root) => ({ root, ...(root === "maintenance-status" ? {} : { boardId }) }))
   targets.push(
     { root: "task-detail", boardId, observedOnly: true },
@@ -102,6 +102,7 @@ export function fullRefetchPlan(eventKind: string, kind: "known" | "unknown" = "
     { root: "task-run-log", boardId, observedOnly: true },
     { root: "task-events", boardId, observedOnly: true },
     { root: "signals", boardId, observedOnly: true },
+    { root: "signal", boardId, observedOnly: true },
     { root: "label-ontology-signal", boardId, observedOnly: true },
     { root: "label-ontology-atom", boardId, observedOnly: true },
   )

@@ -96,6 +96,7 @@ describe("literal event invalidation plans", () => {
   test("returns the conservative board plan for unknown events", () => {
     const plan = classifyEvent(event({ kind: "task.attachment.created", known: false }))
     expect(plan).toEqual(fullRefetchPlan("task.attachment.created", "unknown", "board-a"))
+    expect(plan.targets).toContainEqual({ root: "signal", boardId: "board-a", observedOnly: true })
   })
 
   test("covers every generated known literal without prefix matching", () => {

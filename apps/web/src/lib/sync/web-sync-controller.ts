@@ -20,6 +20,14 @@ import type {
 
 type ControllerState = "idle" | "connecting" | "live" | "recovering" | "polling" | "circuit-open" | "stopped"
 
+interface RecoveryStage {
+  readonly baseCursor: number
+  readonly expectedRevision: number
+  readonly seenIds: Map<number, string>
+  readonly seenEventIds: Map<string, string>
+  cursor: number
+}
+
 export interface StreamUrlContext {
   readonly boardId: string
   readonly after: number
@@ -113,10 +121,16 @@ export class WebSyncController {
   private connectionAbort: AbortController | null = null
   private livenessTimer: number | null = null
   private pollingTimer: number | null = null
+  private recoveryStartTimer: number | null = null
   private pollingAbort: AbortController | null = null
+  private pollingBoundaryCommit: Promise<boolean> | null = null
   private recovery: Promise<void> | null = null
   private recoveryBuffer: ValidatedBusinessEvent[] = []
   private recoverySawLiveFrame = false
+  private recoveryStage: RecoveryStage | null = null
+  private readonly recoveryPreApplied = new Map<string, string>()
+  private recoveryRevision = 0
+  private ingestTail: Promise<void> = Promise.resolve()
   private readonly seenIds = new Map<number, string>()
   private readonly seenEventIds = new Map<string, string>()
   private readonly anomalyAttempts = new Map<string, number>()
@@ -156,8 +170,9 @@ export class WebSyncController {
     this.closeConnection()
     this.stopPolling()
     this.clearLiveness()
+    this.clearRecoveryStartTimer()
     this.recovery = null
-    this.recoveryBuffer = []
+    this.dropRecoveryStage()
     this.state = "stopped"
   }
 
@@ -171,10 +186,11 @@ export class WebSyncController {
     this.seenEventIds.clear()
     this.anomalyAttempts.clear()
     this.recovery = null
-    this.recoveryBuffer = []
+    this.dropRecoveryStage()
     this.closeConnection()
     this.stopPolling()
     this.clearLiveness()
+    this.clearRecoveryStartTimer()
     if (this.running) {
       this.state = "connecting"
       this.openConnection()
@@ -191,7 +207,13 @@ export class WebSyncController {
 
   /** Public test/adapter seam; transport callbacks call this with their epoch token. */
   processFrame(frame: RawSseFrame, token = this.currentToken()): Promise<void> {
-    return this.ingestFrame(frame, token)
+    return this.enqueueIngest(() => this.ingestFrame(frame, token))
+  }
+
+  private enqueueIngest<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.ingestTail.then(operation)
+    this.ingestTail = run.then(() => undefined, () => undefined)
+    return run
   }
 
   snapshot(): WebSyncSnapshot {
@@ -233,13 +255,13 @@ export class WebSyncController {
         signal: abort.signal,
         headers: { "Last-Event-ID": String(this.lastConfirmedCursor) },
         onFrame: (frame) => {
-          void this.ingestFrame(frame, token)
+          void this.processFrame(frame, token)
         },
         onError: (error) => {
-          void this.handleTransportFailure(error, token)
+          void this.enqueueIngest(() => this.handleTransportFailure(error, token))
         },
         onEof: () => {
-          void this.handleTransportFailure(new Error("SSE EOF"), token)
+          void this.enqueueIngest(() => this.handleTransportFailure(new Error("SSE EOF"), token))
         },
       })
     } catch (error) {
@@ -257,7 +279,7 @@ export class WebSyncController {
   private async ingestFrame(frame: RawSseFrame, token: SyncToken): Promise<void> {
     if (!this.running || !this.isCurrent(token)) return
 
-    if (frame.eventName === "kb-heartbeat") {
+    if (this.adapter.isControlFrame(frame)) {
       const control: ControlValidationResult = this.adapter.validateControl(frame)
       if (control.status === "invalid") {
         await this.protocolFailure("invalid-control", token, control.code)
@@ -310,22 +332,32 @@ export class WebSyncController {
       return
     }
     if (decision === "duplicate") {
-      if (event.id > this.lastConfirmedCursor) this.lastConfirmedCursor = event.id
+      if (this.recoveryStage !== null) this.recoveryStage.cursor = Math.max(this.recoveryStage.cursor, event.id)
+      else if (event.id > this.lastConfirmedCursor) this.lastConfirmedCursor = event.id
       return
     }
 
     if (this.recovery !== null) {
-      if (this.recoveryBuffer.length < this.maxSeenEntries * 2) this.recoveryBuffer.push(event)
+      if (this.recoveryBuffer.length >= this.maxSeenEntries * 2) {
+        await this.protocolFailure("recovery-buffer-overflow", token, String(this.maxSeenEntries * 2))
+        return
+      }
+      this.recoveryBuffer.push(event)
+      // Staging this event makes duplicate SSE deliveries idempotent without
+      // publishing its cursor or fingerprints before the recovery barrier.
+      this.commitEvent(event)
       return
     }
     await this.applyEvent(event, token)
   }
 
   private dedupeDecision(event: ValidatedBusinessEvent): "new" | "duplicate" | "conflict" | "stale" {
-    const idFingerprint = this.seenIds.get(event.id)
-    const eventFingerprint = this.seenEventIds.get(event.eventId)
+    const stage = this.recoveryStage
+    const idFingerprint = (stage?.seenIds ?? this.seenIds).get(event.id)
+    const eventFingerprint = (stage?.seenEventIds ?? this.seenEventIds).get(event.eventId)
     if (idFingerprint === undefined && eventFingerprint === undefined) {
-      return event.id <= this.lastConfirmedCursor ? "stale" : "new"
+      const cursor = stage?.cursor ?? this.lastConfirmedCursor
+      return event.id <= cursor ? "stale" : "new"
     }
     if (idFingerprint === event.canonicalFingerprint && eventFingerprint === event.canonicalFingerprint) return "duplicate"
     return "conflict"
@@ -338,37 +370,44 @@ export class WebSyncController {
     if (!this.isCurrent(token)) return
 
     if (!event.known) {
-      const recovery = await this.sink.refetchObserved("F", token, this.lastConfirmedCursor)
-      if (!this.isCurrent(token)) return
-      if (!this.isValidRecoveryResult(recovery, token) || recovery.confirmedCursor < event.id) {
-        await this.protocolFailure("unknown-refetch-gap", token, event.eventId)
-        return
-      }
-      this.commitEvent(event)
-      this.lastConfirmedCursor = Math.max(this.lastConfirmedCursor, recovery.confirmedCursor)
+      // E is lossless and exactly once; the event remains generation-local
+      // while the non-budgeted F barrier establishes the authoritative cursor.
+      void this.beginRecovery("F", "unknown-event", false, [event])
       return
     }
     this.commitEvent(event)
   }
 
-  private isValidRecoveryResult(result: RecoveryResult, token: SyncToken): boolean {
-    return result.noGap && result.boundary.published && result.boundary.token.boardId === token.boardId && result.boundary.token.connectionEpoch === token.connectionEpoch && result.boundary.token.generation === token.generation && result.boundary.highWatermark >= result.confirmedCursor
+  private isValidRecoveryResult(result: RecoveryResult, token: SyncToken, expectedRevision: number): boolean {
+    const boundary = result.boundary
+    if (!result.noGap || !Number.isSafeInteger(result.confirmedCursor) || result.confirmedCursor < 0 || !boundary.published || boundary.revision !== expectedRevision || !tokenEquals(boundary.token, token) || !Number.isSafeInteger(boundary.highWatermark) || boundary.highWatermark < result.confirmedCursor || !Array.isArray(boundary.events)) return false
+    for (const [id, fingerprint] of boundary.byId) {
+      if (!Number.isSafeInteger(id) || id < 0 || id > boundary.highWatermark || typeof fingerprint !== "string") return false
+    }
+    for (const [eventId, fingerprint] of boundary.byEventId) {
+      if (eventId.length === 0 || typeof fingerprint !== "string") return false
+    }
+    return true
   }
 
   private commitEvent(event: ValidatedBusinessEvent): void {
-    this.seenIds.set(event.id, event.canonicalFingerprint)
-    this.seenEventIds.set(event.eventId, event.canonicalFingerprint)
-    while (this.seenIds.size > this.maxSeenEntries) {
-      const oldest = this.seenIds.keys().next().value
+    const stage = this.recoveryStage
+    const seenIds = stage?.seenIds ?? this.seenIds
+    const seenEventIds = stage?.seenEventIds ?? this.seenEventIds
+    seenIds.set(event.id, event.canonicalFingerprint)
+    seenEventIds.set(event.eventId, event.canonicalFingerprint)
+    this.trimSeen(seenIds)
+    this.trimSeen(seenEventIds)
+    if (stage !== null) stage.cursor = Math.max(stage.cursor, event.id)
+    else this.lastConfirmedCursor = Math.max(this.lastConfirmedCursor, event.id)
+  }
+
+  private trimSeen<K>(map: Map<K, string>): void {
+    while (map.size > this.maxSeenEntries) {
+      const oldest = map.keys().next().value
       if (oldest === undefined) break
-      this.seenIds.delete(oldest)
+      map.delete(oldest)
     }
-    while (this.seenEventIds.size > this.maxSeenEntries) {
-      const oldest = this.seenEventIds.keys().next().value
-      if (oldest === undefined) break
-      this.seenEventIds.delete(oldest)
-    }
-    this.lastConfirmedCursor = Math.max(this.lastConfirmedCursor, event.id)
   }
 
   private markLive(token: SyncToken): void {
@@ -397,7 +436,9 @@ export class WebSyncController {
     if (!this.running || !this.isCurrent(token) || this.state === "circuit-open") return
     this.emit("transport-failure", { message: error instanceof Error ? error.message : String(error) })
     if (this.recovery !== null) this.fenceRecovery()
-    await this.beginRecovery("R", "transport-failure", false)
+    // Start the barrier after all prior frames in this queue have committed,
+    // then release the queue so the new epoch can stage concurrent SSE frames.
+    void this.beginRecovery("R", "transport-failure", false)
   }
 
   private anomalyKey(): string {
@@ -407,6 +448,10 @@ export class WebSyncController {
   private async protocolFailure(reason: string, token: SyncToken, code: string): Promise<void> {
     if (!this.running || !this.isCurrent(token) || this.state === "circuit-open") return
     this.emit("protocol-anomaly", { reason, code })
+    if (this.recoveryStartTimer !== null) {
+      this.emit("protocol-anomaly-suppressed", { reason, code })
+      return
+    }
     const key = this.anomalyKey()
     const attempts = (this.anomalyAttempts.get(key) ?? 0) + 1
     this.anomalyAttempts.set(key, attempts)
@@ -416,27 +461,57 @@ export class WebSyncController {
       return
     }
     if (this.recovery !== null) this.fenceRecovery()
-    await this.beginRecovery("F", reason, true)
+    else this.fenceConnection()
+    if (this.recoveryStartTimer !== null) return
+    this.scheduleRecoveryStart("F", reason, true, this.recoveryBackoff(attempts))
   }
 
   private fenceRecovery(): void {
     this.recovery = null
+    this.fenceConnection()
+  }
+
+  private fenceConnection(): void {
     this.closeConnection()
     this.connectionEpoch += 1
     this.generation += 1
-    this.recoveryBuffer = []
     this.recoverySawLiveFrame = false
+    this.dropRecoveryStage()
+  }
+
+  private recoveryBackoff(attempt: number): number {
+    return [250, 1_000, 5_000][Math.min(Math.max(attempt, 1) - 1, 2)] ?? 5_000
+  }
+
+  private scheduleRecoveryStart(mode: "F" | "R", reason: string, budgeted: boolean, delayMs: number): void {
+    if (!this.running || this.state === "circuit-open") return
+    this.state = "polling"
+    this.schedulePolling()
+    this.recoveryStartTimer = this.clock.setTimeout(() => {
+      this.recoveryStartTimer = null
+      if (!this.running || this.state === "circuit-open") return
+      void this.beginRecovery(mode, reason, budgeted)
+    }, delayMs)
+  }
+
+  private clearRecoveryStartTimer(): void {
+    if (this.recoveryStartTimer === null) return
+    this.clock.clearTimeout(this.recoveryStartTimer)
+    this.recoveryStartTimer = null
   }
 
   private openCircuit(reason: string): void {
     this.state = "circuit-open"
     this.closeConnection()
     this.clearLiveness()
+    this.clearRecoveryStartTimer()
+    this.recovery = null
+    this.dropRecoveryStage()
     this.emit("circuit-open", { reason })
     this.schedulePolling()
   }
 
-  private async beginRecovery(mode: "F" | "R", reason: string, budgeted: boolean): Promise<void> {
+  private async beginRecovery(mode: "F" | "R", reason: string, budgeted: boolean, preApplied: readonly ValidatedBusinessEvent[] = []): Promise<void> {
     if (!this.running || this.state === "circuit-open") return
     if (this.recovery !== null) return this.recovery
 
@@ -446,13 +521,27 @@ export class WebSyncController {
     this.generation += 1
     const token = this.currentToken()
     const after = this.lastConfirmedCursor
+    const expectedRevision = this.recoveryRevision + 1
+    this.recoveryRevision = expectedRevision
+    this.recoveryStage = {
+      baseCursor: after,
+      expectedRevision,
+      seenIds: new Map(this.seenIds),
+      seenEventIds: new Map(this.seenEventIds),
+      cursor: after,
+    }
     this.state = "recovering"
-    this.recoveryBuffer = []
+    this.recoveryBuffer = [...preApplied]
+    this.recoveryPreApplied.clear()
+    for (const event of preApplied) {
+      this.recoveryPreApplied.set(event.eventId, event.canonicalFingerprint)
+      this.commitEvent(event)
+    }
     this.recoverySawLiveFrame = false
     this.schedulePolling()
     this.emit("recovery-start", { mode, reason })
 
-    const operation = this.performRecovery(mode, token, after, budgeted)
+    const operation = this.performRecovery(mode, token, after, budgeted, expectedRevision)
     this.recovery = operation
     // R/F barrier and the next SSE subscription overlap. Frames from this
     // generation are staged until the boundary is published and replayed.
@@ -464,109 +553,177 @@ export class WebSyncController {
     }
   }
 
-  private async performRecovery(mode: "F" | "R", token: SyncToken, after: number, budgeted: boolean): Promise<void> {
+  private async performRecovery(mode: "F" | "R", token: SyncToken, after: number, budgeted: boolean, expectedRevision: number): Promise<void> {
+    let countsBudget = budgeted
+    let boundaryValidated = false
     try {
-      const result = await this.sink.refetchObserved(mode, token, after)
+      const result = await this.sink.refetchObserved(mode, token, after, expectedRevision)
       if (!this.isCurrent(token)) return
-      if (!this.isValidRecoveryResult(result, token) || result.confirmedCursor < after) throw new Error("recovery boundary is not gap-free")
+      if (result.boundary.token.boardId !== token.boardId || result.boundary.token.connectionEpoch !== token.connectionEpoch || result.boundary.token.generation !== token.generation || result.boundary.revision !== expectedRevision) {
+        // A response from an older publication/generation is not an anomaly:
+        // discard it and issue a fresh barrier under a new token.
+        this.emit("recovery-stale-result", { revision: result.boundary.revision, expectedRevision })
+        this.fenceRecovery()
+        await this.beginRecovery(mode, "stale-result", false)
+        return
+      }
+      if (!this.isValidRecoveryResult(result, token, expectedRevision) || result.confirmedCursor < after) {
+        countsBudget = true
+        throw new Error("recovery boundary is not gap-free")
+      }
+      boundaryValidated = true
 
       const boundary = result.boundary
       this.seedBoundary(boundary)
-      this.lastConfirmedCursor = Math.max(this.lastConfirmedCursor, after)
-      await this.replayRecoveryBuffer(token, boundary)
+      const replayedBoundaryEvents = await this.replayBoundaryEvents(token, boundary, after)
+      const finalBoundary = await this.replayRecoveryBuffer(token, boundary, replayedBoundaryEvents)
       if (!this.isCurrent(token)) return
-      this.lastConfirmedCursor = Math.max(this.lastConfirmedCursor, result.confirmedCursor, boundary.highWatermark)
+      this.promoteRecoveryStage(Math.max(result.confirmedCursor, finalBoundary.highWatermark))
       if (result.confirmedCursor > after) this.anomalyAttempts.delete(`${this.boardId}:${after}`)
       if (!this.isCurrent(token)) return
       this.state = this.recoverySawLiveFrame ? "live" : "connecting"
       this.recovery = null
+      this.recoveryBuffer = []
+      this.recoveryPreApplied.clear()
       if (this.state === "live") this.stopPolling()
       this.armLiveness(this.currentToken())
       this.emit("recovery-complete", { mode, confirmedCursor: result.confirmedCursor })
     } catch (error) {
       if (!this.isCurrent(token)) return
+      if (boundaryValidated) countsBudget = true
       this.emit("recovery-failure", { message: error instanceof Error ? error.message : String(error) })
-      let attempts = 0
-      if (budgeted) {
+      if (countsBudget) {
         const key = this.anomalyKey()
-        attempts = (this.anomalyAttempts.get(key) ?? 0) + 1
+        const attempts = this.anomalyAttempts.get(key) ?? 1
         this.anomalyAttempts.set(key, attempts)
-        if (attempts > this.maxAnomalyAttempts) {
+        if (attempts >= this.maxAnomalyAttempts) {
           this.openCircuit("recovery-failure")
           return
         }
+        const nextAttempt = attempts + 1
+        this.anomalyAttempts.set(key, nextAttempt)
+        this.recovery = null
+        this.fenceConnection()
+        this.scheduleRecoveryStart("F", "recovery-failure", true, this.recoveryBackoff(nextAttempt))
+        return
       }
-      this.closeConnection()
-      this.connectionEpoch += 1
-      this.generation += 1
-      this.recoveryBuffer = []
       this.recovery = null
-      this.state = "polling"
-      const delay = budgeted ? [250, 1_000, 5_000][Math.min(Math.max(attempts, 1) - 1, 2)] ?? 5_000 : this.reconnectDelayMs
-      this.clock.setTimeout(() => {
-        if (!this.running || this.state === "circuit-open") return
-        this.state = "connecting"
-        this.openConnection()
-      }, delay)
+      this.fenceConnection()
+      this.scheduleRecoveryStart("R", "recovery-failure", false, this.reconnectDelayMs)
     }
   }
 
   private seedBoundary(boundary: RecoveryBoundary): void {
+    const stage = this.recoveryStage
+    if (stage === null) throw new Error("recovery stage is missing")
     for (const [id, fingerprint] of boundary.byId) {
-      const current = this.seenIds.get(id)
+      const current = stage.seenIds.get(id)
       if (current !== undefined && current !== fingerprint) throw new Error("recovery boundary id fingerprint conflict")
-      this.seenIds.set(id, fingerprint)
+      stage.seenIds.set(id, fingerprint)
     }
     for (const [eventId, fingerprint] of boundary.byEventId) {
-      const current = this.seenEventIds.get(eventId)
+      const current = stage.seenEventIds.get(eventId)
       if (current !== undefined && current !== fingerprint) throw new Error("recovery boundary event fingerprint conflict")
-      this.seenEventIds.set(eventId, fingerprint)
+      stage.seenEventIds.set(eventId, fingerprint)
     }
-    while (this.seenIds.size > this.maxSeenEntries) {
-      const oldest = this.seenIds.keys().next().value
-      if (oldest === undefined) break
-      this.seenIds.delete(oldest)
-    }
-    while (this.seenEventIds.size > this.maxSeenEntries) {
-      const oldest = this.seenEventIds.keys().next().value
-      if (oldest === undefined) break
-      this.seenEventIds.delete(oldest)
-    }
+    this.trimSeen(stage.seenIds)
+    this.trimSeen(stage.seenEventIds)
+    stage.cursor = Math.max(stage.cursor, boundary.highWatermark)
   }
 
-  private async replayRecoveryBuffer(token: SyncToken, initialBoundary: RecoveryBoundary): Promise<void> {
-    let boundary = initialBoundary
+  private async replayBoundaryEvents(token: SyncToken, boundary: RecoveryBoundary, after: number): Promise<Set<string>> {
+    const replayed = new Set<string>()
+    let previousId = -1
+    const eligible: ValidatedBusinessEvent[] = []
+    for (const event of boundary.events) {
+      if (!this.isCurrent(token)) return replayed
+      if (event.boardId !== this.boardId || !Number.isSafeInteger(event.id) || event.id < 0 || event.id > boundary.highWatermark) throw new Error("recovery boundary event is out of scope")
+      if (event.id < previousId) throw new Error("recovery boundary events are not ordered")
+      const idFingerprint = boundary.byId.get(event.id)
+      const eventFingerprint = boundary.byEventId.get(event.eventId)
+      if (idFingerprint !== event.canonicalFingerprint || eventFingerprint !== event.canonicalFingerprint) throw new Error("recovery boundary event fingerprint mismatch")
+      previousId = event.id
+      if (event.id > after) eligible.push(event)
+    }
+    for (const event of eligible) {
+      if (!this.isCurrent(token)) return replayed
+      replayed.add(event.eventId)
+      if (this.recoveryPreApplied.get(event.eventId) === event.canonicalFingerprint) continue
+      await this.sink.onEvent(event, classifyEvent(event), token)
+      if (!this.isCurrent(token)) return replayed
+      if (!event.known) {
+        await this.restartUnknownRecovery(token, event)
+        return replayed
+      }
+    }
+    return replayed
+  }
+
+  private async replayRecoveryBuffer(token: SyncToken, initialBoundary: RecoveryBoundary, replayedBoundaryEvents: ReadonlySet<string>): Promise<RecoveryBoundary> {
+    const boundary = initialBoundary
     for (;;) {
       // Let the concurrently opened SSE/poll transport deliver frames that
       // arrived immediately after the boundary response settled.
       await Promise.resolve()
       if (this.recoveryBuffer.length === 0) break
       const buffered = this.recoveryBuffer.splice(0).sort((left, right) => left.id - right.id)
+      let previousBufferedId = -1
+      // Validate the complete batch before emitting any projection effect.
       for (const event of buffered) {
-        if (!this.isCurrent(token)) return
+        if (event.boardId !== this.boardId || !Number.isSafeInteger(event.id) || event.id < 0 || event.id < previousBufferedId) throw new Error("recovery buffer event is out of scope")
+        previousBufferedId = event.id
         if (event.id <= boundary.highWatermark) {
           const idFingerprint = boundary.byId.get(event.id)
           const eventFingerprint = boundary.byEventId.get(event.eventId)
-          if (idFingerprint !== event.canonicalFingerprint || eventFingerprint !== event.canonicalFingerprint) {
-            throw new Error("recovery boundary overlap conflict")
+          if (idFingerprint !== event.canonicalFingerprint || eventFingerprint !== event.canonicalFingerprint) throw new Error("recovery boundary overlap conflict")
+        }
+      }
+      for (const event of buffered) {
+        if (!this.isCurrent(token)) return boundary
+        if (event.id <= boundary.highWatermark) {
+          if (this.recoveryPreApplied.get(event.eventId) === event.canonicalFingerprint || replayedBoundaryEvents.has(event.eventId)) continue
+          await this.sink.onEvent(event, classifyEvent(event), token)
+          if (!event.known) {
+            await this.restartUnknownRecovery(token, event)
+            return boundary
           }
           continue
         }
-        const decision = this.dedupeDecision(event)
-        if (decision === "conflict" || decision === "stale") throw new Error("recovery buffer conflict")
-        if (decision === "duplicate") continue
-        const plan = classifyEvent(event)
-        await this.sink.onEvent(event, plan, token)
-        if (!this.isCurrent(token)) return
+        if (this.recoveryPreApplied.get(event.eventId) === event.canonicalFingerprint) continue
+        await this.sink.onEvent(event, classifyEvent(event), token)
+        if (!this.isCurrent(token)) return boundary
         if (!event.known) {
-          const unknownRecovery = await this.sink.refetchObserved("F", token, this.lastConfirmedCursor)
-          if (!this.isValidRecoveryResult(unknownRecovery, token)) throw new Error("unknown recovery boundary is not gap-free")
-          boundary = unknownRecovery.boundary
-          this.seedBoundary(boundary)
+          await this.restartUnknownRecovery(token, event)
+          return boundary
         }
-        this.commitEvent(event)
       }
     }
+    return boundary
+  }
+
+  private async restartUnknownRecovery(token: SyncToken, event: ValidatedBusinessEvent): Promise<void> {
+    if (!this.isCurrent(token)) return
+    this.fenceRecovery()
+    await this.beginRecovery("F", "unknown-event-during-recovery", false, [event])
+  }
+
+  private promoteRecoveryStage(cursor: number): void {
+    const stage = this.recoveryStage
+    if (stage === null) throw new Error("recovery stage is missing")
+    this.seenIds.clear()
+    for (const [id, fingerprint] of stage.seenIds) this.seenIds.set(id, fingerprint)
+    this.seenEventIds.clear()
+    for (const [eventId, fingerprint] of stage.seenEventIds) this.seenEventIds.set(eventId, fingerprint)
+    this.trimSeen(this.seenIds)
+    this.trimSeen(this.seenEventIds)
+    this.lastConfirmedCursor = Math.max(this.lastConfirmedCursor, cursor, stage.cursor)
+    this.recoveryStage = null
+  }
+
+  private dropRecoveryStage(): void {
+    this.recoveryStage = null
+    this.recoveryBuffer = []
+    this.recoveryPreApplied.clear()
   }
 
   private schedulePolling(): void {
@@ -590,6 +747,85 @@ export class WebSyncController {
     this.pollingAbort = null
   }
 
+  private pollProtocolFailure(reason: string, code: string): void {
+    this.emit("poll-protocol-anomaly", { reason, code })
+  }
+
+  /** Commit a published catch-up boundary while the SSE circuit is open. */
+  private applyPollingBoundary(page: PollEventsPage, token: SyncToken): Promise<boolean> {
+    if (this.pollingBoundaryCommit !== null) return this.pollingBoundaryCommit
+    const operation = this.commitPollingBoundary(page, token)
+    const tracked = operation.finally(() => {
+      if (this.pollingBoundaryCommit === tracked) this.pollingBoundaryCommit = null
+    })
+    this.pollingBoundaryCommit = tracked
+    return tracked
+  }
+
+  private async commitPollingBoundary(page: PollEventsPage, token: SyncToken): Promise<boolean> {
+    const boundary = page.boundary
+    if (boundary === undefined) {
+      this.pollProtocolFailure("poll-boundary-missing", "published-boundary-required")
+      return false
+    }
+    const confirmedCursor = page.confirmedCursor ?? boundary.highWatermark
+    if (!Number.isSafeInteger(confirmedCursor) || confirmedCursor < 0 || !boundary.published || boundary.revision <= 0 || boundary.highWatermark < confirmedCursor || !tokenEquals(boundary.token, token) || !Array.isArray(boundary.events)) {
+      this.pollProtocolFailure("poll-boundary-invalid", "incompatible-boundary")
+      return false
+    }
+    const stagedIds = new Map(this.seenIds)
+    const stagedEventIds = new Map(this.seenEventIds)
+    let previousId = -1
+    try {
+      for (const [id, fingerprint] of boundary.byId) {
+        if (!Number.isSafeInteger(id) || id < 0 || id > boundary.highWatermark || typeof fingerprint !== "string") throw new Error("boundary-id-invalid")
+        const existing = stagedIds.get(id)
+        if (existing !== undefined && existing !== fingerprint) throw new Error("boundary-id-conflict")
+        stagedIds.set(id, fingerprint)
+      }
+      for (const [eventId, fingerprint] of boundary.byEventId) {
+        if (eventId.length === 0 || typeof fingerprint !== "string") throw new Error("boundary-event-id-invalid")
+        const existing = stagedEventIds.get(eventId)
+        if (existing !== undefined && existing !== fingerprint) throw new Error("boundary-event-conflict")
+        stagedEventIds.set(eventId, fingerprint)
+      }
+      const eligible: ValidatedBusinessEvent[] = []
+      for (const event of boundary.events) {
+        if (event.boardId !== this.boardId || !Number.isSafeInteger(event.id) || event.id < previousId || event.id < 0 || event.id > boundary.highWatermark) throw new Error("boundary-event-out-of-scope")
+        const idFingerprint = boundary.byId.get(event.id)
+        const eventFingerprint = boundary.byEventId.get(event.eventId)
+        if (idFingerprint !== event.canonicalFingerprint || eventFingerprint !== event.canonicalFingerprint) throw new Error("boundary-event-fingerprint-mismatch")
+        previousId = event.id
+        if (event.id <= this.lastConfirmedCursor) continue
+        const existing = stagedIds.get(event.id)
+        if (existing !== undefined && existing !== event.canonicalFingerprint) throw new Error("boundary-id-conflict")
+        const existingEvent = stagedEventIds.get(event.eventId)
+        if (existingEvent !== undefined && existingEvent !== event.canonicalFingerprint) throw new Error("boundary-event-conflict")
+        eligible.push(event)
+      }
+      for (const event of eligible) {
+        await this.sink.onEvent(event, classifyEvent(event), token)
+      }
+    } catch (error) {
+      this.pollProtocolFailure("poll-boundary-invalid", error instanceof Error ? error.message : String(error))
+      return false
+    }
+    const staleAnomalyKey = this.anomalyKey()
+    this.trimSeen(stagedIds)
+    this.trimSeen(stagedEventIds)
+    this.seenIds.clear()
+    for (const [id, fingerprint] of stagedIds) this.seenIds.set(id, fingerprint)
+    this.seenEventIds.clear()
+    for (const [eventId, fingerprint] of stagedEventIds) this.seenEventIds.set(eventId, fingerprint)
+    this.lastConfirmedCursor = Math.max(this.lastConfirmedCursor, confirmedCursor, boundary.highWatermark)
+    this.anomalyAttempts.delete(staleAnomalyKey)
+    this.state = "connecting"
+    this.openConnection()
+    this.armLiveness(this.currentToken())
+    this.emit("poll-boundary-complete", { confirmedCursor: this.lastConfirmedCursor })
+    return true
+  }
+
   private async pollOnce(): Promise<void> {
     if (!this.running || this.state === "live") return
     const token = this.currentToken()
@@ -601,17 +837,24 @@ export class WebSyncController {
       do {
         page = await this.sink.pollEvents({ board: this.boardId, after: queryAfter, limit: 100 }, abort.signal)
         if (!this.isCurrent(token)) return
-        if (!page.noGap) {
-          await this.protocolFailure("poll-gap", token, String(page.nextAfter))
+        if (!Number.isSafeInteger(page.nextAfter) || page.nextAfter < 0 || page.nextAfter < queryAfter || (page.hasMore && page.nextAfter === queryAfter)) {
+          this.pollProtocolFailure("poll-invalid-cursor", String(page.nextAfter))
           return
         }
+        if (!page.noGap) {
+          if (this.state === "circuit-open") this.pollProtocolFailure("poll-gap", String(page.nextAfter))
+          else await this.protocolFailure("poll-gap", token, String(page.nextAfter))
+          return
+        }
+        if (this.state === "circuit-open" && !(await this.applyPollingBoundary(page, token))) return
         for (const rawEvent of page.events) {
           const parsed = this.adapter.parsePollingEnvelope(rawEvent)
           if (parsed.status === "invalid") {
-            await this.protocolFailure("poll-invalid-envelope", token, parsed.code)
+            if (this.state === "circuit-open") this.pollProtocolFailure("poll-invalid-envelope", parsed.code)
+            else await this.protocolFailure("poll-invalid-envelope", token, parsed.code)
             return
           }
-          await this.ingestEnvelope(parsed.envelope, token, "poll")
+          await this.enqueueIngest(() => this.ingestEnvelope(parsed.envelope, token, "poll"))
           if (!this.isCurrent(token)) return
         }
         queryAfter = page.nextAfter

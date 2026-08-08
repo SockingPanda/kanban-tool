@@ -56,13 +56,24 @@ describe("bounded SSE parser", () => {
     expect(parser.push(chunk)).toHaveLength(2_000)
   })
 
-  test("does not dispatch comments or empty data frames", () => {
+  test("dispatches named frames without data so the adapter can fail closed", () => {
     const parser = createSseParser()
 
     expect(parser.push(": keepalive\n\n")).toEqual([])
-    expect(parser.push("event: empty\n\n")).toEqual([])
+    expect(parser.push("event: empty\n\n")).toEqual([
+      { eventName: "empty", id: null, data: "" },
+    ])
     expect(parser.push("event: data\ndata:\n\n")).toEqual([
       { eventName: "data", id: null, data: "" },
+    ])
+  })
+
+  test("preserves a data-less named frame across chunk boundaries", () => {
+    const parser = createSseParser()
+
+    expect(parser.push("event: kb-heartbeat\n")).toEqual([])
+    expect(parser.push("\n")).toEqual([
+      { eventName: "kb-heartbeat", id: null, data: "" },
     ])
   })
 })

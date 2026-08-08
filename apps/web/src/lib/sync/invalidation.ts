@@ -130,7 +130,7 @@ export function classifyEvent(event: ValidatedBusinessEvent): InvalidationPlan {
       targets.push(boardTarget("columns", event))
       break
     case "board.archived":
-      targets.push(boardTarget("boards", event), boardTarget("columns", event))
+      targets.push({ root: "boards" }, boardTarget("columns", event))
       addBoardProjection(targets, event)
       break
     case "dependency.added":

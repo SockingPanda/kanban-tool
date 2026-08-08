@@ -1,6 +1,20 @@
 import type { SseFrame } from "./sse-parser"
 import type { ApiListEventsQueryContract } from "../api/generated/contracts/api-list-events-query"
 
+/**
+ * Canonical `boards.id` returned by the board query. This is deliberately
+ * distinct from the runtime board selector/slug used in request URLs; the
+ * Stage 03 query boundary is responsible for resolving that selector.
+ */
+declare const canonicalBoardIdBrand: unique symbol
+
+export type CanonicalBoardId = string & { readonly [canonicalBoardIdBrand]: "CanonicalBoardId" }
+
+export function asCanonicalBoardId(value: string): CanonicalBoardId {
+  if (value.length === 0) throw new RangeError("canonical board ID must not be empty")
+  return value as CanonicalBoardId
+}
+
 /** Raw frame emitted by the transport before any generated contract validation. */
 export type RawSseFrame = SseFrame
 
@@ -111,7 +125,7 @@ export interface StreamContractAdapter {
 }
 
 export interface SyncToken {
-  readonly boardId: string
+  readonly boardId: CanonicalBoardId
   readonly connectionEpoch: number
   readonly generation: number
 }
@@ -128,7 +142,7 @@ export interface SyncClock {
 
 export interface SyncTelemetryEntry {
   readonly type: string
-  readonly boardId: string
+  readonly boardId: CanonicalBoardId
   readonly cursor: number
   readonly details?: Readonly<Record<string, unknown>>
 }

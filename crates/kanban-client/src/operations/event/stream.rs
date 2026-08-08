@@ -464,7 +464,7 @@ mod tests {
         ));
         assert!(request.contains("Accept: text/event-stream\r\n"));
         assert!(request.contains("Last-Event-ID: 41\r\n"));
-        assert!(request.contains("X-KB-Actor: fixture-actor\r\n"));
+        assert!(!request.contains("X-KB-Actor:"));
         fixture.join();
     }
 

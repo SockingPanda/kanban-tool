@@ -1,6 +1,9 @@
 use std::io::Read;
 
-use kanban_protocol::{StreamEventData, StreamEventsQuery};
+use kanban_protocol::{
+    MAX_SAFE_EVENT_CURSOR, SSE_HEARTBEAT_EVENT, SseHeartbeatData, StreamEventData,
+    StreamEventsQuery,
+};
 
 use crate::{
     KanbanClient,
@@ -8,16 +11,19 @@ use crate::{
     transport::{ResponseReader, encode_path_segment},
 };
 
-/// JavaScript 的安全整数上限；SSE cursor 不得超出此范围。
-pub(crate) const JS_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 pub(crate) const MAX_LINE_BYTES: usize = 16 * 1024;
 pub(crate) const MAX_FRAME_BYTES: usize = 256 * 1024;
 pub(crate) const MAX_DATA_BYTES: usize = 128 * 1024;
 
 /// 持久 SSE 连接上的增量项目。
 #[derive(Debug)]
+// 保持调用者可直接匹配 `Business(StreamEventData)`，不把 wire DTO 包装进额外指针。
+#[allow(clippy::large_enum_variant)]
 pub enum EventStreamItem {
+    /// 带业务 cursor 的领域事件。
     Business(StreamEventData),
+    /// 不推进业务 cursor 的连接保活控制事件。
+    Heartbeat(SseHeartbeatData),
 }
 
 /// 持有 SSE response reader 的同步增量流。
@@ -37,13 +43,13 @@ impl std::fmt::Debug for EventStream {
 }
 
 impl EventStream {
-    /// 读取下一个业务事件；连接 EOF 会返回 [`ClientError::StreamClosed`]。
+    /// 读取下一个业务或 heartbeat item；连接 EOF 会返回 [`ClientError::StreamClosed`]。
     pub fn next_item(&mut self) -> Result<EventStreamItem, ClientError> {
         let mut chunk = [0_u8; 4096];
         loop {
             if let Some(frame) = self.decoder.take_frame()? {
-                if let Some(event) = parse_business_frame(&frame)? {
-                    return Ok(EventStreamItem::Business(event));
+                if let Some(item) = parse_stream_frame(&frame)? {
+                    return Ok(item);
                 }
                 continue;
             }
@@ -96,7 +102,7 @@ fn validate_query(query: &StreamEventsQuery) -> Result<(), ClientError> {
     if query.board.trim().is_empty() {
         return Err(ClientError::InvalidInput("board 不能为空".to_owned()));
     }
-    if !(0..=JS_SAFE_INTEGER).contains(&query.after) {
+    if !(0..=MAX_SAFE_EVENT_CURSOR).contains(&query.after) {
         return Err(ClientError::InvalidInput(
             "after 必须是非负 JavaScript 安全整数".to_owned(),
         ));
@@ -114,7 +120,7 @@ fn validate_query(query: &StreamEventsQuery) -> Result<(), ClientError> {
 }
 
 fn validate_last_event_id(last_event_id: Option<i64>) -> Result<(), ClientError> {
-    if last_event_id.is_some_and(|value| !(0..=JS_SAFE_INTEGER).contains(&value)) {
+    if last_event_id.is_some_and(|value| !(0..=MAX_SAFE_EVENT_CURSOR).contains(&value)) {
         return Err(ClientError::InvalidInput(
             "Last-Event-ID 必须是非负 JavaScript 安全整数".to_owned(),
         ));
@@ -269,20 +275,33 @@ fn parse_frame(frame: &[u8]) -> Result<Option<SseFrame>, ClientError> {
     Ok(Some(parsed))
 }
 
-fn parse_business_frame(frame: &[u8]) -> Result<Option<StreamEventData>, ClientError> {
+fn parse_stream_frame(frame: &[u8]) -> Result<Option<EventStreamItem>, ClientError> {
     let Some(frame) = parse_frame(frame)? else {
         return Ok(None);
     };
     let event_name = frame
         .event_name
         .ok_or_else(|| ClientError::InvalidResponse("SSE frame 缺少 event".to_owned()))?;
+    let data = frame
+        .data
+        .ok_or_else(|| ClientError::InvalidResponse("SSE frame 缺少 data".to_owned()))?;
+
+    if event_name == SSE_HEARTBEAT_EVENT {
+        if frame.frame_id.is_some() {
+            return Err(ClientError::InvalidResponse(
+                "SSE heartbeat 不得包含业务 id".to_owned(),
+            ));
+        }
+        let heartbeat: SseHeartbeatData = serde_json::from_str(&data).map_err(|error| {
+            ClientError::InvalidResponse(format!("SSE heartbeat data 无效：{error}"))
+        })?;
+        return Ok(Some(EventStreamItem::Heartbeat(heartbeat)));
+    }
+
     let frame_id = frame
         .frame_id
         .ok_or_else(|| ClientError::InvalidResponse("SSE frame 缺少 id".to_owned()))?;
     let frame_id = parse_frame_id(&frame_id)?;
-    let data = frame
-        .data
-        .ok_or_else(|| ClientError::InvalidResponse("SSE frame 缺少 data".to_owned()))?;
     let event: StreamEventData = serde_json::from_str(&data)
         .map_err(|error| ClientError::InvalidResponse(format!("SSE data 无效：{error}")))?;
     if event.id != frame_id {
@@ -295,7 +314,7 @@ fn parse_business_frame(frame: &[u8]) -> Result<Option<StreamEventData>, ClientE
             "SSE frame event 与 data.kind 不一致".to_owned(),
         ));
     }
-    Ok(Some(event))
+    Ok(Some(EventStreamItem::Business(event)))
 }
 
 fn parse_frame_id(value: &str) -> Result<i64, ClientError> {
@@ -307,7 +326,7 @@ fn parse_frame_id(value: &str) -> Result<i64, ClientError> {
     let value = value
         .parse::<i64>()
         .map_err(|_| ClientError::InvalidResponse("SSE frame id 超出整数范围".to_owned()))?;
-    if value > JS_SAFE_INTEGER {
+    if value > MAX_SAFE_EVENT_CURSOR {
         return Err(ClientError::InvalidResponse(
             "SSE frame id 超出 JavaScript 安全整数范围".to_owned(),
         ));
@@ -467,12 +486,64 @@ mod tests {
                 None,
             )
             .unwrap();
-        let EventStreamItem::Business(event) = stream.next_item().unwrap();
+        let EventStreamItem::Business(event) = stream.next_item().unwrap() else {
+            panic!("business event expected");
+        };
         assert_eq!(
             serde_json::to_value(&event.payload).unwrap(),
             serde_json::json!({"future": true})
         );
         fixture.join();
+    }
+
+    #[test]
+    fn parses_typed_heartbeat_control_without_business_cursor() {
+        let body = format!(
+            ": transport comment\r\n\r\nevent: {SSE_HEARTBEAT_EVENT}\r\ndata: {{}}\r\n\r\n"
+        );
+        let fixture = fixture(response("text/event-stream", body.as_bytes()), false);
+        let mut stream = fixture
+            .client()
+            .open_event_stream(
+                &StreamEventsQuery {
+                    board: "default".to_owned(),
+                    task_id: None,
+                    after: 0,
+                    limit: 10,
+                },
+                None,
+            )
+            .unwrap();
+        assert!(matches!(
+            stream.next_item(),
+            Ok(EventStreamItem::Heartbeat(heartbeat)) if heartbeat == SseHeartbeatData::default()
+        ));
+        fixture.join();
+    }
+
+    #[test]
+    fn rejects_malformed_heartbeat_control_frames() {
+        for body in [
+            format!("event: {SSE_HEARTBEAT_EVENT}\nid: 9\ndata: {{}}\n\n"),
+            format!("event: {SSE_HEARTBEAT_EVENT}\ndata: {{\"unexpected\":true}}\n\n"),
+            format!("event: {SSE_HEARTBEAT_EVENT}\n\n"),
+        ] {
+            let fixture = fixture(response("text/event-stream", body.as_bytes()), false);
+            let mut stream = fixture
+                .client()
+                .open_event_stream(
+                    &StreamEventsQuery {
+                        board: "default".to_owned(),
+                        task_id: None,
+                        after: 0,
+                        limit: 10,
+                    },
+                    None,
+                )
+                .unwrap();
+            assert!(stream.next_item().is_err(), "{body:?}");
+            fixture.join();
+        }
     }
 
     #[test]
@@ -484,7 +555,7 @@ mod tests {
             decoder.push(std::slice::from_ref(byte)).unwrap();
         }
         let frame = decoder.take_frame().unwrap().unwrap();
-        let Some(event) = parse_business_frame(&frame).unwrap() else {
+        let Some(EventStreamItem::Business(event)) = parse_stream_frame(&frame).unwrap() else {
             panic!("business frame expected");
         };
         assert_eq!(event.id, 9);
@@ -523,7 +594,9 @@ mod tests {
                 None,
             )
             .unwrap();
-        let EventStreamItem::Business(event) = stream.next_item().unwrap();
+        let EventStreamItem::Business(event) = stream.next_item().unwrap() else {
+            panic!("business event expected");
+        };
         assert_eq!(event.id, 9);
         fixture.join();
     }
@@ -538,7 +611,7 @@ mod tests {
             format!("event: future.event\nid: -1\ndata: {data}\n\n"),
             format!(
                 "event: future.event\nid: {}\ndata: {data}\n\n",
-                JS_SAFE_INTEGER + 1
+                MAX_SAFE_EVENT_CURSOR + 1
             ),
             "event: future.event\nid: 9\ndata: {not-json}\n\n".to_owned(),
             format!(
@@ -596,7 +669,7 @@ mod tests {
             StreamEventsQuery {
                 board: "default".to_owned(),
                 task_id: None,
-                after: JS_SAFE_INTEGER + 1,
+                after: MAX_SAFE_EVENT_CURSOR + 1,
                 limit: 10,
             },
             StreamEventsQuery {
@@ -617,7 +690,7 @@ mod tests {
                 "invalid_input"
             );
         }
-        for last_event_id in [-1, JS_SAFE_INTEGER + 1] {
+        for last_event_id in [-1, MAX_SAFE_EVENT_CURSOR + 1] {
             assert_eq!(
                 client
                     .open_event_stream(

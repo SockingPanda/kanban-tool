@@ -103,6 +103,19 @@ describe("BoardView", () => {
     expect(markup).not.toContain('data-status="review"')
   })
 
+  test("invalid ready model 的空白 board name 使用非空 fallback heading", () => {
+    const invalidModel: BoardViewModel = {
+      ...model,
+      board: { ...model.board, name: "  " },
+    }
+
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model: invalidModel }} />)
+
+    expect(markup).toContain('data-state="error"')
+    expect(markup).toMatch(/<h1[^>]*>看板<\/h1>/)
+    expect(markup).not.toMatch(/<h1[^>]*><\/h1>/)
+  })
+
   test("覆盖 loading、empty、error 和 offline 状态，并保留 retry seam", () => {
     const retry = vi.fn()
     const states = [

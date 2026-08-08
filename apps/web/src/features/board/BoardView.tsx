@@ -249,8 +249,9 @@ function BoardColumns({ model, copy, rootId }: { readonly model: BoardViewModel;
 export function BoardView({ state, messages: messageOverrides, onRetry, id = "astryx-board", className }: BoardViewProps) {
   const copy = mergeMessages(messageOverrides)
   const titleId = `${id}-title`
-  const board = state.kind === "ready" ? state.model.board : state.kind === "empty" ? state.board : undefined
   const validation = state.kind === "ready" ? validateBoardViewModel(state.model) : { valid: true as const }
+  const board =
+    state.kind === "ready" && validation.valid ? state.model.board : state.kind === "empty" ? state.board : undefined
   const renderedState: BoardViewState =
     state.kind === "ready" && !validation.valid
       ? { kind: "error", message: validation.message }

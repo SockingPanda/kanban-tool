@@ -7,6 +7,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use crate::{KanbanClient, error::ClientError};
 
 type AttachmentBytesResponse = (Option<String>, Option<String>, Option<String>, Vec<u8>);
+pub(crate) type ResponseReader = Box<dyn Read + Send + Sync + 'static>;
 
 impl KanbanClient {
     pub(crate) fn get<T>(&self, path: &str) -> Result<T, ClientError>
@@ -78,17 +79,21 @@ impl KanbanClient {
         decode_response(request.send_json(body))
     }
 
-    pub(crate) fn get_text(
+    pub(crate) fn get_stream(
         &self,
         path: &str,
         accept: &str,
-    ) -> Result<(Option<String>, String), ClientError> {
-        let request = self
+        last_event_id: Option<i64>,
+    ) -> Result<(Option<String>, ResponseReader), ClientError> {
+        let mut request = self
             .agent
             .get(&format!("{}{path}", self.base_url))
             .set("Accept", accept)
             .set("X-KB-Actor", &self.actor);
-        decode_text_response(request.call())
+        if let Some(last_event_id) = last_event_id {
+            request = request.set("Last-Event-ID", &last_event_id.to_string());
+        }
+        decode_stream_response(request.call())
     }
 
     pub(crate) fn get_bytes(
@@ -129,21 +134,18 @@ where
     }
 }
 
-fn decode_text_response(
+fn decode_stream_response(
     response: Result<ureq::Response, ureq::Error>,
-) -> Result<(Option<String>, String), ClientError> {
+) -> Result<(Option<String>, ResponseReader), ClientError> {
     match response {
         Ok(response) => {
             let content_type = response.header("Content-Type").map(str::to_owned);
-            let body = response
-                .into_string()
-                .map_err(|error| ClientError::InvalidResponse(error.to_string()))?;
-            Ok((content_type, body))
+            Ok((content_type, response.into_reader()))
         }
         Err(ureq::Error::Status(status, response)) => {
             let envelope = response.into_json::<ErrorEnvelope>().map_err(|error| {
                 ClientError::InvalidResponse(format!(
-                    "HTTP {status} 响应不包含标准错误 envelope：{error}"
+                    "HTTP {status} SSE 响应不包含标准错误 envelope：{error}"
                 ))
             })?;
             Err(ClientError::Api {

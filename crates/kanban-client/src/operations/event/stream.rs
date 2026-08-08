@@ -1,25 +1,94 @@
+use std::io::Read;
+
 use kanban_protocol::{StreamEventData, StreamEventsQuery};
 
-use crate::{KanbanClient, error::ClientError, transport::encode_path_segment};
+use crate::{
+    KanbanClient,
+    error::ClientError,
+    transport::{ResponseReader, encode_path_segment},
+};
+
+/// JavaScript 的安全整数上限；SSE cursor 不得超出此范围。
+pub(crate) const JS_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
+pub(crate) const MAX_LINE_BYTES: usize = 16 * 1024;
+pub(crate) const MAX_FRAME_BYTES: usize = 256 * 1024;
+pub(crate) const MAX_DATA_BYTES: usize = 128 * 1024;
+
+/// 持久 SSE 连接上的增量项目。
+#[derive(Debug)]
+pub enum EventStreamItem {
+    Business(StreamEventData),
+}
+
+/// 持有 SSE response reader 的同步增量流。
+pub struct EventStream {
+    reader: ResponseReader,
+    decoder: SseDecoder,
+    closed: bool,
+}
+
+impl std::fmt::Debug for EventStream {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("EventStream")
+            .field("closed", &self.closed)
+            .finish_non_exhaustive()
+    }
+}
+
+impl EventStream {
+    /// 读取下一个业务事件；连接 EOF 会返回 [`ClientError::StreamClosed`]。
+    pub fn next_item(&mut self) -> Result<EventStreamItem, ClientError> {
+        let mut chunk = [0_u8; 4096];
+        loop {
+            if let Some(frame) = self.decoder.take_frame()? {
+                if let Some(event) = parse_business_frame(&frame)? {
+                    return Ok(EventStreamItem::Business(event));
+                }
+                continue;
+            }
+            if self.closed {
+                return Err(ClientError::StreamClosed);
+            }
+            let bytes_read = self
+                .reader
+                .read(&mut chunk)
+                .map_err(|error| ClientError::StreamRead(error.to_string()))?;
+            if bytes_read == 0 {
+                self.closed = true;
+                if self.decoder.has_pending() {
+                    return Err(ClientError::InvalidResponse(
+                        "SSE stream 在完整帧结束前关闭".to_owned(),
+                    ));
+                }
+                return Err(ClientError::StreamClosed);
+            }
+            self.decoder.push(&chunk[..bytes_read])?;
+        }
+    }
+}
 
 impl KanbanClient {
-    /// 读取 host 当前可见的有限 SSE 事件快照。
-    pub fn stream_events_snapshot(
+    /// 打开一次持久 SSE 连接；`after` 仍由 query 持有，重连 cursor 通过 `Last-Event-ID` 传递。
+    pub fn open_event_stream(
         &self,
         query: &StreamEventsQuery,
-    ) -> Result<Vec<StreamEventData>, ClientError> {
+        last_event_id: Option<i64>,
+    ) -> Result<EventStream, ClientError> {
         validate_query(query)?;
+        validate_last_event_id(last_event_id)?;
         let path = stream_events_path(query);
-        let (content_type, body) = self.get_text(&path, "text/event-stream")?;
-        if !content_type
-            .as_deref()
-            .is_some_and(|value| value.starts_with("text/event-stream"))
-        {
+        let (content_type, reader) = self.get_stream(&path, "text/event-stream", last_event_id)?;
+        if !is_event_stream_content_type(content_type.as_deref()) {
             return Err(ClientError::InvalidResponse(
-                "SSE 响应缺少 text/event-stream Content-Type".to_owned(),
+                "SSE 响应 Content-Type 必须是 text/event-stream".to_owned(),
             ));
         }
-        parse_sse_snapshot(&body)
+        Ok(EventStream {
+            reader,
+            decoder: SseDecoder::default(),
+            closed: false,
+        })
     }
 }
 
@@ -27,13 +96,27 @@ fn validate_query(query: &StreamEventsQuery) -> Result<(), ClientError> {
     if query.board.trim().is_empty() {
         return Err(ClientError::InvalidInput("board 不能为空".to_owned()));
     }
-    if query.after < 0 {
-        return Err(ClientError::InvalidInput("after 不能为负数".to_owned()));
+    if !(0..=JS_SAFE_INTEGER).contains(&query.after) {
+        return Err(ClientError::InvalidInput(
+            "after 必须是非负 JavaScript 安全整数".to_owned(),
+        ));
+    }
+    if query.limit == 0 {
+        return Err(ClientError::InvalidInput("limit 必须大于 0".to_owned()));
     }
     let task_id = query.task_id.as_deref().map(str::trim);
     if task_id.is_some_and(|task_id| !task_id.starts_with("t_") || task_id.len() <= 2) {
         return Err(ClientError::InvalidInput(
             "task_id 必须是全局 t_... ID".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_last_event_id(last_event_id: Option<i64>) -> Result<(), ClientError> {
+    if last_event_id.is_some_and(|value| !(0..=JS_SAFE_INTEGER).contains(&value)) {
+        return Err(ClientError::InvalidInput(
+            "Last-Event-ID 必须是非负 JavaScript 安全整数".to_owned(),
         ));
     }
     Ok(())
@@ -49,57 +132,158 @@ fn stream_events_path(query: &StreamEventsQuery) -> String {
     format!("/api/v1/stream/events?{}", pairs.join("&"))
 }
 
-fn parse_sse_snapshot(body: &str) -> Result<Vec<StreamEventData>, ClientError> {
-    if body.is_empty() {
-        return Ok(Vec::new());
-    }
-    if body.contains('\r') || !body.ends_with("\n\n") {
-        return Err(ClientError::InvalidResponse(
-            "SSE 快照不是完整的 LF 分隔帧".to_owned(),
-        ));
-    }
-
-    body.trim_end_matches('\n')
-        .split("\n\n")
-        .map(parse_sse_frame)
-        .collect()
+fn is_event_stream_content_type(content_type: Option<&str>) -> bool {
+    content_type
+        .and_then(|value| value.split(';').next())
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("text/event-stream"))
 }
 
-fn parse_sse_frame(frame: &str) -> Result<StreamEventData, ClientError> {
-    let mut event_name = None;
-    let mut frame_id = None;
-    let mut data = None;
+#[derive(Default)]
+struct SseDecoder {
+    pending: Vec<u8>,
+}
+
+impl SseDecoder {
+    fn push(&mut self, bytes: &[u8]) -> Result<(), ClientError> {
+        self.pending.extend_from_slice(bytes);
+        if self.pending.len() > MAX_FRAME_BYTES && find_frame_end(&self.pending).is_none() {
+            return Err(ClientError::InvalidResponse(format!(
+                "SSE frame 超过 {} 字节上限",
+                MAX_FRAME_BYTES
+            )));
+        }
+        Ok(())
+    }
+
+    fn take_frame(&mut self) -> Result<Option<Vec<u8>>, ClientError> {
+        let Some((frame_end, consumed)) = find_frame_end(&self.pending) else {
+            return Ok(None);
+        };
+        if frame_end > MAX_FRAME_BYTES {
+            return Err(ClientError::InvalidResponse(format!(
+                "SSE frame 超过 {} 字节上限",
+                MAX_FRAME_BYTES
+            )));
+        }
+        let frame = self.pending.drain(..frame_end).collect::<Vec<_>>();
+        self.pending.drain(..consumed - frame_end);
+        Ok(Some(frame))
+    }
+
+    fn has_pending(&self) -> bool {
+        !self.pending.is_empty()
+    }
+}
+
+fn find_frame_end(bytes: &[u8]) -> Option<(usize, usize)> {
+    for index in 0..bytes.len() {
+        let suffix = &bytes[index..];
+        if suffix.starts_with(b"\n\n") {
+            return Some((index, index + 2));
+        }
+        if suffix.starts_with(b"\r\n\r\n") {
+            return Some((index, index + 4));
+        }
+        if suffix.starts_with(b"\n\r\n") || suffix.starts_with(b"\r\n\n") {
+            return Some((index, index + 3));
+        }
+    }
+    None
+}
+
+struct SseFrame {
+    event_name: Option<String>,
+    frame_id: Option<String>,
+    data: Option<String>,
+}
+
+fn parse_frame(frame: &[u8]) -> Result<Option<SseFrame>, ClientError> {
+    let frame = std::str::from_utf8(frame)
+        .map_err(|error| ClientError::InvalidResponse(format!("SSE frame 不是 UTF-8：{error}")))?;
+    let mut parsed = SseFrame {
+        event_name: None,
+        frame_id: None,
+        data: None,
+    };
 
     for line in frame.lines() {
-        let (name, value) = line.split_once(": ").ok_or_else(|| {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if line.len() > MAX_LINE_BYTES {
+            return Err(ClientError::InvalidResponse(format!(
+                "SSE 字段行超过 {} 字节上限",
+                MAX_LINE_BYTES
+            )));
+        }
+        if line.contains('\r') {
+            return Err(ClientError::InvalidResponse(
+                "SSE 字段行含有非法 CR".to_owned(),
+            ));
+        }
+        if line.starts_with(':') {
+            continue;
+        }
+        let (name, value) = line.split_once(':').ok_or_else(|| {
             ClientError::InvalidResponse("SSE frame 含有无法识别的字段行".to_owned())
         })?;
-        let slot = match name {
-            "event" => &mut event_name,
-            "id" => &mut frame_id,
-            "data" => &mut data,
+        let value = value.strip_prefix(' ').unwrap_or(value);
+        match name {
+            "event" => {
+                if parsed.event_name.replace(value.to_owned()).is_some() {
+                    return Err(ClientError::InvalidResponse(
+                        "SSE frame 重复字段：event".to_owned(),
+                    ));
+                }
+            }
+            "id" => {
+                if parsed.frame_id.replace(value.to_owned()).is_some() {
+                    return Err(ClientError::InvalidResponse(
+                        "SSE frame 重复字段：id".to_owned(),
+                    ));
+                }
+            }
+            "data" => {
+                let had_data_line = parsed.data.is_some();
+                let data = parsed.data.get_or_insert_with(String::new);
+                if had_data_line {
+                    data.push('\n');
+                }
+                data.push_str(value);
+                if data.len() > MAX_DATA_BYTES {
+                    return Err(ClientError::InvalidResponse(format!(
+                        "SSE data 超过 {} 字节上限",
+                        MAX_DATA_BYTES
+                    )));
+                }
+            }
             _ => {
                 return Err(ClientError::InvalidResponse(format!(
                     "SSE frame 含有未支持字段：{name}"
                 )));
             }
-        };
-        if slot.replace(value).is_some() {
-            return Err(ClientError::InvalidResponse(format!(
-                "SSE frame 重复字段：{name}"
-            )));
         }
     }
 
-    let event_name = event_name
+    if parsed.event_name.is_none() && parsed.frame_id.is_none() && parsed.data.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(parsed))
+}
+
+fn parse_business_frame(frame: &[u8]) -> Result<Option<StreamEventData>, ClientError> {
+    let Some(frame) = parse_frame(frame)? else {
+        return Ok(None);
+    };
+    let event_name = frame
+        .event_name
         .ok_or_else(|| ClientError::InvalidResponse("SSE frame 缺少 event".to_owned()))?;
-    let frame_id = frame_id
-        .ok_or_else(|| ClientError::InvalidResponse("SSE frame 缺少 id".to_owned()))?
-        .parse::<i64>()
-        .map_err(|_| ClientError::InvalidResponse("SSE frame id 不是整数".to_owned()))?;
-    let data =
-        data.ok_or_else(|| ClientError::InvalidResponse("SSE frame 缺少 data".to_owned()))?;
-    let event: StreamEventData = serde_json::from_str(data)
+    let frame_id = frame
+        .frame_id
+        .ok_or_else(|| ClientError::InvalidResponse("SSE frame 缺少 id".to_owned()))?;
+    let frame_id = parse_frame_id(&frame_id)?;
+    let data = frame
+        .data
+        .ok_or_else(|| ClientError::InvalidResponse("SSE frame 缺少 data".to_owned()))?;
+    let event: StreamEventData = serde_json::from_str(&data)
         .map_err(|error| ClientError::InvalidResponse(format!("SSE data 无效：{error}")))?;
     if event.id != frame_id {
         return Err(ClientError::InvalidResponse(
@@ -111,12 +295,109 @@ fn parse_sse_frame(frame: &str) -> Result<StreamEventData, ClientError> {
             "SSE frame event 与 data.kind 不一致".to_owned(),
         ));
     }
-    Ok(event)
+    Ok(Some(event))
+}
+
+fn parse_frame_id(value: &str) -> Result<i64, ClientError> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(ClientError::InvalidResponse(
+            "SSE frame id 必须是十进制非负整数".to_owned(),
+        ));
+    }
+    let value = value
+        .parse::<i64>()
+        .map_err(|_| ClientError::InvalidResponse("SSE frame id 超出整数范围".to_owned()))?;
+    if value > JS_SAFE_INTEGER {
+        return Err(ClientError::InvalidResponse(
+            "SSE frame id 超出 JavaScript 安全整数范围".to_owned(),
+        ));
+    }
+    Ok(value)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::mpsc::{self, Receiver};
+    use std::thread::{self, JoinHandle};
+    use std::time::Duration;
+
+    struct Fixture {
+        address: String,
+        request: Receiver<Vec<u8>>,
+        closed: Receiver<bool>,
+        thread: Option<JoinHandle<()>>,
+    }
+
+    impl Fixture {
+        fn client(&self) -> KanbanClient {
+            KanbanClient::new(&self.address, "fixture-actor").expect("loopback fixture URL")
+        }
+
+        fn join(mut self) {
+            self.thread.take().expect("fixture thread").join().unwrap();
+        }
+    }
+
+    fn fixture(response: Vec<u8>, wait_for_close: bool) -> Fixture {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind fixture");
+        let address = format!("http://{}", listener.local_addr().unwrap());
+        let (request_tx, request) = mpsc::channel();
+        let (closed_tx, closed) = mpsc::channel();
+        let thread = thread::spawn(move || {
+            let (mut socket, _) = listener.accept().expect("accept fixture");
+            socket
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .expect("request read timeout");
+            let request = read_headers(&mut socket);
+            request_tx.send(request).expect("capture request");
+            socket.write_all(&response).expect("write fixture response");
+            socket.flush().expect("flush fixture response");
+
+            let closed_by_client = if wait_for_close {
+                let mut buffer = [0_u8; 1024];
+                loop {
+                    match socket.read(&mut buffer) {
+                        Ok(0) => break true,
+                        Ok(_) => continue,
+                        Err(_) => break false,
+                    }
+                }
+            } else {
+                true
+            };
+            closed_tx.send(closed_by_client).expect("capture close");
+        });
+        Fixture {
+            address,
+            request,
+            closed,
+            thread: Some(thread),
+        }
+    }
+
+    fn read_headers(socket: &mut TcpStream) -> Vec<u8> {
+        let mut request = Vec::new();
+        let mut byte = [0_u8; 1];
+        while !request.ends_with(b"\r\n\r\n") {
+            socket.read_exact(&mut byte).expect("read request header");
+            request.push(byte[0]);
+        }
+        request
+    }
+
+    fn response(content_type: &str, body: &[u8]) -> Vec<u8> {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        )
+        .into_bytes()
+        .into_iter()
+        .chain(body.iter().copied())
+        .collect()
+    }
 
     fn unknown_event_json(id: i64, kind: &str) -> String {
         serde_json::json!({
@@ -134,31 +415,117 @@ mod tests {
     }
 
     #[test]
-    fn path_order_and_encoding_are_stable() {
-        let path = stream_events_path(&StreamEventsQuery {
+    fn opens_stream_with_query_and_last_event_id_header() {
+        let body = format!(
+            "event: future.event\nid: 9\ndata: {}\n\n",
+            unknown_event_json(9, "future.event")
+        );
+        let fixture = fixture(
+            response("text/event-stream; charset=utf-8", body.as_bytes()),
+            false,
+        );
+        let query = StreamEventsQuery {
             board: " team/#1 ".to_owned(),
             task_id: Some(" t_event/1 ".to_owned()),
             after: 7,
             limit: 25,
-        });
-        assert_eq!(
-            path,
-            "/api/v1/stream/events?board=team%2F%231&task_id=t_event%2F1&after=7&limit=25"
-        );
+        };
+        let mut stream = fixture
+            .client()
+            .open_event_stream(&query, Some(41))
+            .expect("open SSE stream");
+        assert!(matches!(
+            stream.next_item().unwrap(),
+            EventStreamItem::Business(event) if event.id == 9
+        ));
+
+        let request = String::from_utf8(fixture.request.recv().unwrap()).unwrap();
+        assert!(request.starts_with(
+            "GET /api/v1/stream/events?board=team%2F%231&task_id=t_event%2F1&after=7&limit=25 HTTP/1.1\r\n"
+        ));
+        assert!(request.contains("Accept: text/event-stream\r\n"));
+        assert!(request.contains("Last-Event-ID: 41\r\n"));
+        assert!(request.contains("X-KB-Actor: fixture-actor\r\n"));
+        fixture.join();
     }
 
     #[test]
-    fn parses_unknown_event_losslessly_through_contract() {
+    fn parses_unknown_event_losslessly_through_incremental_reader() {
         let data = unknown_event_json(9, "future.event");
-        let frames =
-            parse_sse_snapshot(&format!("event: future.event\nid: 9\ndata: {data}\n\n")).unwrap();
-        assert_eq!(frames.len(), 1);
-        assert_eq!(frames[0].kind, "future.event");
-        assert_eq!(frames[0].id, 9);
+        let body =
+            format!(": keepalive\r\n\r\nevent: future.event\r\nid: 9\r\ndata: {data}\r\n\r\n");
+        let fixture = fixture(response("text/event-stream", body.as_bytes()), false);
+        let mut stream = fixture
+            .client()
+            .open_event_stream(
+                &StreamEventsQuery {
+                    board: "default".to_owned(),
+                    task_id: None,
+                    after: 0,
+                    limit: 10,
+                },
+                None,
+            )
+            .unwrap();
+        let EventStreamItem::Business(event) = stream.next_item().unwrap();
         assert_eq!(
-            serde_json::to_value(&frames[0].payload).unwrap(),
+            serde_json::to_value(&event.payload).unwrap(),
             serde_json::json!({"future": true})
         );
+        fixture.join();
+    }
+
+    #[test]
+    fn parses_a_frame_split_at_every_reader_chunk_boundary() {
+        let data = unknown_event_json(9, "future.event");
+        let body = format!("event: future.event\nid: 9\ndata: {data}\n\n");
+        let mut decoder = SseDecoder::default();
+        for byte in body.as_bytes() {
+            decoder.push(std::slice::from_ref(byte)).unwrap();
+        }
+        let frame = decoder.take_frame().unwrap().unwrap();
+        let Some(event) = parse_business_frame(&frame).unwrap() else {
+            panic!("business frame expected");
+        };
+        assert_eq!(event.id, 9);
+    }
+
+    #[test]
+    fn accepts_multiline_data_and_both_line_endings() {
+        let data = serde_json::to_string_pretty(&serde_json::json!({
+            "id": 9,
+            "event_id": "e_example",
+            "board_id": "b_default",
+            "task_id": null,
+            "run_id": null,
+            "kind": "future.event",
+            "actor": "tester",
+            "payload": {"future": true},
+            "created_at": 123
+        }))
+        .unwrap();
+        let data_lines = data
+            .lines()
+            .map(|line| format!("data: {line}"))
+            .collect::<Vec<_>>()
+            .join("\r\n");
+        let body = format!("event: future.event\r\nid: 9\r\ndata: \r\n{data_lines}\r\n\r\n",);
+        let fixture = fixture(response("text/event-stream", body.as_bytes()), false);
+        let mut stream = fixture
+            .client()
+            .open_event_stream(
+                &StreamEventsQuery {
+                    board: "default".to_owned(),
+                    task_id: None,
+                    after: 0,
+                    limit: 10,
+                },
+                None,
+            )
+            .unwrap();
+        let EventStreamItem::Business(event) = stream.next_item().unwrap();
+        assert_eq!(event.id, 9);
+        fixture.join();
     }
 
     #[test]
@@ -168,14 +535,50 @@ mod tests {
             format!("event: future.event\nid: 9\ndata: {data}\n"),
             format!("event: other.event\nid: 9\ndata: {data}\n\n"),
             format!("event: future.event\nid: 8\ndata: {data}\n\n"),
+            format!("event: future.event\nid: -1\ndata: {data}\n\n"),
+            format!(
+                "event: future.event\nid: {}\ndata: {data}\n\n",
+                JS_SAFE_INTEGER + 1
+            ),
+            "event: future.event\nid: 9\ndata: {not-json}\n\n".to_owned(),
+            format!(
+                "event: task.updated\nid: 9\ndata: {}\n\n",
+                serde_json::json!({
+                    "id": 9,
+                    "event_id": "e_example",
+                    "board_id": "b_default",
+                    "task_id": null,
+                    "run_id": null,
+                    "kind": "task.updated",
+                    "actor": "tester",
+                    "payload": {"unexpected": true},
+                    "created_at": 123
+                })
+            ),
             "event: future.event\nid: 9\n\n".to_owned(),
+            format!("event: future.event\nid: 9\nevent: future.event\ndata: {data}\n\n"),
+            format!("event: future.event\nid: 9\ndata: {data}\nunknown: value\n\n"),
         ] {
-            assert!(parse_sse_snapshot(&body).is_err(), "{body:?}");
+            let fixture = fixture(response("text/event-stream", body.as_bytes()), false);
+            let mut stream = fixture
+                .client()
+                .open_event_stream(
+                    &StreamEventsQuery {
+                        board: "default".to_owned(),
+                        task_id: None,
+                        after: 0,
+                        limit: 10,
+                    },
+                    None,
+                )
+                .unwrap();
+            assert!(stream.next_item().is_err(), "{body:?}");
+            fixture.join();
         }
     }
 
     #[test]
-    fn rejects_invalid_query_before_http() {
+    fn rejects_invalid_query_and_last_event_id_before_http() {
         let client = KanbanClient::new(crate::DEFAULT_SERVER_URL, "test").unwrap();
         for query in [
             StreamEventsQuery {
@@ -192,15 +595,161 @@ mod tests {
             },
             StreamEventsQuery {
                 board: "default".to_owned(),
+                task_id: None,
+                after: JS_SAFE_INTEGER + 1,
+                limit: 10,
+            },
+            StreamEventsQuery {
+                board: "default".to_owned(),
+                task_id: None,
+                after: 0,
+                limit: 0,
+            },
+            StreamEventsQuery {
+                board: "default".to_owned(),
                 task_id: Some("default#1".to_owned()),
                 after: 0,
                 limit: 10,
             },
         ] {
             assert_eq!(
-                client.stream_events_snapshot(&query).unwrap_err().code(),
+                client.open_event_stream(&query, None).unwrap_err().code(),
                 "invalid_input"
             );
+        }
+        for last_event_id in [-1, JS_SAFE_INTEGER + 1] {
+            assert_eq!(
+                client
+                    .open_event_stream(
+                        &StreamEventsQuery {
+                            board: "default".to_owned(),
+                            task_id: None,
+                            after: 0,
+                            limit: 10,
+                        },
+                        Some(last_event_id),
+                    )
+                    .unwrap_err()
+                    .code(),
+                "invalid_input"
+            );
+        }
+    }
+
+    #[test]
+    fn requires_exact_event_stream_media_type() {
+        for content_type in ["text/event-streamish", "application/json"] {
+            let fixture = fixture(response(content_type, b""), false);
+            let result = fixture.client().open_event_stream(
+                &StreamEventsQuery {
+                    board: "default".to_owned(),
+                    task_id: None,
+                    after: 0,
+                    limit: 10,
+                },
+                None,
+            );
+            assert!(matches!(result, Err(ClientError::InvalidResponse(_))));
+            fixture.join();
+        }
+    }
+
+    #[test]
+    fn reports_clean_eof_as_stream_closed() {
+        let fixture = fixture(response("text/event-stream", b""), false);
+        let mut stream = fixture
+            .client()
+            .open_event_stream(
+                &StreamEventsQuery {
+                    board: "default".to_owned(),
+                    task_id: None,
+                    after: 0,
+                    limit: 10,
+                },
+                None,
+            )
+            .unwrap();
+        assert!(matches!(stream.next_item(), Err(ClientError::StreamClosed)));
+        fixture.join();
+    }
+
+    #[test]
+    fn reports_reader_failures_as_stream_errors() {
+        struct FailingReader;
+
+        impl Read for FailingReader {
+            fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("fixture read failure"))
+            }
+        }
+
+        let mut stream = EventStream {
+            reader: Box::new(FailingReader),
+            decoder: SseDecoder::default(),
+            closed: false,
+        };
+        assert!(matches!(
+            stream.next_item(),
+            Err(ClientError::StreamRead(message)) if message.contains("fixture read failure")
+        ));
+    }
+
+    #[test]
+    fn drops_stream_reader_and_closes_connection() {
+        let fixture = fixture(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: keep-alive\r\n\r\n"
+                .to_vec(),
+            true,
+        );
+        let stream = fixture
+            .client()
+            .open_event_stream(
+                &StreamEventsQuery {
+                    board: "default".to_owned(),
+                    task_id: None,
+                    after: 0,
+                    limit: 10,
+                },
+                None,
+            )
+            .unwrap();
+        drop(stream);
+        assert!(fixture.closed.recv_timeout(Duration::from_secs(3)).unwrap());
+        fixture.join();
+    }
+
+    #[test]
+    fn rejects_oversized_frame_and_data_without_collecting_body() {
+        let oversized_data = (0..17)
+            .map(|_| format!("data: {}", "x".repeat(8 * 1024)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for body in [
+            format!("event: future.event\nid: 9\n{oversized_data}\n\n"),
+            format!(
+                "event: future.event\nid: 9\ndata: {}\n\n",
+                "x".repeat(MAX_LINE_BYTES + 1)
+            ),
+            format!("{}\n\n", "x".repeat(MAX_FRAME_BYTES + 1)),
+        ] {
+            let fixture = fixture(response("text/event-stream", body.as_bytes()), false);
+            let mut stream = fixture
+                .client()
+                .open_event_stream(
+                    &StreamEventsQuery {
+                        board: "default".to_owned(),
+                        task_id: None,
+                        after: 0,
+                        limit: 10,
+                    },
+                    None,
+                )
+                .unwrap();
+            assert!(matches!(
+                stream.next_item(),
+                Err(ClientError::InvalidResponse(_))
+            ));
+            fixture.join();
         }
     }
 }

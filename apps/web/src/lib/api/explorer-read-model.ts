@@ -762,7 +762,9 @@ function validateInspectorTask(
   expectedId: string,
 ): void {
   if (task.id !== expectedId) throw new ExplorerReadError("anomaly", "任务 Inspector 响应 id 与请求不一致。")
-  validateTaskBoard(task, board)
+  if (task.board_id !== board.id || task.board_slug !== board.slug) {
+    throw new ExplorerReadError("anomaly", `任务 ${task.id} 不属于当前 canonical board。`, { reason: "task-not-found" })
+  }
 }
 
 function validateInspectorScope(
@@ -823,6 +825,7 @@ export async function loadTaskInspector(
       }
       throw error
     }
+    validateInspectorTask(taskResponse.data, board, taskId)
     const [neighborhood, dependencies, steps, runs, comments, events] = await Promise.all([
       getPayload(transport, requests.neighborhood, linked.signal, budget).then((payload) => parseContract("api.task-neighborhood.response", parseApiTaskNeighborhoodResponse, payload).data),
       getPayload(transport, requests.dependencies, linked.signal, budget).then((payload) => parseContract("api.list-dependencies.response", parseApiListDependenciesResponse, payload).data),
@@ -832,7 +835,6 @@ export async function loadTaskInspector(
       getPayload(transport, requests.events, linked.signal, budget).then((payload) => parseContract("api.list-events.response", parseApiListEventsResponse, payload).data),
     ])
     const detail = { neighborhood, dependencies, steps, runs, comments, events }
-    validateInspectorTask(taskResponse.data, board, taskId)
     validateInspectorScope(detail, board, taskId)
     return Object.freeze({
       board,

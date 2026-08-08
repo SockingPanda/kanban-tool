@@ -183,6 +183,37 @@ describe("explorer task list URL state", () => {
       reason: "task-not-found",
     } satisfies Partial<ExplorerReadError>)
   })
+
+  test("fails closed with a typed task-not-found reason for a cross-board task response", async () => {
+    const paths: string[] = []
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        paths.push(path)
+        if (path.startsWith("/api/v1/boards?")) {
+          return {
+            payload: {
+              data: [{ id: "b_default", slug: "default", name: "Default", description: null, created_at: 1, updated_at: 1, archived_at: null }],
+            },
+            bytes: 1,
+          }
+        }
+        if (path === "/api/v1/tasks/t_other") {
+          return { payload: { data: mapTask("t_other", "b_other", "other"), meta: null }, bytes: 1 }
+        }
+        throw new Error(`cross-board task response must not fetch child detail: ${path}`)
+      },
+    }
+
+    await expect(loadTaskInspector(runtime, "default", "t_other", { transport })).rejects.toMatchObject({
+      name: "ExplorerReadError",
+      kind: "anomaly",
+      reason: "task-not-found",
+    } satisfies Partial<ExplorerReadError>)
+    expect(paths).toEqual([
+      "/api/v1/boards?include_archived=false",
+      "/api/v1/tasks/t_other",
+    ])
+  })
 })
 
 describe("explorer canonical board identity", () => {

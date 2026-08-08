@@ -36,6 +36,50 @@ export interface ValidatedControlEvent {
   readonly raw: unknown
 }
 
+export type QueryRoot =
+  | "boards"
+  | "columns"
+  | "events"
+  | "tasks"
+  | "stats"
+  | "search-status"
+  | "board-task-map"
+  | "task-detail"
+  | "task-dependencies"
+  | "task-neighborhood"
+  | "task-steps"
+  | "task-runs"
+  | "task-run-log"
+  | "task-events"
+  | "task-comments"
+  | "task-attachments"
+  | "task-label-suggestions"
+  | "signals"
+  | "signal"
+  | "label-ontology"
+  | "label-ontology-signal"
+  | "label-ontology-atom"
+  | "maintenance-status"
+
+export interface QueryTarget {
+  readonly root: QueryRoot
+  readonly boardId?: string
+  readonly taskId?: string
+  readonly runId?: string
+  readonly signalId?: string
+  readonly atomRef?: string
+  readonly observedOnly?: boolean
+}
+
+export interface InvalidationPlan {
+  readonly kind: "known" | "unknown"
+  readonly eventKind: string
+  readonly timeline: boolean
+  readonly fullRefetch: boolean
+  readonly targets: readonly QueryTarget[]
+  readonly reason?: string
+}
+
 export type EnvelopeParseResult =
   | { readonly status: "valid"; readonly envelope: EnvelopeCandidate }
   | { readonly status: "invalid"; readonly code: string }
@@ -56,6 +100,8 @@ export type ControlValidationResult =
  */
 export interface StreamContractAdapter {
   parseEnvelope(frame: RawSseFrame): EnvelopeParseResult
+  /** Parse a canonical JSON event returned by polling/catch-up without SSE headers. */
+  parsePollingEnvelope(value: unknown): EnvelopeParseResult
   validateBusiness(envelope: EnvelopeCandidate): BusinessValidationResult
   validateControl(frame: RawSseFrame): ControlValidationResult
 }
@@ -68,13 +114,51 @@ export interface SyncToken {
 
 export type RecoveryMode = "F" | "R"
 
+export type SyncTimer = number
+
+export interface SyncClock {
+  now(): number
+  setTimeout(callback: () => void, delayMs: number): SyncTimer
+  clearTimeout(timer: SyncTimer): void
+}
+
+export interface SyncTelemetryEntry {
+  readonly type: string
+  readonly boardId: string
+  readonly cursor: number
+  readonly details?: Readonly<Record<string, unknown>>
+}
+
+export interface SyncTelemetry {
+  record(entry: SyncTelemetryEntry): void
+}
+
+export interface RecoveryBoundary {
+  readonly highWatermark: number
+  readonly byId: ReadonlyMap<number, string>
+  readonly byEventId: ReadonlyMap<string, string>
+  readonly token: SyncToken
+  readonly revision: number
+  readonly published: boolean
+}
+
+export interface RecoveryResult {
+  readonly confirmedCursor: number
+  readonly noGap: boolean
+  readonly boundary: RecoveryBoundary
+}
+
+export interface PollEventsPage {
+  readonly events: readonly unknown[]
+  readonly nextAfter: number
+  readonly hasMore: boolean
+  readonly noGap: boolean
+}
+
 export interface SyncQuerySink<TEvent = ValidatedBusinessEvent> {
-  onEvent(event: TEvent, token: SyncToken): Promise<void>
-  refetchObserved(mode: RecoveryMode, token: SyncToken, after: number): Promise<{
-    readonly confirmedCursor: number
-    readonly noGap: boolean
-  }>
-  pollEvents(query: unknown, signal: AbortSignal): Promise<unknown>
+  onEvent(event: TEvent, plan: InvalidationPlan, token: SyncToken): Promise<void>
+  refetchObserved(mode: RecoveryMode, token: SyncToken, after: number): Promise<RecoveryResult>
+  pollEvents(query: unknown, signal: AbortSignal): Promise<PollEventsPage>
 }
 
 export interface SseTransportRequest {

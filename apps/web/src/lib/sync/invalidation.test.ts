@@ -1,0 +1,108 @@
+import { describe, expect, test } from "vitest"
+
+import { classifyEvent, fullRefetchPlan, targetKey } from "./invalidation"
+import type { ValidatedBusinessEvent } from "./contracts"
+import { knownSseEventKinds } from "../api/generated/sse"
+
+function event(overrides: Partial<ValidatedBusinessEvent> = {}): ValidatedBusinessEvent {
+  return {
+    id: 7,
+    eventId: "e_7",
+    boardId: "board-a",
+    taskId: "task-a",
+    runId: "run-a",
+    kind: "task.updated",
+    raw: {},
+    scope: { taskId: "task-a" },
+    canonicalFingerprint: "fingerprint-7",
+    known: true,
+    ...overrides,
+  }
+}
+
+describe("literal event invalidation plans", () => {
+  test("maps task.updated through the exact known literal", () => {
+    const plan = classifyEvent(event({ kind: "task.updated" }))
+
+    expect(plan.fullRefetch).toBe(false)
+    expect(plan.timeline).toBe(true)
+    expect(plan.targets.map(targetKey)).toEqual(
+      expect.arrayContaining([
+        "events(board-a)",
+        "task-events(task-a)",
+        "tasks(board-a)",
+        "stats(board-a)",
+        "search-status(board-a)",
+        "board-task-map(board-a)",
+        "task-detail(task-a)",
+        "task-label-suggestions(task-a)",
+      ]),
+    )
+    expect(plan.targets.find((target) => target.root === "maintenance-status")).toMatchObject({ observedOnly: true })
+    expect(plan.targets.find((target) => target.root === "maintenance-status")).not.toHaveProperty("boardId")
+    expect(plan.targets.map(targetKey)).toContain("task-neighborhood(board-a)")
+  })
+
+  test("keeps board switcher and global maintenance outside active-board aliases", () => {
+    const created = classifyEvent(event({ kind: "board.created", taskId: null, scope: { taskId: null } }))
+    expect(created.targets.map(targetKey)).not.toContain("boards(board-a)")
+    expect(created.targets.map(targetKey)).toContain("columns(board-a)")
+    expect(created.targets.map(targetKey)).not.toContain("maintenance-status(board-a)")
+  })
+
+  test("only uses run_id-bearing run targets", () => {
+    const withoutRun = classifyEvent(event({ kind: "task.updated", runId: null }))
+    expect(withoutRun.targets.map(targetKey)).not.toContain("task-runs(task-a)")
+    expect(withoutRun.targets.map(targetKey)).not.toContain("task-run-log(task-a)")
+    const withRun = classifyEvent(event({ kind: "task.updated", runId: "run-2" }))
+    expect(withRun.targets.map(targetKey)).toContain("task-runs(task-a)")
+    expect(withRun.targets.map(targetKey)).toContain("task-run-log(run-2)")
+  })
+
+  test("includes both dependency endpoints and linked step neighborhood", () => {
+    const dependency = classifyEvent(
+      event({
+        kind: "dependency.added",
+        taskId: "child",
+        scope: { taskId: "child", parentTaskId: "parent" },
+      }),
+    )
+    expect(dependency.targets.map(targetKey)).toEqual(
+      expect.arrayContaining([
+        "task-detail(child)",
+        "task-dependencies(child)",
+        "task-neighborhood(child)",
+        "task-detail(parent)",
+        "task-dependencies(parent)",
+        "task-neighborhood(parent)",
+      ]),
+    )
+
+    const step = classifyEvent(
+      event({
+        kind: "task.step.updated",
+        scope: { taskId: "parent", linkedTaskId: "linked" },
+      }),
+    )
+    expect(step.targets.map(targetKey)).toContain("task-neighborhood(linked)")
+  })
+
+  test("does not upgrade future prefix lookalikes", () => {
+    const plan = classifyEvent(event({ kind: "task.step.future", known: false }))
+    expect(plan.fullRefetch).toBe(true)
+    expect(plan.kind).toBe("unknown")
+  })
+
+  test("returns the conservative board plan for unknown events", () => {
+    const plan = classifyEvent(event({ kind: "task.attachment.created", known: false }))
+    expect(plan).toEqual(fullRefetchPlan("task.attachment.created", "unknown", "board-a"))
+  })
+
+  test("covers every generated known literal without prefix matching", () => {
+    for (const kind of knownSseEventKinds) {
+      const plan = classifyEvent(event({ kind }))
+      expect(plan.kind, kind).toBe("known")
+      expect(plan.fullRefetch, kind).toBe(false)
+    }
+  })
+})

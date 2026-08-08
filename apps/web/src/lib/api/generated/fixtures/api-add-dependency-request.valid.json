@@ -1,0 +1,4 @@
+{
+  "parent_task_id": "t_fixture_parent",
+  "actor": "fixture-dependency"
+}

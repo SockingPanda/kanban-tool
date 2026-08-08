@@ -1,0 +1,258 @@
+@layer product {
+  .skipLink {
+    position: fixed;
+    z-index: 10;
+    top: 0.75rem;
+    left: 0.75rem;
+    transform: translateY(-200%);
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.5rem 0.75rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    text-decoration: none;
+  }
+
+  .skipLink:focus-visible {
+    transform: translateY(0);
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .shell {
+    display: grid;
+    gap: 1.5rem;
+    max-width: 84rem;
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 2.5rem 3rem 4rem;
+  }
+
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 2rem;
+    border-bottom: 1px solid var(--color-border);
+    padding-block-end: 1.5rem;
+  }
+
+  .eyebrow,
+  .kicker,
+  .signalLabel {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .header h1,
+  .card h2 {
+    margin-block: 0.35rem 0;
+  }
+
+  .header h1 {
+    font-size: clamp(2.25rem, 5vw, 4.5rem);
+    letter-spacing: -0.04em;
+    line-height: 0.98;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+  }
+
+  .shell:focus {
+    outline: none;
+  }
+
+  .shell:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: -0.15rem;
+  }
+
+  .lede {
+    max-width: 62rem;
+    margin: 1rem 0 0;
+    color: var(--color-text-secondary);
+    font-size: 1.05rem;
+    line-height: 1.65;
+  }
+
+  .actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.5rem;
+  }
+
+  .actions :where(button) {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .signalStrip {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    border-inline-start: 0.2rem solid var(--color-accent);
+    padding: 0.7rem 1rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+  }
+
+  .stack {
+    align-items: stretch;
+  }
+
+  .stack > * + * {
+    margin-block-start: 1.25rem;
+  }
+
+  .card {
+    min-height: 10rem;
+  }
+
+  .cardHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-block-end: 1rem;
+  }
+
+  .status {
+    border: 1px solid var(--color-border-success);
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    color: var(--color-text-success);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .muted {
+    margin: 0;
+    color: var(--color-text-secondary);
+  }
+
+  .formRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 1rem;
+  }
+
+  .field {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .fieldLabel {
+    color: var(--color-text-primary);
+    font-size: 0.85rem;
+    font-weight: 650;
+  }
+
+  .fieldDescription {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+  }
+
+  .textInput {
+    min-height: 2.25rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.45rem 0.65rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .textInput:focus-visible,
+  .nativeButton:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .tableWrap {
+    /* 桌面基线让表格保持正常文档流，避免 `overflow-x:auto` 隐式创建
+       垂直溢出后裁掉最后一行。 */
+    overflow: visible;
+  }
+
+  .tableWrap table {
+    min-width: 36rem;
+  }
+
+  .dialogBody {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    max-height: 100vh;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    padding: 1rem;
+    background: var(--color-overlay);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .overlay::backdrop {
+    background: var(--color-overlay);
+  }
+
+  .overlayPanel {
+    width: min(28rem, calc(100vw - 2rem));
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-container);
+    padding: 1.5rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-high);
+  }
+
+  .overlay:not([open]) {
+    display: none;
+  }
+
+  .overlayPanel h2 {
+    margin: 0 0 1rem;
+  }
+
+  .nativeButton {
+    min-height: 2.25rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.45rem 0.75rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .nativeButton:hover {
+    background: var(--color-background-muted);
+  }
+
+  .nativeButton:active {
+    background: var(--color-overlay-pressed);
+  }
+
+  .dialogBody p {
+    margin: 0;
+  }
+}

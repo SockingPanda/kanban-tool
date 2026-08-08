@@ -1,0 +1,32 @@
+{
+  "$id": "urn:kanban-tool:schema:api:complete-task-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "claim_token": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "force": {
+      "default": false,
+      "type": "boolean"
+    },
+    "result": true,
+    "summary": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "Kanban complete task request v1",
+  "type": "object"
+}

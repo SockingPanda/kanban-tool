@@ -1,0 +1,16 @@
+// 由 `xtask web-contracts generate` 生成；请勿手工编辑。
+import type { FromSchema } from "json-schema-to-ts";
+import { ContractValidationError, createContractValidator } from "../runtime";
+
+export const ApiSearchStatusResponseSchema = {"$defs":{"SearchStatus":{"additionalProperties":false,"properties":{"backend":{"type":"string"},"database_instance_id":{"type":["string","null"]},"derived_index":{"type":"boolean"},"fallback_reason":{"type":["string","null"]},"generation":{"type":["string","null"]},"index_lag_events":{"format":"int64","type":["integer","null"]},"index_version":{"type":["string","null"]},"last_event_id":{"format":"int64","type":["integer","null"]},"message":{"type":"string"},"protocol_version":{"format":"int64","type":["integer","null"]},"resolved_board_id":{"type":"string"},"stale":{"type":"boolean"}},"required":["backend","derived_index","stale","database_instance_id","protocol_version","generation","resolved_board_id","fallback_reason","index_version","last_event_id","index_lag_events","message"],"type":"object"}},"$id":"urn:kanban-tool:schema:api:search-status-response:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"data":{"$ref":"#/$defs/SearchStatus"}},"required":["data"],"title":"Kanban search status response v1","type":"object"} as const;
+export type ApiSearchStatusResponseContract = FromSchema<typeof ApiSearchStatusResponseSchema>;
+
+export const apiSearchStatusResponseValidator: ReturnType<typeof createContractValidator<ApiSearchStatusResponseContract>> = createContractValidator<ApiSearchStatusResponseContract>(
+  "api.search-status.response",
+  ApiSearchStatusResponseSchema,
+);
+
+export function parseApiSearchStatusResponse(value: unknown): ApiSearchStatusResponseContract {
+  if (!apiSearchStatusResponseValidator(value)) throw new ContractValidationError("api.search-status.response", apiSearchStatusResponseValidator.errors);
+  return value;
+}

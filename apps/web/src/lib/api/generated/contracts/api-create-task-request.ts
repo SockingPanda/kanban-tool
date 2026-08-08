@@ -1,0 +1,16 @@
+// 由 `xtask web-contracts generate` 生成；请勿手工编辑。
+import type { FromSchema } from "json-schema-to-ts";
+import { ContractValidationError, createContractValidator } from "../runtime";
+
+export const ApiCreateTaskRequestSchema = {"$defs":{"ApiCreateTaskStatus":{"enum":["triage","todo","scheduled","ready"],"type":"string"}},"$id":"urn:kanban-tool:schema:api:create-task-request:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"actor":{"type":["string","null"]},"assignee":{"type":["string","null"]},"depends_on":{"default":[],"items":{"type":"string"},"type":"array"},"description":{"type":["string","null"]},"due_at":{"format":"int64","type":["integer","null"]},"idempotency_key":{"description":"作用域限定在所选看板上的 entity-local 重试 key。","type":["string","null"]},"labels":{"default":[],"items":{"type":"string"},"type":"array"},"max_retries":{"format":"int64","type":["integer","null"]},"metadata":{"additionalProperties":true,"type":["object","null"]},"priority":{"default":3,"format":"int64","type":"integer"},"scheduled_at":{"format":"int64","type":["integer","null"]},"status":{"anyOf":[{"$ref":"#/$defs/ApiCreateTaskStatus"},{"type":"null"}]},"task_id":{"description":"可选的 client 生成 typed ID；省略时由 host 生成。","type":["string","null"]},"title":{"type":"string"}},"required":["title"],"title":"Kanban create task request v1","type":"object"} as const;
+export type ApiCreateTaskRequestContract = FromSchema<typeof ApiCreateTaskRequestSchema>;
+
+export const apiCreateTaskRequestValidator: ReturnType<typeof createContractValidator<ApiCreateTaskRequestContract>> = createContractValidator<ApiCreateTaskRequestContract>(
+  "api.create-task.request",
+  ApiCreateTaskRequestSchema,
+);
+
+export function parseApiCreateTaskRequest(value: unknown): ApiCreateTaskRequestContract {
+  if (!apiCreateTaskRequestValidator(value)) throw new ContractValidationError("api.create-task.request", apiCreateTaskRequestValidator.errors);
+  return value;
+}

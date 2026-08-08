@@ -1,12 +1,4 @@
-@layer reset, product;
-
-@layer reset {
-  *,
-  *::before,
-  *::after {
-    box-sizing: border-box;
-  }
-
+@layer product {
   html,
   body,
   #root {
@@ -14,20 +6,14 @@
   }
 
   body {
-    margin: 0;
-  }
-}
-
-@layer product {
-  body {
-    background: Canvas;
-    color: CanvasText;
-    font-family: system-ui, sans-serif;
+    min-width: 52rem;
+    background: var(--color-background-body);
+    color: var(--color-text-primary);
+    font-family: var(--font-family-body);
   }
 
-  main {
-    max-width: 72rem;
-    margin: 0 auto;
-    padding: 4rem;
+  button,
+  input {
+    font: inherit;
   }
 }

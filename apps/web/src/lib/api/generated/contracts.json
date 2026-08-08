@@ -1,0 +1,2002 @@
+[
+  {
+    "direction": "deserialize",
+    "id": "api.list-board-columns.path",
+    "invalidFixture": "fixtures/api-list-board-columns-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-board-columns-path:v1",
+    "schemaPath": "schemas/api-list-board-columns-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-board-columns-path.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-board-columns.response",
+    "invalidFixture": "fixtures/api-list-board-columns-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-board-columns-response:v1",
+    "schemaPath": "schemas/api-list-board-columns-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-board-columns-response.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.doctor.response",
+    "invalidFixture": "fixtures/api-doctor-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:doctor-response:v1",
+    "schemaPath": "schemas/api-doctor-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-doctor-response.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.error.response",
+    "invalidFixture": "fixtures/api-error-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:error-response:v1",
+    "schemaPath": "schemas/api-error-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-error-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-boards.query",
+    "invalidFixture": "fixtures/api-list-boards-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-boards-query:v1",
+    "schemaPath": "schemas/api-list-boards-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-boards-query.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-boards.response",
+    "invalidFixture": "fixtures/api-list-boards-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-boards-response:v1",
+    "schemaPath": "schemas/api-list-boards-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-boards-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.archive-task.request",
+    "invalidFixture": "fixtures/api-archive-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:archive-task-request:v1",
+    "schemaPath": "schemas/api-archive-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-archive-task-request.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.add-dependency.request",
+    "invalidFixture": "fixtures/api-add-dependency-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:add-dependency-request:v1",
+    "schemaPath": "schemas/api-add-dependency-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-add-dependency-request.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-boards.headers",
+    "invalidFixture": "fixtures/api-list-boards-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-boards-headers:v1",
+    "schemaPath": "schemas/api-list-boards-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-boards-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-board-columns.headers",
+    "invalidFixture": "fixtures/api-list-board-columns-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-board-columns-headers:v1",
+    "schemaPath": "schemas/api-list-board-columns-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-board-columns-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-tasks.path",
+    "invalidFixture": "fixtures/api-list-tasks-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-tasks-path:v1",
+    "schemaPath": "schemas/api-list-tasks-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-tasks-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-tasks.query",
+    "invalidFixture": "fixtures/api-list-tasks-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-tasks-query:v1",
+    "schemaPath": "schemas/api-list-tasks-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-tasks-query.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-tasks.headers",
+    "invalidFixture": "fixtures/api-list-tasks-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-tasks-headers:v1",
+    "schemaPath": "schemas/api-list-tasks-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-tasks-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-tasks.response",
+    "invalidFixture": "fixtures/api-list-tasks-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-tasks-response:v1",
+    "schemaPath": "schemas/api-list-tasks-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-tasks-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-tasks-by-status.path",
+    "invalidFixture": "fixtures/api-list-tasks-by-status-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-tasks-by-status-path:v1",
+    "schemaPath": "schemas/api-list-tasks-by-status-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-tasks-by-status-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-tasks-by-status.query",
+    "invalidFixture": "fixtures/api-list-tasks-by-status-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-tasks-by-status-query:v1",
+    "schemaPath": "schemas/api-list-tasks-by-status-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-tasks-by-status-query.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-tasks-by-status.headers",
+    "invalidFixture": "fixtures/api-list-tasks-by-status-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-tasks-by-status-headers:v1",
+    "schemaPath": "schemas/api-list-tasks-by-status-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-tasks-by-status-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-tasks-by-status.response",
+    "invalidFixture": "fixtures/api-list-tasks-by-status-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-tasks-by-status-response:v1",
+    "schemaPath": "schemas/api-list-tasks-by-status-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-tasks-by-status-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-task.path",
+    "invalidFixture": "fixtures/api-create-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-task-path:v1",
+    "schemaPath": "schemas/api-create-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-task.headers",
+    "invalidFixture": "fixtures/api-create-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-task-headers:v1",
+    "schemaPath": "schemas/api-create-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-task-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-task.request",
+    "invalidFixture": "fixtures/api-create-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-task-request:v1",
+    "schemaPath": "schemas/api-create-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-task-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.create-task.response",
+    "invalidFixture": "fixtures/api-create-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-task-response:v1",
+    "schemaPath": "schemas/api-create-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-task.path",
+    "invalidFixture": "fixtures/api-get-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-task-path:v1",
+    "schemaPath": "schemas/api-get-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-task.query",
+    "invalidFixture": "fixtures/api-get-task-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-task-query:v1",
+    "schemaPath": "schemas/api-get-task-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-task-query.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-task.headers",
+    "invalidFixture": "fixtures/api-get-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-task-headers:v1",
+    "schemaPath": "schemas/api-get-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-task-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.get-task.response",
+    "invalidFixture": "fixtures/api-get-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-task-response:v1",
+    "schemaPath": "schemas/api-get-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.update-task.path",
+    "invalidFixture": "fixtures/api-update-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:update-task-path:v1",
+    "schemaPath": "schemas/api-update-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-update-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.update-task.headers",
+    "invalidFixture": "fixtures/api-update-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:update-task-headers:v1",
+    "schemaPath": "schemas/api-update-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-update-task-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.update-task.request",
+    "invalidFixture": "fixtures/api-update-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:update-task-request:v1",
+    "schemaPath": "schemas/api-update-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-update-task-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.update-task.response",
+    "invalidFixture": "fixtures/api-update-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:update-task-response:v1",
+    "schemaPath": "schemas/api-update-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-update-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.specify-task.path",
+    "invalidFixture": "fixtures/api-specify-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:specify-task-path:v1",
+    "schemaPath": "schemas/api-specify-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-specify-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.specify-task.headers",
+    "invalidFixture": "fixtures/api-specify-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:specify-task-headers:v1",
+    "schemaPath": "schemas/api-specify-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-specify-task-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.specify-task.request",
+    "invalidFixture": "fixtures/api-specify-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:specify-task-request:v1",
+    "schemaPath": "schemas/api-specify-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-specify-task-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.specify-task.response",
+    "invalidFixture": "fixtures/api-specify-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:specify-task-response:v1",
+    "schemaPath": "schemas/api-specify-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-specify-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.promote-task.path",
+    "invalidFixture": "fixtures/api-promote-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:promote-task-path:v1",
+    "schemaPath": "schemas/api-promote-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-promote-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.promote-task.headers",
+    "invalidFixture": "fixtures/api-promote-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:promote-task-headers:v1",
+    "schemaPath": "schemas/api-promote-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-promote-task-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.promote-task.request",
+    "invalidFixture": "fixtures/api-promote-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:promote-task-request:v1",
+    "schemaPath": "schemas/api-promote-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-promote-task-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.promote-task.response",
+    "invalidFixture": "fixtures/api-promote-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:promote-task-response:v1",
+    "schemaPath": "schemas/api-promote-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-promote-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.claim-task.path",
+    "invalidFixture": "fixtures/api-claim-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:claim-task-path:v1",
+    "schemaPath": "schemas/api-claim-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-claim-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.claim-task.headers",
+    "invalidFixture": "fixtures/api-claim-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:claim-task-headers:v1",
+    "schemaPath": "schemas/api-claim-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-claim-task-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.claim-task.request",
+    "invalidFixture": "fixtures/api-claim-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:claim-task-request:v1",
+    "schemaPath": "schemas/api-claim-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-claim-task-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.claim-task.response",
+    "invalidFixture": "fixtures/api-claim-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:claim-task-response:v1",
+    "schemaPath": "schemas/api-claim-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-claim-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.heartbeat-task.path",
+    "invalidFixture": "fixtures/api-heartbeat-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:heartbeat-task-path:v1",
+    "schemaPath": "schemas/api-heartbeat-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-heartbeat-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.heartbeat-task.headers",
+    "invalidFixture": "fixtures/api-heartbeat-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:heartbeat-task-headers:v1",
+    "schemaPath": "schemas/api-heartbeat-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-heartbeat-task-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.heartbeat-task.request",
+    "invalidFixture": "fixtures/api-heartbeat-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:heartbeat-task-request:v1",
+    "schemaPath": "schemas/api-heartbeat-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-heartbeat-task-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.heartbeat-task.response",
+    "invalidFixture": "fixtures/api-heartbeat-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:heartbeat-task-response:v1",
+    "schemaPath": "schemas/api-heartbeat-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-heartbeat-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.complete-task.path",
+    "invalidFixture": "fixtures/api-complete-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:complete-task-path:v1",
+    "schemaPath": "schemas/api-complete-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-complete-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.complete-task.headers",
+    "invalidFixture": "fixtures/api-complete-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:complete-task-headers:v1",
+    "schemaPath": "schemas/api-complete-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-complete-task-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.complete-task.request",
+    "invalidFixture": "fixtures/api-complete-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:complete-task-request:v1",
+    "schemaPath": "schemas/api-complete-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-complete-task-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.complete-task.response",
+    "invalidFixture": "fixtures/api-complete-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:complete-task-response:v1",
+    "schemaPath": "schemas/api-complete-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-complete-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.submit-review-task.path",
+    "invalidFixture": "fixtures/api-submit-review-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:submit-review-task-path:v1",
+    "schemaPath": "schemas/api-submit-review-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-submit-review-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.submit-review-task.headers",
+    "invalidFixture": "fixtures/api-submit-review-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:submit-review-task-headers:v1",
+    "schemaPath": "schemas/api-submit-review-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-submit-review-task-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.submit-review-task.request",
+    "invalidFixture": "fixtures/api-submit-review-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:submit-review-task-request:v1",
+    "schemaPath": "schemas/api-submit-review-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-submit-review-task-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.submit-review-task.response",
+    "invalidFixture": "fixtures/api-submit-review-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:submit-review-task-response:v1",
+    "schemaPath": "schemas/api-submit-review-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-submit-review-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.block-task.path",
+    "invalidFixture": "fixtures/api-block-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:block-task-path:v1",
+    "schemaPath": "schemas/api-block-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-block-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.block-task.headers",
+    "invalidFixture": "fixtures/api-block-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:block-task-headers:v1",
+    "schemaPath": "schemas/api-block-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-block-task-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.block-task.request",
+    "invalidFixture": "fixtures/api-block-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:block-task-request:v1",
+    "schemaPath": "schemas/api-block-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-block-task-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.block-task.response",
+    "invalidFixture": "fixtures/api-block-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:block-task-response:v1",
+    "schemaPath": "schemas/api-block-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-block-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.unblock-task.path",
+    "invalidFixture": "fixtures/api-unblock-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:unblock-task-path:v1",
+    "schemaPath": "schemas/api-unblock-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-unblock-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.unblock-task.headers",
+    "invalidFixture": "fixtures/api-unblock-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:unblock-task-headers:v1",
+    "schemaPath": "schemas/api-unblock-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-unblock-task-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.unblock-task.request",
+    "invalidFixture": "fixtures/api-unblock-task-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:unblock-task-request:v1",
+    "schemaPath": "schemas/api-unblock-task-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-unblock-task-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.unblock-task.response",
+    "invalidFixture": "fixtures/api-unblock-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:unblock-task-response:v1",
+    "schemaPath": "schemas/api-unblock-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-unblock-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.archive-task.path",
+    "invalidFixture": "fixtures/api-archive-task-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:archive-task-path:v1",
+    "schemaPath": "schemas/api-archive-task-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-archive-task-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.archive-task.headers",
+    "invalidFixture": "fixtures/api-archive-task-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:archive-task-headers:v1",
+    "schemaPath": "schemas/api-archive-task-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-archive-task-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.archive-task.response",
+    "invalidFixture": "fixtures/api-archive-task-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:archive-task-response:v1",
+    "schemaPath": "schemas/api-archive-task-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-archive-task-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-steps.path",
+    "invalidFixture": "fixtures/api-list-steps-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-steps-path:v1",
+    "schemaPath": "schemas/api-list-steps-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-steps-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-steps.headers",
+    "invalidFixture": "fixtures/api-list-steps-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-steps-headers:v1",
+    "schemaPath": "schemas/api-list-steps-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-steps-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-steps.response",
+    "invalidFixture": "fixtures/api-list-steps-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-steps-response:v1",
+    "schemaPath": "schemas/api-list-steps-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-steps-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-step.path",
+    "invalidFixture": "fixtures/api-create-step-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-step-path:v1",
+    "schemaPath": "schemas/api-create-step-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-step-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-step.headers",
+    "invalidFixture": "fixtures/api-create-step-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-step-headers:v1",
+    "schemaPath": "schemas/api-create-step-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-step-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-step.request",
+    "invalidFixture": "fixtures/api-create-step-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-step-request:v1",
+    "schemaPath": "schemas/api-create-step-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-step-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.create-step.response",
+    "invalidFixture": "fixtures/api-create-step-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-step-response:v1",
+    "schemaPath": "schemas/api-create-step-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-step-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.mark-execution-plan-not-required.path",
+    "invalidFixture": "fixtures/api-mark-execution-plan-not-required-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:mark-execution-plan-not-required-path:v1",
+    "schemaPath": "schemas/api-mark-execution-plan-not-required-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-mark-execution-plan-not-required-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.mark-execution-plan-not-required.headers",
+    "invalidFixture": "fixtures/api-mark-execution-plan-not-required-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:mark-execution-plan-not-required-headers:v1",
+    "schemaPath": "schemas/api-mark-execution-plan-not-required-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-mark-execution-plan-not-required-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.mark-execution-plan-not-required.request",
+    "invalidFixture": "fixtures/api-mark-execution-plan-not-required-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:mark-execution-plan-not-required-request:v1",
+    "schemaPath": "schemas/api-mark-execution-plan-not-required-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-mark-execution-plan-not-required-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.mark-execution-plan-not-required.response",
+    "invalidFixture": "fixtures/api-mark-execution-plan-not-required-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:mark-execution-plan-not-required-response:v1",
+    "schemaPath": "schemas/api-mark-execution-plan-not-required-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-mark-execution-plan-not-required-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-dependencies.path",
+    "invalidFixture": "fixtures/api-list-dependencies-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-dependencies-path:v1",
+    "schemaPath": "schemas/api-list-dependencies-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-dependencies-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-dependencies.headers",
+    "invalidFixture": "fixtures/api-list-dependencies-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-dependencies-headers:v1",
+    "schemaPath": "schemas/api-list-dependencies-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-dependencies-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-dependencies.response",
+    "invalidFixture": "fixtures/api-list-dependencies-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-dependencies-response:v1",
+    "schemaPath": "schemas/api-list-dependencies-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-dependencies-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.add-dependency.path",
+    "invalidFixture": "fixtures/api-add-dependency-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:add-dependency-path:v1",
+    "schemaPath": "schemas/api-add-dependency-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-add-dependency-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.add-dependency.headers",
+    "invalidFixture": "fixtures/api-add-dependency-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:add-dependency-headers:v1",
+    "schemaPath": "schemas/api-add-dependency-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-add-dependency-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.add-dependency.response",
+    "invalidFixture": "fixtures/api-add-dependency-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:add-dependency-response:v1",
+    "schemaPath": "schemas/api-add-dependency-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-add-dependency-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.remove-dependency.path",
+    "invalidFixture": "fixtures/api-remove-dependency-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:remove-dependency-path:v1",
+    "schemaPath": "schemas/api-remove-dependency-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-remove-dependency-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.remove-dependency.headers",
+    "invalidFixture": "fixtures/api-remove-dependency-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:remove-dependency-headers:v1",
+    "schemaPath": "schemas/api-remove-dependency-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-remove-dependency-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.remove-dependency.response",
+    "invalidFixture": "fixtures/api-remove-dependency-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:remove-dependency-response:v1",
+    "schemaPath": "schemas/api-remove-dependency-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-remove-dependency-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-runs.path",
+    "invalidFixture": "fixtures/api-list-runs-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-runs-path:v1",
+    "schemaPath": "schemas/api-list-runs-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-runs-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-runs.headers",
+    "invalidFixture": "fixtures/api-list-runs-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-runs-headers:v1",
+    "schemaPath": "schemas/api-list-runs-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-runs-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-runs.response",
+    "invalidFixture": "fixtures/api-list-runs-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-runs-response:v1",
+    "schemaPath": "schemas/api-list-runs-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-runs-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-run-log.path",
+    "invalidFixture": "fixtures/api-get-run-log-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-run-log-path:v1",
+    "schemaPath": "schemas/api-get-run-log-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-run-log-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-run-log.headers",
+    "invalidFixture": "fixtures/api-get-run-log-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-run-log-headers:v1",
+    "schemaPath": "schemas/api-get-run-log-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-run-log-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.get-run-log.response",
+    "invalidFixture": "fixtures/api-get-run-log-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-run-log-response:v1",
+    "schemaPath": "schemas/api-get-run-log-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-run-log-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-comments.path",
+    "invalidFixture": "fixtures/api-list-comments-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-comments-path:v1",
+    "schemaPath": "schemas/api-list-comments-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-comments-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-comments.headers",
+    "invalidFixture": "fixtures/api-list-comments-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-comments-headers:v1",
+    "schemaPath": "schemas/api-list-comments-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-comments-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-comments.response",
+    "invalidFixture": "fixtures/api-list-comments-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-comments-response:v1",
+    "schemaPath": "schemas/api-list-comments-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-comments-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-comment.path",
+    "invalidFixture": "fixtures/api-create-comment-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-comment-path:v1",
+    "schemaPath": "schemas/api-create-comment-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-comment-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-comment.headers",
+    "invalidFixture": "fixtures/api-create-comment-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-comment-headers:v1",
+    "schemaPath": "schemas/api-create-comment-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-comment-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-comment.request",
+    "invalidFixture": "fixtures/api-create-comment-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-comment-request:v1",
+    "schemaPath": "schemas/api-create-comment-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-comment-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.create-comment.response",
+    "invalidFixture": "fixtures/api-create-comment-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-comment-response:v1",
+    "schemaPath": "schemas/api-create-comment-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-comment-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-attachments.path",
+    "invalidFixture": "fixtures/api-list-attachments-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-attachments-path:v1",
+    "schemaPath": "schemas/api-list-attachments-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-attachments-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-attachments.headers",
+    "invalidFixture": "fixtures/api-list-attachments-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-attachments-headers:v1",
+    "schemaPath": "schemas/api-list-attachments-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-attachments-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-attachments.response",
+    "invalidFixture": "fixtures/api-list-attachments-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-attachments-response:v1",
+    "schemaPath": "schemas/api-list-attachments-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-attachments-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-attachment.path",
+    "invalidFixture": "fixtures/api-create-attachment-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-attachment-path:v1",
+    "schemaPath": "schemas/api-create-attachment-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-attachment-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-attachment.headers",
+    "invalidFixture": "fixtures/api-create-attachment-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-attachment-headers:v1",
+    "schemaPath": "schemas/api-create-attachment-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-attachment-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-attachment.request",
+    "invalidFixture": "fixtures/api-create-attachment-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-attachment-request:v1",
+    "schemaPath": "schemas/api-create-attachment-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-attachment-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.create-attachment.response",
+    "invalidFixture": "fixtures/api-create-attachment-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-attachment-response:v1",
+    "schemaPath": "schemas/api-create-attachment-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-attachment-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.download-attachment.path",
+    "invalidFixture": "fixtures/api-download-attachment-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:download-attachment-path:v1",
+    "schemaPath": "schemas/api-download-attachment-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-download-attachment-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.download-attachment.headers",
+    "invalidFixture": "fixtures/api-download-attachment-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:download-attachment-headers:v1",
+    "schemaPath": "schemas/api-download-attachment-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-download-attachment-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.download-attachment.response",
+    "invalidFixture": "fixtures/api-download-attachment-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:download-attachment-response:v1",
+    "schemaPath": "schemas/api-download-attachment-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-download-attachment-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.delete-attachment.path",
+    "invalidFixture": "fixtures/api-delete-attachment-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:delete-attachment-path:v1",
+    "schemaPath": "schemas/api-delete-attachment-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-delete-attachment-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.delete-attachment.headers",
+    "invalidFixture": "fixtures/api-delete-attachment-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:delete-attachment-headers:v1",
+    "schemaPath": "schemas/api-delete-attachment-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-delete-attachment-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.delete-attachment.response",
+    "invalidFixture": "fixtures/api-delete-attachment-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:delete-attachment-response:v1",
+    "schemaPath": "schemas/api-delete-attachment-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-delete-attachment-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-events.query",
+    "invalidFixture": "fixtures/api-list-events-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-events-query:v1",
+    "schemaPath": "schemas/api-list-events-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-events-query.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-events.headers",
+    "invalidFixture": "fixtures/api-list-events-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-events-headers:v1",
+    "schemaPath": "schemas/api-list-events-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-events-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-events.response",
+    "invalidFixture": "fixtures/api-list-events-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-events-response:v1",
+    "schemaPath": "schemas/api-list-events-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-events-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "sse.stream-events.query",
+    "invalidFixture": "fixtures/sse-stream-events-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:sse:stream-events-query:v1",
+    "schemaPath": "schemas/sse-stream-events-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "sse",
+    "validFixture": "fixtures/sse-stream-events-query.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "sse.event.data",
+    "invalidFixture": "fixtures/sse-event-data.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:sse:stream-event-data:v1",
+    "schemaPath": "schemas/sse-event-data.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "sse",
+    "validFixture": "fixtures/sse-event-data.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-task-labels.path",
+    "invalidFixture": "fixtures/api-list-task-labels-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-task-labels-path:v1",
+    "schemaPath": "schemas/api-list-task-labels-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-task-labels-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-task-labels.headers",
+    "invalidFixture": "fixtures/api-list-task-labels-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-task-labels-headers:v1",
+    "schemaPath": "schemas/api-list-task-labels-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-task-labels-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-task-labels.response",
+    "invalidFixture": "fixtures/api-list-task-labels-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-task-labels-response:v1",
+    "schemaPath": "schemas/api-list-task-labels-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-task-labels-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.add-task-label.path",
+    "invalidFixture": "fixtures/api-add-task-label-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:add-task-label-path:v1",
+    "schemaPath": "schemas/api-add-task-label-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-add-task-label-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.add-task-label.headers",
+    "invalidFixture": "fixtures/api-add-task-label-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:add-task-label-headers:v1",
+    "schemaPath": "schemas/api-add-task-label-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-add-task-label-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.add-task-label.request",
+    "invalidFixture": "fixtures/api-add-task-label-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:add-task-label-request:v1",
+    "schemaPath": "schemas/api-add-task-label-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-add-task-label-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.add-task-label.response",
+    "invalidFixture": "fixtures/api-add-task-label-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:add-task-label-response:v1",
+    "schemaPath": "schemas/api-add-task-label-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-add-task-label-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.remove-task-label.path",
+    "invalidFixture": "fixtures/api-remove-task-label-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:remove-task-label-path:v1",
+    "schemaPath": "schemas/api-remove-task-label-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-remove-task-label-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.remove-task-label.headers",
+    "invalidFixture": "fixtures/api-remove-task-label-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:remove-task-label-headers:v1",
+    "schemaPath": "schemas/api-remove-task-label-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-remove-task-label-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.remove-task-label.response",
+    "invalidFixture": "fixtures/api-remove-task-label-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:remove-task-label-response:v1",
+    "schemaPath": "schemas/api-remove-task-label-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-remove-task-label-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.label-atom.path",
+    "invalidFixture": "fixtures/api-label-atom-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:label-atom-path:v1",
+    "schemaPath": "schemas/api-label-atom-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-label-atom-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.explain-label-atom.headers",
+    "invalidFixture": "fixtures/api-explain-label-atom-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:explain-label-atom-headers:v1",
+    "schemaPath": "schemas/api-explain-label-atom-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-explain-label-atom-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.explain-label-atom.response",
+    "invalidFixture": "fixtures/api-explain-label-atom-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:explain-label-atom-response:v1",
+    "schemaPath": "schemas/api-explain-label-atom-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-explain-label-atom-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.review-signals.path",
+    "invalidFixture": "fixtures/api-review-signals-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:review-signals-path:v1",
+    "schemaPath": "schemas/api-review-signals-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-review-signals-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.review-signals.query",
+    "invalidFixture": "fixtures/api-review-signals-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:review-signals-query:v1",
+    "schemaPath": "schemas/api-review-signals-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-review-signals-query.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.review-signals.headers",
+    "invalidFixture": "fixtures/api-review-signals-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:review-signals-headers:v1",
+    "schemaPath": "schemas/api-review-signals-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-review-signals-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.review-signals.response",
+    "invalidFixture": "fixtures/api-review-signals-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:review-signals-response:v1",
+    "schemaPath": "schemas/api-review-signals-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-review-signals-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-signal.path",
+    "invalidFixture": "fixtures/api-get-signal-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-signal-path:v1",
+    "schemaPath": "schemas/api-get-signal-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-signal-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-signal.headers",
+    "invalidFixture": "fixtures/api-get-signal-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-signal-headers:v1",
+    "schemaPath": "schemas/api-get-signal-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-signal-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.get-signal.response",
+    "invalidFixture": "fixtures/api-get-signal-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-signal-response:v1",
+    "schemaPath": "schemas/api-get-signal-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-signal-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.suggest-task-labels.path",
+    "invalidFixture": "fixtures/api-suggest-task-labels-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:suggest-task-labels-path:v1",
+    "schemaPath": "schemas/api-suggest-task-labels-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-suggest-task-labels-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.label-suggestion.query",
+    "invalidFixture": "fixtures/api-label-suggestion-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:label-suggestion-query:v1",
+    "schemaPath": "schemas/api-label-suggestion-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-label-suggestion-query.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.suggest-task-labels.headers",
+    "invalidFixture": "fixtures/api-suggest-task-labels-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:suggest-task-labels-headers:v1",
+    "schemaPath": "schemas/api-suggest-task-labels-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-suggest-task-labels-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.suggest-task-labels.response",
+    "invalidFixture": "fixtures/api-suggest-task-labels-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:suggest-task-labels-response:v1",
+    "schemaPath": "schemas/api-suggest-task-labels-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-suggest-task-labels-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-label-ontology-signals.path",
+    "invalidFixture": "fixtures/api-list-label-ontology-signals-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-label-ontology-signals-path:v1",
+    "schemaPath": "schemas/api-list-label-ontology-signals-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-label-ontology-signals-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.label-ontology-signal.query",
+    "invalidFixture": "fixtures/api-label-ontology-signal-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:label-ontology-signal-query:v1",
+    "schemaPath": "schemas/api-label-ontology-signal-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-label-ontology-signal-query.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.list-label-ontology-signals.headers",
+    "invalidFixture": "fixtures/api-list-label-ontology-signals-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-label-ontology-signals-headers:v1",
+    "schemaPath": "schemas/api-list-label-ontology-signals-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-label-ontology-signals-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.list-label-ontology-signals.response",
+    "invalidFixture": "fixtures/api-list-label-ontology-signals-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:list-label-ontology-signals-response:v1",
+    "schemaPath": "schemas/api-list-label-ontology-signals-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-list-label-ontology-signals-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.review-label-ontology.path",
+    "invalidFixture": "fixtures/api-review-label-ontology-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:review-label-ontology-path:v1",
+    "schemaPath": "schemas/api-review-label-ontology-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-review-label-ontology-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.label-ontology-review.query",
+    "invalidFixture": "fixtures/api-label-ontology-review-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:label-ontology-review-query:v1",
+    "schemaPath": "schemas/api-label-ontology-review-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-label-ontology-review-query.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.review-label-ontology.headers",
+    "invalidFixture": "fixtures/api-review-label-ontology-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:review-label-ontology-headers:v1",
+    "schemaPath": "schemas/api-review-label-ontology-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-review-label-ontology-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.review-label-ontology.response",
+    "invalidFixture": "fixtures/api-review-label-ontology-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:review-label-ontology-response:v1",
+    "schemaPath": "schemas/api-review-label-ontology-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-review-label-ontology-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-label-ontology-action.path",
+    "invalidFixture": "fixtures/api-create-label-ontology-action-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-label-ontology-action-path:v1",
+    "schemaPath": "schemas/api-create-label-ontology-action-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-label-ontology-action-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-label-ontology-action.headers",
+    "invalidFixture": "fixtures/api-create-label-ontology-action-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-label-ontology-action-headers:v1",
+    "schemaPath": "schemas/api-create-label-ontology-action-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-label-ontology-action-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.create-label-ontology-action.request",
+    "invalidFixture": "fixtures/api-create-label-ontology-action-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-label-ontology-action-request:v1",
+    "schemaPath": "schemas/api-create-label-ontology-action-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-label-ontology-action-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.create-label-ontology-action.response",
+    "invalidFixture": "fixtures/api-create-label-ontology-action-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:create-label-ontology-action-response:v1",
+    "schemaPath": "schemas/api-create-label-ontology-action-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-create-label-ontology-action-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-label-ontology-signal.path",
+    "invalidFixture": "fixtures/api-get-label-ontology-signal-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-label-ontology-signal-path:v1",
+    "schemaPath": "schemas/api-get-label-ontology-signal-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-label-ontology-signal-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-label-ontology-signal.headers",
+    "invalidFixture": "fixtures/api-get-label-ontology-signal-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-label-ontology-signal-headers:v1",
+    "schemaPath": "schemas/api-get-label-ontology-signal-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-label-ontology-signal-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.get-label-ontology-signal.response",
+    "invalidFixture": "fixtures/api-get-label-ontology-signal-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-label-ontology-signal-response:v1",
+    "schemaPath": "schemas/api-get-label-ontology-signal-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-label-ontology-signal-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.board-task-map.path",
+    "invalidFixture": "fixtures/api-board-task-map-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:board-task-map-path:v1",
+    "schemaPath": "schemas/api-board-task-map-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-board-task-map-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.board-task-map.headers",
+    "invalidFixture": "fixtures/api-board-task-map-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:board-task-map-headers:v1",
+    "schemaPath": "schemas/api-board-task-map-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-board-task-map-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.board-task-map.query",
+    "invalidFixture": "fixtures/api-board-task-map-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:board-task-map-query:v1",
+    "schemaPath": "schemas/api-board-task-map-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-board-task-map-query.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.board-task-map.response",
+    "invalidFixture": "fixtures/api-board-task-map-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:board-task-map-response:v1",
+    "schemaPath": "schemas/api-board-task-map-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-board-task-map-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.task-neighborhood.path",
+    "invalidFixture": "fixtures/api-task-neighborhood-path.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:task-neighborhood-path:v1",
+    "schemaPath": "schemas/api-task-neighborhood-path.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-task-neighborhood-path.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.task-neighborhood.headers",
+    "invalidFixture": "fixtures/api-task-neighborhood-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:task-neighborhood-headers:v1",
+    "schemaPath": "schemas/api-task-neighborhood-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-task-neighborhood-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.task-neighborhood.query",
+    "invalidFixture": "fixtures/api-task-neighborhood-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:task-neighborhood-query:v1",
+    "schemaPath": "schemas/api-task-neighborhood-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-task-neighborhood-query.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.task-neighborhood.response",
+    "invalidFixture": "fixtures/api-task-neighborhood-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:task-neighborhood-response:v1",
+    "schemaPath": "schemas/api-task-neighborhood-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-task-neighborhood-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.search-status.query",
+    "invalidFixture": "fixtures/api-search-status-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:search-status-query:v1",
+    "schemaPath": "schemas/api-search-status-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-search-status-query.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.search-status.headers",
+    "invalidFixture": "fixtures/api-search-status-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:search-status-headers:v1",
+    "schemaPath": "schemas/api-search-status-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-search-status-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.search-status.response",
+    "invalidFixture": "fixtures/api-search-status-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:search-status-response:v1",
+    "schemaPath": "schemas/api-search-status-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-search-status-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.health.headers",
+    "invalidFixture": "fixtures/api-health-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:health-headers:v1",
+    "schemaPath": "schemas/api-health-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-health-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.health.response",
+    "invalidFixture": "fixtures/api-health-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:health-response:v1",
+    "schemaPath": "schemas/api-health-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-health-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-stats.query",
+    "invalidFixture": "fixtures/api-get-stats-query.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-stats-query:v1",
+    "schemaPath": "schemas/api-get-stats-query.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-stats-query.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.get-stats.headers",
+    "invalidFixture": "fixtures/api-get-stats-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-stats-headers:v1",
+    "schemaPath": "schemas/api-get-stats-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-stats-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.get-stats.response",
+    "invalidFixture": "fixtures/api-get-stats-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:get-stats-response:v1",
+    "schemaPath": "schemas/api-get-stats-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-get-stats-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.doctor.headers",
+    "invalidFixture": "fixtures/api-doctor-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:doctor-headers:v1",
+    "schemaPath": "schemas/api-doctor-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-doctor-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.checkpoint.headers",
+    "invalidFixture": "fixtures/api-checkpoint-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:checkpoint-headers:v1",
+    "schemaPath": "schemas/api-checkpoint-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-checkpoint-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.checkpoint.response",
+    "invalidFixture": "fixtures/api-checkpoint-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:checkpoint-response:v1",
+    "schemaPath": "schemas/api-checkpoint-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-checkpoint-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-backup.headers",
+    "invalidFixture": "fixtures/api-maintenance-backup-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-backup-headers:v1",
+    "schemaPath": "schemas/api-maintenance-backup-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-backup-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-backup.request",
+    "invalidFixture": "fixtures/api-maintenance-backup-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-backup-request:v1",
+    "schemaPath": "schemas/api-maintenance-backup-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-backup-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.maintenance-backup.response",
+    "invalidFixture": "fixtures/api-maintenance-backup-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-backup-response:v1",
+    "schemaPath": "schemas/api-maintenance-backup-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-backup-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-export.headers",
+    "invalidFixture": "fixtures/api-maintenance-export-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-export-headers:v1",
+    "schemaPath": "schemas/api-maintenance-export-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-export-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-export.request",
+    "invalidFixture": "fixtures/api-maintenance-export-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-export-request:v1",
+    "schemaPath": "schemas/api-maintenance-export-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-export-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.maintenance-export.response",
+    "invalidFixture": "fixtures/api-maintenance-export-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-export-response:v1",
+    "schemaPath": "schemas/api-maintenance-export-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-export-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-import.headers",
+    "invalidFixture": "fixtures/api-maintenance-import-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-import-headers:v1",
+    "schemaPath": "schemas/api-maintenance-import-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-import-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-import.request",
+    "invalidFixture": "fixtures/api-maintenance-import-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-import-request:v1",
+    "schemaPath": "schemas/api-maintenance-import-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-import-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.maintenance-import.response",
+    "invalidFixture": "fixtures/api-maintenance-import-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-import-response:v1",
+    "schemaPath": "schemas/api-maintenance-import-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-import-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-vacuum.headers",
+    "invalidFixture": "fixtures/api-maintenance-vacuum-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-vacuum-headers:v1",
+    "schemaPath": "schemas/api-maintenance-vacuum-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-vacuum-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.maintenance-vacuum.response",
+    "invalidFixture": "fixtures/api-maintenance-vacuum-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-vacuum-response:v1",
+    "schemaPath": "schemas/api-maintenance-vacuum-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-vacuum-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-status.headers",
+    "invalidFixture": "fixtures/api-maintenance-status-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-status-headers:v1",
+    "schemaPath": "schemas/api-maintenance-status-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-status-headers.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.maintenance-status.response",
+    "invalidFixture": "fixtures/api-maintenance-status-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-status-response:v1",
+    "schemaPath": "schemas/api-maintenance-status-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-status-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-run.headers",
+    "invalidFixture": "fixtures/api-maintenance-run-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-run-headers:v1",
+    "schemaPath": "schemas/api-maintenance-run-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-run-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-run.request",
+    "invalidFixture": "fixtures/api-maintenance-run-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-run-request:v1",
+    "schemaPath": "schemas/api-maintenance-run-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-run-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.maintenance-run.response",
+    "invalidFixture": "fixtures/api-maintenance-run-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-run-response:v1",
+    "schemaPath": "schemas/api-maintenance-run-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-run-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-rebuild.headers",
+    "invalidFixture": "fixtures/api-maintenance-rebuild-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-rebuild-headers:v1",
+    "schemaPath": "schemas/api-maintenance-rebuild-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-rebuild-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-rebuild.request",
+    "invalidFixture": "fixtures/api-maintenance-rebuild-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-rebuild-request:v1",
+    "schemaPath": "schemas/api-maintenance-rebuild-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-rebuild-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.maintenance-rebuild.response",
+    "invalidFixture": "fixtures/api-maintenance-rebuild-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-rebuild-response:v1",
+    "schemaPath": "schemas/api-maintenance-rebuild-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-rebuild-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-cleanup.headers",
+    "invalidFixture": "fixtures/api-maintenance-cleanup-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-cleanup-headers:v1",
+    "schemaPath": "schemas/api-maintenance-cleanup-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-cleanup-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-cleanup.request",
+    "invalidFixture": "fixtures/api-maintenance-cleanup-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-cleanup-request:v1",
+    "schemaPath": "schemas/api-maintenance-cleanup-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-cleanup-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.maintenance-cleanup.response",
+    "invalidFixture": "fixtures/api-maintenance-cleanup-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-cleanup-response:v1",
+    "schemaPath": "schemas/api-maintenance-cleanup-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-cleanup-response.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-import-v30.headers",
+    "invalidFixture": "fixtures/api-maintenance-import-v30-headers.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-import-v30-headers:v1",
+    "schemaPath": "schemas/api-maintenance-import-v30-headers.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-import-v30-headers.valid.json"
+  },
+  {
+    "direction": "deserialize",
+    "id": "api.maintenance-import-v30.request",
+    "invalidFixture": "fixtures/api-maintenance-import-v30-request.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-import-v30-request:v1",
+    "schemaPath": "schemas/api-maintenance-import-v30-request.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-import-v30-request.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "api.maintenance-import-v30.response",
+    "invalidFixture": "fixtures/api-maintenance-import-v30-response.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:api:maintenance-import-v30-response:v1",
+    "schemaPath": "schemas/api-maintenance-import-v30-response.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "api",
+    "validFixture": "fixtures/api-maintenance-import-v30-response.valid.json"
+  },
+  {
+    "direction": "serialize",
+    "id": "runtime.web-config.output",
+    "invalidFixture": "fixtures/runtime-web-config-output.invalid.json",
+    "schemaId": "urn:kanban-tool:schema:runtime:web-config:v1",
+    "schemaPath": "schemas/runtime-web-config-output.schema.json",
+    "strictness": "deny_unknown_fields",
+    "surface": "config",
+    "validFixture": "fixtures/runtime-web-config-output.valid.json"
+  }
+]

@@ -1,0 +1,1751 @@
+[
+  {
+    "id": "api.health",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.health.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.health.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/health",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.list-boards",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-boards.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "contractId": "api.list-boards.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-boards.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.list-board-columns",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-board-columns.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.list-board-columns.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-board-columns.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards/:board/columns",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.explain-label-atom",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.explain-label-atom.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.label-atom.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.explain-label-atom.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards/:board/labels/atoms/:atom_ref/explain",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.list-tasks",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-tasks.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.list-tasks.path",
+        "kind": "contract"
+      },
+      "query": {
+        "contractId": "api.list-tasks.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-tasks.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards/:board/tasks",
+    "sharedComponents": [
+      "api.error.response"
+    ]
+  },
+  {
+    "id": "api.list-tasks-by-status",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-tasks-by-status.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.list-tasks-by-status.path",
+        "kind": "contract"
+      },
+      "query": {
+        "contractId": "api.list-tasks-by-status.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-tasks-by-status.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards/:board/tasks/by-status",
+    "sharedComponents": [
+      "api.error.response"
+    ]
+  },
+  {
+    "id": "api.create-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.create-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.create-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.create-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.create-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards/:board/tasks",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.review-signals",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.review-signals.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.review-signals.path",
+        "kind": "contract"
+      },
+      "query": {
+        "contractId": "api.review-signals.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.review-signals.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards/:board/signals/review",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.get-signal",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.get-signal.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.get-signal.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.get-signal.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/signals/:signal_id",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.board-task-map",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.board-task-map.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.board-task-map.path",
+        "kind": "contract"
+      },
+      "query": {
+        "contractId": "api.board-task-map.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.board-task-map.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards/:board/task-map",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.get-task",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.get-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.get-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "contractId": "api.get-task.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.get-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.update-task",
+    "method": "PATCH",
+    "obligations": {
+      "body": {
+        "contractId": "api.update-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.update-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.update-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.update-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.task-neighborhood",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.task-neighborhood.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.task-neighborhood.path",
+        "kind": "contract"
+      },
+      "query": {
+        "contractId": "api.task-neighborhood.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.task-neighborhood.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/neighborhood",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.list-task-labels",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-task-labels.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.list-task-labels.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-task-labels.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/labels",
+    "sharedComponents": [
+      "api.error.response"
+    ]
+  },
+  {
+    "id": "api.add-task-label",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.add-task-label.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.add-task-label.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.add-task-label.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.add-task-label.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/labels",
+    "sharedComponents": [
+      "api.error.response"
+    ]
+  },
+  {
+    "id": "api.suggest-task-labels",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.suggest-task-labels.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.suggest-task-labels.path",
+        "kind": "contract"
+      },
+      "query": {
+        "contractId": "api.label-suggestion.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.suggest-task-labels.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/labels/suggestions",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.list-label-ontology-signals",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-label-ontology-signals.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.list-label-ontology-signals.path",
+        "kind": "contract"
+      },
+      "query": {
+        "contractId": "api.label-ontology-signal.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-label-ontology-signals.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards/:board/label-ontology/signals",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.review-label-ontology",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.review-label-ontology.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.review-label-ontology.path",
+        "kind": "contract"
+      },
+      "query": {
+        "contractId": "api.label-ontology-review.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.review-label-ontology.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards/:board/label-ontology/review",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.create-label-ontology-action",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.create-label-ontology-action.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.create-label-ontology-action.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.create-label-ontology-action.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.create-label-ontology-action.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/boards/:board/label-ontology/actions",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.get-label-ontology-signal",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.get-label-ontology-signal.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.get-label-ontology-signal.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.get-label-ontology-signal.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/label-ontology/signals/:signal_id",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.remove-task-label",
+    "method": "DELETE",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.remove-task-label.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.remove-task-label.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.remove-task-label.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/labels/:label_id",
+    "sharedComponents": [
+      "api.error.response"
+    ]
+  },
+  {
+    "id": "api.specify-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.specify-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.specify-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.specify-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.specify-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/transitions/specify",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.promote-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.promote-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.promote-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.promote-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.promote-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/transitions/promote",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.claim-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.claim-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.claim-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.claim-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.claim-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/transitions/claim",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.heartbeat-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.heartbeat-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.heartbeat-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.heartbeat-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.heartbeat-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/transitions/heartbeat",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.complete-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.complete-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.complete-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.complete-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.complete-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/transitions/complete",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.submit-review-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.submit-review-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.submit-review-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.submit-review-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.submit-review-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/transitions/submit-review",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.block-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.block-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.block-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.block-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.block-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/transitions/block",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.unblock-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.unblock-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.unblock-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.unblock-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.unblock-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/transitions/unblock",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.archive-task",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.archive-task.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.archive-task.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.archive-task.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.archive-task.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/transitions/archive",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.list-dependencies",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-dependencies.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.list-dependencies.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-dependencies.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/dependencies",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.add-dependency",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.add-dependency.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.add-dependency.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.add-dependency.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.add-dependency.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/dependencies",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.remove-dependency",
+    "method": "DELETE",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.remove-dependency.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.remove-dependency.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.remove-dependency.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:child_task_id/dependencies/:parent_task_id",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.list-steps",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-steps.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.list-steps.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-steps.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/steps",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.create-step",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.create-step.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.create-step.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.create-step.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.create-step.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/steps",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.mark-execution-plan-not-required",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.mark-execution-plan-not-required.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.mark-execution-plan-not-required.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.mark-execution-plan-not-required.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.mark-execution-plan-not-required.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/execution-plan/not-required",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.list-runs",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-runs.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.list-runs.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-runs.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/runs",
+    "sharedComponents": [
+      "api.error.response"
+    ]
+  },
+  {
+    "id": "api.get-run-log",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.get-run-log.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.get-run-log.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.get-run-log.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/runs/:run_id/log",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.list-comments",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-comments.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.list-comments.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-comments.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/comments",
+    "sharedComponents": [
+      "api.error.response"
+    ]
+  },
+  {
+    "id": "api.create-comment",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.create-comment.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.create-comment.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.create-comment.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.create-comment.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/comments",
+    "sharedComponents": [
+      "api.error.response"
+    ]
+  },
+  {
+    "id": "api.list-attachments",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-attachments.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.list-attachments.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-attachments.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/attachments",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.create-attachment",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.create-attachment.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.create-attachment.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.create-attachment.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.create-attachment.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/attachments",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.download-attachment",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.download-attachment.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.download-attachment.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.download-attachment.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/attachments/:attachment_id",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.delete-attachment",
+    "method": "DELETE",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.delete-attachment.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "contractId": "api.delete-attachment.path",
+        "kind": "contract"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.delete-attachment.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/tasks/:task_id/attachments/:attachment_id",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.get-stats",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.get-stats.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "contractId": "api.get-stats.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.get-stats.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/stats",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.search-status",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.search-status.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "contractId": "api.search-status.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.search-status.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/search/status",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.list-events",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.list-events.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "contractId": "api.list-events.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.list-events.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/events",
+    "sharedComponents": []
+  },
+  {
+    "id": "sse.stream-events",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "kind": "excluded",
+        "reason": "V1 finite snapshot intentionally ignores Last-Event-ID; after query owns the cursor"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "contractId": "sse.stream-events.query",
+        "kind": "contract"
+      },
+      "sse": {
+        "contractId": "sse.event.data",
+        "kind": "contract"
+      },
+      "success": {
+        "kind": "not_applicable"
+      }
+    },
+    "path": "/api/v1/stream/events",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.doctor",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.doctor.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.doctor.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/doctor",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.checkpoint",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.checkpoint.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.checkpoint.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/checkpoint",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.maintenance-backup",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.maintenance-backup.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.maintenance-backup.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.maintenance-backup.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/backup",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.maintenance-export",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.maintenance-export.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.maintenance-export.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.maintenance-export.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/export",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.maintenance-import",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.maintenance-import.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.maintenance-import.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.maintenance-import.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/import",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.maintenance-vacuum",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.maintenance-vacuum.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.maintenance-vacuum.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/vacuum",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.maintenance-status",
+    "method": "GET",
+    "obligations": {
+      "body": {
+        "kind": "not_applicable"
+      },
+      "headers": {
+        "contractId": "api.maintenance-status.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.maintenance-status.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/status",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.maintenance-run",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.maintenance-run.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.maintenance-run.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.maintenance-run.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/run",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.maintenance-rebuild",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.maintenance-rebuild.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.maintenance-rebuild.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.maintenance-rebuild.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/rebuild",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.maintenance-cleanup",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.maintenance-cleanup.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.maintenance-cleanup.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.maintenance-cleanup.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/cleanup",
+    "sharedComponents": []
+  },
+  {
+    "id": "api.maintenance-import-v30",
+    "method": "POST",
+    "obligations": {
+      "body": {
+        "contractId": "api.maintenance-import-v30.request",
+        "kind": "contract"
+      },
+      "headers": {
+        "contractId": "api.maintenance-import-v30.headers",
+        "kind": "contract"
+      },
+      "path": {
+        "kind": "not_applicable"
+      },
+      "query": {
+        "kind": "not_applicable"
+      },
+      "sse": {
+        "kind": "not_applicable"
+      },
+      "success": {
+        "contractId": "api.maintenance-import-v30.response",
+        "kind": "contract"
+      }
+    },
+    "path": "/api/v1/maintenance/import-v30",
+    "sharedComponents": []
+  }
+]

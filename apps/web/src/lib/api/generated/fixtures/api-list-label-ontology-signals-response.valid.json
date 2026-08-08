@@ -1,0 +1,39 @@
+{
+  "data": [
+    {
+      "id": "los_fixture",
+      "observation_id": "loo_fixture",
+      "board_id": "board_fixture",
+      "kind": "false_negative",
+      "status": "open",
+      "target_label_id": null,
+      "target_label_name_snapshot": null,
+      "proposed_action": "add_positive_atom",
+      "candidate_atom_polarity": null,
+      "candidate_atom_kind": null,
+      "candidate_text": null,
+      "candidate_content_hash": null,
+      "proposed_label_name": null,
+      "proposed_label_name_normalized": null,
+      "agent_selected": false,
+      "suggest_state": null,
+      "suggest_score": null,
+      "suggest_rank": null,
+      "final_selected": false,
+      "rationale": "fixture",
+      "confidence": null,
+      "signal_key": "fixture-key",
+      "superseded_by_signal_id": null,
+      "status_reason": null,
+      "created_at": 0,
+      "updated_at": 0,
+      "reviewed_at": null,
+      "closed_at": null,
+      "related_labels": [],
+      "proposal": {}
+    }
+  ],
+  "meta": {
+    "limit": 100
+  }
+}

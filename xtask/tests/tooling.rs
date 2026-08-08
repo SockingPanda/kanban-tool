@@ -99,7 +99,7 @@ fn binary_help_preserves_public_cli_contract() {
     assert!(output.stderr.is_empty());
     assert_eq!(
         String::from_utf8(output.stdout).expect("help output must be UTF-8"),
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n"
     );
 }
 
@@ -115,6 +115,57 @@ fn unknown_schema_commands_are_rejected() {
             .expect("错误输出必须是 UTF-8")
             .contains("未知 schema command")
     );
+}
+
+#[test]
+fn unknown_web_contract_commands_are_rejected() {
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args(["web-contracts", "legacy"])
+        .output()
+        .expect("web contract tool binary should execute");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8(output.stderr)
+            .expect("错误输出必须是 UTF-8")
+            .contains("未知 web-contracts command")
+    );
+}
+
+#[test]
+fn web_contract_generation_is_selection_scoped() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask crate must live below workspace root");
+    let files = xtask::web_contracts::expected_files(root).expect("selection should generate");
+    let operations: Value = serde_json::from_slice(
+        files
+            .get("operations.json")
+            .expect("generated operation manifest"),
+    )
+    .expect("operations manifest should be JSON");
+    let operation_ids = operations
+        .as_array()
+        .expect("operations should be an array")
+        .iter()
+        .filter_map(|operation| operation.get("id").and_then(Value::as_str))
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(operation_ids.contains("api.list-tasks"));
+    assert!(operation_ids.contains("sse.stream-events"));
+    assert!(!operation_ids.contains("api.create-board"));
+    assert!(!operation_ids.contains("api.update-step"));
+    let contracts: Value =
+        serde_json::from_slice(files.get("contracts.json").expect("contracts manifest"))
+            .expect("contracts manifest should be JSON");
+    assert!(
+        contracts
+            .as_array()
+            .expect("contracts should be an array")
+            .iter()
+            .any(|contract| contract.get("id")
+                == Some(&Value::String("api.error.response".to_owned())))
+    );
+    assert!(files.contains_key("sse.ts"));
+    assert!(files.contains_key("manifest.json"));
 }
 
 #[test]

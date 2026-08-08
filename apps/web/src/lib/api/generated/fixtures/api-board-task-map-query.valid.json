@@ -1,0 +1,8 @@
+{
+  "active_only": true,
+  "context_depth": 1,
+  "limit_nodes": 250,
+  "include_done_context": true,
+  "include_archived_context": false,
+  "hide_isolated": false
+}

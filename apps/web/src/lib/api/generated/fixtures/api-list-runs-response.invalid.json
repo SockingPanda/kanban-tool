@@ -1,0 +1,1 @@
+{"data":[{"id":"r_private","task_id":"t_fixture","status":"running","worker_profile":null,"worker_pid":null,"claim_owner":"runner","started_at":1,"finished_at":null,"exit_code":null,"summary":null,"error":null,"has_log":false,"metadata":{},"claim_token":"secret","log_path":"/private/run.log"}]}

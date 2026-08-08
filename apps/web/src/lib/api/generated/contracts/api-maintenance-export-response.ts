@@ -1,0 +1,16 @@
+// 由 `xtask web-contracts generate` 生成；请勿手工编辑。
+import type { FromSchema } from "json-schema-to-ts";
+import { ContractValidationError, createContractValidator } from "../runtime";
+
+export const ApiMaintenanceExportResponseSchema = {"$defs":{"ExportReport":{"additionalProperties":false,"properties":{"bytes":{"format":"uint64","minimum":0,"type":"integer"},"checksum_sha256":{"type":"string"},"out_path":{"type":"string"},"record_count":{"format":"uint64","minimum":0,"type":"integer"},"source_fingerprint":{"type":"string"}},"required":["out_path","checksum_sha256","bytes","record_count","source_fingerprint"],"type":"object"}},"$id":"urn:kanban-tool:schema:api:maintenance-export-response:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"data":{"$ref":"#/$defs/ExportReport"}},"required":["data"],"title":"Kanban maintenance export response v1","type":"object"} as const;
+export type ApiMaintenanceExportResponseContract = FromSchema<typeof ApiMaintenanceExportResponseSchema>;
+
+export const apiMaintenanceExportResponseValidator: ReturnType<typeof createContractValidator<ApiMaintenanceExportResponseContract>> = createContractValidator<ApiMaintenanceExportResponseContract>(
+  "api.maintenance-export.response",
+  ApiMaintenanceExportResponseSchema,
+);
+
+export function parseApiMaintenanceExportResponse(value: unknown): ApiMaintenanceExportResponseContract {
+  if (!apiMaintenanceExportResponseValidator(value)) throw new ContractValidationError("api.maintenance-export.response", apiMaintenanceExportResponseValidator.errors);
+  return value;
+}

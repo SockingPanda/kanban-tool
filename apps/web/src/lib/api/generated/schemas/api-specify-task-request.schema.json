@@ -1,0 +1,28 @@
+{
+  "$id": "urn:kanban-tool:schema:api:specify-task-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "scheduled_at": {
+      "format": "int64",
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "title": "Kanban specify task request v1",
+  "type": "object"
+}

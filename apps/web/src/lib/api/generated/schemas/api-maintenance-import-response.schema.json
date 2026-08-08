@@ -1,0 +1,91 @@
+{
+  "$defs": {
+    "ImportReport": {
+      "additionalProperties": false,
+      "properties": {
+        "imported_records": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "in_path": {
+          "type": "string"
+        },
+        "journal_id": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "publish_preconditions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rebuild_jobs_enqueued": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "restart_required": {
+          "type": "boolean"
+        },
+        "skipped_records": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_fingerprint": {
+          "type": "string"
+        },
+        "staged_database_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "staged_fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_fingerprint_before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "in_path",
+        "source_fingerprint",
+        "imported_records",
+        "skipped_records",
+        "rebuild_jobs_enqueued",
+        "journal_id",
+        "phase",
+        "restart_required",
+        "staged_database_path",
+        "target_fingerprint_before",
+        "staged_fingerprint",
+        "publish_preconditions"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:maintenance-import-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/ImportReport"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban maintenance import response v1",
+  "type": "object"
+}

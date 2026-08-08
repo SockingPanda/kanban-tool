@@ -109,6 +109,12 @@ docs-check:
 node-lock-check:
     pnpm install --frozen-lockfile --lockfile-only --ignore-scripts
 
+web-contracts-generate:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- web-contracts generate
+
+web-contracts-check:
+    scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- web-contracts check
+
 web-test:
     pnpm --filter @kanban-tool/web test
 
@@ -121,8 +127,13 @@ web-lint:
 web-build:
     pnpm --filter @kanban-tool/web build
 
+web-e2e:
+    just node-lock-check
+    pnpm --filter @kanban-tool/web e2e
+
 web-check:
     just node-lock-check
+    just web-contracts-check
     just web-typecheck
     just web-lint
     just web-test

@@ -1,0 +1,25 @@
+{
+  "$id": "urn:kanban-tool:schema:api:task-neighborhood-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "depth": {
+      "default": 1,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "include_archived_context": {
+      "default": false,
+      "type": "boolean"
+    },
+    "limit_nodes": {
+      "default": 250,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "title": "Kanban task neighborhood query v1",
+  "type": "object"
+}

@@ -1,0 +1,51 @@
+{
+  "$id": "urn:kanban-tool:schema:api:label-ontology-signal-query:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "include_all": {
+      "default": false,
+      "type": "boolean"
+    },
+    "kind": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "limit": {
+      "default": 100,
+      "format": "uint",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "proposed_label_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "target_label_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "task_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "Label ontology signal query v1",
+  "type": "object"
+}

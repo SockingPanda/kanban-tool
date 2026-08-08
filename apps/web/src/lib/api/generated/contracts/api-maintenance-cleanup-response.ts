@@ -1,0 +1,16 @@
+// 由 `xtask web-contracts generate` 生成；请勿手工编辑。
+import type { FromSchema } from "json-schema-to-ts";
+import { ContractValidationError, createContractValidator } from "../runtime";
+
+export const ApiMaintenanceCleanupResponseSchema = {"$defs":{"MaintenanceRunReport":{"additionalProperties":false,"properties":{"action":{"type":"string"},"database_instance_id":{"type":"string"},"degraded":{"default":false,"type":"boolean"},"errors":{"default":[],"items":{"type":"string"},"type":"array"},"mode":{"type":"string"},"owner":{"type":"string"},"phase":{"default":"","type":"string"},"processed":{"format":"uint64","minimum":0,"type":"integer"},"protocol_version":{"format":"int64","type":"integer"},"stores":{"items":{"$ref":"#/$defs/ProjectionStoreStatus"},"type":"array"}},"required":["database_instance_id","protocol_version","owner","mode","action","processed","phase","degraded","errors","stores"],"type":"object"},"ProjectionStoreStatus":{"additionalProperties":false,"properties":{"active_fingerprint":{"type":["string","null"]},"active_generation":{"type":["string","null"]},"building_generation":{"type":["string","null"]},"degraded":{"default":false,"description":"provider/job 尚未恢复时为 true；不能把此状态报告为 ready。","type":"boolean"},"dirty":{"type":"boolean"},"errors":{"default":[],"description":"阶段错误列表；旧客户端可继续读取 `last_error`。","items":{"type":"string"},"type":"array"},"failed":{"format":"int64","type":"integer"},"fence_epoch":{"format":"int64","type":"integer"},"last_error":{"type":["string","null"]},"last_event_id":{"format":"int64","type":"integer"},"lifecycle_status":{"type":"string"},"pending":{"format":"int64","type":"integer"},"phase":{"default":"","description":"最后一个已提交的实际阶段，例如 `ready`、`pending` 或 `degraded`。","type":"string"},"previous_generation":{"type":["string","null"]},"running":{"format":"int64","type":"integer"},"store_name":{"type":"string"},"updated_at":{"format":"int64","type":"integer"}},"required":["store_name","active_generation","active_fingerprint","previous_generation","building_generation","lifecycle_status","fence_epoch","last_event_id","dirty","pending","running","failed","last_error","phase","degraded","errors","updated_at"],"type":"object"}},"$id":"urn:kanban-tool:schema:api:maintenance-cleanup-response:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"data":{"$ref":"#/$defs/MaintenanceRunReport"}},"required":["data"],"title":"Kanban maintenance cleanup response v1","type":"object"} as const;
+export type ApiMaintenanceCleanupResponseContract = FromSchema<typeof ApiMaintenanceCleanupResponseSchema>;
+
+export const apiMaintenanceCleanupResponseValidator: ReturnType<typeof createContractValidator<ApiMaintenanceCleanupResponseContract>> = createContractValidator<ApiMaintenanceCleanupResponseContract>(
+  "api.maintenance-cleanup.response",
+  ApiMaintenanceCleanupResponseSchema,
+);
+
+export function parseApiMaintenanceCleanupResponse(value: unknown): ApiMaintenanceCleanupResponseContract {
+  if (!apiMaintenanceCleanupResponseValidator(value)) throw new ContractValidationError("api.maintenance-cleanup.response", apiMaintenanceCleanupResponseValidator.errors);
+  return value;
+}

@@ -21,6 +21,8 @@ use kanban_protocol::{
 
 pub type ToolResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
+pub mod web_contracts;
+
 pub const ARTIFACT_DIRECTORY: &str = "schemas/json-schema/draft-2020-12";
 
 #[derive(Debug, Serialize)]

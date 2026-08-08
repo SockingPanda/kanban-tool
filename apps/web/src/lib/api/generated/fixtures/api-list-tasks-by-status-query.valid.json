@@ -1,0 +1,17 @@
+{
+  "status": [
+    "todo",
+    "ready"
+  ],
+  "priority": [],
+  "label": [
+    "状态　窗口"
+  ],
+  "plan_filter": [],
+  "assignee": null,
+  "q": null,
+  "include_archived": false,
+  "limit": 50,
+  "offset": 0,
+  "sort": "position"
+}

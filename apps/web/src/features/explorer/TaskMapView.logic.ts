@@ -8,6 +8,63 @@ export const MIN_MAP_ZOOM = 0.65
 export const MAX_MAP_ZOOM = 1.5
 const MAP_ZOOM_STEP = 0.15
 
+export interface TaskMapUrlState {
+  readonly filter: BoardMapFilter
+  readonly showDoneContext: boolean
+  readonly hideIsolated: boolean
+  readonly zoom: number
+  readonly taskId: string | null
+}
+
+export const defaultTaskMapUrlState: TaskMapUrlState = Object.freeze({
+  filter: "all",
+  showDoneContext: false,
+  hideIsolated: false,
+  zoom: 1,
+  taskId: null,
+})
+
+const mapFilters = new Set<BoardMapFilter>(["all", "blocked", "ready", "running", "unplanned", "incomplete-steps"])
+
+function safeTaskSelector(value: string | null): string | null {
+  if (value === null || value.trim() !== value || !value.startsWith("t_") || value.length <= 2 || /[\\/?#]/.test(value)) return null
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0
+    if (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f)) return null
+  }
+  return value
+}
+
+export function parseTaskMapUrlState(input: string | URLSearchParams): TaskMapUrlState {
+  const params = typeof input === "string"
+    ? new URLSearchParams(input.startsWith("?") ? input.slice(1) : input)
+    : input
+  const filterValue = params.get("filter")
+  const rawZoom = params.get("zoom")
+  const zoomValue = rawZoom !== null && rawZoom.trim() === rawZoom && rawZoom.length > 0 ? Number(rawZoom) : Number.NaN
+  const zoom = rawZoom !== null && Number.isFinite(zoomValue) ? clampMapZoom(zoomValue) : defaultTaskMapUrlState.zoom
+  return Object.freeze({
+    filter: filterValue && mapFilters.has(filterValue as BoardMapFilter) ? filterValue as BoardMapFilter : defaultTaskMapUrlState.filter,
+    showDoneContext: params.get("show_done") === "true",
+    hideIsolated: params.get("hide_isolated") === "true",
+    zoom,
+    taskId: safeTaskSelector(params.get("task")),
+  })
+}
+
+export function serializeTaskMapUrlState(state: TaskMapUrlState): string {
+  const params = new URLSearchParams()
+  const filter = mapFilters.has(state.filter) ? state.filter : defaultTaskMapUrlState.filter
+  if (filter !== defaultTaskMapUrlState.filter) params.set("filter", filter)
+  if (state.showDoneContext === true) params.set("show_done", "true")
+  if (state.hideIsolated === true) params.set("hide_isolated", "true")
+  const zoom = typeof state.zoom === "number" ? clampMapZoom(state.zoom) : defaultTaskMapUrlState.zoom
+  if (zoom !== defaultTaskMapUrlState.zoom) params.set("zoom", String(zoom))
+  const taskId = safeTaskSelector(state.taskId)
+  if (taskId) params.set("task", taskId)
+  return params.toString()
+}
+
 function incompleteRequiredSteps(task: MapNode["task"]): number {
   return Math.max(0, task.required_step_count - task.completed_required_step_count)
 }
@@ -54,7 +111,6 @@ export function resolveSelectedNode(
   if (!graph) return null
   return graph.nodes.find((node) => node.task.id === inspectedTaskId)
     ?? graph.nodes.find((node) => node.task.id === taskId)
-    ?? graph.nodes.find((node) => !node.context_only)
     ?? null
 }
 

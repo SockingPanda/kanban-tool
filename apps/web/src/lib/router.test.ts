@@ -7,6 +7,7 @@ import {
   parseAppRoute,
   routePath,
 } from "./router"
+import { parseTaskMapUrlState } from "../features/explorer/TaskMapView.logic"
 
 describe("App route parser", () => {
   test("parses the app home route and normalizes a trailing slash", () => {
@@ -67,6 +68,20 @@ describe("App route parser", () => {
       kind: "board",
       view: "events",
       query: "after=10",
+    })
+  })
+
+  test("restores map controls from a copied route query", () => {
+    const route = parseAppRoute("http://kanban.test/app/boards/default/map?filter=ready&show_done=true&hide_isolated=true&zoom=1.3&task=t_1")
+
+    expect(route).toMatchObject({ kind: "board", view: "map" })
+    if (route.kind !== "board") throw new Error("expected board route")
+    expect(parseTaskMapUrlState(route.query ?? "")).toEqual({
+      filter: "ready",
+      showDoneContext: true,
+      hideIsolated: true,
+      zoom: 1.3,
+      taskId: "t_1",
     })
   })
 })

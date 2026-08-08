@@ -5,7 +5,7 @@ import type { ExplorerTaskMap, ExplorerTaskMapReadModel } from "../../lib/api/ex
 import { assertCanonicalBoardSlug } from "../../lib/board-slug"
 import { asCanonicalBoardId } from "../../lib/sync/contracts"
 import { TaskMapPresentation, type TaskMapReadState } from "./TaskMapView"
-import { __test } from "./TaskMapView.logic"
+import { __test, defaultTaskMapUrlState, parseTaskMapUrlState, serializeTaskMapUrlState } from "./TaskMapView.logic"
 
 type MapTask = ExplorerTaskMap["nodes"][number]["task"]
 
@@ -85,6 +85,22 @@ const model: ExplorerTaskMapReadModel = {
 const ready: TaskMapReadState = { data: model, loading: false, error: null }
 
 describe("TaskMapView", () => {
+  test("round-trips map controls and task selection through canonical URL state", () => {
+    const state = parseTaskMapUrlState("?filter=ready&show_done=true&hide_isolated=true&zoom=1.3&task=t_ready")
+
+    expect(state).toEqual({ filter: "ready", showDoneContext: true, hideIsolated: true, zoom: 1.3, taskId: "t_ready" })
+    expect(serializeTaskMapUrlState(state)).toBe("filter=ready&show_done=true&hide_isolated=true&zoom=1.3&task=t_ready")
+    expect(serializeTaskMapUrlState({ ...state, taskId: null })).toBe("filter=ready&show_done=true&hide_isolated=true&zoom=1.3")
+  })
+
+  test("fails safe and canonicalizes unknown map query values", () => {
+    expect(parseTaskMapUrlState("?filter=wat&show_done=yes&hide_isolated=1&zoom=9&task=../escape")).toEqual({
+      ...defaultTaskMapUrlState,
+      zoom: 1.5,
+    })
+    expect(parseTaskMapUrlState("?zoom=not-a-number")).toEqual(defaultTaskMapUrlState)
+  })
+
   test("filters graph nodes and edges without mutating typed source", () => {
     const filtered = __test.filterTaskMap(graph, "ready", false)
 
@@ -104,11 +120,24 @@ describe("TaskMapView", () => {
 
     expect(markup).toContain('data-testid="task-map"')
     expect(markup).toContain('data-testid="task-map-graph"')
+    expect(markup).toContain('role="toolbar"')
+    expect(markup).not.toContain("<h1")
     expect(markup).toContain('tabindex="0"')
     expect(markup).toContain('data-testid="task-map-node"')
     expect(markup).toContain('data-task-id="ready"')
     expect(markup).toContain("dep:done:ready")
     expect(markup).toContain("当前选择")
+  })
+
+  test("renders the map copy in English", () => {
+    const markup = renderToStaticMarkup(
+      <TaskMapPresentation locale="en" board="default" taskId="ready" state={ready} onSelectTask={() => undefined} />,
+    )
+
+    expect(markup).toContain("Task map")
+    expect(markup).toContain("Task map filters and zoom")
+    expect(markup).toContain("Current selection")
+    expect(markup).not.toContain("任务关系图")
   })
 
   test("keeps a selected node inspectable when a filter hides it", () => {

@@ -305,7 +305,7 @@ function boardListPath(includeArchived: boolean): string {
 }
 
 function validBoardId(value: string): CanonicalBoardId | null {
-  if (value.trim() !== value || value.length === 0 || hasUnsafeIdentityCharacters(value)) return null
+  if (value.trim() !== value || !value.startsWith("b_") || value.length <= 2 || hasUnsafeIdentityCharacters(value)) return null
   try {
     return asCanonicalBoardId(value)
   } catch {
@@ -317,7 +317,7 @@ function hasUnsafeIdentityCharacters(value: string): boolean {
   if (/[\\/?#]/.test(value)) return true
   for (const character of value) {
     const codePoint = character.codePointAt(0) ?? 0
-    if (codePoint <= 0x1f || codePoint === 0x7f) return true
+    if (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f)) return true
   }
   return false
 }
@@ -332,21 +332,23 @@ function resolveBoard(boards: ApiListBoardsResponseContract["data"], selector: s
     }
     return { candidate, id, slug }
   })
-  const ids = new Set<string>()
-  const slugs = new Set<string>()
+  const selectors = new Set<string>()
   for (const identity of identities) {
-    if (ids.has(identity.id) || slugs.has(identity.slug)) {
+    if (selectors.has(identity.id) || selectors.has(identity.slug)) {
       throw new ExplorerReadError("anomaly", "看板列表包含重复 canonical identity。")
     }
-    ids.add(identity.id)
-    slugs.add(identity.slug)
+    selectors.add(identity.id)
+    selectors.add(identity.slug)
   }
-  const identity = identities.find(({ candidate }) => candidate.id === requested || candidate.slug === requested)
-  if (!identity) {
+  const matches = identities.filter(({ candidate }) => candidate.id === requested || candidate.slug === requested)
+  if (matches.length === 0) {
     throw new ExplorerReadError("empty", "请求的看板 selector 未在看板列表中精确匹配。", {
       reason: "board-not-found",
     })
   }
+  if (matches.length !== 1) throw new ExplorerReadError("anomaly", "请求的看板 selector 不唯一。")
+  const identity = matches[0]
+  if (identity === undefined) throw new ExplorerReadError("empty", "请求的看板 selector 未在看板列表中精确匹配。", { reason: "board-not-found" })
   return Object.freeze({ selector: requested, id: identity.id, slug: identity.slug, name: identity.candidate.name.trim() })
 }
 
@@ -473,8 +475,31 @@ export const defaultTaskMapQuery: TaskMapQueryOptions = Object.freeze({
   limitNodes: 240,
 })
 
+function validateTaskMapOptions(options: TaskMapQueryOptions): void {
+  if (!Number.isSafeInteger(options.contextDepth) || options.contextDepth < 0 || options.contextDepth > 8) {
+    throw new ExplorerReadError("anomaly", "任务关系图 context depth 超出服务端安全范围。")
+  }
+  if (!Number.isSafeInteger(options.limitNodes) || options.limitNodes < 1 || options.limitNodes > 1000) {
+    throw new ExplorerReadError("anomaly", "任务关系图节点上限必须是 1 到 1000 的安全整数。")
+  }
+}
+
+function validateProvidedBoardIdentity(identity: ExplorerBoardIdentity, selector: string): ExplorerBoardIdentity {
+  const id = validBoardId(identity.id)
+  const slug = parseCanonicalBoardSlug(identity.slug)
+  if (!id || !slug || identity.name.trim().length === 0) {
+    throw new ExplorerReadError("anomaly", "Map 使用了无效 canonical board identity。")
+  }
+  const requested = selector.trim()
+  if (requested !== id && requested !== slug) {
+    throw new ExplorerReadError("anomaly", "Map board identity 与当前 route selector 不一致。")
+  }
+  return Object.freeze({ selector: requested, id, slug, name: identity.name.trim() })
+}
+
 export function buildTaskMapRequest(board: string, options: TaskMapQueryOptions = defaultTaskMapQuery): string {
   try {
+    validateTaskMapOptions(options)
     const path = parseApiBoardTaskMapPath({ board }).board
     const query = parseApiBoardTaskMapQuery({
       active_only: options.activeOnly,
@@ -501,19 +526,46 @@ export function buildTaskMapRequest(board: string, options: TaskMapQueryOptions 
   }
 }
 
-function validateMapBoard(map: ExplorerTaskMap, board: ExplorerBoardIdentity): void {
-  for (const node of map.nodes) validateTaskBoard(node.task, board)
-  for (const edge of map.edges) {
-    if (edge.source_task_id.trim().length === 0 || edge.target_task_id.trim().length === 0) {
-      throw new ExplorerReadError("anomaly", "任务关系图包含空 task id edge。")
+function validateMapBoard(map: ExplorerTaskMap, board: ExplorerBoardIdentity, options: TaskMapQueryOptions): void {
+  const nodeIds = new Set<string>()
+  for (const node of map.nodes) {
+    validateTaskBoard(node.task, board)
+    if (node.task.id.trim().length === 0 || nodeIds.has(node.task.id)) {
+      throw new ExplorerReadError("anomaly", "任务关系图包含重复或空 task node id。")
     }
+    nodeIds.add(node.task.id)
+  }
+  for (const edge of map.edges) {
+    if (
+      edge.source_task_id.trim().length === 0
+      || edge.target_task_id.trim().length === 0
+      || !nodeIds.has(edge.source_task_id)
+      || !nodeIds.has(edge.target_task_id)
+    ) {
+      throw new ExplorerReadError("anomaly", "任务关系图 edge 未能在当前响应 node 集合中闭合。")
+    }
+  }
+  const { meta } = map
+  if (
+    meta.depth !== 0
+    || meta.context_depth !== options.contextDepth
+    || meta.active_only !== options.activeOnly
+    || meta.include_done_context !== options.includeDoneContext
+    || meta.include_archived_context !== options.includeArchivedContext
+    || meta.hide_isolated !== options.hideIsolated
+    || meta.limit_nodes !== options.limitNodes
+    || meta.node_count !== map.nodes.length
+    || meta.edge_count !== map.edges.length
+    || map.nodes.length > options.limitNodes
+  ) {
+    throw new ExplorerReadError("anomaly", "任务关系图 meta 与请求或实际数组不一致。")
   }
 }
 
 export async function loadTaskMap(
   runtime: WebRuntimeConfig,
   selector: string,
-  options: ExplorerReadOptions & Partial<TaskMapQueryOptions> = {},
+  options: ExplorerReadOptions & Partial<TaskMapQueryOptions> & { readonly boardIdentity?: ExplorerBoardIdentity } = {},
 ): Promise<ExplorerTaskMapReadModel> {
   const budget = options.budget ?? new ExplorerReadBudget()
   let transport: HttpTransport
@@ -523,20 +575,24 @@ export async function loadTaskMap(
     return wrapTransportError(error)
   }
   try {
-    const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
+    const queryOptions: TaskMapQueryOptions = {
+      activeOnly: options.activeOnly ?? defaultTaskMapQuery.activeOnly,
+      contextDepth: options.contextDepth ?? defaultTaskMapQuery.contextDepth,
+      includeDoneContext: options.includeDoneContext ?? defaultTaskMapQuery.includeDoneContext,
+      includeArchivedContext: options.includeArchivedContext ?? defaultTaskMapQuery.includeArchivedContext,
+      hideIsolated: options.hideIsolated ?? defaultTaskMapQuery.hideIsolated,
+      limitNodes: options.limitNodes ?? defaultTaskMapQuery.limitNodes,
+    }
+    validateTaskMapOptions(queryOptions)
+    const board = options.boardIdentity
+      ? validateProvidedBoardIdentity(options.boardIdentity, selector)
+      : await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
     const map = parseContract(
       "api.board-task-map.response",
       parseApiBoardTaskMapResponse,
-      await getPayload(transport, buildTaskMapRequest(board.slug, {
-        activeOnly: options.activeOnly ?? defaultTaskMapQuery.activeOnly,
-        contextDepth: options.contextDepth ?? defaultTaskMapQuery.contextDepth,
-        includeDoneContext: options.includeDoneContext ?? defaultTaskMapQuery.includeDoneContext,
-        includeArchivedContext: options.includeArchivedContext ?? defaultTaskMapQuery.includeArchivedContext,
-        hideIsolated: options.hideIsolated ?? defaultTaskMapQuery.hideIsolated,
-        limitNodes: options.limitNodes ?? defaultTaskMapQuery.limitNodes,
-      }), options.signal, budget),
+      await getPayload(transport, buildTaskMapRequest(board.slug, queryOptions), options.signal, budget),
     ).data
-    validateMapBoard(map, board)
+    validateMapBoard(map, board, queryOptions)
     return Object.freeze({ board, map })
   } catch (error) {
     return wrapTransportError(error)

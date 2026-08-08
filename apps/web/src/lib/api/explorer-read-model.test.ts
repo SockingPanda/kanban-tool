@@ -4,6 +4,7 @@ import {
   buildTaskListRequest,
   buildTaskInspectorRequests,
   buildTaskMapRequest,
+  loadTaskMap,
   defaultTaskListQuery,
   ExplorerReadError,
   buildRunLogRequest,
@@ -14,7 +15,10 @@ import {
   parseTaskListQuery,
   serializeTaskListQuery,
 } from "./explorer-read-model"
+import type { ApiBoardTaskMapResponseContract } from "./generated/contracts/api-board-task-map-response"
 import type { WebRuntimeConfig } from "../runtime"
+import { assertCanonicalBoardSlug } from "../board-slug"
+import { asCanonicalBoardId } from "../sync/contracts"
 import type { HttpTransportResponse } from "./http-transport"
 import { HttpTransportError } from "./http-transport"
 
@@ -27,6 +31,76 @@ const runtime = {
   protocolVersion: "v1",
   webBuildId: "test",
 } satisfies WebRuntimeConfig
+
+type MapTask = ApiBoardTaskMapResponseContract["data"]["nodes"][number]["task"]
+
+function mapTask(id: string, boardId = "b_default", boardSlug = "default"): MapTask {
+  return {
+    id,
+    board_id: boardId,
+    board_slug: boardSlug,
+    ref: `${boardSlug}#${id}`,
+    seq: 1,
+    title: id,
+    description: "",
+    status: "ready",
+    status_reason: null,
+    assignee: null,
+    priority: 1,
+    position: 0,
+    scheduled_at: null,
+    due_at: null,
+    created_by: "test",
+    created_at: 1,
+    updated_at: 1,
+    started_at: null,
+    completed_at: null,
+    archived_at: null,
+    claim_owner: null,
+    claim_expires_at: null,
+    last_heartbeat_at: null,
+    current_run_id: null,
+    retry_count: 0,
+    max_retries: null,
+    result_summary: null,
+    result: null,
+    metadata: {},
+    lock_version: 0,
+    dependency_blocked: false,
+    unfinished_parent_count: 0,
+    execution_plan_state: "planned",
+    required_step_count: 0,
+    completed_required_step_count: 0,
+    optional_step_count: 0,
+    labels: [],
+  }
+}
+
+function mapResponse(overrides: Partial<ApiBoardTaskMapResponseContract["data"]> = {}): ApiBoardTaskMapResponseContract {
+  const nodes = [{ task: mapTask("t_1"), role: "active" as const, context_only: false }]
+  const edges: ApiBoardTaskMapResponseContract["data"]["edges"] = []
+  return {
+    data: {
+      nodes,
+      edges,
+      meta: {
+        depth: 0,
+        context_depth: 1,
+        generated_at: 1,
+        node_count: nodes.length,
+        edge_count: edges.length,
+        truncated: false,
+        active_statuses: ["ready"],
+        active_only: true,
+        include_done_context: false,
+        include_archived_context: false,
+        hide_isolated: false,
+        limit_nodes: 240,
+      },
+      ...overrides,
+    },
+  }
+}
 
 describe("explorer task list URL state", () => {
   test("parses and serializes all list controls without losing them", () => {
@@ -151,6 +225,75 @@ describe("explorer canonical board identity", () => {
 
     await expect(loadExplorerBoardIdentity(runtime, "same", { transport: duplicateSlugTransport })).rejects.toMatchObject({ kind: "anomaly" })
     await expect(loadExplorerBoardIdentity(runtime, "one", { transport: duplicateIdTransport })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+
+  test("rejects non-canonical board ids and C1 controls", async () => {
+    const noPrefix = { get: async (): Promise<HttpTransportResponse> => ({ payload: { data: [board("default", "default")] }, bytes: 1 }) }
+    const c1 = { get: async (): Promise<HttpTransportResponse> => ({ payload: { data: [board(`b_bad\u0085`, "default")] }, bytes: 1 }) }
+
+    await expect(loadExplorerBoardIdentity(runtime, "default", { transport: noPrefix })).rejects.toMatchObject({ kind: "anomaly" })
+    await expect(loadExplorerBoardIdentity(runtime, "default", { transport: c1 })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+
+  test("fails closed for cross-type selector collisions", async () => {
+    const transport = {
+      get: async (): Promise<HttpTransportResponse> => ({ payload: { data: [board("b_one", "one"), board("b_two", "b_one")] }, bytes: 1 }),
+    }
+
+    await expect(loadExplorerBoardIdentity(runtime, "b_one", { transport })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+})
+
+describe("explorer task map response boundary", () => {
+  const identity = {
+    selector: "default",
+    id: asCanonicalBoardId("b_default"),
+    slug: assertCanonicalBoardSlug("default"),
+    name: "Default",
+  }
+
+  test("uses the parsed board identity without refetching the board list", async () => {
+    const paths: string[] = []
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        paths.push(path)
+        return { payload: mapResponse(), bytes: 1 }
+      },
+    }
+
+    await expect(loadTaskMap(runtime, "default", {
+      transport,
+      boardIdentity: identity,
+      activeOnly: true,
+      contextDepth: 1,
+      includeDoneContext: false,
+      includeArchivedContext: false,
+      hideIsolated: false,
+      limitNodes: 240,
+    })).resolves.toMatchObject({ board: identity })
+    expect(paths).toEqual(["/api/v1/boards/default/task-map?active_only=true&context_depth=1&include_done_context=false&include_archived_context=false&hide_isolated=false&limit_nodes=240"])
+  })
+
+  test("rejects a parsed identity that does not belong to the route selector", async () => {
+    const transport = { get: async (): Promise<HttpTransportResponse> => ({ payload: mapResponse(), bytes: 1 }) }
+
+    await expect(loadTaskMap(runtime, "other", { transport, boardIdentity: identity, limitNodes: 240 })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+
+  test("rejects dangling edge endpoints and inconsistent map metadata", async () => {
+    const dangling = mapResponse({
+      edges: [{ id: "e_1", source_task_id: "t_1", target_task_id: "t_missing", kind: "dependency", required: true, blocking: true }],
+    })
+    const mismatch = mapResponse({ meta: { ...mapResponse().data.meta, node_count: 2 } })
+    const overLimitNodes = Array.from({ length: 241 }, (_, index) => ({ task: mapTask(`t_${index}`), role: "active" as const, context_only: false }))
+    const overLimit = mapResponse({ nodes: overLimitNodes, meta: { ...mapResponse().data.meta, node_count: overLimitNodes.length } })
+    const transport = (payload: ApiBoardTaskMapResponseContract) => ({
+      get: async (): Promise<HttpTransportResponse> => ({ payload, bytes: 1 }),
+    })
+
+    await expect(loadTaskMap(runtime, "default", { transport: transport(dangling), boardIdentity: identity, limitNodes: 240 })).rejects.toMatchObject({ kind: "anomaly" })
+    await expect(loadTaskMap(runtime, "default", { transport: transport(mismatch), boardIdentity: identity, limitNodes: 240 })).rejects.toMatchObject({ kind: "anomaly" })
+    await expect(loadTaskMap(runtime, "default", { transport: transport(overLimit), boardIdentity: identity, limitNodes: 240 })).rejects.toMatchObject({ kind: "anomaly" })
   })
 })
 

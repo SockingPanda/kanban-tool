@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react"
+import { Component, lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import { BoardView } from "../board/BoardView"
 import type { BoardViewModel } from "../board/types"
 import {
   loadTaskInspector,
+  loadExplorerBoardIdentity,
   loadTaskListPage,
   parseTaskListQuery,
   serializeTaskListQuery,
@@ -15,12 +16,42 @@ import type { CanonicalBoardSlug } from "../../lib/board-slug"
 import type { BoardReadModel } from "../../lib/api/board-read-model"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView } from "../../lib/router"
+import { usePreferences } from "../../lib/use-preferences"
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
 import { TaskListView, type TaskListRow } from "./TaskListView"
 import { TaskRunsView } from "./TaskRunsView"
+import { parseTaskMapUrlState, serializeTaskMapUrlState, type TaskMapUrlState } from "./TaskMapView.logic"
 import styles from "./ExplorerPage.module.css"
 
 const LazyTaskMapView = lazy(() => import("./TaskMapView").then((module) => ({ default: module.TaskMapView })))
+
+class TaskMapChunkBoundary extends Component<{ readonly locale: "zh" | "en"; readonly children: ReactNode }, { readonly failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError(): { readonly failed: boolean } {
+    return { failed: true }
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children
+    const copy = this.props.locale === "en"
+      ? { title: "Task map unavailable", description: "The map page chunk could not be loaded.", retry: "Retry" }
+      : { title: "关系图暂不可用", description: "关系图页面资源加载失败。", retry: "重试" }
+    return (
+      <section className={styles.boundary} data-testid="task-map-chunk-error" role="alert">
+        <h2>{copy.title}</h2>
+        <p>{copy.description}</p>
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== "undefined") window.location.reload()
+            else this.setState({ failed: false })
+          }}
+        >{copy.retry}</button>
+      </section>
+    )
+  }
+}
 
 export interface ExplorerPageProps {
   readonly runtime: WebRuntimeConfig
@@ -199,19 +230,27 @@ function ExplorerTabs({ route, basePath, taskId, onNavigate }: { readonly route:
 }
 
 export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) {
+  const { locale } = usePreferences()
   const view = route.view ?? "board"
   const params = queryParams(route)
-  const taskId = params.get("task")?.trim() || null
+  const rawTaskId = params.get("task")?.trim() || null
+  const mapUrlState = useMemo(() => parseTaskMapUrlState(route.query ?? ""), [route.query])
+  const taskId = view === "map" ? mapUrlState.taskId : rawTaskId
   const showInspector = Boolean(taskId) && view !== "runs"
   const listQuery = useMemo(() => parseTaskListQuery(new URLSearchParams(route.query ?? "")), [route.query])
   const listKey = `${route.boardSlug}|${serializeTaskListQuery(listQuery)}`
   const boardRead = useAsyncRead(view === "board", route.boardSlug, (signal) => import("../../lib/api/board-read-model").then(({ loadBoardReadModel }) => loadBoardReadModel(runtime, route.boardSlug, { signal })))
   const listRead = useAsyncRead(view === "list", listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }))
+  const mapIdentityRead = useAsyncRead(view === "map", route.boardSlug, (signal) => loadExplorerBoardIdentity(runtime, route.boardSlug, { signal }))
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
   const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal }) : Promise.reject(new Error("Task Inspector 尚未选择任务")))
 
   const navigate = (target: string) => {
     if (onNavigate) void onNavigate(target)
+  }
+  const updateMapUrlState = (next: TaskMapUrlState) => {
+    const query = new URLSearchParams(serializeTaskMapUrlState(next))
+    navigate(routeTarget(route.boardSlug, "map", query, runtime.webBasePath))
   }
   const updateListQuery = (next: TaskListQueryState) => {
     const nextParams = new URLSearchParams(serializeTaskListQuery(next))
@@ -219,11 +258,19 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
     navigate(routeTarget(route.boardSlug, "list", nextParams, runtime.webBasePath))
   }
   const selectTask = (nextTaskId: string) => {
+    if (view === "map") {
+      updateMapUrlState({ ...mapUrlState, taskId: nextTaskId })
+      return
+    }
     const nextParams = new URLSearchParams(params)
     nextParams.set("task", nextTaskId)
     navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
   }
   const closeInspector = () => {
+    if (view === "map") {
+      updateMapUrlState({ ...mapUrlState, taskId: null })
+      return
+    }
     const nextParams = new URLSearchParams(params)
     nextParams.delete("task")
     navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
@@ -258,9 +305,22 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
             />
           ) : null}
           {view === "map" ? (
-            <Suspense fallback={<div className={styles.boundary} data-testid="task-map-route-loading" role="status">正在加载关系图页面…</div>}>
-              <LazyTaskMapView runtime={runtime} board={route.boardSlug} taskId={taskId} onSelectTask={selectTask} />
-            </Suspense>
+            <TaskMapChunkBoundary locale={locale}>
+              <Suspense fallback={<div className={styles.boundary} data-testid="task-map-route-loading" role="status">{locale === "en" ? "Loading task map page…" : "正在加载关系图页面…"}</div>}>
+                <LazyTaskMapView
+                  runtime={runtime}
+                  board={route.boardSlug}
+                  boardIdentity={mapIdentityRead.data}
+                  identityLoading={mapIdentityRead.loading}
+                  identityError={mapIdentityRead.error}
+                  onRetryIdentity={mapIdentityRead.retry}
+                  taskId={taskId}
+                  onSelectTask={selectTask}
+                  urlState={mapUrlState}
+                  onUrlStateChange={updateMapUrlState}
+                />
+              </Suspense>
+            </TaskMapChunkBoundary>
           ) : null}
           {view === "runs" ? <TaskRunsView runtime={runtime} taskId={taskId} /> : null}
           {view === "events" ? <EventsPlaceholder taskId={taskId} inspector={inspectorRead.data} /> : null}

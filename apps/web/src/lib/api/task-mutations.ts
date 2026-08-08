@@ -1,4 +1,5 @@
 import type { WebRuntimeConfig } from "../runtime"
+import type { CanonicalBoardSlug } from "../board-slug"
 import {
   createHttpTransport,
   type HttpTransport,
@@ -105,13 +106,19 @@ export type UpdateTaskIntent = Omit<import("./generated/contracts/api-update-tas
 export type AddTaskLabelIntent = Omit<import("./generated/contracts/api-add-task-label-request").ApiAddTaskLabelRequestContract, "actor">
 export type SpecifyTaskIntent = Omit<import("./generated/contracts/api-specify-task-request").ApiSpecifyTaskRequestContract, "actor">
 export type PromoteTaskIntent = Omit<import("./generated/contracts/api-promote-task-request").ApiPromoteTaskRequestContract, "actor">
-export type ClaimTaskIntent = Omit<import("./generated/contracts/api-claim-task-request").ApiClaimTaskRequestContract, "actor">
-export type HeartbeatTaskIntent = Omit<import("./generated/contracts/api-heartbeat-task-request").ApiHeartbeatTaskRequestContract, "actor">
-export type CompleteTaskIntent = Omit<import("./generated/contracts/api-complete-task-request").ApiCompleteTaskRequestContract, "actor">
-export type SubmitReviewTaskIntent = Omit<import("./generated/contracts/api-submit-review-task-request").ApiSubmitReviewTaskRequestContract, "actor">
-export type BlockTaskIntent = Omit<import("./generated/contracts/api-block-task-request").ApiBlockTaskRequestContract, "actor">
+export type ClaimTaskIntent = Omit<import("./generated/contracts/api-claim-task-request").ApiClaimTaskRequestContract, "actor" | "ttl_ms">
+  & Partial<Pick<import("./generated/contracts/api-claim-task-request").ApiClaimTaskRequestContract, "ttl_ms">>
+export type HeartbeatTaskIntent = Omit<import("./generated/contracts/api-heartbeat-task-request").ApiHeartbeatTaskRequestContract, "actor" | "ttl_ms">
+  & Partial<Pick<import("./generated/contracts/api-heartbeat-task-request").ApiHeartbeatTaskRequestContract, "ttl_ms">>
+export type CompleteTaskIntent = Omit<import("./generated/contracts/api-complete-task-request").ApiCompleteTaskRequestContract, "actor" | "force">
+  & Partial<Pick<import("./generated/contracts/api-complete-task-request").ApiCompleteTaskRequestContract, "force">>
+export type SubmitReviewTaskIntent = Omit<import("./generated/contracts/api-submit-review-task-request").ApiSubmitReviewTaskRequestContract, "actor" | "force">
+  & Partial<Pick<import("./generated/contracts/api-submit-review-task-request").ApiSubmitReviewTaskRequestContract, "force">>
+export type BlockTaskIntent = Omit<import("./generated/contracts/api-block-task-request").ApiBlockTaskRequestContract, "actor" | "force">
+  & Partial<Pick<import("./generated/contracts/api-block-task-request").ApiBlockTaskRequestContract, "force">>
 export type UnblockTaskIntent = Omit<import("./generated/contracts/api-unblock-task-request").ApiUnblockTaskRequestContract, "actor">
-export type ArchiveTaskIntent = Omit<import("./generated/contracts/api-archive-task-request").ApiArchiveTaskRequestContract, "actor">
+export type ArchiveTaskIntent = Omit<import("./generated/contracts/api-archive-task-request").ApiArchiveTaskRequestContract, "actor" | "force">
+  & Partial<Pick<import("./generated/contracts/api-archive-task-request").ApiArchiveTaskRequestContract, "force">>
 export type CreateStepIntent = Pick<import("./generated/contracts/api-create-step-request").ApiCreateStepRequestContract, "title">
   & Partial<Omit<import("./generated/contracts/api-create-step-request").ApiCreateStepRequestContract, "actor" | "title">>
 export type MarkExecutionPlanNotRequiredIntent = Omit<import("./generated/contracts/api-mark-execution-plan-not-required-request").ApiMarkExecutionPlanNotRequiredRequestContract, "actor">
@@ -171,7 +178,6 @@ export interface TaskMutationClient {
   transitionTask(taskId: string, action: "block", input: BlockTaskIntent, options?: MutationRequestOptions): Promise<ApiBlockTaskResponseContract>
   transitionTask(taskId: string, action: "unblock", input?: UnblockTaskIntent, options?: MutationRequestOptions): Promise<ApiUnblockTaskResponseContract>
   transitionTask(taskId: string, action: "archive", input?: ArchiveTaskIntent, options?: MutationRequestOptions): Promise<ApiArchiveTaskResponseContract>
-  transitionTask(taskId: string, action: TaskTransitionAction, input?: Readonly<Record<string, unknown>>, options?: MutationRequestOptions): Promise<TaskTransitionResponse>
   listDependencies(taskId: string, options?: MutationRequestOptions): Promise<ApiListDependenciesResponseContract>
   addDependency(taskId: string, parentTaskId: string, options?: MutationRequestOptions): Promise<ApiAddDependencyResponseContract>
   removeDependency(taskId: string, parentTaskId: string, options?: MutationRequestOptions): Promise<ApiRemoveDependencyResponseContract>
@@ -264,13 +270,17 @@ function transitionPath(taskId: string, action: TaskTransitionAction): string {
   return `/api/v1/tasks/${taskPath(parsed.task_id)}/transitions/${action}`
 }
 
-function createClient(runtime: WebRuntimeConfig, dependencies: TaskMutationDependencies): TaskMutationClient {
+function createClient(
+  runtime: WebRuntimeConfig,
+  activeBoard: CanonicalBoardSlug,
+  dependencies: TaskMutationDependencies,
+): TaskMutationClient {
   const transport = dependencies.transport ?? createHttpTransport(runtime, dependencies)
   const actor = runtime.actor
 
   const createTask = (input: CreateTaskIntent, options: MutationRequestOptions = {}) => {
     const body = parseApiCreateTaskRequest(mergeActor(actor, input))
-    return requestContract(transport, "POST", createTaskPath(runtime.defaultBoard), body, jsonHeaders(parseApiCreateTaskHeaders, actor), parseApiCreateTaskResponse, options.signal)
+    return requestContract(transport, "POST", createTaskPath(activeBoard), body, jsonHeaders(parseApiCreateTaskHeaders, actor), parseApiCreateTaskResponse, options.signal)
   }
 
   const updateTask = (taskId: string, input: UpdateTaskIntent, options: MutationRequestOptions = {}) => {
@@ -423,7 +433,8 @@ function createClient(runtime: WebRuntimeConfig, dependencies: TaskMutationDepen
 
 export function createTaskMutationClient(
   runtime: WebRuntimeConfig,
+  activeBoard: CanonicalBoardSlug,
   dependencies: TaskMutationDependencies = {},
 ): TaskMutationClient {
-  return createClient(runtime, dependencies)
+  return createClient(runtime, activeBoard, dependencies)
 }

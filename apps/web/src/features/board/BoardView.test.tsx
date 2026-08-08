@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
 import { BoardView } from "./BoardView"
-import type { BoardViewModel } from "./types"
+import { validateBoardViewModel } from "./types"
+import type { BoardTaskViewModel, BoardViewModel } from "./types"
 
 const model: BoardViewModel = {
   board: { id: "b-1", slug: "roadmap", name: "产品路线图" },
@@ -50,6 +51,21 @@ const model: BoardViewModel = {
     ],
     running: [],
   },
+}
+
+function expectInvalid(candidate: BoardViewModel) {
+  expect(validateBoardViewModel(candidate).valid).toBe(false)
+}
+
+function runningTask(overrides: Partial<BoardTaskViewModel> = {}): BoardTaskViewModel {
+  return {
+    ...model.tasksByStatus.ready[0],
+    id: "t-running",
+    ref: "KB-RUNNING",
+    title: "运行中的任务",
+    status: "running",
+    ...overrides,
+  }
 }
 
 describe("BoardView", () => {
@@ -127,6 +143,22 @@ describe("BoardView", () => {
     expect(markup).not.toContain("看板暂无列")
   })
 
+  test("hidden column 的合法任务保持隐藏且不会触发 anomaly", () => {
+    const hiddenTaskModel: BoardViewModel = {
+      ...model,
+      tasksByStatus: {
+        ...model.tasksByStatus,
+        done: [runningTask({ id: "t-done", ref: "KB-DONE", title: "隐藏完成任务", status: "done" })],
+      },
+    }
+
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model: hiddenTaskModel }} />)
+
+    expect(markup).toContain('data-state="ready"')
+    expect(markup).not.toContain('data-anomaly="board-model"')
+    expect(markup).not.toContain("隐藏完成任务")
+  })
+
   test("文案可以由 props 注入而不改变 presentation model", () => {
     const markup = renderToStaticMarkup(
       <BoardView
@@ -140,5 +172,80 @@ describe("BoardView", () => {
 
     expect(markup).toContain("No tasks in this column.")
     expect(markup).toContain("产品路线图")
+  })
+
+  test("键盘可到达列 section、heading 和横向滚动 region", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
+
+    expect(markup).toContain('role="region"')
+    expect(markup).toContain('aria-label="看板列内容"')
+    expect(markup).toContain('role="region" aria-label="看板列内容" tabindex="0"')
+    expect(markup).toMatch(/tabindex="-1"[^>]*data-testid="board-column"/)
+    expect((markup.match(/tabindex="-1"/g) ?? []).length).toBeGreaterThanOrEqual(3)
+  })
+
+  test("presentation 校验拒绝空白身份和异常 server columns", () => {
+    const invalidModels: readonly BoardViewModel[] = [
+      { ...model, board: { ...model.board, id: " " } },
+      { ...model, board: { ...model.board, slug: "\t" } },
+      { ...model, board: { ...model.board, name: "\n" } },
+      { ...model, columns: model.columns.map((column) => ({ ...column, id: " " })) },
+      { ...model, columns: model.columns.map((column) => ({ ...column, title: "\t" })) },
+      { ...model, columns: [{ ...model.columns[0], id: model.columns[1].id }, ...model.columns.slice(1)] },
+      { ...model, columns: [{ ...model.columns[0], status: model.columns[1].status }, ...model.columns.slice(1)] },
+      { ...model, columns: [{ ...model.columns[0], position: model.columns[1].position }, ...model.columns.slice(1)] },
+      { ...model, columns: model.columns.map((column) => ({ ...column, position: Number.MAX_SAFE_INTEGER + 1 })) },
+    ]
+
+    for (const candidate of invalidModels) expectInvalid(candidate)
+  })
+
+  test("presentation 校验跨所有 task groups 拒绝重复、空白和非法 position", () => {
+    const invalidModels: readonly BoardViewModel[] = [
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          done: [{ ...runningTask(), status: "done", id: model.tasksByStatus.ready[0].id }],
+        },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          running: [runningTask({ id: " " })],
+        },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          running: [runningTask({ ref: "\t" })],
+        },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          running: [runningTask({ title: "\n" })],
+        },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          running: [runningTask({ position: Number.MAX_SAFE_INTEGER + 1 })],
+        },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          running: [runningTask({ status: "ready" })],
+        },
+      },
+    ]
+
+    for (const candidate of invalidModels) expectInvalid(candidate)
   })
 })

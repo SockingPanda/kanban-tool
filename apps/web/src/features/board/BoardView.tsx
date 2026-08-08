@@ -113,13 +113,15 @@ function StateContent({ state, copy, onRetry }: { readonly state: BoardViewState
 
   if (state.kind === "error" || state.kind === "offline") {
     return (
-      <Banner
-        status={state.kind === "error" ? "error" : "warning"}
-        title={state.kind === "error" ? copy.errorTitle : copy.offlineTitle}
-        description={state.message ?? copy.offlineTitle}
-        endContent={onRetry ? <Button label={copy.retry} variant="secondary" onClick={onRetry} /> : undefined}
-        data-testid={`board-${state.kind}`}
-      />
+      <div className={styles.errorContainer}>
+        <Banner
+          status={state.kind === "error" ? "error" : "warning"}
+          title={state.kind === "error" ? copy.errorTitle : copy.offlineTitle}
+          description={<span className={styles.errorCopy}>{state.message ?? copy.offlineTitle}</span>}
+          endContent={onRetry ? <Button label={copy.retry} variant="secondary" onClick={onRetry} /> : undefined}
+          data-testid={`board-${state.kind}`}
+        />
+      </div>
     )
   }
 
@@ -199,7 +201,7 @@ function BoardColumns({ model, copy, rootId }: { readonly model: BoardViewModel;
           ))}
         </ul>
       </nav>
-      <div className={styles.boardColumns}>
+      <div className={styles.boardColumns} role="region" aria-label={copy.boardColumnsLabel} tabIndex={0}>
         <div className={styles.columnsGrid}>
           {columns.map((column, index) => {
             const tasks = tasksForColumn(model, column)
@@ -211,12 +213,13 @@ function BoardColumns({ model, copy, rootId }: { readonly model: BoardViewModel;
                 key={column.id}
                 id={columnAnchorId(rootId, index)}
                 aria-labelledby={headingId}
+                tabIndex={-1}
                 data-testid="board-column"
                 data-column-id={column.id}
                 data-status={column.status}
               >
                 <header className={styles.columnHeader}>
-                  <Heading level={2} id={headingId}>
+                  <Heading level={2} id={headingId} tabIndex={-1}>
                     {column.title}
                   </Heading>
                   <p className={styles.columnCount}>{copy.columnTaskCount(tasks.length)}</p>

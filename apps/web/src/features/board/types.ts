@@ -69,26 +69,60 @@ export type BoardViewModelValidationResult =
  * 将缺少 server column 的任务渲染成一个看似完整的 board。
  */
 export function validateBoardViewModel(model: BoardViewModel): BoardViewModelValidationResult {
+  if (!model || !model.board) return { valid: false, message: "看板身份无效" }
+  if (!Array.isArray(model.columns)) return { valid: false, message: "服务端列数据无效" }
+  if (!model.tasksByStatus || typeof model.tasksByStatus !== "object") {
+    return { valid: false, message: "任务状态分组无效" }
+  }
+  if (!hasText(model.board.id)) return { valid: false, message: "看板 id 不能为空" }
+  if (!hasText(model.board.slug)) return { valid: false, message: "看板 slug 不能为空" }
+  if (!hasText(model.board.name)) return { valid: false, message: "看板名称不能为空" }
+
+  const columnIds = new Set<string>()
   const statuses = new Set<string>()
+  const positions = new Set<number>()
   for (const column of model.columns) {
+    if (!hasText(column.id)) return { valid: false, message: "服务端列 id 不能为空" }
+    if (!hasText(column.title)) return { valid: false, message: "服务端列标题不能为空" }
+    if (!Number.isSafeInteger(column.position)) {
+      return { valid: false, message: `服务端列 ${column.id} 的 position 必须是 safe integer` }
+    }
+    if (columnIds.has(column.id)) return { valid: false, message: `服务端返回重复列 id：${column.id}` }
+    if (positions.has(column.position)) return { valid: false, message: `服务端返回重复列 position：${column.position}` }
     if (statuses.has(column.status)) {
       return { valid: false, message: `服务端返回重复状态列：${column.status}` }
     }
+    columnIds.add(column.id)
     statuses.add(column.status)
+    positions.add(column.position)
   }
 
+  const taskIds = new Set<string>()
   for (const [status, tasks] of Object.entries(model.tasksByStatus)) {
+    if (!Array.isArray(tasks)) return { valid: false, message: `任务状态 ${status} 的任务分组无效` }
     if (tasks.length > 0 && !statuses.has(status)) {
       return { valid: false, message: `任务状态 ${status} 没有对应的服务端列` }
     }
     for (const task of tasks) {
+      if (!hasText(task.id)) return { valid: false, message: "任务 id 不能为空" }
+      if (!hasText(task.ref)) return { valid: false, message: `任务 ${task.id} 的 ref 不能为空` }
+      if (!hasText(task.title)) return { valid: false, message: `任务 ${task.ref} 的标题不能为空` }
+      if (!Number.isSafeInteger(task.position)) {
+        return { valid: false, message: `任务 ${task.ref} 的 position 必须是 safe integer` }
+      }
+      if (taskIds.has(task.id)) return { valid: false, message: `服务端返回重复任务 id：${task.id}` }
       if (task.status !== status) {
         return { valid: false, message: `任务 ${task.ref} 的状态分组与任务事实不一致` }
       }
+      taskIds.add(task.id)
     }
   }
 
   return { valid: true }
+}
+
+function hasText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0
 }
 
 export type BoardViewState =
@@ -102,6 +136,7 @@ export interface BoardMessages {
   readonly boardEyebrow: string
   readonly boardTitle: string
   readonly boardIdentityLabel: string
+  readonly boardColumnsLabel: string
   readonly skipToColumns: string
   readonly columnNavigationLabel: string
   readonly columnTaskCount: (count: number) => string
@@ -136,6 +171,7 @@ export const defaultBoardMessages: BoardMessages = {
   boardEyebrow: "ASTRYX BOARD",
   boardTitle: "看板",
   boardIdentityLabel: "看板标识",
+  boardColumnsLabel: "看板列内容",
   skipToColumns: "跳转到看板列",
   columnNavigationLabel: "看板列导航",
   columnTaskCount: (count) => `${count} 个任务`,

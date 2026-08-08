@@ -36,11 +36,14 @@ export class HttpTransportError extends Error {
   }
 }
 
-/** Observer used by the board reader to account for every decoded response body. */
-export type ResponseBytesObserver = (bytes: number) => void
+/** Decoded transport payload plus the exact raw UTF-8 byte count consumed. */
+export interface HttpTransportResponse {
+  readonly payload: unknown
+  readonly bytes: number
+}
 
 export interface HttpTransport {
-  get(path: string, signal?: AbortSignal, onResponseBytes?: ResponseBytesObserver): Promise<unknown>
+  get(path: string, signal?: AbortSignal): Promise<HttpTransportResponse>
 }
 
 export interface HttpTransportOptions {
@@ -95,7 +98,14 @@ function hasDotSegmentOrBackslash(path: string): boolean {
     if (segment === "." || segment === "..") return true
     try {
       let decoded = segment
-      for (let pass = 0; pass < 3; pass += 1) {
+      for (let pass = 0; pass < 64; pass += 1) {
+        if (
+          decoded === "."
+          || decoded === ".."
+          || decoded.includes("\\")
+          || decoded.includes("/")
+          || decoded.includes("\u0000")
+        ) return true
         const next = decodeURIComponent(decoded)
         if (next === decoded) break
         decoded = next
@@ -106,6 +116,7 @@ function hasDotSegmentOrBackslash(path: string): boolean {
         || decoded.includes("\\")
         || decoded.includes("/")
         || decoded.includes("\u0000")
+        || decoded.includes("%")
       ) return true
     } catch {
       return true
@@ -165,6 +176,14 @@ function isJSONContentType(value: string | null): boolean {
   return value === "application/json" || value?.endsWith("+json") === true
 }
 
+async function cancelResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel()
+  } catch {
+    // The caller's typed rejection remains authoritative if cancellation races the network.
+  }
+}
+
 function contentLength(response: Response): number | null {
   const value = response.headers.get("content-length")
   if (value === null) return null
@@ -192,8 +211,15 @@ interface JSONPayload {
 }
 
 async function readJSON(response: Response): Promise<JSONPayload> {
-  const declaredLength = contentLength(response)
+  let declaredLength: number | null
+  try {
+    declaredLength = contentLength(response)
+  } catch (error) {
+    await cancelResponseBody(response)
+    throw error
+  }
   if (declaredLength !== null && declaredLength > MAX_JSON_RESPONSE_BYTES) {
+    await cancelResponseBody(response)
     throw new HttpTransportError(
       "response_too_large",
       `Web API 响应超过 ${MAX_JSON_RESPONSE_BYTES} 字节上限。`,
@@ -235,11 +261,18 @@ async function readJSON(response: Response): Promise<JSONPayload> {
     }
   } catch (cause) {
     if (cause instanceof HttpTransportError) throw cause
+    if (isAbortError(cause)) throw cause
     throw new HttpTransportError(
       "invalid_json",
       "Web API 响应 body 无法读取。",
       { status: response.status, cause },
     )
+  } finally {
+    try {
+      reader.releaseLock()
+    } catch {
+      // Release is best effort after cancellation or an aborted stream.
+    }
   }
 
   const bytes = new Uint8Array(total)
@@ -290,7 +323,7 @@ export function createHttpTransport(
   const base = sameOriginBase(runtime, options.documentBaseURI ?? documentBaseURI())
 
   return {
-    async get(path, signal, onResponseBytes) {
+    async get(path, signal) {
       const url = requestURL(base, path)
       let response: Response
       try {
@@ -311,7 +344,12 @@ export function createHttpTransport(
         )
       }
 
-      validateFinalOrigin(response, base.origin)
+      try {
+        validateFinalOrigin(response, base.origin)
+      } catch (error) {
+        await cancelResponseBody(response)
+        throw error
+      }
       const contentType = responseContentType(response)
       if (!response.ok && !isJSONContentType(contentType)) {
         let body: JSONPayload
@@ -327,7 +365,6 @@ export function createHttpTransport(
           }
           throw error
         }
-        onResponseBytes?.(body.bytes)
         throw new HttpTransportError(
           "http",
           `Web API 请求失败：HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
@@ -336,6 +373,7 @@ export function createHttpTransport(
       }
 
       if (contentType === null || !isJSONContentType(contentType)) {
+        await cancelResponseBody(response)
         throw new HttpTransportError(
           "invalid_content_type",
           "Web API 成功响应必须使用 application/json 或 +json Content-Type。",
@@ -344,7 +382,6 @@ export function createHttpTransport(
       }
 
       const body = await readJSON(response)
-      onResponseBytes?.(body.bytes)
       if (!response.ok) {
         try {
           const apiError = parseApiErrorResponse(body.payload)
@@ -362,7 +399,7 @@ export function createHttpTransport(
           )
         }
       }
-      return body.payload
+      return body
     },
   }
 }

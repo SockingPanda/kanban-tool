@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest"
 
 import type { WebRuntimeConfig } from "../runtime"
 import { BoardReadError, createBoardReadQuery, loadBoardReadModel } from "./board-read-model"
+import type { HttpTransportResponse } from "./http-transport"
 
 const runtime = {
   apiBaseUrl: "",
@@ -278,10 +279,11 @@ describe("board read model", () => {
 
   test("enforces the shared raw-byte budget and reports an anomaly", async () => {
     const transport = {
-      get: vi.fn(async (path: string, _signal?: AbortSignal, onResponseBytes?: (bytes: number) => void) => {
-        onResponseBytes?.(64 * 1024 * 1024 + 1)
-        if (path.startsWith("/api/v1/boards?")) return { data: [board("b_default", "default", "Default")] }
-        return { data: [] }
+      get: vi.fn(async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) {
+          return { payload: { data: [board("b_default", "default", "Default")] }, bytes: 64 * 1024 * 1024 + 1 }
+        }
+        return { payload: { data: [] }, bytes: 0 }
       }),
     }
     await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport } })).rejects.toMatchObject({
@@ -292,9 +294,9 @@ describe("board read model", () => {
 
   test("enforces the 50k task budget instead of silently truncating pagination", async () => {
     const transport = {
-      get: vi.fn(async (path: string) => {
-        if (path.startsWith("/api/v1/boards?")) return { data: [board("b_default", "default", "Default")] }
-        if (path.endsWith("/columns")) return { data: [column("c_ready", "b_default", "ready", 10)] }
+      get: vi.fn(async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board("b_default", "default", "Default")] }, bytes: 0 }
+        if (path.endsWith("/columns")) return { payload: { data: [column("c_ready", "b_default", "ready", 10)] }, bytes: 0 }
         const url = new URL(path, "http://127.0.0.1")
         const offset = Number(url.searchParams.get("offset"))
         const count = offset === 50_000 ? 1 : 1_000
@@ -303,8 +305,11 @@ describe("board read model", () => {
           return task(`t_${position}`, "b_default", "default", "ready", position)
         })
         return {
-          data: { statuses: [{ status: "ready", tasks, page: { limit: 1_000, offset, total: 50_001 } }] },
-          meta: { limit: 1_000, offset },
+          payload: {
+            data: { statuses: [{ status: "ready", tasks, page: { limit: 1_000, offset, total: 50_001 } }] },
+            meta: { limit: 1_000, offset },
+          },
+          bytes: 0,
         }
       }),
     }

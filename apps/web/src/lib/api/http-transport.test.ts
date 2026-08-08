@@ -24,7 +24,10 @@ describe("same-origin Web HTTP transport", () => {
       documentBaseURI: "https://kanban.test/app/boards/default/board",
     })
 
-    await expect(transport.get("/api/v1/boards")).resolves.toEqual({ data: [] })
+    await expect(transport.get("/api/v1/boards")).resolves.toMatchObject({
+      payload: { data: [] },
+      bytes: expect.any(Number),
+    })
     expect(fetcher).toHaveBeenCalledWith(
       "https://kanban.test/__kb_api__/api/v1/boards",
       expect.objectContaining({ credentials: "same-origin", method: "GET", mode: "same-origin", redirect: "error" }),
@@ -43,11 +46,14 @@ describe("same-origin Web HTTP transport", () => {
   test("rejects traversal, encoded separators, backslashes, and NUL paths", async () => {
     const fetcher = vi.fn<typeof fetch>()
     const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+    let nestedDot = ".."
+    for (let index = 0; index < 8; index += 1) nestedDot = encodeURIComponent(nestedDot)
 
     for (const path of [
       "/api/./v1/boards",
       "/api/%2e%2e/v1/boards",
       "/api/%252e%252e/v1/boards",
+      `/api/${nestedDot}/v1/boards`,
       "/api/%2f/v1/boards",
       "/api/%5c/v1/boards",
       "/api/%00/v1/boards",
@@ -102,6 +108,42 @@ describe("same-origin Web HTTP transport", () => {
     const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
     await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ kind: "response_too_large" })
     expect(canceled).toBe(true)
+  })
+
+  test("cancels early rejected bodies and preserves reader AbortError", async () => {
+    let canceled = false
+    const oversizedStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([123]))
+      },
+      cancel() {
+        canceled = true
+      },
+    })
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(oversizedStream, {
+        status: 200,
+        headers: { "content-type": "application/json", "content-length": String(16 * 1024 * 1024 + 1) },
+      }))
+      .mockResolvedValueOnce(new Response("{}", { status: 200, headers: { "content-type": "text/plain" } }))
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+    await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ kind: "response_too_large" })
+    expect(canceled).toBe(true)
+    await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ kind: "invalid_content_type" })
+
+    let pulls = 0
+    const abortedStream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1
+        if (pulls === 1) controller.enqueue(new Uint8Array([123]))
+        else controller.error(new DOMException("aborted", "AbortError"))
+      },
+    })
+    fetcher.mockResolvedValueOnce(new Response(abortedStream, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))
+    await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ name: "AbortError" })
   })
 
   test("parses the generated API error contract for non-success responses", async () => {

@@ -20,7 +20,7 @@ import {
   HttpTransportError,
   type HttpTransport,
   type HttpTransportOptions,
-  type ResponseBytesObserver,
+  type HttpTransportResponse,
 } from "./http-transport"
 
 export type BoardColumn = ApiListBoardColumnsResponseContract["data"][number]
@@ -226,10 +226,22 @@ async function get(
   transport: BoardReadTransport,
   path: string,
   signal: AbortSignal | undefined,
-  onResponseBytes: ResponseBytesObserver,
+  budget: BoardReadBudget,
 ): Promise<unknown> {
   try {
-    return await transport.get(path, signal, onResponseBytes)
+    const response: HttpTransportResponse = await transport.get(path, signal)
+    if (
+      response === null
+      || typeof response !== "object"
+      || !("payload" in response)
+      || typeof response.bytes !== "number"
+      || !Number.isSafeInteger(response.bytes)
+      || response.bytes < 0
+    ) {
+      throw new BoardReadError("anomaly", "Web API transport 返回了无效 raw JSON 字节数。")
+    }
+    budget.consumeBytes(response.bytes)
+    return response.payload
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -304,7 +316,7 @@ function appendTasksQuery(path: string, query: ApiListTasksByStatusQueryContract
 function emptyError(selector: string, reason: "no-boards" | "board-not-found"): BoardReadError {
   const message = reason === "no-boards"
     ? "kanban serve 未返回可用看板。"
-    : "runtime.defaultBoard 未在看板列表中精确匹配。"
+    : "请求的看板 selector 未在看板列表中精确匹配。"
   return new BoardReadError("empty", `${message} selector=${JSON.stringify(selector)}`, { reason, selector })
 }
 
@@ -366,7 +378,7 @@ async function resolveIdentity(
   const payload = parseContract(
     "api.list-boards.response",
     parseApiListBoardsResponse,
-    await get(transport, boardQuery(includeArchived), signal, (bytes) => budget.consumeBytes(bytes)),
+    await get(transport, boardQuery(includeArchived), signal, budget),
   )
   if (payload.data.length === 0) throw emptyError(requestedSelector, "no-boards")
   validateBoardList(payload.data, requestedSelector)
@@ -502,7 +514,7 @@ async function loadTasksForStatus(
     if (pages >= MAX_TASK_PAGES) throw new BoardReadError("anomaly", "tasks-by-status 分页超过安全页数上限。")
     const query = tasksQuery(status, options, offset, pageSize)
     const parsed = parseTasksWindow(
-      await get(transport, appendTasksQuery(basePath, query), signal, (bytes) => budget.consumeBytes(bytes)),
+      await get(transport, appendTasksQuery(basePath, query), signal, budget),
       identity,
       status,
       offset,
@@ -548,7 +560,7 @@ export async function loadBoardReadModel(
     }
     const identity = await resolveIdentity(transport, selector, includeArchived, linked.signal, budget)
     const columns = parseColumns(
-      await get(transport, columnsPath(identity.slug), linked.signal, (bytes) => budget.consumeBytes(bytes)),
+      await get(transport, columnsPath(identity.slug), linked.signal, budget),
       identity,
     )
     const statuses = columns.map((column) => column.status)

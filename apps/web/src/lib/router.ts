@@ -14,9 +14,11 @@ export type InvalidBoardRoute = {
   error: CanonicalBoardSlugError
 }
 
+export type BoardRouteView = "board" | "list" | "map" | "runs" | "events"
+
 export type AppRoute =
   | { kind: "home"; pathname: string }
-  | { kind: "board"; boardSlug: CanonicalBoardSlug; pathname: string }
+  | { kind: "board"; boardSlug: CanonicalBoardSlug; pathname: string; view?: BoardRouteView; query?: string }
   | { kind: "settings"; pathname: string }
   | { kind: "not-found"; pathname: string }
   | InvalidBoardRoute
@@ -60,6 +62,14 @@ function pathnameFromInput(input: string): string {
   }
 }
 
+function queryFromInput(input: string): string {
+  try {
+    return new URL(input, "http://kanban-tool.invalid").search.replace(/^\?/, "")
+  } catch {
+    return input.split("?", 2)[1]?.split("#", 1)[0] ?? ""
+  }
+}
+
 function canonicalPathname(pathname: string, basePath: string): string {
   const withoutTrailingSlash = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname
   const baseWithoutTrailingSlash = basePath.length > 1 ? basePath.slice(0, -1) : basePath
@@ -92,6 +102,7 @@ export function parseAppRoute(
 ): AppRoute {
   const basePath = normalizeBasePath(options.basePath)
   const pathname = canonicalPathname(pathnameFromInput(input), basePath)
+  const query = queryFromInput(input)
   const baseWithoutTrailingSlash = basePath.length > 1 ? basePath.slice(0, -1) : basePath
 
   if (pathname === basePath || pathname === baseWithoutTrailingSlash) {
@@ -102,11 +113,19 @@ export function parseAppRoute(
   }
 
   const boardPrefix = `${basePath}boards/`
-  if (pathname.startsWith(boardPrefix) && pathname.endsWith("/board")) {
-    const slug = pathname.slice(boardPrefix.length, -"/board".length)
+  if (pathname.startsWith(boardPrefix)) {
+    const tail = pathname.slice(boardPrefix.length)
+    const separator = tail.lastIndexOf("/")
+    const view = separator > 0 ? tail.slice(separator + 1) : ""
+    if (!(["board", "list", "map", "runs", "events"] as const).includes(view as BoardRouteView)) {
+      return { kind: "not-found", pathname }
+    }
+    const slug = tail.slice(0, separator)
     const boardSlug = decodeBoardSlug(slug, pathname)
     if (typeof boardSlug === "string") {
-      return { kind: "board", boardSlug, pathname: routePath({ kind: "board", boardSlug }, options) }
+      const route = { kind: "board" as const, boardSlug, pathname: routePath({ kind: "board", boardSlug, view: view as BoardRouteView }, options) }
+      if (view === "board" && query.length === 0) return route
+      return { ...route, view: view as BoardRouteView, ...(query.length > 0 ? { query } : {}) }
     }
     return { ...boardSlug, pathname }
   }
@@ -117,7 +136,7 @@ export function parseAppRoute(
 type RoutePathInput =
   | AppRoute
   | { kind: "home" }
-  | { kind: "board"; boardSlug: CanonicalBoardSlug }
+  | { kind: "board"; boardSlug: CanonicalBoardSlug; view?: BoardRouteView; query?: string }
   | { kind: "settings" }
 
 function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOptions): AppRoute {
@@ -148,7 +167,11 @@ export function routePath(route: RoutePathInput, options: { basePath?: string } 
       if (!boardSlug) {
         throw validateCanonicalBoardSlug(route.boardSlug) ?? new CanonicalBoardSlugError(route.boardSlug, "invalid-character")
       }
-      return `${basePath}boards/${encodeURIComponent(boardSlug)}/board`
+      {
+        const view = route.view ?? "board"
+        const path = `${basePath}boards/${encodeURIComponent(boardSlug)}/${view}`
+        return route.query ? `${path}?${route.query.replace(/^\?/, "")}` : path
+      }
     }
     case "not-found":
     case "error":

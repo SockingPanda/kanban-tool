@@ -38,8 +38,10 @@ describe("App route parser", () => {
       kind: "settings",
       pathname: "/app/settings",
     })
-    expect(parseAppRoute("/app/boards/alpha/list")).toEqual({
-      kind: "not-found",
+    expect(parseAppRoute("/app/boards/alpha/list")).toMatchObject({
+      kind: "board",
+      boardSlug: "alpha",
+      view: "list",
       pathname: "/app/boards/alpha/list",
     })
   })

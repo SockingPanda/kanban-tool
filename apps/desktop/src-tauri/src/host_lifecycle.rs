@@ -25,6 +25,34 @@ const HOST_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MAX_HTTP_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_STDERR_DIAGNOSTIC_BYTES: usize = 16 * 1024;
 
+#[derive(Debug, Clone, Copy)]
+struct ProbeTimeouts {
+    connect: Duration,
+    io: Duration,
+    total: Duration,
+}
+
+impl Default for ProbeTimeouts {
+    fn default() -> Self {
+        Self {
+            connect: HTTP_CONNECT_TIMEOUT,
+            io: HTTP_READ_TIMEOUT,
+            total: Duration::from_secs(2),
+        }
+    }
+}
+
+impl ProbeTimeouts {
+    #[cfg(test)]
+    fn with_single_timeout(timeout: Duration) -> Self {
+        Self {
+            connect: timeout,
+            io: timeout,
+            total: timeout,
+        }
+    }
+}
+
 pub fn default_endpoint() -> SocketAddr {
     SocketAddr::from(([127, 0, 0, 1], DEFAULT_PORT))
 }
@@ -132,13 +160,21 @@ impl std::fmt::Display for ProbeError {
 impl std::error::Error for ProbeError {}
 
 /// 探测固定 loopback host 的 health、runtime 与 Web artifact manifest。
+#[allow(dead_code)]
 pub fn probe_host(endpoint: SocketAddr) -> Result<HostCompatibility, ProbeError> {
+    probe_host_with_timeouts(endpoint, ProbeTimeouts::default())
+}
+
+fn probe_host_with_timeouts(
+    endpoint: SocketAddr,
+    timeouts: ProbeTimeouts,
+) -> Result<HostCompatibility, ProbeError> {
     if !endpoint.ip().is_loopback() {
         return Err(ProbeError::incompatible(
             "Desktop host probe 只允许 loopback 地址",
         ));
     }
-    let health = get_json::<HealthResponse>(endpoint, "/health")?;
+    let health = get_json::<HealthResponse>(endpoint, "/health", timeouts)?;
     if !health.data.ok {
         return Err(ProbeError::incompatible("host health.ok=false"));
     }
@@ -150,17 +186,17 @@ pub fn probe_host(endpoint: SocketAddr) -> Result<HostCompatibility, ProbeError>
         )));
     }
 
-    let runtime = get_json::<WebRuntimeConfig>(endpoint, "/app/runtime.json")?;
-    let manifest = get_json::<WebArtifactManifest>(endpoint, "/app/manifest.json")?;
+    let runtime = get_json::<WebRuntimeConfig>(endpoint, "/app/runtime.json", timeouts)?;
+    let manifest = get_json::<WebArtifactManifest>(endpoint, "/app/manifest.json", timeouts)?;
     HostCompatibility::verify(runtime, manifest, env!("CARGO_PKG_VERSION"))
         .map_err(|error| ProbeError::incompatible(error.to_string()))
 }
 
-fn get_json<T>(endpoint: SocketAddr, path: &str) -> Result<T, ProbeError>
+fn get_json<T>(endpoint: SocketAddr, path: &str, timeouts: ProbeTimeouts) -> Result<T, ProbeError>
 where
     T: serde::de::DeserializeOwned,
 {
-    let response = get(endpoint, path)?;
+    let response = get(endpoint, path, timeouts)?;
     if response.status != 200 {
         return Err(ProbeError::incompatible(format!(
             "host {path} 返回 HTTP {}，需要 200",
@@ -183,25 +219,42 @@ where
         .map_err(|error| ProbeError::incompatible(format!("host {path} JSON 无法解析: {error}")))
 }
 
-fn get(endpoint: SocketAddr, path: &str) -> Result<HttpResponse, ProbeError> {
-    let mut stream =
-        TcpStream::connect_timeout(&endpoint, HTTP_CONNECT_TIMEOUT).map_err(|error| {
+fn get(
+    endpoint: SocketAddr,
+    path: &str,
+    timeouts: ProbeTimeouts,
+) -> Result<HttpResponse, ProbeError> {
+    let deadline = Instant::now() + timeouts.total;
+    let mut stream = TcpStream::connect_timeout(
+        &endpoint,
+        remaining_timeout(deadline, timeouts.connect).map_err(|error| {
             ProbeError::unavailable(format!(
                 "无法连接固定 host http://{endpoint}{path}: {error}"
             ))
-        })?;
+        })?,
+    )
+    .map_err(|error| {
+        ProbeError::unavailable(format!(
+            "无法连接固定 host http://{endpoint}{path}: {error}"
+        ))
+    })?;
     stream
-        .set_read_timeout(Some(HTTP_READ_TIMEOUT))
-        .map_err(|error| ProbeError::unavailable(format!("设置 host 读取超时失败: {error}")))?;
+        .set_read_timeout(Some(remaining_timeout(deadline, timeouts.io).map_err(
+            |error| ProbeError::incompatible(format!("设置 host 读取超时失败: {error}")),
+        )?))
+        .map_err(|error| ProbeError::incompatible(format!("设置 host 读取超时失败: {error}")))?;
     stream
-        .set_write_timeout(Some(HTTP_READ_TIMEOUT))
-        .map_err(|error| ProbeError::unavailable(format!("设置 host 写入超时失败: {error}")))?;
+        .set_write_timeout(Some(remaining_timeout(deadline, timeouts.io).map_err(
+            |error| ProbeError::incompatible(format!("设置 host 写入超时失败: {error}")),
+        )?))
+        .map_err(|error| ProbeError::incompatible(format!("设置 host 写入超时失败: {error}")))?;
     write!(
         stream,
         "GET {path} HTTP/1.1\r\nHost: {endpoint}\r\nAccept: application/json\r\nConnection: close\r\n\r\n"
     )
-    .map_err(|error| ProbeError::unavailable(format!("发送 host probe 请求失败: {error}")))?;
-    read_http_response(&mut stream).map_err(|error| ProbeError::unavailable(error.to_string()))
+    .map_err(|error| ProbeError::incompatible(format!("发送 host probe 请求失败: {error}")))?;
+    read_http_response(&mut stream, deadline, timeouts.io)
+        .map_err(|error| ProbeError::incompatible(error.to_string()))
 }
 
 #[derive(Debug)]
@@ -211,9 +264,26 @@ struct HttpResponse {
     body: Vec<u8>,
 }
 
-fn read_http_response(stream: &mut TcpStream) -> io::Result<HttpResponse> {
+fn remaining_timeout(deadline: Instant, maximum: Duration) -> io::Result<Duration> {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "host probe total deadline exceeded",
+        ))
+    } else {
+        Ok(remaining.min(maximum))
+    }
+}
+
+fn read_http_response(
+    stream: &mut TcpStream,
+    deadline: Instant,
+    io_timeout: Duration,
+) -> io::Result<HttpResponse> {
     let mut bytes = Vec::new();
     let header_end = loop {
+        stream.set_read_timeout(Some(remaining_timeout(deadline, io_timeout)?))?;
         let mut chunk = [0_u8; 4096];
         let count = stream.read(&mut chunk)?;
         if count == 0 {
@@ -244,22 +314,41 @@ fn read_http_response(stream: &mut TcpStream) -> io::Result<HttpResponse> {
     let status_line = lines
         .next()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "host probe 状态行缺失"))?;
-    let mut status_parts = status_line.split_whitespace();
-    if status_parts.next() != Some("HTTP/1.1") {
+    if !status_line.starts_with("HTTP/1.1 ")
+        || status_line
+            .bytes()
+            .any(|byte| !byte.is_ascii() || byte < b' ' || byte == 0x7f)
+    {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "host probe 只支持 HTTP/1.1 状态行",
+            "host probe 状态行必须为 HTTP/1.1 SP 3DIGIT 结构",
         ));
     }
-    let status_code = status_parts
-        .next()
-        .filter(|value| value.len() == 3 && value.bytes().all(|byte| byte.is_ascii_digit()))
+    let status_bytes = status_line.as_bytes();
+    let status_code = status_bytes
+        .get(9..12)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "host probe 状态码无效"))?;
+    if !status_code.iter().all(|byte| byte.is_ascii_digit()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "host probe 状态码无效",
+        ));
+    }
+    if status_bytes.get(12) != Some(&b' ') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "host probe 状态码后必须为空格",
+        ));
+    }
     let status = status_code
-        .parse::<u16>()
-        .ok()
-        .filter(|status| (100..=599).contains(status))
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "host probe 状态码超出范围"))?;
+        .iter()
+        .fold(0_u16, |status, byte| status * 10 + u16::from(byte - b'0'));
+    if !(100..=599).contains(&status) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "host probe 状态码超出范围",
+        ));
+    }
     let mut content_length = None;
     let mut content_type = None;
     for line in lines {
@@ -328,6 +417,7 @@ fn read_http_response(stream: &mut TcpStream) -> io::Result<HttpResponse> {
         ));
     }
     while body.len() < content_length {
+        stream.set_read_timeout(Some(remaining_timeout(deadline, io_timeout)?))?;
         let remaining = content_length - body.len();
         let mut chunk = vec![0_u8; remaining.min(4096)];
         let count = stream.read(&mut chunk)?;
@@ -356,6 +446,7 @@ pub struct HostLaunchConfig {
     pub actor: String,
     pub board: String,
     pub startup_timeout: Duration,
+    probe_timeouts: ProbeTimeouts,
 }
 
 impl HostLaunchConfig {
@@ -374,7 +465,14 @@ impl HostLaunchConfig {
             actor: actor.into(),
             board: board.into(),
             startup_timeout: HOST_STARTUP_TIMEOUT,
+            probe_timeouts: ProbeTimeouts::default(),
         }
+    }
+
+    #[cfg(test)]
+    fn with_probe_timeout(mut self, timeout: Duration) -> Self {
+        self.probe_timeouts = ProbeTimeouts::with_single_timeout(timeout);
+        self
     }
 }
 
@@ -484,53 +582,59 @@ impl HostHandle {
         if self.ownership == HostOwnership::External {
             return Ok(ShutdownResult::ExternalHostKept);
         }
-        let Some(child) = self.child.as_mut() else {
+        let Some(mut child) = self.child.take() else {
             return Ok(ShutdownResult::AlreadyExited);
         };
-        if child
-            .process
-            .try_wait()
-            .map_err(|error| ShutdownError::Io(error.to_string()))?
-            .is_some()
-        {
-            child.finish_drain();
-            self.child = None;
-            return Ok(ShutdownResult::AlreadyExited);
+        match child.process.try_wait() {
+            Ok(Some(_)) => {
+                child.finish_drain();
+                return Ok(ShutdownResult::AlreadyExited);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                let first_error = ShutdownError::Io(error.to_string());
+                let cleanup_error = force_stop(&mut child).err();
+                if let Some(cleanup_error) = cleanup_error {
+                    eprintln!("kanban owned host cleanup 失败：{cleanup_error}");
+                }
+                return Err(first_error);
+            }
         }
 
         if let Err(error) = request_graceful_stop(&child.process) {
-            let _ = child.process.kill();
-            let _ = child.process.wait();
-            child.finish_drain();
-            self.child = None;
-            return Err(ShutdownError::GracefulRequest(error.to_string()));
+            let first_error = ShutdownError::GracefulRequest(error.to_string());
+            let cleanup_error = force_stop(&mut child).err();
+            if let Some(cleanup_error) = cleanup_error {
+                eprintln!("kanban owned host cleanup 失败：{cleanup_error}");
+            }
+            return Err(first_error);
         }
         let deadline = Instant::now() + GRACEFUL_SHUTDOWN_TIMEOUT;
         loop {
-            if child
-                .process
-                .try_wait()
-                .map_err(|error| ShutdownError::Io(error.to_string()))?
-                .is_some()
-            {
-                child.finish_drain();
-                self.child = None;
-                return Ok(ShutdownResult::Graceful);
+            match child.process.try_wait() {
+                Ok(Some(_)) => {
+                    child.finish_drain();
+                    return Ok(ShutdownResult::Graceful);
+                }
+                Ok(None) if Instant::now() < deadline => {
+                    thread::sleep(HOST_POLL_INTERVAL);
+                }
+                Ok(None) => {
+                    let cleanup_error = force_stop(&mut child).err();
+                    if let Some(cleanup_error) = cleanup_error {
+                        return Err(ShutdownError::Io(cleanup_error.to_string()));
+                    }
+                    return Ok(ShutdownResult::Forced);
+                }
+                Err(error) => {
+                    let first_error = ShutdownError::Io(error.to_string());
+                    let cleanup_error = force_stop(&mut child).err();
+                    if let Some(cleanup_error) = cleanup_error {
+                        eprintln!("kanban owned host cleanup 失败：{cleanup_error}");
+                    }
+                    return Err(first_error);
+                }
             }
-            if Instant::now() >= deadline {
-                child
-                    .process
-                    .kill()
-                    .map_err(|error| ShutdownError::Io(error.to_string()))?;
-                child
-                    .process
-                    .wait()
-                    .map_err(|error| ShutdownError::Io(error.to_string()))?;
-                child.finish_drain();
-                self.child = None;
-                return Ok(ShutdownResult::Forced);
-            }
-            thread::sleep(HOST_POLL_INTERVAL);
         }
     }
 }
@@ -566,7 +670,7 @@ impl std::fmt::Display for ShutdownError {
 impl std::error::Error for ShutdownError {}
 
 pub fn connect_or_spawn(config: &HostLaunchConfig) -> Result<HostHandle, HostStartupError> {
-    match probe_host(config.endpoint) {
+    match probe_host_with_timeouts(config.endpoint, config.probe_timeouts) {
         Ok(_) => Ok(HostHandle {
             endpoint: config.endpoint,
             ownership: HostOwnership::External,
@@ -586,7 +690,9 @@ pub fn connect_or_spawn(config: &HostLaunchConfig) -> Result<HostHandle, HostSta
                     child: Some(child),
                 }),
                 Err(error) => {
-                    let _ = force_stop(&mut child);
+                    if let Err(cleanup_error) = force_stop(&mut child) {
+                        eprintln!("kanban sidecar cleanup 失败：{cleanup_error}");
+                    }
                     Err(error)
                 }
             }
@@ -668,7 +774,7 @@ fn wait_for_sidecar(
 ) -> Result<HostCompatibility, HostStartupError> {
     let deadline = Instant::now() + config.startup_timeout;
     loop {
-        let latest_error = match probe_host(config.endpoint) {
+        let latest_error = match probe_host_with_timeouts(config.endpoint, config.probe_timeouts) {
             Ok(compatibility) => return Ok(compatibility),
             Err(error) => error,
         };
@@ -730,12 +836,29 @@ fn drain_stderr(mut stderr: impl Read, diagnostics: Arc<Mutex<VecDeque<u8>>>) {
 }
 
 fn force_stop(child: &mut OwnedChild) -> io::Result<()> {
-    if child.process.try_wait()?.is_none() {
-        child.process.kill()?;
+    let mut first_error = None;
+    let needs_wait = match child.process.try_wait() {
+        Ok(Some(_)) => false,
+        Ok(None) => true,
+        Err(error) => {
+            first_error = Some(error);
+            true
+        }
+    };
+    if needs_wait {
+        if let Err(error) = child.process.kill()
+            && first_error.is_none()
+        {
+            first_error = Some(error);
+        }
+        if let Err(error) = child.process.wait()
+            && first_error.is_none()
+        {
+            first_error = Some(error);
+        }
     }
-    let _ = child.process.wait();
     child.finish_drain();
-    Ok(())
+    first_error.map_or(Ok(()), Err)
 }
 
 #[cfg(unix)]
@@ -761,6 +884,7 @@ mod tests {
     use std::{
         io::{Read, Write},
         net::TcpListener,
+        sync::atomic::{AtomicUsize, Ordering},
         thread,
     };
 
@@ -773,6 +897,8 @@ mod tests {
     };
 
     use super::*;
+
+    static NEXT_FIXTURE_ID: AtomicUsize = AtomicUsize::new(0);
 
     fn compatible_values() -> (WebRuntimeConfig, WebArtifactManifest) {
         let payload = WebArtifactFile {
@@ -875,7 +1001,7 @@ mod tests {
         ]);
         let error = probe_host(endpoint).expect_err("missing content-length must fail closed");
         assert!(
-            matches!(error, ProbeError::Unavailable(message) if message.contains("content-length"))
+            matches!(error, ProbeError::Incompatible(message) if message.contains("content-length"))
         );
 
         let response = format!(
@@ -884,7 +1010,9 @@ mod tests {
         );
         let endpoint = spawn_raw_host([response.into_bytes()]);
         let error = probe_host(endpoint).expect_err("oversized body must fail closed");
-        assert!(matches!(error, ProbeError::Unavailable(message) if message.contains("body 过大")));
+        assert!(
+            matches!(error, ProbeError::Incompatible(message) if message.contains("body 过大"))
+        );
     }
 
     #[test]
@@ -894,14 +1022,28 @@ mod tests {
                 .to_vec(),
         ]);
         let error = probe_host(endpoint).expect_err("non-HTTP status line must fail closed");
-        assert!(matches!(error, ProbeError::Unavailable(message) if message.contains("HTTP/1.1")));
+        assert!(matches!(error, ProbeError::Incompatible(message) if message.contains("HTTP/1.1")));
+
+        let endpoint = spawn_raw_host([
+            b" HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
+                .to_vec(),
+        ]);
+        let error = probe_host(endpoint).expect_err("leading whitespace status must fail closed");
+        assert!(matches!(error, ProbeError::Incompatible(message) if message.contains("状态行")));
 
         let endpoint = spawn_raw_host([
             b"HTTP/1.1 20 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
                 .to_vec(),
         ]);
         let error = probe_host(endpoint).expect_err("two-digit status must fail closed");
-        assert!(matches!(error, ProbeError::Unavailable(message) if message.contains("状态码")));
+        assert!(matches!(error, ProbeError::Incompatible(message) if message.contains("状态码")));
+
+        let endpoint = spawn_raw_host([
+            b"HTTP/1.1 200\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
+                .to_vec(),
+        ]);
+        let error = probe_host(endpoint).expect_err("missing reason separator must fail closed");
+        assert!(matches!(error, ProbeError::Incompatible(message) if message.contains("状态码后")));
     }
 
     #[test]
@@ -912,7 +1054,7 @@ mod tests {
         ]);
         let error = probe_host(endpoint).expect_err("trailing body bytes must fail closed");
         assert!(
-            matches!(error, ProbeError::Unavailable(message) if message.contains("超过 content-length"))
+            matches!(error, ProbeError::Incompatible(message) if message.contains("超过 content-length"))
         );
     }
 
@@ -926,13 +1068,41 @@ mod tests {
             db_fingerprint: "private".to_owned(),
         });
         let endpoint = spawn_json_host([serde_json::to_vec(&health).expect("health JSON")]);
+        assert_no_sidecar_spawn(endpoint);
+    }
+
+    #[test]
+    fn malformed_connected_host_does_not_spawn_sidecar() {
+        let endpoint = spawn_raw_host([
+            b"garbage\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}".to_vec(),
+        ]);
+        assert_no_sidecar_spawn(endpoint);
+    }
+
+    #[test]
+    fn reset_connected_host_does_not_spawn_sidecar() {
+        assert_no_sidecar_spawn(spawn_raw_host([Vec::new()]));
+    }
+
+    #[test]
+    fn stalled_connected_host_does_not_spawn_sidecar() {
+        assert_no_sidecar_spawn(spawn_stalled_host());
+    }
+
+    #[test]
+    fn slow_drip_connected_host_hits_total_probe_deadline_without_spawn() {
+        assert_no_sidecar_spawn(spawn_slow_drip_host());
+    }
+
+    fn assert_no_sidecar_spawn(endpoint: SocketAddr) {
+        let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
         let marker = std::env::temp_dir().join(format!(
-            "kanban-desktop-no-spawn-marker-{}",
-            std::process::id()
+            "kanban-desktop-no-spawn-marker-{}-{id}",
+            std::process::id(),
         ));
         let sidecar = std::env::temp_dir().join(format!(
-            "kanban-desktop-no-spawn-sidecar-{}",
-            std::process::id()
+            "kanban-desktop-no-spawn-sidecar-{}-{id}",
+            std::process::id(),
         ));
         let _ = std::fs::remove_file(&marker);
         let _ = std::fs::remove_file(&sidecar);
@@ -953,11 +1123,58 @@ mod tests {
 
         let mut config = HostLaunchConfig::new(sidecar.clone(), "web", "db", "actor", "board");
         config.endpoint = endpoint;
+        config.startup_timeout = Duration::from_millis(100);
+        config = config.with_probe_timeout(Duration::from_millis(50));
         let error = connect_or_spawn(&config).expect_err("incompatible host must block spawn");
         assert!(matches!(error, HostStartupError::PortConflict { .. }));
         assert!(
             !marker.exists(),
             "sidecar marker proves an unexpected spawn"
+        );
+        let _ = std::fs::remove_file(marker);
+        let _ = std::fs::remove_file(sidecar);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn startup_failure_reaps_owned_sidecar() {
+        let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
+        let marker = std::env::temp_dir().join(format!(
+            "kanban-desktop-startup-exit-marker-{}-{id}",
+            std::process::id(),
+        ));
+        let sidecar = std::env::temp_dir().join(format!(
+            "kanban-desktop-startup-exit-sidecar-{}-{id}",
+            std::process::id(),
+        ));
+        let endpoint = TcpListener::bind((DEFAULT_HOST, 0))
+            .expect("startup fixture endpoint")
+            .local_addr()
+            .expect("startup fixture address");
+        let script = format!("#!/bin/sh\nprintf '%s' $$ > {}\nexit 7\n", marker.display());
+        std::fs::write(&sidecar, script).expect("startup sidecar fixture");
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&sidecar)
+                .expect("startup sidecar metadata")
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&sidecar, permissions).expect("startup sidecar executable");
+        }
+
+        let mut config = HostLaunchConfig::new(sidecar.clone(), "web", "db", "actor", "board");
+        config.endpoint = endpoint;
+        config.startup_timeout = Duration::from_millis(100);
+        config = config.with_probe_timeout(Duration::from_millis(25));
+        let error = connect_or_spawn(&config).expect_err("exited sidecar must fail startup");
+        assert!(matches!(error, HostStartupError::SidecarExited { .. }));
+        let pid = std::fs::read_to_string(&marker)
+            .expect("sidecar pid marker")
+            .parse::<i32>()
+            .expect("sidecar pid");
+        assert!(
+            unsafe { libc::kill(pid, 0) } != 0,
+            "sidecar pid remains alive"
         );
         let _ = std::fs::remove_file(marker);
         let _ = std::fs::remove_file(sidecar);
@@ -989,6 +1206,7 @@ mod tests {
             handle.shutdown().expect("owned graceful shutdown"),
             ShutdownResult::Graceful
         );
+        assert!(handle.child.is_none(), "graceful child must be reaped");
     }
 
     #[cfg(unix)]
@@ -1004,6 +1222,7 @@ mod tests {
             handle.shutdown().expect("owned force shutdown"),
             ShutdownResult::Forced
         );
+        assert!(handle.child.is_none(), "forced child must be reaped");
     }
 
     #[cfg(unix)]
@@ -1095,6 +1314,37 @@ mod tests {
                     request.extend_from_slice(&chunk[..count]);
                 }
                 stream.write_all(&response).expect("fixture response");
+            }
+        });
+        endpoint
+    }
+
+    fn spawn_stalled_host() -> SocketAddr {
+        let listener = TcpListener::bind((DEFAULT_HOST, 0)).expect("stall fixture listener");
+        let endpoint = listener.local_addr().expect("stall fixture address");
+        thread::spawn(move || {
+            if let Ok((stream, _)) = listener.accept() {
+                thread::sleep(Duration::from_millis(150));
+                drop(stream);
+            }
+        });
+        endpoint
+    }
+
+    fn spawn_slow_drip_host() -> SocketAddr {
+        let listener = TcpListener::bind((DEFAULT_HOST, 0)).expect("drip fixture listener");
+        let endpoint = listener.local_addr().expect("drip fixture address");
+        thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            let response =
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}";
+            for byte in response {
+                if stream.write_all(&[*byte]).is_err() {
+                    return;
+                }
+                thread::sleep(Duration::from_millis(10));
             }
         });
         endpoint

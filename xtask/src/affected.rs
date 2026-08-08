@@ -205,15 +205,18 @@ fn is_schema(path: &str) -> bool {
 }
 
 fn is_desktop(path: &str) -> bool {
-    path.starts_with("apps/desktop/")
+    path.starts_with("apps/desktop/") || is_root_node_workspace_file(path)
 }
 
 fn is_web(path: &str) -> bool {
-    path.starts_with("apps/web/")
-        || matches!(
-            path,
-            "package.json" | "pnpm-lock.yaml" | "pnpm-workspace.yaml"
-        )
+    path.starts_with("apps/web/") || is_root_node_workspace_file(path)
+}
+
+fn is_root_node_workspace_file(path: &str) -> bool {
+    matches!(
+        path,
+        "package.json" | "pnpm-lock.yaml" | "pnpm-workspace.yaml"
+    )
 }
 
 fn is_rust_product(path: &str) -> bool {
@@ -420,6 +423,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(plan.classifications["web"], ["apps/web/src/App.tsx"]);
+        assert!(!plan.classifications.contains_key("desktop"));
         assert_eq!(recipes, ["web-check", "diff-check"]);
     }
 
@@ -427,12 +431,26 @@ mod tests {
     fn node_manifests_use_frontend_gates_without_rust_release_gates() {
         assert_eq!(
             build_plan("main".to_owned(), sources(&["package.json"])).recipes,
-            vec![Recipe::WebCheck, Recipe::DiffCheck]
+            vec![Recipe::WebCheck, Recipe::DesktopCheck, Recipe::DiffCheck]
         );
         assert_eq!(
             build_plan("main".to_owned(), sources(&["apps/desktop/package.json"])).recipes,
             vec![Recipe::DesktopCheck, Recipe::DiffCheck]
         );
+    }
+
+    #[test]
+    fn root_node_workspace_files_cover_both_frontend_gates() {
+        for path in ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"] {
+            let plan = build_plan("main".to_owned(), sources(&[path]));
+            assert_eq!(
+                plan.recipes,
+                vec![Recipe::WebCheck, Recipe::DesktopCheck, Recipe::DiffCheck],
+                "root workspace file must cover web and desktop for {path}"
+            );
+            assert_eq!(plan.classifications["web"], [path]);
+            assert_eq!(plan.classifications["desktop"], [path]);
+        }
     }
 
     #[test]

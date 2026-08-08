@@ -114,7 +114,7 @@ describe("TaskMapView", () => {
   })
 
   test("renders each discrete zoom level through static CSP-safe classes", () => {
-    for (const zoom of [0.65, 0.7, 0.8, 0.85, 0.95, 1, 1.1, 1.15, 1.25, 1.3, 1.4, 1.45, 1.5]) {
+    for (const zoom of [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5]) {
       const markup = renderToStaticMarkup(
         <TaskMapPresentation board="default" taskId={null} state={ready} zoom={zoom} onSelectTask={() => undefined} />,
       )

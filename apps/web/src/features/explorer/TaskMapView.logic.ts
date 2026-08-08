@@ -6,7 +6,7 @@ type MapNode = ExplorerTaskMap["nodes"][number]
 
 export const MIN_MAP_ZOOM = 0.65
 export const MAX_MAP_ZOOM = 1.5
-export const MAP_ZOOM_LEVELS = [0.65, 0.7, 0.8, 0.85, 0.95, 1, 1.1, 1.15, 1.25, 1.3, 1.4, 1.45, 1.5] as const
+export const MAP_ZOOM_LEVELS = [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5] as const
 const MAP_ZOOM_STEP = 0.15
 
 export interface TaskMapUrlState {

@@ -28,6 +28,12 @@ export interface ReadState<T> {
   readonly error: unknown | null
 }
 
+/** Keep an explicitly closed detail closed; only replace a non-null stale id. */
+export function reconcileSelection<T extends { readonly id: string }>(selectedId: string | null, rows: readonly T[]): string | null {
+  if (selectedId === null) return null
+  return rows.some((row) => row.id === selectedId) ? selectedId : rows[0]?.id ?? null
+}
+
 export interface SignalsScreenProps {
   readonly api: SignalsOntologyReadApi | null
   readonly boardName?: string
@@ -159,8 +165,8 @@ export function SignalsScreen({
 
   const visibleSignals = list.data
   useEffect(() => {
-    if (selectedSignalId !== null && visibleSignals.some((signal) => signal.id === selectedSignalId)) return
-    const nextId = visibleSignals[0]?.id ?? null
+    const nextId = reconcileSelection(selectedSignalId, visibleSignals)
+    if (nextId === selectedSignalId) return
     setLocalSelectedSignalId(nextId)
     onSelectSignalProp?.(nextId)
   }, [onSelectSignalProp, selectedSignalId, visibleSignals])

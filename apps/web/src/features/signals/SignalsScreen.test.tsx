@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest"
 import type { SignalRecord } from "../../lib/api/signals-ontology-read-model"
 import type { SignalsRouteFilters } from "../../lib/router"
 
-import { SignalDetailView, SignalsScreenView, type ReadState } from "./SignalsScreen"
+import { reconcileSelection, SignalDetailView, SignalsScreenView, type ReadState } from "./SignalsScreen"
 
 const signal = (overrides: Partial<SignalRecord> = {}): SignalRecord => ({
   id: "sig_1",
@@ -45,6 +45,12 @@ function state<T>(data: T, phase: ReadState<T>["phase"] = "success", error?: unk
 }
 
 describe("Signals screen presentation", () => {
+  test("keeps a closed detail closed while reconciling stale selected ids", () => {
+    expect(reconcileSelection(null, [signal()])).toBeNull()
+    expect(reconcileSelection("sig_missing", [signal()])).toBe("sig_1")
+    expect(reconcileSelection("sig_1", [signal()])).toBe("sig_1")
+  })
+
   test("renders the generic shell, filters, rows, and selected detail", () => {
     const html = renderToStaticMarkup(
       <SignalsScreenView

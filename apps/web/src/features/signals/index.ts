@@ -3,6 +3,7 @@ export {
   SignalListView,
   SignalsScreen,
   SignalsScreenView,
+  reconcileSelection,
   useReadState,
   type ReadPhase,
   type ReadState,

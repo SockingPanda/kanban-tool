@@ -16,7 +16,7 @@ import type {
   SignalsOntologyReadApi,
 } from "../../lib/api/signals-ontology-read-model"
 import type { OntologyRouteFilters } from "../../lib/router"
-import { useReadState, type ReadPhase, type ReadState } from "../signals/SignalsScreen"
+import { reconcileSelection, useReadState, type ReadPhase, type ReadState } from "../signals/SignalsScreen"
 
 import styles from "./OntologyScreen.module.css"
 
@@ -140,8 +140,8 @@ export function OntologyScreen({
   const groups = useReadState(Boolean(api), reviewRequest, `ontology-review:${api?.board ?? "none"}:${filterKey}:${refreshToken}:${invalidationRevision}`, emptyGroups())
 
   useEffect(() => {
-    if (selectedSignalId !== null && signals.data.some((signal) => signal.id === selectedSignalId)) return
-    const nextId = signals.data[0]?.id ?? null
+    const nextId = reconcileSelection(selectedSignalId, signals.data)
+    if (nextId === selectedSignalId) return
     setLocalSelectedSignalId(nextId)
     onSelectSignalProp?.(nextId)
   }, [onSelectSignalProp, selectedSignalId, signals.data])

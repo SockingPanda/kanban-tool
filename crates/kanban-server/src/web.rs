@@ -132,7 +132,7 @@ impl HostOriginPolicy {
         if matches_loopback_host(host) && port == Some(self.port) {
             return scheme == "http";
         }
-        matches_loopback_host(host) && matches!(port, Some(1420 | 1421))
+        scheme == "http" && matches_loopback_host(host) && matches!(port, Some(1420 | 1421))
     }
 }
 
@@ -747,6 +747,7 @@ mod tests {
         let policy = HostOriginPolicy::for_listener(SocketAddr::from(([127, 0, 0, 1], 9988)));
         assert!(policy.accepts_host("[::1]:9988"));
         assert!(policy.accepts_origin("http://[::1]:9988"));
+        assert!(!policy.accepts_origin("https://localhost:1420"));
         assert!(!policy.accepts_host("127.0.0.1:9987"));
     }
 }

@@ -47,6 +47,33 @@ pub struct WebArtifactFile {
     pub sha256: String,
 }
 
+/// 计算 Web artifact 文件或 manifest 的 canonical SHA-256 文本值。
+///
+/// 该函数只负责纯 bytes → value 转换；路径、文件数量和 manifest `buildId` 的完整
+/// 约束分别由 [`web_artifact_file_from_bytes`] 与 [`validate_web_artifact_manifest`] 负责。
+pub fn web_artifact_sha256_for_bytes(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    format!("{BUILD_ID_PREFIX}{digest:x}")
+}
+
+/// 从实际文件 bytes 构造 manifest 中的文件摘要。
+///
+/// 这是 Rust filesystem/offline adapter 共用的最小纯 helper；Node/Vite emitter 通过
+/// known-vector 与它对齐。它同时执行 manifest path 规则、byte count 与 SHA-256 格式的 canonicalization。根
+/// `manifest.json` 不是 payload，调用方应当把它作为 raw manifest 单独处理。
+pub fn web_artifact_file_from_bytes(
+    path: &str,
+    bytes: &[u8],
+) -> Result<WebArtifactFile, WebArtifactError> {
+    validate_path(path)?;
+    Ok(WebArtifactFile {
+        path: path.to_owned(),
+        bytes: u64::try_from(bytes.len())
+            .map_err(|_| WebArtifactError::new("Web artifact 文件长度溢出"))?,
+        sha256: web_artifact_sha256_for_bytes(bytes),
+    })
+}
+
 /// Browser 与 Tauri 共同消费的静态 Web artifact manifest。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -135,8 +162,7 @@ pub fn web_artifact_build_id_for(
         protocol_version,
         files,
     )?;
-    let digest = Sha256::digest(preimage);
-    Ok(format!("{BUILD_ID_PREFIX}{digest:x}"))
+    Ok(web_artifact_sha256_for_bytes(&preimage))
 }
 
 /// 暴露 canonical preimage，供跨语言 known-vector 和 host 诊断测试使用。

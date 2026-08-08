@@ -6,7 +6,7 @@ kanban-tool 只有一条 canonical host 路径：
 CLI / MCP / Desktop
         │ typed localhost HTTP/SSE
         ▼
-kanban-server（kanban serve）
+kanban-server（kanban serve） ── kanban-web-artifact
         │ host lifecycle + HTTP/SSE
         ▼
 kanban-service（KanbanService） ── kanban-core
@@ -21,12 +21,17 @@ Turso canonical 数据库 + 可重建 projection
 - `kanban-service` 拥有 `KanbanService` application path、Turso 的打开/初始化/迁移、连接、事务、
   repository、projection provider 和只读 importer；它是唯一直接拥有 Turso canonical persistence 的 crate。
 - `kanban-server` 拥有 host 进程生命周期、数据库及附件/run-log 路径准备、Axum router 和 dispatcher。
+- `kanban-web-artifact` 拥有 Web dist 的 no-follow filesystem 校验与 immutable snapshot；它只依赖
+  `kanban-protocol` 的 manifest value contract，server/xtask 通过它消费统一的 artifact 事实，HTTP
+  content type、ETag 与 package copy 仍归各自 adapter。
 - `kanban-protocol` 拥有 DTO、error envelope、schema 和 endpoint/surface catalog；不拥有 row 或 handler。
 - `kanban-client` 拥有 typed localhost transport；CLI、MCP、Desktop 依赖它而不直连数据库。
 - `xtask` 只执行离线 artifact、依赖和文档检查，不是运行时依赖。
 
 第三方依赖的精确 owner 和 feature 由 Cargo manifest 与 `$style` 维护。内部依赖方向必须保持单向：
 domain 不向 adapter 反向依赖，adapter 不复制 service 状态机。
+Web artifact filesystem adapter 只能沿 `kanban-web-artifact -> kanban-protocol` 方向依赖，
+`kanban-protocol` 不反向依赖 filesystem。
 
 ## 规范事实与派生数据
 

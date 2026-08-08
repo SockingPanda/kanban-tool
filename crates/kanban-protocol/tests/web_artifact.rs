@@ -1,7 +1,7 @@
 use kanban_protocol::{
     WEB_ARTIFACT_BASE_PATH, WEB_ARTIFACT_ENTRYPOINT, WEB_ARTIFACT_FORMAT_VERSION,
     WEB_PROTOCOL_VERSION, WebArtifactFile, WebArtifactManifest, validate_web_artifact_manifest,
-    web_artifact_build_id_for,
+    web_artifact_build_id_for, web_artifact_file_from_bytes, web_artifact_sha256_for_bytes,
 };
 
 fn file(path: &str, bytes: u64, sha256: &str) -> WebArtifactFile {
@@ -178,4 +178,20 @@ fn protocol_version_is_wire_generation_and_matches_runtime_fixture() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn file_helper_freezes_bytes_length_and_sha256_format() {
+    let file = web_artifact_file_from_bytes("assets/app.js", b"abc").unwrap();
+    assert_eq!(file.path, "assets/app.js");
+    assert_eq!(file.bytes, 3);
+    assert_eq!(
+        file.sha256,
+        "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+    assert_eq!(
+        web_artifact_sha256_for_bytes(b"abc"),
+        "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+    assert!(web_artifact_file_from_bytes("manifest.json", b"root").is_err());
 }

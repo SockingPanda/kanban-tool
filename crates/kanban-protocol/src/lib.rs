@@ -230,7 +230,7 @@ pub use web_artifact::{
     WEB_ARTIFACT_BASE_PATH, WEB_ARTIFACT_ENTRYPOINT, WEB_ARTIFACT_FORMAT_VERSION,
     WEB_ARTIFACT_MANIFEST_PATH, WEB_PROTOCOL_VERSION, WebArtifactError, WebArtifactFile,
     WebArtifactManifest, validate_web_artifact_manifest, web_artifact_build_id_for,
-    web_artifact_build_preimage,
+    web_artifact_build_preimage, web_artifact_file_from_bytes, web_artifact_sha256_for_bytes,
 };
 pub use wire::{
     ApiErrorCode, CreatedLabelsMeta, DataEnvelope, DecisionMetadata, DecisionOption,

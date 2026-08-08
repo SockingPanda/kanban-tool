@@ -212,6 +212,11 @@ fn is_web(path: &str) -> bool {
     path.starts_with("apps/web/")
         || path == "xtask/src/web_assets.rs"
         || path.starts_with("crates/kanban-web-artifact/")
+        || matches!(
+            path,
+            "crates/kanban-protocol/src/web_artifact.rs"
+                | "crates/kanban-protocol/tests/web_artifact.rs"
+        )
         || is_root_node_workspace_file(path)
 }
 
@@ -469,6 +474,39 @@ mod tests {
         assert_eq!(
             manifest.classifications["web"],
             ["crates/kanban-web-artifact/Cargo.toml"]
+        );
+    }
+
+    #[test]
+    fn protocol_web_artifact_paths_use_web_schema_and_rust_owner_gates() {
+        for path in [
+            "crates/kanban-protocol/src/web_artifact.rs",
+            "crates/kanban-protocol/tests/web_artifact.rs",
+        ] {
+            let plan = build_plan("main".to_owned(), sources(&[path]));
+            assert_eq!(plan.classifications["web"], [path]);
+            assert_eq!(plan.classifications["schema"], [path]);
+            assert_eq!(plan.classifications["rust"], [path]);
+            assert_eq!(
+                plan.recipes,
+                vec![
+                    Recipe::SchemaCheck,
+                    Recipe::WebCheck,
+                    Recipe::RustFast,
+                    Recipe::DiffCheck,
+                ],
+                "unexpected recipes for {path}"
+            );
+        }
+
+        let protocol = build_plan(
+            "main".to_owned(),
+            sources(&["crates/kanban-protocol/src/schema.rs"]),
+        );
+        assert!(!protocol.classifications.contains_key("web"));
+        assert_eq!(
+            protocol.recipes,
+            vec![Recipe::SchemaCheck, Recipe::RustFast, Recipe::DiffCheck]
         );
     }
 

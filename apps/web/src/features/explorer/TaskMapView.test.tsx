@@ -1,11 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
 
 import type { ExplorerTaskMap, ExplorerTaskMapReadModel } from "../../lib/api/explorer-read-model"
 import { assertCanonicalBoardSlug } from "../../lib/board-slug"
+import { PreferencesProvider } from "../../lib/preferences-provider"
 import { asCanonicalBoardId } from "../../lib/sync/contracts"
-import { TaskMapPresentation, type TaskMapReadState } from "./TaskMapView"
-import { __test, defaultTaskMapUrlState, fenceTaskMapReadModel, hasTaskMapSelection, parseTaskMapUrlState, serializeTaskMapUrlState } from "./TaskMapView.logic"
+import type { WebRuntimeConfig } from "../../lib/runtime"
+import { TaskMapPresentation, TaskMapView, type TaskMapReadState } from "./TaskMapView"
+import { __test, defaultTaskMapUrlState, fenceTaskMapReadModel, parseTaskMapUrlState, serializeTaskMapUrlState } from "./TaskMapView.logic"
 
 type MapTask = ExplorerTaskMap["nodes"][number]["task"]
 
@@ -84,6 +86,16 @@ const model: ExplorerTaskMapReadModel = {
 
 const ready: TaskMapReadState = { data: model, loading: false, error: null }
 
+const runtime = {
+  apiBaseUrl: "",
+  webBasePath: "/app/",
+  actor: "test",
+  defaultBoard: "default",
+  serverVersion: "3.0.0",
+  protocolVersion: "v1",
+  webBuildId: "test",
+} satisfies WebRuntimeConfig
+
 describe("TaskMapView", () => {
   test("round-trips map controls and task selection through canonical URL state", () => {
     const state = parseTaskMapUrlState("?filter=ready&show_done=true&hide_isolated=true&zoom=1.3&task=t_ready")
@@ -124,7 +136,7 @@ describe("TaskMapView", () => {
     }
   })
 
-  test("fences stale board data and clears missing task selections", () => {
+  test("fences stale board data without invalidating deep links absent from the graph", () => {
     const identity = model.board
     const otherIdentity = {
       ...identity,
@@ -136,15 +148,34 @@ describe("TaskMapView", () => {
     expect(fenceTaskMapReadModel("other", null, model)).toBeNull()
     expect(fenceTaskMapReadModel("other", identity, model)).toBeNull()
     expect(fenceTaskMapReadModel("other", otherIdentity, model)).toBeNull()
-    expect(hasTaskMapSelection(model, "ready")).toBe(true)
-    expect(hasTaskMapSelection(model, "t_missing")).toBe(false)
-    expect(hasTaskMapSelection(fenceTaskMapReadModel("other", identity, model), "ready")).toBe(false)
-
     const hidden = renderToStaticMarkup(
       <TaskMapPresentation board="other" taskId="ready" state={{ data: fenceTaskMapReadModel("other", identity, model), loading: true, error: null }} onSelectTask={() => undefined} />,
     )
     expect(hidden).not.toContain('data-task-id="ready"')
+    const selectedAbsentFromGraph = renderToStaticMarkup(
+      <TaskMapPresentation board="default" taskId="t_valid" state={ready} onSelectTask={() => undefined} />,
+    )
+    expect(selectedAbsentFromGraph).toContain('data-testid="task-map"')
+    expect(selectedAbsentFromGraph).not.toContain('data-task-id="t_valid"')
     expect(__test.resolveSelectedNode(graph, "t_missing", "t_missing")).toBeNull()
+  })
+
+  test("does not clear a valid Inspector task when the task map omits it", () => {
+    const onUrlStateChange = vi.fn()
+    renderToStaticMarkup(
+      <PreferencesProvider>
+        <TaskMapView
+          runtime={runtime}
+          board="default"
+          boardIdentity={model.board}
+          taskId="t_valid"
+          urlState={{ ...defaultTaskMapUrlState, taskId: "t_valid" }}
+          onSelectTask={() => undefined}
+          onUrlStateChange={onUrlStateChange}
+        />
+      </PreferencesProvider>,
+    )
+    expect(onUrlStateChange).not.toHaveBeenCalled()
   })
 
   test("renders keyboard-accessible graph region, nodes, edges and selected inspector", () => {

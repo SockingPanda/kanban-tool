@@ -20,6 +20,7 @@ import { usePreferences } from "../../lib/use-preferences"
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
 import { TaskListView, type TaskListRow } from "./TaskListView"
 import { TaskRunsView } from "./TaskRunsView"
+import { shouldClearMapTaskFromInspector } from "./ExplorerPage.logic"
 import { parseTaskMapUrlState, serializeTaskMapUrlState, type TaskMapUrlState } from "./TaskMapView.logic"
 import styles from "./ExplorerPage.module.css"
 
@@ -279,7 +280,7 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
   const clearedTaskIdRef = useRef<string | null>(null)
   useEffect(() => {
     const error = inspectorRead.error
-    if (view !== "map" || !taskId || !(error instanceof ExplorerReadError) || error.reason !== "task-not-found") {
+    if (!shouldClearMapTaskFromInspector(view, taskId, error)) {
       if (!taskId) clearedTaskIdRef.current = null
       return
     }

@@ -14,11 +14,11 @@ import {
   filterTaskMap,
   clampMapZoom,
   fenceTaskMapReadModel,
-  hasTaskMapSelection,
   MAX_MAP_ZOOM,
   MIN_MAP_ZOOM,
   resolveSelectedNode,
   stepMapZoom,
+  taskMapIdentityKey,
   type BoardMapFilter,
   type TaskMapUrlState,
 } from "./TaskMapView.logic"
@@ -67,6 +67,11 @@ export interface TaskMapPresentationProps {
 }
 
 type MapNode = NonNullable<ReturnType<typeof resolveSelectedNode>>
+
+type TaskMapReadInternalState = TaskMapReadState & {
+  readonly requestKey: string
+  readonly identityToken: string
+}
 
 const MAP_LIMIT_NODES = 240
 
@@ -264,27 +269,43 @@ function useTaskMapRead(
     })
     : null
   const [generation, setGeneration] = useState(0)
-  const [state, setState] = useState<TaskMapReadState>({ data: null, loading: false, error: null })
   const key = `${board}|${boardIdentity?.id ?? "identity-pending"}|${includeDoneContext ? "done" : "active"}|${hideIsolated ? "connected" : "all"}`
+  const identityToken = `${board}|${boardIdentity ? taskMapIdentityKey(boardIdentity) : "identity-pending"}`
+  const requestKey = `${key}|${generation}`
+  const [state, setState] = useState<TaskMapReadInternalState>(() => ({
+    data: null,
+    loading: false,
+    error: null,
+    requestKey,
+    identityToken,
+  }))
 
   useEffect(() => {
     if (!boardIdentity) {
-      setState({ data: null, loading: false, error: null })
+      setState({ data: null, loading: false, error: null, requestKey, identityToken })
       return
     }
     const controller = new AbortController()
     let active = true
-    setState((current) => ({ data: current.data, loading: true, error: null }))
+    setState((current) => ({
+      data: current.identityToken === identityToken ? current.data : null,
+      loading: true,
+      error: null,
+      requestKey,
+      identityToken,
+    }))
     void loadRef.current?.(controller.signal).then(
       (data) => {
-        if (active) setState({ data, loading: false, error: null })
+        if (active) setState({ data, loading: false, error: null, requestKey, identityToken })
       },
       (error: unknown) => {
         if (active && !(error instanceof Error && error.name === "AbortError")) {
           setState((current) => ({
-            data: current.data,
+            data: current.identityToken === identityToken ? current.data : null,
             loading: false,
             error: error instanceof Error ? error : new Error(String(error)),
+            requestKey,
+            identityToken,
           }))
         }
       },
@@ -293,9 +314,16 @@ function useTaskMapRead(
       active = false
       controller.abort()
     }
-  }, [boardIdentity, generation, key])
+  }, [boardIdentity, generation, identityToken, key, requestKey])
 
-  return { ...state, retry: () => setGeneration((current) => current + 1) }
+  const sameIdentity = state.identityToken === identityToken
+  const currentRequest = sameIdentity && state.requestKey === requestKey
+  return {
+    data: sameIdentity ? state.data : null,
+    loading: sameIdentity ? (currentRequest ? state.loading : true) : true,
+    error: currentRequest ? state.error : null,
+    retry: () => setGeneration((current) => current + 1),
+  }
 }
 
 function TaskMapToolbar({
@@ -520,21 +548,6 @@ export function TaskMapView({
     return { data: fencedData, loading: mapRead.loading || (!fencedData && !mapRead.error), error: mapRead.error }
   }, [fencedData, identityError, identityLoading, mapRead.error, mapRead.loading, routeIdentity])
   const selectedTaskId = urlState.taskId ?? taskId
-  const invalidTaskRef = useRef<string | null>(null)
-  useEffect(() => {
-    const selectedTaskId = urlState.taskId
-    if (!selectedTaskId || !fencedData || !onUrlStateChange) {
-      if (!selectedTaskId) invalidTaskRef.current = null
-      return
-    }
-    if (hasTaskMapSelection(fencedData, selectedTaskId)) {
-      invalidTaskRef.current = null
-      return
-    }
-    if (invalidTaskRef.current === selectedTaskId) return
-    invalidTaskRef.current = selectedTaskId
-    onUrlStateChange({ ...urlState, taskId: null }, { replace: true })
-  }, [fencedData, onUrlStateChange, urlState])
   const updateUrlState = (next: Partial<TaskMapUrlState>) => onUrlStateChange?.({ ...urlState, ...next })
   const retry = identityError || !routeIdentity ? onRetryIdentity : mapRead.retry
 

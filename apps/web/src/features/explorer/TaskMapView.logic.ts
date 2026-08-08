@@ -139,8 +139,4 @@ export function fenceTaskMapReadModel(
   return taskMapIdentityKey(identity) === taskMapIdentityKey(model.board) ? model : null
 }
 
-export function hasTaskMapSelection(model: ExplorerTaskMapReadModel | null, taskId: string | null): boolean {
-  return Boolean(model && taskId && model.map.nodes.some((node) => node.task.id === taskId))
-}
-
 export const __test = { clampMapZoom, filterTaskMap, resolveSelectedNode, stepMapZoom }

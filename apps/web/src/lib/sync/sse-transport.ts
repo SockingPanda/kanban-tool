@@ -17,6 +17,7 @@ export function createFetchSseTransport(options: FetchSseTransportOptions = {}):
   return (request: SseTransportRequest): SseTransportConnection => {
     let closed = false
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+    let readerCleanup: Promise<void> | null = null
     const parser = createSseParser(options.parser)
     const internalAbort = new AbortController()
     const onExternalAbort = (): void => {
@@ -27,12 +28,43 @@ export function createFetchSseTransport(options: FetchSseTransportOptions = {}):
       request.signal.removeEventListener("abort", onExternalAbort)
     }
 
+    function reportError(error: unknown): void {
+      try {
+        request.onError(error)
+      } catch {
+        // Consumer callbacks must never create an unhandled rejection in the
+        // detached transport task.
+      }
+    }
+
+    function cleanupReader(cancel: boolean): Promise<void> {
+      if (readerCleanup !== null) return readerCleanup
+      const current = reader
+      if (current === null) return Promise.resolve()
+      readerCleanup = (async () => {
+        if (cancel) {
+          try {
+            await current.cancel()
+          } catch {
+            // Cancellation races with an already-closed stream are expected.
+          }
+        }
+        try {
+          current.releaseLock()
+        } catch {
+          // The stream may have released the lock as part of its own close.
+        }
+        if (reader === current) reader = null
+      })()
+      return readerCleanup
+    }
+
     function closeConnection(): void {
       if (closed) return
       closed = true
       cleanupExternalAbort()
       internalAbort.abort()
-      void reader?.cancel()
+      void cleanupReader(true).catch(() => undefined)
     }
 
     if (request.signal.aborted) {
@@ -50,7 +82,7 @@ export function createFetchSseTransport(options: FetchSseTransportOptions = {}):
       },
     }
 
-    void (async () => {
+    const run = async (): Promise<void> => {
       try {
         if (closed) return
         const headers = new Headers(request.headers)
@@ -66,9 +98,15 @@ export function createFetchSseTransport(options: FetchSseTransportOptions = {}):
         if (!response.body) throw new Error("SSE response has no body")
 
         reader = response.body.getReader()
+        if (closed) {
+          await cleanupReader(true)
+          return
+        }
         const decoder = new TextDecoder("utf-8", { fatal: true })
         while (!closed) {
-          const chunk = await reader.read()
+          const currentReader = reader
+          if (currentReader === null) return
+          const chunk = await currentReader.read()
           if (chunk.done) break
           if (!chunk.value) continue
           for (const frame of parser.push(decoder.decode(chunk.value, { stream: true }))) {
@@ -83,11 +121,15 @@ export function createFetchSseTransport(options: FetchSseTransportOptions = {}):
         parser.finish()
         if (!closed) request.onEof()
       } catch (error) {
-        if (!closed) request.onError(error)
+        if (!closed) reportError(error)
       } finally {
         cleanupExternalAbort()
+        await cleanupReader(false)
       }
-    })()
+    }
+    void run().catch((error) => {
+      if (!closed) reportError(error)
+    })
 
     return connection
   }

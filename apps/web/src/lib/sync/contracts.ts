@@ -1,4 +1,5 @@
 import type { SseFrame } from "./sse-parser"
+import type { ApiListEventsQueryContract } from "../api/generated/contracts/api-list-events-query"
 
 /** Raw frame emitted by the transport before any generated contract validation. */
 export type RawSseFrame = SseFrame
@@ -15,6 +16,7 @@ export interface EnvelopeCandidate {
   readonly taskId: string | null
   readonly runId: string | null
   readonly kind: string
+  readonly createdAt: number
   readonly raw: unknown
 }
 
@@ -163,9 +165,9 @@ export interface PollEventsPage {
 }
 
 export interface SyncQuerySink<TEvent = ValidatedBusinessEvent> {
-  onEvent(event: TEvent, plan: InvalidationPlan, token: SyncToken): Promise<void>
-  refetchObserved(mode: RecoveryMode, token: SyncToken, after: number, expectedRevision: number): Promise<RecoveryResult>
-  pollEvents(query: unknown, signal: AbortSignal): Promise<PollEventsPage>
+  onEvent(event: TEvent, plan: InvalidationPlan, token: SyncToken, signal?: AbortSignal): Promise<void>
+  refetchObserved(mode: RecoveryMode, token: SyncToken, after: number, expectedRevision: number, signal: AbortSignal): Promise<RecoveryResult>
+  pollEvents(query: ApiListEventsQueryContract, signal: AbortSignal): Promise<PollEventsPage>
 }
 
 export interface SseTransportRequest {

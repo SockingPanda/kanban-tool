@@ -165,13 +165,12 @@ export function createSseParser(options: SseParserOptions = {}): SseParser {
   return {
     push(chunk: string): readonly SseFrame[] {
       if (ended) throw new SseParseError("incomplete_frame", "SSE parser is already finished")
-      const chunkBytes = byteLength(chunk)
-      if (lineBufferBytes + chunkBytes > maxBufferBytes) {
-        fail(new SseParseError("buffer_limit", `SSE buffer exceeds ${maxBufferBytes} bytes`))
-      }
-
+      // A transport chunk may contain many complete frames.  Retained-buffer
+      // limits apply only after those lines have been consumed; checking the
+      // whole chunk first would reject a legal burst merely because it is
+      // larger than the incomplete-line budget.
       lineBuffer += chunk
-      lineBufferBytes += chunkBytes
+      lineBufferBytes += byteLength(chunk)
       const frames: SseFrame[] = []
       let newline = lineBuffer.indexOf("\n")
       while (newline !== -1) {
@@ -181,6 +180,9 @@ export function createSseParser(options: SseParserOptions = {}): SseParser {
         const frame = consumeLine(line)
         if (frame !== null) frames.push(frame)
         newline = lineBuffer.indexOf("\n")
+      }
+      if (lineBufferBytes > maxBufferBytes) {
+        fail(new SseParseError("buffer_limit", `SSE buffer exceeds ${maxBufferBytes} bytes`))
       }
       checkFrameBytes(pending.bytes + lineBufferBytes)
       return frames

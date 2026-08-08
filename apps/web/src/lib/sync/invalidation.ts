@@ -80,12 +80,17 @@ function finish(event: ValidatedBusinessEvent, targets: QueryTarget[], fullRefet
 }
 
 export function targetKey(target: QueryTarget): string {
-  if (target.taskId !== undefined) return `${target.root}(${target.taskId})`
-  if (target.runId !== undefined) return `${target.root}(${target.runId})`
-  if (target.signalId !== undefined) return `${target.root}(${target.signalId})`
-  if (target.atomRef !== undefined) return `${target.root}(${target.atomRef})`
-  if (target.boardId !== undefined) return `${target.root}(${target.boardId})`
-  return target.root
+  const dimensions = [
+    ["board", target.boardId],
+    ["task", target.taskId],
+    ["run", target.runId],
+    ["signal", target.signalId],
+    ["atom", target.atomRef],
+  ].filter((entry): entry is [string, string] => entry[1] !== undefined)
+  const label = dimensions.length === 0
+    ? target.root
+    : `${target.root}(${dimensions.map(([name, value]) => `${name}=${JSON.stringify(value)}`).join(",")})`
+  return `${label}|observed=${target.observedOnly === true ? "true" : "false"}`
 }
 
 export function fullRefetchPlan(eventKind: string, kind: "known" | "unknown", boardId: string): InvalidationPlan {

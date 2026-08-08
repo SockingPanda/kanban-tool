@@ -47,15 +47,29 @@ function canonicalValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalValue)
   const object = record(value)
   if (object === null) return value
-  const result: RecordValue = {}
-  for (const key of Object.keys(object).sort()) result[key] = canonicalValue(object[key])
+  const result = Object.create(null) as RecordValue
+  for (const key of Object.keys(object).sort()) {
+    Object.defineProperty(result, key, {
+      value: canonicalValue(object[key]),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    })
+  }
   return result
 }
 
 /** Unknown fallback uses the generated envelope order; no Web-owned field inventory is duplicated. */
 function canonicalUnknown(value: RecordValue): string {
-  const ordered: RecordValue = {}
-  for (const field of sseEventEnvelopeFieldOrder) ordered[field] = canonicalValue(value[field])
+  const ordered = Object.create(null) as RecordValue
+  for (const field of sseEventEnvelopeFieldOrder) {
+    Object.defineProperty(ordered, field, {
+      value: canonicalValue(value[field]),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    })
+  }
   return JSON.stringify(ordered)
 }
 
@@ -99,6 +113,7 @@ function envelopeFromValue(value: unknown, frame: RawSseFrame | null): EnvelopeP
       taskId,
       runId,
       kind,
+      createdAt,
       raw: object,
     },
   }

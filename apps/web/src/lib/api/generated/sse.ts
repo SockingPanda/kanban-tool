@@ -73,8 +73,8 @@ export interface UnknownSseEvent {
 export type ParsedSseEvent = KnownSseEvent | UnknownSseEvent;
 
 export function canonicalizeSseEventEnvelope(value: SseEventDataContract): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const field of sseEventEnvelopeFieldOrder) result[field] = canonicalizeSseValue(value[field]);
+  const result = Object.create(null) as Record<string, unknown>;
+  for (const field of sseEventEnvelopeFieldOrder) Object.defineProperty(result, field, { value: canonicalizeSseValue(value[field]), enumerable: true, writable: true, configurable: true });
   return result;
 }
 
@@ -85,8 +85,8 @@ export function canonicalSseEventFingerprint(value: SseEventDataContract): strin
 function canonicalizeSseValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalizeSseValue);
   if (!isRecord(value)) return value;
-  const result: Record<string, unknown> = {};
-  for (const key of Object.keys(value).sort()) result[key] = canonicalizeSseValue(value[key]);
+  const result = Object.create(null) as Record<string, unknown>;
+  for (const key of Object.keys(value).sort()) Object.defineProperty(result, key, { value: canonicalizeSseValue(value[key]), enumerable: true, writable: true, configurable: true });
   return result;
 }
 

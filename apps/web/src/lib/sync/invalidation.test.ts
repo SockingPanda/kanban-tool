@@ -12,6 +12,7 @@ function event(overrides: Partial<ValidatedBusinessEvent> = {}): ValidatedBusine
     taskId: "task-a",
     runId: "run-a",
     kind: "task.updated",
+    createdAt: 1_700_000_000,
     raw: {},
     scope: { taskId: "task-a" },
     canonicalFingerprint: "fingerprint-7",
@@ -21,6 +22,14 @@ function event(overrides: Partial<ValidatedBusinessEvent> = {}): ValidatedBusine
 }
 
 describe("literal event invalidation plans", () => {
+  test("target keys retain every semantic dimension and observed mode", () => {
+    const live = targetKey({ root: "task-detail", boardId: "board-a", taskId: "task-a" })
+    const observed = targetKey({ root: "task-detail", boardId: "board-a", taskId: "task-a", observedOnly: true })
+    expect(live).not.toBe(observed)
+    expect(live).toContain('board="board-a"')
+    expect(live).toContain('task="task-a"')
+  })
+
   test("maps task.updated through the exact known literal", () => {
     const plan = classifyEvent(event({ kind: "task.updated" }))
 
@@ -28,35 +37,35 @@ describe("literal event invalidation plans", () => {
     expect(plan.timeline).toBe(true)
     expect(plan.targets.map(targetKey)).toEqual(
       expect.arrayContaining([
-        "events(board-a)",
-        "task-events(task-a)",
-        "tasks(board-a)",
-        "stats(board-a)",
-        "search-status(board-a)",
-        "board-task-map(board-a)",
-        "task-detail(task-a)",
-        "task-label-suggestions(task-a)",
+        expect.stringContaining('events(board="board-a")'),
+        expect.stringContaining('task-events(task="task-a")'),
+        expect.stringContaining('tasks(board="board-a")'),
+        expect.stringContaining('stats(board="board-a")'),
+        expect.stringContaining('search-status(board="board-a")'),
+        expect.stringContaining('board-task-map(board="board-a")'),
+        expect.stringContaining('task-detail(task="task-a")'),
+        expect.stringContaining('task-label-suggestions(task="task-a")'),
       ]),
     )
     expect(plan.targets.find((target) => target.root === "maintenance-status")).toMatchObject({ observedOnly: true })
     expect(plan.targets.find((target) => target.root === "maintenance-status")).not.toHaveProperty("boardId")
-    expect(plan.targets.map(targetKey)).toContain("task-neighborhood(board-a)")
+    expect(plan.targets.map(targetKey)).toContain('task-neighborhood(board="board-a")|observed=true')
   })
 
   test("keeps board switcher and global maintenance outside active-board aliases", () => {
     const created = classifyEvent(event({ kind: "board.created", taskId: null, scope: { taskId: null } }))
     expect(created.targets.map(targetKey)).not.toContain("boards(board-a)")
-    expect(created.targets.map(targetKey)).toContain("columns(board-a)")
-    expect(created.targets.map(targetKey)).not.toContain("maintenance-status(board-a)")
+    expect(created.targets.map(targetKey)).toContain('columns(board="board-a")|observed=false')
+    expect(created.targets.map(targetKey)).not.toContain('maintenance-status(board="board-a")|observed=false')
   })
 
   test("only uses run_id-bearing run targets", () => {
     const withoutRun = classifyEvent(event({ kind: "task.updated", runId: null }))
-    expect(withoutRun.targets.map(targetKey)).not.toContain("task-runs(task-a)")
-    expect(withoutRun.targets.map(targetKey)).not.toContain("task-run-log(task-a)")
+    expect(withoutRun.targets.map(targetKey)).not.toContain('task-runs(task="task-a")|observed=true')
+    expect(withoutRun.targets.map(targetKey)).not.toContain('task-run-log(task="task-a")|observed=true')
     const withRun = classifyEvent(event({ kind: "task.updated", runId: "run-2" }))
-    expect(withRun.targets.map(targetKey)).toContain("task-runs(task-a)")
-    expect(withRun.targets.map(targetKey)).toContain("task-run-log(run-2)")
+    expect(withRun.targets.map(targetKey)).toContain('task-runs(task="task-a")|observed=true')
+    expect(withRun.targets.map(targetKey)).toContain('task-run-log(run="run-2")|observed=true')
   })
 
   test("includes both dependency endpoints and linked step neighborhood", () => {
@@ -69,12 +78,12 @@ describe("literal event invalidation plans", () => {
     )
     expect(dependency.targets.map(targetKey)).toEqual(
       expect.arrayContaining([
-        "task-detail(child)",
-        "task-dependencies(child)",
-        "task-neighborhood(child)",
-        "task-detail(parent)",
-        "task-dependencies(parent)",
-        "task-neighborhood(parent)",
+        expect.stringContaining('task-detail(task="child")'),
+        expect.stringContaining('task-dependencies(task="child")'),
+        expect.stringContaining('task-neighborhood(task="child")'),
+        expect.stringContaining('task-detail(task="parent")'),
+        expect.stringContaining('task-dependencies(task="parent")'),
+        expect.stringContaining('task-neighborhood(task="parent")'),
       ]),
     )
 
@@ -84,7 +93,7 @@ describe("literal event invalidation plans", () => {
         scope: { taskId: "parent", linkedTaskId: "linked" },
       }),
     )
-    expect(step.targets.map(targetKey)).toContain("task-neighborhood(linked)")
+    expect(step.targets.map(targetKey)).toContain('task-neighborhood(task="linked")|observed=false')
   })
 
   test("does not upgrade future prefix lookalikes", () => {

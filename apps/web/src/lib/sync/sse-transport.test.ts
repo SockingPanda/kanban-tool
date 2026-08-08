@@ -118,4 +118,25 @@ describe("fetch SSE transport", () => {
     await Promise.resolve()
     expect(onError).not.toHaveBeenCalled()
   })
+
+  test("contains a reader.cancel rejection during close", async () => {
+    const onError = vi.fn()
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        return Promise.reject(new Error("cancel raced with stream close"))
+      },
+    })
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } }))
+    const connection = createFetchSseTransport({ fetcher })({
+      url: "http://127.0.0.1/api/v1/stream/events",
+      signal: new AbortController().signal,
+      onFrame: vi.fn(),
+      onError,
+      onEof: vi.fn(),
+    })
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce())
+    connection.close()
+    await new Promise<void>((resolve) => queueMicrotask(resolve))
+    expect(onError).not.toHaveBeenCalled()
+  })
 })

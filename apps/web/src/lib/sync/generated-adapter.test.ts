@@ -48,6 +48,26 @@ describe("generated StreamContractAdapter", () => {
     expect(firstResult.event.canonicalFingerprint).toBe(secondResult.event.canonicalFingerprint)
   })
 
+  test("preserves an own __proto__ payload key in unknown fingerprints", () => {
+    const plain = rawEvent({ kind: "task.attachment.created", payload: {} })
+    const polluted = rawEvent({
+      kind: "task.attachment.created",
+      payload: JSON.parse('{"__proto__":{"x":1}}') as Record<string, unknown>,
+    })
+    const firstEnvelope = adapter.parsePollingEnvelope(plain)
+    const secondEnvelope = adapter.parsePollingEnvelope(polluted)
+    expect(firstEnvelope.status).toBe("valid")
+    expect(secondEnvelope.status).toBe("valid")
+    if (firstEnvelope.status !== "valid" || secondEnvelope.status !== "valid") return
+    const firstResult = adapter.validateBusiness(firstEnvelope.envelope)
+    const secondResult = adapter.validateBusiness(secondEnvelope.envelope)
+    expect(firstResult.status).toBe("unknown")
+    expect(secondResult.status).toBe("unknown")
+    if (firstResult.status !== "unknown" || secondResult.status !== "unknown") return
+    expect(secondResult.event.canonicalFingerprint).not.toBe(firstResult.event.canonicalFingerprint)
+    expect(secondResult.event.canonicalFingerprint).toContain('"__proto__":{"x":1}')
+  })
+
   test("enforces generated task scope metadata without a Web-owned inventory", () => {
     const missingTask = adapter.parsePollingEnvelope(rawEvent({ task_id: null }))
     expect(missingTask.status).toBe("valid")

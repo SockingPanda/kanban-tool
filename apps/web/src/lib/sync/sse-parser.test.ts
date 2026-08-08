@@ -50,6 +50,12 @@ describe("bounded SSE parser", () => {
     expect(() => createSseParser({ maxBufferBytes: 4 }).push("event:")).toThrowError(/buffer exceeds/)
   })
 
+  test("consumes a large chunk of complete frames before applying retained-buffer limits", () => {
+    const parser = createSseParser({ maxBufferBytes: 16, maxFrameBytes: 128 })
+    const chunk = Array.from({ length: 2_000 }, (_, index) => `event: e\nid: ${index}\ndata: {}\n\n`).join("")
+    expect(parser.push(chunk)).toHaveLength(2_000)
+  })
+
   test("does not dispatch comments or empty data frames", () => {
     const parser = createSseParser()
 

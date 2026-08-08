@@ -300,7 +300,7 @@ export function OntologyScreenView({
             {groups.phase === "refreshing" ? <Badge variant="warning" label="refreshing" /> : null}
           </div>
           <div className={styles.tabs} role="group" aria-label="Group by">
-            {(["label", "candidate_atom", "proposed_label"] as const).map((candidate) => <Button key={candidate} label={candidate === "candidate_atom" ? "Atom" : candidate === "proposed_label" ? "Proposal" : "Label"} variant={groupBy === candidate ? "primary" : "ghost"} size="sm" aria-pressed={groupBy === candidate} onClick={() => onFiltersChange({ ...filters, groupBy: candidate })} />)}
+            {(["label", "candidate_atom", "proposed_label", "cluster"] as const).map((candidate) => <Button key={candidate} label={candidate === "candidate_atom" ? "Atom" : candidate === "proposed_label" ? "Proposal" : candidate === "cluster" ? "Cluster" : "Label"} variant={groupBy === candidate ? "primary" : "ghost"} size="sm" aria-pressed={groupBy === candidate} onClick={() => onFiltersChange({ ...filters, groupBy: candidate })} />)}
           </div>
           <ReviewGroupsView phase={groups.phase} groups={groups.data} onSelectSignal={onSelectSignal} />
         </Card>

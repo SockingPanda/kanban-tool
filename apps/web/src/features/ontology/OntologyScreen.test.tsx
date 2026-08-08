@@ -215,6 +215,33 @@ describe("Ontology screen presentation", () => {
     expect(html).not.toMatch(/precision|recall|error rate/i)
   })
 
+  test("exposes the generated cluster review grouping", () => {
+    const html = renderToStaticMarkup(
+      <OntologyScreenView
+        boardName="Default"
+        filters={{ includeAll: false, groupBy: "cluster" }}
+        signals={{ phase: "success", data: [], error: null }}
+        groups={{ phase: "success", data: [reviewGroupFixture({ group_by: "cluster", key: "cluster-1", label_id: null, label_name: null, cluster_key: "cluster-1", candidate_text: null })], error: null }}
+        detail={{ phase: "idle", data: null, error: null }}
+        atom={{ phase: "idle", data: null, error: null }}
+        selectedSignalId={null}
+        atomRef=""
+        online
+        actionReason=""
+        actionPending={false}
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+        onActionReasonChange={() => undefined}
+        onLifecycleAction={() => undefined}
+        onExplainAtom={() => undefined}
+        onAtomSearch={() => undefined}
+      />,
+    )
+    expect(html).toContain("Cluster")
+    expect(html).toContain("cluster-1")
+  })
+
   test("maps lifecycle controls to callbacks and keeps them disabled for resolved signals", () => {
     const action = vi.fn<(action: LifecycleAction) => void>()
     const tree = OntologySignalDetailView({

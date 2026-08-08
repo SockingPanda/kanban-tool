@@ -15,7 +15,13 @@ import {
 } from "./generated/operations"
 import {
   knownSseEventKinds,
+  canonicalSseEventFingerprint,
+  canonicalizeSseEventEnvelope,
+  isSseHeartbeat,
+  parseSseHeartbeat,
   parseSseEvent,
+  sseEventEnvelopeFieldOrder,
+  taskScopedSseEventKinds,
 } from "./generated/sse"
 
 type ContractRecord = {
@@ -64,7 +70,7 @@ describe("generated Web contracts", () => {
       checked += 1
     }
 
-    expect(checked).toBe(197)
+    expect(checked).toBe(199)
   })
 
   test("keeps unknown contract ids out of the validation boundary", () => {
@@ -174,5 +180,41 @@ describe("generated Web contracts", () => {
       envelope: null,
       reason: "invalid_envelope",
     })
+  })
+
+  test("freezes SSE cursor headers, heartbeat control, scope metadata, and fingerprint order", () => {
+    const validHeaders = fixture("fixtures/sse-stream-events-headers.valid.json")
+    const invalidHeaders = fixture("fixtures/sse-stream-events-headers.invalid.json")
+    expect(validateContract("sse.stream-events.headers", validHeaders)).toBe(true)
+    expect(validateContract("sse.stream-events.headers", invalidHeaders)).toBe(false)
+
+    const validHeartbeat = fixture("fixtures/sse-event-heartbeat.valid.json")
+    const invalidHeartbeat = fixture("fixtures/sse-event-heartbeat.invalid.json")
+    expect(validateContract("sse.event.heartbeat", validHeartbeat)).toBe(true)
+    expect(validateContract("sse.event.heartbeat", invalidHeartbeat)).toBe(false)
+    expect(isSseHeartbeat(validHeartbeat)).toBe(true)
+    expect(parseSseHeartbeat(validHeartbeat)).toBe(validHeartbeat)
+    expect(isSseHeartbeat(invalidHeartbeat)).toBe(false)
+
+    expect(taskScopedSseEventKinds).toContain("dependency.added")
+    expect(taskScopedSseEventKinds).toContain("task.heartbeat")
+    expect(taskScopedSseEventKinds).not.toContain("task.attachment.created")
+
+    const event = {
+      id: 42,
+      event_id: "e_fixture",
+      board_id: "b_fixture",
+      task_id: "t_fixture",
+      run_id: null,
+      kind: "task.created",
+      actor: "fixture-actor",
+      payload: { status: "todo", z: 1, a: 2 },
+      created_at: 123,
+    } as const
+    const canonical = canonicalizeSseEventEnvelope(event)
+    expect(Object.keys(canonical)).toEqual([...sseEventEnvelopeFieldOrder])
+    expect(canonicalSseEventFingerprint(event)).toBe(
+      '{"id":42,"event_id":"e_fixture","board_id":"b_fixture","task_id":"t_fixture","run_id":null,"kind":"task.created","actor":"fixture-actor","payload":{"a":2,"status":"todo","z":1},"created_at":123}',
+    )
   })
 })

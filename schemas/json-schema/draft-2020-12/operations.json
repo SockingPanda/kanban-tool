@@ -3885,6 +3885,34 @@
     "binding": "exact_surface",
     "direction": "deserialize",
     "exclusion": null,
+    "fixture": "schemas/fixtures/sse/stream-events-headers.v1.valid.json",
+    "granularity": "exact",
+    "id": "sse.stream-events.headers",
+    "operation": "GET /api/v1/stream/events",
+    "path": "GET /api/v1/stream/events headers",
+    "schema_id": "urn:kanban-tool:schema:sse:stream-events-headers:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "sse",
+    "transport": {
+      "kind": "http",
+      "location": "headers",
+      "operation_key": "GET /api/v1/stream/events",
+      "parameters": [
+        {
+          "cardinality": "optional_one",
+          "name": "Accept-Language"
+        },
+        {
+          "cardinality": "optional_one",
+          "name": "Last-Event-ID"
+        }
+      ]
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "deserialize",
+    "exclusion": null,
     "fixture": "schemas/fixtures/sse/stream-events-query.v1.valid.json",
     "granularity": "exact",
     "id": "sse.stream-events.query",
@@ -3933,6 +3961,25 @@
       "kind": "http",
       "location": "sse",
       "operation_key": "GET /api/v1/stream/events",
+      "parameters": []
+    }
+  },
+  {
+    "binding": "shared_component",
+    "direction": "serialize",
+    "exclusion": null,
+    "fixture": "schemas/fixtures/sse/event-heartbeat.v1.valid.json",
+    "granularity": "exact",
+    "id": "sse.event.heartbeat",
+    "operation": "GET /api/v1/stream/events",
+    "path": "GET /api/v1/stream/events heartbeat",
+    "schema_id": "urn:kanban-tool:schema:sse:event-heartbeat:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "sse",
+    "transport": {
+      "kind": "http",
+      "location": "sse",
+      "operation_key": null,
       "parameters": []
     }
   },

@@ -192,7 +192,11 @@ pub use signals::{
     ResolveSignalsResponse, ReviewSignalsRequest, SignalCommentRequest, SignalRecordResult,
     SupersedeSignalsResponse,
 };
-pub use sse::{StreamEventData, StreamEventsQuery};
+pub use sse::{
+    MAX_SAFE_EVENT_CURSOR, SSE_HEARTBEAT_EVENT, STREAM_EVENT_ENVELOPE_FIELDS, SseHeartbeatData,
+    StreamEventData, StreamEventsHeaders, StreamEventsQuery, TASK_SCOPED_EVENT_KINDS,
+    parse_event_cursor, task_scoped_event_kind, validate_event_cursor,
+};
 pub use steps::{
     ApiExecutionPlan, ApiStepStatus, ApiTaskStep, ApiTaskSteps, CompleteStepPath,
     CompleteStepRequest, CompleteStepResponse, CreateStepPath, CreateStepRequest,

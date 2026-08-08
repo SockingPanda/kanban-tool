@@ -1142,6 +1142,16 @@
     },
     {
       "direction": "deserialize",
+      "id": "sse.stream-events.headers",
+      "invalidFixture": "fixtures/sse-stream-events-headers.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:sse:stream-events-headers:v1",
+      "schemaPath": "schemas/sse-stream-events-headers.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "sse",
+      "validFixture": "fixtures/sse-stream-events-headers.valid.json"
+    },
+    {
+      "direction": "deserialize",
       "id": "sse.stream-events.query",
       "invalidFixture": "fixtures/sse-stream-events-query.invalid.json",
       "schemaId": "urn:kanban-tool:schema:sse:stream-events-query:v1",
@@ -1159,6 +1169,16 @@
       "strictness": "deny_unknown_fields",
       "surface": "sse",
       "validFixture": "fixtures/sse-event-data.valid.json"
+    },
+    {
+      "direction": "serialize",
+      "id": "sse.event.heartbeat",
+      "invalidFixture": "fixtures/sse-event-heartbeat.invalid.json",
+      "schemaId": "urn:kanban-tool:schema:sse:event-heartbeat:v1",
+      "schemaPath": "schemas/sse-event-heartbeat.schema.json",
+      "strictness": "deny_unknown_fields",
+      "surface": "sse",
+      "validFixture": "fixtures/sse-event-heartbeat.valid.json"
     },
     {
       "direction": "deserialize",
@@ -2169,6 +2189,8 @@
     "contracts/api-update-task-response.ts",
     "contracts/runtime-web-config-output.ts",
     "contracts/sse-event-data.ts",
+    "contracts/sse-event-heartbeat.ts",
+    "contracts/sse-stream-events-headers.ts",
     "contracts/sse-stream-events-query.ts",
     "fixtures/api-add-dependency-headers.invalid.json",
     "fixtures/api-add-dependency-headers.valid.json",
@@ -2562,6 +2584,10 @@
     "fixtures/runtime-web-config-output.valid.json",
     "fixtures/sse-event-data.invalid.json",
     "fixtures/sse-event-data.valid.json",
+    "fixtures/sse-event-heartbeat.invalid.json",
+    "fixtures/sse-event-heartbeat.valid.json",
+    "fixtures/sse-stream-events-headers.invalid.json",
+    "fixtures/sse-stream-events-headers.valid.json",
     "fixtures/sse-stream-events-query.invalid.json",
     "fixtures/sse-stream-events-query.valid.json",
     "generated.sha256",
@@ -2766,6 +2792,8 @@
     "schemas/api-update-task-response.schema.json",
     "schemas/runtime-web-config-output.schema.json",
     "schemas/sse-event-data.schema.json",
+    "schemas/sse-event-heartbeat.schema.json",
+    "schemas/sse-stream-events-headers.schema.json",
     "schemas/sse-stream-events-query.schema.json",
     "sse.ts",
     "test-only.ts"
@@ -4155,8 +4183,8 @@
           "kind": "not_applicable"
         },
         "headers": {
-          "kind": "excluded",
-          "reason": "V1 finite snapshot intentionally ignores Last-Event-ID; after query owns the cursor"
+          "contractId": "sse.stream-events.headers",
+          "kind": "contract"
         },
         "path": {
           "kind": "not_applicable"
@@ -4174,7 +4202,9 @@
         }
       },
       "path": "/api/v1/stream/events",
-      "sharedComponents": []
+      "sharedComponents": [
+        "sse.event.heartbeat"
+      ]
     },
     {
       "id": "api.doctor",
@@ -4495,9 +4525,9 @@
   "schemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "selectionPath": "apps/web/web-contracts.json",
   "sourceHashes": {
-    "protocolEndpoints": "sha256:4e4e5f9e483040fa4e8323038b6ca52c560982ad05e81f560efef8cf673e0a97",
-    "protocolOperations": "sha256:c6a58d18da419a0408c8da37e2fd259da842d826203f89b0e1c341087e94804e",
-    "protocolSchemas": "sha256:a46739da30598befdcbd6a86ce71bc97c203a869a9e1f781a80385ce4bc9dc05",
+    "protocolEndpoints": "sha256:7031b329eb0e9ffb4b7a7391bbdfcd57668daa16dd66b5eed1f4e71938b3c98a",
+    "protocolOperations": "sha256:2da6b4b634a7bfb113ed52ed606c4b5f03baca25b9ab9b7ffd80e144d5793df5",
+    "protocolSchemas": "sha256:86becad67a4ec235016f389831856841b6a832ccd0aec39df430d4245d340c7a",
     "selection": "sha256:a767a0d80a64ff8eb1844be0dca2c6ae1a91cc5f900b1f2c2a80f11787f78c04"
   }
 }

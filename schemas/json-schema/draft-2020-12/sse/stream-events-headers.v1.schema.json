@@ -1,0 +1,24 @@
+{
+  "$id": "urn:kanban-tool:schema:sse:stream-events-headers:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "`/api/v1/stream/events` 的 exact request headers。",
+  "properties": {
+    "Accept-Language": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "Last-Event-ID": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "Kanban SSE stream events request headers v1",
+  "type": "object"
+}

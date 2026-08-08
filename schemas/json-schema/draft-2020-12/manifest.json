@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:c6a58d18da419a0408c8da37e2fd259da842d826203f89b0e1c341087e94804e"
+    "sha256": "sha256:2da6b4b634a7bfb113ed52ed606c4b5f03baca25b9ab9b7ffd80e144d5793df5"
   },
   "roots": [
     {
@@ -1655,13 +1655,23 @@
       "strictness": "deny_unknown_fields"
     },
     {
+      "contract_id": "sse.stream-events.headers",
+      "direction": "deserialize",
+      "id": "urn:kanban-tool:schema:sse:stream-events-headers:v1",
+      "invalid_fixture": "schemas/fixtures/sse/stream-events-headers.v1.invalid.json",
+      "path": "sse/stream-events-headers.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/sse/stream-events-headers.v1.valid.json",
+      "sha256": "sha256:693eee453795817b6a74a07e594df371347b8d135a1c98789333241b925eee62",
+      "strictness": "deny_unknown_fields"
+    },
+    {
       "contract_id": "sse.stream-events.query",
       "direction": "deserialize",
       "id": "urn:kanban-tool:schema:sse:stream-events-query:v1",
       "invalid_fixture": "schemas/fixtures/sse/stream-events-query.v1.invalid.json",
       "path": "sse/stream-events-query.v1.schema.json",
       "schema_fixture": "schemas/fixtures/sse/stream-events-query.v1.valid.json",
-      "sha256": "sha256:a108e0a37d3a852eaa320a046d9be317af473db21d2bccead0f8819989c9c091",
+      "sha256": "sha256:d4766f504fc765c93700d31e4475a9308d999ee185f9fc3bddb4617fde9a97f9",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -1672,6 +1682,16 @@
       "path": "sse/stream-event-data.v1.schema.json",
       "schema_fixture": "schemas/fixtures/sse/stream-event-data.v1.valid.json",
       "sha256": "sha256:d206a56f7b845aff3b6ffd4add18222ca151c486101b9a1f4e065c4f437cdd25",
+      "strictness": "deny_unknown_fields"
+    },
+    {
+      "contract_id": "sse.event.heartbeat",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:sse:event-heartbeat:v1",
+      "invalid_fixture": "schemas/fixtures/sse/event-heartbeat.v1.invalid.json",
+      "path": "sse/event-heartbeat.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/sse/event-heartbeat.v1.valid.json",
+      "sha256": "sha256:5281eca45456b996834574eb0974ba749efff900f8fc4d28a9ca9cf8777dd076",
       "strictness": "deny_unknown_fields"
     },
     {
@@ -5818,6 +5838,6 @@
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "surface_catalog": {
     "path": "surface-operations.json",
-    "sha256": "sha256:2f1368b0f91aac9414f0ceec1c78337744b48eff3ba67e3e365f9c67608637a3"
+    "sha256": "sha256:f81670bb7282b33ddad301973771c024f4b9ce92db5c2e5668b8d77ac7fd6179"
   }
 }

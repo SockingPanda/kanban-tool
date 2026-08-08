@@ -115,8 +115,10 @@ import { ApiDeleteAttachmentResponseSchema, apiDeleteAttachmentResponseValidator
 import { ApiListEventsQuerySchema, apiListEventsQueryValidator } from "./contracts/api-list-events-query";
 import { ApiListEventsHeadersSchema, apiListEventsHeadersValidator } from "./contracts/api-list-events-headers";
 import { ApiListEventsResponseSchema, apiListEventsResponseValidator } from "./contracts/api-list-events-response";
+import { SseStreamEventsHeadersSchema, sseStreamEventsHeadersValidator } from "./contracts/sse-stream-events-headers";
 import { SseStreamEventsQuerySchema, sseStreamEventsQueryValidator } from "./contracts/sse-stream-events-query";
 import { SseEventDataSchema, sseEventDataValidator } from "./contracts/sse-event-data";
+import { SseEventHeartbeatSchema, sseEventHeartbeatValidator } from "./contracts/sse-event-heartbeat";
 import { ApiAddTaskLabelPathSchema, apiAddTaskLabelPathValidator } from "./contracts/api-add-task-label-path";
 import { ApiAddTaskLabelHeadersSchema, apiAddTaskLabelHeadersValidator } from "./contracts/api-add-task-label-headers";
 import { ApiAddTaskLabelRequestSchema, apiAddTaskLabelRequestValidator } from "./contracts/api-add-task-label-request";
@@ -316,8 +318,10 @@ export const schemas = {
   "api.list-events.query": ApiListEventsQuerySchema,
   "api.list-events.headers": ApiListEventsHeadersSchema,
   "api.list-events.response": ApiListEventsResponseSchema,
+  "sse.stream-events.headers": SseStreamEventsHeadersSchema,
   "sse.stream-events.query": SseStreamEventsQuerySchema,
   "sse.event.data": SseEventDataSchema,
+  "sse.event.heartbeat": SseEventHeartbeatSchema,
   "api.add-task-label.path": ApiAddTaskLabelPathSchema,
   "api.add-task-label.headers": ApiAddTaskLabelHeadersSchema,
   "api.add-task-label.request": ApiAddTaskLabelRequestSchema,
@@ -516,8 +520,10 @@ export const validators = {
   "api.list-events.query": apiListEventsQueryValidator,
   "api.list-events.headers": apiListEventsHeadersValidator,
   "api.list-events.response": apiListEventsResponseValidator,
+  "sse.stream-events.headers": sseStreamEventsHeadersValidator,
   "sse.stream-events.query": sseStreamEventsQueryValidator,
   "sse.event.data": sseEventDataValidator,
+  "sse.event.heartbeat": sseEventHeartbeatValidator,
   "api.add-task-label.path": apiAddTaskLabelPathValidator,
   "api.add-task-label.headers": apiAddTaskLabelHeadersValidator,
   "api.add-task-label.request": apiAddTaskLabelRequestValidator,
@@ -726,8 +732,10 @@ export { parseApiDeleteAttachmentResponse } from "./contracts/api-delete-attachm
 export { parseApiListEventsQuery } from "./contracts/api-list-events-query";
 export { parseApiListEventsHeaders } from "./contracts/api-list-events-headers";
 export { parseApiListEventsResponse } from "./contracts/api-list-events-response";
+export { parseSseStreamEventsHeaders } from "./contracts/sse-stream-events-headers";
 export { parseSseStreamEventsQuery } from "./contracts/sse-stream-events-query";
 export { parseSseEventData } from "./contracts/sse-event-data";
+export { parseSseEventHeartbeat } from "./contracts/sse-event-heartbeat";
 export { parseApiAddTaskLabelPath } from "./contracts/api-add-task-label-path";
 export { parseApiAddTaskLabelHeaders } from "./contracts/api-add-task-label-headers";
 export { parseApiAddTaskLabelRequest } from "./contracts/api-add-task-label-request";

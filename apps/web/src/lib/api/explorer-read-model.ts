@@ -255,6 +255,28 @@ export interface ExplorerTaskListPage {
   readonly meta: ApiListTasksResponseContract["meta"]
 }
 
+export const BOARD_EVENTS_PAGE_LIMIT = 150
+
+export type ExplorerEvent = ApiListEventsResponseContract["data"][number]
+
+/** 由现有 sync owner 交给 UI 的已校验、看板隔离事件 batch。 */
+export interface BoardEventsBatch {
+  readonly boardId: CanonicalBoardId
+  readonly events: readonly ExplorerEvent[]
+  readonly nextAfter: number
+}
+
+export interface BoardEventsReadModel {
+  readonly board: ExplorerBoardIdentity
+  readonly taskId: string | null
+  readonly events: readonly ExplorerEvent[]
+  readonly meta: {
+    readonly count: number
+    readonly nextAfter: number
+    readonly limit: number
+  }
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError"
 }
@@ -370,6 +392,171 @@ export async function loadExplorerBoardIdentity(
     )
     if (response.data.length === 0) throw new ExplorerReadError("empty", "kanban serve 未返回可用看板。", { reason: "board-not-found" })
     return resolveBoard(response.data, selector)
+  } catch (error) {
+    return wrapTransportError(error)
+  }
+}
+
+function safeEventCursor(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+}
+
+function stableEventValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableEventValue)
+  if (typeof value !== "object" || value === null) return value
+  const record = value as Record<string, unknown>
+  return Object.fromEntries(Object.keys(record).sort().map((key) => [key, stableEventValue(record[key])]))
+}
+
+function eventFingerprint(event: ExplorerEvent): string {
+  return JSON.stringify(stableEventValue(event))
+}
+
+function validateEventBatch(
+  events: readonly ExplorerEvent[],
+  board: ExplorerBoardIdentity,
+  after: number,
+  nextAfter: number,
+  limit: number,
+): void {
+  if (!safeEventCursor(after) || !safeEventCursor(nextAfter)) {
+    throw new ExplorerReadError("anomaly", "事件响应的 cursor 不是非负安全整数。")
+  }
+  if (!Number.isSafeInteger(limit) || limit < 0 || events.length > limit) {
+    throw new ExplorerReadError("anomaly", "事件响应超过请求的 page limit。")
+  }
+  let previousId = after
+  const ids = new Set<number>()
+  const eventIds = new Set<string>()
+  for (const event of events) {
+    if (!safeEventCursor(event.id) || event.id <= previousId) {
+      throw new ExplorerReadError("anomaly", "事件响应的 id 必须严格按数字递增。")
+    }
+    if (event.board_id !== board.id) {
+      throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 不属于当前 canonical board。`)
+    }
+    if (event.event_id.trim().length === 0) {
+      throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 缺少 event_id。`)
+    }
+    if (ids.has(event.id) || eventIds.has(event.event_id)) {
+      throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 在响应中重复。`)
+    }
+    ids.add(event.id)
+    eventIds.add(event.event_id)
+    previousId = event.id
+  }
+  if (events.length === 0) {
+    if (nextAfter !== after) throw new ExplorerReadError("anomaly", "空事件页不得推进 next_after。")
+  } else if (nextAfter !== previousId) {
+    throw new ExplorerReadError("anomaly", "事件响应的 next_after 必须等于最后一个 event id。")
+  }
+}
+
+/**
+ * 按 canonical numeric id 与 event_id 合并看板隔离事件 batch。
+ * 返回窗口按 ASC 排序，只保留最新 150 个 id。
+ */
+export function mergeBoardEvents(
+  existing: readonly ExplorerEvent[],
+  incoming: readonly ExplorerEvent[],
+  boardId: CanonicalBoardId,
+): readonly ExplorerEvent[] {
+  const byId = new Map<number, ExplorerEvent>()
+  const byEventId = new Map<string, ExplorerEvent>()
+
+  const add = (event: ExplorerEvent): void => {
+    if (!safeEventCursor(event.id) || event.event_id.trim().length === 0) {
+      throw new ExplorerReadError("anomaly", "事件 batch 含有无效 canonical id。")
+    }
+    if (event.board_id !== boardId) {
+      throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 越过当前 board scope。`)
+    }
+    const byIdMatch = byId.get(event.id)
+    const byEventIdMatch = byEventId.get(event.event_id)
+    if (byIdMatch !== undefined && byIdMatch.event_id !== event.event_id) {
+      throw new ExplorerReadError("anomaly", `事件 id ${String(event.id)} 对应多个 event_id。`)
+    }
+    if (byEventIdMatch !== undefined && byEventIdMatch.id !== event.id) {
+      throw new ExplorerReadError("anomaly", `事件 event_id ${event.event_id} 对应多个数字 id。`)
+    }
+    if (byIdMatch !== undefined || byEventIdMatch !== undefined) {
+      const previous = byIdMatch ?? byEventIdMatch
+      if (previous && eventFingerprint(previous) !== eventFingerprint(event)) {
+        throw new ExplorerReadError("anomaly", `事件 ${String(event.id)} 的重复内容不一致。`)
+      }
+      return
+    }
+    byId.set(event.id, event)
+    byEventId.set(event.event_id, event)
+  }
+
+  for (const event of existing) add(event)
+  let previousIncomingId = -1
+  for (const event of incoming) {
+    if (!safeEventCursor(event.id) || event.id <= previousIncomingId) {
+      throw new ExplorerReadError("anomaly", "事件 batch 的 id 必须严格递增。")
+    }
+    add(event)
+    previousIncomingId = event.id
+  }
+  const sorted = [...byId.values()].sort((left, right) => left.id - right.id)
+  return Object.freeze(sorted.slice(-BOARD_EVENTS_PAGE_LIMIT).map((event) => Object.freeze({ ...event })))
+}
+
+export function buildBoardEventsRequest(board: string, taskId: string | null = null): string {
+  try {
+    const parsed = parseApiListEventsQuery({
+      board,
+      task_id: taskId,
+      after: 0,
+      limit: BOARD_EVENTS_PAGE_LIMIT,
+    })
+    const params = new URLSearchParams()
+    if (parsed.board !== undefined) params.set("board", parsed.board)
+    if (parsed.task_id !== undefined && parsed.task_id !== null) params.set("task_id", parsed.task_id)
+    if (parsed.after !== undefined) params.set("after", String(parsed.after))
+    if (parsed.limit !== undefined) params.set("limit", String(parsed.limit))
+    return `/api/v1/events?${params.toString()}`
+  } catch (error) {
+    if (error instanceof ContractValidationError) {
+      throw new ExplorerReadError("invalid_contract", "Board Events 请求不符合 generated query contract。", {
+        contractId: "api.list-events.query",
+        cause: error,
+      })
+    }
+    throw error
+  }
+}
+
+export async function loadBoardEvents(
+  runtime: WebRuntimeConfig,
+  selector = runtime.defaultBoard,
+  options: ExplorerReadOptions & { readonly taskId?: string | null } = {},
+): Promise<BoardEventsReadModel> {
+  const budget = options.budget ?? new ExplorerReadBudget()
+  let transport: HttpTransport
+  try {
+    transport = options.transport ?? createHttpTransport(runtime, options)
+  } catch (error) {
+    return wrapTransportError(error)
+  }
+  try {
+    const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
+    const taskId = options.taskId?.trim() || null
+    if (taskId !== null) validateTaskSelector(taskId)
+    const response = parseContract(
+      "api.list-events.response",
+      parseApiListEventsResponse,
+      await getPayload(transport, buildBoardEventsRequest(board.slug, taskId), options.signal, budget),
+    )
+    validateEventBatch(response.data, board, 0, response.meta.next_after, BOARD_EVENTS_PAGE_LIMIT)
+    const events = mergeBoardEvents([], response.data, board.id)
+    return Object.freeze({
+      board,
+      taskId,
+      events,
+      meta: Object.freeze({ count: events.length, nextAfter: response.meta.next_after, limit: BOARD_EVENTS_PAGE_LIMIT }),
+    })
   } catch (error) {
     return wrapTransportError(error)
   }

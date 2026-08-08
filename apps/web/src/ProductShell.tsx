@@ -7,6 +7,7 @@ import { SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react"
 
 import type { CanonicalBoardSlug } from "./lib/board-slug"
+import type { BoardEventsBatch } from "./lib/api/explorer-read-model"
 import type { WebRuntimeConfig } from "./lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router"
 import { parseLocalePreference, parseThemePreference } from "./lib/preferences"
@@ -26,6 +27,9 @@ export type ProductShellProps = {
   error?: ReactNode
   onNavigate?: (target: AppNavigationTarget) => void | Promise<unknown>
   onRetry?: () => void
+  /** 现有 persistent SSE integration 的可选只读 seam。 */
+  invalidationRevision?: number
+  eventsBatch?: BoardEventsBatch | null
 }
 
 function safeText(value: string): string {
@@ -280,7 +284,7 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
   )
 }
 
-function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry }: ProductShellProps) {
+function RouteContent({ runtime, route, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, eventsBatch }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -356,7 +360,7 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   }
   if (route.kind === "settings") return <SettingsPage runtime={runtime} />
   if (children) return <>{children}</>
-  if (route.kind === "board") return <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} />
+  if (route.kind === "board") return <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} eventsBatch={eventsBatch} />
 
   return (
     <section className={styles.page} aria-labelledby="board-placeholder-heading" data-testid="board-placeholder">
@@ -370,7 +374,7 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   )
 }
 
-export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry }: ProductShellProps) {
+export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry, invalidationRevision = 0, eventsBatch }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
 
@@ -397,7 +401,7 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
                 data-runtime-web-build-id={runtime.webBuildId}
                 data-runtime-web-base-path={runtime.webBasePath}
               >
-                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry}>
+                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onRetry={onRetry} invalidationRevision={invalidationRevision} eventsBatch={eventsBatch}>
                   {children}
                 </RouteContent>
               </div>

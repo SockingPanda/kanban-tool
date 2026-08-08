@@ -1,0 +1,199 @@
+@layer product {
+  .events {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+    color: var(--color-text-primary);
+  }
+
+  .heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    border-block-end: 1px solid var(--color-border);
+    padding-block-end: 1rem;
+  }
+
+  .heading h2,
+  .heading p {
+    margin: 0;
+  }
+
+  .heading h2 {
+    font-size: clamp(1.6rem, 3vw, 2.35rem);
+    letter-spacing: -0.035em;
+  }
+
+  .kicker {
+    margin: 0 0 0.35rem;
+    color: var(--color-text-secondary);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+
+  .boardContext,
+  .count {
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+  }
+
+  .heading button,
+  .state button,
+  .tokenButton {
+    min-height: 2.2rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.35rem 0.7rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    cursor: pointer;
+  }
+
+  .heading button:hover,
+  .state button:hover,
+  .tokenButton:hover {
+    border-color: var(--color-accent);
+  }
+
+  .heading button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+  }
+
+  .filterBar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .filterBar label {
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    font-weight: 650;
+  }
+
+  .filterBar input {
+    min-width: min(26rem, 100%);
+    min-height: 2.2rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.35rem 0.6rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+  }
+
+  .tableRegion {
+    min-width: 0;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    background: var(--color-background-surface);
+  }
+
+  .tableRegion:focus-visible,
+  .filterBar input:focus-visible,
+  .heading button:focus-visible,
+  .state button:focus-visible,
+  .tokenButton:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .table {
+    width: 100%;
+    min-width: 48rem;
+    border-collapse: collapse;
+    text-align: left;
+  }
+
+  .table th,
+  .table td {
+    border-block-end: 1px solid var(--color-border);
+    padding: 0.7rem 0.8rem;
+    vertical-align: top;
+  }
+
+  .table th {
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .table tbody tr:last-child td {
+    border-block-end: 0;
+  }
+
+  .table tbody tr:focus-within,
+  .table tbody tr:hover {
+    background: var(--color-background-subtle);
+  }
+
+  .token {
+    overflow-wrap: anywhere;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+  }
+
+  .tokenButton {
+    min-height: 0;
+    border-color: transparent;
+    padding: 0.1rem 0.2rem;
+    background: transparent;
+    text-align: left;
+  }
+
+  .notice {
+    display: grid;
+    gap: 0.25rem;
+    border-inline-start: 0.25rem solid var(--color-accent);
+    padding: 0.65rem 0.8rem;
+    background: var(--color-background-subtle);
+  }
+
+  .notice span,
+  .errorDetail {
+    color: var(--color-text-secondary);
+  }
+
+  .empty,
+  .errorDetail,
+  .count {
+    margin: 0;
+  }
+
+  .state {
+    display: grid;
+    min-height: 12rem;
+    align-content: center;
+    justify-items: start;
+    gap: 0.65rem;
+    border: 1px solid var(--color-border);
+    padding: 1.1rem;
+    background: var(--color-background-surface);
+  }
+
+  .state h2,
+  .state p {
+    margin: 0;
+  }
+
+  .visuallyHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 52rem) {
+    .heading {
+      flex-direction: column;
+    }
+  }
+}

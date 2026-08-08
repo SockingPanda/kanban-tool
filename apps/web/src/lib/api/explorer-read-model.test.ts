@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  BOARD_EVENTS_PAGE_LIMIT,
+  buildBoardEventsRequest,
   buildTaskListRequest,
   buildTaskInspectorRequests,
   buildTaskMapRequest,
@@ -9,14 +11,18 @@ import {
   buildRunLogRequest,
   buildTaskRunsRequest,
   loadTaskRuns,
+  loadBoardEvents,
   loadExplorerBoardIdentity,
   loadTaskInspector,
+  mergeBoardEvents,
   parseTaskListQuery,
   serializeTaskListQuery,
 } from "./explorer-read-model"
 import type { WebRuntimeConfig } from "../runtime"
 import type { HttpTransportResponse } from "./http-transport"
 import { HttpTransportError } from "./http-transport"
+import { asCanonicalBoardId } from "../sync/contracts"
+import type { ApiListEventsResponseContract } from "./generated/contracts/api-list-events-response"
 
 const runtime = {
   apiBaseUrl: "",
@@ -151,6 +157,75 @@ describe("explorer canonical board identity", () => {
 
     await expect(loadExplorerBoardIdentity(runtime, "same", { transport: duplicateSlugTransport })).rejects.toMatchObject({ kind: "anomaly" })
     await expect(loadExplorerBoardIdentity(runtime, "one", { transport: duplicateIdTransport })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+})
+
+describe("board events read model", () => {
+  const board = (id = "b_default", slug = "default") => ({
+    id,
+    slug,
+    name: "Board",
+    description: null,
+    created_at: 1,
+    updated_at: 1,
+    archived_at: null,
+  })
+  const event = (id: number, boardId = "b_default", eventId = `event-${id}`): ApiListEventsResponseContract["data"][number] => ({
+    id,
+    event_id: eventId,
+    board_id: boardId,
+    task_id: null,
+    run_id: null,
+    kind: "board.archived",
+    actor: "tester",
+    payload: {},
+    created_at: 1_700_000_000 + id,
+  })
+
+  test("builds the first board page with ASC cursor order and encoded selector", () => {
+    expect(buildBoardEventsRequest("board slug")).toBe("/api/v1/events?board=board+slug&after=0&limit=150")
+    expect(buildBoardEventsRequest("default", "t_1")).toBe("/api/v1/events?board=default&task_id=t_1&after=0&limit=150")
+    expect(BOARD_EVENTS_PAGE_LIMIT).toBe(150)
+  })
+
+  test("resolves canonical board identity and rejects foreign or non-ascending events", async () => {
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board()] }, bytes: 1 }
+        return { payload: { data: [event(1), event(2)], meta: { next_after: 2 } }, bytes: 1 }
+      },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport })).resolves.toMatchObject({
+      board: { id: "b_default", slug: "default" },
+      taskId: null,
+      events: [{ id: 1 }, { id: 2 }],
+      meta: { count: 2, nextAfter: 2, limit: 150 },
+    })
+
+    const foreign = {
+      get: async (path: string): Promise<HttpTransportResponse> => path.startsWith("/api/v1/boards?")
+        ? { payload: { data: [board()] }, bytes: 1 }
+        : { payload: { data: [event(1, "b_other")], meta: { next_after: 1 } }, bytes: 1 },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport: foreign })).rejects.toMatchObject({ kind: "anomaly" })
+
+    const outOfOrder = {
+      get: async (path: string): Promise<HttpTransportResponse> => path.startsWith("/api/v1/boards?")
+        ? { payload: { data: [board()] }, bytes: 1 }
+        : { payload: { data: [event(2), event(1)], meta: { next_after: 1 } }, bytes: 1 },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport: outOfOrder })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+
+  test("merges by numeric id and event_id and retains only the final 150 events", () => {
+    const first = Array.from({ length: 150 }, (_, index) => event(index + 1))
+    const boardId = asCanonicalBoardId("b_default")
+    const merged = mergeBoardEvents(first, [event(150), event(151)], boardId)
+    expect(merged).toHaveLength(150)
+    expect(merged[0]?.id).toBe(2)
+    expect(merged.at(-1)?.id).toBe(151)
+    expect(() => mergeBoardEvents(first, [event(151, "b_other")], boardId)).toThrow(/board scope/)
+    expect(() => mergeBoardEvents(first, [event(151, "b_default", "event-1")], boardId)).toThrow(/多个数字 id/)
   })
 })
 

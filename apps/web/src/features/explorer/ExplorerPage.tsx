@@ -18,6 +18,8 @@ import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
 import { TaskListView, type TaskListRow } from "./TaskListView"
 import { TaskRunsView } from "./TaskRunsView"
+import { EventsView } from "./EventsView"
+import type { BoardEventsBatch } from "../../lib/api/explorer-read-model"
 import styles from "./ExplorerPage.module.css"
 
 const LazyTaskMapView = lazy(() => import("./TaskMapView").then((module) => ({ default: module.TaskMapView })))
@@ -26,6 +28,17 @@ export interface ExplorerPageProps {
   readonly runtime: WebRuntimeConfig
   readonly route: Extract<AppRoute, { kind: "board" }>
   readonly onNavigate?: (target: AppNavigationTarget) => void | Promise<unknown>
+  /** 由 ProductShell 持有的响应式浏览器 connectivity 状态。 */
+  readonly online?: boolean
+  /** 现有 persistent SSE integration 持有的 revision/batch seam。 */
+  readonly invalidationRevision?: number
+  readonly eventsBatch?: BoardEventsBatch | null
+}
+
+const MAX_EVENT_KIND_FILTER_LENGTH = 128
+
+function normalizeEventKindFilter(value: string | null | undefined): string {
+  return (value ?? "").trim().slice(0, MAX_EVENT_KIND_FILTER_LENGTH)
 }
 
 type AsyncState<T> = {
@@ -198,10 +211,11 @@ function ExplorerTabs({ route, basePath, taskId, onNavigate }: { readonly route:
   )
 }
 
-export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) {
+export function ExplorerPage({ runtime, route, onNavigate, online, invalidationRevision = 0, eventsBatch }: ExplorerPageProps) {
   const view = route.view ?? "board"
   const params = queryParams(route)
   const taskId = params.get("task")?.trim() || null
+  const kindFilter = normalizeEventKindFilter(params.get("kind"))
   const showInspector = Boolean(taskId) && view !== "runs"
   const listQuery = useMemo(() => parseTaskListQuery(new URLSearchParams(route.query ?? "")), [route.query])
   const listKey = `${route.boardSlug}|${serializeTaskListQuery(listQuery)}`
@@ -227,6 +241,13 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
     const nextParams = new URLSearchParams(params)
     nextParams.delete("task")
     navigate(routeTarget(route.boardSlug, view, nextParams, runtime.webBasePath))
+  }
+  const updateEventKindFilter = (nextKind: string) => {
+    const nextParams = new URLSearchParams(params)
+    const normalizedKind = normalizeEventKindFilter(nextKind)
+    if (normalizedKind) nextParams.set("kind", normalizedKind)
+    else nextParams.delete("kind")
+    navigate(routeTarget(route.boardSlug, "events", nextParams, runtime.webBasePath))
   }
 
   return (
@@ -263,7 +284,19 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
             </Suspense>
           ) : null}
           {view === "runs" ? <TaskRunsView runtime={runtime} taskId={taskId} /> : null}
-          {view === "events" ? <EventsPlaceholder taskId={taskId} inspector={inspectorRead.data} /> : null}
+          {view === "events" ? (
+            <EventsView
+              runtime={runtime}
+              boardSelector={route.boardSlug}
+              taskId={taskId}
+              kindFilter={kindFilter}
+              online={online}
+              invalidationRevision={invalidationRevision}
+              batch={eventsBatch}
+              onKindFilterChange={updateEventKindFilter}
+              onSelectTask={selectTask}
+            />
+          ) : null}
         </main>
         {showInspector ? (
           inspectorRead.data ? <TaskInspector model={inspectorViewModel(inspectorRead.data)} onSelectTask={selectTask} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} />
@@ -271,8 +304,4 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
       </div>
     </section>
   )
-}
-
-function EventsPlaceholder({ taskId, inspector }: { readonly taskId: string | null; readonly inspector: TaskInspectorReadModel | null }) {
-  return <section className={styles.boundary} data-testid="events-view"><h2>Events</h2><p>{taskId ? inspector ? `${inspector.events.length} 条任务事件` : "正在加载事件…" : "选择任务后查看事件。"}</p></section>
 }

@@ -43,6 +43,43 @@ describe("App route parser", () => {
       pathname: "/app/boards/alpha/list",
     })
   })
+
+  test("parses canonical Signals and Ontology board routes with URL filters", () => {
+    expect(parseAppRoute("/app/boards/default/signals?status=resolved&kind=agent_cli_friction,agent_timeout&task=default%231"))
+      .toEqual({
+        kind: "board",
+        boardSlug: "default",
+        pathname: "/app/boards/default/signals",
+        view: "signals",
+        filters: {
+          status: "resolved",
+          kinds: ["agent_cli_friction", "agent_timeout"],
+          task: "default#1",
+        },
+      })
+    expect(parseAppRoute("/app/boards/default/ontology?include_all=true&group_by=candidate_atom")).toEqual({
+      kind: "board",
+      boardSlug: "default",
+      pathname: "/app/boards/default/ontology",
+      view: "ontology",
+      filters: { includeAll: true, groupBy: "candidate_atom" },
+    })
+  })
+
+  test("serializes feature routes without losing canonical board identity", () => {
+    expect(routePath({
+      kind: "board",
+      boardSlug: assertCanonicalBoardSlug("team-one"),
+      view: "signals",
+      filters: { status: "open", kinds: ["agent/timeout"], task: "team-one#7" },
+    })).toBe("/app/boards/team-one/signals?status=open&kind=agent%2Ftimeout&task=team-one%237")
+    expect(routePath({
+      kind: "board",
+      boardSlug: assertCanonicalBoardSlug("team-one"),
+      view: "ontology",
+      filters: { includeAll: true, groupBy: "proposed_label" },
+    })).toBe("/app/boards/team-one/ontology?include_all=true&group_by=proposed_label")
+  })
 })
 
 describe("History API navigation", () => {

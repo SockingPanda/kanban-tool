@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs"
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
 
 import { describe, expect, test } from "vitest"
 
@@ -71,5 +73,27 @@ describe("CSP-safe generated contract validator", () => {
     expect(() => plugin.resolveId("virtual:kanban-contract-validator/does-not-exist")).toThrow(
       /unknown generated contract validator slug/i,
     )
+  })
+
+  test("rejects schema roots reached through a parent-directory symlink", () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), "kanban-contract-validator-"))
+    const canonicalRoot = path.join(temporaryRoot, "canonical", "schemas")
+    const linkedParent = path.join(temporaryRoot, "linked-parent")
+    const linkedSchemaDirectory = path.join(linkedParent, "schemas")
+    mkdirSync(canonicalRoot, { recursive: true })
+    copyFileSync(
+      new URL("../src/lib/api/generated/schemas/runtime-web-config-output.schema.json", import.meta.url),
+      path.join(canonicalRoot, "runtime-web-config-output.schema.json"),
+    )
+    symlinkSync(path.dirname(canonicalRoot), linkedParent, "dir")
+
+    try {
+      const plugin = createContractValidatorPlugin({ schemaDirectory: linkedSchemaDirectory })
+      expect(() => plugin.resolveId("virtual:kanban-contract-validator/runtime-web-config-output")).toThrow(
+        /symlink/i,
+      )
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true })
+    }
   })
 })

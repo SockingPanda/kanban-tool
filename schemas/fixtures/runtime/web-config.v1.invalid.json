@@ -1,0 +1,10 @@
+{
+  "apiBaseUrl": "",
+  "webBasePath": "/app/",
+  "actor": "local",
+  "defaultBoard": "default",
+  "serverVersion": "2.1.3",
+  "protocolVersion": "v1",
+  "webBuildId": "dev",
+  "extra": true
+}

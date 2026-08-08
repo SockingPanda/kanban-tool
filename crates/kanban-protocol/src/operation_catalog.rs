@@ -87,6 +87,7 @@ pub fn operation_catalog() -> &'static [OperationDeclaration] {
                 + crate::admin_catalog::operation_declarations().len()
                 + crate::portable::operation_declarations().len()
                 + crate::metadata_config_catalog::operation_declarations().len()
+                + crate::runtime_catalog::operation_declarations().len()
                 + crate::cli_labels_catalog::operation_declarations().len()
                 + crate::cli_shell_catalog::operation_declarations().len()
                 + crate::cli_queue_catalog::operation_declarations().len(),
@@ -101,6 +102,7 @@ pub fn operation_catalog() -> &'static [OperationDeclaration] {
         declarations.extend_from_slice(crate::admin_catalog::operation_declarations());
         declarations.extend_from_slice(crate::portable::operation_declarations());
         declarations.extend_from_slice(crate::metadata_config_catalog::operation_declarations());
+        declarations.extend_from_slice(crate::runtime_catalog::operation_declarations());
         declarations.extend_from_slice(crate::cli_labels_catalog::operation_declarations());
         declarations.extend_from_slice(crate::cli_shell_catalog::operation_declarations());
         declarations.extend_from_slice(crate::cli_queue_catalog::operation_declarations());
@@ -261,7 +263,7 @@ mod tests {
 
     #[test]
     fn migrated_domain_source_is_exposed_without_legacy_duplication() {
-        assert_eq!(operation_catalog().len(), 276);
+        assert_eq!(operation_catalog().len(), 277);
         assert_eq!(
             operation_catalog()
                 .iter()
@@ -312,6 +314,11 @@ mod tests {
                 )
                 .chain(
                     crate::metadata_config_catalog::operation_declarations()
+                        .iter()
+                        .map(|operation| operation.operation_id),
+                )
+                .chain(
+                    crate::runtime_catalog::operation_declarations()
                         .iter()
                         .map(|operation| operation.operation_id),
                 )

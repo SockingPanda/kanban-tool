@@ -52,6 +52,8 @@ mod portable;
 mod protocol_tests;
 mod protocols;
 mod runs;
+mod runtime;
+pub mod runtime_catalog;
 mod signals;
 mod sse;
 pub mod step_catalog;
@@ -182,6 +184,7 @@ pub use runs::{
     ApiClaim, ApiRun, ApiRunLog, ApiRunStatus, GetRunLogPath, GetRunLogResponse, GetRunPath,
     GetRunResponse, ListRunsPath, ListRunsResponse,
 };
+pub use runtime::WebRuntimeConfig;
 pub use signals::{
     ConfirmSignalsResponse, RecordSignalRequest, RecordSignalResponse, RejectSignalsResponse,
     ResolveSignalsResponse, ReviewSignalsRequest, SignalCommentRequest, SignalRecordResult,

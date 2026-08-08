@@ -8,6 +8,8 @@ artifact 是精确事实源；本页只保留语义和维护规则。
 - Rust DTO、event payload、error envelope 和 catalog 在 `crates/kanban-protocol/src/`。
 - `schemas/` 中的 JSON Schema 与 fixture 由 `xtask` 生成或校验，不能手工维护第二份 inventory。
 - schema 使用 JSON Schema Draft 2020-12，root 必须自包含，局部引用只能指向 `#/$defs/...`。
+- `/app/runtime.json` 的 `WebRuntimeConfig` 由 `runtime_catalog` 以 `Config` surface 声明；它是
+  host metadata，不是 `/api/v1` endpoint，因此不会出现在 HTTP endpoint catalog 中。
 
 ## 契约边界
 

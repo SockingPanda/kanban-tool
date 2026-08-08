@@ -22,9 +22,9 @@ test.describe("同源 Web runtime bootstrap", () => {
 
     await page.goto("/app/", { waitUntil: "networkidle" })
 
-    await expect(page.getByRole("heading", { name: "Astryx foundation lab" })).toBeVisible()
-    await expect(page.locator("#main-content")).toHaveAttribute("data-runtime-actor", validRuntime.actor)
-    await expect(page.locator("#main-content")).toHaveAttribute("data-runtime-default-board", validRuntime.defaultBoard)
+    await expect(page.getByTestId("product-shell")).toBeVisible()
+    await expect(page.locator("[data-runtime-actor]")).toHaveAttribute("data-runtime-actor", validRuntime.actor)
+    await expect(page.locator("[data-runtime-default-board]")).toHaveAttribute("data-runtime-default-board", validRuntime.defaultBoard)
     expect(runtimeRequests).toEqual(["http://127.0.0.1:4173/app/runtime.json"])
   })
 
@@ -36,7 +36,7 @@ test.describe("同源 Web runtime bootstrap", () => {
     await page.goto("/app/", { waitUntil: "networkidle" })
 
     await expect(page.getByTestId("runtime-startup-error")).toBeVisible()
-    await expect(page.getByRole("heading", { name: "Astryx foundation lab" })).toHaveCount(0)
+    await expect(page.getByTestId("product-shell")).toHaveCount(0)
     await expect(page.getByTestId("runtime-startup-error")).toContainText("HTTP 503")
   })
 
@@ -53,6 +53,6 @@ test.describe("同源 Web runtime bootstrap", () => {
 
     await expect(page.getByTestId("runtime-startup-error")).toBeVisible()
     await expect(page.getByTestId("runtime-startup-error")).toContainText("不符合当前协议")
-    await expect(page.getByRole("heading", { name: "Astryx foundation lab" })).toHaveCount(0)
+    await expect(page.getByTestId("product-shell")).toHaveCount(0)
   })
 })

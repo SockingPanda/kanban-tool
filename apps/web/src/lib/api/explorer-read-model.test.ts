@@ -6,6 +6,9 @@ import {
   buildTaskMapRequest,
   defaultTaskListQuery,
   ExplorerReadError,
+  buildRunLogRequest,
+  buildTaskRunsRequest,
+  loadTaskRuns,
   loadExplorerBoardIdentity,
   loadTaskInspector,
   parseTaskListQuery,
@@ -148,5 +151,68 @@ describe("explorer canonical board identity", () => {
 
     await expect(loadExplorerBoardIdentity(runtime, "same", { transport: duplicateSlugTransport })).rejects.toMatchObject({ kind: "anomaly" })
     await expect(loadExplorerBoardIdentity(runtime, "one", { transport: duplicateIdTransport })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+})
+
+describe("explorer task runs read", () => {
+  const run = (id: string, taskId = "t_1", hasLog = false) => ({
+    id,
+    task_id: taskId,
+    status: "succeeded" as const,
+    worker_profile: "worker",
+    worker_pid: null,
+    claim_owner: "owner",
+    started_at: 1,
+    finished_at: 2,
+    exit_code: 0,
+    summary: "done",
+    error: null,
+    has_log: hasLog,
+    metadata: {},
+  })
+
+  test("builds generated run and log paths", () => {
+    expect(buildTaskRunsRequest("t_1")).toBe("/api/v1/tasks/t_1/runs")
+    expect(buildRunLogRequest("r_1")).toBe("/api/v1/runs/r_1/log")
+  })
+
+  test("loads runs and fetches the first run with has_log only", async () => {
+    const paths: string[] = []
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        paths.push(path)
+        if (path === "/api/v1/tasks/t_1/runs") return { payload: { data: [run("r_no_log"), run("r_first", "t_1", true), run("r_second", "t_1", true)] }, bytes: 1 }
+        if (path === "/api/v1/runs/r_first/log") return { payload: { data: { run_id: "r_first", content: "hello", truncated: false } }, bytes: 1 }
+        throw new Error(`unexpected path: ${path}`)
+      },
+    }
+
+    await expect(loadTaskRuns(runtime, "t_1", { transport })).resolves.toMatchObject({
+      taskId: "t_1",
+      selectedRunId: "r_first",
+      log: { run_id: "r_first", content: "hello", truncated: false },
+    })
+    expect(paths).toEqual(["/api/v1/tasks/t_1/runs", "/api/v1/runs/r_first/log"])
+  })
+
+  test("keeps no-log state without requesting a log endpoint", async () => {
+    const paths: string[] = []
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        paths.push(path)
+        return { payload: { data: [run("r_no_log")] }, bytes: 1 }
+      },
+    }
+
+    await expect(loadTaskRuns(runtime, "t_1", { transport })).resolves.toMatchObject({ taskId: "t_1", selectedRunId: null, log: null })
+    expect(paths).toEqual(["/api/v1/tasks/t_1/runs"])
+  })
+
+  test("fails closed when a run belongs to another task", async () => {
+    const transport = {
+      get: async (): Promise<HttpTransportResponse> => ({ payload: { data: [run("r_cross", "t_other", true)] }, bytes: 1 }),
+    }
+
+    await expect(loadTaskRuns(runtime, "t_1", { transport })).rejects.toMatchObject({ name: "ExplorerReadError", kind: "anomaly" })
   })
 })

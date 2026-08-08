@@ -17,6 +17,7 @@ import type { WebRuntimeConfig } from "../../lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView } from "../../lib/router"
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
 import { TaskListView, type TaskListRow } from "./TaskListView"
+import { TaskRunsView } from "./TaskRunsView"
 import styles from "./ExplorerPage.module.css"
 
 const LazyTaskMapView = lazy(() => import("./TaskMapView").then((module) => ({ default: module.TaskMapView })))
@@ -201,12 +202,13 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
   const view = route.view ?? "board"
   const params = queryParams(route)
   const taskId = params.get("task")?.trim() || null
+  const showInspector = Boolean(taskId) && view !== "runs"
   const listQuery = useMemo(() => parseTaskListQuery(new URLSearchParams(route.query ?? "")), [route.query])
   const listKey = `${route.boardSlug}|${serializeTaskListQuery(listQuery)}`
   const boardRead = useAsyncRead(view === "board", route.boardSlug, (signal) => import("../../lib/api/board-read-model").then(({ loadBoardReadModel }) => loadBoardReadModel(runtime, route.boardSlug, { signal })))
   const listRead = useAsyncRead(view === "list", listKey, (signal) => loadTaskListPage(runtime, route.boardSlug, listQuery, { signal }))
   const inspectorKey = `${route.boardSlug}|${taskId ?? ""}`
-  const inspectorRead = useAsyncRead(Boolean(taskId), inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal }) : Promise.reject(new Error("Task Inspector 尚未选择任务")))
+  const inspectorRead = useAsyncRead(Boolean(taskId) && view !== "runs", inspectorKey, (signal) => taskId ? loadTaskInspector(runtime, route.boardSlug, taskId, { signal }) : Promise.reject(new Error("Task Inspector 尚未选择任务")))
 
   const navigate = (target: string) => {
     if (onNavigate) void onNavigate(target)
@@ -237,7 +239,7 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
         {taskId ? <button type="button" className={styles.closeInspector} onClick={closeInspector}>关闭 Inspector</button> : null}
       </header>
       <ExplorerTabs route={route} basePath={runtime.webBasePath} taskId={taskId} onNavigate={onNavigate} />
-      <div className={taskId ? styles.contentWithInspector : styles.content}>
+      <div className={showInspector ? styles.contentWithInspector : styles.content}>
         <main className={styles.primaryContent}>
           {view === "board" ? (
             boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status">正在加载看板…</div>
@@ -260,20 +262,15 @@ export function ExplorerPage({ runtime, route, onNavigate }: ExplorerPageProps) 
               <LazyTaskMapView runtime={runtime} board={route.boardSlug} taskId={taskId} onSelectTask={selectTask} />
             </Suspense>
           ) : null}
-          {view === "runs" ? <RunsPlaceholder taskId={taskId} inspector={inspectorRead.data} /> : null}
+          {view === "runs" ? <TaskRunsView runtime={runtime} taskId={taskId} /> : null}
           {view === "events" ? <EventsPlaceholder taskId={taskId} inspector={inspectorRead.data} /> : null}
         </main>
-        {taskId ? (
+        {showInspector ? (
           inspectorRead.data ? <TaskInspector model={inspectorViewModel(inspectorRead.data)} onSelectTask={selectTask} /> : <InspectorBoundary loading={inspectorRead.loading} error={inspectorRead.error instanceof Error ? inspectorRead.error : null} onRetry={inspectorRead.retry} />
         ) : null}
       </div>
     </section>
   )
-}
-
-function RunsPlaceholder({ taskId, inspector }: { readonly taskId: string | null; readonly inspector: TaskInspectorReadModel | null }) {
-  if (!taskId) return <section className={styles.boundary} data-testid="runs-empty" role="status"><h2>Runs</h2><p>选择任务后查看运行记录。</p></section>
-  return <section className={styles.boundary} data-testid="runs-view"><h2>Runs</h2><p>{inspector ? `${inspector.runs.length} 条运行记录` : "正在加载运行记录…"}</p></section>
 }
 
 function EventsPlaceholder({ taskId, inspector }: { readonly taskId: string | null; readonly inspector: TaskInspectorReadModel | null }) {

@@ -1,0 +1,249 @@
+@layer product {
+  .runs {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+    color: var(--color-text-primary);
+  }
+
+  .heading {
+    display: grid;
+    gap: 0.35rem;
+    min-width: 0;
+    border-block-end: 1px solid var(--color-border);
+    padding-block-end: 1rem;
+  }
+
+  .heading h1,
+  .heading p {
+    margin: 0;
+  }
+
+  .heading h1 {
+    font-size: clamp(1.45rem, 3vw, 2rem);
+    letter-spacing: -0.03em;
+  }
+
+  .kicker {
+    color: var(--color-text-secondary);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+
+  .taskId,
+  .runId {
+    overflow-wrap: anywhere;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.76rem;
+  }
+
+  .taskId {
+    color: var(--color-text-secondary);
+  }
+
+  .state {
+    display: grid;
+    gap: 0.55rem;
+    min-height: 12rem;
+    align-content: center;
+    justify-items: start;
+    border: 1px solid var(--color-border);
+    padding: 1.25rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+  }
+
+  .state h1,
+  .state p {
+    margin: 0;
+  }
+
+  .state h1 {
+    color: var(--color-text-primary);
+    font-size: 1rem;
+  }
+
+  .state button,
+  .refreshError button {
+    min-height: 2.15rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.35rem 0.65rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    cursor: pointer;
+  }
+
+  .state button:hover,
+  .state button:focus-visible,
+  .refreshError button:hover,
+  .refreshError button:focus-visible,
+  .runListPanel:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 1fr);
+    gap: 1rem;
+    min-width: 0;
+    align-items: start;
+  }
+
+  .runListPanel,
+  .logPanel,
+  .noLog {
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    background: var(--color-background-surface);
+  }
+
+  .runListPanel {
+    max-height: 42rem;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .runList {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .runRow {
+    display: grid;
+    gap: 0.7rem;
+    min-width: 0;
+    border-block-end: 1px solid var(--color-border);
+    padding: 0.85rem;
+  }
+
+  .runRow:last-child {
+    border-block-end: 0;
+  }
+
+  .runHeader,
+  .logHeader {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    align-items: baseline;
+    min-width: 0;
+  }
+
+  .runHeader {
+    justify-content: space-between;
+  }
+
+  .runId {
+    color: var(--color-text-primary);
+    font-weight: 600;
+  }
+
+  .statusBadge,
+  .logTruncated {
+    display: inline-flex;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.12rem 0.4rem;
+    color: var(--color-text-secondary);
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    gap: 0.55rem;
+    margin: 0;
+  }
+
+  .facts div {
+    min-width: 0;
+  }
+
+  .facts dt {
+    color: var(--color-text-secondary);
+    font-size: 0.7rem;
+  }
+
+  .facts dd {
+    margin: 0.15rem 0 0;
+    overflow-wrap: anywhere;
+    font-size: 0.78rem;
+  }
+
+  .runError,
+  .refreshError {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+  }
+
+  .logPanel,
+  .noLog {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.85rem;
+  }
+
+  .logHeader h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .logTruncated {
+    color: var(--color-accent);
+  }
+
+  .logPanel pre {
+    max-height: 35rem;
+    margin: 0;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    padding: 0.75rem;
+    background: var(--color-background-body);
+    color: var(--color-text-primary);
+    font: 0.76rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .noLog {
+    align-content: center;
+    min-height: 12rem;
+    color: var(--color-text-secondary);
+  }
+
+  .noLog p {
+    margin: 0;
+  }
+
+  .refreshError {
+    border: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+    padding: 0.65rem 0.8rem;
+  }
+
+  .visuallyHidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 52rem) {
+    .columns {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

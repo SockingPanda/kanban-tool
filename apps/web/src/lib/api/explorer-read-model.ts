@@ -26,6 +26,8 @@ import { parseApiListStepsPath } from "./generated/contracts/api-list-steps-path
 import { parseApiListStepsResponse, type ApiListStepsResponseContract } from "./generated/contracts/api-list-steps-response"
 import { parseApiListRunsPath } from "./generated/contracts/api-list-runs-path"
 import { parseApiListRunsResponse, type ApiListRunsResponseContract } from "./generated/contracts/api-list-runs-response"
+import { parseApiGetRunLogPath } from "./generated/contracts/api-get-run-log-path"
+import { parseApiGetRunLogResponse, type ApiGetRunLogResponseContract } from "./generated/contracts/api-get-run-log-response"
 import { parseApiListCommentsPath } from "./generated/contracts/api-list-comments-path"
 import { parseApiListCommentsResponse, type ApiListCommentsResponseContract } from "./generated/contracts/api-list-comments-response"
 import { parseApiListEventsQuery } from "./generated/contracts/api-list-events-query"
@@ -536,6 +538,104 @@ export async function loadTaskMap(
     ).data
     validateMapBoard(map, board)
     return Object.freeze({ board, map })
+  } catch (error) {
+    return wrapTransportError(error)
+  }
+}
+
+export interface TaskRunsReadModel {
+  readonly taskId: string
+  readonly runs: readonly ApiListRunsResponseContract["data"][number][]
+  readonly selectedRunId: string | null
+  readonly log: ApiGetRunLogResponseContract["data"] | null
+}
+
+function hasUnsafeTaskSelector(value: string): boolean {
+  if (value.trim() !== value || value.length === 0 || /[\\/?#]/.test(value)) return true
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0
+    if (codePoint <= 0x1f || codePoint === 0x7f) return true
+  }
+  return false
+}
+
+function validateTaskSelector(value: string): void {
+  if (hasUnsafeTaskSelector(value)) throw new ExplorerReadError("anomaly", "Runs 请求的 task selector 无效。")
+}
+
+export function buildTaskRunsRequest(taskId: string): string {
+  try {
+    validateTaskSelector(taskId)
+    const path = parseApiListRunsPath({ task_id: taskId }).task_id
+    return `/api/v1/tasks/${encodedSegment(path)}/runs`
+  } catch (error) {
+    if (error instanceof ExplorerReadError) throw error
+    if (error instanceof ContractValidationError) {
+      throw new ExplorerReadError("invalid_contract", "Runs 请求不符合 generated path contract。", { contractId: "api.list-runs.path", cause: error })
+    }
+    throw error
+  }
+}
+
+export function buildRunLogRequest(runId: string): string {
+  try {
+    validateTaskSelector(runId)
+    const path = parseApiGetRunLogPath({ run_id: runId }).run_id
+    return `/api/v1/runs/${encodedSegment(path)}/log`
+  } catch (error) {
+    if (error instanceof ExplorerReadError) throw error
+    if (error instanceof ContractValidationError) {
+      throw new ExplorerReadError("invalid_contract", "Run log 请求不符合 generated path contract。", { contractId: "api.get-run-log.path", cause: error })
+    }
+    throw error
+  }
+}
+
+function validateRunScope(
+  runs: readonly ApiListRunsResponseContract["data"][number][],
+  taskId: string,
+): void {
+  for (const run of runs) {
+    if (run.task_id !== taskId) throw new ExplorerReadError("anomaly", "Runs 响应越过了当前 task scope。")
+  }
+}
+
+export async function loadTaskRuns(
+  runtime: WebRuntimeConfig,
+  taskId: string,
+  options: ExplorerReadOptions = {},
+): Promise<TaskRunsReadModel> {
+  const budget = options.budget ?? new ExplorerReadBudget()
+  let transport: HttpTransport
+  try {
+    validateTaskSelector(taskId)
+    transport = options.transport ?? createHttpTransport(runtime, options)
+  } catch (error) {
+    return wrapTransportError(error)
+  }
+  try {
+    const runs = parseContract(
+      "api.list-runs.response",
+      parseApiListRunsResponse,
+      await getPayload(transport, buildTaskRunsRequest(taskId), options.signal, budget),
+    ).data
+    validateRunScope(runs, taskId)
+    const selectedRun = runs.find((run) => run.has_log) ?? null
+    let log: ApiGetRunLogResponseContract["data"] | null = null
+    if (selectedRun) {
+      log = parseContract(
+        "api.get-run-log.response",
+        parseApiGetRunLogResponse,
+        await getPayload(transport, buildRunLogRequest(selectedRun.id), options.signal, budget),
+      ).data
+      if (log.run_id !== selectedRun.id) throw new ExplorerReadError("anomaly", "Run log 响应 id 与请求不一致。")
+    }
+    return Object.freeze({
+      taskId,
+      runs: Object.freeze(runs.map((run) => Object.freeze({ ...run }))),
+      selectedRunId: selectedRun?.id ?? null,
+      log: log ? Object.freeze({ ...log }) : null,
+    })
   } catch (error) {
     return wrapTransportError(error)
   }

@@ -68,9 +68,14 @@ export interface WebSyncSnapshot {
 }
 
 const NOOP_TELEMETRY: SyncTelemetry = { record: () => undefined }
-const MAX_RECONNECT_DELAY_MS = 5_000
-const MAX_POLLING_INTERVAL_MS = 60_000
-const MAX_LIVENESS_TIMEOUT_MS = 120_000
+const MAX_SEEN_ENTRIES = 8_192
+const MAX_BOUNDARY_BYTES = 8 * 1024 * 1024
+const MAX_RECOVERY_BUFFER_BYTES = 8 * 1024 * 1024
+const MAX_EFFECT_TIMEOUT_MS = 30_000
+const DEFAULT_LIVENESS_TIMEOUT_MS = 35_000
+const DEFAULT_POLLING_INTERVAL_MS = 5_000
+const DEFAULT_RECONNECT_DELAY_MS = 250
+const DEFAULT_MAX_SEEN_ENTRIES = 2_048
 
 class SinkEffectError extends Error {
   constructor(message: string) {
@@ -134,6 +139,22 @@ function valueByteLength(value: unknown): number {
   }
 }
 
+function validatedEventByteLength(event: ValidatedBusinessEvent): number {
+  return valueByteLength({
+    id: event.id,
+    eventId: event.eventId,
+    boardId: event.boardId,
+    taskId: event.taskId,
+    runId: event.runId,
+    kind: event.kind,
+    createdAt: event.createdAt,
+    scope: event.scope,
+    canonicalFingerprint: event.canonicalFingerprint,
+    known: event.known,
+    raw: event.raw,
+  })
+}
+
 export class WebSyncController {
   private boardId: string
   private readonly transport: SseTransport
@@ -162,6 +183,7 @@ export class WebSyncController {
   private livenessTimer: number | null = null
   private pollingTimer: number | null = null
   private recoveryStartTimer: number | null = null
+  private recoveryConnectionRetryTimer: number | null = null
   private pollingAbort: AbortController | null = null
   private pollingBoundaryCommit: Promise<boolean> | null = null
   private recoveryAbort: AbortController | null = null
@@ -176,6 +198,8 @@ export class WebSyncController {
   private ingestTail: Promise<void> = Promise.resolve()
   private readonly seenIds = new Map<number, string>()
   private readonly seenEventIds = new Map<string, string>()
+  private readonly seenEventsById = new Map<number, ValidatedBusinessEvent>()
+  private readonly seenEventsByEventId = new Map<string, ValidatedBusinessEvent>()
   private readonly anomalyAttempts = new Map<string, number>()
   private readonly activeEffects = new Set<AbortController>()
 
@@ -187,27 +211,28 @@ export class WebSyncController {
     this.sink = options.sink
     this.clock = options.clock ?? systemClock()
     this.telemetry = options.telemetry ?? NOOP_TELEMETRY
-    this.livenessTimeoutMs = options.livenessTimeoutMs ?? 35_000
-    this.pollingIntervalMs = options.pollingIntervalMs ?? 5_000
-    this.reconnectDelayMs = options.reconnectDelayMs ?? 250
-    this.maxSeenEntries = options.maxSeenEntries ?? 2_048
+    this.livenessTimeoutMs = options.livenessTimeoutMs ?? DEFAULT_LIVENESS_TIMEOUT_MS
+    this.pollingIntervalMs = options.pollingIntervalMs ?? DEFAULT_POLLING_INTERVAL_MS
+    this.reconnectDelayMs = options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS
+    this.maxSeenEntries = options.maxSeenEntries ?? DEFAULT_MAX_SEEN_ENTRIES
     this.maxAnomalyAttempts = options.maxAnomalyAttempts ?? 3
-    if (!options.testOnlyLimits && this.maxSeenEntries < 2_048) throw new RangeError("maxSeenEntries must be at least 2048")
+    if (!options.testOnlyLimits && (this.maxSeenEntries < 2_048 || this.maxSeenEntries > MAX_SEEN_ENTRIES)) throw new RangeError("maxSeenEntries must be between 2048 and 8192")
     if (!options.testOnlyLimits && this.maxAnomalyAttempts > 3) throw new RangeError("maxAnomalyAttempts must be at most 3")
     if (!Number.isSafeInteger(this.maxAnomalyAttempts) || this.maxAnomalyAttempts <= 0) throw new RangeError("maxAnomalyAttempts must be positive")
-    this.maxRecoveryBufferBytes = options.maxRecoveryBufferBytes ?? 512 * 1024
+    this.maxRecoveryBufferBytes = options.maxRecoveryBufferBytes ?? MAX_RECOVERY_BUFFER_BYTES
     this.maxBoundaryEvents = options.maxBoundaryEvents ?? this.maxSeenEntries
-    this.maxBoundaryBytes = options.maxBoundaryBytes ?? 512 * 1024
+    this.maxBoundaryBytes = options.maxBoundaryBytes ?? MAX_BOUNDARY_BYTES
     this.effectTimeoutMs = options.effectTimeoutMs ?? 30_000
     if (!Number.isSafeInteger(this.livenessTimeoutMs) || this.livenessTimeoutMs <= 0) throw new RangeError("livenessTimeoutMs must be positive")
     if (!Number.isSafeInteger(this.pollingIntervalMs) || this.pollingIntervalMs <= 0) throw new RangeError("pollingIntervalMs must be positive")
     if (!Number.isSafeInteger(this.reconnectDelayMs) || this.reconnectDelayMs <= 0) throw new RangeError("reconnectDelayMs must be positive")
-    if (!options.testOnlyLimits && (this.reconnectDelayMs > MAX_RECONNECT_DELAY_MS || this.pollingIntervalMs > MAX_POLLING_INTERVAL_MS || this.livenessTimeoutMs > MAX_LIVENESS_TIMEOUT_MS)) throw new RangeError("sync timing exceeds production SLO bounds")
+    if (!options.testOnlyLimits && (this.reconnectDelayMs !== DEFAULT_RECONNECT_DELAY_MS || this.pollingIntervalMs !== DEFAULT_POLLING_INTERVAL_MS || this.livenessTimeoutMs !== DEFAULT_LIVENESS_TIMEOUT_MS)) throw new RangeError("production SLO timing overrides require testOnlyLimits")
     if (!Number.isSafeInteger(this.maxSeenEntries) || this.maxSeenEntries <= 0) throw new RangeError("maxSeenEntries must be positive")
     if (!Number.isSafeInteger(this.maxRecoveryBufferBytes) || this.maxRecoveryBufferBytes <= 0) throw new RangeError("maxRecoveryBufferBytes must be positive")
     if (!Number.isSafeInteger(this.maxBoundaryEvents) || this.maxBoundaryEvents <= 0) throw new RangeError("maxBoundaryEvents must be positive")
     if (!Number.isSafeInteger(this.maxBoundaryBytes) || this.maxBoundaryBytes <= 0) throw new RangeError("maxBoundaryBytes must be positive")
     if (!Number.isSafeInteger(this.effectTimeoutMs) || this.effectTimeoutMs <= 0) throw new RangeError("effectTimeoutMs must be positive")
+    if (!options.testOnlyLimits && (this.maxSeenEntries !== DEFAULT_MAX_SEEN_ENTRIES || this.maxRecoveryBufferBytes !== MAX_RECOVERY_BUFFER_BYTES || this.maxBoundaryEvents !== DEFAULT_MAX_SEEN_ENTRIES || this.maxBoundaryBytes !== MAX_BOUNDARY_BYTES || this.effectTimeoutMs !== MAX_EFFECT_TIMEOUT_MS)) throw new RangeError("production safety limit overrides require testOnlyLimits")
   }
 
   start(): void {
@@ -230,6 +255,7 @@ export class WebSyncController {
     this.closeConnection()
     this.stopPolling()
     this.pollingBoundaryCommit = null
+    this.clearRecoveryConnectionRetryTimer()
     this.clearLiveness()
     this.clearRecoveryStartTimer()
     this.recovery = null
@@ -248,12 +274,15 @@ export class WebSyncController {
     this.lastConfirmedCursor = 0
     this.seenIds.clear()
     this.seenEventIds.clear()
+    this.seenEventsById.clear()
+    this.seenEventsByEventId.clear()
     this.anomalyAttempts.clear()
     this.recovery = null
     this.dropRecoveryStage()
     this.closeConnection()
     this.stopPolling()
     this.pollingBoundaryCommit = null
+    this.clearRecoveryConnectionRetryTimer()
     this.clearLiveness()
     this.clearRecoveryStartTimer()
     if (this.running) {
@@ -328,7 +357,14 @@ export class WebSyncController {
     const cancellation = new Promise<never>((_resolve, reject) => {
       controller.signal.addEventListener("abort", () => reject(new SinkEffectCancelled()), { once: true })
     })
-    const operation = Promise.resolve().then(() => this.sink.onEvent(event, classifyEvent(event), token, controller.signal))
+    const canInvokeSink = (): boolean => {
+      if (controller.signal.aborted || !this.running) return false
+      return allowCircuit ? this.isCurrent(token) : this.isRecoveryOrConnectionTokenCurrent(token)
+    }
+    const operation = Promise.resolve().then(() => {
+      if (!canInvokeSink()) throw new SinkEffectCancelled()
+      return this.sink.onEvent(event, classifyEvent(event), token, controller.signal)
+    })
     operation.catch(() => undefined)
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = this.clock.setTimeout(() => {
@@ -460,7 +496,7 @@ export class WebSyncController {
     }
 
     if (this.recovery !== null) {
-      const eventBytes = valueByteLength(event.raw)
+      const eventBytes = validatedEventByteLength(event)
       if (this.recoveryBuffer.length >= this.maxSeenEntries * 2 || this.recoveryBufferBytes + eventBytes > this.maxRecoveryBufferBytes) {
         await this.protocolFailure("recovery-buffer-overflow", token, `${this.recoveryBuffer.length}/${this.recoveryBufferBytes}`)
         return
@@ -518,7 +554,7 @@ export class WebSyncController {
     let previousId = -1
     let maxEventId = baseCursor
     for (const event of boundary.events) {
-      const eventBytes = valueByteLength(event.raw)
+      const eventBytes = validatedEventByteLength(event)
       if (!Number.isFinite(eventBytes) || (boundaryBytes += eventBytes) > this.maxBoundaryBytes) return false
       if (event.boardId !== this.boardId || !Number.isSafeInteger(event.id) || event.id < 0 || event.id > boundary.highWatermark || event.id <= previousId || typeof event.eventId !== "string" || event.eventId.length === 0 || typeof event.canonicalFingerprint !== "string") return false
       if (eventIds.has(event.id) || eventKeys.has(event.eventId)) return false
@@ -534,8 +570,7 @@ export class WebSyncController {
       if (!Number.isSafeInteger(id) || id < 0 || id > boundary.highWatermark || typeof fingerprint !== "string") return false
       if (id > baseCursor && !eventIds.has(id)) return false
       if (id <= baseCursor) {
-        const known = this.recoveryStage?.seenIds.get(id) ?? this.seenIds.get(id)
-        if (known !== fingerprint && ![...this.recoveryPreApplied.values()].includes(fingerprint)) return false
+        if (!this.oldBoundaryIdPairMatches(boundary, id, fingerprint)) return false
       }
     }
     for (const [eventId, fingerprint] of boundary.byEventId) {
@@ -543,8 +578,7 @@ export class WebSyncController {
       if (!Number.isFinite(entryBytes) || (boundaryBytes += entryBytes) > this.maxBoundaryBytes) return false
       if (typeof eventId !== "string" || eventId.length === 0 || typeof fingerprint !== "string") return false
       if (eventId.length > 0 && !eventKeys.has(eventId)) {
-        const known = this.recoveryStage?.seenEventIds.get(eventId) ?? this.seenEventIds.get(eventId)
-        if (known !== fingerprint && !this.recoveryPreApplied.has(eventId)) return false
+        if (!this.oldBoundaryEventPairMatches(boundary, eventId, fingerprint)) return false
       }
     }
     if (boundary.highWatermark > baseCursor && (boundary.events.length === 0 || maxEventId !== boundary.highWatermark)) return false
@@ -564,8 +598,49 @@ export class WebSyncController {
     seenEventIds.set(event.eventId, event.canonicalFingerprint)
     this.trimSeen(seenIds)
     this.trimSeen(seenEventIds)
+    if (stage === null) this.rememberEvent(event)
     if (stage !== null) stage.cursor = Math.max(stage.cursor, event.id)
     else this.lastConfirmedCursor = Math.max(this.lastConfirmedCursor, event.id)
+  }
+
+  private rememberEvent(event: ValidatedBusinessEvent): void {
+    this.seenEventsById.set(event.id, event)
+    this.seenEventsByEventId.set(event.eventId, event)
+    while (this.seenEventsById.size > this.maxSeenEntries) {
+      const oldest = this.seenEventsById.keys().next().value
+      if (oldest === undefined) break
+      this.seenEventsById.delete(oldest)
+    }
+    while (this.seenEventsByEventId.size > this.maxSeenEntries) {
+      const oldest = this.seenEventsByEventId.keys().next().value
+      if (oldest === undefined) break
+      this.seenEventsByEventId.delete(oldest)
+    }
+  }
+
+  private knownEventForId(id: number): ValidatedBusinessEvent | undefined {
+    const remembered = this.seenEventsById.get(id)
+    if (remembered !== undefined) return remembered
+    for (const event of this.recoveryAppliedEvents.values()) if (event.id === id) return event
+    return undefined
+  }
+
+  private knownEventForEventId(eventId: string): ValidatedBusinessEvent | undefined {
+    const remembered = this.seenEventsByEventId.get(eventId)
+    if (remembered !== undefined) return remembered
+    const applied = this.recoveryAppliedEvents.get(eventId)
+    if (applied !== undefined) return applied
+    return undefined
+  }
+
+  private oldBoundaryIdPairMatches(boundary: RecoveryBoundary, id: number, fingerprint: string): boolean {
+    const event = this.knownEventForId(id)
+    return event !== undefined && event.canonicalFingerprint === fingerprint && boundary.byEventId.get(event.eventId) === fingerprint
+  }
+
+  private oldBoundaryEventPairMatches(boundary: RecoveryBoundary, eventId: string, fingerprint: string): boolean {
+    const event = this.knownEventForEventId(eventId)
+    return event !== undefined && event.canonicalFingerprint === fingerprint && boundary.byId.get(event.id) === fingerprint
   }
 
   private trimSeen<K>(map: Map<K, string>): void {
@@ -577,7 +652,11 @@ export class WebSyncController {
   }
 
   private markLive(token: SyncToken): void {
-    if (!this.isCurrent(token) || this.recovery !== null || this.state === "circuit-open") return
+    if (!this.isCurrent(token) || this.state === "circuit-open") return
+    if (this.recovery !== null) {
+      this.armLiveness(token)
+      return
+    }
     this.state = "live"
     this.stopPolling()
     this.armLiveness(token)
@@ -588,6 +667,11 @@ export class WebSyncController {
     this.livenessTimer = this.clock.setTimeout(() => {
       if (!this.running || !this.isCurrent(token) || this.state === "circuit-open") return
       this.emit("stalled")
+      if (this.recovery !== null) {
+        this.fenceRecoveryConnection()
+        this.scheduleRecoveryConnectionRetry("stalled", 1)
+        return
+      }
       void this.beginRecovery("R", "stalled", false).catch((error) => this.detachedFailure("stalled-recovery", error))
     }, this.livenessTimeoutMs)
   }
@@ -606,6 +690,7 @@ export class WebSyncController {
       // barrier or discard its staged/pre-applied evidence.
       this.fenceRecoveryConnection()
       this.openConnection()
+      this.armLiveness(this.currentToken())
       return
     }
     // Start the barrier after all prior frames in this queue have committed,
@@ -621,10 +706,15 @@ export class WebSyncController {
     if (!this.running || !this.isCurrent(token) || this.state === "circuit-open") return
     this.emit("protocol-anomaly", { reason, code })
     if (this.recovery !== null) {
-      // Protocol failures are scoped to the offending connection epoch while
-      // a barrier is in flight; they are not circuit-budget anomalies.
+      const key = this.anomalyKey()
+      const attempts = (this.anomalyAttempts.get(key) ?? 0) + 1
+      this.anomalyAttempts.set(key, attempts)
       this.fenceRecoveryConnection()
-      this.openConnection()
+      if (attempts >= this.maxAnomalyAttempts) {
+        this.openCircuit(reason)
+        return
+      }
+      this.scheduleRecoveryConnectionRetry(reason, attempts)
       return
     }
     if (this.recoveryStartTimer !== null) {
@@ -634,7 +724,7 @@ export class WebSyncController {
     const key = this.anomalyKey()
     const attempts = (this.anomalyAttempts.get(key) ?? 0) + 1
     this.anomalyAttempts.set(key, attempts)
-    if (attempts > this.maxAnomalyAttempts) {
+    if (attempts >= this.maxAnomalyAttempts) {
       this.openCircuit(reason)
       return
     }
@@ -652,6 +742,7 @@ export class WebSyncController {
 
   private fenceConnection(): void {
     this.closeConnection()
+    this.clearRecoveryConnectionRetryTimer()
     this.connectionEpoch += 1
     this.generation += 1
     this.cancelEffects()
@@ -661,7 +752,27 @@ export class WebSyncController {
 
   private fenceRecoveryConnection(): void {
     this.closeConnection()
+    this.clearRecoveryConnectionRetryTimer()
+    this.clearLiveness()
     this.connectionEpoch += 1
+  }
+
+  private scheduleRecoveryConnectionRetry(reason: string, attempt: number): void {
+    if (!this.running || this.state === "circuit-open" || this.recoveryConnectionRetryTimer !== null) return
+    const delayMs = this.recoveryBackoff(attempt)
+    this.recoveryConnectionRetryTimer = this.clock.setTimeout(() => {
+      this.recoveryConnectionRetryTimer = null
+      if (!this.running || this.state === "circuit-open") return
+      this.openConnection()
+      this.armLiveness(this.currentToken())
+      this.emit("recovery-connection-retry", { reason, attempt, delayMs })
+    }, delayMs)
+  }
+
+  private clearRecoveryConnectionRetryTimer(): void {
+    if (this.recoveryConnectionRetryTimer === null) return
+    this.clock.clearTimeout(this.recoveryConnectionRetryTimer)
+    this.recoveryConnectionRetryTimer = null
   }
 
   private recoveryBackoff(attempt: number): number {
@@ -693,6 +804,7 @@ export class WebSyncController {
     this.cancelEffects()
     this.clearLiveness()
     this.clearRecoveryStartTimer()
+    this.clearRecoveryConnectionRetryTimer()
     this.recovery = null
     this.dropRecoveryStage()
     this.stopPolling()
@@ -722,7 +834,7 @@ export class WebSyncController {
     }
     this.state = "recovering"
     this.recoveryBuffer = [...preApplied]
-    this.recoveryBufferBytes = preApplied.reduce((total, event) => total + valueByteLength(event.raw), 0)
+    this.recoveryBufferBytes = preApplied.reduce((total, event) => total + validatedEventByteLength(event), 0)
     if (this.recoveryBufferBytes > this.maxRecoveryBufferBytes || this.recoveryBuffer.length > this.maxSeenEntries * 2) {
       this.recoveryBuffer = []
       this.recoveryBufferBytes = 0
@@ -749,6 +861,7 @@ export class WebSyncController {
     // R/F barrier and the next SSE subscription overlap. Frames from this
     // generation are staged until the boundary is published and replayed.
     this.openConnection()
+    this.armLiveness(this.currentToken())
     try {
       await operation
     } finally {
@@ -781,6 +894,7 @@ export class WebSyncController {
       const finalBoundary = await this.replayRecoveryBuffer(token, boundary, replayedBoundaryEvents)
       if (signal.aborted || !this.isRecoveryCurrent(token)) return
       this.promoteRecoveryStage(Math.max(result.confirmedCursor, finalBoundary.highWatermark))
+      this.clearRecoveryConnectionRetryTimer()
       if (result.confirmedCursor > after) this.anomalyAttempts.delete(`${this.boardId}:${after}`)
       if (signal.aborted || !this.isRecoveryCurrent(token)) return
       this.state = this.recoverySawLiveFrame ? "live" : "connecting"
@@ -930,6 +1044,8 @@ export class WebSyncController {
     for (const [eventId, fingerprint] of stage.seenEventIds) this.seenEventIds.set(eventId, fingerprint)
     this.trimSeen(this.seenIds)
     this.trimSeen(this.seenEventIds)
+    for (const event of this.recoveryAppliedEvents.values()) this.rememberEvent(event)
+    this.recoveryAppliedEvents.clear()
     this.lastConfirmedCursor = Math.max(this.lastConfirmedCursor, cursor, stage.cursor)
     this.recoveryStage = null
   }
@@ -1029,6 +1145,7 @@ export class WebSyncController {
           void this.beginRecovery("F", "sink-effect-failure", false).catch((failure) => this.detachedFailure("poll-sink-effect-failure", failure))
           return false
         }
+        if (event.known) this.rememberEvent(event)
         if (!event.known) {
           this.state = "recovering"
           void this.beginRecovery("F", "unknown-event-during-poll", false, [event]).catch((failure) => this.detachedFailure("poll-unknown-event", failure))

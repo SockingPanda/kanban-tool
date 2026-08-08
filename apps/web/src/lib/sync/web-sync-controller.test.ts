@@ -155,9 +155,12 @@ describe("WebSyncController", () => {
       adapter: adapterFor(businessEvent()),
       sink: sink(),
     }
-    expect(() => new WebSyncController({ ...base, maxSeenEntries: 1 })).toThrow(/at least 2048/)
+    expect(() => new WebSyncController({ ...base, maxSeenEntries: 1 })).toThrow(/between 2048 and 8192/)
     expect(() => new WebSyncController({ ...base, maxAnomalyAttempts: 4 })).toThrow(/at most 3/)
-    expect(() => new WebSyncController({ ...base, livenessTimeoutMs: 120_001 })).toThrow(/SLO/)
+    expect(() => new WebSyncController({ ...base, livenessTimeoutMs: 120_001 })).toThrow(/testOnlyLimits/)
+    expect(() => new WebSyncController({ ...base, livenessTimeoutMs: 1 })).toThrow(/testOnlyLimits/)
+    expect(() => new WebSyncController({ ...base, pollingIntervalMs: 1 })).toThrow(/testOnlyLimits/)
+    expect(() => new WebSyncController({ ...base, maxBoundaryBytes: 128 })).toThrow(/testOnlyLimits/)
     expect(() => new WebSyncController({ ...base, maxSeenEntries: 1, maxAnomalyAttempts: 1, testOnlyLimits: true })).not.toThrow()
   })
 
@@ -252,6 +255,7 @@ describe("WebSyncController", () => {
       sink: querySink,
       clock,
       livenessTimeoutMs: 35,
+      testOnlyLimits: true,
     })
 
     controller.start()
@@ -386,6 +390,42 @@ describe("WebSyncController", () => {
     expect(querySink.onEvent).not.toHaveBeenCalled()
   })
 
+  test("fences a sink invocation queued behind a stop or board switch microtask", async () => {
+    const frame = { eventName: "task.updated", id: "1", data: "{}" }
+    const firstSink = sink()
+    const firstTransport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const stopped = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport: firstTransport,
+      adapter: adapterFor(businessEvent()),
+      sink: firstSink,
+    })
+    stopped.start()
+    const stoppedProcessing = stopped.processFrame(frame)
+    await Promise.resolve()
+    stopped.stop()
+    await stoppedProcessing
+    expect(firstSink.onEvent).not.toHaveBeenCalled()
+
+    const switchedSink = sink()
+    const switchedTransport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const switched = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport: switchedTransport,
+      adapter: adapterFor(businessEvent()),
+      sink: switchedSink,
+    })
+    switched.start()
+    const switchedProcessing = switched.processFrame(frame)
+    await Promise.resolve()
+    switched.switchBoard("board-b")
+    await switchedProcessing
+    expect(switchedSink.onEvent).not.toHaveBeenCalled()
+    switched.stop()
+  })
+
   test("starts the next SSE epoch before R barrier settles and replays a buffered frame", async () => {
     const querySink = sink()
     let resolveBarrier: (result: RecoveryResult) => void = () => undefined
@@ -499,6 +539,91 @@ describe("WebSyncController", () => {
     expect(querySink.onEvent.mock.calls.map((call) => call[0].id)).toEqual([1, 2, 3])
   })
 
+  test("aggregates active-recovery protocol anomalies by cursor with bounded epoch backoff", async () => {
+    const querySink = sink()
+    querySink.refetchObserved.mockImplementation(async () => new Promise<RecoveryResult>(() => undefined))
+    const { clock, advance } = fakeClock()
+    const anomalies: string[] = []
+    const adapter: StreamContractAdapter = {
+      ...adapterFor(businessEvent()),
+      validateControl: () => ({ status: "invalid", code: "malformed-control" }),
+    }
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter,
+      sink: querySink,
+      clock,
+      telemetry: { record: (entry) => { if (entry.type === "protocol-anomaly") anomalies.push(String(entry.details?.reason)) } },
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(2))
+
+    const malformed = { eventName: "kb-heartbeat", id: null, data: "{}" }
+    transport.mock.calls[1]?.[0].onFrame(malformed)
+    await vi.waitFor(() => expect(anomalies).toHaveLength(1))
+    advance(250)
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(3))
+    transport.mock.calls[2]?.[0].onFrame(malformed)
+    await vi.waitFor(() => expect(anomalies).toHaveLength(2))
+    advance(1_000)
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(4))
+    transport.mock.calls[3]?.[0].onFrame(malformed)
+    await vi.waitFor(() => expect(anomalies).toHaveLength(3))
+    await vi.waitFor(() => expect(controller.snapshot().circuitOpen).toBe(true))
+
+    expect(querySink.refetchObserved).toHaveBeenCalledOnce()
+    expect(controller.snapshot().lastConfirmedCursor).toBe(0)
+    controller.stop()
+  })
+
+  test("resets recovery liveness on overlapping heartbeat and rotates only the connection after timeout", async () => {
+    const querySink = sink()
+    querySink.refetchObserved.mockImplementation(async () => new Promise<RecoveryResult>(() => undefined))
+    const { clock, advance } = fakeClock()
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(businessEvent()),
+      sink: querySink,
+      clock,
+      livenessTimeoutMs: 35,
+      testOnlyLimits: true,
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(2))
+    advance(34)
+    transport.mock.calls[1]?.[0].onFrame({ eventName: "kb-heartbeat", id: null, data: "{}" })
+    await Promise.resolve()
+    advance(1)
+    await Promise.resolve()
+    expect(querySink.refetchObserved).toHaveBeenCalledOnce()
+    expect(transport).toHaveBeenCalledTimes(2)
+
+    advance(34)
+    await Promise.resolve()
+    expect(transport).toHaveBeenCalledTimes(2)
+    advance(1)
+    await Promise.resolve()
+    expect(querySink.refetchObserved).toHaveBeenCalledOnce()
+    advance(248)
+    expect(transport).toHaveBeenCalledTimes(2)
+    advance(1)
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(3))
+    expect(querySink.refetchObserved).toHaveBeenCalledOnce()
+    controller.stop()
+  })
+
   test("replays accepted boundary events before publishing its cursor", async () => {
     const querySink = sink()
     const accepted = businessEvent({ id: 1, eventId: "e-1", canonicalFingerprint: "fp-1" })
@@ -563,6 +688,113 @@ describe("WebSyncController", () => {
     await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledOnce())
     await vi.waitFor(() => expect(controller.snapshot().state).toBe("connecting"))
     expect(failures).toEqual([])
+  })
+
+  test("rejects exact-pair evidence from a failed generation and clears it on board switch", async () => {
+    const querySink = sink()
+    const known = businessEvent()
+    const unknown = businessEvent({ id: 2, eventId: "e-2", canonicalFingerprint: "fp-2", known: false, kind: "task.attachment.created" })
+    const failures: string[] = []
+    const baseAdapter = adapterFor(known)
+    const adapter: StreamContractAdapter = {
+      ...baseAdapter,
+      validateBusiness: (envelope) => envelope.id === unknown.id
+        ? { status: "unknown", event: { ...unknown, raw: envelope.raw, kind: envelope.kind } }
+        : baseAdapter.validateBusiness(envelope),
+    }
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter,
+      sink: querySink,
+      telemetry: { record: (entry) => { if (entry.type === "recovery-failure") failures.push(entry.type) } },
+    })
+
+    controller.start()
+    transport.mock.calls[0]?.[0].onFrame({ eventName: known.kind, id: "1", data: "{}" })
+    await vi.waitFor(() => expect(controller.snapshot().lastConfirmedCursor).toBe(1))
+    querySink.refetchObserved.mockImplementationOnce((_mode, token, _after, expectedRevision) => Promise.resolve({
+      confirmedCursor: 1,
+      noGap: true,
+      boundary: {
+        highWatermark: 1,
+        // Both maps contain the staged fingerprint, but they do not describe
+        // the same canonical event as the already committed id=1 pair.
+        byId: new Map([[1, unknown.canonicalFingerprint]]),
+        byEventId: new Map([[unknown.eventId, unknown.canonicalFingerprint]]),
+        events: [],
+        token,
+        revision: expectedRevision,
+        published: true,
+      },
+    }))
+    transport.mock.calls[0]?.[0].onFrame({ eventName: unknown.kind, id: "2", data: "{}" })
+    await vi.waitFor(() => expect(failures).toHaveLength(1))
+    expect(querySink.onEvent.mock.calls.map((call) => call[0].eventId)).toEqual([known.eventId, unknown.eventId])
+    expect(controller.snapshot().lastConfirmedCursor).toBe(1)
+
+    controller.switchBoard("board-b")
+    expect(controller.snapshot().seenIds).toBe(0)
+    expect(controller.snapshot().seenEventIds).toBe(0)
+    controller.stop()
+  })
+
+  test("accepts a 1000-event boundary with full metadata accounting and fails closed on byte overflow", async () => {
+    const events = Array.from({ length: 1_000 }, (_, index) => businessEvent({
+      id: index + 1,
+      eventId: `e-${index + 1}`,
+      canonicalFingerprint: `fp-${index + 1}`,
+      raw: { id: index + 1, payload: "boundary" },
+    }))
+    const querySink = sink()
+    querySink.refetchObserved.mockImplementationOnce((_mode, token, _after, expectedRevision) => Promise.resolve({
+      confirmedCursor: 1_000,
+      noGap: true,
+      boundary: {
+        highWatermark: 1_000,
+        byId: new Map(events.map((event) => [event.id, event.canonicalFingerprint])),
+        byEventId: new Map(events.map((event) => [event.eventId, event.canonicalFingerprint])),
+        events,
+        token,
+        revision: expectedRevision,
+        published: true,
+      },
+    }))
+    const transport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const controller = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport,
+      adapter: adapterFor(events[0] ?? businessEvent()),
+      sink: querySink,
+    })
+    controller.start()
+    transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(querySink.onEvent).toHaveBeenCalledTimes(1_000), { timeout: 10_000 })
+    expect(controller.snapshot().lastConfirmedCursor).toBe(1_000)
+    controller.stop()
+
+    const oversizedSink = sink()
+    const failures: string[] = []
+    const oversizedTransport = vi.fn<SseTransport>(() => ({ closed: false, close: vi.fn() }))
+    const oversizedController = new WebSyncController({
+      boardId: "board-a",
+      streamUrl: "http://127.0.0.1/api/v1/stream/events",
+      transport: oversizedTransport,
+      adapter: adapterFor(businessEvent()),
+      sink: oversizedSink,
+      maxBoundaryBytes: 64,
+      testOnlyLimits: true,
+      telemetry: { record: (entry) => { if (entry.type === "recovery-failure") failures.push(entry.type) } },
+    })
+    oversizedController.start()
+    oversizedTransport.mock.calls[0]?.[0].onError(new Error("disconnect"))
+    await vi.waitFor(() => expect(failures).toHaveLength(1))
+    expect(oversizedSink.onEvent).not.toHaveBeenCalled()
+    expect(oversizedController.snapshot().lastConfirmedCursor).toBe(0)
+    oversizedController.stop()
   })
 
   test("starts a fresh non-budgeted F when an unknown event arrives during recovery", async () => {
@@ -771,6 +1003,7 @@ describe("WebSyncController", () => {
       sink: querySink,
       clock,
       pollingIntervalMs: 5,
+      testOnlyLimits: true,
     })
 
     controller.start()
@@ -807,6 +1040,7 @@ describe("WebSyncController", () => {
       sink: querySink,
       clock,
       pollingIntervalMs: 5,
+      testOnlyLimits: true,
     })
     controller.start()
     transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
@@ -851,6 +1085,7 @@ describe("WebSyncController", () => {
       sink: querySink,
       clock,
       pollingIntervalMs: 5,
+      testOnlyLimits: true,
     })
 
     controller.start()
@@ -903,6 +1138,7 @@ describe("WebSyncController", () => {
       sink: querySink,
       clock,
       pollingIntervalMs: 5,
+      testOnlyLimits: true,
     })
 
     controller.start()
@@ -974,6 +1210,7 @@ describe("WebSyncController", () => {
       sink: querySink,
       clock,
       pollingIntervalMs: 5,
+      testOnlyLimits: true,
       telemetry: { record: (entry) => { if (entry.type === "poll-protocol-anomaly") pollAnomalies.push(String(entry.details?.reason)) } },
     })
 

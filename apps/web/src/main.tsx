@@ -1,11 +1,8 @@
-import { StrictMode } from "react"
-import { createRoot } from "react-dom/client"
-
 import "@astryxdesign/core/reset.css"
 import "@astryxdesign/core/astryx.css"
 import "@astryxdesign/theme-neutral/theme.css"
 
-import App from "./App"
+import { bootstrapWebApp, renderRuntimeStartupError } from "./bootstrap"
 import "./layers.css"
 import "./styles.css"
 
@@ -15,8 +12,4 @@ if (!root) {
   throw new Error("Missing #root element")
 }
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+void bootstrapWebApp(root).catch((error: unknown) => renderRuntimeStartupError(root, error))

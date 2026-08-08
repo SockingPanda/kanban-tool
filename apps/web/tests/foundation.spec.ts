@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Response } from "@playwright/test"
 
+import { installRuntimeFixture } from "./runtime-fixture"
+
 type FoundationPage = Page & { foundationErrors?: string[] }
 
 const strictCspDirectives = [
@@ -24,6 +26,7 @@ function expectStrictCsp(response: Pick<Response, "headers"> | null) {
 
 test.describe("Astryx foundation lab", () => {
   test.beforeEach(async ({ page }, testInfo) => {
+    await installRuntimeFixture(page)
     const errors: string[] = []
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(`console: ${message.text()}`)

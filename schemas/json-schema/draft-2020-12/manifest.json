@@ -2791,7 +2791,7 @@
       "invalid_fixture": "schemas/fixtures/api/list-label-ontology-signals-response.v1.invalid.json",
       "path": "api/list-label-ontology-signals-response.v1.schema.json",
       "schema_fixture": "schemas/fixtures/api/list-label-ontology-signals-response.v1.valid.json",
-      "sha256": "sha256:f9e0d608fa369710a749be6611e4c90236020024d36d460c403ea75d660eec12",
+      "sha256": "sha256:e11094aff4cfa7195757c45b5fcc6bb312fde7a10e65d2cf475be7ac0766e41c",
       "strictness": "deny_unknown_fields"
     },
     {

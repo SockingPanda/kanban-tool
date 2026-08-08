@@ -98,6 +98,8 @@
     color: var(--color-text-primary);
     text-align: start;
     cursor: pointer;
+    content-visibility: auto;
+    contain-intrinsic-size: 0 7rem;
   }
 
   .ontologyRow:hover,

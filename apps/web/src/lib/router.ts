@@ -20,11 +20,14 @@ export interface SignalsRouteFilters {
   readonly status?: "review" | "all" | "open" | "confirmed" | "resolved" | "rejected" | "superseded"
   readonly kinds?: readonly string[]
   readonly task?: string
+  readonly signal?: string
 }
 
 export interface OntologyRouteFilters {
   readonly includeAll?: boolean
   readonly groupBy?: "label" | "candidate_atom" | "proposed_label" | "cluster"
+  readonly signal?: string
+  readonly atom?: string
 }
 
 export type BoardRouteFilters = SignalsRouteFilters | OntologyRouteFilters
@@ -134,10 +137,12 @@ function parseSignalsFilters(search: string): SignalsRouteFilters {
     .map((value) => value.trim())
     .filter(Boolean)
   const task = params.get("task")?.trim() || undefined
+  const signal = params.get("signal")?.trim() || undefined
   return {
     ...(status === undefined ? {} : { status }),
     ...(kinds.length === 0 ? {} : { kinds }),
     ...(task === undefined ? {} : { task }),
+    ...(signal === undefined ? {} : { signal }),
   }
 }
 
@@ -147,9 +152,13 @@ function parseOntologyFilters(search: string): OntologyRouteFilters {
   const groupBy = rawGroupBy === "candidate_atom" || rawGroupBy === "proposed_label" || rawGroupBy === "cluster"
     ? rawGroupBy
     : "label"
+  const signal = params.get("signal")?.trim() || undefined
+  const atom = params.get("atom")?.trim() || undefined
   return {
     includeAll: params.get("include_all") === "true",
     groupBy,
+    ...(signal === undefined ? {} : { signal }),
+    ...(atom === undefined ? {} : { atom }),
   }
 }
 
@@ -163,10 +172,16 @@ function appendFeatureQuery(params: URLSearchParams, view: BoardView, filters: B
     }
     const task = signalFilters?.task?.trim()
     if (task) params.set("task", task)
+    const signal = signalFilters?.signal?.trim()
+    if (signal) params.set("signal", signal)
   } else {
     const ontologyFilters = filters as OntologyRouteFilters | undefined
     if (ontologyFilters?.includeAll === true) params.set("include_all", "true")
     if (ontologyFilters?.groupBy !== undefined && ontologyFilters.groupBy !== "label") params.set("group_by", ontologyFilters.groupBy)
+    const signal = ontologyFilters?.signal?.trim()
+    if (signal) params.set("signal", signal)
+    const atom = ontologyFilters?.atom?.trim()
+    if (atom) params.set("atom", atom)
   }
 }
 

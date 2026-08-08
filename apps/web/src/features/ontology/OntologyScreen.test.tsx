@@ -9,6 +9,7 @@ import type {
   LabelOntologySignalDetail,
   LabelOntologySignalRecord,
 } from "../../lib/api/signals-ontology-read-model"
+import { featureCopyForLocale } from "../../lib/i18n"
 import type { OntologyRouteFilters } from "../../lib/router"
 
 import {
@@ -16,7 +17,6 @@ import {
   OntologyScreenView,
   ReviewGroupsView,
   OntologySignalDetailView,
-  OntologySignalListView,
   type LifecycleAction,
 } from "./OntologyScreen"
 
@@ -203,6 +203,42 @@ describe("Ontology screen presentation", () => {
     expect(html).toContain("Candidate atom")
   })
 
+  test.each([
+    ["zh", "本体审阅", "关闭详情"],
+    ["en", "Ontology review", "Close detail"],
+  ] as const)("renders feature copy in %s while keeping machine values literal", (locale, heading, closeDetail) => {
+    const html = renderToStaticMarkup(
+      <OntologyScreenView
+        boardName="Default"
+        filters={filters}
+        signals={{ phase: "success", data: [signalFixture()], error: null }}
+        groups={{ phase: "success", data: [reviewGroupFixture()], error: null }}
+        detail={{ phase: "success", data: detailFixture(), error: null }}
+        atom={{ phase: "success", data: atomExplainFixture(), error: null }}
+        selectedSignalId="los_1"
+        atomRef="hash_1"
+        atomDraft="hash_1"
+        online
+        actionReason=""
+        actionPending={false}
+        copy={featureCopyForLocale(locale).ontology}
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+        onActionReasonChange={() => undefined}
+        onLifecycleAction={() => undefined}
+        onExplainAtom={() => undefined}
+        onAtomSearch={() => undefined}
+        onCloseDetail={() => undefined}
+      />,
+    )
+
+    expect(html).toContain(heading)
+    expect(html).toContain(closeDetail)
+    expect(html).toContain('translate="no">los_1')
+    expect(html).toContain('translate="no">positive / applies_when / hash_1')
+  })
+
   test("selects review group source rows and avoids quality-rate claims", () => {
     const onSelectSignal = vi.fn()
     const tree = ReviewGroupsView({ phase: "success", groups: [reviewGroupFixture({ signal_ids: ["los_1"] })], onSelectSignal })
@@ -249,6 +285,7 @@ describe("Ontology screen presentation", () => {
         detail: detailFixture(),
         actionReason: "Reviewed",
         actionPending: false,
+        lifecycleEnabled: true,
         onActionReasonChange: () => undefined,
         onLifecycleAction: action,
         onExplainAtom: () => undefined,

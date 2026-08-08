@@ -2,9 +2,11 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test } from "vitest"
 
 import type { SignalRecord } from "../../lib/api/signals-ontology-read-model"
+import { featureCopyForLocale } from "../../lib/i18n"
 import type { SignalsRouteFilters } from "../../lib/router"
+import { reconcileSelection, type ReadState } from "../read-state"
 
-import { reconcileSelection, SignalDetailView, SignalsScreenView, type ReadState } from "./SignalsScreen"
+import { SignalDetailView, SignalsScreenView } from "./SignalsScreen"
 
 const signal = (overrides: Partial<SignalRecord> = {}): SignalRecord => ({
   id: "sig_1",
@@ -74,6 +76,32 @@ describe("Signals screen presentation", () => {
     expect(html).toContain("Evidence JSON")
     expect(html).toContain("default#1")
     expect(html).toContain("Close detail")
+  })
+
+  test.each([
+    ["zh", "信号", "刷新"],
+    ["en", "Signals", "Refresh"],
+  ] as const)("renders feature copy in %s while keeping machine values literal", (locale, heading, refresh) => {
+    const html = renderToStaticMarkup(
+      <SignalsScreenView
+        boardName="Default"
+        filters={filters}
+        list={state([signal()])}
+        detail={state(signal())}
+        selectedSignalId="sig_1"
+        online
+        copy={featureCopyForLocale(locale).signals}
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+        onCloseDetail={() => undefined}
+      />,
+    )
+
+    expect(html).toContain(heading)
+    expect(html).toContain(refresh)
+    expect(html).toContain('translate="no">agent_cli_friction')
+    expect(html).toContain('translate="no">sig_1')
   })
 
   test("keeps stale rows visible while a refresh fails", () => {

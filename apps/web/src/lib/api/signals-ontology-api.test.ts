@@ -1,8 +1,9 @@
 import { describe, expect, test, vi } from "vitest"
 
 import type { WebRuntimeConfig } from "../runtime"
+import { asCanonicalBoardId } from "../sync/contracts"
 import type { HttpTransportResponse } from "./http-transport"
-import { createSignalsOntologyReadApi, type SignalsOntologyReadTransport } from "./signals-ontology-read-model"
+import { createSignalsOntologyReadApi, SignalsOntologyReadError, type SignalsOntologyReadTransport } from "./signals-ontology-read-model"
 
 const runtime = {
   apiBaseUrl: "/__kb_api__",
@@ -45,18 +46,29 @@ const signal = {
   },
 } as const
 
+const board = {
+  id: "b_1",
+  slug: "team-one",
+  name: "Team One",
+  description: null,
+  created_at: 1,
+  updated_at: 1,
+  archived_at: null,
+} as const
+
 const response = <T,>(payload: T): HttpTransportResponse => ({ payload, bytes: 10 })
 
 describe("signals and ontology API seam", () => {
   test("validates generated query/path contracts and keeps board route encoded", async () => {
     const transport: SignalsOntologyReadTransport = {
       get: vi.fn(async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) return response({ data: [board] })
         if (path.includes("signals/review")) return response({ data: [signal], meta: { include_all: false, limit: 100 } })
         return response(signal)
       }),
     }
     const api = createSignalsOntologyReadApi(runtime, {
-      board: "team/one #",
+      board: "b_1",
       transport,
     })
 
@@ -64,7 +76,7 @@ describe("signals and ontology API seam", () => {
 
     expect(rows).toHaveLength(1)
     expect(transport.get).toHaveBeenCalledWith(
-      "/api/v1/boards/team%2Fone%20%23/signals/review?status=open&kind=agent_cli_friction&task_ref=team%2Fone%231&include_all=false&limit=100",
+      "/api/v1/boards/b_1/signals/review?status=open&kind=agent_cli_friction&task_ref=team%2Fone%231&include_all=false&limit=100",
       undefined,
     )
   })
@@ -73,8 +85,45 @@ describe("signals and ontology API seam", () => {
     const transport: SignalsOntologyReadTransport = {
       get: vi.fn(async (): Promise<HttpTransportResponse> => response({ data: [{ id: "sig_1" }] })),
     }
-    const api = createSignalsOntologyReadApi(runtime, { board: "default", transport })
+    const api = createSignalsOntologyReadApi(runtime, {
+      board: "default",
+      identity: { selector: "default", canonicalBoardId: asCanonicalBoardId("b_1"), slug: "default", name: "Default" },
+      transport,
+    })
 
-    await expect(api.reviewSignals()).rejects.toMatchObject({ name: "ContractValidationError", contractId: "api.review-signals.response" })
+    await expect(api.reviewSignals()).rejects.toMatchObject({ name: SignalsOntologyReadError.name, contractId: "api.review-signals.response" })
+  })
+
+  test("resolves a slug once, then uses canonical board IDs in cache keys and ontology queries", async () => {
+    const transport: SignalsOntologyReadTransport = {
+      get: vi.fn(async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) return response({ data: [board] })
+        if (path.startsWith("/api/v1/boards/b_1/label-ontology/signals?")) return response({ data: [], meta: { include_all: false, limit: 100 } })
+        return response({ data: [], meta: { group_by: "label", include_all: false, limit: 100 } })
+      }),
+    }
+    const api = createSignalsOntologyReadApi(runtime, { board: "team-one", transport })
+
+    expect(api.cacheKey).toContain(":team-one")
+    await expect(api.listLabelOntologySignals({ statuses: ["open", "confirmed"], includeAll: false })).resolves.toEqual([])
+    expect(api.cacheKey).toContain(":b_1")
+    expect(transport.get).toHaveBeenCalledWith(
+      "/api/v1/boards/b_1/label-ontology/signals?status=open&status=confirmed&include_all=false&limit=100",
+      undefined,
+    )
+  })
+
+  test("rejects a response that crosses the resolved board scope", async () => {
+    const transport: SignalsOntologyReadTransport = {
+      get: vi.fn(async (path: string): Promise<HttpTransportResponse> => {
+        if (path.includes("signals/review")) {
+          return response({ data: [{ ...signal, board_id: "b_other", observation: { ...signal.observation, board_id: "b_other" } }], meta: { include_all: false, limit: 100 } })
+        }
+        return response({ data: [board] })
+      }),
+    }
+    const api = createSignalsOntologyReadApi(runtime, { board: "team-one", transport })
+
+    await expect(api.reviewSignals()).rejects.toMatchObject({ name: SignalsOntologyReadError.name, kind: "board_scope" })
   })
 })

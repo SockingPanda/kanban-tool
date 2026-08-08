@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 use kanban_protocol::{
     DataEnvelope, ListBoardLabelProposalsPath, ListBoardLabelProposalsQuery,
     ListBoardLabelProposalsResponse,
+    LabelOntologySignalQuery,
     cli_labels::{CliLabelOntologyQuality, CliLabelOntologyQualityOutput},
 };
 
@@ -499,20 +500,22 @@ pub(crate) async fn record_observation(
 pub(crate) async fn list_signals(
     State(state): State<AppState>,
     Path(board): Path<String>,
-    Query(query): Query<HashMap<String, String>>,
+    Query(query): Query<LabelOntologySignalQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let statuses = query
-        .get("status")
-        .map(|value| value.split(',').map(str::to_owned).collect::<Vec<_>>())
-        .unwrap_or_default();
+        .status
+        .iter()
+        .flat_map(|value| value.split(',').map(str::to_owned))
+        .collect::<Vec<_>>();
     let kinds = query
-        .get("kind")
-        .map(|value| value.split(',').map(str::to_owned).collect::<Vec<_>>())
-        .unwrap_or_default();
-    let input = json!({"statuses": statuses, "kinds": kinds, "task_ref": query.get("task_ref"), "target_label_ref": query.get("target_label_ref"), "proposed_label_name": query.get("proposed_label_name"), "include_all": query.get("include_all").is_some_and(|v| v == "true"), "limit": query.get("limit").and_then(|v| v.parse::<usize>().ok()).unwrap_or(100)});
+        .kind
+        .iter()
+        .flat_map(|value| value.split(',').map(str::to_owned))
+        .collect::<Vec<_>>();
+    let input = json!({"statuses": statuses, "kinds": kinds, "task_ref": query.task_ref, "target_label_ref": query.target_label_ref, "proposed_label_name": query.proposed_label_name, "include_all": query.include_all, "limit": query.limit});
     let Json(value) = run(State(state), "list_signals", &board, input).await?;
     Ok(Json(
-        json!({"data": value, "meta": {"include_all": query.get("include_all").is_some_and(|v| v == "true"), "limit": query.get("limit").and_then(|v| v.parse::<usize>().ok()).unwrap_or(100)}}),
+        json!({"data": value, "meta": {"include_all": query.include_all, "limit": query.limit}}),
     ))
 }
 

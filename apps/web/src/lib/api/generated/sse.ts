@@ -1,6 +1,21 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
 import type { SseEventDataContract } from "./contracts/sse-event-data";
 import { sseEventDataValidator } from "./contracts/sse-event-data";
+import type { SseEventHeartbeatContract } from "./contracts/sse-event-heartbeat";
+import { parseSseEventHeartbeat, sseEventHeartbeatValidator } from "./contracts/sse-event-heartbeat";
+
+export const sseHeartbeatEventName = "kb-heartbeat" as const;
+export const sseEventEnvelopeFieldOrder = ["id","event_id","board_id","task_id","run_id","kind","actor","payload","created_at"] as const;
+export const taskScopedSseEventKinds = ["dependency.added","dependency.removed","task.archived","task.blocked","task.claimed","task.comment.created","task.completed","task.created","task.execution_plan.not_required","task.execution_plan.planned","task.execution_plan.unplanned","task.export_sanitized","task.heartbeat","task.label.added","task.label.removed","task.label_proposal.accepted","task.label_proposal.proposed","task.label_proposal.rejected","task.promoted","task.reclaimed","task.recomputed","task.released","task.reopened","task.retry_policy.updated","task.specified","task.step.created","task.step.done","task.step.removed","task.step.reopened","task.step.skipped","task.step.updated","task.submitted_for_review","task.unblocked","task.updated"] as const;
+
+export type SseEventEnvelopeField = (typeof sseEventEnvelopeFieldOrder)[number];
+export type TaskScopedSseEventKind = (typeof taskScopedSseEventKinds)[number];
+export type SseHeartbeatDataContract = SseEventHeartbeatContract;
+export const sseHeartbeatDataValidator = sseEventHeartbeatValidator;
+export const isSseHeartbeat = sseEventHeartbeatValidator;
+export function parseSseHeartbeat(value: unknown): SseHeartbeatDataContract {
+  return parseSseEventHeartbeat(value);
+}
 
 export const knownSseEventKinds = [
   "board.created",
@@ -56,6 +71,24 @@ export interface UnknownSseEvent {
 }
 
 export type ParsedSseEvent = KnownSseEvent | UnknownSseEvent;
+
+export function canonicalizeSseEventEnvelope(value: SseEventDataContract): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const field of sseEventEnvelopeFieldOrder) result[field] = canonicalizeSseValue(value[field]);
+  return result;
+}
+
+export function canonicalSseEventFingerprint(value: SseEventDataContract): string {
+  return JSON.stringify(canonicalizeSseEventEnvelope(value));
+}
+
+function canonicalizeSseValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeSseValue);
+  if (!isRecord(value)) return value;
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(value).sort()) result[key] = canonicalizeSseValue(value[key]);
+  return result;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

@@ -15,7 +15,8 @@ use std::{
 use fs4::fs_std::FileExt;
 use kanban_protocol::{
     ContractDirection, ContractStrictness, ContractSurface, EndpointDescriptor, EndpointObligation,
-    HttpMethod, OperationContract, endpoint_catalog, operation_inventory,
+    HttpMethod, OperationContract, SSE_HEARTBEAT_EVENT, STREAM_EVENT_ENVELOPE_FIELDS,
+    TASK_SCOPED_EVENT_KINDS, endpoint_catalog, operation_inventory,
     schema::{DRAFT_2020_12, SchemaRoot, canonicalize, schema_document, schema_registry},
 };
 use serde::{Deserialize, Serialize};
@@ -745,9 +746,19 @@ fn sse_module(selection: &ResolvedSelection) -> ToolResult<Vec<u8>> {
         .ok_or_else(|| failure("Web selection missing sse.event.data schema"))?;
     let schema = schema_document(root);
     let kinds = known_sse_event_kinds(&schema);
+    let _heartbeat_root = selection
+        .roots
+        .iter()
+        .find(|root| root.contract_id == "sse.event.heartbeat")
+        .ok_or_else(|| failure("Web selection missing sse.event.heartbeat schema"))?;
+    let field_order = serde_json::to_string(STREAM_EVENT_ENVELOPE_FIELDS)?;
+    let task_scoped_kinds = serde_json::to_string(TASK_SCOPED_EVENT_KINDS)?;
     let mut output = String::from(
-        "// 由 `xtask web-contracts generate` 生成；请勿手工编辑。\nimport type { SseEventDataContract } from \"./contracts/sse-event-data\";\nimport { sseEventDataValidator } from \"./contracts/sse-event-data\";\n\n",
+        "// 由 `xtask web-contracts generate` 生成；请勿手工编辑。\nimport type { SseEventDataContract } from \"./contracts/sse-event-data\";\nimport { sseEventDataValidator } from \"./contracts/sse-event-data\";\nimport type { SseEventHeartbeatContract } from \"./contracts/sse-event-heartbeat\";\nimport { parseSseEventHeartbeat, sseEventHeartbeatValidator } from \"./contracts/sse-event-heartbeat\";\n\n",
     );
+    output.push_str(&format!(
+        "export const sseHeartbeatEventName = {SSE_HEARTBEAT_EVENT:?} as const;\nexport const sseEventEnvelopeFieldOrder = {field_order} as const;\nexport const taskScopedSseEventKinds = {task_scoped_kinds} as const;\n\nexport type SseEventEnvelopeField = (typeof sseEventEnvelopeFieldOrder)[number];\nexport type TaskScopedSseEventKind = (typeof taskScopedSseEventKinds)[number];\nexport type SseHeartbeatDataContract = SseEventHeartbeatContract;\nexport const sseHeartbeatDataValidator = sseEventHeartbeatValidator;\nexport const isSseHeartbeat = sseEventHeartbeatValidator;\nexport function parseSseHeartbeat(value: unknown): SseHeartbeatDataContract {{\n  return parseSseEventHeartbeat(value);\n}}\n\n",
+    ));
     output.push_str("export const knownSseEventKinds = [\n");
     for kind in &kinds {
         output.push_str(&format!("  {kind:?},\n"));
@@ -757,6 +768,7 @@ fn sse_module(selection: &ResolvedSelection) -> ToolResult<Vec<u8>> {
     output.push_str("export type KnownSseEvent = { [K in KnownSseEventKind]: Extract<SseEventDataContract, { kind: K }> }[KnownSseEventKind];\n\n");
     output.push_str("export interface UnknownSseEvent {\n  readonly kind: string | null;\n  readonly raw: unknown;\n  readonly envelope: Record<string, unknown> | null;\n  readonly reason: \"unknown_kind\" | \"known_payload_invalid\" | \"invalid_envelope\";\n}\n\n");
     output.push_str("export type ParsedSseEvent = KnownSseEvent | UnknownSseEvent;\n\n");
+    output.push_str("export function canonicalizeSseEventEnvelope(value: SseEventDataContract): Record<string, unknown> {\n  const result: Record<string, unknown> = {};\n  for (const field of sseEventEnvelopeFieldOrder) result[field] = canonicalizeSseValue(value[field]);\n  return result;\n}\n\nexport function canonicalSseEventFingerprint(value: SseEventDataContract): string {\n  return JSON.stringify(canonicalizeSseEventEnvelope(value));\n}\n\nfunction canonicalizeSseValue(value: unknown): unknown {\n  if (Array.isArray(value)) return value.map(canonicalizeSseValue);\n  if (!isRecord(value)) return value;\n  const result: Record<string, unknown> = {};\n  for (const key of Object.keys(value).sort()) result[key] = canonicalizeSseValue(value[key]);\n  return result;\n}\n\n");
     output.push_str("function isRecord(value: unknown): value is Record<string, unknown> {\n  return typeof value === \"object\" && value !== null && !Array.isArray(value);\n}\n\n");
     output.push_str("export function parseSseEvent(value: unknown): ParsedSseEvent {\n  if (!isRecord(value)) return invalidEnvelope(value, null);\n  const kind = typeof value.kind === \"string\" ? value.kind : null;\n  if (!sseEventDataValidator(value)) {\n    return kind !== null && isKnownKind(kind)\n      ? { kind, raw: value, envelope: value, reason: \"known_payload_invalid\" }\n      : invalidEnvelope(value, value);\n  }\n  if (kind !== null && isKnownSseEvent(value)) return value;\n  if (kind !== null) return { kind, raw: value, envelope: value, reason: \"unknown_kind\" };\n  return invalidEnvelope(value, value);\n}\n\nfunction isKnownSseEvent(value: SseEventDataContract): value is KnownSseEvent {\n  return typeof value.kind === \"string\" && isKnownKind(value.kind);\n}\n\nfunction isKnownKind(value: string): value is KnownSseEventKind {\n  return knownSseEventKinds.some((kind) => kind === value);\n}\n\nfunction invalidEnvelope(raw: unknown, envelope: Record<string, unknown> | null): UnknownSseEvent {\n  return { kind: envelope && typeof envelope.kind === \"string\" ? envelope.kind : null, raw, envelope, reason: \"invalid_envelope\" };\n}\n");
     Ok(output.into_bytes())

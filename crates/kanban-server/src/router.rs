@@ -53,8 +53,12 @@ where
         ));
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    let shutdown_state = state.clone();
     axum::serve(listener, build_router(state))
-        .with_graceful_shutdown(shutdown)
+        .with_graceful_shutdown(async move {
+            shutdown.await;
+            shutdown_state.begin_event_stream_shutdown();
+        })
         .await
 }
 
@@ -75,8 +79,12 @@ where
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let listener_addr = listener.local_addr()?;
+    let shutdown_state = state.clone();
     axum::serve(listener, build_production_router(state, web, listener_addr))
-        .with_graceful_shutdown(shutdown)
+        .with_graceful_shutdown(async move {
+            shutdown.await;
+            shutdown_state.begin_event_stream_shutdown();
+        })
         .await
 }
 
@@ -114,6 +122,7 @@ async fn serve_with_dispatcher_shutdown_inner(
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let listener_addr = listener.local_addr()?;
+    let shutdown_state = state.clone();
     let router = web
         .map(|web| build_production_router(state.clone(), web, listener_addr))
         .unwrap_or_else(|| build_router(state.clone()));
@@ -137,12 +146,17 @@ async fn serve_with_dispatcher_shutdown_inner(
     let mut force_shutdown = shutdown.clone();
 
     let dispatcher_result = tokio::select! {
-        result = &mut http => return result,
+        result = &mut http => {
+            shutdown_state.begin_event_stream_shutdown();
+            return result;
+        },
         result = &mut dispatcher => result,
         () = wait_for_force(&mut force_shutdown) => {
+            shutdown_state.begin_event_stream_shutdown();
             return Err(force_shutdown_error());
         }
     };
+    shutdown_state.begin_event_stream_shutdown();
     if *shutdown.borrow() == ShutdownSignal::Force {
         return Err(force_shutdown_error());
     }
@@ -153,7 +167,10 @@ async fn serve_with_dispatcher_shutdown_inner(
 
     tokio::select! {
         result = &mut http => result,
-        () = wait_for_force(&mut force_shutdown) => Err(force_shutdown_error()),
+        () = wait_for_force(&mut force_shutdown) => {
+            shutdown_state.begin_event_stream_shutdown();
+            Err(force_shutdown_error())
+        },
     }
 }
 

@@ -1,0 +1,6 @@
+{
+  "actor": "fixture-heartbeat",
+  "claim_token": "ct_fixture",
+  "ttl_ms": 300000,
+  "note": "still running"
+}

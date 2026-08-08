@@ -1,0 +1,16 @@
+// 由 `xtask web-contracts generate` 生成；请勿手工编辑。
+import type { FromSchema } from "json-schema-to-ts";
+import { ContractValidationError, createContractValidator } from "../runtime";
+
+export const ApiReviewSignalsResponseSchema = {"$defs":{"SignalFilterMeta":{"additionalProperties":false,"properties":{"include_all":{"type":"boolean"},"limit":{"format":"uint","minimum":0,"type":"integer"}},"required":["include_all","limit"],"type":"object"},"SignalObservationWire":{"additionalProperties":false,"properties":{"actor":{"type":"string"},"agent_type":{"type":["string","null"]},"board_id":{"type":"string"},"comment_id":{"type":["string","null"]},"created_at":{"format":"int64","type":"integer"},"evidence":{"additionalProperties":true,"type":"object"},"id":{"type":"string"},"run_id":{"type":["string","null"]},"source":{"type":["string","null"]},"task_id":{"type":["string","null"]},"task_ref_snapshot":{"type":["string","null"]}},"required":["id","board_id","task_id","task_ref_snapshot","run_id","comment_id","actor","agent_type","source","evidence","created_at"],"type":"object"},"SignalWire":{"additionalProperties":false,"properties":{"board_id":{"type":"string"},"created_at":{"format":"int64","type":"integer"},"dedupe_key":{"type":["string","null"]},"id":{"type":"string"},"kind":{"type":"string"},"observation":{"$ref":"#/$defs/SignalObservationWire"},"observation_id":{"type":"string"},"review_reason":{"type":["string","null"]},"reviewed_at":{"format":"int64","type":["integer","null"]},"reviewed_by":{"type":["string","null"]},"severity":{"type":"string"},"status":{"type":"string"},"summary":{"type":"string"},"superseded_by_signal_id":{"type":["string","null"]},"title":{"type":"string"},"updated_at":{"format":"int64","type":"integer"}},"required":["id","board_id","observation_id","kind","title","summary","severity","status","dedupe_key","superseded_by_signal_id","reviewed_by","reviewed_at","review_reason","created_at","updated_at","observation"],"type":"object"}},"$id":"urn:kanban-tool:schema:api:review-signals-response:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"data":{"items":{"$ref":"#/$defs/SignalWire"},"type":"array"},"meta":{"$ref":"#/$defs/SignalFilterMeta"}},"required":["data","meta"],"title":"Review signals response v1","type":"object"} as const;
+export type ApiReviewSignalsResponseContract = FromSchema<typeof ApiReviewSignalsResponseSchema>;
+
+export const apiReviewSignalsResponseValidator: ReturnType<typeof createContractValidator<ApiReviewSignalsResponseContract>> = createContractValidator<ApiReviewSignalsResponseContract>(
+  "api.review-signals.response",
+  ApiReviewSignalsResponseSchema,
+);
+
+export function parseApiReviewSignalsResponse(value: unknown): ApiReviewSignalsResponseContract {
+  if (!apiReviewSignalsResponseValidator(value)) throw new ContractValidationError("api.review-signals.response", apiReviewSignalsResponseValidator.errors);
+  return value;
+}

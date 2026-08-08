@@ -1,0 +1,37 @@
+{
+  "$defs": {
+    "ApiRunLog": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "run_id",
+        "content",
+        "truncated"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:get-run-log-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/ApiRunLog"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban API get run log response v1",
+  "type": "object"
+}

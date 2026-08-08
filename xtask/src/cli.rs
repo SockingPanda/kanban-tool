@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use xtask::ToolResult;
+use xtask::{ToolResult, web_contracts};
 
 use crate::{
     affected,
@@ -45,11 +45,13 @@ pub(crate) fn run() -> ToolResult<()> {
 
     match (group, subcommand) {
         ("schema", Some(command)) => run_schema(command, &root),
+        ("web-contracts", Some(command)) => web_contracts::run(&root, command),
         ("docs", Some("check")) => docs::run(&root),
         ("deps", Some("check")) => dependencies::run(&root),
         ("agents", Some("check")) => agents::run(&root),
         ("tooling", Some("check")) => tooling::run(&root),
         ("schema", None) => invalid("schema 缺少子命令"),
+        ("web-contracts", None) => invalid("web-contracts 缺少子命令"),
         ("docs", Some(command)) => invalid(format!("docs 不支持子命令: {command}")),
         ("docs", None) => invalid("docs 缺少子命令"),
         ("deps", Some(command)) => invalid(format!("deps 不支持子命令: {command}")),
@@ -149,6 +151,6 @@ fn invalid(message: impl Into<String>) -> ToolResult<()> {
 
 fn print_usage() {
     println!(
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]"
     );
 }

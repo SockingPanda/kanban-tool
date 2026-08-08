@@ -3,13 +3,13 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig, loadEnv, type ProxyOptions } from "vite"
 
-import { normalizeApiBaseUrl, normalizeLoopbackHttpUrl } from "./src/lib/loopback-url"
+import { normalizeApiBaseUrl, normalizeLoopbackHttpUrl } from "./src/lib/loopback-url.ts"
 
 const DEFAULT_DEV_API_BASE = "/__kb_api__"
 const DEFAULT_DEV_PROXY_TARGET = "http://127.0.0.1:8721"
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, __dirname, "")
+  const env = loadEnv(mode, import.meta.dirname, "")
   const proxy = devApiProxy(
     env.VITE_KB_API_BASE_URL || DEFAULT_DEV_API_BASE,
     env.VITE_KB_DEV_PROXY_TARGET || DEFAULT_DEV_PROXY_TARGET,
@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
+        "@": path.resolve(import.meta.dirname, "./src"),
       },
     },
     server: {

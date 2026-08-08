@@ -1,7 +1,7 @@
 {
   "contract_inventory": {
     "path": "operations.json",
-    "sha256": "sha256:48e09c90638391c05ce3443fd1cfddb802134e9ca52417e1dd960b1ebcd89cec"
+    "sha256": "sha256:c6a58d18da419a0408c8da37e2fd259da842d826203f89b0e1c341087e94804e"
   },
   "roots": [
     {
@@ -4635,6 +4635,16 @@
       "strictness": "deny_unknown_fields"
     },
     {
+      "contract_id": "runtime.web-config.output",
+      "direction": "serialize",
+      "id": "urn:kanban-tool:schema:runtime:web-config:v1",
+      "invalid_fixture": "schemas/fixtures/runtime/web-config.v1.invalid.json",
+      "path": "runtime/web-config.v1.schema.json",
+      "schema_fixture": "schemas/fixtures/runtime/web-config.v1.valid.json",
+      "sha256": "sha256:67c75304317f5e45b1237b2dfe4fe3aa99e83a927c491e115e0122f59c5c7283",
+      "strictness": "deny_unknown_fields"
+    },
+    {
       "contract_id": "cli.label-add.output",
       "direction": "serialize",
       "id": "urn:kanban-tool:schema:cli:label-add-output:v1",
@@ -5808,6 +5818,6 @@
   "schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "surface_catalog": {
     "path": "surface-operations.json",
-    "sha256": "sha256:adb9aeb7b2107240309a27753d7ce5ffb797a7ecc44ce1aba8ad9e7f6e7590c6"
+    "sha256": "sha256:2f1368b0f91aac9414f0ceec1c78337744b48eff3ba67e3e365f9c67608637a3"
   }
 }

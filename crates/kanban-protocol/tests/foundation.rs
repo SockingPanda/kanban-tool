@@ -586,7 +586,7 @@ fn public_operation_inventory_covers_every_public_surface() {
 fn public_catalog_preserves_contract_and_exclusion_counts() {
     assert_eq!(
         operation_inventory().len(),
-        580,
+        581,
         "public contract inventory 不得静默增删"
     );
     let exclusions = surface_operation_catalog()

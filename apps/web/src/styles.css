@@ -1,0 +1,19 @@
+@layer product {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    min-width: 52rem;
+    background: var(--color-background-body);
+    color: var(--color-text-primary);
+    font-family: var(--font-family-body);
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+}

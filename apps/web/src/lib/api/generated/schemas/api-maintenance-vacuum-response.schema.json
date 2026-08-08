@@ -1,0 +1,45 @@
+{
+  "$defs": {
+    "VacuumReport": {
+      "additionalProperties": false,
+      "properties": {
+        "after_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "before_bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "source_fingerprint": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ok",
+        "before_bytes",
+        "after_bytes",
+        "source_fingerprint"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:kanban-tool:schema:api:maintenance-vacuum-response:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/VacuumReport"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "Kanban maintenance vacuum response v1",
+  "type": "object"
+}

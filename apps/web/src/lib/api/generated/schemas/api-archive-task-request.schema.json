@@ -1,0 +1,19 @@
+{
+  "$id": "urn:kanban-tool:schema:api:archive-task-request:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "force": {
+      "default": false,
+      "type": "boolean"
+    }
+  },
+  "title": "Kanban archive task request v1",
+  "type": "object"
+}

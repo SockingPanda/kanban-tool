@@ -1,0 +1,8 @@
+{
+  "actor": "fixture-worker",
+  "ttl_ms": 300000,
+  "worker_profile": "fixture-profile",
+  "metadata": {
+    "source": "schema-fixture"
+  }
+}

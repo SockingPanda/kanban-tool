@@ -12,6 +12,7 @@ pub(crate) enum Recipe {
     DocsCheck,
     RustFast,
     RustFull,
+    WebCheck,
     DesktopCheck,
     #[serde(rename = "schema-contract")]
     SchemaCheck,
@@ -26,6 +27,7 @@ impl Recipe {
             Self::DocsCheck => "docs-check",
             Self::RustFast => "rust-fast",
             Self::RustFull => "rust-full",
+            Self::WebCheck => "web-check",
             Self::DesktopCheck => "desktop-check",
             Self::SchemaCheck => "schema-contract",
             Self::DepsCheck => "deps-check",
@@ -100,6 +102,7 @@ fn classify(paths: &[String]) -> BTreeMap<String, Vec<String>> {
         ("root-risk", is_root_risk),
         ("tooling", is_tooling),
         ("schema", is_schema),
+        ("web", is_web),
         ("desktop", is_desktop),
         ("rust", is_rust_product),
     ] {
@@ -136,6 +139,9 @@ fn plan_recipes(paths: &[String]) -> Vec<Recipe> {
         }
         if paths.iter().any(|path| is_schema(path)) {
             recipes.push(Recipe::SchemaCheck);
+        }
+        if paths.iter().any(|path| is_web(path)) {
+            recipes.push(Recipe::WebCheck);
         }
         if paths.iter().any(|path| is_desktop(path)) {
             recipes.push(Recipe::DesktopCheck);
@@ -175,7 +181,9 @@ fn is_root_risk(path: &str) -> bool {
             | "deny.toml"
     );
     let ci = path.starts_with(".github/workflows/");
-    let named_risk = !file_name.ends_with(".md")
+    let node_manifest = file_name == "package.json";
+    let named_risk = !node_manifest
+        && !file_name.ends_with(".md")
         && (file_name.contains("release")
             || file_name.contains("version")
             || file_name.contains("package"));
@@ -197,7 +205,18 @@ fn is_schema(path: &str) -> bool {
 }
 
 fn is_desktop(path: &str) -> bool {
-    path.starts_with("apps/desktop/")
+    path.starts_with("apps/desktop/") || is_root_node_workspace_file(path)
+}
+
+fn is_web(path: &str) -> bool {
+    path.starts_with("apps/web/") || is_root_node_workspace_file(path)
+}
+
+fn is_root_node_workspace_file(path: &str) -> bool {
+    matches!(
+        path,
+        "package.json" | "pnpm-lock.yaml" | "pnpm-workspace.yaml"
+    )
 }
 
 fn is_rust_product(path: &str) -> bool {
@@ -392,6 +411,46 @@ mod tests {
             build_plan("main".to_owned(), sources(&["xtask/src/affected.rs"])).recipes,
             vec![Recipe::ToolingCheck, Recipe::DiffCheck]
         );
+    }
+
+    #[test]
+    fn web_paths_use_the_web_gate() {
+        let plan = build_plan("main".to_owned(), sources(&["apps/web/src/App.tsx"]));
+        let recipes = plan
+            .recipes
+            .iter()
+            .map(|recipe| recipe.name())
+            .collect::<Vec<_>>();
+
+        assert_eq!(plan.classifications["web"], ["apps/web/src/App.tsx"]);
+        assert!(!plan.classifications.contains_key("desktop"));
+        assert_eq!(recipes, ["web-check", "diff-check"]);
+    }
+
+    #[test]
+    fn node_manifests_use_frontend_gates_without_rust_release_gates() {
+        assert_eq!(
+            build_plan("main".to_owned(), sources(&["package.json"])).recipes,
+            vec![Recipe::WebCheck, Recipe::DesktopCheck, Recipe::DiffCheck]
+        );
+        assert_eq!(
+            build_plan("main".to_owned(), sources(&["apps/desktop/package.json"])).recipes,
+            vec![Recipe::DesktopCheck, Recipe::DiffCheck]
+        );
+    }
+
+    #[test]
+    fn root_node_workspace_files_cover_both_frontend_gates() {
+        for path in ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"] {
+            let plan = build_plan("main".to_owned(), sources(&[path]));
+            assert_eq!(
+                plan.recipes,
+                vec![Recipe::WebCheck, Recipe::DesktopCheck, Recipe::DiffCheck],
+                "root workspace file must cover web and desktop for {path}"
+            );
+            assert_eq!(plan.classifications["web"], [path]);
+            assert_eq!(plan.classifications["desktop"], [path]);
+        }
     }
 
     #[test]

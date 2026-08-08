@@ -196,14 +196,14 @@ install_node_dependencies() {
   if command -v corepack >/dev/null 2>&1; then
     log "Activating pnpm through corepack"
     corepack enable
-    corepack prepare pnpm@10 --activate
+    corepack prepare pnpm@11.20.0 --activate
   elif ! command -v pnpm >/dev/null 2>&1; then
     log "Installing pnpm with npm"
-    npm install --global pnpm@10
+    npm install --global pnpm@11.20.0
   fi
 
-  log "Installing desktop frontend dependencies"
-  pnpm --dir "$ROOT/apps/desktop" install --frozen-lockfile
+  log "Installing Node workspace dependencies"
+  pnpm --dir "$ROOT" install --frozen-lockfile
 }
 
 prewarm_rust_dependencies() {

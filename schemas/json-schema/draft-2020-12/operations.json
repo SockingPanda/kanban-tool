@@ -10459,6 +10459,22 @@
     "binding": "exact_surface",
     "direction": "serialize",
     "exclusion": null,
+    "fixture": "schemas/fixtures/runtime/web-config.v1.valid.json",
+    "granularity": "exact",
+    "id": "runtime.web-config.output",
+    "operation": "GET /app/runtime.json",
+    "path": "/app/runtime.json",
+    "schema_id": "urn:kanban-tool:schema:runtime:web-config:v1",
+    "strictness": "deny_unknown_fields",
+    "surface": "config",
+    "transport": {
+      "kind": "no_transport"
+    }
+  },
+  {
+    "binding": "exact_surface",
+    "direction": "serialize",
+    "exclusion": null,
     "fixture": "schemas/fixtures/cli/label-add-output.v1.valid.json",
     "granularity": "exact",
     "id": "cli.label-add.output",

@@ -1,0 +1,17 @@
+// 由 `xtask web-contracts generate` 生成；请勿手工编辑。
+/* eslint-disable no-loss-of-precision -- JSON Schema 的 int64 边界有意超过 JS 安全整数范围。 */
+import type { FromSchema } from "json-schema-to-ts";
+import { ContractValidationError, createContractValidator } from "../runtime";
+
+export const ApiListTasksQuerySchema = {"$defs":{"ApiTaskPriority":{"format":"uint8","maximum":3,"minimum":0,"type":"integer"},"ApiTaskStatus":{"enum":["triage","todo","scheduled","ready","running","blocked","review","done","archived"],"type":"string"},"TaskReadLabel":{"maxLength":128,"minLength":1,"pattern":"\\P{White_Space}","type":"string"},"TaskReadPlanFilter":{"enum":["plan_needed","has_steps","incomplete_required_steps"],"type":"string"},"TaskReadSort":{"enum":["seq","-seq","title","-title","status","-status","position","-position","priority","-priority","assignee","-assignee","scheduled_at","-scheduled_at","due_at","-due_at","created_at","-created_at","updated_at","-updated_at"],"type":"string"}},"$id":"urn:kanban-tool:schema:api:list-tasks-query:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"assignee":{"default":null,"maxLength":128,"type":["string","null"]},"include_archived":{"default":false,"type":"boolean"},"label":{"default":[],"items":{"$ref":"#/$defs/TaskReadLabel"},"maxItems":32,"type":"array","uniqueItems":true},"limit":{"default":100,"format":"uint","maximum":1000,"minimum":0,"type":"integer"},"offset":{"default":0,"format":"uint","maximum":9223372036854775807,"minimum":0,"type":"integer"},"plan_filter":{"default":[],"items":{"$ref":"#/$defs/TaskReadPlanFilter"},"maxItems":3,"type":"array","uniqueItems":true},"priority":{"default":[],"items":{"$ref":"#/$defs/ApiTaskPriority"},"maxItems":4,"type":"array","uniqueItems":true},"q":{"default":null,"maxLength":1024,"type":["string","null"]},"sort":{"$ref":"#/$defs/TaskReadSort","default":"position"},"status":{"default":[],"items":{"$ref":"#/$defs/ApiTaskStatus"},"maxItems":9,"type":"array","uniqueItems":true}},"title":"Kanban list tasks query v1","type":"object"} as const;
+export type ApiListTasksQueryContract = FromSchema<typeof ApiListTasksQuerySchema>;
+
+export const apiListTasksQueryValidator: ReturnType<typeof createContractValidator<ApiListTasksQueryContract>> = createContractValidator<ApiListTasksQueryContract>(
+  "api.list-tasks.query",
+  ApiListTasksQuerySchema,
+);
+
+export function parseApiListTasksQuery(value: unknown): ApiListTasksQueryContract {
+  if (!apiListTasksQueryValidator(value)) throw new ContractValidationError("api.list-tasks.query", apiListTasksQueryValidator.errors);
+  return value;
+}

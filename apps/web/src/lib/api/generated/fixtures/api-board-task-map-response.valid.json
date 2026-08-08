@@ -1,0 +1,69 @@
+{
+  "data": {
+    "nodes": [
+      {
+        "task": {
+          "id": "t_center",
+          "board_id": "b_fixture",
+          "board_slug": "default",
+          "ref": "default#1",
+          "seq": 1,
+          "title": "graph fixture",
+          "description": "ready spec",
+          "status": "ready",
+          "status_reason": null,
+          "assignee": null,
+          "priority": 3,
+          "position": 1024,
+          "scheduled_at": null,
+          "due_at": null,
+          "created_by": "fixture",
+          "created_at": 1,
+          "updated_at": 2,
+          "started_at": null,
+          "completed_at": null,
+          "archived_at": null,
+          "claim_owner": null,
+          "claim_expires_at": null,
+          "last_heartbeat_at": null,
+          "current_run_id": null,
+          "retry_count": 0,
+          "max_retries": null,
+          "result_summary": null,
+          "result": null,
+          "metadata": {},
+          "lock_version": 0,
+          "dependency_blocked": false,
+          "unfinished_parent_count": 0,
+          "execution_plan_state": "not_required",
+          "required_step_count": 0,
+          "completed_required_step_count": 0,
+          "optional_step_count": 0,
+          "labels": []
+        },
+        "role": "active",
+        "context_only": false
+      }
+    ],
+    "edges": [],
+    "meta": {
+      "depth": 0,
+      "context_depth": 1,
+      "generated_at": 1,
+      "node_count": 1,
+      "edge_count": 0,
+      "truncated": false,
+      "active_statuses": [
+        "ready",
+        "running",
+        "review",
+        "blocked"
+      ],
+      "active_only": true,
+      "include_done_context": true,
+      "include_archived_context": false,
+      "hide_isolated": false,
+      "limit_nodes": 250
+    }
+  }
+}

@@ -7321,6 +7321,7 @@ dependencies = [
 name = "xtask"
 version = "3.0.0"
 dependencies = [
+ "fs4",
  "jsonschema",
  "kanban-protocol",
  "serde",

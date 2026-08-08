@@ -1,0 +1,32 @@
+{
+  "data": {
+    "id": "sig_fixture",
+    "board_id": "fixture",
+    "observation_id": "obs_fixture",
+    "kind": "fixture",
+    "title": "fixture",
+    "summary": "fixture",
+    "severity": "info",
+    "status": "open",
+    "dedupe_key": "fixture",
+    "superseded_by_signal_id": null,
+    "reviewed_by": null,
+    "reviewed_at": null,
+    "review_reason": null,
+    "created_at": 1,
+    "updated_at": 1,
+    "observation": {
+      "id": "obs_fixture",
+      "board_id": "fixture",
+      "task_id": "t_fixture",
+      "task_ref_snapshot": "fixture#1",
+      "run_id": null,
+      "comment_id": null,
+      "actor": "fixture",
+      "agent_type": null,
+      "source": "fixture",
+      "created_at": 1,
+      "evidence": {}
+    }
+  }
+}

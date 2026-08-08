@@ -9,3 +9,4 @@ ledger、旧 recovery runbook、聚合快照、baseline 和一次性 workaround 
 - [0003 规范事实与派生数据](0003_canonical_and_derived_data.md)
 - [0004 显式任务生命周期](0004_explicit_task_lifecycle.md)
 - [0005 文档事实源与领域语言分层](0005_documentation_sources_of_truth.md)
+- [0006 Browser-first 的 Astryx 统一 Web UI](0006_browser_first_astryx_web_ui.md)

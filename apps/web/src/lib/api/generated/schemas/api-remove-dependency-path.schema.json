@@ -1,0 +1,19 @@
+{
+  "$id": "urn:kanban-tool:schema:api:remove-dependency-path:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "child_task_id": {
+      "type": "string"
+    },
+    "parent_task_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "child_task_id",
+    "parent_task_id"
+  ],
+  "title": "Kanban API remove dependency path v1",
+  "type": "object"
+}

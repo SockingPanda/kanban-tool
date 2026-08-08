@@ -1,0 +1,21 @@
+{
+  "$id": "urn:kanban-tool:schema:api:maintenance-backup-headers:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "Accept-Language": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "Content-Type": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "Content-Type"
+  ],
+  "title": "Kanban api.maintenance-backup request headers v1",
+  "type": "object"
+}

@@ -1,0 +1,6 @@
+packages:
+  - "apps/*"
+
+allowBuilds:
+  '@astryxdesign/core': false
+  esbuild: true

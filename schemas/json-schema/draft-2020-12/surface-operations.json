@@ -1536,6 +1536,14 @@
   },
   {
     "contracts": [
+      "runtime.web-config.output"
+    ],
+    "exclusion": null,
+    "key": "GET /app/runtime.json",
+    "surface": "config"
+  },
+  {
+    "contracts": [
       "cli.label-add.output"
     ],
     "exclusion": null,

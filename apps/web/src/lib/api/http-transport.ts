@@ -129,43 +129,39 @@ function hasDotSegmentOrBackslash(path: string): boolean {
   const segments = pathOnly.split("/")
   for (const segment of segments) {
     if (segment === "." || segment === "..") return true
-    let decoded: string
-    try {
-      decoded = decodeURIComponent(segment)
-    } catch {
-      return true
-    }
+    if (hasMalformedPercent(segment)) return true
 
-    let decodeLayers = 1
-    while (true) {
+    let layer = segment
+    for (let unwrapLayers = 0; ; unwrapLayers += 1) {
       if (
-        decoded === "."
-        || decoded === ".."
-        || decoded.includes("\\")
-        || decoded.includes("/")
-        || decoded.includes("\u0000")
+        layer.includes("\\")
+        || layer.includes("/")
+        || layer.includes("\u0000")
+        || /%(?:2f|5c|00)/i.test(layer)
       ) return true
-      if (!decoded.includes("%")) break
-      if (decodeLayers >= MAX_PATH_DECODE_LAYERS) {
-        try {
-          decodeURIComponent(decoded)
-        } catch {
-          // A residual literal percent was encoded by the previous successful pass.
-          break
-        }
-        // A further successful decode would exceed the bounded scan budget.
-        return true
-      }
-      try {
-        decoded = decodeURIComponent(decoded)
-        decodeLayers += 1
-      } catch {
-        // A residual literal percent was encoded by the previous successful pass.
-        break
-      }
+      const dotView = layer.replace(/%2e/gi, ".")
+      if (dotView === "." || dotView === "..") return true
+      if (!layer.includes("%25")) break
+      if (unwrapLayers >= MAX_PATH_DECODE_LAYERS) return true
+      layer = layer.replace(/%25/g, "%")
     }
   }
   return false
+}
+
+function hasMalformedPercent(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] !== "%") continue
+    const first = value[index + 1]
+    const second = value[index + 2]
+    if (first === undefined || second === undefined || !isHex(first) || !isHex(second)) return true
+    index += 2
+  }
+  return false
+}
+
+function isHex(value: string): boolean {
+  return /^[0-9a-f]$/i.test(value)
 }
 
 function requestURL(base: URL, path: string): string {

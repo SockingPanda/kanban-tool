@@ -72,10 +72,17 @@ describe("same-origin Web HTTP transport", () => {
   test.each([
     { path: "/api/v1/tasks/t_1/attachments/a_%25", allowed: true },
     { path: "/api/v1/tasks/t_1/attachments/a_%2525", allowed: true },
+    { path: "/api/v1/tasks/t_1/attachments/a_%25FF", allowed: true },
+    { path: "/api/v1/tasks/t_1/attachments/a_%E4%B8%AD", allowed: true },
     { path: "/api/v1/tasks/t_1/attachments/a_%", allowed: false },
     { path: "/api/v1/tasks/t_1/attachments/a_%2", allowed: false },
+    { path: "/api/v1/tasks/t_1/attachments/a_%ZZ", allowed: false },
     { path: "/api/v1/tasks/t_1/attachments/a_%252f", allowed: false },
+    { path: "/api/v1/tasks/t_1/attachments/a_%252f%25", allowed: false },
+    { path: "/api/v1/tasks/t_1/attachments/a_%255c%25", allowed: false },
+    { path: "/api/v1/tasks/t_1/attachments/a_%2500%25", allowed: false },
     { path: "/api/v1/tasks/t_1/attachments/%252e%252e", allowed: false },
+    { path: "/api/v1/tasks/t_1/attachments/%252e%252e%252f", allowed: false },
     { path: "/api/v1/tasks/t_1/attachments/a_%25255c", allowed: false },
     { path: "/api/v1/tasks/t_1/attachments/a_%252500", allowed: false },
   ])("handles encoded attachment percent layers safely: $path", async ({ path, allowed }) => {

@@ -31,6 +31,7 @@ import { createHttpTransport, type HttpTransport, type HttpTransportOptions } fr
 export type SignalRecord = ApiReviewSignalsResponseContract["data"][number]
 export type LabelOntologySignalRecord = ApiListLabelOntologySignalsResponseContract["data"][number]
 export type LabelOntologySignalDetail = ApiGetLabelOntologySignalResponseContract["data"]
+export type LabelOntologyActionRecord = LabelOntologySignalDetail["actions"][number]
 export type LabelOntologyReviewGroup = ApiReviewLabelOntologyResponseContract["data"][number]
 export type LabelAtomExplainRecord = ApiExplainLabelAtomResponseContract["data"]
 

@@ -33,6 +33,8 @@ export interface SignalsScreenProps {
   readonly boardName?: string
   readonly filters?: SignalsRouteFilters
   readonly selectedSignalId?: string | null
+  /** Incremented by the sync sink when a matching `signals`/`signal` target is invalidated. */
+  readonly invalidationRevision?: number
   readonly online?: boolean
   readonly onFiltersChange?: (filters: SignalsRouteFilters) => void
   readonly onSelectSignal?: (signalId: string | null) => void
@@ -50,7 +52,7 @@ function hasPriorData<T>(state: ReadState<T>): boolean {
   return state.phase === "success" || state.phase === "refreshing" || state.phase === "error"
 }
 
-function useReadState<T>(
+export function useReadState<T>(
   enabled: boolean,
   request: ((signal: AbortSignal) => Promise<T>) | null,
   key: string,
@@ -134,6 +136,7 @@ export function SignalsScreen({
   boardName,
   filters = {},
   selectedSignalId: selectedSignalIdProp,
+  invalidationRevision = 0,
   online = typeof navigator === "undefined" || navigator.onLine,
   onFiltersChange,
   onSelectSignal: onSelectSignalProp,
@@ -149,7 +152,7 @@ export function SignalsScreen({
     const query = queryFromFilters(effectiveFilters)
     return (signal: AbortSignal) => api.reviewSignals(query, signal)
   }, [api, filterKey])
-  const list = useReadState(Boolean(api), listRequest, `signals:${api?.board ?? "none"}:${filterKey}:${refreshToken}`, emptyListState())
+  const list = useReadState(Boolean(api), listRequest, `signals:${api?.board ?? "none"}:${filterKey}:${refreshToken}:${invalidationRevision}`, emptyListState())
 
   const visibleSignals = list.data
   useEffect(() => {
@@ -163,7 +166,7 @@ export function SignalsScreen({
     if (!api || !selectedSignalId) return null
     return (signal: AbortSignal) => api.getSignal(selectedSignalId, signal)
   }, [api, selectedSignalId])
-  const detail = useReadState(Boolean(api && selectedSignalId), detailRequest, `signal:${selectedSignalId ?? "none"}:${refreshToken}`, emptyDetailState())
+  const detail = useReadState(Boolean(api && selectedSignalId), detailRequest, `signal:${selectedSignalId ?? "none"}:${refreshToken}:${invalidationRevision}`, emptyDetailState())
 
   const updateFilters = (next: SignalsRouteFilters) => {
     setLocalFilters(next)

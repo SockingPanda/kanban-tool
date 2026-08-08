@@ -49,6 +49,7 @@ impl Host {
             "127.0.0.1".to_owned(),
             "--port".to_owned(),
             port.to_string(),
+            "--no-web".to_owned(),
         ];
         if let Some(path) = profile_path.as_ref() {
             args.extend([
@@ -179,7 +180,12 @@ fn wait_for_health(child: &mut Child, port: u16) {
                 .set_read_timeout(Some(Duration::from_millis(500)))
                 .expect("set health read timeout");
             stream
-                .write_all(b"GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                .write_all(
+                    format!(
+                        "GET /health HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n"
+                    )
+                    .as_bytes(),
+                )
                 .expect("write health request");
             let mut response = Vec::new();
             let _ = stream.read_to_end(&mut response);

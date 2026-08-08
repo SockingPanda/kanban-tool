@@ -17,12 +17,21 @@ use crate::{
     dispatcher::{DispatcherConfig, ShutdownSignal, run_dispatcher},
     http::operations,
     state::AppState,
+    web::WebHostConfig,
 };
 
 pub fn build_router(state: AppState) -> Router {
     operations::router(state)
         .layer(desktop_cors_layer())
         .layer(TraceLayer::new_for_http())
+}
+
+pub fn build_production_router(
+    state: AppState,
+    config: WebHostConfig,
+    listener: SocketAddr,
+) -> Router {
+    crate::web::build_production_router(state, config, listener)
 }
 
 pub async fn serve(addr: SocketAddr, state: AppState) -> std::io::Result<()> {
@@ -49,11 +58,53 @@ where
         .await
 }
 
+pub async fn serve_with_shutdown_and_web<S>(
+    addr: SocketAddr,
+    state: AppState,
+    web: WebHostConfig,
+    shutdown: S,
+) -> std::io::Result<()>
+where
+    S: Future<Output = ()> + Send + 'static,
+{
+    if !addr.ip().is_loopback() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "kanban serve 只接受 loopback 地址",
+        ));
+    }
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener_addr = listener.local_addr()?;
+    axum::serve(listener, build_production_router(state, web, listener_addr))
+        .with_graceful_shutdown(shutdown)
+        .await
+}
+
 pub async fn serve_with_dispatcher_shutdown(
     addr: SocketAddr,
     state: AppState,
     dispatcher: Option<DispatcherConfig>,
     shutdown: watch::Receiver<ShutdownSignal>,
+) -> std::io::Result<()> {
+    serve_with_dispatcher_shutdown_inner(addr, state, dispatcher, shutdown, None).await
+}
+
+pub async fn serve_with_dispatcher_shutdown_and_web(
+    addr: SocketAddr,
+    state: AppState,
+    dispatcher: Option<DispatcherConfig>,
+    shutdown: watch::Receiver<ShutdownSignal>,
+    web: WebHostConfig,
+) -> std::io::Result<()> {
+    serve_with_dispatcher_shutdown_inner(addr, state, dispatcher, shutdown, Some(web)).await
+}
+
+async fn serve_with_dispatcher_shutdown_inner(
+    addr: SocketAddr,
+    state: AppState,
+    dispatcher: Option<DispatcherConfig>,
+    shutdown: watch::Receiver<ShutdownSignal>,
+    web: Option<WebHostConfig>,
 ) -> std::io::Result<()> {
     if !addr.ip().is_loopback() {
         return Err(std::io::Error::new(
@@ -62,9 +113,13 @@ pub async fn serve_with_dispatcher_shutdown(
         ));
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener_addr = listener.local_addr()?;
+    let router = web
+        .map(|web| build_production_router(state.clone(), web, listener_addr))
+        .unwrap_or_else(|| build_router(state.clone()));
     let (http_shutdown_tx, http_shutdown_rx) = oneshot::channel();
     let mut http = std::pin::pin!(
-        axum::serve(listener, build_router(state.clone()))
+        axum::serve(listener, router)
             .with_graceful_shutdown(async move {
                 let _ = http_shutdown_rx.await;
             })
@@ -73,7 +128,7 @@ pub async fn serve_with_dispatcher_shutdown(
     let dispatcher_shutdown = shutdown.clone();
     let mut dispatcher = std::pin::pin!(async move {
         if let Some(config) = dispatcher {
-            run_dispatcher(state, config, addr, dispatcher_shutdown).await
+            run_dispatcher(state, config, listener_addr, dispatcher_shutdown).await
         } else {
             wait_for_graceful(dispatcher_shutdown).await;
             Ok(())

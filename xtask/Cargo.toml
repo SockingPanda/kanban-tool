@@ -17,6 +17,7 @@ name = "xtask"
 path = "src/lib.rs"
 
 [dependencies]
+fs4.workspace = true
 jsonschema = { workspace = true, default-features = false }
 kanban-protocol = { workspace = true, default-features = false, features = ["schema"] }
 serde = { workspace = true, features = ["derive"] }

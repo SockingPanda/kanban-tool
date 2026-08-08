@@ -7,10 +7,12 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
+    fs::OpenOptions,
     path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use fs4::fs_std::FileExt;
 use kanban_protocol::{
     ContractDirection, ContractStrictness, ContractSurface, EndpointDescriptor, EndpointObligation,
     HttpMethod, OperationContract, endpoint_catalog, operation_inventory,
@@ -120,7 +122,7 @@ pub fn run(repo_root: &Path, command: &str) -> ToolResult<()> {
     }
 }
 
-/// 原子生成精确的 Web output directory。
+/// 可恢复地生成精确的 Web output directory。
 pub fn generate(repo_root: &Path) -> ToolResult<()> {
     let generated = expected_files(repo_root)?;
     let output = repo_relative_path(
@@ -129,19 +131,27 @@ pub fn generate(repo_root: &Path) -> ToolResult<()> {
         RepoPathKind::Directory,
         true,
     )?;
-    atomic_replace_directory(&output, &generated)?;
+    recoverable_replace_directory(&output, &generated)?;
     Ok(())
 }
 
 /// 在内存重新生成并逐字节比较，不写入任何文件。
 pub fn check(repo_root: &Path) -> ToolResult<()> {
-    let generated = expected_files(repo_root)?;
     let output = repo_relative_path(
         repo_root,
         OUTPUT_RELATIVE_PATH,
         RepoPathKind::Directory,
-        false,
+        true,
     )?;
+    let parent = output.parent().ok_or_else(|| {
+        failure(format!(
+            "Web output path has no parent: {}",
+            output.display()
+        ))
+    })?;
+    let _lock = acquire_replace_lock(parent, ReplaceLockMode::Shared, false)?;
+    let generated = expected_files(repo_root)?;
+    ensure_replace_state_clean(&output)?;
     compare_output_directory(&output, &generated)
 }
 
@@ -968,26 +978,94 @@ fn remove_owned_directory_if_present(path: &Path) -> ToolResult<()> {
     }
 }
 
-fn owned_directory_exists(path: &Path) -> ToolResult<bool> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => Err(failure(format!(
-            "owned temporary directory 不得为 symlink: {}",
-            path.display()
-        ))),
-        Ok(metadata) if metadata.is_dir() => Ok(true),
-        Ok(_) => Err(failure(format!(
-            "owned temporary path 必须是 directory: {}",
-            path.display()
-        ))),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(failure(format!(
-            "owned temporary path 不可访问: {}: {error}",
-            path.display()
-        ))),
+const GENERATED_TEMP_PREFIX: &str = ".generated.tmp-";
+const GENERATED_BACKUP_PREFIX: &str = ".generated.old-";
+const GENERATED_LOCK_FILE: &str = ".generated.lock";
+
+#[derive(Debug, Clone, Copy)]
+enum ReplaceLockMode {
+    Shared,
+    Exclusive,
+}
+
+#[derive(Debug)]
+struct ReplaceLock {
+    file: fs::File,
+}
+
+impl Drop for ReplaceLock {
+    fn drop(&mut self) {
+        let _ = self.file.unlock();
     }
 }
 
-fn atomic_replace_directory(target: &Path, files: &BTreeMap<String, Vec<u8>>) -> ToolResult<()> {
+fn acquire_replace_lock(
+    parent: &Path,
+    mode: ReplaceLockMode,
+    create: bool,
+) -> ToolResult<ReplaceLock> {
+    validate_directory_chain(parent, false)?;
+    let path = parent.join(GENERATED_LOCK_FILE);
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(failure(format!(
+                "generated lock file must not be a symlink: {}",
+                path.display()
+            )));
+        }
+        Ok(metadata) if !metadata.is_file() => {
+            return Err(failure(format!(
+                "generated lock file must be regular: {}",
+                path.display()
+            )));
+        }
+        Ok(metadata) => Some(metadata),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound && !create => None,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(failure(format!(
+                "generated lock file 不可访问: {}: {error}",
+                path.display()
+            )));
+        }
+    };
+    if metadata.is_none() && !create {
+        return Err(failure(format!(
+            "generated lock file missing: {}; run `kanban web-contracts generate` first",
+            path.display()
+        )));
+    }
+    let file = if create {
+        OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&path)
+            .map_err(|error| failure(format!("无法打开 generated lock file: {path:?}: {error}")))?
+    } else {
+        OpenOptions::new()
+            .read(true)
+            .open(&path)
+            .map_err(|error| failure(format!("无法读取 generated lock file: {path:?}: {error}")))?
+    };
+    match mode {
+        ReplaceLockMode::Shared => file.lock_shared(),
+        ReplaceLockMode::Exclusive => file.lock_exclusive(),
+    }
+    .map_err(|error| {
+        failure(format!(
+            "无法锁定 generated output: {}: {error}",
+            path.display()
+        ))
+    })?;
+    Ok(ReplaceLock { file })
+}
+
+fn recoverable_replace_directory(
+    target: &Path,
+    files: &BTreeMap<String, Vec<u8>>,
+) -> ToolResult<()> {
     let parent = target.parent().ok_or_else(|| {
         failure(format!(
             "Web output path has no parent: {}",
@@ -997,36 +1075,20 @@ fn atomic_replace_directory(target: &Path, files: &BTreeMap<String, Vec<u8>>) ->
     validate_directory_chain(parent, true)?;
     fs::create_dir_all(parent)?;
     validate_directory_chain(parent, false)?;
-    let target_exists = match fs::symlink_metadata(target) {
-        Ok(metadata) => {
-            if metadata.file_type().is_symlink() {
-                return Err(failure(format!(
-                    "Web output path must not be a symlink: {}",
-                    target.display()
-                )));
-            }
-            if !metadata.is_dir() {
-                return Err(failure(format!(
-                    "Web output path must be a directory: {}",
-                    target.display()
-                )));
-            }
-            true
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-        Err(error) => {
-            return Err(failure(format!(
-                "Web output path 不可访问: {}: {error}",
-                target.display()
-            )));
-        }
-    };
+    let _lock = acquire_replace_lock(parent, ReplaceLockMode::Exclusive, true)?;
+    recover_replace_state(target)?;
+    let target_exists = directory_exists(target, "Web output path")?;
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
-    let temp = parent.join(format!(".generated.tmp-{}-{nonce}", std::process::id()));
-    remove_owned_directory_if_present(&temp)?;
+    let temp = parent.join(format!(
+        "{GENERATED_TEMP_PREFIX}{}-{nonce}",
+        std::process::id()
+    ));
+    // 上面的 recovery scan 已接管所有 generated prefix 路径；创建新目录前仍显式检查
+    // 同 nonce 冲突，避免误删未知路径。
+    ensure_absent(&temp, "generated temporary path")?;
     fs::create_dir(&temp)?;
     for (relative, bytes) in files {
         let path = temp.join(relative);
@@ -1035,22 +1097,197 @@ fn atomic_replace_directory(target: &Path, files: &BTreeMap<String, Vec<u8>>) ->
         }
         fs::write(path, bytes)?;
     }
-    let backup = parent.join(format!(".generated.old-{}-{nonce}", std::process::id()));
-    remove_owned_directory_if_present(&backup)?;
+    let backup = parent.join(format!(
+        "{GENERATED_BACKUP_PREFIX}{}-{nonce}",
+        std::process::id()
+    ));
+    ensure_absent(&backup, "generated backup path")?;
     if target_exists {
         fs::rename(target, &backup)?;
     }
     if let Err(error) = fs::rename(&temp, target) {
-        if owned_directory_exists(&backup)? {
+        if directory_exists(&backup, "generated backup path")? {
             let _ = fs::rename(&backup, target);
         }
-        let _ = fs::remove_dir_all(&temp);
+        let _ = remove_owned_directory_if_present(&temp);
         return Err(error.into());
     }
-    if owned_directory_exists(&backup)? {
+    if directory_exists(&backup, "generated backup path")? {
         fs::remove_dir_all(backup)?;
     }
     Ok(())
+}
+
+/// 恢复在两个目录 rename 之间中断的 replace。
+///
+/// 该 rename sequence 明确设计为可恢复，而不是声称跨目录 atomic：进程可能在把
+/// `target` 移到 `backup` 后、把 `temp` 放入目标前停止。每次调用都会扫描 parent，
+/// 只接受至多一组 owned temp/backup，并且只处理含义明确的状态；未知名称、symlink、
+/// 非目录和多候选状态都会 fail closed，不删除任何内容。
+fn recover_replace_state(target: &Path) -> ToolResult<()> {
+    let state = inspect_replace_state(target, true)?;
+
+    match (
+        state.target_exists,
+        state.backup.is_some(),
+        state.temp.is_some(),
+    ) {
+        (false, true, true) => {
+            let backup = state.backup.expect("backup presence checked");
+            let temp = state.temp.expect("temp presence checked");
+            fs::rename(&backup, target).map_err(|error| {
+                failure(format!(
+                    "无法从 owned backup 恢复 Web output {}: {error}",
+                    target.display()
+                ))
+            })?;
+            remove_owned_directory_if_present(&temp)?;
+        }
+        (false, true, false) => {
+            let backup = state.backup.expect("backup presence checked");
+            fs::rename(&backup, target).map_err(|error| {
+                failure(format!(
+                    "无法从 owned backup 恢复 Web output {}: {error}",
+                    target.display()
+                ))
+            })?;
+        }
+        (true, true, false) => {
+            remove_owned_directory_if_present(&state.backup.expect("backup presence checked"))?;
+        }
+        (false, false, true) | (true, false, true) => {
+            remove_owned_directory_if_present(&state.temp.expect("temp presence checked"))?;
+        }
+        (true, true, true) => {
+            return Err(failure(
+                "ambiguous generated replace state: target, backup and temp all exist",
+            ));
+        }
+        (false, false, false) | (true, false, false) => {}
+    }
+    Ok(())
+}
+
+#[derive(Debug)]
+struct ReplaceState {
+    target_exists: bool,
+    temp: Option<PathBuf>,
+    backup: Option<PathBuf>,
+}
+
+fn inspect_replace_state(target: &Path, create_parent: bool) -> ToolResult<ReplaceState> {
+    let parent = target.parent().ok_or_else(|| {
+        failure(format!(
+            "Web output path has no parent: {}",
+            target.display()
+        ))
+    })?;
+    if create_parent {
+        validate_directory_chain(parent, true)?;
+        fs::create_dir_all(parent)?;
+    }
+    validate_directory_chain(parent, false)?;
+    Ok(ReplaceState {
+        target_exists: directory_exists(target, "Web output path")?,
+        temp: discover_owned_directory(parent, GENERATED_TEMP_PREFIX)?,
+        backup: discover_owned_directory(parent, GENERATED_BACKUP_PREFIX)?,
+    })
+}
+
+fn ensure_replace_state_clean(target: &Path) -> ToolResult<()> {
+    let state = inspect_replace_state(target, false)?;
+    if state.temp.is_none() && state.backup.is_none() {
+        return Ok(());
+    }
+    Err(failure(format!(
+        "Web output has pending recoverable replace state (target_exists={}, temp={:?}, backup={:?}); run `kanban web-contracts generate` to recover",
+        state.target_exists, state.temp, state.backup
+    )))
+}
+
+fn directory_exists(path: &Path, label: &str) -> ToolResult<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(failure(format!(
+            "{label} must not be a symlink: {}",
+            path.display()
+        ))),
+        Ok(metadata) if metadata.is_dir() => Ok(true),
+        Ok(_) => Err(failure(format!(
+            "{label} must be a directory: {}",
+            path.display()
+        ))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(failure(format!(
+            "{label} 不可访问: {}: {error}",
+            path.display()
+        ))),
+    }
+}
+
+fn ensure_absent(path: &Path, label: &str) -> ToolResult<()> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Err(failure(format!("{label} collision: {}", path.display()))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(failure(format!(
+            "{label} 不可访问: {}: {error}",
+            path.display()
+        ))),
+    }
+}
+
+fn discover_owned_directory(parent: &Path, prefix: &str) -> ToolResult<Option<PathBuf>> {
+    let mut candidates = Vec::new();
+    for entry in fs::read_dir(parent)? {
+        let entry = entry?;
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !name.starts_with(prefix) {
+            continue;
+        }
+        let suffix = &name[prefix.len()..];
+        let valid_name = suffix.split_once('-').is_some_and(|(pid, nonce)| {
+            !pid.is_empty()
+                && !nonce.is_empty()
+                && pid.bytes().all(|byte| byte.is_ascii_digit())
+                && nonce.bytes().all(|byte| byte.is_ascii_digit())
+        });
+        if !valid_name {
+            return Err(failure(format!(
+                "owned generated path name is invalid: {}",
+                path.display()
+            )));
+        }
+        // 不跟随 symlink 解析 metadata；匹配到 symlink 或 regular file 都是不安全/歧义状态，
+        // 不得删除。
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(failure(format!(
+                    "owned generated path must not be a symlink: {}",
+                    path.display()
+                )));
+            }
+            Ok(metadata) if metadata.is_dir() => candidates.push(path),
+            Ok(_) => {
+                return Err(failure(format!(
+                    "owned generated path must be a directory: {}",
+                    path.display()
+                )));
+            }
+            Err(error) => {
+                return Err(failure(format!(
+                    "owned generated path 不可访问: {}: {error}",
+                    path.display()
+                )));
+            }
+        }
+    }
+    if candidates.len() > 1 {
+        return Err(failure(format!(
+            "ambiguous owned generated paths with prefix {prefix:?}: {candidates:?}"
+        )));
+    }
+    Ok(candidates.pop())
 }
 
 fn collect_files(root: &Path) -> ToolResult<BTreeMap<String, Vec<u8>>> {
@@ -1507,9 +1744,253 @@ mod tests {
         fs::remove_dir_all(temp).expect("remove source chain test directory");
     }
 
+    #[test]
+    fn recoverable_state_restores_missing_target_and_removes_stale_temp() {
+        let root = std::env::temp_dir().join(format!(
+            "kanban-web-contracts-recovery-missing-target-{}",
+            std::process::id()
+        ));
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("remove old recovery directory");
+        }
+        fs::create_dir_all(&root).expect("create recovery directory");
+        let target = root.join("generated");
+        let backup = root.join(".generated.old-123-1");
+        let temp = root.join(".generated.tmp-123-1");
+        fs::create_dir(&backup).expect("create owned backup");
+        fs::write(backup.join("sentinel"), b"old").expect("write old sentinel");
+        fs::create_dir(&temp).expect("create owned temp");
+        fs::write(temp.join("sentinel"), b"new").expect("write new sentinel");
+
+        recover_replace_state(&target).expect("missing target should recover from backup");
+
+        assert_eq!(
+            fs::read(target.join("sentinel")).expect("read restored target"),
+            b"old"
+        );
+        assert!(!backup.exists());
+        assert!(!temp.exists());
+        fs::remove_dir_all(root).expect("remove recovery directory");
+    }
+
+    #[test]
+    fn recoverable_state_cleans_new_target_backup_after_temp_rename() {
+        let root = std::env::temp_dir().join(format!(
+            "kanban-web-contracts-recovery-new-target-{}",
+            std::process::id()
+        ));
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("remove old recovery directory");
+        }
+        fs::create_dir_all(&root).expect("create recovery directory");
+        let target = root.join("generated");
+        let backup = root.join(".generated.old-123-2");
+        fs::create_dir(&target).expect("create new target");
+        fs::write(target.join("sentinel"), b"new").expect("write new sentinel");
+        fs::create_dir(&backup).expect("create owned backup");
+        fs::write(backup.join("sentinel"), b"old").expect("write old sentinel");
+
+        recover_replace_state(&target).expect("new target should win and stale backup clean");
+
+        assert_eq!(
+            fs::read(target.join("sentinel")).expect("read target"),
+            b"new"
+        );
+        assert!(!backup.exists());
+        fs::remove_dir_all(root).expect("remove recovery directory");
+    }
+
+    #[test]
+    fn recoverable_state_cleans_temp_before_target_rename() {
+        let root = std::env::temp_dir().join(format!(
+            "kanban-web-contracts-recovery-temp-only-{}",
+            std::process::id()
+        ));
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("remove old recovery directory");
+        }
+        fs::create_dir_all(&root).expect("create recovery directory");
+        let target = root.join("generated");
+        let temp = root.join(".generated.tmp-123-3");
+        fs::create_dir(&temp).expect("create owned temp");
+
+        recover_replace_state(&target).expect("stale temp should be cleaned");
+
+        assert!(!target.exists());
+        assert!(!temp.exists());
+        fs::remove_dir_all(root).expect("remove recovery directory");
+    }
+
+    #[test]
+    fn recoverable_state_rejects_ambiguous_target_backup_temp_without_mutation() {
+        let root = std::env::temp_dir().join(format!(
+            "kanban-web-contracts-recovery-ambiguous-{}",
+            std::process::id()
+        ));
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("remove old recovery directory");
+        }
+        fs::create_dir_all(&root).expect("create recovery directory");
+        let target = root.join("generated");
+        let backup = root.join(".generated.old-123-4");
+        let temp = root.join(".generated.tmp-123-4");
+        fs::create_dir(&target).expect("create target");
+        fs::write(target.join("sentinel"), b"target").expect("write target sentinel");
+        fs::create_dir(&backup).expect("create backup");
+        fs::write(backup.join("sentinel"), b"backup").expect("write backup sentinel");
+        fs::create_dir(&temp).expect("create temp");
+        fs::write(temp.join("sentinel"), b"temp").expect("write temp sentinel");
+
+        let error = recover_replace_state(&target).expect_err("ambiguous state must fail closed");
+
+        assert!(error.to_string().contains("ambiguous"));
+        assert_eq!(
+            fs::read(target.join("sentinel")).expect("read target"),
+            b"target"
+        );
+        assert_eq!(
+            fs::read(backup.join("sentinel")).expect("read backup"),
+            b"backup"
+        );
+        assert_eq!(fs::read(temp.join("sentinel")).expect("read temp"), b"temp");
+        fs::remove_dir_all(root).expect("remove recovery directory");
+    }
+
     #[cfg(unix)]
     #[test]
-    fn atomic_generation_rejects_symlink_output_parent() {
+    fn recoverable_state_rejects_owned_symlink_without_removing_it() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "kanban-web-contracts-recovery-symlink-{}",
+            std::process::id()
+        ));
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("remove old recovery directory");
+        }
+        fs::create_dir_all(&root).expect("create recovery directory");
+        let external = root.join("external");
+        fs::create_dir(&external).expect("create external directory");
+        let target = root.join("generated");
+        let temp = root.join(".generated.tmp-123-6");
+        symlink(&external, &temp).expect("create owned temp symlink");
+
+        let error = recover_replace_state(&target).expect_err("owned symlink must fail closed");
+
+        assert!(error.to_string().contains("symlink"));
+        assert!(temp.exists());
+        assert!(!target.exists());
+        fs::remove_file(temp).expect("remove owned temp symlink");
+        fs::remove_dir_all(root).expect("remove recovery directory");
+    }
+
+    #[test]
+    fn check_pending_replace_state_is_read_only() {
+        let root = std::env::temp_dir().join(format!(
+            "kanban-web-contracts-check-read-only-{}",
+            std::process::id()
+        ));
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("remove old check directory");
+        }
+        fs::create_dir_all(&root).expect("create check directory");
+        let target = root.join("generated");
+        let backup = root.join(".generated.old-123-5");
+        fs::create_dir(&target).expect("create target");
+        fs::write(target.join("sentinel"), b"target").expect("write target sentinel");
+        fs::create_dir(&backup).expect("create backup");
+        fs::write(backup.join("sentinel"), b"backup").expect("write backup sentinel");
+        let mut before = fs::read_dir(&root)
+            .expect("read before state")
+            .map(|entry| {
+                let entry = entry.expect("read before entry");
+                let metadata = entry.metadata().expect("read before metadata");
+                (entry.file_name(), metadata.len(), metadata.is_dir())
+            })
+            .collect::<Vec<_>>();
+        before.sort_by(|left, right| left.0.cmp(&right.0));
+
+        let error =
+            ensure_replace_state_clean(&target).expect_err("check must report pending state");
+        assert!(
+            error
+                .to_string()
+                .contains("run `kanban web-contracts generate`")
+        );
+
+        let mut after = fs::read_dir(&root)
+            .expect("read after state")
+            .map(|entry| {
+                let entry = entry.expect("read after entry");
+                let metadata = entry.metadata().expect("read after metadata");
+                (entry.file_name(), metadata.len(), metadata.is_dir())
+            })
+            .collect::<Vec<_>>();
+        after.sort_by(|left, right| left.0.cmp(&right.0));
+        assert_eq!(before, after);
+        fs::remove_dir_all(root).expect("remove check directory");
+    }
+
+    #[test]
+    fn check_missing_lock_is_actionable_and_read_only() {
+        let root = std::env::temp_dir().join(format!(
+            "kanban-web-contracts-check-missing-lock-{}",
+            std::process::id()
+        ));
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("remove old missing-lock directory");
+        }
+        fs::create_dir_all(&root).expect("create missing-lock directory");
+        let before = fs::read_dir(&root)
+            .expect("read before missing-lock state")
+            .count();
+
+        let error = acquire_replace_lock(&root, ReplaceLockMode::Shared, false)
+            .expect_err("missing shared lock must fail without creating it");
+
+        assert!(error.to_string().contains("generated lock file missing"));
+        assert_eq!(
+            fs::read_dir(&root)
+                .expect("read after missing-lock state")
+                .count(),
+            before
+        );
+        assert!(!root.join(GENERATED_LOCK_FILE).exists());
+        fs::remove_dir_all(root).expect("remove missing-lock directory");
+    }
+
+    #[test]
+    fn replace_lock_serializes_exclusive_generators() {
+        let root = std::env::temp_dir().join(format!(
+            "kanban-web-contracts-lock-test-{}",
+            std::process::id()
+        ));
+        if root.exists() {
+            fs::remove_dir_all(&root).expect("remove old lock directory");
+        }
+        fs::create_dir_all(&root).expect("create lock directory");
+        let first = acquire_replace_lock(&root, ReplaceLockMode::Exclusive, true)
+            .expect("acquire first exclusive lock");
+        let lock_path = root.join(GENERATED_LOCK_FILE);
+        let contender = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock_path)
+            .expect("open lock contender");
+        assert!(!contender.try_lock_exclusive().expect("try lock contender"));
+        drop(first);
+        assert!(
+            contender
+                .try_lock_exclusive()
+                .expect("try lock after release")
+        );
+        contender.unlock().expect("unlock contender");
+        fs::remove_dir_all(root).expect("remove lock directory");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recoverable_generation_rejects_symlink_output_parent() {
         use std::os::unix::fs::symlink;
 
         let temp = std::env::temp_dir().join(format!(
@@ -1528,7 +2009,7 @@ mod tests {
         let mut files = BTreeMap::new();
         files.insert("manifest.json".to_owned(), b"{}\n".to_vec());
         let error =
-            atomic_replace_directory(&target, &files).expect_err("parent symlink must fail");
+            recoverable_replace_directory(&target, &files).expect_err("parent symlink must fail");
         assert!(error.to_string().contains("symlink"));
         assert!(!external.join("manifest.json").exists());
         fs::remove_file(parent).expect("remove parent symlink");
@@ -1537,7 +2018,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn atomic_generation_rejects_symlink_output_without_touching_target() {
+    fn recoverable_generation_rejects_symlink_output_without_touching_target() {
         use std::os::unix::fs::symlink;
 
         let root = repository_root();
@@ -1555,7 +2036,7 @@ mod tests {
         fs::write(target.join("sentinel"), b"keep").expect("write target sentinel");
         let link = temp.join("generated");
         symlink(&target, &link).expect("create output symlink");
-        let error = atomic_replace_directory(&link, &expected).expect_err("symlink must fail");
+        let error = recoverable_replace_directory(&link, &expected).expect_err("symlink must fail");
         assert!(error.to_string().contains("symlink"));
         assert_eq!(
             fs::read(target.join("sentinel")).expect("read target sentinel"),

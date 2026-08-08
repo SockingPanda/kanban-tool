@@ -4,10 +4,10 @@
   "version": "3.0.0",
   "identifier": "io.github.sockingpanda.kanban",
   "build": {
-    "beforeDevCommand": "pnpm dev --host 127.0.0.1",
-    "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "pnpm vite-build",
-    "frontendDist": "../dist"
+    "beforeDevCommand": "pnpm --filter @kanban-tool/web vite-build",
+    "devUrl": "http://127.0.0.1:8721/app/",
+    "beforeBuildCommand": "pnpm --filter @kanban-tool/web vite-build",
+    "frontendDist": "../../web/dist"
   },
   "app": {
     "windows": [
@@ -29,7 +29,8 @@
       "icons/icon.png"
     ],
     "resources": {
-      "../../web/dist/": "web/"
+      "../../web/dist/": "web/",
+      "bin/kanban": "kanban"
     },
     "targets": [
       "deb"

@@ -649,8 +649,8 @@ describe("WebSyncController", () => {
     transport.mock.calls[0]?.[0].onError(new Error("disconnect"))
     await vi.waitFor(() => expect(querySink.refetchObserved).toHaveBeenCalledOnce())
     await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(2))
-    transport.mock.calls[1]?.[0].onError(new Error("overlap disconnect"))
-    await Promise.resolve()
+    const closedConnection = transport.mock.results[1]?.value as { closed: boolean } | undefined
+    if (closedConnection !== undefined) closedConnection.closed = true
     advance(249)
     expect(transport).toHaveBeenCalledTimes(2)
     resolveBarrier({

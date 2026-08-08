@@ -897,7 +897,7 @@ export class WebSyncController {
       this.clearRecoveryConnectionRetryTimer()
       if (result.confirmedCursor > after) this.anomalyAttempts.delete(`${this.boardId}:${after}`)
       if (signal.aborted || !this.isRecoveryCurrent(token)) return
-      const hasCurrentConnection = this.connection !== null && this.connectionAbort !== null && !this.connectionAbort.signal.aborted
+      const hasCurrentConnection = this.connection !== null && !this.connection.closed && this.connectionAbort !== null && !this.connectionAbort.signal.aborted
       if (!hasCurrentConnection) this.openConnection()
       this.state = this.recoverySawLiveFrame && hasCurrentConnection ? "live" : "connecting"
       this.recovery = null

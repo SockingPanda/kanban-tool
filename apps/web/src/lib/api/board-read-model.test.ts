@@ -95,7 +95,7 @@ function routeResponse(url: string): Response {
   if (parsed.pathname === "/api/v1/boards") {
     return jsonResponse({ data: [board("b_default", "default", "Default"), board("b_other", "other", "Other")] })
   }
-  if (parsed.pathname === "/api/v1/boards/b_default/columns") {
+  if (parsed.pathname === "/api/v1/boards/default/columns") {
     return jsonResponse({
       data: [
         column("c_ready", "b_default", "ready", 20),
@@ -104,7 +104,7 @@ function routeResponse(url: string): Response {
       ],
     })
   }
-  if (parsed.pathname === "/api/v1/boards/b_default/tasks/by-status") {
+  if (parsed.pathname === "/api/v1/boards/default/tasks/by-status") {
     const status = parsed.searchParams.get("status")
     if (status === "ready") return jsonResponse({ data: { statuses: [{ status, tasks: [task("t_ready", "b_default", "default", status, 20)], page: { limit: 1000, offset: 0, total: 1 } }] }, meta: { limit: 1000, offset: 0 } })
     if (status === "todo") return jsonResponse({ data: { statuses: [{ status, tasks: [task("t_todo", "b_default", "default", status, 10)], page: { limit: 1000, offset: 0, total: 1 } }] }, meta: { limit: 1000, offset: 0 } })
@@ -117,7 +117,7 @@ describe("board read model", () => {
   test("resolves the exact selector, preserves server columns, and groups one request per unique status", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => routeResponse(String(input)))
 
-    const model = await loadBoardReadModel(runtime, undefined, { fetcher })
+    const model = await loadBoardReadModel(runtime, undefined, { dependencies: { fetcher } })
 
     expect(model.identity).toEqual({
       selector: "default",
@@ -130,9 +130,9 @@ describe("board read model", () => {
       { status: "todo", position: 10, hidden: false },
       { status: "done", position: 30, hidden: true },
     ])
-    expect(model.tasksByStatus.get("ready")?.map(({ id }) => id)).toEqual(["t_ready"])
-    expect(model.tasksByStatus.get("todo")?.map(({ id }) => id)).toEqual(["t_todo"])
-    expect(model.tasksByStatus.get("done")).toEqual([])
+    expect(model.tasksByStatus.ready?.map(({ id }) => id)).toEqual(["t_ready"])
+    expect(model.tasksByStatus.todo?.map(({ id }) => id)).toEqual(["t_todo"])
+    expect(model.tasksByStatus.done).toEqual([])
     expect(fetcher).toHaveBeenCalledTimes(5)
     expect(fetcher.mock.calls.filter(([input]) => String(input).includes("/tasks/by-status")).map(([input]) => String(input))).toHaveLength(3)
     expect(fetcher.mock.calls.every(([, init]) => init?.credentials === "same-origin")).toBe(true)
@@ -146,7 +146,7 @@ describe("board read model", () => {
       return jsonResponse({ data: { statuses: [{ status: "todo", tasks: [], page: { limit: 1000, offset: 0, total: 0 } }] }, meta: { limit: 1000, offset: 0 } })
     })
 
-    await expect(loadBoardReadModel(runtime, "default", { fetcher })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "anomaly",
     })
@@ -164,7 +164,7 @@ describe("board read model", () => {
       })
     })
 
-    await expect(loadBoardReadModel(runtime, "default", { fetcher })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "anomaly",
     })
@@ -175,7 +175,7 @@ describe("board read model", () => {
       throw new TypeError("Failed to fetch")
     })
 
-    await expect(loadBoardReadModel(runtime, "default", { fetcher })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "offline",
     })
@@ -193,7 +193,7 @@ describe("board read model", () => {
       return jsonResponse({ data: { statuses: [{ status: "ready", tasks: page.tasks, page: { limit: 1000, offset, total: page.total } }] }, meta: { limit: 1000, offset } })
     })
 
-    await expect(loadBoardReadModel(runtime, "default", { fetcher })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "anomaly",
     })
@@ -212,9 +212,9 @@ describe("board read model", () => {
       return jsonResponse({ data: { statuses: [{ status: "ready", tasks, page: { limit: 2, offset, total: 3 } }] }, meta: { limit: 2, offset } })
     })
 
-    const model = await loadBoardReadModel(runtime, "default", { fetcher, taskLimit: 2 })
+    const model = await loadBoardReadModel(runtime, "default", { dependencies: { fetcher }, taskPageSize: 2 })
 
-    expect(model.tasksByStatus.get("ready")?.map(({ id }) => id)).toEqual(["t_0", "t_1", "t_2"])
+    expect(model.tasksByStatus.ready?.map(({ id }) => id)).toEqual(["t_0", "t_1", "t_2"])
   })
 
   test("rejects cross-origin runtime API bases before issuing a request", async () => {
@@ -223,12 +223,96 @@ describe("board read model", () => {
 
     await expect(
       loadBoardReadModel(crossOriginRuntime, "default", {
-        fetcher,
-        documentBaseURI: "https://kanban.test/app/",
+        dependencies: { fetcher, documentBaseURI: "https://kanban.test/app/" },
       }),
     ).rejects.toMatchObject({ name: "BoardReadError", kind: "cross_origin" })
     expect(fetcher).not.toHaveBeenCalled()
   })
+
+  test("fails closed on duplicate board identities and invalid canonical slug/id", async () => {
+    const duplicateFetcher = vi.fn<typeof fetch>(async () => jsonResponse({
+      data: [board("b_default", "default", "Default"), board("b_default", "other", "Other")],
+    }))
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher: duplicateFetcher } })).rejects.toMatchObject({
+      name: "BoardReadError",
+      kind: "anomaly",
+    })
+
+    for (const invalid of [
+      board("b_default", "Bads", "Default"),
+      board("b_\u0000", "default", "Default"),
+    ]) {
+      const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ data: [invalid] }))
+      await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
+        name: "BoardReadError",
+        kind: "anomaly",
+      })
+    }
+  })
+
+  test("rejects an unsafe task page size before issuing requests", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+    await expect(loadBoardReadModel(runtime, "default", {
+      dependencies: { fetcher },
+      taskPageSize: 0,
+    })).rejects.toMatchObject({ name: "BoardReadError", kind: "anomaly" })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  test("returns a narrow, deeply frozen projection", async () => {
+    const fetcher = vi.fn<typeof fetch>(async (input) => routeResponse(String(input)))
+    const model = await loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })
+    const ready = model.tasksByStatus.ready?.[0]
+    expect(Object.isFrozen(model)).toBe(true)
+    expect(Object.isFrozen(model.identity)).toBe(true)
+    expect(Object.isFrozen(model.columns)).toBe(true)
+    expect(Object.isFrozen(model.columns[0])).toBe(true)
+    expect(Object.isFrozen(model.tasksByStatus)).toBe(true)
+    expect(Object.isFrozen(model.tasksByStatus.ready)).toBe(true)
+    expect(Object.isFrozen(ready)).toBe(true)
+    expect(ready).not.toHaveProperty("description")
+    expect(ready).not.toHaveProperty("result")
+    expect(ready).not.toHaveProperty("metadata")
+    expect(ready).not.toHaveProperty("labels")
+  })
+
+  test("enforces the shared raw-byte budget and reports an anomaly", async () => {
+    const transport = {
+      get: vi.fn(async (path: string, _signal?: AbortSignal, onResponseBytes?: (bytes: number) => void) => {
+        onResponseBytes?.(64 * 1024 * 1024 + 1)
+        if (path.startsWith("/api/v1/boards?")) return { data: [board("b_default", "default", "Default")] }
+        return { data: [] }
+      }),
+    }
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { transport } })).rejects.toMatchObject({
+      name: "BoardReadError",
+      kind: "anomaly",
+    })
+  })
+
+  test("enforces the 50k task budget instead of silently truncating pagination", async () => {
+    const transport = {
+      get: vi.fn(async (path: string) => {
+        if (path.startsWith("/api/v1/boards?")) return { data: [board("b_default", "default", "Default")] }
+        if (path.endsWith("/columns")) return { data: [column("c_ready", "b_default", "ready", 10)] }
+        const url = new URL(path, "http://127.0.0.1")
+        const offset = Number(url.searchParams.get("offset"))
+        const count = offset === 50_000 ? 1 : 1_000
+        const tasks = Array.from({ length: count }, (_, index) => {
+          const position = offset + index
+          return task(`t_${position}`, "b_default", "default", "ready", position)
+        })
+        return {
+          data: { statuses: [{ status: "ready", tasks, page: { limit: 1_000, offset, total: 50_001 } }] },
+          meta: { limit: 1_000, offset },
+        }
+      }),
+    }
+    await expect(loadBoardReadModel(runtime, "default", {
+      dependencies: { transport },
+      taskPageSize: 1_000,
+    })).rejects.toMatchObject({ name: "BoardReadError", kind: "anomaly" })
+  }, 30_000)
 
   test("uses include_archived only when explicitly requested", async () => {
     const fetcher = vi.fn<typeof fetch>(async (input) => {
@@ -238,7 +322,7 @@ describe("board read model", () => {
       throw new Error(`unexpected URL ${url}`)
     })
 
-    await loadBoardReadModel(runtime, "default", { fetcher, includeArchived: true })
+    await loadBoardReadModel(runtime, "default", { dependencies: { fetcher }, includeArchived: true })
     expect(String(fetcher.mock.calls[0]?.[0])).toContain("include_archived=true")
   })
 
@@ -248,23 +332,24 @@ describe("board read model", () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockReturnValueOnce(firstResponse)
       .mockImplementation(async (input) => routeResponse(String(input)))
-    const query = createBoardReadQuery(runtime, "default", { fetcher })
+    const query = createBoardReadQuery(runtime, "default", { dependencies: { fetcher } })
 
     const first = query.load()
     expect(query.load()).toBe(first)
     query.invalidate()
+    expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
     const second = query.load()
     expect(fetcher).toHaveBeenCalledTimes(2)
     resolveFirst?.(routeResponse("http://127.0.0.1/api/v1/boards"))
     await expect(second).resolves.toMatchObject({ identity: { canonicalBoardId: "b_default" } })
-    await expect(first).resolves.toMatchObject({ identity: { canonicalBoardId: "b_default" } })
+    await expect(first).rejects.toMatchObject({ name: "AbortError" })
     await expect(query.load()).resolves.toMatchObject({ identity: { canonicalBoardId: "b_default" } })
   })
 
   test("exposes an empty-board error for an exact selector miss", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => jsonResponse({ data: [board("b_other", "other", "Other")] }))
 
-    await expect(loadBoardReadModel(runtime, "default", { fetcher })).rejects.toMatchObject({
+    await expect(loadBoardReadModel(runtime, "default", { dependencies: { fetcher } })).rejects.toMatchObject({
       name: "BoardReadError",
       kind: "empty",
       reason: "board-not-found",

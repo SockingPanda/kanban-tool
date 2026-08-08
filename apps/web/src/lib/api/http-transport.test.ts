@@ -15,7 +15,10 @@ const runtime = {
 
 describe("same-origin Web HTTP transport", () => {
   test("applies a same-origin runtime API path prefix and credentials", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: [] }), { status: 200 }))
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: [] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))
     const transport = createHttpTransport(runtime, {
       fetcher,
       documentBaseURI: "https://kanban.test/app/boards/default/board",
@@ -24,7 +27,7 @@ describe("same-origin Web HTTP transport", () => {
     await expect(transport.get("/api/v1/boards")).resolves.toEqual({ data: [] })
     expect(fetcher).toHaveBeenCalledWith(
       "https://kanban.test/__kb_api__/api/v1/boards",
-      expect.objectContaining({ credentials: "same-origin", method: "GET" }),
+      expect.objectContaining({ credentials: "same-origin", method: "GET", mode: "same-origin", redirect: "error" }),
     )
   })
 
@@ -37,10 +40,74 @@ describe("same-origin Web HTTP transport", () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
+  test("rejects traversal, encoded separators, backslashes, and NUL paths", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+
+    for (const path of [
+      "/api/./v1/boards",
+      "/api/%2e%2e/v1/boards",
+      "/api/%252e%252e/v1/boards",
+      "/api/%2f/v1/boards",
+      "/api/%5c/v1/boards",
+      "/api/%00/v1/boards",
+    ]) {
+      await expect(transport.get(path)).rejects.toMatchObject({ kind: "cross_origin" })
+    }
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  test("rejects malformed runtime URL and a final cross-origin response URL", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+    expect(() => createHttpTransport({ ...runtime, apiBaseUrl: "http://[bad" }, { fetcher })).toThrow(
+      expect.objectContaining({ kind: "malformed_url" }),
+    )
+
+    const response = new Response(JSON.stringify({ data: [] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })
+    Object.defineProperty(response, "url", { value: "https://evil.test/final" })
+    fetcher.mockResolvedValueOnce(response)
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+    await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ kind: "cross_origin" })
+  })
+
+  test("requires JSON content types and enforces a declared byte cap", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("{}", { status: 200, headers: { "content-type": "text/plain" } }))
+      .mockResolvedValueOnce(new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json", "content-length": String(16 * 1024 * 1024 + 1) },
+      }))
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+    await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ kind: "invalid_content_type" })
+    await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ kind: "response_too_large" })
+  })
+
+  test("cancels a streamed response as soon as the byte cap is exceeded", async () => {
+    let canceled = false
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(16 * 1024 * 1024 + 1))
+      },
+      cancel() {
+        canceled = true
+      },
+    })
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(stream, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+    await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ kind: "response_too_large" })
+    expect(canceled).toBe(true)
+  })
+
   test("parses the generated API error contract for non-success responses", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => new Response(
       JSON.stringify({ error: { code: "not_found", message: "board not found" } }),
-      { status: 404 },
+      { status: 404, headers: { "content-type": "application/json" } },
     ))
     const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
 

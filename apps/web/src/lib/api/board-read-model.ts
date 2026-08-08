@@ -1,22 +1,18 @@
 import type { WebRuntimeConfig } from "../runtime"
 import { asCanonicalBoardId, type CanonicalBoardId } from "../sync/contracts"
-import {
-  parseApiListBoardColumnsPath,
-} from "./generated/contracts/api-list-board-columns-path"
+import { parseApiListBoardColumnsPath } from "./generated/contracts/api-list-board-columns-path"
 import {
   parseApiListBoardColumnsResponse,
 } from "./generated/contracts/api-list-board-columns-response"
 import type { ApiListBoardColumnsResponseContract } from "./generated/contracts/api-list-board-columns-response"
 import { parseApiListBoardsQuery } from "./generated/contracts/api-list-boards-query"
 import { parseApiListBoardsResponse } from "./generated/contracts/api-list-boards-response"
+import type { ApiListBoardsResponseContract } from "./generated/contracts/api-list-boards-response"
+import type { ApiErrorResponseContract } from "./generated/contracts/api-error-response"
 import { parseApiListTasksByStatusPath } from "./generated/contracts/api-list-tasks-by-status-path"
-import {
-  parseApiListTasksByStatusQuery,
-} from "./generated/contracts/api-list-tasks-by-status-query"
+import { parseApiListTasksByStatusQuery } from "./generated/contracts/api-list-tasks-by-status-query"
 import type { ApiListTasksByStatusQueryContract } from "./generated/contracts/api-list-tasks-by-status-query"
-import {
-  parseApiListTasksByStatusResponse,
-} from "./generated/contracts/api-list-tasks-by-status-response"
+import { parseApiListTasksByStatusResponse } from "./generated/contracts/api-list-tasks-by-status-response"
 import type { ApiListTasksByStatusResponseContract } from "./generated/contracts/api-list-tasks-by-status-response"
 import { ContractValidationError } from "./generated/runtime"
 import {
@@ -24,12 +20,33 @@ import {
   HttpTransportError,
   type HttpTransport,
   type HttpTransportOptions,
+  type ResponseBytesObserver,
 } from "./http-transport"
 
 export type BoardColumn = ApiListBoardColumnsResponseContract["data"][number]
-export type BoardTask = ApiListTasksByStatusResponseContract["data"]["statuses"][number]["tasks"][number]
+type WireBoardTask = ApiListTasksByStatusResponseContract["data"]["statuses"][number]["tasks"][number]
+
+/** The task fields needed by board cards and sync projections; large payload fields are discarded. */
+export type BoardTask = Readonly<Pick<
+  WireBoardTask,
+  | "id"
+  | "ref"
+  | "title"
+  | "status"
+  | "priority"
+  | "position"
+  | "assignee"
+  | "dependency_blocked"
+  | "unfinished_parent_count"
+  | "execution_plan_state"
+  | "required_step_count"
+  | "completed_required_step_count"
+  | "optional_step_count"
+>>
+
 export type BoardTaskStatus = BoardColumn["status"]
 export type BoardTaskSort = NonNullable<ApiListTasksByStatusQueryContract["sort"]>
+export type BoardTaskGroups = Readonly<Partial<Record<BoardTaskStatus, readonly BoardTask[]>>>
 
 export interface ResolvedBoardIdentity {
   readonly selector: string
@@ -41,7 +58,7 @@ export interface ResolvedBoardIdentity {
 export interface BoardReadModel {
   readonly identity: ResolvedBoardIdentity
   readonly columns: readonly BoardColumn[]
-  readonly tasksByStatus: ReadonlyMap<BoardTaskStatus, readonly BoardTask[]>
+  readonly tasksByStatus: BoardTaskGroups
 }
 
 export type BoardReadErrorKind =
@@ -52,12 +69,17 @@ export type BoardReadErrorKind =
   | "invalid_contract"
   | "anomaly"
   | "cross_origin"
+  | "malformed_url"
+  | "invalid_content_type"
+  | "response_too_large"
 
 export class BoardReadError extends Error {
   readonly kind: BoardReadErrorKind
   readonly reason: "no-boards" | "board-not-found" | null
   readonly status: number | null
   readonly contractId: string | null
+  readonly apiError: ApiErrorResponseContract["error"] | null
+  readonly selector: string | null
 
   constructor(
     kind: BoardReadErrorKind,
@@ -66,6 +88,8 @@ export class BoardReadError extends Error {
       reason?: BoardReadError["reason"]
       status?: number
       contractId?: string
+      apiError?: ApiErrorResponseContract["error"] | null
+      selector?: string
       cause?: unknown
     } = {},
   ) {
@@ -75,29 +99,86 @@ export class BoardReadError extends Error {
     this.reason = options.reason ?? null
     this.status = options.status ?? null
     this.contractId = options.contractId ?? null
+    this.apiError = options.apiError ?? null
+    this.selector = options.selector ?? null
+  }
+
+  /** Structured server error code, without exposing the raw response body. */
+  get code(): ApiErrorResponseContract["error"]["code"] | null {
+    return this.apiError?.code ?? null
   }
 }
 
 export type BoardReadTransport = HttpTransport
 
-export interface BoardReadModelOptions extends HttpTransportOptions {
+export interface BoardReadDependencies extends HttpTransportOptions {
   readonly transport?: BoardReadTransport
+}
+
+export interface BoardReadModelOptions {
   readonly signal?: AbortSignal
   readonly includeArchived?: boolean
-  readonly taskLimit?: number
+  readonly taskPageSize?: number
   readonly taskSort?: BoardTaskSort
+  readonly dependencies?: BoardReadDependencies
 }
 
 export interface BoardReadQuery {
+  /** Load the cached snapshot or the current generation once. */
   load(signal?: AbortSignal): Promise<BoardReadModel>
+  /** Abort the current generation, invalidate it, and load a fresh snapshot. */
   reload(signal?: AbortSignal): Promise<BoardReadModel>
+  /** Abort and discard the current generation without issuing a replacement request. */
   invalidate(): void
 }
 
-const DEFAULT_TASK_LIMIT = 1_000
+const DEFAULT_TASK_PAGE_SIZE = 1_000
 const DEFAULT_TASK_OFFSET = 0
 const DEFAULT_TASK_SORT: BoardTaskSort = "position"
-const MAX_TASK_PAGES = 1_024
+const MAX_TOTAL_TASKS = 50_000
+const MAX_TASK_PAGES = MAX_TOTAL_TASKS
+const MAX_TOTAL_JSON_BYTES = 64 * 1024 * 1024
+const RESERVED_SLUG_PREFIXES = ["b_", "t_", "r_", "c_", "a_", "l_", "col_", "e_"] as const
+
+class BoardReadBudget {
+  private totalBytes = 0
+  private totalTasks = 0
+
+  consumeBytes(bytes: number): void {
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || this.totalBytes > MAX_TOTAL_JSON_BYTES - bytes) {
+      throw new BoardReadError("anomaly", `board read raw JSON 超过 ${MAX_TOTAL_JSON_BYTES} 字节预算。`)
+    }
+    this.totalBytes += bytes
+  }
+
+  consumeTasks(count: number): void {
+    if (!Number.isSafeInteger(count) || count < 0 || this.totalTasks > MAX_TOTAL_TASKS - count) {
+      throw new BoardReadError("anomaly", `board read 任务数超过 ${MAX_TOTAL_TASKS} 条预算。`)
+    }
+    this.totalTasks += count
+  }
+}
+
+interface LinkedAbortSignal {
+  readonly signal: AbortSignal
+  readonly cleanup: () => void
+}
+
+function linkAbortSignals(signals: readonly (AbortSignal | undefined)[]): LinkedAbortSignal {
+  const controller = new AbortController()
+  const activeSignals = signals.filter((signal): signal is AbortSignal => signal !== undefined)
+  const abort = () => controller.abort()
+  for (const signal of activeSignals) {
+    if (signal.aborted) controller.abort()
+    else signal.addEventListener("abort", abort, { once: true })
+  }
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      for (const signal of activeSignals) signal.removeEventListener("abort", abort)
+    },
+  }
+}
 
 function encodedSegment(value: string): string {
   return encodeURIComponent(value)
@@ -122,21 +203,33 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError"
 }
 
+function generationAbortError(): Error {
+  const error = new Error("board read generation 已被取消。")
+  error.name = "AbortError"
+  return error
+}
+
 function wrapTransportError(error: unknown): never {
   if (isAbortError(error)) throw error
   if (error instanceof BoardReadError) throw error
   if (error instanceof HttpTransportError) {
     throw new BoardReadError(error.kind, error.message, {
       status: error.status ?? undefined,
+      apiError: error.apiError,
       cause: error,
     })
   }
   throw error
 }
 
-async function get(transport: BoardReadTransport, path: string, signal?: AbortSignal): Promise<unknown> {
+async function get(
+  transport: BoardReadTransport,
+  path: string,
+  signal: AbortSignal | undefined,
+  onResponseBytes: ResponseBytesObserver,
+): Promise<unknown> {
   try {
-    return await transport.get(path, signal)
+    return await transport.get(path, signal, onResponseBytes)
   } catch (error) {
     return wrapTransportError(error)
   }
@@ -159,12 +252,20 @@ function tasksPath(selector: string): string {
   return `/api/v1/boards/${encodedSegment(path.board)}/tasks/by-status`
 }
 
+function validateTaskPageSize(value: number | undefined): number {
+  const pageSize = value ?? DEFAULT_TASK_PAGE_SIZE
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > DEFAULT_TASK_PAGE_SIZE) {
+    throw new BoardReadError("anomaly", "taskPageSize 必须是 1 到 1000 的安全整数。")
+  }
+  return pageSize
+}
+
 function tasksQuery(
   status: BoardTaskStatus,
   options: BoardReadModelOptions,
   offset: number,
+  pageSize: number,
 ): ApiListTasksByStatusQueryContract {
-  const limit = options.taskLimit ?? DEFAULT_TASK_LIMIT
   const includeArchived = options.includeArchived ?? false
   const sort = options.taskSort ?? DEFAULT_TASK_SORT
   return parseContract(
@@ -178,7 +279,7 @@ function tasksQuery(
       assignee: null,
       q: null,
       include_archived: includeArchived,
-      limit,
+      limit: pageSize,
       offset,
       sort,
     },
@@ -204,37 +305,85 @@ function emptyError(selector: string, reason: "no-boards" | "board-not-found"): 
   const message = reason === "no-boards"
     ? "kanban serve 未返回可用看板。"
     : "runtime.defaultBoard 未在看板列表中精确匹配。"
-  return new BoardReadError("empty", `${message} selector=${JSON.stringify(selector)}`, { reason })
+  return new BoardReadError("empty", `${message} selector=${JSON.stringify(selector)}`, { reason, selector })
+}
+
+function isCanonicalBoardId(value: string): boolean {
+  if (!value.startsWith("b_") || value.length <= 2) return false
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0
+    if ((code >= 0 && code <= 0x1f) || (code >= 0x7f && code <= 0x9f)) return false
+  }
+  return true
+}
+
+function isCanonicalBoardSlug(value: string): boolean {
+  if (value.length === 0 || value.length > 64 || !/^[a-z0-9][a-z0-9._-]*$/.test(value)) return false
+  return !RESERVED_SLUG_PREFIXES.some((prefix) => value.startsWith(prefix))
+}
+
+function validateBoardList(
+  boards: ApiListBoardsResponseContract["data"],
+  selector: string,
+): void {
+  const ids = new Set<string>()
+  const slugs = new Set<string>()
+  for (const board of boards) {
+    if (
+      board.id.length === 0
+      || board.slug.length === 0
+      || board.name.trim().length === 0
+      || !isCanonicalBoardId(board.id)
+      || !isCanonicalBoardSlug(board.slug)
+    ) {
+      throw new BoardReadError(
+        "anomaly",
+        `看板列表包含无效 canonical identity：selector=${JSON.stringify(selector)}。`,
+        { selector },
+      )
+    }
+    if (ids.has(board.id) || slugs.has(board.slug)) {
+      throw new BoardReadError(
+        "anomaly",
+        `看板列表包含重复 id 或 slug：selector=${JSON.stringify(selector)}。`,
+        { selector },
+      )
+    }
+    ids.add(board.id)
+    slugs.add(board.slug)
+  }
 }
 
 async function resolveIdentity(
   transport: BoardReadTransport,
   selector: string,
   includeArchived: boolean,
-  signal?: AbortSignal,
+  signal: AbortSignal,
+  budget: BoardReadBudget,
 ): Promise<ResolvedBoardIdentity> {
-  if (selector.length === 0) throw emptyError(selector, "board-not-found")
+  const requestedSelector = selector.trim()
+  if (requestedSelector.length === 0) throw emptyError(requestedSelector, "board-not-found")
   const payload = parseContract(
     "api.list-boards.response",
     parseApiListBoardsResponse,
-    await get(transport, boardQuery(includeArchived), signal),
+    await get(transport, boardQuery(includeArchived), signal, (bytes) => budget.consumeBytes(bytes)),
   )
-  if (payload.data.length === 0) throw emptyError(selector, "no-boards")
-  const matches = payload.data.filter((board) => board.id === selector || board.slug === selector)
-  if (matches.length === 0) throw emptyError(selector, "board-not-found")
-  if (matches.length > 1) throw new BoardReadError("anomaly", "selector 同时匹配多个看板。")
-  const board = matches[0]
-  if (board === undefined) throw emptyError(selector, "board-not-found")
-  if (board.id.length === 0 || board.slug.length === 0 || board.name.length === 0) {
-    throw new BoardReadError("anomaly", "看板响应缺少 canonical identity 字段。")
+  if (payload.data.length === 0) throw emptyError(requestedSelector, "no-boards")
+  validateBoardList(payload.data, requestedSelector)
+  const matches = payload.data.filter((board) => board.id === requestedSelector || board.slug === requestedSelector)
+  if (matches.length === 0) throw emptyError(requestedSelector, "board-not-found")
+  if (matches.length > 1) {
+    throw new BoardReadError("anomaly", `selector 同时匹配多个看板：${JSON.stringify(requestedSelector)}。`, { selector: requestedSelector })
   }
+  const board = matches[0]
+  if (board === undefined) throw emptyError(requestedSelector, "board-not-found")
   let canonicalBoardId: CanonicalBoardId
   try {
     canonicalBoardId = asCanonicalBoardId(board.id)
   } catch (error) {
-    throw new BoardReadError("anomaly", "看板响应的 canonical id 为空。", { cause: error })
+    throw new BoardReadError("anomaly", "看板响应的 canonical id 为空。", { selector: requestedSelector, cause: error })
   }
-  return { selector, canonicalBoardId, slug: board.slug, name: board.name }
+  return Object.freeze({ selector: requestedSelector, canonicalBoardId, slug: board.slug, name: board.name.trim() })
 }
 
 function parseColumns(
@@ -250,14 +399,11 @@ function parseColumns(
   const statuses = new Set<BoardTaskStatus>()
   const positions = new Set<number>()
   for (const column of response.data) {
-    if (column.id.length === 0 || column.title.length === 0) {
+    if (column.id.trim().length === 0 || column.title.trim().length === 0) {
       throw new BoardReadError("anomaly", "看板列响应缺少 id 或 title。")
     }
     if (column.board_id !== identity.canonicalBoardId) {
-      throw new BoardReadError(
-        "anomaly",
-        `看板列 ${column.id} 返回了错误的 board_id。`,
-      )
+      throw new BoardReadError("anomaly", `看板列 ${column.id} 返回了错误的 board_id。`)
     }
     if (columnIds.has(column.id) || statuses.has(column.status) || positions.has(column.position)) {
       throw new BoardReadError("anomaly", "看板列违反了 board 内唯一 id/status/position 约束。")
@@ -266,7 +412,7 @@ function parseColumns(
     statuses.add(column.status)
     positions.add(column.position)
   }
-  return Object.freeze([...response.data])
+  return Object.freeze(response.data.map((column) => Object.freeze({ ...column })))
 }
 
 function parseTasksWindow(
@@ -276,14 +422,14 @@ function parseTasksWindow(
   expectedOffset: number,
   expectedLimit: number,
   expectedTotal: number | null,
-): { tasks: readonly BoardTask[]; total: number; nextOffset: number } {
+): { tasks: readonly WireBoardTask[]; total: number; nextOffset: number } {
   const response = parseContract(
     "api.list-tasks-by-status.response",
     parseApiListTasksByStatusResponse,
     payload,
   )
   if (response.meta.limit !== expectedLimit || response.meta.offset !== expectedOffset) {
-    throw new BoardReadError("anomaly", `tasks-by-status 的 meta 与请求 offset/limit 不一致。`)
+    throw new BoardReadError("anomaly", "tasks-by-status 的 meta 与请求 offset/limit 不一致。")
   }
   if (response.data.statuses.length !== 1) {
     throw new BoardReadError("anomaly", "tasks-by-status 返回了超出请求 status 的窗口。")
@@ -302,55 +448,73 @@ function parseTasksWindow(
     throw new BoardReadError("anomaly", "tasks-by-status 返回的任务数超过 page.limit。")
   }
   for (const task of window.tasks) {
-    if (task.id.length === 0 || task.title.length === 0) throw new BoardReadError("anomaly", "任务响应缺少 id 或 title。")
+    if (task.id.trim().length === 0 || task.title.trim().length === 0) throw new BoardReadError("anomaly", "任务响应缺少 id 或 title。")
     if (task.status !== status) throw new BoardReadError("anomaly", `任务 ${task.id} 的 status 与请求窗口不一致。`)
     if (task.board_id !== identity.canonicalBoardId || task.board_slug !== identity.slug) {
       throw new BoardReadError("anomaly", `任务 ${task.id} 不属于当前 canonical board。`)
     }
   }
-  if (window.page.total > expectedOffset && expectedLimit <= 0) {
-    throw new BoardReadError("anomaly", "tasks-by-status 分页没有前进。")
-  }
   if (window.page.total > expectedOffset && window.tasks.length === 0) {
     throw new BoardReadError("anomaly", "tasks-by-status 返回空页但 page.total 仍要求继续分页。")
   }
-  const nextOffset = expectedLimit === 0 ? expectedOffset : expectedOffset + expectedLimit
+  const nextOffset = expectedOffset + expectedLimit
   if (!Number.isSafeInteger(nextOffset) || (window.page.total > expectedOffset && nextOffset <= expectedOffset)) {
     throw new BoardReadError("anomaly", "tasks-by-status offset 超出安全分页范围。")
   }
-  return { tasks: Object.freeze([...window.tasks]), total: window.page.total, nextOffset }
+  return { tasks: window.tasks, total: window.page.total, nextOffset }
 }
 
+function projectTask(task: WireBoardTask): BoardTask {
+  return Object.freeze({
+    id: task.id,
+    ref: task.ref,
+    title: task.title,
+    status: task.status,
+    assignee: task.assignee,
+    priority: task.priority,
+    position: task.position,
+    dependency_blocked: task.dependency_blocked,
+    unfinished_parent_count: task.unfinished_parent_count,
+    execution_plan_state: task.execution_plan_state,
+    required_step_count: task.required_step_count,
+    completed_required_step_count: task.completed_required_step_count,
+    optional_step_count: task.optional_step_count,
+  })
+}
+
+/** Traverse every server task page for one column status, preserving order and completeness. */
 async function loadTasksForStatus(
   transport: BoardReadTransport,
   identity: ResolvedBoardIdentity,
   status: BoardTaskStatus,
   options: BoardReadModelOptions,
-  signal?: AbortSignal,
+  pageSize: number,
+  signal: AbortSignal,
+  budget: BoardReadBudget,
 ): Promise<readonly BoardTask[]> {
-  const basePath = tasksPath(identity.canonicalBoardId)
+  const basePath = tasksPath(identity.slug)
   let offset = DEFAULT_TASK_OFFSET
-  const limit = options.taskLimit ?? DEFAULT_TASK_LIMIT
   let total: number | null = null
   let pages = 0
   const tasks: BoardTask[] = []
   const taskIds = new Set<string>()
   while (true) {
     if (pages >= MAX_TASK_PAGES) throw new BoardReadError("anomaly", "tasks-by-status 分页超过安全页数上限。")
-    const query = tasksQuery(status, options, offset)
+    const query = tasksQuery(status, options, offset, pageSize)
     const parsed = parseTasksWindow(
-      await get(transport, appendTasksQuery(basePath, query), signal),
+      await get(transport, appendTasksQuery(basePath, query), signal, (bytes) => budget.consumeBytes(bytes)),
       identity,
       status,
       offset,
-      limit,
+      pageSize,
       total,
     )
     total ??= parsed.total
+    budget.consumeTasks(parsed.tasks.length)
     for (const task of parsed.tasks) {
       if (taskIds.has(task.id)) throw new BoardReadError("anomaly", `tasks-by-status 返回重复任务 ${task.id}。`)
       taskIds.add(task.id)
-      tasks.push(task)
+      tasks.push(projectTask(task))
     }
     pages += 1
     if (parsed.nextOffset >= parsed.total) break
@@ -363,40 +527,53 @@ async function loadTasksForStatus(
   return Object.freeze(tasks)
 }
 
+/** Load the canonical board, server columns, and all status windows into one immutable read model. */
 export async function loadBoardReadModel(
   runtime: WebRuntimeConfig,
   selector = runtime.defaultBoard,
   options: BoardReadModelOptions = {},
 ): Promise<BoardReadModel> {
   const includeArchived = options.includeArchived ?? false
-  let transport: BoardReadTransport
+  const pageSize = validateTaskPageSize(options.taskPageSize)
+  const statusController = new AbortController()
+  const linked = linkAbortSignals([options.signal, statusController.signal])
+  const budget = new BoardReadBudget()
   try {
-    transport = options.transport ?? createHttpTransport(runtime, options)
-  } catch (error) {
-    return wrapTransportError(error)
-  }
-  const identity = await resolveIdentity(transport, selector, includeArchived, options.signal)
-  const columns = parseColumns(
-    await get(transport, columnsPath(identity.canonicalBoardId), options.signal),
-    identity,
-  )
-  const statuses = [...new Set(columns.map((column) => column.status))]
-  const windows = await Promise.all(
-    statuses.map(async (status) => ({ status, tasks: await loadTasksForStatus(transport, identity, status, options, options.signal) })),
-  )
-  const tasksByStatus = new Map<BoardTaskStatus, readonly BoardTask[]>()
-  const taskIds = new Set<string>()
-  for (const window of windows) {
-    for (const task of window.tasks) {
-      if (taskIds.has(task.id)) throw new BoardReadError("anomaly", `tasks-by-status 返回跨 status 重复任务 ${task.id}。`)
-      taskIds.add(task.id)
+    let transport: BoardReadTransport
+    try {
+      transport = options.dependencies?.transport
+        ?? createHttpTransport(runtime, options.dependencies)
+    } catch (error) {
+      return wrapTransportError(error)
     }
-    tasksByStatus.set(window.status, window.tasks)
-  }
-  return {
-    identity,
-    columns,
-    tasksByStatus,
+    const identity = await resolveIdentity(transport, selector, includeArchived, linked.signal, budget)
+    const columns = parseColumns(
+      await get(transport, columnsPath(identity.slug), linked.signal, (bytes) => budget.consumeBytes(bytes)),
+      identity,
+    )
+    const statuses = columns.map((column) => column.status)
+    const windows = await Promise.all(
+      statuses.map(async (status) => ({
+        status,
+        tasks: await loadTasksForStatus(transport, identity, status, options, pageSize, linked.signal, budget),
+      })),
+    )
+    const grouped: Partial<Record<BoardTaskStatus, readonly BoardTask[]>> = {}
+    const taskIds = new Set<string>()
+    for (const window of windows) {
+      for (const task of window.tasks) {
+        if (taskIds.has(task.id)) throw new BoardReadError("anomaly", `tasks-by-status 返回跨 status 重复任务 ${task.id}。`)
+        taskIds.add(task.id)
+      }
+      grouped[window.status] = window.tasks
+    }
+    const tasksByStatus = Object.freeze(grouped)
+    return Object.freeze({ identity, columns, tasksByStatus })
+  } catch (error) {
+    statusController.abort()
+    return wrapTransportError(error)
+  } finally {
+    linked.cleanup()
   }
 }
 
@@ -407,42 +584,52 @@ export function createBoardReadQuery(
 ): BoardReadQuery {
   let generation = 0
   let cached: BoardReadModel | null = null
+  let generationController: AbortController | null = null
   let pending: { readonly generation: number; readonly promise: Promise<BoardReadModel> } | null = null
 
   const load = (signal?: AbortSignal): Promise<BoardReadModel> => {
     if (cached !== null) return Promise.resolve(cached)
     if (pending !== null && pending.generation === generation) return pending.promise
+
     const requestGeneration = generation
-    const loadOptions = signal === undefined ? options : { ...options, signal }
+    const controller = new AbortController()
+    const linked = linkAbortSignals([options.signal, signal, controller.signal])
+    generationController = controller
+    const loadOptions = { ...options, signal: linked.signal }
     const promise = loadBoardReadModel(runtime, selector, loadOptions).then(
       (model) => {
-        if (requestGeneration === generation) {
-          cached = model
-          pending = null
-        }
+        if (requestGeneration !== generation) throw generationAbortError()
+        cached = model
+        pending = null
+        generationController = null
         return model
       },
       (error: unknown) => {
-        if (requestGeneration === generation) pending = null
+        if (requestGeneration === generation) {
+          pending = null
+          generationController = null
+        }
         throw error
       },
-    )
+    ).finally(() => linked.cleanup())
     pending = { generation: requestGeneration, promise }
     return promise
+  }
+
+  const invalidate = (): void => {
+    generationController?.abort()
+    generationController = null
+    generation += 1
+    cached = null
+    pending = null
   }
 
   return {
     load,
     reload(signal) {
-      generation += 1
-      cached = null
-      pending = null
+      invalidate()
       return load(signal)
     },
-    invalidate() {
-      generation += 1
-      cached = null
-      pending = null
-    },
+    invalidate,
   }
 }

@@ -3,6 +3,12 @@ import { describe, expect, test, vi } from "vitest"
 import { createFetchSseTransport } from "./sse-transport"
 import type { RawSseFrame } from "./contracts"
 
+function responseWithURL(body: BodyInit | null, init: ResponseInit, url = "http://127.0.0.1/api/v1/stream/events"): Response {
+  const response = new Response(body, init)
+  Object.defineProperty(response, "url", { value: url })
+  return response
+}
+
 describe("fetch SSE transport", () => {
   test("resolves relative URLs against document.baseURI with a same-origin fetch", async () => {
     const onFrame = vi.fn<(frame: RawSseFrame) => void>()
@@ -15,7 +21,7 @@ describe("fetch SSE transport", () => {
       },
     })
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } }),
+      responseWithURL(body, { status: 200, headers: { "content-type": "text/event-stream" } }, "https://kanban.test/api/v1/stream/events"),
     )
 
     createFetchSseTransport({ fetcher, documentBaseURI: "https://kanban.test/app/boards/default" })({
@@ -30,7 +36,7 @@ describe("fetch SSE transport", () => {
     await vi.waitFor(() => expect(onEof).toHaveBeenCalledOnce())
     expect(fetcher).toHaveBeenCalledWith(
       "https://kanban.test/api/v1/stream/events?board=default",
-      expect.objectContaining({ credentials: "same-origin", mode: "same-origin", redirect: "error" }),
+      expect.objectContaining({ cache: "no-store", credentials: "same-origin", mode: "same-origin", redirect: "error" }),
     )
     const request = fetcher.mock.calls[0]?.[1]
     expect(new Headers(request?.headers).get("Accept")).toBe("text/event-stream")
@@ -93,7 +99,7 @@ describe("fetch SSE transport", () => {
       },
     })
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } }),
+      responseWithURL(body, { status: 200, headers: { "content-type": "text/event-stream" } }),
     )
 
     const transport = createFetchSseTransport({ fetcher })
@@ -122,7 +128,7 @@ describe("fetch SSE transport", () => {
 
   test("reports HTTP and parser failures through onError", async () => {
     const onError = vi.fn()
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("no", { status: 500 }))
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(responseWithURL("no", { status: 500 }))
     createFetchSseTransport({ fetcher })({
       url: "http://127.0.0.1/api/v1/stream/events",
       signal: new AbortController().signal,
@@ -137,7 +143,7 @@ describe("fetch SSE transport", () => {
 
   test("fails closed when the response is not text/event-stream", async () => {
     const onError = vi.fn()
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", { status: 200, headers: { "content-type": "application/json" } }))
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(responseWithURL("{}", { status: 200, headers: { "content-type": "application/json" } }))
     createFetchSseTransport({ fetcher })({
       url: "http://127.0.0.1/api/v1/stream/events",
       signal: new AbortController().signal,
@@ -162,14 +168,13 @@ describe("fetch SSE transport", () => {
         onCancel()
       },
     })
-    const crossOrigin = new Response(stream(() => { crossOriginCanceled = true }), {
+    const crossOrigin = responseWithURL(stream(() => { crossOriginCanceled = true }), {
       status: 200,
       headers: { "content-type": "text/event-stream" },
-    })
-    Object.defineProperty(crossOrigin, "url", { value: "https://evil.test/final" })
+    }, "https://evil.test/final")
     const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(stream(() => { nonSuccessCanceled = true }), { status: 503 }))
-      .mockResolvedValueOnce(new Response(stream(() => { invalidContentCanceled = true }), { status: 200, headers: { "content-type": "application/json" } }))
+      .mockResolvedValueOnce(responseWithURL(stream(() => { nonSuccessCanceled = true }), { status: 503 }))
+      .mockResolvedValueOnce(responseWithURL(stream(() => { invalidContentCanceled = true }), { status: 200, headers: { "content-type": "application/json" } }))
       .mockResolvedValueOnce(crossOrigin)
     const connect = (): Promise<void> => new Promise((resolve) => {
       const onError = vi.fn(() => resolve())
@@ -213,6 +218,28 @@ describe("fetch SSE transport", () => {
     expect(canceled).toBe(true)
   })
 
+  test("rejects an empty final response URL and cancels its body", async () => {
+    let canceled = false
+    const response = new Response(new ReadableStream<Uint8Array>({
+      cancel() {
+        canceled = true
+      },
+    }), { status: 200, headers: { "content-type": "text/event-stream" } })
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response)
+    const onError = vi.fn()
+    createFetchSseTransport({ fetcher, documentBaseURI: "https://kanban.test/app/" })({
+      url: "/api/v1/stream/events",
+      signal: new AbortController().signal,
+      onFrame: vi.fn(),
+      onError,
+      onEof: vi.fn(),
+    })
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+    expect(onError.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ kind: "cross_origin" }))
+    expect(canceled).toBe(true)
+  })
+
   test("cancels and releases a response that arrives after close", async () => {
     let resolveFetch: (response: Response) => void = () => undefined
     const pending = new Promise<Response>((resolve) => { resolveFetch = resolve })
@@ -238,6 +265,63 @@ describe("fetch SSE transport", () => {
     expect(onError).not.toHaveBeenCalled()
   })
 
+  test.each([
+    ["parser", new TextEncoder().encode("unsupported: field\n")],
+    ["decoder", new Uint8Array([0xff])],
+  ])("cancels and releases the reader after a %s failure", async (_kind, chunk) => {
+    let canceled = false
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk)
+      },
+      cancel() {
+        canceled = true
+      },
+    })
+    const onError = vi.fn()
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(responseWithURL(body, { status: 200, headers: { "content-type": "text/event-stream" } }))
+    createFetchSseTransport({ fetcher })({
+      url: "http://127.0.0.1/api/v1/stream/events",
+      signal: new AbortController().signal,
+      onFrame: vi.fn(),
+      onError,
+      onEof: vi.fn(),
+    })
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(canceled).toBe(true))
+    expect(onError).toHaveBeenCalledOnce()
+    const reader = body.getReader()
+    reader.releaseLock()
+  })
+
+  test("cancels and releases the reader after a consumer callback failure", async () => {
+    let canceled = false
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("event: future\nid: 9\ndata: {}\n\n"))
+      },
+      cancel() {
+        canceled = true
+      },
+    })
+    const onError = vi.fn()
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(responseWithURL(body, { status: 200, headers: { "content-type": "text/event-stream" } }))
+    createFetchSseTransport({ fetcher })({
+      url: "http://127.0.0.1/api/v1/stream/events",
+      signal: new AbortController().signal,
+      onFrame: () => { throw new Error("consumer failed") },
+      onError,
+      onEof: vi.fn(),
+    })
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(canceled).toBe(true))
+    expect(onError).toHaveBeenCalledOnce()
+    const reader = body.getReader()
+    reader.releaseLock()
+  })
+
   test("contains frame callback failures", async () => {
     const onError = vi.fn()
     const body = new ReadableStream<Uint8Array>({
@@ -247,7 +331,7 @@ describe("fetch SSE transport", () => {
       },
     })
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } }),
+      responseWithURL(body, { status: 200, headers: { "content-type": "text/event-stream" } }),
     )
     createFetchSseTransport({ fetcher })({
       url: "http://127.0.0.1/api/v1/stream/events",
@@ -269,7 +353,7 @@ describe("fetch SSE transport", () => {
         controller.close()
       },
     })
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } }))
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(responseWithURL(body, { status: 200, headers: { "content-type": "text/event-stream" } }))
     createFetchSseTransport({ fetcher })({
       url: "http://127.0.0.1/api/v1/stream/events",
       signal: new AbortController().signal,
@@ -315,7 +399,7 @@ describe("fetch SSE transport", () => {
         return Promise.reject(new Error("cancel raced with stream close"))
       },
     })
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } }))
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(responseWithURL(body, { status: 200, headers: { "content-type": "text/event-stream" } }))
     const connection = createFetchSseTransport({ fetcher })({
       url: "http://127.0.0.1/api/v1/stream/events",
       signal: new AbortController().signal,

@@ -303,7 +303,9 @@ async function readJSON(response: Response): Promise<JSONPayload> {
 }
 
 function validateFinalOrigin(response: Response, requestOrigin: string): void {
-  if (response.url.length === 0) return
+  if (response.url.length === 0) {
+    throw new HttpTransportError("cross_origin", "Web API 响应 URL 缺失。")
+  }
   let finalURL: URL
   try {
     finalURL = new URL(response.url)
@@ -333,6 +335,7 @@ export function createHttpTransport(
           credentials: "same-origin",
           mode: "same-origin",
           redirect: "error",
+          cache: "no-store",
           signal,
         })
       } catch (cause) {

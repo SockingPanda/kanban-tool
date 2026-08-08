@@ -97,7 +97,9 @@ async function cancelResponseBody(response: Response): Promise<void> {
 }
 
 function validateFinalOrigin(response: Response, origin: string): void {
-  if (response.url.length === 0) return
+  if (response.url.length === 0) {
+    throw new SseTransportError("cross_origin", "SSE 响应 URL 缺失。")
+  }
   let finalURL: URL
   try {
     finalURL = new URL(response.url)
@@ -202,6 +204,7 @@ export function createFetchSseTransport(options: FetchSseTransportOptions = {}):
           credentials: "same-origin",
           mode: "same-origin",
           redirect: "error",
+          cache: "no-store",
           signal: internalAbort.signal,
         })
         if (closed) {
@@ -250,7 +253,10 @@ export function createFetchSseTransport(options: FetchSseTransportOptions = {}):
         parser.finish()
         if (!closed) request.onEof()
       } catch (error) {
-        if (!closed) reportError(error)
+        if (!closed) {
+          await cleanupReader(true)
+          reportError(error)
+        }
       } finally {
         cleanupExternalAbort()
         await cleanupReader(false)

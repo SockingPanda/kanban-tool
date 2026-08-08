@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
 DEB_DIR="$("$LOCK" --print-target-dir)/release/bundle/deb"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/kanban-desktop-layout.XXXXXX")"
+trap 'rm -rf -- "$TMP_ROOT"' EXIT
 
 deb_path="${1:-}"
 if [[ -z "$deb_path" ]]; then
@@ -28,4 +30,27 @@ if grep -Eq '(^|[[:space:]])(\./)?usr/bin/kanban$' <<<"$contents"; then
   exit 1
 fi
 
-echo "ok: $deb_path contains the Desktop app"
+"$LOCK" -- cargo run --locked -p xtask --bin xtask -- \
+  web-assets check --root "$ROOT" --dir apps/web/dist >/dev/null
+
+dpkg-deb --extract "$deb_path" "$TMP_ROOT/extracted"
+mapfile -t web_manifests < <(
+  find "$TMP_ROOT/extracted/usr" -type f -path '*/web/manifest.json' -print
+)
+if [[ "${#web_manifests[@]}" -ne 1 ]]; then
+  echo "error: Desktop deb must contain exactly one bundled Web artifact" >&2
+  exit 1
+fi
+web_root="$(dirname "${web_manifests[0]}")"
+web_parent="$(dirname "$web_root")"
+"$LOCK" -- cargo run --locked -p xtask --bin xtask -- \
+  web-assets check --root "$web_parent" --dir web >/dev/null
+
+diff -r --no-dereference \
+  "$ROOT/apps/web/dist" \
+  "$web_root" >/dev/null || {
+  echo "error: packaged Desktop Web artifact differs from apps/web/dist" >&2
+  exit 1
+}
+
+echo "ok: $deb_path contains the Desktop app and exact Web artifact"

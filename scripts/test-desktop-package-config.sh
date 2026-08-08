@@ -22,6 +22,15 @@ if ! jq -e '(.bundle.externalBin? // null) == null' "$TAURI_CONF" >/dev/null; th
   exit 1
 fi
 
+jq -e '
+  .build.frontendDist == "../dist"
+  and (.bundle.resources | type == "object")
+  and .bundle.resources["../../web/dist/"] == "web/"
+' "$TAURI_CONF" >/dev/null || {
+  echo "error: Tauri package must retain frontendDist ../dist and map ../../web/dist/ to web/" >&2
+  exit 1
+}
+
 if rg -n 'kanban-(vector-lancedb|graph-oxigraph)|prepare-desktop-helper|test-desktop-helper' \
   "$TAURI_CONF" "$DESKTOP_MANIFEST" "$JUSTFILE" "$PACKAGE_LAYOUT_SCRIPT"; then
   echo "error: retired helper packaging references remain" >&2

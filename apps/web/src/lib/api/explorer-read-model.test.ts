@@ -6,6 +6,7 @@ import {
   buildTaskMapRequest,
   defaultTaskListQuery,
   ExplorerReadError,
+  loadExplorerBoardIdentity,
   loadTaskInspector,
   parseTaskListQuery,
   serializeTaskListQuery,
@@ -104,5 +105,40 @@ describe("explorer task list URL state", () => {
       kind: "http",
       reason: "task-not-found",
     } satisfies Partial<ExplorerReadError>)
+  })
+})
+
+describe("explorer canonical board identity", () => {
+  const board = (id: string, slug: string) => ({
+    id,
+    slug,
+    name: "Board",
+    description: null,
+    created_at: 1,
+    updated_at: 1,
+    archived_at: null,
+  })
+
+  test("rejects a server slug that only becomes valid after trimming", async () => {
+    const transport = {
+      get: async (): Promise<HttpTransportResponse> => ({ payload: { data: [board("b_default", " default ")] }, bytes: 1 }),
+    }
+
+    await expect(loadExplorerBoardIdentity(runtime, "default", { transport })).rejects.toMatchObject({
+      name: "ExplorerReadError",
+      kind: "anomaly",
+    })
+  })
+
+  test("rejects duplicate canonical board id or slug before selecting a board", async () => {
+    const duplicateSlugTransport = {
+      get: async (): Promise<HttpTransportResponse> => ({ payload: { data: [board("b_one", "same"), board("b_two", "same")] }, bytes: 1 }),
+    }
+    const duplicateIdTransport = {
+      get: async (): Promise<HttpTransportResponse> => ({ payload: { data: [board("b_same", "one"), board("b_same", "two")] }, bytes: 1 }),
+    }
+
+    await expect(loadExplorerBoardIdentity(runtime, "same", { transport: duplicateSlugTransport })).rejects.toMatchObject({ kind: "anomaly" })
+    await expect(loadExplorerBoardIdentity(runtime, "one", { transport: duplicateIdTransport })).rejects.toMatchObject({ kind: "anomaly" })
   })
 })

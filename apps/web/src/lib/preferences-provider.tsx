@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 
 import {
+  applyWebPreferencesToDocument,
   readStoredPreferences,
-  themeColorForMode,
   writeStoredPreferences,
   type Locale,
   type ThemeMode,
@@ -29,9 +29,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     writeStoredPreferences(storage, preferences)
     if (typeof document === "undefined") return
-    document.documentElement.lang = preferences.locale === "en" ? "en" : "zh-CN"
-    document.documentElement.dataset.theme = preferences.theme
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColorForMode(preferences.theme))
+    applyWebPreferencesToDocument(preferences, document)
   }, [preferences, storage])
 
   const setTheme = useCallback((theme: ThemeMode) => setPreferences((current) => ({ ...current, theme })), [])

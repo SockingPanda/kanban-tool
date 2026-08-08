@@ -30,12 +30,20 @@ function browserStorage(): PreferenceStorage | null {
   }
 }
 
+export function parseThemePreference(value: unknown): ThemeMode | null {
+  return value === "light" || value === "dark" ? value : null
+}
+
+export function parseLocalePreference(value: unknown): Locale | null {
+  return value === "zh" || value === "en" ? value : null
+}
+
 function validTheme(value: string | null): ThemeMode {
-  return value === "dark" ? "dark" : DEFAULT_PREFERENCES.theme
+  return parseThemePreference(value) ?? DEFAULT_PREFERENCES.theme
 }
 
 function validLocale(value: string | null): Locale {
-  return value === "en" ? "en" : DEFAULT_PREFERENCES.locale
+  return parseLocalePreference(value) ?? DEFAULT_PREFERENCES.locale
 }
 
 function validSidebar(value: string | null): boolean {
@@ -68,4 +76,25 @@ export function writeStoredPreferences(storage: PreferenceStorage | null, prefer
 
 export function themeColorForMode(mode: ThemeMode): string {
   return mode === "dark" ? "#1b1b1b" : "#f1f1f1"
+}
+
+export function loadingCopyForLocale(locale: Locale): string {
+  return locale === "en" ? "Loading Astryx workspace…" : "正在加载 Astryx 工作区…"
+}
+
+type PreferenceDocument = Pick<Document, "documentElement" | "querySelector">
+
+export function applyWebPreferencesToDocument(preferences: WebPreferences, documentLike: PreferenceDocument): void {
+  documentLike.documentElement.lang = preferences.locale === "en" ? "en" : "zh-CN"
+  documentLike.documentElement.dataset.theme = preferences.theme
+  documentLike.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColorForMode(preferences.theme))
+  documentLike.querySelector("#bootstrap-loading-copy")?.replaceChildren(loadingCopyForLocale(preferences.locale))
+}
+
+/** Apply persisted shell preferences before the runtime bootstrap can fetch. */
+export function prepareWebPreferences(documentLike?: PreferenceDocument): WebPreferences {
+  const preferences = readStoredPreferences()
+  const target = documentLike ?? (typeof document === "undefined" ? null : document)
+  if (target) applyWebPreferencesToDocument(preferences, target)
+  return preferences
 }

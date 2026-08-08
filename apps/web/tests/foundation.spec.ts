@@ -34,7 +34,7 @@ test.describe("Astryx product shell", () => {
     await expect(page).toHaveTitle("Astryx Kanban · Workspace")
     await expect(page.getByTestId("product-shell")).toBeVisible()
     await expect(page.getByTestId("board-placeholder")).toBeVisible()
-    await expect(page.getByRole("navigation", { name: "Side navigation" })).toBeVisible()
+    await expect(page.getByRole("navigation", { name: "侧栏导航" })).toBeVisible()
     await expect(page.getByRole("main")).toHaveCount(1)
 
     const skipLink = page.getByRole("link", { name: "跳转到主要内容" })
@@ -70,6 +70,34 @@ test.describe("Astryx product shell", () => {
     await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
   })
 
+  test("surfaces a rejected navigation without an unhandled page error", async ({ page }) => {
+    const pageErrors: Error[] = []
+    page.on("pageerror", (error) => pageErrors.push(error))
+    await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
+    await page.evaluate(() => {
+      history.pushState = () => {
+        throw new Error("navigation rejected")
+      }
+    })
+
+    await page.getByTestId("nav-settings").click()
+    await expect(page.getByTestId("shell-error")).toBeVisible()
+    expect(pageErrors).toEqual([])
+  })
+
+  test("keeps board and settings entries available in collapsed desktop navigation", async ({ page }) => {
+    await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
+    await page.getByRole("button", { name: "收起侧栏" }).click()
+    await expect(page.getByRole("button", { name: "展开侧栏" })).toBeVisible()
+    await expect(page.getByTestId("nav-board")).toBeVisible()
+    await expect(page.getByTestId("nav-settings")).toBeVisible()
+    await page.getByTestId("nav-board").hover()
+    await page.getByTestId("nav-settings").focus()
+    await page.getByRole("button", { name: "展开侧栏" }).click()
+    await page.getByRole("button", { name: "收起侧栏" }).click()
+    await expect(page.locator("[style]")).toHaveCount(0)
+  })
+
   test("keeps strict CSP on assets and the SPA fallback", async ({ page }) => {
     const response = await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
     expectStrictCsp(response)
@@ -89,5 +117,11 @@ test.describe("Astryx product shell", () => {
     await page.goto("/app/unknown", { waitUntil: "networkidle" })
     await expect(page.getByTestId("shell-not-found")).toBeVisible()
     await expect(page.getByRole("heading", { name: "页面不存在" })).toBeVisible()
+  })
+
+  test("renders an explicit invalid-slug boundary without rewriting the address", async ({ page }) => {
+    await page.goto("/app/boards/Bad%20Board/board", { waitUntil: "networkidle" })
+    await expect(page.getByTestId("shell-route-error")).toBeVisible()
+    await expect(page).toHaveURL(/\/app\/boards\/Bad%20Board\/board$/)
   })
 })

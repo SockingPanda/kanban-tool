@@ -1,4 +1,5 @@
 import type { Locale } from "./preferences"
+import type { MessagesByLocale, Overrides } from "@astryxdesign/core/i18n"
 
 export const localeMessages = {
   zh: {
@@ -40,6 +41,8 @@ export const localeMessages = {
     offlineDescription: "浏览器无法连接服务；恢复连接后可以重新加载。",
     retry: "重新加载",
     errorDescription: "shell 遇到未处理的错误。",
+    invalidBoardSlug: "看板地址无效",
+    invalidBoardSlugDescription: "该地址中的规范看板标识不符合服务约束。",
     routeBoundary: "路由边界",
     reported: "未报告",
   },
@@ -82,12 +85,57 @@ export const localeMessages = {
     offlineDescription: "The browser cannot reach the service. Reload after the connection returns.",
     retry: "Reload",
     errorDescription: "The shell encountered an unhandled error.",
+    invalidBoardSlug: "Invalid board address",
+    invalidBoardSlugDescription: "The canonical board identity in this address does not satisfy the service rules.",
     routeBoundary: "Route boundary",
     reported: "Not reported",
   },
 } as const
 
 export type MessageKey = keyof (typeof localeMessages)["zh"]
+
+/** Static Astryx component catalogs kept beside the product copy. */
+export const astryxMessages: MessagesByLocale = {
+  zh: {
+    "@astryx.appShell.mobileNavigation": { defaultMessage: "移动导航" },
+    "@astryx.appShell.skipToContent": { defaultMessage: "跳转到主要内容" },
+    "@astryx.sideNav.heading.dialogLabel": { defaultMessage: "导航" },
+    "@astryx.sideNav.heading.openMenu": { defaultMessage: "打开菜单" },
+    "@astryx.sideNav.label": { defaultMessage: "侧栏导航" },
+    "@astryx.sideNav.resizeSidebar": { defaultMessage: "调整侧栏大小" },
+    "@astryx.sideNavCollapseButton.collapseSidebar": { defaultMessage: "收起侧栏" },
+    "@astryx.sideNavCollapseButton.expandSidebar": { defaultMessage: "展开侧栏" },
+    "@astryx.sideNavItem.collapse": { defaultMessage: "收起 {label}" },
+    "@astryx.sideNavItem.expand": { defaultMessage: "展开 {label}" },
+  },
+  en: {
+    "@astryx.appShell.mobileNavigation": { defaultMessage: "Mobile navigation" },
+    "@astryx.appShell.skipToContent": { defaultMessage: "Skip to main content" },
+    "@astryx.sideNav.heading.dialogLabel": { defaultMessage: "Navigation" },
+    "@astryx.sideNav.heading.openMenu": { defaultMessage: "Open menu" },
+    "@astryx.sideNav.label": { defaultMessage: "Sidebar navigation" },
+    "@astryx.sideNav.resizeSidebar": { defaultMessage: "Resize sidebar" },
+    "@astryx.sideNavCollapseButton.collapseSidebar": { defaultMessage: "Collapse sidebar" },
+    "@astryx.sideNavCollapseButton.expandSidebar": { defaultMessage: "Expand sidebar" },
+    "@astryx.sideNavItem.collapse": { defaultMessage: "Collapse {label}" },
+    "@astryx.sideNavItem.expand": { defaultMessage: "Expand {label}" },
+  },
+}
+
+export const astryxOverrides: Overrides = {
+  zh: {
+    "@astryx.appShell.skipToContent": "跳转到主要内容",
+    "@astryx.sideNav.label": "侧栏导航",
+    "@astryx.sideNavCollapseButton.collapseSidebar": "收起侧栏",
+    "@astryx.sideNavCollapseButton.expandSidebar": "展开侧栏",
+  },
+  en: {
+    "@astryx.appShell.skipToContent": "Skip to main content",
+    "@astryx.sideNav.label": "Sidebar navigation",
+    "@astryx.sideNavCollapseButton.collapseSidebar": "Collapse sidebar",
+    "@astryx.sideNavCollapseButton.expandSidebar": "Expand sidebar",
+  },
+}
 
 export function messagesForLocale(locale: Locale) {
   return localeMessages[locale]

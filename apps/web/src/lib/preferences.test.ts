@@ -3,6 +3,8 @@ import { describe, expect, test } from "vitest"
 import {
   DEFAULT_PREFERENCES,
   PREFERENCE_STORAGE_KEYS,
+  parseLocalePreference,
+  parseThemePreference,
   readStoredPreferences,
   writeStoredPreferences,
   type WebPreferences,
@@ -44,5 +46,25 @@ describe("Web preferences", () => {
       [PREFERENCE_STORAGE_KEYS.locale, "en"],
       [PREFERENCE_STORAGE_KEYS.sidebar, "collapsed"],
     ])
+  })
+
+  test("parses only supported theme and locale values", () => {
+    expect(parseThemePreference("dark")).toBe("dark")
+    expect(parseThemePreference("system")).toBeNull()
+    expect(parseLocalePreference("en")).toBe("en")
+    expect(parseLocalePreference("fr")).toBeNull()
+  })
+
+  test("survives hostile storage reads", () => {
+    const hostile = {
+      getItem: () => {
+        throw new Error("storage blocked")
+      },
+      setItem: () => {
+        throw new Error("storage blocked")
+      },
+    }
+    expect(readStoredPreferences(hostile)).toEqual(DEFAULT_PREFERENCES)
+    expect(() => writeStoredPreferences(hostile, DEFAULT_PREFERENCES)).not.toThrow()
   })
 })

@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest"
 
+import { assertCanonicalBoardSlug } from "./board-slug"
 import {
   navigateApp,
   navigateDefaultBoard,
@@ -20,12 +21,16 @@ describe("App route parser", () => {
   })
 
   test("parses a board route without decoding a slash into a slug", () => {
+    const canonicalSlug = assertCanonicalBoardSlug("alpha-team")
     expect(parseAppRoute("/app/boards/alpha%2Dteam/board/")).toEqual({
       kind: "board",
-      boardSlug: "alpha-team",
+      boardSlug: canonicalSlug,
       pathname: "/app/boards/alpha-team/board",
     })
-    expect(parseAppRoute("/app/boards/alpha%2Fteam/board").kind).toBe("not-found")
+    expect(parseAppRoute("/app/boards/alpha%2Fteam/board")).toMatchObject({
+      kind: "error",
+      code: "invalid-board-slug",
+    })
   })
 
   test("parses settings and returns a stable not-found route", () => {
@@ -76,7 +81,7 @@ describe("History API navigation", () => {
 
   test("navigates directly when the caller already has a canonical slug", async () => {
     const history = { pushState: vi.fn(), replaceState: vi.fn() }
-    const route = await navigateDefaultBoard("default", { history })
+    const route = await navigateDefaultBoard(assertCanonicalBoardSlug("default"), { history })
 
     expect(route).toEqual({ kind: "board", boardSlug: "default", pathname: "/app/boards/default/board" })
     expect(history.replaceState).toHaveBeenCalledWith({}, "", "/app/boards/default/board")
@@ -84,10 +89,32 @@ describe("History API navigation", () => {
 
   test("uses pushState for an explicit board navigation", async () => {
     const history = { pushState: vi.fn(), replaceState: vi.fn() }
-    const route = await navigateApp({ kind: "board", boardSlug: "team one" }, { history })
+    const route = await navigateApp({ kind: "board", boardSlug: assertCanonicalBoardSlug("team-one") }, { history })
 
-    expect(routePath(route)).toBe("/app/boards/team%20one/board")
-    expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/boards/team%20one/board")
+    expect(routePath(route)).toBe("/app/boards/team-one/board")
+    expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/boards/team-one/board")
+    expect(history.replaceState).not.toHaveBeenCalled()
+  })
+
+  test("renders an invalid explicit board route as an error without history", async () => {
+    const history = { pushState: vi.fn(), replaceState: vi.fn() }
+    const route = await navigateApp("/app/boards/team%20one/board", { history })
+
+    expect(route).toMatchObject({ kind: "error", code: "invalid-board-slug" })
+    expect(history.pushState).not.toHaveBeenCalled()
+    expect(history.replaceState).not.toHaveBeenCalled()
+  })
+
+  test("renders an invalid resolver result as an error without history", async () => {
+    const history = { pushState: vi.fn(), replaceState: vi.fn() }
+    const route = await navigateApp("/app/", {
+      defaultBoard: "selector:active",
+      resolveBoard: async () => "b_reserved",
+      history,
+    })
+
+    expect(route).toMatchObject({ kind: "error", code: "invalid-board-slug" })
+    expect(history.pushState).not.toHaveBeenCalled()
     expect(history.replaceState).not.toHaveBeenCalled()
   })
 })

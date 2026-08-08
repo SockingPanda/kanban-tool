@@ -1,26 +1,39 @@
 @layer product {
-  .skipLink {
-    position: fixed;
-    z-index: 20;
-    inset-block-start: 0.75rem;
-    inset-inline-start: 0.75rem;
-    transform: translateY(-200%);
-    border: 1px solid var(--color-border-emphasized);
+  .mainFrame {
+    min-height: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .compactNavItemWrapper {
+    display: grid;
+    min-width: 0;
+  }
+
+  .compactNavItem {
+    display: grid;
+    place-items: center;
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    border: 1px solid transparent;
     border-radius: var(--radius-element);
-    padding: 0.5rem 0.75rem;
-    background: var(--color-background-surface);
-    color: var(--color-text-primary);
+    background: transparent;
+    color: var(--color-text-secondary);
     text-decoration: none;
   }
 
-  .skipLink:focus-visible {
-    transform: translateY(0);
-    outline: 0.15rem solid var(--color-accent);
-    outline-offset: 0.15rem;
+  .compactNavItem:hover,
+  .compactNavItem:focus-visible,
+  .compactNavItem[aria-current="page"] {
+    border-color: var(--color-border-emphasized);
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
   }
 
-  .mainFrame {
-    min-height: 100%;
+  .compactNavItem:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
 
   .mainFrame:focus {
@@ -36,6 +49,8 @@
   .boundary {
     display: grid;
     gap: 1.25rem;
+    min-width: 0;
+    max-width: 100%;
     max-width: 72rem;
     margin: 0 auto;
   }
@@ -80,6 +95,8 @@
   }
 
   .routePath {
+    min-width: 0;
+    max-width: 100%;
     width: fit-content;
     margin: 0;
     border-inline-start: 0.2rem solid var(--color-accent);
@@ -88,6 +105,8 @@
     color: var(--color-text-secondary);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.8rem;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .boundary {
@@ -97,7 +116,10 @@
 
   .boundary p,
   .boundary code {
+    min-width: 0;
+    max-width: 100%;
     margin: 0;
+    overflow-wrap: anywhere;
     color: var(--color-text-secondary);
   }
 
@@ -157,6 +179,14 @@
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.75rem;
     margin: 0;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .codeValue {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 
   .runtimeFacts div {

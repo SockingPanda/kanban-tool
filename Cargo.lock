@@ -2803,6 +2803,7 @@ version = "3.0.0"
 dependencies = [
  "kanban-protocol",
  "ksni",
+ "libc",
  "serde",
  "serde_json",
  "tauri",

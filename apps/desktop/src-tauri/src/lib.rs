@@ -1,22 +1,18 @@
 #![doc = include_str!("../../README.md")]
 
-use std::{
-    env,
-    net::{IpAddr, SocketAddr},
-    sync::{Mutex, MutexGuard},
-};
+use std::{env, fs, path::PathBuf, sync::Mutex};
 
 #[cfg(target_os = "linux")]
 use ksni::blocking::TrayMethods;
-use serde::Serialize;
 use tauri::{
-    Manager, State,
+    Manager,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
-mod tray_lifecycle;
 mod host_lifecycle;
+mod tray_lifecycle;
+use host_lifecycle::{HostHandle, HostLaunchConfig, connect_or_spawn};
 use tray_lifecycle::{
     CloseRequestAction, RestoreWindowAction, SingleInstanceAction, TRAY_QUIT_ID, TRAY_SHOW_ID,
     TrayBackendKind, TrayIconAction, TrayMenuAction, close_request_action, restore_window_action,
@@ -25,44 +21,25 @@ use tray_lifecycle::{
     tray_icon_left_double_click_action, tray_menu_action,
 };
 
-const DEFAULT_SERVER_URL: &str = "http://127.0.0.1:8721";
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RuntimeConfig {
-    api_base_url: String,
-    actor: String,
-    board: String,
+struct DesktopHost {
+    handle: Mutex<HostHandle>,
 }
 
-struct DesktopRuntime {
-    config: Mutex<RuntimeConfig>,
-}
-
-impl DesktopRuntime {
-    fn config(&self) -> MutexGuard<'_, RuntimeConfig> {
-        self.config.lock().expect("桌面运行时配置锁已失效")
-    }
-}
-
-#[tauri::command]
-fn runtime_config(runtime: State<'_, DesktopRuntime>) -> RuntimeConfig {
-    runtime.config().clone()
-}
-
-#[tauri::command]
-fn set_runtime_board(
-    board: String,
-    runtime: State<'_, DesktopRuntime>,
-) -> Result<RuntimeConfig, String> {
-    let board = board.trim();
-    if board.is_empty() {
-        return Err("board 不能为空".to_owned());
+impl DesktopHost {
+    fn shutdown(&self) -> Result<host_lifecycle::ShutdownResult, host_lifecycle::ShutdownError> {
+        self.handle
+            .lock()
+            .expect("桌面 host 生命周期锁已失效")
+            .shutdown()
     }
 
-    let mut config = runtime.config();
-    config.board = board.to_owned();
-    Ok(config.clone())
+    #[allow(dead_code)]
+    fn app_url(&self) -> String {
+        self.handle
+            .lock()
+            .expect("桌面 host 生命周期锁已失效")
+            .app_url()
+    }
 }
 
 pub fn run() {
@@ -73,14 +50,16 @@ pub fn run() {
             }
         }))
         .setup(|app| {
-            app.manage(DesktopRuntime {
-                config: Mutex::new(default_runtime_config()?),
+            let host = start_desktop_host(app)?;
+            let app_url = host.app_url();
+            app.manage(DesktopHost {
+                handle: Mutex::new(host),
             });
             set_main_window_title(app)?;
             setup_tray(app)?;
+            navigate_main_window(app, &app_url)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![runtime_config, set_runtime_board])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 match close_request_action() {
@@ -91,53 +70,85 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("运行 kanban 桌面端时出错");
+        .build(tauri::generate_context!())
+        .expect("运行 kanban 桌面端时出错")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::ExitRequested { .. })
+                && let Some(host) = app.try_state::<DesktopHost>()
+                && let Err(error) = host.shutdown()
+            {
+                eprintln!("kanban owned host shutdown 失败：{error}");
+            }
+        });
 }
 
-fn default_runtime_config() -> Result<RuntimeConfig, String> {
-    let api_base_url = env::var("KANBAN_SERVER_URL")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_SERVER_URL.to_owned());
-    let api_base_url = normalize_loopback_url(&api_base_url)?;
-
+fn start_desktop_host(app: &tauri::App) -> tauri::Result<HostHandle> {
+    let resource_dir = app.path().resource_dir()?;
+    let web_dir = resource_dir.join("web");
+    let sidecar_path = resolve_sidecar_path(&resource_dir)?;
+    let app_data_dir = app.path().app_data_dir()?;
+    fs::create_dir_all(&app_data_dir)?;
+    let db_path = app_data_dir.join("kanban.db");
     let actor = first_non_empty_env(&["KANBAN_ACTOR", "USER", "USERNAME"])
         .unwrap_or_else(|| "local".to_owned());
     let board = first_non_empty_env(&["KB_BOARD"]).unwrap_or_else(|| "default".to_owned());
-
-    Ok(RuntimeConfig {
-        api_base_url,
-        actor,
-        board,
-    })
+    let config = HostLaunchConfig::new(sidecar_path, web_dir, db_path, actor, board);
+    connect_or_spawn(&config).map_err(setup_error)
 }
 
-fn normalize_loopback_url(value: &str) -> Result<String, String> {
-    let value = value.trim().trim_end_matches('/');
-    let authority = value
-        .strip_prefix("http://")
-        .ok_or_else(|| "KANBAN_SERVER_URL 必须使用回环地址上的 http".to_owned())?;
-    if authority.is_empty()
-        || authority.contains(['/', '?', '#', '@'])
-        || !is_loopback_authority(authority)
-    {
-        return Err("KANBAN_SERVER_URL 必须指向回环地址".to_owned());
+fn resolve_sidecar_path(resource_dir: &std::path::Path) -> tauri::Result<PathBuf> {
+    if let Some(path) = first_non_empty_env(&["KANBAN_DESKTOP_SIDECAR"]) {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            return Ok(path);
+        }
+        return Err(setup_error_message(format!(
+            "KANBAN_DESKTOP_SIDECAR 不是文件: {}",
+            path.display()
+        )));
     }
-    Ok(value.to_owned())
+    let mut candidates = vec![resource_dir.join("kanban"), resource_dir.join("bin/kanban")];
+    if let Ok(entries) = fs::read_dir(resource_dir) {
+        candidates.extend(
+            entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with("kanban-"))
+                }),
+        );
+    }
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .ok_or_else(|| {
+            setup_error_message(format!(
+                "bundled kanban serve sidecar 不存在于 {}",
+                resource_dir.display()
+            ))
+        })
 }
 
-fn is_loopback_authority(authority: &str) -> bool {
-    if matches!(authority, "localhost" | "[::1]") {
-        return true;
-    }
-    if let Some(port) = authority.strip_prefix("localhost:") {
-        return port.parse::<u16>().is_ok();
-    }
-    authority.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
-        || authority
-            .parse::<SocketAddr>()
-            .is_ok_and(|addr| addr.ip().is_loopback())
+fn navigate_main_window(app: &tauri::App, app_url: &str) -> tauri::Result<()> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or(tauri::Error::WindowNotFound)?;
+    let url = tauri::Url::parse(app_url).map_err(tauri::Error::InvalidUrl)?;
+    window.navigate(url)
+}
+
+fn setup_error(error: impl std::error::Error + Send + Sync + 'static) -> tauri::Error {
+    let error: Box<dyn std::error::Error> = Box::new(error);
+    tauri::Error::Setup(error.into())
+}
+
+fn setup_error_message(message: impl Into<String>) -> tauri::Error {
+    setup_error(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        message.into(),
+    ))
 }
 
 fn first_non_empty_env(names: &[&str]) -> Option<String> {
@@ -322,28 +333,17 @@ fn show_main_window(app: &tauri::AppHandle) {
 }
 
 fn quit_app(app: &tauri::AppHandle) {
+    if let Some(host) = app.try_state::<DesktopHost>() {
+        if let Err(error) = host.shutdown() {
+            eprintln!("kanban owned host graceful shutdown 失败：{error}");
+        }
+    }
     app.exit(0);
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{desktop_window_title, normalize_loopback_url};
-
-    #[test]
-    fn server_url_accepts_only_loopback_http() {
-        assert_eq!(
-            normalize_loopback_url("http://127.0.0.1:8721/").expect("loopback URL"),
-            "http://127.0.0.1:8721"
-        );
-        assert_eq!(
-            normalize_loopback_url("http://localhost:8721").expect("localhost URL"),
-            "http://localhost:8721"
-        );
-        assert!(normalize_loopback_url("https://127.0.0.1:8721").is_err());
-        assert!(normalize_loopback_url("http://example.com:8721").is_err());
-        assert!(normalize_loopback_url("http://127.0.0.1:8721@evil.example").is_err());
-        assert!(normalize_loopback_url("http://localhost:8721/api").is_err());
-    }
+    use super::desktop_window_title;
 
     #[test]
     fn desktop_window_title_includes_package_version() {

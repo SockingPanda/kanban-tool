@@ -155,6 +155,18 @@ export function OntologyScreen({
   }, [api, groupBy, includeAll])
   const groups = useReadState(Boolean(api), reviewRequest, `ontology-review:${api?.cacheKey ?? "none"}:${filterKey}:${listRefreshToken}:${invalidationRevision}`, emptyGroups())
 
+  const detailRequest = useMemo(() => {
+    if (!api || !selectedSignalId) return null
+    return (signal: AbortSignal) => api.getLabelOntologySignal(selectedSignalId, signal)
+  }, [api, selectedSignalId])
+  const detail = useReadState(Boolean(api && selectedSignalId), detailRequest, `ontology-signal:${api?.cacheKey ?? "none"}:${selectedSignalId ?? "none"}:${detailRefreshToken}:${invalidationRevision}`, emptyDetail())
+  const visibleSignals = useMemo(
+    () => errorStatus(detail.error) === 404 && selectedSignalId !== null
+      ? signals.data.filter((signal) => signal.id !== selectedSignalId)
+      : signals.data,
+    [detail.error, selectedSignalId, signals.data],
+  )
+
   useEffect(() => {
     if (signals.phase !== "success") return
     const nextId = reconcileSelection(selectedSignalId, signals.data)
@@ -162,12 +174,6 @@ export function OntologyScreen({
     setLocalSelectedSignalId(nextId)
     onSelectSignalProp?.(nextId)
   }, [onSelectSignalProp, selectedSignalId, signals.data, signals.phase])
-
-  const detailRequest = useMemo(() => {
-    if (!api || !selectedSignalId) return null
-    return (signal: AbortSignal) => api.getLabelOntologySignal(selectedSignalId, signal)
-  }, [api, selectedSignalId])
-  const detail = useReadState(Boolean(api && selectedSignalId), detailRequest, `ontology-signal:${api?.cacheKey ?? "none"}:${selectedSignalId ?? "none"}:${detailRefreshToken}:${invalidationRevision}`, emptyDetail())
 
   const atomRequest = useMemo(() => {
     if (!api || !atomRef) return null
@@ -225,7 +231,7 @@ export function OntologyScreen({
       boardName={boardName ?? api?.board ?? "—"}
       copy={featureCopyForLocale(locale).ontology}
       filters={effectiveFilters}
-      signals={signals}
+      signals={{ ...signals, data: visibleSignals }}
       groups={groups}
       detail={{ phase: detail.phase, data: detailData, error: detail.error }}
       atom={atom}
@@ -318,6 +324,9 @@ export function OntologyScreenView({
   const stale = signals.data.length > 0 && signals.phase === "error"
   const includeAll = filters.includeAll === true
   const groupBy = filters.groupBy ?? "label"
+  const viewSignals = detail.error && errorStatus(detail.error) === 404 && selectedSignalId !== null
+    ? signals.data.filter((signal) => signal.id !== selectedSignalId)
+    : signals.data
   return (
     <main className={styles.screen} aria-labelledby="ontology-title" data-testid="ontology-screen">
       <header className={styles.hero}>
@@ -342,8 +351,8 @@ export function OntologyScreenView({
 
       <section className={styles.workspace}>
         <Card className={styles.signalPanel} padding={0}>
-          <PanelHeader title={copy.signalRows} meta={copy.loadedCount(signals.data.length)} refreshing={signals.phase === "refreshing"} copy={copy} />
-          <OntologySignalListView phase={signals.phase} signals={signals.data} selectedSignalId={selectedSignalId} onSelectSignal={onSelectSignal} copy={copy} />
+          <PanelHeader title={copy.signalRows} meta={copy.loadedCount(viewSignals.length)} refreshing={signals.phase === "refreshing"} copy={copy} />
+          <OntologySignalListView phase={signals.phase} signals={viewSignals} selectedSignalId={selectedSignalId} onSelectSignal={onSelectSignal} copy={copy} />
         </Card>
         <Card className={styles.groupPanel} padding={0}>
           <div className={styles.panelHeader}>

@@ -334,6 +334,33 @@ describe("Ontology screen presentation", () => {
     expect(renderToStaticMarkup(tree)).toContain("Ontology signal is no longer available")
   })
 
+  test("removes a not-found detail row from the list projection", () => {
+    const html = renderToStaticMarkup(
+      <OntologyScreenView
+        boardName="Default"
+        filters={filters}
+        signals={{ phase: "success", data: [signalFixture()], error: null }}
+        groups={{ phase: "success", data: [], error: null }}
+        detail={{ phase: "error", data: null, error: { status: 404 } }}
+        atom={{ phase: "idle", data: null, error: null }}
+        selectedSignalId="los_1"
+        atomRef=""
+        online
+        actionReason=""
+        actionPending={false}
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+        onActionReasonChange={() => undefined}
+        onLifecycleAction={() => undefined}
+        onExplainAtom={() => undefined}
+        onAtomSearch={() => undefined}
+      />,
+    )
+    expect(html).not.toContain('translate="no">los_1 · false_negative')
+    expect(html).toContain("Ontology signal is no longer available")
+  })
+
   test("renders degraded atom evidence and validation status without claiming success", () => {
     const html = renderToStaticMarkup(
       <AtomExplainView

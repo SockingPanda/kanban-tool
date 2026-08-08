@@ -150,4 +150,22 @@ describe("Signals screen presentation", () => {
     )
     expect(html).toContain("Signal is no longer available")
   })
+
+  test("removes a not-found detail row from the list projection", () => {
+    const html = renderToStaticMarkup(
+      <SignalsScreenView
+        boardName="Default"
+        filters={{}}
+        list={state([signal()])}
+        detail={state(null, "error", { status: 404 })}
+        selectedSignalId="sig_1"
+        online
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+      />,
+    )
+    expect(html).not.toContain("CLI friction")
+    expect(html).toContain("Signal is no longer available")
+  })
 })

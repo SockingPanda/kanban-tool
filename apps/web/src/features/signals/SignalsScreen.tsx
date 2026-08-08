@@ -118,20 +118,24 @@ export function SignalsScreen({
   }, [api, effectiveFilters])
   const list = useReadState(Boolean(api), listRequest, `signals:${api?.cacheKey ?? "none"}:${filterKey}:${listRefreshToken}:${invalidationRevision}`, emptyListState())
 
-  const visibleSignals = list.data
-  useEffect(() => {
-    if (list.phase !== "success") return
-    const nextId = reconcileSelection(selectedSignalId, visibleSignals)
-    if (nextId === selectedSignalId) return
-    setLocalSelectedSignalId(nextId)
-    onSelectSignalProp?.(nextId)
-  }, [list.phase, onSelectSignalProp, selectedSignalId, visibleSignals])
-
   const detailRequest = useMemo(() => {
     if (!api || !selectedSignalId) return null
     return (signal: AbortSignal) => api.getSignal(selectedSignalId, signal)
   }, [api, selectedSignalId])
   const detail = useReadState(Boolean(api && selectedSignalId), detailRequest, `signal:${api?.cacheKey ?? "none"}:${selectedSignalId ?? "none"}:${detailRefreshToken}:${invalidationRevision}`, emptyDetailState())
+  const visibleSignals = useMemo(
+    () => errorStatus(detail.error) === 404 && selectedSignalId !== null
+      ? list.data.filter((signal) => signal.id !== selectedSignalId)
+      : list.data,
+    [detail.error, list.data, selectedSignalId],
+  )
+  useEffect(() => {
+    if (list.phase !== "success") return
+    const nextId = reconcileSelection(selectedSignalId, list.data)
+    if (nextId === selectedSignalId) return
+    setLocalSelectedSignalId(nextId)
+    onSelectSignalProp?.(nextId)
+  }, [list.data, list.phase, onSelectSignalProp, selectedSignalId])
 
   const updateFilters = (next: SignalsRouteFilters) => {
     setLocalFilters(next)
@@ -166,7 +170,7 @@ export function SignalsScreen({
       boardName={boardName ?? api?.board ?? "—"}
       copy={featureCopyForLocale(locale).signals}
       filters={effectiveFilters}
-      list={list}
+      list={{ ...list, data: visibleSignals }}
       detail={{
         phase: detail.phase,
         data: detailData,
@@ -218,6 +222,9 @@ export function SignalsScreenView({
   const stale = list.phase === "error" && list.data.length > 0
   const status = (filters.status ?? "review") as SignalStatusFilter
   const kindsValue = (filters.kinds ?? []).join(", ")
+  const viewSignals = errorStatus(detail.error) === 404 && selectedSignalId !== null
+    ? list.data.filter((signal) => signal.id !== selectedSignalId)
+    : list.data
   return (
       <main className={styles.screen} aria-labelledby="signals-title" data-testid="signals-screen">
       <header className={styles.hero}>
@@ -284,13 +291,13 @@ export function SignalsScreenView({
           <div className={styles.panelHeader}>
             <div>
               <Heading level={2}>{copy.signalRows}</Heading>
-              <Text as="p" type="supporting">{copy.loadedCount(list.data.length)}</Text>
+              <Text as="p" type="supporting">{copy.loadedCount(viewSignals.length)}</Text>
             </div>
             {list.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}
           </div>
           <SignalListView
             phase={list.phase}
-            signals={list.data}
+            signals={viewSignals}
             selectedSignalId={selectedSignalId}
             onSelectSignal={onSelectSignal}
             copy={copy}

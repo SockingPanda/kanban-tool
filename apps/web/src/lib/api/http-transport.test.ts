@@ -160,4 +160,86 @@ describe("same-origin Web HTTP transport", () => {
       apiError: { code: "not_found", message: "board not found" },
     } satisfies Partial<HttpTransportError>)
   })
+
+  test("sends raw JSON mutation requests without a generic response cast", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: { ok: true } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))
+    const transport = createHttpTransport(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await expect(transport.request({ method: "POST", path: "/api/v1/tasks/t_1/transitions/block", body: { actor: "test-actor", reason: "blocked" } }))
+      .resolves.toMatchObject({ payload: { data: { ok: true } }, bytes: expect.any(Number) })
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://kanban.test/__kb_api__/api/v1/tasks/t_1/transitions/block",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ actor: "test-actor", reason: "blocked" }),
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        credentials: "same-origin",
+        mode: "same-origin",
+        redirect: "error",
+      }),
+    )
+  })
+
+  test("does not add a request Content-Type for bodyless DELETE", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: [] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))
+    const transport = createHttpTransport(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    await transport.request({ method: "DELETE", path: "/api/v1/tasks/t_1/dependencies/t_2" })
+    expect(fetcher.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+    }))
+  })
+
+  test("raw mutation requests preserve generated API errors", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error: { code: "invalid_transition", message: "task cannot be blocked" } }),
+      { status: 409, headers: { "content-type": "application/json" } },
+    ))
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+
+    await expect(transport.request({ method: "POST", path: "/api/v1/tasks/t_1/transitions/block", body: { reason: "no" } })).rejects.toMatchObject({
+      kind: "http",
+      status: 409,
+      apiError: { code: "invalid_transition", message: "task cannot be blocked" },
+    })
+  })
+
+  test("rejects circular request bodies before issuing a fetch", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+    const body: Record<string, unknown> = {}
+    body.self = body
+
+    await expect(transport.request({ method: "POST", path: "/api/v1/tasks", body })).rejects.toMatchObject({ kind: "invalid_json" })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  test("omits Content-Type when a method has no JSON body and preserves AbortError", async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }))
+      .mockRejectedValueOnce(new DOMException("aborted", "AbortError"))
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+
+    await transport.request({ method: "POST", path: "/api/v1/tasks", body: undefined })
+    expect(fetcher.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      headers: { Accept: "application/json" },
+    }))
+    await expect(transport.request({ method: "POST", path: "/api/v1/tasks" })).rejects.toMatchObject({ name: "AbortError" })
+  })
 })

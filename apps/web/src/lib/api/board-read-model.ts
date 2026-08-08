@@ -18,7 +18,7 @@ import { ContractValidationError } from "./generated/runtime"
 import {
   createHttpTransport,
   HttpTransportError,
-  type HttpTransport,
+  type HttpReadTransport,
   type HttpTransportOptions,
   type HttpTransportResponse,
 } from "./http-transport"
@@ -109,7 +109,7 @@ export class BoardReadError extends Error {
   }
 }
 
-export type BoardReadTransport = HttpTransport
+export type BoardReadTransport = HttpReadTransport
 
 export interface BoardReadDependencies extends HttpTransportOptions {
   readonly transport?: BoardReadTransport

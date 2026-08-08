@@ -157,9 +157,13 @@ desktop-build:
     pnpm --filter @kanban-tool/desktop build
 
 desktop-package:
+    just web-build
+    just web-artifact-check
     scripts/cargo-build-lock.sh -- pnpm --filter @kanban-tool/desktop tauri build
 
 cli-package:
+    just web-build
+    just web-artifact-check
     scripts/cargo-build-lock.sh -- cargo run --locked -p xtask --bin xtask -- package cli --format deb
 
 cli-package-layout:

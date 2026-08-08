@@ -28,6 +28,9 @@
     "icon": [
       "icons/icon.png"
     ],
+    "resources": {
+      "../../web/dist/": "web/"
+    },
     "targets": [
       "deb"
     ]

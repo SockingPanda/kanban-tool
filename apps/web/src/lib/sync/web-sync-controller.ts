@@ -635,12 +635,12 @@ export class WebSyncController {
 
   private oldBoundaryIdPairMatches(boundary: RecoveryBoundary, id: number, fingerprint: string): boolean {
     const event = this.knownEventForId(id)
-    return event !== undefined && event.canonicalFingerprint === fingerprint && boundary.byEventId.get(event.eventId) === fingerprint
+    return event !== undefined && event.boardId === this.boardId && event.canonicalFingerprint === fingerprint && boundary.byEventId.get(event.eventId) === fingerprint
   }
 
   private oldBoundaryEventPairMatches(boundary: RecoveryBoundary, eventId: string, fingerprint: string): boolean {
     const event = this.knownEventForEventId(eventId)
-    return event !== undefined && event.canonicalFingerprint === fingerprint && boundary.byId.get(event.id) === fingerprint
+    return event !== undefined && event.boardId === this.boardId && event.canonicalFingerprint === fingerprint && boundary.byId.get(event.id) === fingerprint
   }
 
   private trimSeen<K>(map: Map<K, string>): void {
@@ -689,8 +689,7 @@ export class WebSyncController {
       // A failed overlapping SSE epoch must not cancel the in-flight F/R
       // barrier or discard its staged/pre-applied evidence.
       this.fenceRecoveryConnection()
-      this.openConnection()
-      this.armLiveness(this.currentToken())
+      this.scheduleRecoveryConnectionRetry("transport-failure", 1)
       return
     }
     // Start the barrier after all prior frames in this queue have committed,
@@ -754,6 +753,7 @@ export class WebSyncController {
     this.closeConnection()
     this.clearRecoveryConnectionRetryTimer()
     this.clearLiveness()
+    this.recoverySawLiveFrame = false
     this.connectionEpoch += 1
   }
 
@@ -897,7 +897,9 @@ export class WebSyncController {
       this.clearRecoveryConnectionRetryTimer()
       if (result.confirmedCursor > after) this.anomalyAttempts.delete(`${this.boardId}:${after}`)
       if (signal.aborted || !this.isRecoveryCurrent(token)) return
-      this.state = this.recoverySawLiveFrame ? "live" : "connecting"
+      const hasCurrentConnection = this.connection !== null && this.connectionAbort !== null && !this.connectionAbort.signal.aborted
+      if (!hasCurrentConnection) this.openConnection()
+      this.state = this.recoverySawLiveFrame && hasCurrentConnection ? "live" : "connecting"
       this.recovery = null
       this.recoveryBuffer = []
       this.recoveryBufferBytes = 0
@@ -1005,6 +1007,7 @@ export class WebSyncController {
         if (event.id <= boundary.highWatermark) {
           if (this.recoveryPreApplied.get(event.eventId) === event.canonicalFingerprint || replayedBoundaryEvents.has(event.eventId)) continue
           await this.invokeEffect(event, token, "recovery")
+          if (!this.isRecoveryCurrent(token)) return boundary
           this.recoveryAppliedEvents.set(event.eventId, event)
           this.recoveryPreApplied.set(event.eventId, event.canonicalFingerprint)
           if (!event.known) {
@@ -1114,6 +1117,7 @@ export class WebSyncController {
     }
     const stagedIds = new Map(this.seenIds)
     const stagedEventIds = new Map(this.seenEventIds)
+    const stagedKnownEvents: ValidatedBusinessEvent[] = []
     try {
       for (const [id, fingerprint] of boundary.byId) {
         if (!Number.isSafeInteger(id) || id < 0 || id > boundary.highWatermark || typeof fingerprint !== "string") throw new Error("boundary-id-invalid")
@@ -1141,11 +1145,13 @@ export class WebSyncController {
         try {
           await this.invokeEffect(event, token, "poll-boundary", true)
         } catch (error) {
+          if (signal.aborted || !this.running || !this.isCurrent(token) || this.state !== "circuit-open") return false
           this.emit("sink-effect-failure", { eventId: event.eventId, message: error instanceof Error ? error.message : String(error) })
           void this.beginRecovery("F", "sink-effect-failure", false).catch((failure) => this.detachedFailure("poll-sink-effect-failure", failure))
           return false
         }
-        if (event.known) this.rememberEvent(event)
+        if (signal.aborted || !this.running || !this.isCurrent(token) || this.state !== "circuit-open") return false
+        if (event.known) stagedKnownEvents.push(event)
         if (!event.known) {
           this.state = "recovering"
           void this.beginRecovery("F", "unknown-event-during-poll", false, [event]).catch((failure) => this.detachedFailure("poll-unknown-event", failure))
@@ -1165,6 +1171,7 @@ export class WebSyncController {
     this.seenEventIds.clear()
     for (const [eventId, fingerprint] of stagedEventIds) this.seenEventIds.set(eventId, fingerprint)
     this.lastConfirmedCursor = Math.max(this.lastConfirmedCursor, confirmedCursor, boundary.highWatermark)
+    for (const event of stagedKnownEvents) this.rememberEvent(event)
     this.anomalyAttempts.delete(staleAnomalyKey)
     this.state = "connecting"
     this.openConnection()

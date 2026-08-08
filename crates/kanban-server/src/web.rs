@@ -474,6 +474,7 @@ fn production_cors_layer(policy: &HostOriginPolicy) -> tower_http::cors::CorsLay
         .allow_headers([
             header::CONTENT_TYPE,
             header::ACCEPT,
+            HeaderName::from_static("last-event-id"),
             HeaderName::from_static("x-kb-actor"),
         ])
 }
@@ -743,6 +744,30 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
+
+        let preflight = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/api/v1/stream/events")
+                    .header(header::HOST, format!("localhost:{PORT}"))
+                    .header(header::ORIGIN, format!("http://localhost:{PORT}"))
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                    .header(header::ACCESS_CONTROL_REQUEST_HEADERS, "last-event-id")
+                    .body(Body::empty())
+                    .expect("preflight request"),
+            )
+            .await
+            .expect("preflight response");
+        assert_eq!(preflight.status(), StatusCode::OK);
+        assert!(
+            preflight.headers()[header::ACCESS_CONTROL_ALLOW_HEADERS]
+                .to_str()
+                .expect("allow headers")
+                .split(',')
+                .any(|value| value.trim().eq_ignore_ascii_case("last-event-id"))
+        );
 
         let policy = HostOriginPolicy::for_listener(SocketAddr::from(([127, 0, 0, 1], 9988)));
         assert!(policy.accepts_host("[::1]:9988"));

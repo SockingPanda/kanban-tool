@@ -322,6 +322,77 @@ describe("fetch SSE transport", () => {
     reader.releaseLock()
   })
 
+  test("does not report a parser failure when external abort races reader cleanup", async () => {
+    let cancelStarted = false
+    let resolveCancel: () => void = () => undefined
+    const pendingCancel = new Promise<void>((resolve) => {
+      resolveCancel = resolve
+    })
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("unsupported: field\n"))
+      },
+      cancel() {
+        cancelStarted = true
+        return pendingCancel
+      },
+    })
+    const onError = vi.fn()
+    const abortController = new AbortController()
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(responseWithURL(body, { status: 200, headers: { "content-type": "text/event-stream" } }))
+    createFetchSseTransport({ fetcher })({
+      url: "http://127.0.0.1/api/v1/stream/events",
+      signal: abortController.signal,
+      onFrame: vi.fn(),
+      onError,
+      onEof: vi.fn(),
+    })
+
+    await vi.waitFor(() => expect(cancelStarted).toBe(true))
+    abortController.abort()
+    resolveCancel()
+    await vi.waitFor(() => {
+      expect(onError).not.toHaveBeenCalled()
+      const reader = body.getReader()
+      reader.releaseLock()
+    })
+  })
+
+  test("does not report a frame failure when close races reader cleanup", async () => {
+    let cancelStarted = false
+    let resolveCancel: () => void = () => undefined
+    const pendingCancel = new Promise<void>((resolve) => {
+      resolveCancel = resolve
+    })
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("event: future\nid: 9\ndata: {}\n\n"))
+      },
+      cancel() {
+        cancelStarted = true
+        return pendingCancel
+      },
+    })
+    const onError = vi.fn()
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(responseWithURL(body, { status: 200, headers: { "content-type": "text/event-stream" } }))
+    const connection = createFetchSseTransport({ fetcher })({
+      url: "http://127.0.0.1/api/v1/stream/events",
+      signal: new AbortController().signal,
+      onFrame: () => { throw new Error("frame callback failed") },
+      onError,
+      onEof: vi.fn(),
+    })
+
+    await vi.waitFor(() => expect(cancelStarted).toBe(true))
+    connection.close()
+    resolveCancel()
+    await vi.waitFor(() => {
+      expect(onError).not.toHaveBeenCalled()
+      const reader = body.getReader()
+      reader.releaseLock()
+    })
+  })
+
   test("contains frame callback failures", async () => {
     const onError = vi.fn()
     const body = new ReadableStream<Uint8Array>({

@@ -2,9 +2,9 @@
 
 use crate::{
     ApiHeaderProfile, ContractBinding, ContractDeclaration, ContractDirection, ContractGranularity,
-    ContractStrictness, ContractSurface, EndpointDescriptor, EndpointObligation,
-    EndpointObligationKind, HttpMethod, HttpTransportLocation, McpExposure, McpPolicy,
-    McpToolBinding, OperationContract, OperationDeclaration, SurfaceOperation, WireParameter,
+    ContractStrictness, ContractSurface, EndpointDescriptor, HttpMethod, HttpTransportLocation,
+    McpExposure, McpPolicy, McpToolBinding, OperationContract, OperationDeclaration,
+    SurfaceOperation, WireParameter,
 };
 
 const COMMENT_PATH_PARAMETERS: &[WireParameter] = &[WireParameter {
@@ -48,6 +48,16 @@ const LIST_EVENTS_QUERY_PARAMETERS: &[WireParameter] = &[
     },
     WireParameter {
         name: "limit",
+        cardinality: Some(crate::WireParameterCardinality::OptionalOne),
+    },
+];
+const SSE_STREAM_EVENTS_HEADER_PARAMETERS: &[WireParameter] = &[
+    WireParameter {
+        name: "Accept-Language",
+        cardinality: Some(crate::WireParameterCardinality::OptionalOne),
+    },
+    WireParameter {
+        name: "Last-Event-ID",
         cardinality: Some(crate::WireParameterCardinality::OptionalOne),
     },
 ];
@@ -129,6 +139,31 @@ macro_rules! header_contract {
                 unreachable!()
             }
         };
+        contract
+    }};
+}
+
+macro_rules! sse_header_contract {
+    () => {{
+        let contract = ContractDeclaration::new(
+            "sse.stream-events.headers",
+            "GET /api/v1/stream/events headers",
+            ContractDirection::Deserialize,
+            Some(HttpTransportLocation::Headers),
+            ContractStrictness::DenyUnknownFields,
+            ContractGranularity::Exact,
+            ContractBinding::ExactSurface,
+        )
+        .with_transport(None, SSE_STREAM_EVENTS_HEADER_PARAMETERS)
+        .with_schema(
+            "urn:kanban-tool:schema:sse:stream-events-headers:v1",
+            "sse/stream-events-headers.v1.schema.json",
+            "Kanban SSE stream events request headers v1",
+            "schemas/fixtures/sse/stream-events-headers.v1.valid.json",
+            "schemas/fixtures/sse/stream-events-headers.v1.invalid.json",
+        );
+        #[cfg(feature = "schema")]
+        let contract = contract.with_schema_type::<crate::StreamEventsHeaders>();
         contract
     }};
 }
@@ -571,6 +606,7 @@ const API_LIST_EVENTS_CONTRACTS: &[ContractDeclaration] = &[
 ];
 
 const SSE_STREAM_EVENTS_CONTRACTS: &[ContractDeclaration] = &[
+    sse_header_contract!(),
     api_contract!(
         "sse.stream-events.query",
         "GET /api/v1/stream/events query",
@@ -597,6 +633,27 @@ const SSE_STREAM_EVENTS_CONTRACTS: &[ContractDeclaration] = &[
         "schemas/fixtures/sse/stream-event-data.v1.invalid.json",
         crate::StreamEventData
     ),
+    {
+        let contract = ContractDeclaration::new(
+            "sse.event.heartbeat",
+            "GET /api/v1/stream/events heartbeat",
+            ContractDirection::Serialize,
+            Some(HttpTransportLocation::Sse),
+            ContractStrictness::DenyUnknownFields,
+            ContractGranularity::Exact,
+            ContractBinding::SharedComponent,
+        )
+        .with_schema(
+            "urn:kanban-tool:schema:sse:event-heartbeat:v1",
+            "sse/event-heartbeat.v1.schema.json",
+            "Kanban SSE transport heartbeat v1",
+            "schemas/fixtures/sse/event-heartbeat.v1.valid.json",
+            "schemas/fixtures/sse/event-heartbeat.v1.invalid.json",
+        );
+        #[cfg(feature = "schema")]
+        let contract = contract.with_schema_type::<crate::SseHeartbeatData>();
+        contract
+    },
 ];
 
 const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
@@ -723,13 +780,7 @@ const HISTORY_OPERATIONS: &[OperationDeclaration] = &[
         "GET /api/v1/stream/events",
         SSE_STREAM_EVENTS_CONTRACTS,
     )
-    .with_obligation_overrides(&[(
-        EndpointObligationKind::Headers,
-        EndpointObligation::Excluded {
-            reason:
-                "V1 finite snapshot intentionally ignores Last-Event-ID; after query owns the cursor",
-        },
-    )]),
+    .with_shared_components(&["sse.event.heartbeat"]),
 ];
 
 pub const fn operation_declarations() -> &'static [OperationDeclaration] {

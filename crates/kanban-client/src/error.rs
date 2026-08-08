@@ -17,6 +17,10 @@ pub enum ClientError {
     },
     #[error("服务端响应无效：{0}")]
     InvalidResponse(String),
+    #[error("SSE stream 已关闭")]
+    StreamClosed,
+    #[error("SSE stream 读取失败：{0}")]
+    StreamRead(String),
 }
 
 impl ClientError {
@@ -26,6 +30,8 @@ impl ClientError {
             Self::ServerUnavailable(_) => "server_unavailable",
             Self::Api { code, .. } => api_error_code(*code),
             Self::InvalidResponse(_) => "invalid_response",
+            Self::StreamClosed => "stream_closed",
+            Self::StreamRead(_) => "stream_error",
         }
     }
 }

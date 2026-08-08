@@ -255,7 +255,7 @@ export function createFetchSseTransport(options: FetchSseTransportOptions = {}):
       } catch (error) {
         if (!closed) {
           await cleanupReader(true)
-          reportError(error)
+          if (!closed && !request.signal.aborted) reportError(error)
         }
       } finally {
         cleanupExternalAbort()

@@ -19,10 +19,12 @@ use crate::process::status_description;
 const CRATES_IO_SOURCE: &str = "registry+https://github.com/rust-lang/crates.io-index";
 const TOOL_PACKAGE: &str = "xtask";
 const CONTRACT_PACKAGE: &str = "kanban-protocol";
+const WEB_ARTIFACT_PACKAGE: &str = "kanban-web-artifact";
 const SERVICE_PACKAGE: &str = "kanban-service";
 const SERVER_PACKAGE: &str = "kanban-server";
 const JSONSCHEMA_PACKAGE: &str = "jsonschema";
 const SCHEMARS_PACKAGE: &str = "schemars";
+const FS4_PACKAGE: &str = "fs4";
 
 const RETIRED_PACKAGES: &[&str] = &["kanban-sqlite", "kanban-local"];
 
@@ -77,17 +79,29 @@ const OWNER_POLICIES: &[DependencyPolicy] = &[
         uses_default_features: true,
         features: &["tray-icon"],
     },
+    DependencyPolicy {
+        name: "libc",
+        owner: WEB_ARTIFACT_PACKAGE,
+        requirement: "^0.2",
+        exact_version: None,
+        uses_default_features: false,
+        features: &[],
+    },
 ];
 
 const TOOL_DEPENDENCIES: &[&str] = &[
+    FS4_PACKAGE,
     JSONSCHEMA_PACKAGE,
     CONTRACT_PACKAGE,
+    WEB_ARTIFACT_PACKAGE,
     "serde",
     "serde_json",
     "sha2",
 ];
 
-const CONTRACT_DEPENDENCIES: &[&str] = &[SCHEMARS_PACKAGE, "serde", "serde_json"];
+const CONTRACT_DEPENDENCIES: &[&str] = &[SCHEMARS_PACKAGE, "serde", "serde_json", "sha2"];
+const WEB_ARTIFACT_DEPENDENCIES: &[&str] = &[CONTRACT_PACKAGE, "libc"];
+const WEB_ARTIFACT_DEV_DEPENDENCIES: &[&str] = &["serde_json", "tempfile"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PolicyError(String);
@@ -607,6 +621,25 @@ fn normal_edge(edge: &Map<String, Value>, context: &str, exact_only: bool) -> Po
     Ok(())
 }
 
+fn dev_edge(edge: &Map<String, Value>, context: &str) -> PolicyResult<()> {
+    let kinds = edge
+        .get("dep_kinds")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error(format!("{context} 缺少 dep_kinds")))?;
+    if kinds.len() != 1 {
+        return Err(error(format!("{context} 必须是唯一 dev edge")));
+    }
+    let kind = kinds[0]
+        .as_object()
+        .ok_or_else(|| error(format!("{context} dev edge kind 必须是 object")))?;
+    if optional_string_field(kind, "kind", context)? != Some("dev")
+        || optional_string_field(kind, "target", context)?.is_some()
+    {
+        return Err(error(format!("{context} 必须是 unconditional dev edge")));
+    }
+    Ok(())
+}
+
 fn feature_set<'a>(
     dependency: &'a Map<String, Value>,
     context: &str,
@@ -627,6 +660,7 @@ fn resolved_version_matches(version: &str, policy: &DependencyPolicy) -> bool {
     }
     match policy.requirement {
         "^0.7" => version.starts_with("0.7."),
+        "^0.2" => version.starts_with("0.2."),
         "^2.12" => version.starts_with("2.12."),
         "^2" => version.starts_with("2."),
         _ => false,
@@ -746,7 +780,7 @@ fn validate_owner_policies(
         )?
         .into_iter()
         .collect::<HashSet<_>>();
-        if policy.uses_default_features != features.contains("default") {
+        if policy.uses_default_features && !features.contains("default") {
             return Err(error(format!("{context} resolved default feature 漂移")));
         }
         if !policy
@@ -1072,6 +1106,7 @@ fn validate_tool_and_contract(
             )));
         }
         match name {
+            FS4_PACKAGE => check_registry_declaration(dependency, "^0.13.1", true, &[], &context)?,
             JSONSCHEMA_PACKAGE => {
                 check_registry_declaration(dependency, "^0.47.0", false, &[], &context)?
             }
@@ -1083,6 +1118,17 @@ fn validate_tool_and_contract(
                 {
                     return Err(error(format!(
                         "{context} schema exception declaration 漂移"
+                    )));
+                }
+            }
+            WEB_ARTIFACT_PACKAGE => {
+                if dependency.get("source") != Some(&Value::Null)
+                    || dependency.get("path").and_then(Value::as_str).is_none()
+                    || bool_field(dependency, "uses_default_features", &context)?
+                    || !feature_set(dependency, &context)?.is_empty()
+                {
+                    return Err(error(format!(
+                        "{context} 必须是 path + default-features=false 且不启用额外 feature"
                     )));
                 }
             }
@@ -1105,6 +1151,7 @@ fn validate_tool_and_contract(
             )?,
             "serde" => check_registry_declaration(dependency, "^1.0", true, &["derive"], &context)?,
             "serde_json" => check_registry_declaration(dependency, "^1.0", true, &[], &context)?,
+            "sha2" => check_registry_declaration(dependency, "^0.10", true, &[], &context)?,
             _ => unreachable!("exact contract dependency list already checked"),
         }
         if name == SCHEMARS_PACKAGE && dependency.get("optional") != Some(&Value::Bool(true)) {
@@ -1197,6 +1244,140 @@ fn validate_tool_and_contract(
     Ok(())
 }
 
+fn validate_web_artifact_dependencies(
+    workspace: &HashMap<String, String>,
+    packages: &HashMap<String, &Map<String, Value>>,
+    nodes: &HashMap<String, &Map<String, Value>>,
+) -> PolicyResult<()> {
+    let package_id = workspace
+        .get(WEB_ARTIFACT_PACKAGE)
+        .ok_or_else(|| error("workspace 缺少 kanban-web-artifact"))?;
+    let package = packages
+        .get(package_id)
+        .ok_or_else(|| error("kanban-web-artifact package 缺失"))?;
+    for dependency in package_dependencies(package)? {
+        let kind = dependency.get("kind").and_then(Value::as_str);
+        if !normal_kind(kind) && kind != Some("dev") {
+            return Err(error(format!(
+                "{WEB_ARTIFACT_PACKAGE} 禁止未冻结 dependency kind: {kind:?}"
+            )));
+        }
+    }
+    validate_exact_normal_dependencies(package, WEB_ARTIFACT_PACKAGE, WEB_ARTIFACT_DEPENDENCIES)?;
+
+    for dependency in package_dependencies(package)?
+        .into_iter()
+        .filter(|dependency| normal_kind(dependency.get("kind").and_then(Value::as_str)))
+    {
+        let name = dependency_identity(dependency)?;
+        let context = format!("{WEB_ARTIFACT_PACKAGE} -> {name}");
+        if dependency_alias(dependency)? != name
+            || !normal_kind(dependency.get("kind").and_then(Value::as_str))
+            || dependency.get("optional") != Some(&Value::Bool(false))
+            || dependency
+                .get("target")
+                .is_some_and(|value| !value.is_null())
+        {
+            return Err(error(format!(
+                "{context} 必须是唯一 normal nonoptional non-target edge"
+            )));
+        }
+        match name {
+            CONTRACT_PACKAGE => {
+                if dependency.get("source") != Some(&Value::Null)
+                    || dependency.get("path").and_then(Value::as_str).is_none()
+                    || bool_field(dependency, "uses_default_features", &context)?
+                    || !feature_set(dependency, &context)?.is_empty()
+                {
+                    return Err(error(format!(
+                        "{context} 必须是 path + default-features=false 且不启用 schema"
+                    )));
+                }
+            }
+            "libc" => check_registry_declaration(dependency, "^0.2", false, &[], &context)?,
+            _ => unreachable!("exact Web artifact dependency list already checked"),
+        }
+    }
+
+    validate_exact_dev_dependencies(package, WEB_ARTIFACT_PACKAGE, WEB_ARTIFACT_DEV_DEPENDENCIES)?;
+    for dependency in package_dependencies(package)?
+        .into_iter()
+        .filter(|dependency| dependency.get("kind").and_then(Value::as_str) == Some("dev"))
+    {
+        let name = dependency_identity(dependency)?;
+        let context = format!("{WEB_ARTIFACT_PACKAGE} dev -> {name}");
+        if dependency_alias(dependency)? != name
+            || dependency.get("optional") != Some(&Value::Bool(false))
+            || dependency
+                .get("target")
+                .is_some_and(|value| !value.is_null())
+        {
+            return Err(error(format!(
+                "{context} 必须是 nonoptional、非 target dev dependency"
+            )));
+        }
+        match name {
+            "serde_json" => check_registry_declaration(dependency, "^1.0", true, &[], &context)?,
+            "tempfile" => check_registry_declaration(dependency, "^3.10", true, &[], &context)?,
+            _ => unreachable!("exact Web artifact dev dependency list already checked"),
+        }
+    }
+
+    let node = nodes
+        .get(package_id)
+        .ok_or_else(|| error("kanban-web-artifact resolve node 缺失"))?;
+    for dependency_name in WEB_ARTIFACT_DEPENDENCIES {
+        let edge = direct_edge(
+            node,
+            &dependency_name.replace('-', "_"),
+            WEB_ARTIFACT_PACKAGE,
+        )?;
+        normal_edge(
+            edge,
+            &format!("{WEB_ARTIFACT_PACKAGE} -> {dependency_name}"),
+            true,
+        )?;
+        let resolved = packages
+            .get(string_field(edge, "pkg", "Web artifact resolve edge")?)
+            .ok_or_else(|| error("Web artifact resolve package 缺失"))?;
+        if package_name(resolved)? != *dependency_name {
+            return Err(error(format!(
+                "Web artifact resolve edge identity 错误: {dependency_name}"
+            )));
+        }
+    }
+    for dependency_name in WEB_ARTIFACT_DEV_DEPENDENCIES {
+        let edge = direct_edge(
+            node,
+            &dependency_name.replace('-', "_"),
+            WEB_ARTIFACT_PACKAGE,
+        )?;
+        let context = format!("{WEB_ARTIFACT_PACKAGE} dev -> {dependency_name}");
+        dev_edge(edge, &context)?;
+        let resolved = packages
+            .get(string_field(edge, "pkg", "Web artifact dev resolve edge")?)
+            .ok_or_else(|| error("Web artifact dev resolve package 缺失"))?;
+        if package_name(resolved)? != *dependency_name {
+            return Err(error(format!(
+                "Web artifact dev resolve edge identity 错误: {dependency_name}"
+            )));
+        }
+        let resolved_node = nodes
+            .get(string_field(edge, "pkg", "Web artifact dev resolve edge")?)
+            .ok_or_else(|| error("Web artifact dev resolve node 缺失"))?;
+        let features = unique_string_array(
+            resolved_node
+                .get("features")
+                .ok_or_else(|| error(format!("{context} resolved features 缺失")))?,
+            &format!("{context} resolved features"),
+        )?;
+        if !features.contains(&"default") {
+            return Err(error(format!("{context} resolved default feature 缺失")));
+        }
+    }
+    Ok(())
+}
+
 fn validate_exact_direct_dependencies(
     package: &Map<String, Value>,
     package_name_expected: &str,
@@ -1211,6 +1392,46 @@ fn validate_exact_direct_dependencies(
     if actual.len() != expected.len() || actual_set != expected {
         return Err(error(format!(
             "{package_name_expected} direct dependencies 必须精确为 {expected:?}，实际 {actual:?}"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_exact_normal_dependencies(
+    package: &Map<String, Value>,
+    package_name_expected: &str,
+    expected: &[&str],
+) -> PolicyResult<()> {
+    let actual = package_dependencies(package)?
+        .into_iter()
+        .filter(|dependency| normal_kind(dependency.get("kind").and_then(Value::as_str)))
+        .map(dependency_identity)
+        .collect::<PolicyResult<Vec<_>>>()?;
+    let expected = expected.iter().copied().collect::<HashSet<_>>();
+    let actual_set = actual.iter().copied().collect::<HashSet<_>>();
+    if actual.len() != expected.len() || actual_set != expected {
+        return Err(error(format!(
+            "{package_name_expected} normal dependencies 必须精确为 {expected:?}，实际 {actual:?}"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_exact_dev_dependencies(
+    package: &Map<String, Value>,
+    package_name_expected: &str,
+    expected: &[&str],
+) -> PolicyResult<()> {
+    let actual = package_dependencies(package)?
+        .into_iter()
+        .filter(|dependency| dependency.get("kind").and_then(Value::as_str) == Some("dev"))
+        .map(dependency_identity)
+        .collect::<PolicyResult<Vec<_>>>()?;
+    let expected = expected.iter().copied().collect::<HashSet<_>>();
+    let actual_set = actual.iter().copied().collect::<HashSet<_>>();
+    if actual.len() != expected.len() || actual_set != expected {
+        return Err(error(format!(
+            "{package_name_expected} dev dependencies 必须精确为 {expected:?}，实际 {actual:?}"
         )));
     }
     Ok(())
@@ -1286,6 +1507,7 @@ fn audit_metadata(metadata: &Value) -> PolicyResult<()> {
     validate_runtime_isolation(metadata, &workspace, &default_members, &packages, &nodes)?;
     validate_legacy_graph(&workspace, &packages, &nodes)?;
     validate_tool_and_contract(&workspace, &packages, &nodes)?;
+    validate_web_artifact_dependencies(&workspace, &packages, &nodes)?;
     Ok(())
 }
 
@@ -1315,6 +1537,9 @@ mod tests {
             "serde" => "1.0.228",
             "serde_json" => "1.0.150",
             "sha2" => "0.10.9",
+            "libc" => "0.2.186",
+            "fs4" => "0.13.1",
+            "tempfile" => "3.27.0",
             _ => "1.0.0",
         }
     }
@@ -1348,6 +1573,12 @@ mod tests {
 
     fn registry_dependency(name: &str, req: &str, default: bool, features: &[&str]) -> Value {
         dependency(name, Some(CRATES_IO_SOURCE), req, default, features)
+    }
+
+    fn dev_registry_dependency(name: &str, req: &str, default: bool, features: &[&str]) -> Value {
+        let mut dependency = registry_dependency(name, req, default, features);
+        dependency["kind"] = json!("dev");
+        dependency
     }
 
     fn package(name: &str, dependencies: Vec<Value>) -> Value {
@@ -1385,6 +1616,14 @@ mod tests {
         })
     }
 
+    fn dev_edge(name: &str, package_id: &str) -> Value {
+        json!({
+            "name": name.replace('-', "_"),
+            "pkg": package_id,
+            "dep_kinds": [{"kind": "dev", "target": null}],
+        })
+    }
+
     fn node(package_id: &str, edges: Vec<Value>, features: &[&str]) -> Value {
         let dependencies = edges
             .iter()
@@ -1404,6 +1643,7 @@ mod tests {
             "kanban-core",
             SERVICE_PACKAGE,
             CONTRACT_PACKAGE,
+            WEB_ARTIFACT_PACKAGE,
             "kanban-client",
             "kanban-cli",
             "kanban-mcp",
@@ -1428,6 +1668,16 @@ mod tests {
                 },
                 registry_dependency("serde", "^1.0", true, &["derive"]),
                 registry_dependency("serde_json", "^1.0", true, &[]),
+                registry_dependency("sha2", "^0.10", true, &[]),
+            ],
+        ));
+        packages.push(package(
+            WEB_ARTIFACT_PACKAGE,
+            vec![
+                local_dependency(CONTRACT_PACKAGE, &[]),
+                registry_dependency("libc", "^0.2", false, &[]),
+                dev_registry_dependency("serde_json", "^1.0", true, &[]),
+                dev_registry_dependency("tempfile", "^3.10", true, &[]),
             ],
         ));
         packages.push(package(
@@ -1461,24 +1711,29 @@ mod tests {
         packages.push(package(
             TOOL_PACKAGE,
             vec![
+                registry_dependency(FS4_PACKAGE, "^0.13.1", true, &[]),
                 registry_dependency(JSONSCHEMA_PACKAGE, "^0.47.0", false, &[]),
                 local_dependency(CONTRACT_PACKAGE, &["schema"]),
+                local_dependency(WEB_ARTIFACT_PACKAGE, &[]),
                 registry_dependency("serde", "^1.0", true, &["derive"]),
                 registry_dependency("serde_json", "^1.0", true, &[]),
                 registry_dependency("sha2", "^0.10", true, &[]),
             ],
         ));
         for name in [
+            FS4_PACKAGE,
             "turso",
             "axum",
             "ureq",
             "rmcp",
             "tauri",
+            "libc",
             JSONSCHEMA_PACKAGE,
             SCHEMARS_PACKAGE,
             "serde",
             "serde_json",
             "sha2",
+            "tempfile",
         ] {
             packages.push(registry_package(name));
         }
@@ -1496,8 +1751,19 @@ mod tests {
                 edge(SCHEMARS_PACKAGE, &registry_id(SCHEMARS_PACKAGE, "1.2.1")),
                 edge("serde", &registry_id("serde", "1.0.228")),
                 edge("serde_json", &registry_id("serde_json", "1.0.150")),
+                edge("sha2", &registry_id("sha2", "0.10.9")),
             ],
             &["default", "schema"],
+        ));
+        nodes.push(node(
+            &id(WEB_ARTIFACT_PACKAGE),
+            vec![
+                edge(CONTRACT_PACKAGE, &id(CONTRACT_PACKAGE)),
+                edge("libc", &registry_id("libc", "0.2.186")),
+                dev_edge("serde_json", &registry_id("serde_json", "1.0.150")),
+                dev_edge("tempfile", &registry_id("tempfile", "3.27.0")),
+            ],
+            &[],
         ));
         nodes.push(node(
             &id("kanban-client"),
@@ -1529,11 +1795,13 @@ mod tests {
         nodes.push(node(
             &id(TOOL_PACKAGE),
             vec![
+                edge(FS4_PACKAGE, &registry_id(FS4_PACKAGE, "0.13.1")),
                 edge(
                     JSONSCHEMA_PACKAGE,
                     &registry_id(JSONSCHEMA_PACKAGE, "0.47.0"),
                 ),
                 edge(CONTRACT_PACKAGE, &id(CONTRACT_PACKAGE)),
+                edge(WEB_ARTIFACT_PACKAGE, &id(WEB_ARTIFACT_PACKAGE)),
                 edge("serde", &registry_id("serde", "1.0.228")),
                 edge("serde_json", &registry_id("serde_json", "1.0.150")),
                 edge("sha2", &registry_id("sha2", "0.10.9")),
@@ -1541,15 +1809,18 @@ mod tests {
             &[],
         ));
         for name in [
+            FS4_PACKAGE,
             "turso",
             "axum",
             "ureq",
             "rmcp",
             "tauri",
+            "libc",
             JSONSCHEMA_PACKAGE,
             "serde",
             "serde_json",
             "sha2",
+            "tempfile",
         ] {
             let features = match name {
                 "turso" => vec!["fts"],
@@ -1557,6 +1828,10 @@ mod tests {
                 "rmcp" => vec!["macros", "server", "transport-io"],
                 "tauri" => vec!["default", "tray-icon"],
                 "axum" => vec!["default"],
+                "libc" => vec!["default"],
+                "fs4" => vec!["default"],
+                "tempfile" => vec!["default"],
+                "serde_json" => vec!["default"],
                 _ => vec![],
             };
             nodes.push(node(
@@ -1575,7 +1850,7 @@ mod tests {
             .iter()
             .map(|name| id(name))
             .collect::<Vec<_>>();
-        let default_members = workspace_names[..7]
+        let default_members = workspace_names[..8]
             .iter()
             .map(|name| id(name))
             .collect::<Vec<_>>();
@@ -1630,6 +1905,43 @@ mod tests {
     #[test]
     fn clean_fixture_passes() {
         audit_metadata(&fixture()).expect("clean dependency fixture should pass");
+    }
+
+    #[test]
+    fn web_artifact_and_protocol_dependency_boundaries_are_frozen() {
+        assert_reject(fixture(), |metadata| {
+            package_record(metadata, WEB_ARTIFACT_PACKAGE)["dependencies"]
+                .as_array_mut()
+                .unwrap()
+                .push(registry_dependency("serde", "^1.0", true, &["derive"]));
+        });
+        assert_reject(fixture(), |metadata| {
+            dependency_record(metadata, CONTRACT_PACKAGE, "sha2")["req"] = json!("^0.11");
+        });
+        assert_reject(fixture(), |metadata| {
+            dependency_record(metadata, WEB_ARTIFACT_PACKAGE, "libc")["uses_default_features"] =
+                json!(true);
+        });
+        assert_reject(fixture(), |metadata| {
+            let mut dependency = registry_dependency("sha2", "^0.10", true, &[]);
+            dependency["kind"] = json!("dev");
+            package_record(metadata, WEB_ARTIFACT_PACKAGE)["dependencies"]
+                .as_array_mut()
+                .unwrap()
+                .push(dependency);
+        });
+        assert_reject(fixture(), |metadata| {
+            dependency_record(metadata, WEB_ARTIFACT_PACKAGE, "tempfile")["target"] =
+                json!("cfg(unix)");
+        });
+        assert_reject(fixture(), |metadata| {
+            let mut dependency = registry_dependency("sha2", "^0.10", true, &[]);
+            dependency["kind"] = json!("build");
+            package_record(metadata, WEB_ARTIFACT_PACKAGE)["dependencies"]
+                .as_array_mut()
+                .unwrap()
+                .push(dependency);
+        });
     }
 
     #[test]

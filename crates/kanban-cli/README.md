@@ -9,6 +9,10 @@ hook 外，命令都通过 `kanban-client` 请求 host；CLI 不直接打开数�
 显式 lifecycle 操作。需要脚本稳定输出时传 `--json`；错误使用 protocol 的 machine `error.code`，
 人类消息不作为脚本判定接口。
 
+源码树完成 Web build 后，可从仓库根目录用 `kanban serve --web-dir apps/web/dist` 启动同源 `/app/`
+UI；打包安装的默认 artifact 目录是 `/usr/share/kanban-tool/web`。只需要 API host 时使用
+`kanban serve --no-web`。Web 目录解析优先级为显式 `--web-dir`、`KANBAN_WEB_DIR`、默认目录。
+
 完整领域面还包括 `label`/`labels`/`ontology`、`search`/`index`、`graph`、`vector`、`context`、
 signals、attachments、runs/events 和 host-admin maintenance。`kanban label proposals list` 的
 `--task-ref` 是可选的：提供时按任务列出 proposal；省略时按当前 board 查询，`--status` 可继续过滤。

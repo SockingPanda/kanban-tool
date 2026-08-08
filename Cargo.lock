@@ -2764,6 +2764,7 @@ dependencies = [
  "kanban-core",
  "kanban-protocol",
  "kanban-server",
+ "kanban-web-artifact",
  "serde",
  "serde_json",
  "serde_path_to_error",
@@ -2827,6 +2828,7 @@ dependencies = [
  "schemars 1.2.1",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -2837,6 +2839,7 @@ dependencies = [
  "http-body-util",
  "kanban-protocol",
  "kanban-service",
+ "kanban-web-artifact",
  "serde",
  "serde_json",
  "tempfile",
@@ -2860,6 +2863,16 @@ dependencies = [
  "tokio",
  "turso",
  "ulid",
+]
+
+[[package]]
+name = "kanban-web-artifact"
+version = "3.0.0"
+dependencies = [
+ "kanban-protocol",
+ "libc",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -7324,6 +7337,7 @@ dependencies = [
  "fs4",
  "jsonschema",
  "kanban-protocol",
+ "kanban-web-artifact",
  "serde",
  "serde_json",
  "sha2",

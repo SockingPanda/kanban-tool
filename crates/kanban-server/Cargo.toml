@@ -14,6 +14,7 @@ legacy-sqlite-import = ["kanban-service/legacy-sqlite-import"]
 axum.workspace = true
 kanban-service.workspace = true
 kanban-protocol = { workspace = true, default-features = false }
+kanban-web-artifact = { workspace = true, default-features = false }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 tokio = { workspace = true, features = [

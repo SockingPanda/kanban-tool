@@ -6,7 +6,8 @@
 //! HTTP handler 或 CLI command。operation inventory 保存当前公开 surface、contract、
 //! transport、schema、fixture 与明确 exclusion；真实 runtime 行为继续由各 adapter 的
 //! 集成测试验证。schema model 生成由显式 `schema` feature 启用；离线校验、artifact
-//! 管理和 CLI 位于独立的 `xtask` leaf crate。正常 runtime 依赖图只包含 Serde wire 类型。
+//! 管理和 CLI tooling 分别由独立的 `kanban-web-artifact` 与 `xtask` owner 负责；本 crate 只拥有
+//! 跨 adapter 的 wire value contract 与 schema/catalog。
 // 通用 signal DTO 由 HTTP、client、CLI 和 MCP 共享。
 
 pub mod admin_catalog;
@@ -65,6 +66,7 @@ mod task_core;
 mod task_graph;
 mod task_read;
 mod transitions;
+pub mod web_artifact;
 mod wire;
 
 #[cfg(all(test, feature = "schema"))]
@@ -224,6 +226,12 @@ pub use transitions::{
     ReclaimTaskResponse, ReleaseTaskPath, ReleaseTaskResponse, ReopenTaskPath, ReopenTaskResponse,
     SpecifyTaskPath, SpecifyTaskResponse, SubmitReviewTaskPath, SubmitReviewTaskResponse,
     UnblockTaskPath, UnblockTaskResponse,
+};
+pub use web_artifact::{
+    WEB_ARTIFACT_BASE_PATH, WEB_ARTIFACT_ENTRYPOINT, WEB_ARTIFACT_FORMAT_VERSION,
+    WEB_ARTIFACT_MANIFEST_PATH, WEB_PROTOCOL_VERSION, WebArtifactError, WebArtifactFile,
+    WebArtifactManifest, validate_web_artifact_manifest, web_artifact_build_id_for,
+    web_artifact_build_preimage, web_artifact_file_from_bytes, web_artifact_sha256_for_bytes,
 };
 pub use wire::{
     ApiErrorCode, CreatedLabelsMeta, DataEnvelope, DecisionMetadata, DecisionOption,

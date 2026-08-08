@@ -70,6 +70,27 @@
     outline-offset: -0.15rem;
   }
 
+  .startupError {
+    display: grid;
+    align-content: center;
+    gap: 0.85rem;
+    max-width: 48rem;
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 2.5rem 3rem 4rem;
+  }
+
+  .startupError h1,
+  .startupError p {
+    margin: 0;
+  }
+
+  .startupError h1 {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+
   .lede {
     max-width: 62rem;
     margin: 1rem 0 0;

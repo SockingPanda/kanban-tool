@@ -56,4 +56,23 @@ describe("TaskInspector", () => {
     expect(markup).not.toContain("Add comment")
     expect(markup).not.toContain("Create step")
   })
+
+  test("does not invoke lazy detail loaders until a disclosure is opened", () => {
+    const onLoadRuns = vi.fn(async () => model.runs)
+    const onLoadEvents = vi.fn(async () => model.events)
+    const onLoadNeighborhood = vi.fn(async () => ({ centerTaskId: model.task.id, nodes: [], edges: [] }))
+    renderToStaticMarkup(
+      <TaskInspector
+        model={{ ...model, runs: [], events: [], neighborhood: undefined }}
+        onSelectTask={vi.fn()}
+        onLoadRuns={onLoadRuns}
+        onLoadEvents={onLoadEvents}
+        onLoadNeighborhood={onLoadNeighborhood}
+      />,
+    )
+
+    expect(onLoadRuns).not.toHaveBeenCalled()
+    expect(onLoadEvents).not.toHaveBeenCalled()
+    expect(onLoadNeighborhood).not.toHaveBeenCalled()
+  })
 })

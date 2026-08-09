@@ -302,9 +302,8 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
   }, [])
 
   const ownsLiveBoardRoute = route.kind === "home"
-    || (route.kind === "board" && (route.view === undefined || route.view === "board"))
   // BoardLive owns loading, empty, stale and offline presentation. Keep the
-  // child mounted before generic boundaries; for Explorer routes it remains a
+  // child mounted before generic boundaries; for board routes it remains a
   // hidden session owner and Explorer owns the visible route content below.
   if (ownsLiveBoardRoute && children) return <>{children}</>
 

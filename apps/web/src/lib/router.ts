@@ -116,11 +116,13 @@ export function parseAppRoute(
   if (pathname.startsWith(boardPrefix)) {
     const tail = pathname.slice(boardPrefix.length)
     const separator = tail.lastIndexOf("/")
-    const view = separator > 0 ? tail.slice(separator + 1) : ""
+    // `/boards/:slug` is the canonical default Board view. Normalize it to
+    // the same board route as the explicit `/board` suffix.
+    const view = separator > 0 ? tail.slice(separator + 1) : "board"
     if (!(["board", "list", "map", "runs", "events"] as const).includes(view as BoardRouteView)) {
       return { kind: "not-found", pathname }
     }
-    const slug = tail.slice(0, separator)
+    const slug = separator > 0 ? tail.slice(0, separator) : tail
     const boardSlug = decodeBoardSlug(slug, pathname)
     if (typeof boardSlug === "string") {
       const route = { kind: "board" as const, boardSlug, pathname: routePath({ kind: "board", boardSlug, view: view as BoardRouteView }, options) }
@@ -146,7 +148,15 @@ function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOpt
       return { kind: "home", pathname: routePath(target, options) }
     case "board":
       if (!parseCanonicalBoardSlug(target.boardSlug)) return invalidBoardRoute(routePath({ kind: "home" }, options), target.boardSlug)
-      return { kind: "board", boardSlug: target.boardSlug, pathname: routePath(target, options) }
+      // `AppRoute` is a valid navigation target too. Preserve its explorer
+      // view/query when an object target comes from a copied deep link.
+      return {
+        kind: "board",
+        boardSlug: target.boardSlug,
+        pathname: routePath(target, options),
+        ...(target.view ? { view: target.view } : {}),
+        ...(target.query ? { query: target.query } : {}),
+      }
     case "settings":
       return { kind: "settings", pathname: routePath(target, options) }
     case "not-found":

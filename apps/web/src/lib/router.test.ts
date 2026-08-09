@@ -47,6 +47,14 @@ describe("App route parser", () => {
     })
   })
 
+  test("treats a board slug without a view suffix as the default board view", () => {
+    expect(parseAppRoute("/app/boards/alpha")).toEqual({
+      kind: "board",
+      boardSlug: "alpha",
+      pathname: "/app/boards/alpha/board",
+    })
+  })
+
   test("parses explorer views and preserves URL query state", () => {
     expect(parseAppRoute("http://kanban.test/app/boards/default/list?status=ready&sort=-updated_at&page=2&q=needle")).toMatchObject({
       kind: "board",
@@ -135,6 +143,16 @@ describe("History API navigation", () => {
     expect(routePath(route)).toBe("/app/boards/team-one/board")
     expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/boards/team-one/board")
     expect(history.replaceState).not.toHaveBeenCalled()
+  })
+
+  test("preserves explorer view and query for an object deep-link target", async () => {
+    const history = { pushState: vi.fn(), replaceState: vi.fn() }
+    const target = parseAppRoute("/app/boards/team-one/events?task=t_1&kind=task.updated")
+
+    const route = await navigateApp(target, { history })
+
+    expect(route).toMatchObject({ kind: "board", boardSlug: "team-one", view: "events", query: "task=t_1&kind=task.updated" })
+    expect(history.pushState).toHaveBeenCalledWith({}, "", "/app/boards/team-one/events?task=t_1&kind=task.updated")
   })
 
   test("renders an invalid explicit board route as an error without history", async () => {

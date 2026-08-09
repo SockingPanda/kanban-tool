@@ -524,6 +524,7 @@ export function mergeBoardEvents(
 
 export function buildBoardEventsRequest(board: string, taskId: string | null = null, after = 0): string {
   try {
+    if (taskId !== null) validateCanonicalTaskSelector(taskId)
     const parsed = parseApiListEventsQuery({
       board,
       task_id: taskId,
@@ -552,6 +553,8 @@ export async function loadBoardEvents(
   selector = runtime.defaultBoard,
   options: ExplorerReadOptions & { readonly taskId?: string | null } = {},
 ): Promise<BoardEventsReadModel> {
+  const taskId = options.taskId?.trim() || null
+  if (taskId !== null) validateCanonicalTaskSelector(taskId)
   const budget = options.budget ?? new ExplorerReadBudget()
   let transport: HttpTransport
   try {
@@ -561,8 +564,6 @@ export async function loadBoardEvents(
   }
   try {
     const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
-    const taskId = options.taskId?.trim() || null
-    if (taskId !== null) validateTaskSelector(taskId)
     let after = 0
     let pageCount = 0
     let events: readonly ExplorerEvent[] = []
@@ -840,13 +841,21 @@ function hasUnsafeTaskSelector(value: string): boolean {
   return false
 }
 
-function validateTaskSelector(value: string): void {
-  if (hasUnsafeTaskSelector(value)) throw new ExplorerReadError("anomaly", "Runs 请求的 task selector 无效。")
+function validateCanonicalTaskSelector(value: string): void {
+  if (hasUnsafeTaskSelector(value) || !value.startsWith("t_") || value.length <= 2) {
+    throw new ExplorerReadError("anomaly", "请求的 task selector 必须是 canonical t_ identity。", { reason: "task-not-found" })
+  }
+}
+
+function validateRunSelector(value: string): void {
+  if (hasUnsafeTaskSelector(value) || !value.startsWith("r_") || value.length <= 2) {
+    throw new ExplorerReadError("anomaly", "Run selector 必须是 canonical r_ identity。")
+  }
 }
 
 export function buildTaskRunsRequest(taskId: string): string {
   try {
-    validateTaskSelector(taskId)
+    validateCanonicalTaskSelector(taskId)
     const path = parseApiListRunsPath({ task_id: taskId }).task_id
     return `/api/v1/tasks/${encodedSegment(path)}/runs`
   } catch (error) {
@@ -860,7 +869,7 @@ export function buildTaskRunsRequest(taskId: string): string {
 
 export function buildRunLogRequest(runId: string): string {
   try {
-    validateTaskSelector(runId)
+    validateRunSelector(runId)
     const path = parseApiGetRunLogPath({ run_id: runId }).run_id
     return `/api/v1/runs/${encodedSegment(path)}/log`
   } catch (error) {
@@ -889,7 +898,7 @@ export async function loadTaskRuns(
   const budget = options.budget ?? new ExplorerReadBudget()
   let transport: HttpTransport
   try {
-    validateTaskSelector(taskId)
+    validateCanonicalTaskSelector(taskId)
     transport = options.transport ?? createHttpTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
@@ -925,13 +934,20 @@ export async function loadTaskRuns(
 export interface TaskInspectorReadModel {
   readonly board: ExplorerBoardIdentity
   readonly task: ApiGetTaskResponseContract["data"]
-  readonly neighborhood: ApiTaskNeighborhoodResponseContract["data"]
+  readonly neighborhood: ApiTaskNeighborhoodResponseContract["data"] | null
   readonly dependencies: ApiListDependenciesResponseContract["data"]
   readonly steps: ApiListStepsResponseContract["data"]
   readonly runs: ApiListRunsResponseContract["data"]
   readonly comments: ApiListCommentsResponseContract["data"]
   readonly events: ApiListEventsResponseContract["data"]
   readonly runtime: Pick<WebRuntimeConfig, "actor" | "apiBaseUrl" | "serverVersion" | "protocolVersion" | "webBuildId">
+}
+
+export interface TaskInspectorReadOptions extends ExplorerReadOptions {
+  /** Detail sections are fetched by the inspector when their disclosure opens. */
+  readonly includeNeighborhood?: boolean
+  readonly includeRuns?: boolean
+  readonly includeEvents?: boolean
 }
 
 export interface TaskInspectorRequests {
@@ -945,6 +961,7 @@ export interface TaskInspectorRequests {
 }
 
 function listEventsRequest(board: string, taskId: string): string {
+  validateCanonicalTaskSelector(taskId)
   const query = parseApiListEventsQuery({ board, task_id: taskId, after: 0, limit: 50 })
   const params = new URLSearchParams()
   if (query.board !== undefined) params.set("board", query.board)
@@ -956,6 +973,7 @@ function listEventsRequest(board: string, taskId: string): string {
 
 export function buildTaskInspectorRequests(board: string, taskId: string): TaskInspectorRequests {
   try {
+    validateCanonicalTaskSelector(taskId)
     const task = parseApiGetTaskPath({ task_id: taskId }).task_id
     const neighborhoodPath = parseApiTaskNeighborhoodPath({ task_id: task }).task_id
     const neighborhoodQuery = parseApiTaskNeighborhoodQuery({ depth: 1, include_archived_context: false, limit_nodes: 40 })
@@ -992,17 +1010,53 @@ function validateInspectorTask(
   }
 }
 
+function validateNeighborhoodScope(
+  neighborhood: ApiTaskNeighborhoodResponseContract["data"],
+  board: ExplorerBoardIdentity,
+  taskId: string,
+): void {
+  if (neighborhood.center_task_id !== taskId) throw new ExplorerReadError("anomaly", "任务邻域响应中心 task id 不一致。")
+  const nodeIds = new Set<string>()
+  let centerCount = 0
+  for (const node of neighborhood.nodes) {
+    validateTaskBoard(node.task, board)
+    const nodeId = node.task.id
+    if (nodeId.trim().length === 0 || nodeIds.has(nodeId)) {
+      throw new ExplorerReadError("anomaly", "任务邻域包含重复或空 task node id。")
+    }
+    nodeIds.add(nodeId)
+    if (node.role === "center") {
+      centerCount += 1
+      if (nodeId !== taskId) throw new ExplorerReadError("anomaly", "任务邻域 center node 越过当前 task scope。")
+    }
+  }
+  if (centerCount !== 1 || !nodeIds.has(taskId)) throw new ExplorerReadError("anomaly", "任务邻域缺少唯一的当前 task center node。")
+  const edgeIds = new Set<string>()
+  for (const edge of neighborhood.edges) {
+    if (edge.id.trim().length === 0 || edgeIds.has(edge.id)) {
+      throw new ExplorerReadError("anomaly", "任务邻域包含重复或空 edge id。")
+    }
+    if (!nodeIds.has(edge.source_task_id) || !nodeIds.has(edge.target_task_id)) {
+      throw new ExplorerReadError("anomaly", "任务邻域 edge 越过当前 node scope。")
+    }
+    edgeIds.add(edge.id)
+  }
+  if (neighborhood.meta.node_count !== neighborhood.nodes.length || neighborhood.meta.edge_count !== neighborhood.edges.length) {
+    throw new ExplorerReadError("anomaly", "任务邻域 meta 与 node/edge 数量不一致。")
+  }
+}
+
 function validateInspectorScope(
   model: Pick<TaskInspectorReadModel, "neighborhood" | "dependencies" | "steps" | "runs" | "comments" | "events">,
   board: ExplorerBoardIdentity,
   taskId: string,
 ): void {
-  if (model.neighborhood.center_task_id !== taskId) throw new ExplorerReadError("anomaly", "任务邻域响应中心 task id 不一致。")
+  if (model.neighborhood !== null) validateNeighborhoodScope(model.neighborhood, board, taskId)
   if (model.dependencies.task.id !== taskId) throw new ExplorerReadError("anomaly", "任务依赖响应 task id 不一致。")
   if (model.steps.task_id !== taskId) throw new ExplorerReadError("anomaly", "任务步骤响应 task id 不一致。")
   for (const task of [...model.dependencies.parents, ...model.dependencies.children]) validateTaskBoard(task, board)
   for (const event of model.events) {
-    if (event.board_id !== board.id || (event.task_id !== null && event.task_id !== taskId)) {
+    if (event.board_id !== board.id || event.task_id !== taskId) {
       throw new ExplorerReadError("anomaly", "任务事件响应越过了当前 board/task scope。")
     }
   }
@@ -1024,8 +1078,11 @@ export async function loadTaskInspector(
   runtime: WebRuntimeConfig,
   selector: string,
   taskId: string,
-  options: ExplorerReadOptions = {},
+  options: TaskInspectorReadOptions = {},
 ): Promise<TaskInspectorReadModel> {
+  // Reject a copied/typed task deep link before resolving board identity or
+  // constructing a transport request. Invalid selectors are local errors.
+  validateCanonicalTaskSelector(taskId)
   const budget = options.budget ?? new ExplorerReadBudget()
   let transport: HttpTransport
   try {
@@ -1051,13 +1108,22 @@ export async function loadTaskInspector(
       throw error
     }
     validateInspectorTask(taskResponse.data, board, taskId)
+    const neighborhoodPromise: Promise<ApiTaskNeighborhoodResponseContract["data"] | null> = options.includeNeighborhood === false
+      ? Promise.resolve(null)
+      : getPayload(transport, requests.neighborhood, linked.signal, budget).then((payload) => parseContract("api.task-neighborhood.response", parseApiTaskNeighborhoodResponse, payload).data)
+    const runsPromise: Promise<ApiListRunsResponseContract["data"]> = options.includeRuns === false
+      ? Promise.resolve([])
+      : getPayload(transport, requests.runs, linked.signal, budget).then((payload) => parseContract("api.list-runs.response", parseApiListRunsResponse, payload).data)
+    const eventsPromise: Promise<ApiListEventsResponseContract["data"]> = options.includeEvents === false
+      ? Promise.resolve([])
+      : getPayload(transport, requests.events, linked.signal, budget).then((payload) => parseContract("api.list-events.response", parseApiListEventsResponse, payload).data)
     const [neighborhood, dependencies, steps, runs, comments, events] = await Promise.all([
-      getPayload(transport, requests.neighborhood, linked.signal, budget).then((payload) => parseContract("api.task-neighborhood.response", parseApiTaskNeighborhoodResponse, payload).data),
+      neighborhoodPromise,
       getPayload(transport, requests.dependencies, linked.signal, budget).then((payload) => parseContract("api.list-dependencies.response", parseApiListDependenciesResponse, payload).data),
       getPayload(transport, requests.steps, linked.signal, budget).then((payload) => parseContract("api.list-steps.response", parseApiListStepsResponse, payload).data),
-      getPayload(transport, requests.runs, linked.signal, budget).then((payload) => parseContract("api.list-runs.response", parseApiListRunsResponse, payload).data),
+      runsPromise,
       getPayload(transport, requests.comments, linked.signal, budget).then((payload) => parseContract("api.list-comments.response", parseApiListCommentsResponse, payload).data),
-      getPayload(transport, requests.events, linked.signal, budget).then((payload) => parseContract("api.list-events.response", parseApiListEventsResponse, payload).data),
+      eventsPromise,
     ])
     const detail = { neighborhood, dependencies, steps, runs, comments, events }
     validateInspectorScope(detail, board, taskId)
@@ -1083,5 +1149,81 @@ export async function loadTaskInspector(
     return wrapTransportError(error)
   } finally {
     linked.cleanup()
+  }
+}
+
+async function loadInspectorSectionContext(
+  runtime: WebRuntimeConfig,
+  selector: string,
+  taskId: string,
+  options: ExplorerReadOptions,
+): Promise<{ readonly board: ExplorerBoardIdentity; readonly transport: HttpTransport; readonly budget: ExplorerReadBudget }> {
+  validateCanonicalTaskSelector(taskId)
+  const budget = options.budget ?? new ExplorerReadBudget()
+  const transport = options.transport ?? createHttpTransport(runtime, options)
+  const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
+  return { board, transport, budget }
+}
+
+export async function loadTaskInspectorNeighborhood(
+  runtime: WebRuntimeConfig,
+  selector: string,
+  taskId: string,
+  options: ExplorerReadOptions = {},
+): Promise<ApiTaskNeighborhoodResponseContract["data"]> {
+  try {
+    const { board, transport, budget } = await loadInspectorSectionContext(runtime, selector, taskId, options)
+    const requests = buildTaskInspectorRequests(board.slug, taskId)
+    const neighborhood = parseContract(
+      "api.task-neighborhood.response",
+      parseApiTaskNeighborhoodResponse,
+      await getPayload(transport, requests.neighborhood, options.signal, budget),
+    ).data
+    validateNeighborhoodScope(neighborhood, board, taskId)
+    return neighborhood
+  } catch (error) {
+    return wrapTransportError(error)
+  }
+}
+
+export async function loadTaskInspectorRuns(
+  runtime: WebRuntimeConfig,
+  selector: string,
+  taskId: string,
+  options: ExplorerReadOptions = {},
+): Promise<ApiListRunsResponseContract["data"]> {
+  try {
+    const { board, transport, budget } = await loadInspectorSectionContext(runtime, selector, taskId, options)
+    const requests = buildTaskInspectorRequests(board.slug, taskId)
+    const runs = parseContract(
+      "api.list-runs.response",
+      parseApiListRunsResponse,
+      await getPayload(transport, requests.runs, options.signal, budget),
+    ).data
+    validateRunScope(runs, taskId)
+    return runs
+  } catch (error) {
+    return wrapTransportError(error)
+  }
+}
+
+export async function loadTaskInspectorEvents(
+  runtime: WebRuntimeConfig,
+  selector: string,
+  taskId: string,
+  options: ExplorerReadOptions = {},
+): Promise<ApiListEventsResponseContract["data"]> {
+  try {
+    const { board, transport, budget } = await loadInspectorSectionContext(runtime, selector, taskId, options)
+    const requests = buildTaskInspectorRequests(board.slug, taskId)
+    const response = parseContract(
+      "api.list-events.response",
+      parseApiListEventsResponse,
+      await getPayload(transport, requests.events, options.signal, budget),
+    )
+    validateEventBatch(response.data, board, taskId, 0, response.meta.next_after, 50)
+    return response.data
+  } catch (error) {
+    return wrapTransportError(error)
   }
 }

@@ -167,6 +167,35 @@ describe("explorer task list URL state", () => {
     })
   })
 
+  test("rejects non-canonical task deep links before building requests", () => {
+    expect(() => buildTaskInspectorRequests("default", "task-1")).toThrow(/canonical t_ identity/)
+    expect(() => buildTaskRunsRequest("task-1")).toThrow(/canonical t_ identity/)
+    expect(() => buildBoardEventsRequest("default", "task-1")).toThrow(/canonical t_ identity/)
+    expect(() => buildRunLogRequest("run-1")).toThrow(/canonical r_ identity/)
+  })
+
+  test("rejects invalid task deep links locally without a board request", async () => {
+    const paths: string[] = []
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        paths.push(path)
+        return { payload: { data: [] }, bytes: 1 }
+      },
+    }
+
+    await expect(loadTaskInspector(runtime, "default", "task-1", { transport })).rejects.toMatchObject({
+      name: "ExplorerReadError",
+      kind: "anomaly",
+      reason: "task-not-found",
+    } satisfies Partial<ExplorerReadError>)
+    await expect(loadBoardEvents(runtime, "default", { transport, taskId: "task-1" })).rejects.toMatchObject({
+      name: "ExplorerReadError",
+      kind: "anomaly",
+      reason: "task-not-found",
+    } satisfies Partial<ExplorerReadError>)
+    expect(paths).toEqual([])
+  })
+
   test("surfaces a typed task-not-found error before attempting detail children", async () => {
     const transport = {
       get: async (path: string): Promise<HttpTransportResponse> => {

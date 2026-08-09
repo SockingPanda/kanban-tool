@@ -78,6 +78,11 @@ describe("TaskInspectorRelationsPanel", () => {
     expect(markup).toContain('data-testid="task-inspector-steps"')
     expect(markup).toContain("alice")
     expect(markup).toContain("**keep** this note")
+    expect(markup).toContain('dateTime="1970-01-01T00:00:00.010Z"')
+    expect(markup).not.toContain(">10<")
+    expect(markup).toContain("评论排序")
+    expect(markup).toContain(">备注</option>")
+    expect(markup).toContain(">决策</option>")
     expect(markup).toContain('{&quot;selected&quot;:&quot;keep&quot;')
     expect(markup).toContain("Parent")
     expect(markup).toContain("Child")
@@ -126,7 +131,9 @@ describe("TaskInspectorRelationsPanel", () => {
             pending: new Set(["addComment:t_current", "addDependency:t_current", "createStep:t_current"]),
             errors: new Map([
               ["addDependency:t_current", { operation: "addDependency", taskId: "t_current", kind: "conflict", message: "Dependency cycle detected", status: 409, code: "dependency_cycle", recoverable: true }],
+              ["removeDependency:t_current", { operation: "removeDependency", taskId: "t_current", kind: "conflict", message: "Dependency removal rejected", status: 409, code: "dependency_remove_conflict", recoverable: true }],
               ["createStep:t_current", { operation: "createStep", taskId: "t_current", kind: "error", message: "Task is outside board scope", status: 422, code: "scope_mismatch", recoverable: true }],
+              ["linkStep:t_current", { operation: "linkStep", taskId: "t_current", kind: "error", message: "Linked task is outside board scope", status: 422, code: "link_scope_mismatch", recoverable: true }],
             ]),
           },
         })}
@@ -138,8 +145,12 @@ describe("TaskInspectorRelationsPanel", () => {
     expect(markup).toContain("正在创建步骤…")
     expect(markup).toContain("Dependency cycle detected")
     expect(markup).toContain("dependency_cycle")
+    expect(markup).toContain("Dependency removal rejected")
+    expect(markup).toContain("dependency_remove_conflict")
     expect(markup).toContain("Task is outside board scope")
     expect(markup).toContain("scope_mismatch")
+    expect(markup).toContain("Linked task is outside board scope")
+    expect(markup).toContain("link_scope_mismatch")
     expect(markup).toContain('role="alert"')
   })
 
@@ -173,7 +184,29 @@ describe("TaskInspectorRelationsPanel input seams", () => {
   test("builds exact typed step and plan inputs", () => {
     expect(__test.stepInput(" Verify ", " Body ", true)).toEqual({ title: "Verify", body: "Body", required: true })
     expect(__test.stepInput(" Link ", "", false, " default#2 ")).toEqual({ title: "Link", required: false, linked_task_ref: "default#2" })
+    expect(__test.stepSubmission(" Create ", " Body ", true, "default#2", "create")).toEqual({ operation: "createStep", input: { title: "Create", body: "Body", required: true } })
+    expect(__test.stepSubmission(" Link ", "", false, "t_2", "link")).toEqual({ operation: "linkStep", input: { title: "Link", required: false, linked_task_ref: "t_2" } })
+    expect(__test.stepSubmission(" ", "Body", true, "t_2", "create")).toBeNull()
+    expect(__test.stepSubmission("Link", "Body", true, "", "link")).toBeNull()
     expect(__test.planInput(" manual execution ")).toEqual({ reason: "manual execution" })
+  })
+
+  test("sorts and pages comments through the same seam used by the controls", () => {
+    const comments = [
+      { id: "c_old", createdAt: 10 },
+      { id: "c_new", createdAt: 20 },
+      { id: "c_mid", createdAt: 15 },
+    ]
+    expect(__test.commentPageState(comments, 0, 2, "newest").comments.map((comment) => comment.id)).toEqual(["c_new", "c_mid"])
+    expect(__test.commentPageState(comments, 1, 2, "newest").comments.map((comment) => comment.id)).toEqual(["c_old"])
+    expect(__test.commentPageState(comments, 0, 2, "oldest").comments.map((comment) => comment.id)).toEqual(["c_old", "c_mid"])
+  })
+
+  test("formats comment timestamps as localized labels with valid machine values", () => {
+    const rendered = __test.formatCommentDateTime(0, "zh")
+    expect(rendered.iso).toBe("1970-01-01T00:00:00.000Z")
+    expect(rendered.label).not.toBe("0")
+    expect(__test.formatCommentDateTime(Number.NaN, "en")).toEqual({ label: "—", iso: "" })
   })
 
   test("resolves direct ids and same-board refs before a mutation, with no call for unresolved input", () => {

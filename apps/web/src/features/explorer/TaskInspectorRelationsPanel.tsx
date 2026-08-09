@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react"
+import { useRef, useState, type FormEvent } from "react"
 
 import {
   inspectorMutationKey,
@@ -6,7 +6,7 @@ import {
   type TaskInspectorMutationHandlers,
   type TaskInspectorMutationSnapshot,
 } from "./task-inspector-mutation-state"
-import { buildCommentInput, buildPlanInput, buildStepInput, resolveTaskSelector, type TaskSelectorResolver } from "./TaskInspectorRelationsPanel.logic"
+import { buildCommentInput, buildPlanInput, buildStepSubmission, commentPageState, formatCommentDateTime, resolveTaskSelector, type CommentSortOrder, type TaskSelectorResolver } from "./TaskInspectorRelationsPanel.logic"
 import styles from "./TaskInspectorRelationsPanel.module.css"
 
 export type TaskInspectorRelationTaskStatus =
@@ -87,10 +87,12 @@ type RelationsCopy = {
   readonly steps: string
   readonly newest: string
   readonly oldest: string
+  readonly commentSortLabel: string
   readonly commentCount: (count: number) => string
   readonly commentKind: string
   readonly commentBody: string
   readonly commentPlaceholder: string
+  readonly requiredCommentBody: string
   readonly addComment: string
   readonly addingComment: string
   readonly parent: string
@@ -100,6 +102,7 @@ type RelationsCopy = {
   readonly noSteps: string
   readonly dependencyInput: string
   readonly dependencyPlaceholder: string
+  readonly requiredDependency: string
   readonly addDependency: string
   readonly addingDependency: string
   readonly removeParent: (title: string) => string
@@ -112,6 +115,7 @@ type RelationsCopy = {
   readonly stepTitle: string
   readonly stepBody: string
   readonly stepBodyPlaceholder: string
+  readonly requiredStepTitle: string
   readonly stepLink: string
   readonly stepLinkPlaceholder: string
   readonly createStep: string
@@ -122,6 +126,7 @@ type RelationsCopy = {
   readonly planState: Readonly<Record<"unplanned" | "planned" | "not_required", string>>
   readonly planReason: string
   readonly planReasonPlaceholder: string
+  readonly requiredPlanReason: string
   readonly markPlanNotRequired: string
   readonly markingPlanNotRequired: string
   readonly metadata: string
@@ -141,10 +146,12 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     steps: "步骤",
     newest: "最新优先",
     oldest: "最早优先",
+    commentSortLabel: "评论排序",
     commentCount: (count) => `${count} 条评论`,
     commentKind: "类型",
     commentBody: "评论内容",
     commentPlaceholder: "记录交接、决定或观察…",
+    requiredCommentBody: "请输入评论内容。",
     addComment: "添加评论",
     addingComment: "正在添加评论…",
     parent: "父任务",
@@ -154,6 +161,7 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     noSteps: "暂无步骤。",
     dependencyInput: "父任务 ref 或 id",
     dependencyPlaceholder: "例如 default#12 或 t_parent…",
+    requiredDependency: "请输入父任务 ref 或 id。",
     addDependency: "添加父依赖",
     addingDependency: "正在添加依赖…",
     removeParent: (title) => `移除父依赖：${title}`,
@@ -166,6 +174,7 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     stepTitle: "步骤标题",
     stepBody: "步骤说明",
     stepBodyPlaceholder: "可选说明…",
+    requiredStepTitle: "请输入步骤标题。",
     stepLink: "关联任务 ref 或 id",
     stepLinkPlaceholder: "可选，例如 default#13…",
     createStep: "创建步骤",
@@ -176,6 +185,7 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
     planReason: "无需计划原因",
     planReasonPlaceholder: "说明为何无需执行计划…",
+    requiredPlanReason: "请输入无需计划原因。",
     markPlanNotRequired: "标记为无需计划",
     markingPlanNotRequired: "正在更新计划…",
     metadata: "元数据",
@@ -193,10 +203,12 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     steps: "Steps",
     newest: "Newest first",
     oldest: "Oldest first",
+    commentSortLabel: "Comment sort order",
     commentCount: (count) => `${count} comments`,
     commentKind: "Kind",
     commentBody: "Comment body",
     commentPlaceholder: "Record a handoff, decision, or observation…",
+    requiredCommentBody: "Enter a comment body.",
     addComment: "Add comment",
     addingComment: "Adding comment…",
     parent: "Parents",
@@ -206,6 +218,7 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     noSteps: "No steps.",
     dependencyInput: "Parent task ref or id",
     dependencyPlaceholder: "For example default#12 or t_parent…",
+    requiredDependency: "Enter a parent task ref or id.",
     addDependency: "Add parent dependency",
     addingDependency: "Adding dependency…",
     removeParent: (title) => `Remove parent dependency: ${title}`,
@@ -218,6 +231,7 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     stepTitle: "Step title",
     stepBody: "Step description",
     stepBodyPlaceholder: "Optional description…",
+    requiredStepTitle: "Enter a step title.",
     stepLink: "Linked task ref or id",
     stepLinkPlaceholder: "Optional, for example default#13…",
     createStep: "Create step",
@@ -228,6 +242,7 @@ const copy: Record<"zh" | "en", RelationsCopy> = {
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
     planReason: "Why no plan is needed",
     planReasonPlaceholder: "Explain why an execution plan is not needed…",
+    requiredPlanReason: "Enter a reason for not requiring a plan.",
     markPlanNotRequired: "Mark plan not required",
     markingPlanNotRequired: "Updating plan…",
     metadata: "Metadata",
@@ -310,6 +325,7 @@ function CommentsPanel({
   handlers,
   snapshot,
   localeCopy,
+  locale,
   pageSize,
 }: {
   readonly taskId: string
@@ -317,32 +333,32 @@ function CommentsPanel({
   readonly handlers: TaskInspectorMutationHandlers
   readonly snapshot: TaskInspectorMutationSnapshot
   readonly localeCopy: RelationsCopy
+  readonly locale: "zh" | "en"
   readonly pageSize: number
 }) {
-  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest")
+  const [sortOrder, setSortOrder] = useState<CommentSortOrder>("newest")
   const [page, setPage] = useState(0)
   const [kind, setKind] = useState<TaskInspectorCommentKind>("note")
   const [body, setBody] = useState("")
-  const sortedComments = useMemo(() => [...comments].sort((left, right) => {
-    const createdDiff = left.createdAt - right.createdAt
-    const idDiff = left.id.localeCompare(right.id)
-    const diff = createdDiff || idDiff
-    return sortOrder === "newest" ? -diff : diff
-  }), [comments, sortOrder])
-  const pageCount = Math.max(1, Math.ceil(sortedComments.length / pageSize))
-  const currentPage = Math.min(Math.max(page, 0), pageCount - 1)
-  const visibleComments = sortedComments.slice(currentPage * pageSize, currentPage * pageSize + pageSize)
+  const [bodyError, setBodyError] = useState<string | null>(null)
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+  const pageState = commentPageState(comments, page, pageSize, sortOrder)
   const pending = pendingFor(snapshot, "addComment", taskId)
   const error = errorFor(snapshot, "addComment", taskId)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const input = buildCommentInput(kind, body)
-    if (!input.body) return
+    if (!input.body) {
+      setBodyError(localeCopy.requiredCommentBody)
+      bodyRef.current?.focus()
+      return
+    }
     try {
       await handlers.addComment(input)
       setBody("")
       setKind("note")
+      setBodyError(null)
     } catch {
       // The shared controller owns the recoverable error snapshot. Keep draft text for retry.
     }
@@ -358,14 +374,15 @@ function CommentsPanel({
         <>
           <div className={styles.toolbar}>
             <label className={styles.inlineField} htmlFor="task-inspector-comments-sort">
-              <span className={styles.visuallyHidden}>{localeCopy.comments}</span>
+              <span className={styles.visuallyHidden}>{localeCopy.commentSortLabel}</span>
               <select
                 id="task-inspector-comments-sort"
                 data-testid="task-inspector-comments-sort"
                 name="comments-sort"
                 value={sortOrder}
+                aria-label={localeCopy.commentSortLabel}
                 onChange={(event) => {
-                  setSortOrder(event.currentTarget.value as "newest" | "oldest")
+                  setSortOrder(event.currentTarget.value as CommentSortOrder)
                   setPage(0)
                 }}
               >
@@ -375,11 +392,14 @@ function CommentsPanel({
             </label>
           </div>
           <ul className={styles.list}>
-            {visibleComments.map((comment) => (
+            {pageState.comments.map((comment) => (
               <li className={styles.card} key={comment.id}>
                 <div className={styles.cardMeta}>
                   <span><strong>{comment.author}</strong><span className={styles.muted}> · {localeCopy.commentKindLabel[comment.kind]}</span></span>
-                  <time dateTime={String(comment.createdAt)}>{comment.createdAt}</time>
+                  {(() => {
+                    const renderedTime = formatCommentDateTime(comment.createdAt, locale)
+                    return <time dateTime={renderedTime.iso || undefined}>{renderedTime.label}</time>
+                  })()}
                 </div>
                 <p className={styles.body}>{comment.body}</p>
                 <details className={styles.metadata}>
@@ -389,11 +409,11 @@ function CommentsPanel({
               </li>
             ))}
           </ul>
-          {pageCount > 1 ? (
+          {pageState.pageCount > 1 ? (
             <div className={styles.pager}>
-              <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={currentPage === 0}>{localeCopy.previous}</button>
-              <span aria-live="polite">{localeCopy.page(currentPage + 1, pageCount)}</span>
-              <button data-testid="task-inspector-comments-next" type="button" onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))} disabled={currentPage >= pageCount - 1}>{localeCopy.next}</button>
+              <button type="button" onClick={() => setPage((value) => Math.max(0, value - 1))} disabled={!pageState.hasPreviousPage}>{localeCopy.previous}</button>
+              <span aria-live="polite">{localeCopy.page(pageState.page + 1, pageState.pageCount)}</span>
+              <button data-testid="task-inspector-comments-next" type="button" onClick={() => setPage((value) => Math.min(pageState.pageCount - 1, value + 1))} disabled={!pageState.hasNextPage}>{localeCopy.next}</button>
             </div>
           ) : null}
         </>
@@ -402,16 +422,17 @@ function CommentsPanel({
         <label>
           <span>{localeCopy.commentKind}</span>
           <select name="comment-kind" value={kind} onChange={(event) => setKind(event.currentTarget.value as TaskInspectorCommentKind)}>
-            <option value="note">note</option>
-            <option value="decision">decision</option>
-            <option value="signal">signal</option>
+            <option value="note">{localeCopy.commentKindLabel.note}</option>
+            <option value="decision">{localeCopy.commentKindLabel.decision}</option>
+            <option value="signal">{localeCopy.commentKindLabel.signal}</option>
           </select>
         </label>
         <label>
           <span>{localeCopy.commentBody}</span>
-          <textarea name="comment-body" autoComplete="off" value={body} onChange={(event) => setBody(event.currentTarget.value)} placeholder={localeCopy.commentPlaceholder} />
+          <textarea ref={bodyRef} name="comment-body" autoComplete="off" required aria-required="true" aria-invalid={bodyError ? "true" : "false"} aria-describedby={bodyError ? "task-inspector-comment-body-error" : undefined} value={body} onChange={(event) => { setBody(event.currentTarget.value); setBodyError(null) }} onInvalid={() => setBodyError(localeCopy.requiredCommentBody)} placeholder={localeCopy.commentPlaceholder} />
         </label>
-        <button type="submit" disabled={pending || !body.trim()}>{pending ? localeCopy.addingComment : localeCopy.addComment}</button>
+        {bodyError ? <p id="task-inspector-comment-body-error" className={styles.error} role="alert" aria-live="polite">{bodyError}</p> : null}
+        <button type="submit" disabled={pending}>{pending ? localeCopy.addingComment : localeCopy.addComment}</button>
         <Feedback error={error} pendingLabel={pending ? localeCopy.addingComment : undefined} />
       </form>
     </section>
@@ -437,6 +458,7 @@ function DependenciesPanel({
 }) {
   const [input, setInput] = useState("")
   const [resolutionError, setResolutionError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const addPending = pendingFor(snapshot, "addDependency", taskId)
   const addError = errorFor(snapshot, "addDependency", taskId)
   const removePending = pendingFor(snapshot, "removeDependency", taskId)
@@ -445,7 +467,11 @@ function DependenciesPanel({
   const add = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const value = input.trim()
-    if (!value) return
+    if (!value) {
+      setResolutionError(localeCopy.requiredDependency)
+      inputRef.current?.focus()
+      return
+    }
     const parentTaskId = resolveTaskSelector(value, resolveSelector)
     if (!parentTaskId) {
       setResolutionError(localeCopy.unresolvedDependency)
@@ -489,11 +515,12 @@ function DependenciesPanel({
       <form className={styles.form} onSubmit={(event) => void add(event)} aria-busy={addPending || undefined}>
         <label>
           <span>{localeCopy.dependencyInput}</span>
-          <input name="dependency-parent" autoComplete="off" value={input} onChange={(event) => { setInput(event.currentTarget.value); setResolutionError(null) }} placeholder={localeCopy.dependencyPlaceholder} />
+          <input ref={inputRef} name="dependency-parent" autoComplete="off" required aria-required="true" aria-invalid={resolutionError ? "true" : "false"} aria-describedby={resolutionError ? "task-inspector-dependency-error" : undefined} value={input} onChange={(event) => { setInput(event.currentTarget.value); setResolutionError(null) }} onInvalid={() => setResolutionError(localeCopy.requiredDependency)} placeholder={localeCopy.dependencyPlaceholder} />
         </label>
-        <button type="submit" disabled={addPending || !input.trim()}>{addPending ? localeCopy.addingDependency : localeCopy.addDependency}</button>
-        <Feedback error={addError ?? removeError} pendingLabel={addPending ? localeCopy.addingDependency : removePending ? localeCopy.removingDependency : undefined} />
-        {resolutionError ? <p className={styles.error} role="alert" aria-live="polite">{resolutionError}</p> : null}
+        <button type="submit" disabled={addPending}>{addPending ? localeCopy.addingDependency : localeCopy.addDependency}</button>
+        <Feedback error={addError} pendingLabel={addPending ? localeCopy.addingDependency : undefined} />
+        <Feedback error={removeError} pendingLabel={removePending ? localeCopy.removingDependency : undefined} />
+        {resolutionError ? <p id="task-inspector-dependency-error" className={styles.error} role="alert" aria-live="polite">{resolutionError}</p> : null}
       </form>
     </section>
   )
@@ -521,7 +548,11 @@ function StepsPanel({
   const [required, setRequired] = useState(true)
   const [linkedTaskRef, setLinkedTaskRef] = useState("")
   const [linkedTaskResolutionError, setLinkedTaskResolutionError] = useState<string | null>(null)
+  const [titleError, setTitleError] = useState<string | null>(null)
+  const titleRef = useRef<HTMLInputElement | null>(null)
   const [planReason, setPlanReason] = useState("")
+  const [planReasonError, setPlanReasonError] = useState<string | null>(null)
+  const planReasonRef = useRef<HTMLInputElement | null>(null)
   const stepsView = asStepsView(stepsInput)
   const createPending = pendingFor(snapshot, "createStep", taskId)
   const createError = errorFor(snapshot, "createStep", taskId)
@@ -533,21 +564,27 @@ function StepsPanel({
   const plan = stepsView.executionPlan
 
   const submitStep = async (link: boolean) => {
-    const linkedTaskId = link ? resolveTaskSelector(linkedTaskRef, resolveSelector) : null
+    if (!title.trim()) {
+      setTitleError(localeCopy.requiredStepTitle)
+      titleRef.current?.focus()
+      return
+    }
+    const linkedTaskId = link && linkedTaskRef.trim() ? resolveTaskSelector(linkedTaskRef, resolveSelector) : null
     if (link && !linkedTaskId) {
       setLinkedTaskResolutionError(localeCopy.unresolvedLinkedTask)
       return
     }
-    const input = buildStepInput(title, body, required, linkedTaskId ?? undefined)
-    if (!input.title || (link && !input.linked_task_ref)) return
+    const submission = buildStepSubmission(title, body, required, linkedTaskId ?? undefined, link ? "link" : "create")
+    if (!submission) return
     try {
-      if (link) await handlers.linkStep(input)
-      else await handlers.createStep(input)
+      if (submission.operation === "linkStep") await handlers.linkStep(submission.input)
+      else await handlers.createStep(submission.input)
       setTitle("")
       setBody("")
       setRequired(true)
       setLinkedTaskRef("")
       setLinkedTaskResolutionError(null)
+      setTitleError(null)
     } catch {
       // Keep the draft available for a retry.
     }
@@ -556,10 +593,15 @@ function StepsPanel({
   const submitPlan = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const input = buildPlanInput(planReason)
-    if (!input.reason) return
+    if (!input.reason) {
+      setPlanReasonError(localeCopy.requiredPlanReason)
+      planReasonRef.current?.focus()
+      return
+    }
     try {
       await handlers.markPlanNotRequired(input)
       setPlanReason("")
+      setPlanReasonError(null)
     } catch {
       // Keep the reason available for a retry.
     }
@@ -590,11 +632,12 @@ function StepsPanel({
           ))}
         </ul>
       )}
-      <form className={styles.form} onSubmit={(event) => { event.preventDefault(); void submitStep(Boolean(linkedTaskRef.trim())) }} aria-busy={stepPending || undefined}>
+      <form className={styles.form} onSubmit={(event) => { event.preventDefault(); void submitStep(false) }} aria-busy={stepPending || undefined}>
         <label>
           <span>{localeCopy.stepTitle}</span>
-          <input data-testid="task-inspector-step-title" name="step-title" autoComplete="off" value={title} onChange={(event) => setTitle(event.currentTarget.value)} />
+          <input ref={titleRef} data-testid="task-inspector-step-title" name="step-title" autoComplete="off" required aria-required="true" aria-invalid={titleError ? "true" : "false"} aria-describedby={titleError ? "task-inspector-step-title-error" : undefined} value={title} onChange={(event) => { setTitle(event.currentTarget.value); setTitleError(null) }} onInvalid={() => setTitleError(localeCopy.requiredStepTitle)} />
         </label>
+        {titleError ? <p id="task-inspector-step-title-error" className={styles.error} role="alert" aria-live="polite">{titleError}</p> : null}
         <label>
           <span>{localeCopy.stepBody}</span>
           <textarea name="step-body" autoComplete="off" value={body} onChange={(event) => setBody(event.currentTarget.value)} placeholder={localeCopy.stepBodyPlaceholder} />
@@ -605,21 +648,23 @@ function StepsPanel({
         </label>
         <label>
           <span>{localeCopy.stepLink}</span>
-          <input name="step-linked-task" autoComplete="off" value={linkedTaskRef} onChange={(event) => { setLinkedTaskRef(event.currentTarget.value); setLinkedTaskResolutionError(null) }} placeholder={localeCopy.stepLinkPlaceholder} />
+          <input name="step-linked-task" autoComplete="off" aria-invalid={linkedTaskResolutionError ? "true" : "false"} aria-describedby={linkedTaskResolutionError ? "task-inspector-step-link-error" : undefined} value={linkedTaskRef} onChange={(event) => { setLinkedTaskRef(event.currentTarget.value); setLinkedTaskResolutionError(null) }} placeholder={localeCopy.stepLinkPlaceholder} />
         </label>
         <div className={styles.buttonRow}>
-          <button data-testid="task-inspector-create-step" type="button" disabled={stepPending || !title.trim()} onClick={() => void submitStep(false)}>{stepPending ? localeCopy.creatingStep : localeCopy.createStep}</button>
-          <button data-testid="task-inspector-link-step" type="button" disabled={stepPending || !title.trim() || !linkedTaskRef.trim()} onClick={() => void submitStep(true)}>{stepPending ? localeCopy.creatingStep : localeCopy.createAndLinkStep}</button>
+          <button data-testid="task-inspector-create-step" type="button" disabled={stepPending} onClick={() => void submitStep(false)}>{stepPending ? localeCopy.creatingStep : localeCopy.createStep}</button>
+          <button data-testid="task-inspector-link-step" type="button" disabled={stepPending} onClick={() => void submitStep(true)}>{stepPending ? localeCopy.creatingStep : localeCopy.createAndLinkStep}</button>
         </div>
-        <Feedback error={createError ?? linkError} pendingLabel={stepPending ? localeCopy.creatingStep : undefined} />
-        {linkedTaskResolutionError ? <p className={styles.error} role="alert" aria-live="polite">{linkedTaskResolutionError}</p> : null}
+        <Feedback error={createError} pendingLabel={createPending ? localeCopy.creatingStep : undefined} />
+        <Feedback error={linkError} pendingLabel={linkPending ? localeCopy.creatingStep : undefined} />
+        {linkedTaskResolutionError ? <p id="task-inspector-step-link-error" className={styles.error} role="alert" aria-live="polite">{linkedTaskResolutionError}</p> : null}
       </form>
       <form className={styles.form} onSubmit={(event) => void submitPlan(event)} aria-busy={planPending || undefined}>
         <label>
           <span>{localeCopy.planReason}</span>
-          <input name="plan-not-required-reason" autoComplete="off" value={planReason} onChange={(event) => setPlanReason(event.currentTarget.value)} placeholder={localeCopy.planReasonPlaceholder} />
+          <input ref={planReasonRef} name="plan-not-required-reason" autoComplete="off" required aria-required="true" aria-invalid={planReasonError ? "true" : "false"} aria-describedby={planReasonError ? "task-inspector-plan-reason-error" : undefined} value={planReason} onChange={(event) => { setPlanReason(event.currentTarget.value); setPlanReasonError(null) }} onInvalid={() => setPlanReasonError(localeCopy.requiredPlanReason)} placeholder={localeCopy.planReasonPlaceholder} />
         </label>
-        <button data-testid="task-inspector-mark-plan-not-required" type="submit" disabled={planPending || !planReason.trim() || plan?.state === "not_required"}>{planPending ? localeCopy.markingPlanNotRequired : localeCopy.markPlanNotRequired}</button>
+        {planReasonError ? <p id="task-inspector-plan-reason-error" className={styles.error} role="alert" aria-live="polite">{planReasonError}</p> : null}
+        <button data-testid="task-inspector-mark-plan-not-required" type="submit" disabled={planPending || plan?.state === "not_required"}>{planPending ? localeCopy.markingPlanNotRequired : localeCopy.markPlanNotRequired}</button>
         <Feedback error={planError} pendingLabel={planPending ? localeCopy.markingPlanNotRequired : undefined} />
       </form>
     </section>
@@ -642,7 +687,7 @@ export function TaskInspectorRelationsPanel({
   const safePageSize = Number.isSafeInteger(commentPageSize) && commentPageSize > 0 ? commentPageSize : 10
   return (
     <div className={styles.relations} data-testid="task-inspector-relations">
-      <CommentsPanel taskId={taskId} comments={comments} handlers={handlers} snapshot={snapshot} localeCopy={localeCopy} pageSize={safePageSize} />
+      <CommentsPanel taskId={taskId} comments={comments} handlers={handlers} snapshot={snapshot} localeCopy={localeCopy} locale={locale} pageSize={safePageSize} />
       <DependenciesPanel taskId={taskId} dependencies={dependencies} handlers={handlers} snapshot={snapshot} onSelectTask={onSelectTask} resolveSelector={resolveSelector} localeCopy={localeCopy} />
       <StepsPanel taskId={taskId} stepsInput={steps} handlers={handlers} snapshot={snapshot} onSelectTask={onSelectTask} resolveSelector={resolveSelector} localeCopy={localeCopy} />
     </div>

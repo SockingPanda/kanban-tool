@@ -1,13 +1,14 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
 import type { FromSchema } from "json-schema-to-ts";
 import { ContractValidationError, createContractValidator } from "../runtime";
+import staticValidator from "virtual:kanban-contract-validator/api-list-tasks-headers";
 
 export const ApiListTasksHeadersSchema = {"$id":"urn:kanban-tool:schema:api:list-tasks-headers:v1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"Accept-Language":{"type":["string","null"]}},"title":"Kanban api.list-tasks request headers v1","type":"object"} as const;
 export type ApiListTasksHeadersContract = FromSchema<typeof ApiListTasksHeadersSchema>;
 
 export const apiListTasksHeadersValidator: ReturnType<typeof createContractValidator<ApiListTasksHeadersContract>> = createContractValidator<ApiListTasksHeadersContract>(
   "api.list-tasks.headers",
-  ApiListTasksHeadersSchema,
+  staticValidator,
 );
 
 export function parseApiListTasksHeaders(value: unknown): ApiListTasksHeadersContract {

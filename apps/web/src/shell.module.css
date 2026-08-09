@@ -1,0 +1,224 @@
+@layer product {
+  .mainFrame {
+    min-height: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .compactNavItemWrapper {
+    display: grid;
+    min-width: 0;
+  }
+
+  .compactNavItem {
+    display: grid;
+    place-items: center;
+    inline-size: 2.5rem;
+    block-size: 2.5rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-element);
+    background: transparent;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+  }
+
+  .compactNavItem:hover,
+  .compactNavItem:focus-visible,
+  .compactNavItem[aria-current="page"] {
+    border-color: var(--color-border-emphasized);
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+  }
+
+  .compactNavItem:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .mainFrame:focus {
+    outline: none;
+  }
+
+  .mainFrame:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: -0.15rem;
+  }
+
+  .page,
+  .boundary {
+    display: grid;
+    gap: 1.25rem;
+    min-width: 0;
+    max-width: 100%;
+    max-width: 72rem;
+    margin: 0 auto;
+  }
+
+  .pageHeading {
+    display: grid;
+    gap: 0.6rem;
+    max-width: 52rem;
+  }
+
+  .pageHeading h1,
+  .boundary h1 {
+    margin: 0;
+    font-size: clamp(2rem, 4vw, 3.6rem);
+    letter-spacing: -0.04em;
+    line-height: 1;
+    text-wrap: balance;
+  }
+
+  .pageHeading h2,
+  .settingsSection h2,
+  .runtimeSection h2 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+
+  .eyebrow {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .lede {
+    max-width: 58ch;
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 1.05rem;
+    line-height: 1.6;
+  }
+
+  .routePath {
+    min-width: 0;
+    max-width: 100%;
+    width: fit-content;
+    margin: 0;
+    border-inline-start: 0.2rem solid var(--color-accent);
+    padding: 0.65rem 0.85rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .boundary {
+    align-content: center;
+    min-height: 50vh;
+  }
+
+  .boundary p,
+  .boundary code {
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--color-text-secondary);
+  }
+
+  .settingsGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    border-block: 1px solid var(--color-border);
+    background: var(--color-border);
+  }
+
+  .settingsSection {
+    display: grid;
+    align-content: start;
+    gap: 1rem;
+    min-height: 10rem;
+    padding: 1.25rem;
+    background: var(--color-background-body);
+  }
+
+  .field {
+    display: grid;
+    gap: 0.4rem;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+  }
+
+  .field select {
+    min-height: 2.5rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.45rem 0.65rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+  }
+
+  .field select:focus-visible {
+    outline: 0.15rem solid var(--color-accent);
+    outline-offset: 0.15rem;
+  }
+
+  .muted {
+    margin: 0;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+  }
+
+  .runtimeSection {
+    display: grid;
+    gap: 0.8rem;
+    border-block-start: 1px solid var(--color-border);
+    padding-block-start: 1.25rem;
+  }
+
+  .runtimeFacts {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin: 0;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .codeValue {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .runtimeFacts div {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+
+  .runtimeFacts dt {
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+  }
+
+  .runtimeFacts dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--color-text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+  }
+
+  @media (max-width: 64rem) {
+    .settingsGrid,
+    .runtimeFacts {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 42rem) {
+    .settingsGrid,
+    .runtimeFacts {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

@@ -2,7 +2,7 @@ import { StrictMode, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 
 import App from "./App"
-import styles from "./foundation.module.css"
+import styles from "./shell.module.css"
 import { WebRuntimeProvider } from "./lib/runtime-provider"
 import {
   loadWebRuntimeConfig,
@@ -42,7 +42,7 @@ export async function bootstrapWebApp(root: HTMLElement, dependencies: Bootstrap
 export function renderRuntimeStartupError(root: HTMLElement, error: unknown): Root {
   const reactRoot = createRoot(root)
   reactRoot.render(
-    <main className={styles.startupError} role="alert" aria-live="assertive" data-testid="runtime-startup-error">
+    <main className={styles.boundary} role="alert" aria-live="assertive" data-testid="runtime-startup-error">
       <p className={styles.eyebrow}>KANBAN TOOL / RUNTIME</p>
       <h1>Kanban Tool 无法启动</h1>
       <p>{runtimeErrorMessage(error)}</p>

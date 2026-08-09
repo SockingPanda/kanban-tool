@@ -1,19 +1,28 @@
 // 由 `xtask web-contracts generate` 生成；请勿手工编辑。
-import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020";
-
-// `strict` 保持开启；协议沿用的 int64/uint format 只在这里关闭格式校验，整数类型仍由 JSON Schema 校验。
-const ajv = new Ajv2020({ allErrors: true, strict: true, validateFormats: false });
-const validatorCache = new WeakMap<object, ValidateFunction>();
+export type ContractErrorObject = {
+  readonly instancePath: string;
+  readonly schemaPath: string;
+  readonly keyword: string;
+  readonly params: Record<string, unknown>;
+  readonly message?: string;
+  readonly propertyName?: string;
+  readonly schema?: unknown;
+  readonly data?: unknown;
+};
 
 export type ContractValidator<T> = ((value: unknown) => value is T) & {
-  readonly errors: ErrorObject[] | null | undefined;
+  readonly errors: ContractErrorObject[] | null | undefined;
+};
+
+type StaticValidator = ((value: unknown) => boolean) & {
+  errors?: ContractErrorObject[] | null | undefined;
 };
 
 export class ContractValidationError extends Error {
   readonly contractId: string;
-  readonly errors: ErrorObject[] | null | undefined;
+  readonly errors: ContractErrorObject[] | null | undefined;
 
-  constructor(contractId: string, errors: ErrorObject[] | null | undefined) {
+  constructor(contractId: string, errors: ContractErrorObject[] | null | undefined) {
     super(`Invalid ${contractId} payload`);
     this.name = "ContractValidationError";
     this.contractId = contractId;
@@ -46,18 +55,9 @@ function unsafeNumberPath(value: unknown, path = ""): string | null {
   return null;
 }
 
-function compileValidator(id: string, schema: object): ValidateFunction {
-  const cached = validatorCache.get(schema);
-  if (cached) return cached;
-  const validator = ajv.compile(schema);
-  validatorCache.set(schema, validator);
-  return validator;
-}
-
-// 数字策略 `reject_unsafe_json_numbers`：先拒绝非有限数和非安全整数，再交给 AJV。
-export function createContractValidator<T>(id: string, schema: object): ContractValidator<T> {
-  let compiled: ValidateFunction | undefined;
-  let errors: ErrorObject[] | null | undefined;
+// 数字策略 `reject_unsafe_json_numbers`：先拒绝非有限数和非安全整数，再调用构建期生成的静态 validator。
+export function createContractValidator<T>(_id: string, staticValidator: StaticValidator): ContractValidator<T> {
+  let errors: ContractErrorObject[] | null | undefined;
   const validate = Object.assign(
     (value: unknown): value is T => {
       const unsafePath = unsafeNumberPath(value);
@@ -66,9 +66,8 @@ export function createContractValidator<T>(id: string, schema: object): Contract
         validate.errors = errors;
         return false;
       }
-      compiled ??= compileValidator(id, schema);
-      const valid = compiled(value);
-      errors = compiled.errors;
+      const valid = staticValidator(value);
+      errors = staticValidator.errors;
       validate.errors = errors;
       return valid;
     },

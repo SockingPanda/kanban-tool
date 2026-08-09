@@ -99,9 +99,8 @@ pnpm --filter @kanban-tool/web exec playwright test tests/foundation.spec.ts --p
 pnpm --filter @kanban-tool/web typecheck
 pnpm --filter @kanban-tool/web vite-build
 pnpm --filter @kanban-tool/web exec playwright test tests/foundation.spec.ts \
-  --project chromium --project firefox --project webkit
-# 最新固定 1440×900 run：13 passed、2 skipped；visual baseline 只在 Chromium 项目执行，
-# Firefox/WebKit 的该测试按项目约束 skip。
+  --project chromium --project firefox
+# 当前固定 1440×900 run 只覆盖 Chromium、Firefox；visual baseline 只在 Chromium 项目执行。
 ```
 
 `typecheck` 的 UI-only 结果是在并行 web-contracts generator 写入
@@ -112,8 +111,8 @@ typecheck/lint。
 
 测试覆盖：Astryx Button/Card/Table/VStack 的可见性和 computed padding、第二行 table row 不被
 table/card 裁切、light/dark 和长中英文案、Popover/anchor feature detection、严格 CSP 下无
-console/pageerror、`<dialog>:modal`、Tab containment、Escape 和 focus return。WebKit project
-只代理 Playwright WebKit engine，明确不等同于 Linux packaged WebKitGTK/Tauri smoke。
+console/pageerror、`<dialog>:modal`、Tab containment、Escape 和 focus return。Playwright gate
+不把 WebKit/Safari 作为目标；Linux packaged WebKitGTK/Tauri smoke 留给后续 Desktop 阶段。
 
 ## 构建与后续边界
 

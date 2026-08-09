@@ -190,7 +190,12 @@ describe("signals and ontology API seam", () => {
       created_at: 1,
       signal_ids: ["los_1"],
     } as const
-    const post = vi.fn(async (): Promise<HttpTransportResponse> => response({ data: action }))
+    const post = vi.fn<NonNullable<SignalsOntologyReadTransport["post"]>>(async (path, body, signal) => {
+      void path
+      void body
+      void signal
+      return response({ data: action })
+    })
     const transport: SignalsOntologyReadTransport = { get: vi.fn(), post }
     const api = createSignalsOntologyReadApi(runtime, {
       board: "default",

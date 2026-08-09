@@ -406,6 +406,7 @@ export class WebSyncController {
         eventId: event.eventId,
         eventKind: event.kind,
         source,
+        eventCursor: event.id,
         createdAt: event.createdAt,
         appliedAt,
         latencyMs: Math.max(0, appliedAt - createdAtMs),

@@ -104,6 +104,41 @@ describe("Signals screen presentation", () => {
     expect(html).toContain('translate="no">sig_1')
   })
 
+  test("formats signal timestamps with the selected locale", () => {
+    const enDate = new Date(1).toLocaleString("en-US")
+    const zhDate = new Date(1).toLocaleString("zh-CN")
+    const en = renderToStaticMarkup(
+      <SignalsScreenView
+        boardName="Default"
+        filters={filters}
+        list={state([signal()])}
+        detail={state(signal())}
+        selectedSignalId="sig_1"
+        online
+        locale="en"
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+      />,
+    )
+    const zh = renderToStaticMarkup(
+      <SignalsScreenView
+        boardName="Default"
+        filters={filters}
+        list={state([signal()])}
+        detail={state(signal())}
+        selectedSignalId="sig_1"
+        online
+        locale="zh"
+        onRefresh={() => undefined}
+        onFiltersChange={() => undefined}
+        onSelectSignal={() => undefined}
+      />,
+    )
+    expect(en).toContain(enDate)
+    expect(zh).toContain(zhDate)
+  })
+
   test("keeps stale rows visible while a refresh fails", () => {
     const html = renderToStaticMarkup(
       <SignalsScreenView

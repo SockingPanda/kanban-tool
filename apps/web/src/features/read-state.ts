@@ -32,41 +32,41 @@ export function useReadState<T>(
   const [state, setState] = useState<ReadState<T>>(initial)
   const keyRef = useRef(key)
   const generationRef = useRef(0)
-  if (keyRef.current !== key) {
-    keyRef.current = key
-    generationRef.current += 1
-  }
-  const generation = generationRef.current
+  const keyChanged = state.requestKey !== key
+  const generation = keyChanged ? generationRef.current + 1 : generationRef.current
 
   useEffect(() => {
+    const requestGeneration = generationRef.current + 1
+    generationRef.current = requestGeneration
+    keyRef.current = key
     if (!enabled || request === null) {
-      setState({ ...initial, requestKey: key, generation })
+      setState({ ...initial, requestKey: key, generation: requestGeneration })
       return
     }
     const controller = new AbortController()
     setState((previous) => {
-      const sameRequest = previous.requestKey === key && previous.generation === generation
+      const priorData = hasPriorData(previous)
       return {
-        phase: sameRequest && hasPriorData(previous) ? "refreshing" : "loading",
-        data: sameRequest ? previous.data : initial.data,
+        phase: priorData ? "refreshing" : "loading",
+        data: priorData ? previous.data : initial.data,
         error: null,
         requestKey: key,
-        generation,
+        generation: requestGeneration,
       }
     })
     void request(controller.signal).then(
       (data) => {
-        if (controller.signal.aborted || keyRef.current !== key || generationRef.current !== generation) return
-        setState({ phase: "success", data, error: null, requestKey: key, generation })
+        if (controller.signal.aborted || keyRef.current !== key || generationRef.current !== requestGeneration) return
+        setState({ phase: "success", data, error: null, requestKey: key, generation: requestGeneration })
       },
       (error: unknown) => {
-        if (controller.signal.aborted || keyRef.current !== key || generationRef.current !== generation) return
+        if (controller.signal.aborted || keyRef.current !== key || generationRef.current !== requestGeneration) return
         setState((previous) => ({
           phase: "error",
-          data: previous.requestKey === key && previous.generation === generation ? previous.data : initial.data,
+          data: previous.data,
           error,
           requestKey: key,
-          generation,
+          generation: requestGeneration,
         }))
       },
     )
@@ -75,10 +75,12 @@ export function useReadState<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, key])
 
-  if (state.requestKey !== key || state.generation !== generation) {
+  if (keyChanged || state.generation !== generation) {
     return {
-      phase: enabled && request !== null ? "loading" : "idle",
-      data: initial.data,
+      phase: enabled && request !== null
+        ? hasPriorData(state) ? "refreshing" : "loading"
+        : "idle",
+      data: hasPriorData(state) ? state.data : initial.data,
       error: null,
       requestKey: key,
       generation,

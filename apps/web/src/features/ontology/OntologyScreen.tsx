@@ -16,9 +16,11 @@ import type {
   SignalsOntologyReadApi,
 } from "../../lib/api/signals-ontology-read-model"
 import { featureCopyForLocale } from "../../lib/i18n"
+import type { Locale } from "../../lib/preferences"
 import type { OntologyRouteFilters } from "../../lib/router"
 import { usePreferences } from "../../lib/use-preferences"
 import { reconcileSelection, useReadState, type ReadPhase, type ReadState } from "../read-state"
+import { localizedErrorMessage } from "../safe-error"
 
 import styles from "./OntologyScreen.module.css"
 
@@ -54,11 +56,6 @@ function emptyDetail(): ReadState<LabelOntologySignalDetail | null> {
 
 function emptyAtom(): ReadState<LabelAtomExplainRecord | null> {
   return { phase: "idle", data: null, error: null }
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim()) return error.message
-  return fallback
 }
 
 function MachineBadge(props: ComponentProps<typeof Badge>) {
@@ -241,6 +238,7 @@ export function OntologyScreen({
     <OntologyScreenView
       boardName={boardName ?? api?.board ?? "—"}
       copy={featureCopyForLocale(locale).ontology}
+      locale={locale}
       filters={effectiveFilters}
       signals={{ ...signals, data: visibleSignals }}
       groups={groups}
@@ -282,6 +280,7 @@ export interface OntologyScreenViewProps {
   readonly selectedSignalId: string | null
   readonly atomRef: string
   readonly online: boolean
+  readonly locale?: Locale
   readonly actionReason: string
   readonly actionPending: boolean
   readonly actionError?: unknown | null
@@ -314,6 +313,7 @@ export function OntologyScreenView({
   selectedSignalId,
   atomRef,
   online,
+  locale = "en",
   actionReason,
   actionPending,
   actionError,
@@ -357,8 +357,8 @@ export function OntologyScreenView({
       </header>
 
       {!online ? <Banner status="warning" title={copy.offline} description={stale ? copy.offlineStale : copy.offlineConnect} /> : null}
-      {signals.error ? <Banner status="error" title={copy.rowsError} description={errorMessage(signals.error, copy.unreadableResponse)} endContent={<Button label={copy.retryRows} variant="ghost" size="sm" onClick={onRefreshRows} />} /> : null}
-      {groups.error ? <Banner status="error" title={copy.groupsError} description={errorMessage(groups.error, copy.unreadableResponse)} endContent={<Button label={copy.retryGroups} variant="ghost" size="sm" onClick={onRefreshGroups} />} /> : null}
+      {signals.error ? <Banner status="error" title={copy.rowsError} description={localizedErrorMessage(signals.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryRows} variant="ghost" size="sm" onClick={onRefreshRows} />} /> : null}
+      {groups.error ? <Banner status="error" title={copy.groupsError} description={localizedErrorMessage(groups.error, copy.unreadableResponse, locale)} endContent={<Button label={copy.retryGroups} variant="ghost" size="sm" onClick={onRefreshGroups} />} /> : null}
 
       <section className={styles.workspace}>
         <Card className={styles.signalPanel} padding={0}>
@@ -382,7 +382,7 @@ export function OntologyScreenView({
               {selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null}
             {detail.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}
             </div>
-            <OntologySignalDetailView phase={detail.phase} detail={detail.data} error={detail.error} actionError={actionError} onRetryAction={onRetryAction} actionReason={actionReason} actionPending={actionPending} lifecycleEnabled={lifecycleEnabled} onActionReasonChange={onActionReasonChange} onLifecycleAction={onLifecycleAction} onExplainAtom={onExplainAtom} copy={copy} onRetry={onRefreshDetail} />
+            <OntologySignalDetailView phase={detail.phase} detail={detail.data} error={detail.error} actionError={actionError} onRetryAction={onRetryAction} actionReason={actionReason} actionPending={actionPending} lifecycleEnabled={lifecycleEnabled} onActionReasonChange={onActionReasonChange} onLifecycleAction={onLifecycleAction} onExplainAtom={onExplainAtom} locale={locale} copy={copy} onRetry={onRefreshDetail} />
           </Card>
           <Card className={styles.atomPanel} padding={0}>
             <PanelHeader title={copy.atomExplain} meta={atom.phase === "refreshing" ? copy.refreshing : atomRef || copy.none} refreshing={atom.phase === "refreshing"} copy={copy} />
@@ -393,7 +393,7 @@ export function OntologyScreenView({
               </label>
               <Button label={copy.explain} type="submit" variant="secondary" size="sm" isDisabled={!atomDraft.trim()} />
             </form>
-            <AtomExplainView phase={atom.phase} explain={atom.data} error={atom.error} onRetry={onRefreshAtom} copy={copy} />
+            <AtomExplainView phase={atom.phase} explain={atom.data} error={atom.error} onRetry={onRefreshAtom} locale={locale} copy={copy} />
           </Card>
         </div>
       </section>
@@ -417,11 +417,11 @@ export function ReviewGroupsView({ phase, groups, onSelectSignal, copy = feature
   return <div className={styles.scrollList}>{groups.map((group) => <article key={`${group.group_by}:${group.key}`} className={styles.group}><div className={styles.rowTop}><div><strong>{groupTitle(group)}</strong><span className={styles.rowMeta} translate="no">{group.sample_task_refs.length ? group.sample_task_refs.join(", ") : group.key}</span></div><Badge variant="warning" label={copy.sourceTasks(group.task_count)} /></div>{group.candidate_text ? <Text as="p" type="supporting">{group.candidate_text}</Text> : null}<div className={styles.metrics}><span><b>{group.signal_count}</b> {copy.signalCount(group.signal_count).replace(String(group.signal_count), "").trim()}</span><span><b>{group.open_count}</b> {copy.openCount(group.open_count).replace(String(group.open_count), "").trim()}</span><span><b>{group.confirmed_count}</b> {copy.confirmedCount(group.confirmed_count).replace(String(group.confirmed_count), "").trim()}</span><span><b>{group.action_count}</b> {copy.actionCountLabel(group.action_count).replace(String(group.action_count), "").trim()}</span></div><div className={styles.groupSignals}>{group.signal_ids.slice(0, 4).map((id) => <Button key={id} label={shortId(id)} variant="ghost" size="sm" onClick={() => onSelectSignal(id)} />)}</div></article>)}</div>
 }
 
-export function OntologySignalDetailView({ phase, detail, error, actionError, onRetry, onRetryAction, actionReason, actionPending, lifecycleEnabled = false, onActionReasonChange, onLifecycleAction, onExplainAtom, copy = featureCopyForLocale("en").ontology }: { readonly phase: ReadPhase; readonly detail: LabelOntologySignalDetail | null; readonly error?: unknown | null; readonly actionError?: unknown | null; readonly onRetry?: () => void; readonly onRetryAction?: () => void; readonly actionReason: string; readonly actionPending: boolean; readonly lifecycleEnabled?: boolean; readonly onActionReasonChange: (value: string) => void; readonly onLifecycleAction: (action: LifecycleAction) => void; readonly onExplainAtom: (atomRef: string | null | undefined) => void; readonly copy?: OntologyCopy }) {
+export function OntologySignalDetailView({ phase, detail, error, actionError, onRetry, onRetryAction, actionReason, actionPending, lifecycleEnabled = false, onActionReasonChange, onLifecycleAction, onExplainAtom, locale = "en", copy = featureCopyForLocale("en").ontology }: { readonly phase: ReadPhase; readonly detail: LabelOntologySignalDetail | null; readonly error?: unknown | null; readonly actionError?: unknown | null; readonly onRetry?: () => void; readonly onRetryAction?: () => void; readonly actionReason: string; readonly actionPending: boolean; readonly lifecycleEnabled?: boolean; readonly onActionReasonChange: (value: string) => void; readonly onLifecycleAction: (action: LifecycleAction) => void; readonly onExplainAtom: (atomRef: string | null | undefined) => void; readonly locale?: Locale; readonly copy?: OntologyCopy }) {
   if (phase === "loading" && detail === null) return <div className={styles.loading} role="status" aria-label={copy.signalDetail}><span /><span /><span /></div>
   if (errorStatus(error) === 404) return <div className={styles.empty}>{copy.unavailable}</div>
   if (detail === null) {
-    if (error) return <div className={styles.empty}><Banner status="error" title={copy.detailError} description={errorMessage(error, copy.unreadableResponse)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></div>
+    if (error) return <div className={styles.empty}><Banner status="error" title={copy.detailError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></div>
     return <div className={styles.empty}>{copy.selectDetail}</div>
   }
   const signal = detail.signal
@@ -434,7 +434,7 @@ export function OntologySignalDetailView({ phase, detail, error, actionError, on
     <Text as="p" type="supporting">{signal.rationale || copy.rationaleMissing}</Text>
     <dl className={styles.facts}><Fact label={copy.sourceTask} value={detail.observation.task_ref_snapshot} /><Fact label={copy.target} value={signal.target_label_name_snapshot ?? signal.proposed_label_name ?? "—"} /><Fact label={copy.suggest} value={signal.suggest_state ?? "—"} /><Fact label={copy.recordedScore} value={formatScore(signal.suggest_score)} /><Fact label={copy.rank} value={signal.suggest_rank === null ? "—" : String(signal.suggest_rank)} /><Fact label={copy.recordedConfidence} value={formatScore(signal.confidence)} /></dl>
     {signal.candidate_text ? <div className={styles.candidate}><div className={styles.candidateHeader}><Text as="span" type="label">{copy.candidateAtom}</Text><Button label={copy.explainHash} variant="ghost" size="sm" onClick={() => onExplainAtom(signal.candidate_content_hash)} /></div><Text as="p">{signal.candidate_text}</Text><span className={styles.rowMeta} translate="no">{signal.candidate_atom_polarity ?? "—"} / {signal.candidate_atom_kind ?? "—"} / {signal.candidate_content_hash ?? "—"}</span></div> : null}
-    <div className={styles.actionArea}>{actionError ? <Banner status="error" title={copy.actionError} description={`${errorMessage(actionError, copy.unreadableResponse)} ${copy.actionNextStep}`} endContent={onRetryAction ? <Button label={copy.retryAction} variant="ghost" size="sm" onClick={onRetryAction} /> : undefined} /> : null}<label><span>{copy.reviewReason}</span><textarea name="ontology-action-reason" autoComplete="off" aria-label={copy.reviewReason} value={actionReason} onChange={(event) => onActionReasonChange(event.currentTarget.value)} placeholder={copy.reasonPlaceholder} /></label><div className={styles.actionButtons}><Button label={copy.confirm} variant="primary" isDisabled={!canConfirm} isLoading={actionPending} onClick={() => onLifecycleAction("confirm")} /><Button label={copy.resolveNoChange} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("resolve_no_change")} /><Button label={copy.reject} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("reject")} /></div></div>
+    <div className={styles.actionArea}>{actionError ? <Banner status="error" title={copy.actionError} description={`${localizedErrorMessage(actionError, copy.unreadableResponse, locale)} ${copy.actionNextStep}`} endContent={onRetryAction ? <Button label={copy.retryAction} variant="ghost" size="sm" onClick={onRetryAction} /> : undefined} /> : null}<label><span>{copy.reviewReason}</span><textarea name="ontology-action-reason" autoComplete="off" aria-label={copy.reviewReason} value={actionReason} onChange={(event) => onActionReasonChange(event.currentTarget.value)} placeholder={copy.reasonPlaceholder} /></label><div className={styles.actionButtons}><Button label={copy.confirm} variant="primary" isDisabled={!canConfirm} isLoading={actionPending} onClick={() => onLifecycleAction("confirm")} /><Button label={copy.resolveNoChange} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("resolve_no_change")} /><Button label={copy.reject} variant="secondary" isDisabled={!canReview || actionPending} onClick={() => onLifecycleAction("reject")} /></div></div>
     <ActionHistory actions={detail.actions} onExplainAtom={onExplainAtom} copy={copy} />
   </article>
 }
@@ -444,13 +444,13 @@ function ActionHistory({ actions, onExplainAtom, copy = featureCopyForLocale("en
   return <section className={styles.history}><Heading level={4}>{copy.actions}</Heading>{actions.map((action) => <article key={action.id} className={styles.historyRow}><div className={styles.rowBadges}><MachineBadge variant="neutral" label={action.action_type} /><MachineBadge variant="neutral" label={copy.requiresValidation(action.validation_requirement)} /><MachineBadge variant={validationVariant(action.validation_effective_outcome)} label={action.validation_effective_outcome} /><span className={styles.rowMeta} translate="no">{shortId(action.id)}</span></div><Text as="p" type="supporting">{action.reason}</Text>{action.result_atom_id || action.result_atom_content_hash ? <div className={styles.groupSignals}>{action.result_atom_id ? <Button label={copy.atomRef(shortId(action.result_atom_id))} variant="ghost" size="sm" onClick={() => onExplainAtom(action.result_atom_id)} /> : null}{action.result_atom_content_hash ? <Button label={copy.hashRef(shortId(action.result_atom_content_hash))} variant="ghost" size="sm" onClick={() => onExplainAtom(action.result_atom_content_hash)} /> : null}</div> : null}</article>)}</section>
 }
 
-export function AtomExplainView({ phase, explain, error, onRetry, copy = featureCopyForLocale("en").ontology }: { readonly phase: ReadPhase; readonly explain: LabelAtomExplainRecord | null; readonly error?: unknown | null; readonly onRetry?: () => void; readonly copy?: OntologyCopy }) {
+export function AtomExplainView({ phase, explain, error, onRetry, locale = "en", copy = featureCopyForLocale("en").ontology }: { readonly phase: ReadPhase; readonly explain: LabelAtomExplainRecord | null; readonly error?: unknown | null; readonly onRetry?: () => void; readonly locale?: Locale; readonly copy?: OntologyCopy }) {
   if (phase === "loading" && explain === null) return <div className={styles.loading} role="status" aria-label={copy.atomExplain}><span /><span /></div>
   if (explain === null) {
-    if (error) return <div className={styles.empty}><Banner status="error" title={copy.atomError} description={errorMessage(error, copy.unreadableResponse)} endContent={onRetry ? <Button label={copy.retryAtom} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></div>
+    if (error) return <div className={styles.empty}><Banner status="error" title={copy.atomError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryAtom} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></div>
     return <div className={styles.empty}>{copy.enterAtom}</div>
   }
-  if (error) return <article className={styles.atomExplain}><Banner status="warning" title={copy.atomError} description={errorMessage(error, copy.unreadableResponse)} endContent={onRetry ? <Button label={copy.retryAtom} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></article>
+  if (error) return <article className={styles.atomExplain}><Banner status="warning" title={copy.atomError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryAtom} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></article>
   return <article className={styles.atomExplain}><div className={styles.detailBadges}><Badge variant={explain.legacy_untracked ? "warning" : "success"} label={explain.legacy_untracked ? copy.legacyUntracked : copy.hasProvenance} />{explain.atom ? <Badge variant="neutral" label={explain.atom.label_name} /> : null}</div>{explain.atom ? <div className={styles.atomCard}><span className={styles.rowMeta} translate="no">{explain.atom.kind}</span><Text as="p" type="supporting">{explain.atom.text}</Text><span className={styles.rowMeta} translate="no">{explain.atom.id} / {explain.atom.content_hash}</span></div> : <Text as="p" type="supporting">{copy.noCurrentAtom(explain.query)}</Text>}{explain.legacy_reason ? <Text as="p" type="supporting">{explain.legacy_reason}</Text> : null}<div className={styles.metrics}><span><b>{explain.provenance_actions.length}</b> {copy.actionCount(explain.provenance_actions.length).replace(String(explain.provenance_actions.length), "").trim()}</span><span><b>{explain.supporting_signals.length}</b> {copy.supportingCount(explain.supporting_signals.length).replace(String(explain.supporting_signals.length), "").trim()}</span><span><b>{explain.validation_history.length}</b> {copy.validationCount(explain.validation_history.length).replace(String(explain.validation_history.length), "").trim()}</span></div>{explain.provenance_actions.slice(0, 4).map((entry) => <div key={entry.action.id} className={styles.historyRow}><div className={styles.rowBadges}><MachineBadge variant="neutral" label={entry.action.action_type} /><span className={styles.rowMeta} translate="no">{entry.matched_by}</span></div><Text as="p" type="supporting">{entry.action.reason}</Text></div>)}{explain.validation_history.slice(0, 4).map((entry) => <div key={entry.action.id} className={styles.historyRow}><div className={styles.rowBadges}><MachineBadge variant={validationVariant(entry.validation_status)} label={entry.validation_status} /><span className={styles.rowMeta} translate="no">{copy.parentRef(shortId(entry.parent_action_id))}</span></div>{entry.warnings.length ? <Text as="p" type="supporting">{entry.warnings.join("; ")}</Text> : null}</div>)}</article>
 }
 

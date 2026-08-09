@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { telemetryInvalidatesFeature } from "./board-feature-invalidation"
+import { telemetryInvalidationSource, telemetryInvalidatesFeature } from "./board-feature-invalidation"
 
 describe("Board feature session invalidation", () => {
   test("keeps signal and ontology event ownership exact", () => {
@@ -17,5 +17,11 @@ describe("Board feature session invalidation", () => {
     expect(telemetryInvalidatesFeature("signals", "recovery-complete", undefined)).toBe(true)
     expect(telemetryInvalidatesFeature("ontology", "poll-boundary-complete", undefined)).toBe(true)
     expect(telemetryInvalidatesFeature("signals", "protocol-anomaly", undefined)).toBe(true)
+  })
+
+  test("classifies invalidation source so event and boundary refreshes can coalesce", () => {
+    expect(telemetryInvalidationSource("ontology", "event-applied", "label.ontology.action.created")).toBe("event")
+    expect(telemetryInvalidationSource("ontology", "poll-boundary-complete", undefined)).toBe("boundary")
+    expect(telemetryInvalidationSource("ontology", "event-applied", "signal.recorded")).toBeNull()
   })
 })

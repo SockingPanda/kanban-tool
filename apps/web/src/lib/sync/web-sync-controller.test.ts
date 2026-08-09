@@ -210,7 +210,7 @@ describe("WebSyncController", () => {
     transport.mock.calls[0]?.[0].onFrame({ eventName: "task.updated", id: "1", data: "{}" })
     await vi.waitFor(() => expect(telemetry.some((entry) => entry.type === "event-applied")).toBe(true))
     const applied = telemetry.find((entry) => entry.type === "event-applied")
-    expect(applied?.details).toMatchObject({ eventId: "e-1", source: "sse", createdAt: 1_700_000_000 })
+    expect(applied?.details).toMatchObject({ eventId: "e-1", eventCursor: 1, source: "sse", createdAt: 1_700_000_000 })
     expect(applied?.details?.latencyMs).toBeTypeOf("number")
   })
 

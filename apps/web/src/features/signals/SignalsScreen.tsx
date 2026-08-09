@@ -13,9 +13,11 @@ import type {
   SignalsOntologyReadApi,
 } from "../../lib/api/signals-ontology-read-model"
 import { featureCopyForLocale } from "../../lib/i18n"
+import type { Locale } from "../../lib/preferences"
 import type { SignalsRouteFilters } from "../../lib/router"
 import { usePreferences } from "../../lib/use-preferences"
 import { reconcileSelection, useReadState, type ReadPhase, type ReadState } from "../read-state"
+import { localizedErrorMessage } from "../safe-error"
 
 import styles from "./SignalsScreen.module.css"
 
@@ -75,18 +77,15 @@ function statusVariant(status: string): "neutral" | "info" | "success" | "warnin
   }
 }
 
-function timestamp(value: number): string {
+function timestamp(value: number, locale: Locale): string {
   if (!Number.isFinite(value)) return "—"
-  return new Date(value).toLocaleString()
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+  return date.toLocaleString(locale === "zh" ? "zh-CN" : "en-US")
 }
 
 function signalTask(signal: SignalRecord): string {
   return signal.observation.task_ref_snapshot ?? signal.observation.task_id ?? "—"
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message.trim()) return error.message
-  return fallback
 }
 
 function MachineBadge(props: ComponentProps<typeof Badge>) {
@@ -175,6 +174,7 @@ export function SignalsScreen({
     <SignalsScreenView
       boardName={boardName ?? api?.board ?? "—"}
       copy={featureCopyForLocale(locale).signals}
+      locale={locale}
       filters={effectiveFilters}
       list={{ ...list, data: visibleSignals }}
       detail={{
@@ -201,6 +201,7 @@ export interface SignalsScreenViewProps {
   readonly detail: ReadState<SignalRecord | null>
   readonly selectedSignalId: string | null
   readonly online: boolean
+  readonly locale?: Locale
   readonly onRefresh: () => void
   readonly onRefreshList?: () => void
   readonly onRefreshDetail?: () => void
@@ -217,6 +218,7 @@ export function SignalsScreenView({
   detail,
   selectedSignalId,
   online,
+  locale = "en",
   onRefresh,
   onRefreshList = onRefresh,
   onRefreshDetail = onRefresh,
@@ -250,7 +252,7 @@ export function SignalsScreenView({
         <Banner
           status="error"
           title={copy.loadError}
-          description={stale ? `${errorMessage(list.error, copy.unreadableResponse)} · ${copy.staleRows}` : errorMessage(list.error, copy.unreadableResponse)}
+          description={stale ? `${localizedErrorMessage(list.error, copy.unreadableResponse, locale)} · ${copy.staleRows}` : localizedErrorMessage(list.error, copy.unreadableResponse, locale)}
           endContent={<Button label={copy.retryList} variant="ghost" size="sm" onClick={onRefreshList} />}
         />
       ) : null}
@@ -306,6 +308,7 @@ export function SignalsScreenView({
             signals={viewSignals}
             selectedSignalId={selectedSignalId}
             onSelectSignal={onSelectSignal}
+            locale={locale}
             copy={copy}
           />
         </Card>
@@ -319,7 +322,7 @@ export function SignalsScreenView({
             {selectedSignalId !== null && onCloseDetail ? <Button label={copy.closeDetail} variant="ghost" size="sm" onClick={onCloseDetail} /> : null}
             {detail.phase === "refreshing" ? <Badge variant="warning" label={copy.refreshing} /> : null}
           </div>
-          <SignalDetailView loading={detail.phase === "loading"} signal={detail.data} error={detail.error} onRetry={onRefreshDetail} copy={copy} />
+          <SignalDetailView loading={detail.phase === "loading"} signal={detail.data} error={detail.error} onRetry={onRefreshDetail} locale={locale} copy={copy} />
         </Card>
       </section>
     </main>
@@ -331,12 +334,14 @@ export function SignalListView({
   signals,
   selectedSignalId,
   onSelectSignal,
+  locale = "en",
   copy = featureCopyForLocale("en").signals,
 }: {
   readonly phase: ReadPhase
   readonly signals: readonly SignalRecord[]
   readonly selectedSignalId: string | null
   readonly onSelectSignal: (signalId: string) => void
+  readonly locale?: Locale
   readonly copy?: SignalsCopy
 }) {
   if (phase === "loading" && signals.length === 0) {
@@ -360,14 +365,14 @@ export function SignalListView({
             <strong>{signal.title}</strong>
           </span>
           <span className={styles.rowSummary}>{signal.summary}</span>
-          <span className={styles.rowMeta} translate="no">{signal.kind} · {signalTask(signal)} · {timestamp(signal.created_at)}</span>
+          <span className={styles.rowMeta} translate="no">{signal.kind} · {signalTask(signal)} · {timestamp(signal.created_at, locale)}</span>
         </button>
       ))}
     </div>
   )
 }
 
-export function SignalDetailView({ loading, signal, error, onRetry, copy = featureCopyForLocale("en").signals }: { readonly loading: boolean; readonly signal: SignalRecord | null; readonly error?: unknown | null; readonly onRetry?: () => void; readonly copy?: SignalsCopy }) {
+export function SignalDetailView({ loading, signal, error, onRetry, locale = "en", copy = featureCopyForLocale("en").signals }: { readonly loading: boolean; readonly signal: SignalRecord | null; readonly error?: unknown | null; readonly onRetry?: () => void; readonly locale?: Locale; readonly copy?: SignalsCopy }) {
   if (loading && signal === null) {
     return <div className={styles.detailLoading} role="status" aria-label={copy.loading}><span /><span /><span /></div>
   }
@@ -375,12 +380,12 @@ export function SignalDetailView({ loading, signal, error, onRetry, copy = featu
     return <div className={styles.emptyState}>{copy.unavailable}</div>
   }
   if (signal === null) {
-    if (error) return <div className={styles.emptyState}><Banner status="error" title={copy.detailError} description={errorMessage(error, copy.unreadableResponse)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></div>
+    if (error) return <div className={styles.emptyState}><Banner status="error" title={copy.detailError} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /></div>
     return <div className={styles.emptyState}>{copy.selectDetail}</div>
   }
   return (
     <article className={styles.detail} aria-label={copy.detail}>
-      {error ? <Banner status="warning" title={copy.staleDetail} description={errorMessage(error, copy.unreadableResponse)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /> : null}
+      {error ? <Banner status="warning" title={copy.staleDetail} description={localizedErrorMessage(error, copy.unreadableResponse, locale)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /> : null}
       <div className={styles.detailBadges}>
         <MachineBadge variant={statusVariant(signal.status)} label={signal.status} />
         <MachineBadge variant="neutral" label={signal.severity} />
@@ -396,7 +401,7 @@ export function SignalDetailView({ loading, signal, error, onRetry, copy = featu
         <Fact label={copy.actor} value={signal.observation.actor} />
         <Fact label={copy.agentType} value={signal.observation.agent_type ?? "—"} />
         <Fact label={copy.dedupeKey} value={signal.dedupe_key ?? "—"} />
-        <Fact label={copy.created} value={timestamp(signal.created_at)} />
+        <Fact label={copy.created} value={timestamp(signal.created_at, locale)} />
       </dl>
       <div className={styles.evidence}>
         <Heading level={4}>{copy.evidence}</Heading>

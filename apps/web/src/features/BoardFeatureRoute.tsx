@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 
 import type { AppNavigationTarget, OntologyRouteFilters, SignalsRouteFilters } from "../lib/router"
 import type { CanonicalBoardSlug } from "../lib/board-slug"
@@ -7,7 +7,8 @@ import { createTranslator } from "../lib/i18n"
 import { usePreferences } from "../lib/use-preferences"
 import { createHttpTransport } from "../lib/api/http-transport"
 import { subscribeBoardSessionTelemetry } from "./board/board-session-registry"
-import { telemetryInvalidatesFeature } from "./board-feature-invalidation"
+import { telemetryInvalidationSource } from "./board-feature-invalidation"
+import { localizedErrorMessage } from "./safe-error"
 import {
   createSignalsOntologyReadApi,
   resolveSignalsOntologyBoardIdentity,
@@ -32,10 +33,6 @@ export type FeatureRoute = {
   readonly filters?: SignalsRouteFilters | OntologyRouteFilters
 }
 
-function featureErrorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() ? error.message : fallback
-}
-
 export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRouteProps) {
   const { locale } = usePreferences()
   const t = createTranslator(locale)
@@ -43,9 +40,13 @@ export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRo
   const [state, setState] = useState<{ readonly key: string; readonly identity: FeatureBoardIdentity; readonly api: SignalsOntologyReadApi } | null>(null)
   const [error, setError] = useState<{ readonly key: string; readonly value: unknown } | null>(null)
   const [invalidationRevision, setInvalidationRevision] = useState(0)
+  const lastEventCursor = useRef<number | null>(null)
+  const lastBoundaryCursor = useRef<number | null>(null)
 
   useEffect(() => {
     setInvalidationRevision(0)
+    lastEventCursor.current = null
+    lastBoundaryCursor.current = null
   }, [routeKey])
 
   useEffect(() => {
@@ -69,7 +70,26 @@ export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRo
   useEffect(() => {
     if (state?.key !== routeKey) return
     return subscribeBoardSessionTelemetry(runtime, state.identity.canonicalBoardId, (entry) => {
-      if (!telemetryInvalidatesFeature(route.view, entry.type, entry.details?.eventKind)) return
+      const source = telemetryInvalidationSource(route.view, entry.type, entry.details?.eventKind)
+      if (source === null) return
+      if (source === "event") {
+        const eventCursor = typeof entry.details?.eventCursor === "number" && Number.isSafeInteger(entry.details.eventCursor)
+          ? entry.details.eventCursor
+          : entry.cursor
+        lastEventCursor.current = Math.max(lastEventCursor.current ?? -1, eventCursor)
+      } else {
+        const coalescibleBoundary = entry.type === "recovery-complete" || entry.type === "poll-complete" || entry.type === "poll-boundary-complete"
+        if (!coalescibleBoundary) {
+          setInvalidationRevision((revision) => revision + 1)
+          return
+        }
+        const boundaryCursor = typeof entry.details?.confirmedCursor === "number" && Number.isSafeInteger(entry.details.confirmedCursor)
+          ? entry.details.confirmedCursor
+          : entry.cursor
+        if (lastBoundaryCursor.current !== null && boundaryCursor <= lastBoundaryCursor.current) return
+        if (lastEventCursor.current !== null && boundaryCursor <= lastEventCursor.current) return
+        lastBoundaryCursor.current = boundaryCursor
+      }
       setInvalidationRevision((revision) => revision + 1)
     })
   }, [route.view, routeKey, runtime, state])
@@ -78,7 +98,7 @@ export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRo
     return (
       <section role="alert" data-testid="board-feature-error">
         <h1>{t("featureLoadError")}</h1>
-        <p>{featureErrorMessage(error.value, t("featureBoardIdentityError"))}</p>
+        <p>{localizedErrorMessage(error.value, t("featureBoardIdentityError"), locale)}</p>
         <button type="button" onClick={() => window.location.reload()}>{t("featureRetry")}</button>
       </section>
     )

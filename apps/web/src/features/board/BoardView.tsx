@@ -289,7 +289,7 @@ export function BoardView({ state, messages: messageOverrides, onRetry, syncStat
     state.kind === "ready" && validation.valid ? state.model.board : state.kind === "empty" ? state.board : undefined
   const renderedState: BoardViewState =
     state.kind === "ready" && !validation.valid
-      ? { kind: "error", message: validation.message }
+      ? { kind: "error", message: copy.invalidModelDescription }
       : state
   const rootClassName = className ? `${styles.board} ${className}` : styles.board
 

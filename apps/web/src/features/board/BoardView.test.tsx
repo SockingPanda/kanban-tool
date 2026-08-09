@@ -100,7 +100,8 @@ describe("BoardView", () => {
 
     expect(markup).toContain('data-state="error"')
     expect(markup).toContain('data-anomaly="board-model"')
-    expect(markup).toContain("任务状态 review 没有对应的服务端列")
+    expect(markup).toContain("服务端返回的看板数据暂时无法显示，请重试。")
+    expect(markup).not.toContain("任务状态 review 没有对应的服务端列")
     expect(markup).not.toContain('data-status="review"')
   })
 

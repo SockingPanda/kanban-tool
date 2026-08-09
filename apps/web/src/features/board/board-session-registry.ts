@@ -1,5 +1,5 @@
 import type { BoardReadModel, BoardReadQuery } from "../../lib/api/board-read-model"
-import type { HttpTransport } from "../../lib/api/http-transport"
+import { resolveHttpRequestURL, type HttpTransport } from "../../lib/api/http-transport"
 import {
   createBoardSyncSink,
   createEventsApiClient,
@@ -19,19 +19,30 @@ export interface BoardReadResource {
   readonly transport: HttpTransport
   readonly query: BoardReadQuery
   readonly adapter: StreamContractAdapter
+  readonly runtimeKey: string
+  identityKey: string
+  canonicalBoardId: CanonicalBoardId | null
+  resolvedSlug: string | null
+  sessionGeneration: number
 }
 
 interface BoardSession {
+  readonly key: string
+  readonly generation: number
   readonly query: BoardReadQuery
   readonly controller: Pick<WebSyncController, "start" | "stop" | "retry">
+  readonly resource: BoardReadResource
+  readonly resources: Set<BoardReadResource>
   readonly listeners: Set<(model: BoardReadModel) => void>
   readonly telemetryListeners: Set<(entry: SyncTelemetryEntry) => void>
   refs: number
+  disposed: boolean
 }
 
 export interface BoardSessionHandle {
   readonly release: () => void
   readonly retry: () => void
+  readonly generation: number
 }
 
 export interface BoardSessionTestDependencies {
@@ -41,8 +52,45 @@ export interface BoardSessionTestDependencies {
 
 const sessions = new Map<string, BoardSession>()
 
-function sessionKey(runtime: WebRuntimeConfig, boardId: CanonicalBoardId): string {
-  return `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}\u0000${boardId}`
+export function runtimeIdentityKey(runtime: WebRuntimeConfig): string {
+  return `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}`
+}
+
+export function resourceIdentityKey(
+  runtime: WebRuntimeConfig,
+  selector: string,
+  canonicalBoardId: CanonicalBoardId | null,
+): string {
+  return `${runtimeIdentityKey(runtime)}\u0000${selector}\u0000${canonicalBoardId ?? "?"}`
+}
+
+/** Canonical session ownership is independent from the selector used to read a board. */
+function sessionKey(runtime: WebRuntimeConfig, canonicalBoardId: CanonicalBoardId): string {
+  return `${runtimeIdentityKey(runtime)}\u0000${canonicalBoardId}`
+}
+
+export function routeResourceContextKey(runtime: WebRuntimeConfig, selector: string, routeKind: string, boardSlug = ""): string {
+  return `${resourceIdentityKey(runtime, selector, null)}\u0000${routeKind}\u0000${boardSlug}`
+}
+
+export function bindBoardResourceIdentity(
+  runtime: WebRuntimeConfig,
+  resource: BoardReadResource,
+  readModel: BoardReadModel,
+): string {
+  const canonicalBoardId = asCanonicalBoardId(readModel.identity.canonicalBoardId)
+  const expectedRuntimeKey = runtimeIdentityKey(runtime)
+  if (resource.runtimeKey !== expectedRuntimeKey) throw new Error("board resource runtime identity changed")
+  if (resource.selector !== readModel.identity.selector) throw new Error("board resource selector changed")
+  resource.canonicalBoardId = canonicalBoardId
+  resource.resolvedSlug = readModel.identity.slug
+  resource.identityKey = resourceIdentityKey(runtime, resource.selector, canonicalBoardId)
+  return resource.identityKey
+}
+
+function validatedStreamURL(runtime: WebRuntimeConfig): string {
+  const resolved = new URL(resolveHttpRequestURL(runtime, "/api/v1/stream/events"))
+  return `${resolved.pathname}${resolved.search}${resolved.hash}`
 }
 
 /** Number of live canonical-board sessions; used by focused registry tests. */
@@ -53,7 +101,11 @@ export function activeBoardSessionCount(): number {
 /** Test-only cleanup for aborted test mounts; production unmounts use release(). */
 export function resetBoardSessionsForTests(): void {
   for (const session of sessions.values()) {
+    session.disposed = true
+    session.listeners.clear()
+    session.telemetryListeners.clear()
     session.controller.stop()
+    for (const resource of session.resources) resource.sessionGeneration += 1
     session.query.invalidate()
   }
   sessions.clear()
@@ -72,8 +124,21 @@ export function acquireBoardSession(
   dependencies: BoardSessionTestDependencies = {},
 ): BoardSessionHandle {
   const boardId = asCanonicalBoardId(model.board.id)
+  const expectedKey = resourceIdentityKey(runtime, resource.selector, boardId)
+  if (
+    resource.runtimeKey !== runtimeIdentityKey(runtime)
+    || resource.canonicalBoardId !== boardId
+    || resource.resolvedSlug !== model.board.slug
+    || resource.identityKey !== expectedKey
+  ) {
+    throw new Error("board session resource identity mismatch")
+  }
   const key = sessionKey(runtime, boardId)
   let session = sessions.get(key)
+  if (session?.disposed === true) {
+    if (sessions.get(key) === session) sessions.delete(key)
+    session = undefined
+  }
   if (session === undefined) {
     const listeners = new Set<(nextModel: BoardReadModel) => void>()
     const telemetryListeners = new Set<(entry: SyncTelemetryEntry) => void>()
@@ -90,7 +155,7 @@ export function acquireBoardSession(
     const controllerOptions = {
       boardSelector: model.board.slug,
       canonicalBoardId: boardId,
-      streamUrl: "/api/v1/stream/events",
+      streamUrl: validatedStreamURL(runtime),
       transport: dependencies.streamTransport ?? createFetchSseTransport(),
       adapter: resource.adapter,
       sink,
@@ -101,10 +166,24 @@ export function acquireBoardSession(
       },
     } satisfies ConstructorParameters<typeof WebSyncController>[0]
     const controller = dependencies.createController?.(controllerOptions) ?? new WebSyncController(controllerOptions)
-    session = { query: resource.query, controller, listeners, telemetryListeners, refs: 0 }
+    resource.sessionGeneration += 1
+    session = {
+      key,
+      generation: resource.sessionGeneration,
+      query: resource.query,
+      resource,
+      resources: new Set([resource]),
+      controller,
+      listeners,
+      telemetryListeners,
+      refs: 0,
+      disposed: false,
+    }
     sessions.set(key, session)
   }
 
+  resource.sessionGeneration = session.generation
+  session.resources.add(resource)
   session.refs += 1
   // Each acquire owns a wrapper, so two mounts that happen to pass the same
   // callback cannot remove one another's subscription on first release.
@@ -118,19 +197,24 @@ export function acquireBoardSession(
   const release = () => {
     if (released) return
     released = true
-    session?.listeners.delete(modelListener)
-    session?.telemetryListeners.delete(telemetryListener)
-    if (session === undefined) return
+    if (session === undefined || sessions.get(key) !== session || session.key !== key) return
+    session.listeners.delete(modelListener)
+    session.telemetryListeners.delete(telemetryListener)
     session.refs -= 1
     if (session.refs > 0) return
+    session.disposed = true
+    session.listeners.clear()
+    session.telemetryListeners.clear()
+    for (const resource of session.resources) resource.sessionGeneration += 1
     session.controller.stop()
     session.query.invalidate()
-    sessions.delete(key)
+    if (sessions.get(key) === session) sessions.delete(key)
   }
   return {
     release,
     retry: () => {
-      if (!released) session?.controller.retry()
+      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
     },
+    generation: session.generation,
   }
 }

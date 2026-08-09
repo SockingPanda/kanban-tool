@@ -159,6 +159,6 @@ fn invalid(message: impl Into<String>) -> ToolResult<()> {
 
 fn print_usage() {
     println!(
-        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|web-assets check|release check|receipt|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n用法：xtask web-assets check [--root PATH] [--dir PATH]\n用法：xtask release receipt [--root PATH] [--out PATH] [--artifact PATH]"
+        "用法：xtask <affected plan|json|run|self-test|docs check|schema generate|check|audit|web-contracts generate|check|web-assets check|release check|receipt|package|deps check|agents check|tooling check|package cli> [--base REF] [--root PATH]\n用法：xtask web-assets check [--root PATH] [--dir PATH]\n用法：xtask release receipt [--root PATH] [--out PATH] [--artifact PATH]\n用法：xtask release package [--diagnostic] [--root PATH] [--evidence PATH] [--out PATH]"
     );
 }

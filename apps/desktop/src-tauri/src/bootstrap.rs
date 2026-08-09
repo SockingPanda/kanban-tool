@@ -18,8 +18,8 @@ use super::{
         GenerationFence,
     },
     host_lifecycle::{
-        DEFAULT_HOST, DEFAULT_PORT, HostHandle, HostLaunchConfig, ProbeError, connect_or_spawn,
-        probe_host,
+        DEFAULT_HOST, DEFAULT_PORT, HostHandle, HostLaunchConfig, ProbeError,
+        connect_or_spawn_with_cancel, probe_host_with_cancel,
     },
 };
 
@@ -60,6 +60,11 @@ struct BootstrapWorker {
     join: Option<JoinHandle<()>>,
 }
 
+struct PendingWorker {
+    generation: u64,
+    cancel: Arc<AtomicBool>,
+}
+
 impl Drop for BootstrapWorker {
     fn drop(&mut self) {
         self.cancel.store(true, Ordering::Release);
@@ -86,6 +91,9 @@ pub(crate) struct DesktopHost {
     handle: Mutex<Option<HostHandle>>,
     runtime: Mutex<RuntimeState>,
     worker: Mutex<Option<BootstrapWorker>>,
+    pending_worker: Mutex<Option<PendingWorker>>,
+    exit_in_progress: AtomicBool,
+    exit_ready: AtomicBool,
     config: Option<HostLaunchConfig>,
     app_url: Option<ValidatedAppUrl>,
 }
@@ -117,6 +125,9 @@ impl DesktopHost {
                 navigation_claimed: None,
             }),
             worker: Mutex::new(None),
+            pending_worker: Mutex::new(None),
+            exit_in_progress: AtomicBool::new(false),
+            exit_ready: AtomicBool::new(false),
             config,
             app_url,
         }
@@ -124,6 +135,10 @@ impl DesktopHost {
 
     fn config(&self) -> Option<HostLaunchConfig> {
         self.config.clone()
+    }
+
+    pub(crate) fn setup_can_start(&self) -> bool {
+        self.config.is_some() && self.app_url.is_some()
     }
 
     fn begin(&self, kind: AttemptKind) -> Option<u64> {
@@ -152,21 +167,23 @@ impl DesktopHost {
         if !runtime.fence.finish(generation, AttemptKind::ProbeExisting) {
             return false;
         }
-        if let Some(diagnostic) = runtime.setup_diagnostic.clone() {
-            runtime.phase = BootstrapPhase::Recovery;
-            runtime.diagnostic = Some(diagnostic);
-            runtime.external_ready = false;
-            return true;
-        }
         match result {
             Ok(()) => {
                 runtime.phase = BootstrapPhase::Ready;
-                runtime.diagnostic = None;
+                runtime.diagnostic = runtime.setup_diagnostic.clone();
                 runtime.external_ready = true;
             }
             Err(diagnostic) => {
                 runtime.phase = BootstrapPhase::Recovery;
-                runtime.diagnostic = Some(diagnostic);
+                runtime.diagnostic = Some(runtime.setup_diagnostic.clone().map_or(
+                    diagnostic.clone(),
+                    |setup| {
+                        BootstrapDiagnostic::new(
+                            setup.kind,
+                            format!("{}；host probe: {}", setup.message, diagnostic.message),
+                        )
+                    },
+                ));
                 runtime.external_ready = false;
             }
         }
@@ -189,15 +206,9 @@ impl DesktopHost {
                     .lock()
                     .expect("桌面 host 生命周期锁已失效")
                     .replace(handle);
-                if let Some(diagnostic) = runtime.setup_diagnostic.clone() {
-                    runtime.phase = BootstrapPhase::Recovery;
-                    runtime.diagnostic = Some(diagnostic);
-                    runtime.external_ready = false;
-                } else {
-                    runtime.phase = BootstrapPhase::Ready;
-                    runtime.diagnostic = None;
-                    runtime.external_ready = true;
-                }
+                runtime.phase = BootstrapPhase::Ready;
+                runtime.diagnostic = runtime.setup_diagnostic.clone();
+                runtime.external_ready = true;
             }
             Err(diagnostic) => {
                 runtime.phase = BootstrapPhase::Recovery;
@@ -247,7 +258,7 @@ impl DesktopHost {
             ));
             runtime.navigation_claimed = None;
         }
-        self.cancel_and_join_worker();
+        self.cancel_workers();
     }
 
     fn close(&self) {
@@ -305,13 +316,64 @@ impl DesktopHost {
             .clone()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn shutdown(
         &self,
     ) -> Result<Option<super::host_lifecycle::ShutdownResult>, super::host_lifecycle::ShutdownError>
     {
         self.close();
-        self.cancel_and_join_worker();
+        self.cancel_workers();
+        self.reap_finished_worker();
+        if self.worker_in_flight() {
+            return Err(super::host_lifecycle::ShutdownError::WorkerInFlight);
+        }
         self.shutdown_host_only()
+    }
+
+    pub(crate) fn request_exit(&self, app: tauri::AppHandle, code: i32) -> bool {
+        if self.exit_ready.swap(false, Ordering::AcqRel) {
+            return true;
+        }
+        if self
+            .exit_in_progress
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return false;
+        }
+        self.close();
+        self.cancel_workers();
+        let app_for_thread = app.clone();
+        let spawn_result = thread::Builder::new()
+            .name("kanban-desktop-exit-cleanup".to_owned())
+            .spawn(move || {
+                for _ in 0..120 {
+                    let Some(state) = app_for_thread.try_state::<DesktopHost>() else {
+                        return;
+                    };
+                    match state.shutdown_for_exit_attempt() {
+                        Ok(_) => {
+                            state.exit_ready.store(true, Ordering::Release);
+                            state.exit_in_progress.store(false, Ordering::Release);
+                            app_for_thread.exit(code);
+                            return;
+                        }
+                        Err(error) => {
+                            eprintln!("kanban exit cleanup retry 失败：{error}");
+                        }
+                    }
+                    thread::sleep(std::time::Duration::from_millis(25));
+                }
+                if let Some(state) = app_for_thread.try_state::<DesktopHost>() {
+                    state.exit_in_progress.store(false, Ordering::Release);
+                }
+                eprintln!("kanban exit cleanup bounded retry exhausted；保留桌面进程避免 orphan");
+            });
+        if spawn_result.is_err() {
+            self.exit_in_progress.store(false, Ordering::Release);
+            eprintln!("kanban exit cleanup thread 启动失败；保留桌面进程避免 orphan");
+        }
+        false
     }
 
     fn shutdown_host_only(
@@ -326,7 +388,46 @@ impl DesktopHost {
         else {
             return Ok(None);
         };
-        handle.shutdown().map(Some)
+        match handle.shutdown() {
+            Ok(result) => Ok(Some(result)),
+            Err(error) => {
+                self.handle
+                    .lock()
+                    .expect("桌面 host 生命周期锁已失效")
+                    .replace(handle);
+                Err(error)
+            }
+        }
+    }
+
+    fn shutdown_for_exit_attempt(
+        &self,
+    ) -> Result<Option<super::host_lifecycle::ShutdownResult>, super::host_lifecycle::ShutdownError>
+    {
+        self.close();
+        self.cancel_workers();
+        self.reap_finished_worker();
+        if self.worker_in_flight() {
+            return Err(super::host_lifecycle::ShutdownError::WorkerInFlight);
+        }
+        let Some(mut handle) = self
+            .handle
+            .lock()
+            .expect("桌面 host 生命周期锁已失效")
+            .take()
+        else {
+            return Ok(None);
+        };
+        match handle.shutdown_nonblocking() {
+            Ok(result) => Ok(Some(result)),
+            Err(error) => {
+                self.handle
+                    .lock()
+                    .expect("桌面 host 生命周期锁已失效")
+                    .replace(handle);
+                Err(error)
+            }
+        }
     }
 
     fn abort_after_navigation_failure(&self) {
@@ -336,24 +437,63 @@ impl DesktopHost {
         }
     }
 
+    fn register_pending_worker(&self, cancel: Arc<AtomicBool>, generation: u64) -> bool {
+        let runtime = self.runtime.lock().expect("桌面 bootstrap 状态锁已失效");
+        if !runtime.fence.is_current(generation) || runtime.fence.is_closed() {
+            return false;
+        }
+        let mut pending = self
+            .pending_worker
+            .lock()
+            .expect("桌面 bootstrap pending worker 锁已失效");
+        if pending.is_some() {
+            return false;
+        }
+        *pending = Some(PendingWorker { generation, cancel });
+        true
+    }
+
+    fn unregister_pending_worker(&self, cancel: &Arc<AtomicBool>) {
+        let mut pending = self
+            .pending_worker
+            .lock()
+            .expect("桌面 bootstrap pending worker 锁已失效");
+        if pending
+            .as_ref()
+            .is_some_and(|pending| Arc::ptr_eq(&pending.cancel, cancel))
+        {
+            pending.take();
+        }
+    }
+
     fn install_worker(&self, cancel: Arc<AtomicBool>, join: JoinHandle<()>, generation: u64) {
+        let registered = {
+            let mut pending = self
+                .pending_worker
+                .lock()
+                .expect("桌面 bootstrap pending worker 锁已失效");
+            pending.take().is_some_and(|pending| {
+                pending.generation == generation && Arc::ptr_eq(&pending.cancel, &cancel)
+            })
+        };
+        if !registered {
+            cancel.store(true, Ordering::Release);
+        }
         let keep = self
             .runtime
             .lock()
             .expect("桌面 bootstrap 状态锁已失效")
             .fence
             .is_current(generation);
-        if keep {
-            self.worker
-                .lock()
-                .expect("桌面 bootstrap worker 锁已失效")
-                .replace(BootstrapWorker {
-                    cancel,
-                    join: Some(join),
-                });
-        } else {
-            cancel.store(true, Ordering::Release);
-            let _ = join.join();
+        self.worker
+            .lock()
+            .expect("桌面 bootstrap worker 锁已失效")
+            .replace(BootstrapWorker {
+                cancel,
+                join: Some(join),
+            });
+        if !keep {
+            self.reap_finished_worker();
         }
     }
 
@@ -376,19 +516,40 @@ impl DesktopHost {
         }
     }
 
-    fn cancel_and_join_worker(&self) {
-        let worker = self
+    fn cancel_workers(&self) {
+        if let Some(worker) = self
             .worker
             .lock()
             .expect("桌面 bootstrap worker 锁已失效")
-            .take();
-        let Some(mut worker) = worker else {
-            return;
-        };
-        worker.cancel.store(true, Ordering::Release);
-        if let Some(join) = worker.join.take() {
-            let _ = join.join();
+            .as_ref()
+        {
+            worker.cancel.store(true, Ordering::Release);
         }
+        if let Some(worker) = self
+            .pending_worker
+            .lock()
+            .expect("桌面 bootstrap pending worker 锁已失效")
+            .as_ref()
+        {
+            worker.cancel.store(true, Ordering::Release);
+        }
+    }
+
+    fn worker_in_flight(&self) -> bool {
+        if self
+            .pending_worker
+            .lock()
+            .expect("桌面 bootstrap pending worker 锁已失效")
+            .is_some()
+        {
+            return true;
+        }
+        self.worker
+            .lock()
+            .expect("桌面 bootstrap worker 锁已失效")
+            .as_ref()
+            .and_then(|worker| worker.join.as_ref())
+            .is_some_and(|join| !join.is_finished())
     }
 }
 
@@ -417,40 +578,44 @@ pub(crate) fn start_background_attempt(
     };
 
     let cancel = Arc::new(AtomicBool::new(false));
+    if !state.register_pending_worker(Arc::clone(&cancel), generation) {
+        state.cancel_in_flight();
+        return state.snapshot();
+    }
     let cancel_for_thread = Arc::clone(&cancel);
     let app_for_thread = app.clone();
     let spawn_result = thread::Builder::new()
         .name("kanban-desktop-bootstrap".to_owned())
         .spawn(move || match kind {
             AttemptKind::ProbeExisting => {
-                let result = if cancel_for_thread.load(Ordering::Acquire) {
-                    Err(BootstrapDiagnostic::new(
-                        DiagnosticKind::Internal,
-                        "桌面 bootstrap 已取消",
-                    ))
-                } else {
-                    match probe_host(config.endpoint) {
-                        Ok(_) => Ok(()),
-                        Err(error) => Err(diagnostic_from_probe(error)),
-                    }
+                if cancel_for_thread.load(Ordering::Acquire) {
+                    return;
+                }
+                let result = match probe_host_with_cancel(config.endpoint, &cancel_for_thread) {
+                    Ok(_) => Ok(()),
+                    Err(error) => Err(diagnostic_from_probe(error)),
                 };
+                if cancel_for_thread.load(Ordering::Acquire) {
+                    return;
+                }
                 complete_probe_attempt(&app_for_thread, generation, result);
             }
             AttemptKind::StartLocal => {
-                let result = if cancel_for_thread.load(Ordering::Acquire) {
-                    Err(BootstrapDiagnostic::new(
-                        DiagnosticKind::Internal,
-                        "桌面 bootstrap 已取消",
-                    ))
-                } else {
-                    connect_or_spawn(&config).map_err(diagnostic_from_start)
-                };
+                if cancel_for_thread.load(Ordering::Acquire) {
+                    return;
+                }
+                let result = connect_or_spawn_with_cancel(&config, &cancel_for_thread)
+                    .map_err(diagnostic_from_start);
+                if cancel_for_thread.load(Ordering::Acquire) {
+                    return;
+                }
                 complete_start_attempt(&app_for_thread, generation, result);
             }
         });
     let join = match spawn_result {
         Ok(join) => join,
         Err(error) => {
+            state.unregister_pending_worker(&cancel);
             let diagnostic = BootstrapDiagnostic::new(
                 DiagnosticKind::Internal,
                 format!("启动 bootstrap 后台线程失败: {error}"),
@@ -518,6 +683,9 @@ fn diagnostic_from_probe(error: ProbeError) -> BootstrapDiagnostic {
         ProbeError::Incompatible(message) => {
             BootstrapDiagnostic::new(DiagnosticKind::HostIncompatible, message)
         }
+        ProbeError::Cancelled => {
+            BootstrapDiagnostic::new(DiagnosticKind::Internal, "桌面 bootstrap 已取消")
+        }
     }
 }
 
@@ -538,6 +706,7 @@ fn diagnostic_from_start(error: super::host_lifecycle::HostStartupError) -> Boot
         super::host_lifecycle::HostStartupError::StartupTimeout { .. } => {
             DiagnosticKind::StartupTimeout
         }
+        super::host_lifecycle::HostStartupError::Cancelled => DiagnosticKind::Internal,
     };
     BootstrapDiagnostic::new(kind, error.to_string())
 }
@@ -631,7 +800,7 @@ mod tests {
         super::bootstrap_state::{
             AttemptKind, BootstrapDiagnostic, BootstrapPhase, DiagnosticKind,
         },
-        super::host_lifecycle::HostLaunchConfig,
+        super::host_lifecycle::{HostHandle, HostLaunchConfig},
         BootstrapWorker, DesktopHost, FIXED_APP_URL, ValidatedAppUrl,
     };
 
@@ -684,15 +853,10 @@ mod tests {
         let generation = host
             .begin(AttemptKind::StartLocal)
             .expect("bootstrap operation should start");
-        let result = host.finish_start(
-            generation,
-            Err(BootstrapDiagnostic::new(
-                DiagnosticKind::SidecarExited,
-                "sidecar exited",
-            )),
-        );
+        let result = host.finish_start(generation, Ok(HostHandle::external_for_test()));
         assert!(result);
-        assert_eq!(host.snapshot().phase, BootstrapPhase::Recovery);
+        assert_eq!(host.snapshot().phase, BootstrapPhase::Ready);
+        assert!(host.snapshot().can_open_browser || !cfg!(target_os = "linux"));
         assert!(
             host.snapshot()
                 .diagnostic
@@ -700,6 +864,64 @@ mod tests {
                 .message
                 .contains("tray unavailable")
         );
+        assert!(host.claim_navigation(generation).is_some());
+    }
+
+    #[test]
+    fn successful_external_probe_recovers_from_setup_diagnostic() {
+        let host = DesktopHost::from_setup(
+            Some(HostLaunchConfig::new(
+                "sidecar", "web", "db", "actor", "board",
+            )),
+            ValidatedAppUrl::fixed().ok(),
+            Some(BootstrapDiagnostic::new(
+                DiagnosticKind::Window,
+                "window setup warning",
+            )),
+        );
+        let generation = host
+            .begin(AttemptKind::ProbeExisting)
+            .expect("probe should start");
+        assert!(host.finish_probe(generation, Ok(())));
+        assert_eq!(host.snapshot().phase, BootstrapPhase::Ready);
+        assert!(host.snapshot().can_open_browser || !cfg!(target_os = "linux"));
+        assert!(host.claim_navigation(generation).is_some());
+    }
+
+    #[test]
+    fn shutdown_fences_pending_worker_before_thread_installation() {
+        let host = test_host();
+        let generation = host
+            .begin(AttemptKind::StartLocal)
+            .expect("bootstrap operation should start");
+        let cancel = Arc::new(AtomicBool::new(false));
+        assert!(host.register_pending_worker(Arc::clone(&cancel), generation));
+        let error = host
+            .shutdown()
+            .expect_err("shutdown must wait for pending worker registration");
+        assert!(matches!(
+            error,
+            super::super::host_lifecycle::ShutdownError::WorkerInFlight
+        ));
+        assert!(cancel.load(Ordering::Acquire));
+
+        let join = std::thread::spawn({
+            let cancel = Arc::clone(&cancel);
+            move || {
+                while !cancel.load(Ordering::Acquire) {
+                    std::thread::yield_now();
+                }
+            }
+        });
+        host.install_worker(cancel, join, generation);
+        for _ in 0..100 {
+            host.reap_finished_worker();
+            if host.worker.lock().expect("worker lock").is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(host.worker.lock().expect("worker lock").is_none());
     }
 
     #[test]

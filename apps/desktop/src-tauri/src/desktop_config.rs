@@ -49,6 +49,8 @@ pub(crate) fn set_main_window_title(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::desktop_window_title;
 
     #[test]
@@ -56,6 +58,15 @@ mod tests {
         assert_eq!(
             desktop_window_title(),
             format!("kanban {}", env!("CARGO_PKG_VERSION"))
+        );
+    }
+
+    #[test]
+    fn sidecar_path_matches_package_resource_destination() {
+        let resource_dir = Path::new("/tmp/kanban-resource");
+        assert_eq!(
+            super::resolve_sidecar_path(resource_dir),
+            resource_dir.join("kanban")
         );
     }
 }

@@ -4,10 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TAURI_CONF="$ROOT/apps/desktop/src-tauri/tauri.conf.json"
 DESKTOP_MANIFEST="$ROOT/apps/desktop/src-tauri/Cargo.toml"
+DESKTOP_CONFIG="$ROOT/apps/desktop/src-tauri/src/desktop_config.rs"
 JUSTFILE="$ROOT/justfile"
 PACKAGE_LAYOUT_SCRIPT="$ROOT/scripts/test-desktop-package-layout.sh"
+SIDECAR_PREP_SCRIPT="$ROOT/scripts/prepare-desktop-sidecar.sh"
 
-for path in "$TAURI_CONF" "$DESKTOP_MANIFEST" "$JUSTFILE" "$PACKAGE_LAYOUT_SCRIPT"; do
+for path in "$TAURI_CONF" "$DESKTOP_MANIFEST" "$DESKTOP_CONFIG" "$JUSTFILE" "$PACKAGE_LAYOUT_SCRIPT" "$SIDECAR_PREP_SCRIPT"; do
   [[ -f "$path" ]] || { echo "error: missing expected file: $path" >&2; exit 1; }
 done
 
@@ -24,12 +26,40 @@ fi
 
 jq -e '
   .build.frontendDist == "../bootstrap"
+  and (.build.devUrl? // null) == null
   and (.bundle.resources | type == "object")
   and .bundle.resources["../../web/dist/"] == "web/"
+  and .bundle.resources["bin/kanban"] == "kanban"
 ' "$TAURI_CONF" >/dev/null || {
-  echo "error: Tauri package must retain bootstrap frontendDist and map ../../web/dist/ to web/" >&2
+  echo "error: Tauri config must use static bootstrap in dev/package and map Web/kanban resources" >&2
   exit 1
 }
+
+rg -n 'resolve_sidecar_path|resource_dir\.join\("kanban"\)' "$DESKTOP_CONFIG" >/dev/null || {
+  echo "error: Desktop host must resolve the packaged kanban sidecar at resource_dir/kanban" >&2
+  exit 1
+}
+
+rg -n 'DEST=.*src-tauri/bin/kanban|release/kanban' "$SIDECAR_PREP_SCRIPT" >/dev/null || {
+  echo "error: sidecar preparation must copy release/kanban to src-tauri/bin/kanban" >&2
+  exit 1
+}
+
+desktop_check_block="$(sed -n '/^desktop-check:/,/^desktop-build:/p' "$JUSTFILE")"
+for required in 'just web-build' 'just web-artifact-check' 'cargo build --locked -p kanban-cli --release' 'scripts/prepare-desktop-sidecar.sh'; do
+  if ! grep -Fq -- "$required" <<<"$desktop_check_block"; then
+    echo "error: desktop-check is missing prerequisite: $required" >&2
+    exit 1
+  fi
+done
+
+desktop_build_block="$(sed -n '/^desktop-build:/,/^desktop-package:/p' "$JUSTFILE")"
+for required in 'just web-build' 'just web-artifact-check' 'cargo build --locked -p kanban-cli --release' 'scripts/prepare-desktop-sidecar.sh' 'tauri build'; do
+  if ! grep -Fq -- "$required" <<<"$desktop_build_block"; then
+    echo "error: desktop-build is missing sidecar/package step: $required" >&2
+    exit 1
+  fi
+done
 
 if rg -n 'kanban-(vector-lancedb|graph-oxigraph)|prepare-desktop-helper|test-desktop-helper' \
   "$TAURI_CONF" "$DESKTOP_MANIFEST" "$JUSTFILE" "$PACKAGE_LAYOUT_SCRIPT"; then

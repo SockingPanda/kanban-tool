@@ -5,7 +5,6 @@
   "identifier": "io.github.sockingpanda.kanban",
   "build": {
     "beforeDevCommand": "pnpm --filter @kanban-tool/web vite-build",
-    "devUrl": "http://127.0.0.1:8721/app/",
     "beforeBuildCommand": "pnpm --filter @kanban-tool/web vite-build",
     "frontendDist": "../bootstrap"
   },
@@ -30,7 +29,8 @@
       "icons/icon.png"
     ],
     "resources": {
-      "../../web/dist/": "web/"
+      "../../web/dist/": "web/",
+      "bin/kanban": "kanban"
     },
     "targets": [
       "deb"

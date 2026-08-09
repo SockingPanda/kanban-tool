@@ -34,6 +34,19 @@ fi
   web-assets check --root "$ROOT" --dir apps/web/dist >/dev/null
 
 dpkg-deb --extract "$deb_path" "$TMP_ROOT/extracted"
+mapfile -t sidecar_paths < <(
+  find "$TMP_ROOT/extracted/usr" -type f -name 'kanban' -print
+)
+if [[ "${#sidecar_paths[@]}" -ne 1 ]]; then
+  echo "error: Desktop deb must contain exactly one bundled kanban sidecar executable" >&2
+  exit 1
+fi
+sidecar_path="${sidecar_paths[0]}"
+if [[ "$sidecar_path" == */usr/bin/kanban || ! -x "$sidecar_path" ]]; then
+  echo "error: bundled kanban sidecar must be executable and outside usr/bin: $sidecar_path" >&2
+  exit 1
+fi
+
 mapfile -t web_manifests < <(
   find "$TMP_ROOT/extracted/usr" -type f -path '*/web/manifest.json' -print
 )
@@ -53,4 +66,4 @@ diff -r --no-dereference \
   exit 1
 }
 
-echo "ok: $deb_path contains the Desktop app and exact Web artifact"
+echo "ok: $deb_path contains the Desktop app, bundled kanban sidecar, and exact Web artifact"

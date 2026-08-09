@@ -19,6 +19,8 @@ import {
   validateBoardViewModel,
 } from "./types"
 import {
+  canCompleteTask,
+  canPromoteTask,
   transitionOptionsForTask,
   type BoardTaskMutationSurface,
 } from "./task-mutation-state"
@@ -191,6 +193,8 @@ function TaskCard({
   const pending = controller?.isPending(`transition:${task.id}`) === true
     || controller?.isPending(`edit:${task.id}`) === true
   const transitionOptions = controller ? transitionOptionsForTask(task, controller.claimTokenForTask(task.id)) : []
+  const promoteNotReady = controller !== undefined && (task.status === "todo" || task.status === "scheduled") && !canPromoteTask(task)
+  const requiredStepsIncomplete = controller !== undefined && (task.status === "running" || task.status === "review") && !canCompleteTask(task)
 
   return (
     <Card
@@ -205,6 +209,7 @@ function TaskCard({
       role={controller ? "group" : undefined}
       aria-roledescription={controller ? copy.taskCardRoleDescription : undefined}
       aria-grabbed={controller ? controller.grabbedTaskId === task.id : undefined}
+      aria-busy={pending || undefined}
       aria-label={controller ? `${task.ref} ${task.title}` : undefined}
       aria-keyshortcuts={controller ? "Space Escape ArrowLeft ArrowRight Enter" : undefined}
       onDragStart={controller ? (event) => controller.onDragStart(task.id, event) : undefined}
@@ -248,7 +253,7 @@ function TaskCard({
         </div>
       </dl>
       {controller ? (
-        <div className={styles.taskActions} aria-label={copy.transitionLabel}>
+        <div className={styles.taskActions} aria-label={copy.transitionLabel} aria-busy={pending || undefined}>
           <Button
             label={copy.editTask}
             variant="secondary"
@@ -260,14 +265,18 @@ function TaskCard({
           {transitionOptions.map((option) => (
             <Button
               key={option.action}
-              label={copy.transitionNames[option.action] ?? option.action}
+              label={pending ? copy.mutationPending : copy.transitionNames[option.action] ?? option.action}
               variant="secondary"
               size="sm"
               isDisabled={pending}
+              isLoading={pending}
               onClick={(event) => controller.openTransition(task, option, event.currentTarget)}
               data-testid={`task-transition-${option.action}-${task.id}`}
             />
           ))}
+          {promoteNotReady ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.promoteNotReady}</span> : null}
+          {requiredStepsIncomplete ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.requiredStepsIncomplete}</span> : null}
+          {pending ? <span role="status" aria-live="polite" className={styles.mutedAction}>{copy.mutationPending}</span> : null}
         </div>
       ) : null}
     </Card>
@@ -383,7 +392,7 @@ export function BoardView({ state, messages: messageOverrides, onRetry, syncStat
       </a>
       <BoardHeader board={board} titleId={titleId} copy={copy} onCreate={controller?.openCreate} />
       {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
-      {controller ? <MutationNotice controller={controller} copy={copy} /> : null}
+      {controller && controller.dialog === null ? <MutationNotice controller={controller} copy={copy} /> : null}
       {controller ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-drag-announcement">{controller.dragAnnouncement}</p> : null}
       <div id={`${id}-columns`} tabIndex={-1}>
         {renderedState.kind === "ready" && displayModel !== null && validation.valid ? (

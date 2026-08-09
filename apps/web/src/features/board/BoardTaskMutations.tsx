@@ -68,6 +68,7 @@ export function MutationDialog({ controller, copy }: { readonly controller: Boar
           <Heading level={2} id="task-mutation-dialog-title">{title}</Heading>
           <Button label={copy.close} variant="secondary" size="sm" isDisabled={pending} onClick={controller.closeDialog} />
         </div>
+        {controller.notice !== null ? <MutationNotice controller={controller} copy={copy} /> : null}
         <form
           className={styles.dialogForm}
           onSubmit={(event) => {
@@ -124,6 +125,47 @@ export function MutationDialog({ controller, copy }: { readonly controller: Boar
                   <span>{copy.forceConfirmationLabel}</span>
                 </label>
               ) : null}
+            </>
+          ) : dialog.kind === "create" ? (
+            <>
+              <label className={styles.dialogField}>
+                <span>{copy.taskTitleLabel}</span>
+                <input
+                  name="task-title"
+                  autoComplete="off"
+                  value={dialog.title}
+                  onChange={(event) => controller.setDialogTitle(event.currentTarget.value)}
+                  placeholder={copy.taskTitleLabel}
+                  disabled={pending}
+                  required
+                  autoFocus
+                  data-testid="task-title-input"
+                />
+              </label>
+              <label className={styles.dialogField}>
+                <span>{copy.taskDescriptionLabel}</span>
+                <textarea
+                  name="task-description"
+                  autoComplete="off"
+                  value={dialog.description}
+                  onChange={(event) => controller.setDialogDescription(event.currentTarget.value)}
+                  placeholder={copy.taskDescriptionPlaceholder}
+                  disabled={pending}
+                  data-testid="task-description-input"
+                />
+              </label>
+              <label className={styles.dialogField}>
+                <span>{copy.firstRequiredStepLabel}</span>
+                <input
+                  name="first-required-step"
+                  autoComplete="off"
+                  value={dialog.firstStepTitle}
+                  onChange={(event) => controller.setDialogFirstStepTitle(event.currentTarget.value)}
+                  placeholder={copy.firstRequiredStepPlaceholder}
+                  disabled={pending}
+                  data-testid="first-required-step-input"
+                />
+              </label>
             </>
           ) : (
             <label className={styles.dialogField}>

@@ -18,7 +18,7 @@ const model: BoardViewModel = {
       seq: 1,
       ref: "default#1",
       title: "Draft",
-      description: null,
+      description: "Draft specification",
       status: "todo",
       position: 1,
       lockVersion: 3,
@@ -41,6 +41,7 @@ const model: BoardViewModel = {
 function surface(): BoardTaskMutationSurface {
   const client: BoardTaskMutationClient = {
     createTask: vi.fn(),
+    createStep: vi.fn(),
     updateTask: vi.fn(),
     transitionTask: vi.fn(),
   }

@@ -49,6 +49,7 @@ export interface BoardTaskViewModel {
   readonly description: string | null
   readonly status: BoardTaskStatus
   readonly position: number
+  readonly scheduledAt?: number | null
   readonly lockVersion: number
   readonly priority: 0 | 1 | 2 | 3
   readonly assignee: string | null
@@ -198,6 +199,7 @@ export interface BoardMessages {
   readonly create: string
   readonly cancel: string
   readonly mutationPending: string
+  readonly mutationSuccess: string
   readonly mutationError: string
   readonly mutationUnauthorized: string
   readonly mutationNotFound: string
@@ -210,9 +212,14 @@ export interface BoardMessages {
   readonly dropTargetLabel: (column: string) => string
   readonly dropRejected: string
   readonly dropSameColumn: string
+  readonly dropBlockedOnlyTodo: string
   readonly dropIllegal: (source: string, target: string) => string
+  readonly promoteNotReady: string
+  readonly requiredStepsIncomplete: string
   readonly taskDescriptionLabel: string
   readonly taskDescriptionPlaceholder: string
+  readonly firstRequiredStepLabel: string
+  readonly firstRequiredStepPlaceholder: string
   readonly forceConfirmationLabel: string
 }
 
@@ -286,11 +293,12 @@ export const defaultBoardMessages: BoardMessages = {
   editTaskTitle: "编辑任务",
   transitionTaskTitle: "状态转换",
   blockReasonLabel: "阻塞原因",
-  blockReasonPlaceholder: "说明为什么暂时无法继续",
+  blockReasonPlaceholder: "说明为什么暂时无法继续…",
   save: "保存",
   create: "创建",
   cancel: "取消",
   mutationPending: "正在保存…",
+  mutationSuccess: "任务操作已提交。",
   mutationError: "任务操作失败",
   mutationUnauthorized: "当前操作未获授权。",
   mutationNotFound: "任务不存在或已被移除。",
@@ -303,9 +311,14 @@ export const defaultBoardMessages: BoardMessages = {
   dropTargetLabel: (column) => `放置到${column}`,
   dropRejected: "未识别的拖动来源，未移动任务。",
   dropSameColumn: "任务已在此列，未移动。",
+  dropBlockedOnlyTodo: "阻塞任务只能解除到待办列。",
   dropIllegal: (source, target) => `不能从 ${source} 移动到 ${target}。`,
+  promoteNotReady: "任务规格、依赖、时间或执行计划尚未满足推进条件。",
+  requiredStepsIncomplete: "必需步骤尚未完成，不能标记完成。",
   taskDescriptionLabel: "任务说明",
   taskDescriptionPlaceholder: "补充任务说明…",
+  firstRequiredStepLabel: "首个必需步骤（可选）",
+  firstRequiredStepPlaceholder: "例如：验证接口契约…",
   forceConfirmationLabel: "我确认要在没有当前 claim 的情况下强制执行此操作。",
 }
 
@@ -375,11 +388,12 @@ export const englishBoardMessages: BoardMessages = {
   editTaskTitle: "Edit task",
   transitionTaskTitle: "Status transition",
   blockReasonLabel: "Block reason",
-  blockReasonPlaceholder: "Explain why work cannot continue",
+  blockReasonPlaceholder: "Explain why work cannot continue…",
   save: "Save",
   create: "Create",
   cancel: "Cancel",
   mutationPending: "Saving…",
+  mutationSuccess: "The task action was submitted.",
   mutationError: "Task action failed",
   mutationUnauthorized: "You are not authorized to perform this action.",
   mutationNotFound: "The task no longer exists.",
@@ -392,9 +406,14 @@ export const englishBoardMessages: BoardMessages = {
   dropTargetLabel: (column) => `Drop in ${column}`,
   dropRejected: "The drag source was not recognized; the task was not moved.",
   dropSameColumn: "The task is already in this column.",
+  dropBlockedOnlyTodo: "Blocked tasks can only be unblocked to Todo.",
   dropIllegal: (source, target) => `Cannot move from ${source} to ${target}.`,
+  promoteNotReady: "The task spec, dependencies, schedule, or execution plan is not ready.",
+  requiredStepsIncomplete: "Required steps are incomplete; the task cannot be completed.",
   taskDescriptionLabel: "Task description",
   taskDescriptionPlaceholder: "Add task details…",
+  firstRequiredStepLabel: "First required step (optional)",
+  firstRequiredStepPlaceholder: "For example: verify the API contract…",
   forceConfirmationLabel: "I confirm this forced action without the current claim.",
 }
 

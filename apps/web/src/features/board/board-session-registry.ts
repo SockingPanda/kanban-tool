@@ -223,9 +223,13 @@ export function acquireBoardSession(
       if (released || session === undefined || session.disposed || sessions.get(key) !== session) return Promise.resolve()
       if (session.refreshPromise !== null) return session.refreshPromise
       const current = session
+      const generation = current.generation
       const refreshPromise = (async () => {
         const nextModel = await current.query.reload()
-        if (released || current.disposed || sessions.get(key) !== current) return
+        // The refresh belongs to the canonical session entry, not the handle
+        // that happened to start it. A released handle must not suppress a
+        // publish when another owner still retains the same session.
+        if (current.disposed || current.generation !== generation || sessions.get(key) !== current) return
         for (const listener of current.listeners) listener(nextModel)
       })()
       current.refreshPromise = refreshPromise

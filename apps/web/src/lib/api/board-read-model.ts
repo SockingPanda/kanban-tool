@@ -37,6 +37,7 @@ export type BoardTask = Readonly<Pick<
   | "status"
   | "priority"
   | "position"
+  | "scheduled_at"
   | "lock_version"
   | "assignee"
   | "dependency_blocked"
@@ -492,6 +493,7 @@ function projectTask(task: WireBoardTask): BoardTask {
     assignee: task.assignee,
     priority: task.priority,
     position: task.position,
+    scheduled_at: task.scheduled_at,
     lock_version: task.lock_version,
     dependency_blocked: task.dependency_blocked,
     unfinished_parent_count: task.unfinished_parent_count,

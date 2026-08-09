@@ -68,6 +68,7 @@ function projectTask(task: BoardTask, groupedStatus: BoardTaskStatus): BoardTask
     description: task.description,
     status,
     position: task.position,
+    scheduledAt: task.scheduled_at,
     lockVersion: task.lock_version,
     priority: parsePriority(task.priority),
     assignee: task.assignee,

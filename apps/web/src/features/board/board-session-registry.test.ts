@@ -141,6 +141,31 @@ describe("Board canonical session registry", () => {
     handle.release()
   })
 
+  test("publishes a refresh started by a released owner to a retained session owner", async () => {
+    let resolveReload: (value: BoardReadModel) => void = () => undefined
+    const reload = vi.fn(() => new Promise<BoardReadModel>((resolve) => { resolveReload = resolve }))
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload,
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const createController = vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() }))
+    const firstListener = vi.fn()
+    const secondListener = vi.fn()
+    const first = acquireBoardSession(runtime, model, resource(query), firstListener, vi.fn(), { createController })
+    const second = acquireBoardSession(runtime, model, resource(query), secondListener, vi.fn(), { createController })
+
+    const refresh = first.refresh()
+    first.release()
+    expect(activeBoardSessionCount()).toBe(1)
+    resolveReload(readModel)
+    await refresh
+
+    expect(firstListener).not.toHaveBeenCalled()
+    expect(secondListener).toHaveBeenCalledWith(readModel)
+    second.release()
+  })
+
   test("does not leak a session across runtime/build identity changes", () => {
     const query = {
       load: vi.fn(async () => readModel),

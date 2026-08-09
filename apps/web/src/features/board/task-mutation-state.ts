@@ -3,6 +3,7 @@ import type {
   ArchiveTaskIntent,
   BlockTaskIntent,
   ClaimTaskIntent,
+  HeartbeatTaskIntent,
   CompleteTaskIntent,
   PromoteTaskIntent,
   SpecifyTaskIntent,
@@ -21,7 +22,7 @@ export interface BoardTaskTransitionOption {
   readonly requiresConfirmation: boolean
 }
 
-export type BoardTaskMutationClient = Pick<TaskMutationClient, "createTask" | "updateTask" | "transitionTask">
+export type BoardTaskMutationClient = Pick<TaskMutationClient, "createTask" | "createStep" | "updateTask" | "transitionTask">
 
 export interface BoardTaskMutationSurface {
   readonly client: BoardTaskMutationClient
@@ -32,24 +33,25 @@ const TRANSITIONS: Readonly<Record<BoardTaskStatus, readonly BoardTaskTransition
   triage: [
     { action: "specify", targetStatus: "todo", requiresReason: false, requiresDescription: true, requiresConfirmation: false },
     { action: "block", targetStatus: "blocked", requiresReason: true, requiresDescription: false, requiresConfirmation: false },
-    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
+    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: true },
   ],
   todo: [
     { action: "promote", targetStatus: "ready", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
     { action: "block", targetStatus: "blocked", requiresReason: true, requiresDescription: false, requiresConfirmation: false },
-    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
+    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: true },
   ],
   scheduled: [
     { action: "promote", targetStatus: "ready", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
     { action: "block", targetStatus: "blocked", requiresReason: true, requiresDescription: false, requiresConfirmation: false },
-    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
+    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: true },
   ],
   ready: [
     { action: "claim", targetStatus: "running", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
     { action: "block", targetStatus: "blocked", requiresReason: true, requiresDescription: false, requiresConfirmation: false },
-    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
+    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: true },
   ],
   running: [
+    { action: "heartbeat", targetStatus: "running", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
     { action: "submit-review", targetStatus: "review", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
     { action: "complete", targetStatus: "done", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
     { action: "block", targetStatus: "blocked", requiresReason: true, requiresDescription: false, requiresConfirmation: false },
@@ -61,16 +63,32 @@ const TRANSITIONS: Readonly<Record<BoardTaskStatus, readonly BoardTaskTransition
   review: [
     { action: "complete", targetStatus: "done", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
     { action: "block", targetStatus: "blocked", requiresReason: true, requiresDescription: false, requiresConfirmation: false },
-    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
+    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: true },
   ],
   done: [
-    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: false },
+    { action: "archive", targetStatus: "archived", requiresReason: false, requiresDescription: false, requiresConfirmation: true },
   ],
   archived: [],
 }
 
 export function transitionOptionsForStatus(status: BoardTaskStatus): readonly BoardTaskTransitionOption[] {
   return TRANSITIONS[status]
+}
+
+/** Promote is accepted only when the read projection proves server readiness. */
+export function canPromoteTask(task: BoardTaskViewModel, now = Date.now()): boolean {
+  if (task.status !== "todo" && task.status !== "scheduled") return false
+  if (task.title.trim().length === 0 || (task.description ?? "").trim().length === 0) return false
+  if (task.readiness.dependencyBlocked) return false
+  if (task.readiness.executionPlanState === "unplanned") return false
+  if (task.status === "scheduled" && (task.scheduledAt === undefined || task.scheduledAt === null || task.scheduledAt > now)) return false
+  return true
+}
+
+/** Complete/review cannot bypass incomplete required steps from the board summary. */
+export function canCompleteTask(task: BoardTaskViewModel): boolean {
+  if (task.status !== "running" && task.status !== "review") return true
+  return task.readiness.completedRequiredStepCount >= task.readiness.requiredStepCount
 }
 
 export function transitionForTarget(
@@ -94,6 +112,10 @@ function withContext(task: BoardTaskViewModel, option: BoardTaskTransitionOption
 export function transitionOptionsForTask(task: BoardTaskViewModel, claimToken: string | null = null): readonly BoardTaskTransitionOption[] {
   return transitionOptionsForStatus(task.status)
     .filter((option) => option.action !== "submit-review" || claimToken !== null)
+    .filter((option) => option.action !== "heartbeat" || claimToken !== null)
+    .filter((option) => option.action !== "promote" || canPromoteTask(task))
+    .filter((option) => option.action !== "complete" || canCompleteTask(task))
+    .filter((option) => option.action !== "archive" || task.status !== "running" || claimToken !== null)
     .map((option) => withContext(task, option, claimToken))
 }
 
@@ -103,7 +125,7 @@ export function transitionForTaskTarget(
   targetStatus: BoardTaskStatus,
   claimToken: string | null = null,
 ): BoardTaskTransitionOption | null {
-  if (task.status === "blocked" && (targetStatus === "todo" || targetStatus === "scheduled" || targetStatus === "ready" || targetStatus === "running")) {
+  if (task.status === "blocked" && targetStatus === "todo") {
     return { action: "unblock", targetStatus, requiresReason: false, requiresDescription: false, requiresConfirmation: false }
   }
   const option = transitionOptionsForTask(task, claimToken).find((candidate) => candidate.targetStatus === targetStatus)
@@ -121,6 +143,7 @@ export type BoardTaskTransitionCommand =
   | { readonly action: "specify"; readonly input: SpecifyTaskIntent }
   | { readonly action: "promote"; readonly input: PromoteTaskIntent }
   | { readonly action: "claim"; readonly input: ClaimTaskIntent }
+  | { readonly action: "heartbeat"; readonly input: HeartbeatTaskIntent }
   | { readonly action: "complete"; readonly input: CompleteTaskIntent }
   | { readonly action: "submit-review"; readonly input: SubmitReviewTaskIntent }
   | { readonly action: "block"; readonly input: BlockTaskIntent }
@@ -144,6 +167,8 @@ export function transitionCommandForTask(
       return { action: "promote", input: {} }
     case "claim":
       return { action: "claim", input: { ttl_ms: 300_000, worker_profile: "manual" } }
+    case "heartbeat":
+      return claimToken === null ? null : { action: "heartbeat", input: { claim_token: claimToken, ttl_ms: 300_000 } }
     case "submit-review":
       return claimToken === null ? null : { action: "submit-review", input: { claim_token: claimToken } }
     case "complete":
@@ -160,7 +185,7 @@ export function transitionCommandForTask(
     case "unblock":
       return { action: "unblock", input: {} }
     case "archive":
-      return task.status === "running" ? { action: "archive", input: { force: true } } : { action: "archive", input: {} }
+      return task.status === "running" && claimToken === null ? null : { action: "archive", input: { force: true } }
     default:
       return null
   }
@@ -176,6 +201,7 @@ export function executeBoardTaskTransition(
     case "specify": return client.transitionTask(taskId, "specify", command.input)
     case "promote": return client.transitionTask(taskId, "promote", command.input)
     case "claim": return client.transitionTask(taskId, "claim", command.input)
+    case "heartbeat": return client.transitionTask(taskId, "heartbeat", command.input)
     case "complete": return client.transitionTask(taskId, "complete", command.input)
     case "submit-review": return client.transitionTask(taskId, "submit-review", command.input)
     case "block": return client.transitionTask(taskId, "block", command.input)
@@ -283,5 +309,16 @@ export function isMutationConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false
   const candidate = error as Partial<Pick<HttpTransportError, "status" | "apiError">>
   const code = candidate.apiError?.code
-  return candidate.status === 409 || code === "conflict" || code === "claim_conflict" || code === "idempotency_conflict"
+  return candidate.status === 409
+    || code === "conflict"
+    || code === "claim_conflict"
+    || code === "claim_token_mismatch"
+    || code === "idempotency_conflict"
+}
+
+export function isClaimTokenConflict(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false
+  const candidate = error as Partial<Pick<HttpTransportError, "status" | "apiError">>
+  return candidate.apiError?.code === "claim_token_mismatch"
+    || (candidate.status === 403 && candidate.apiError?.code === "claim_conflict")
 }

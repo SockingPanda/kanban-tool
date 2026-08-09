@@ -3,11 +3,13 @@ import { describe, expect, test } from "vitest"
 import type { BoardViewModel } from "./types"
 import {
   isMutationConflict,
+  isClaimTokenConflict,
   moveTaskOptimistically,
   rollbackTaskOptimistically,
   transitionCommandForTask,
   transitionForTarget,
   transitionForTaskTarget,
+  transitionOptionsForTask,
   transitionOptionsForStatus,
   updateTaskOptimistically,
 } from "./task-mutation-state"
@@ -25,7 +27,7 @@ const model: BoardViewModel = {
       seq: 1,
       ref: "default#1",
       title: "Draft",
-      description: null,
+      description: "Draft specification",
       status: "todo",
       position: 1,
       priority: 2,
@@ -49,7 +51,7 @@ describe("board task mutation state", () => {
     expect(transitionForTarget("todo", "ready")).toMatchObject({ action: "promote", targetStatus: "ready" })
     expect(transitionForTarget("todo", "running")).toBeNull()
     expect(transitionOptionsForStatus("archived")).toEqual([])
-    expect(transitionOptionsForStatus("running").map((option) => option.targetStatus)).toEqual(["review", "done", "blocked", "archived"])
+    expect(transitionOptionsForStatus("running").map((option) => option.targetStatus)).toEqual(["running", "review", "done", "blocked", "archived"])
   })
 
   test("moves a task optimistically without mutating the canonical snapshot", () => {
@@ -74,6 +76,8 @@ describe("board task mutation state", () => {
   test("classifies typed conflict responses for canonical reload and retry", () => {
     expect(isMutationConflict({ status: 409 })).toBe(true)
     expect(isMutationConflict({ apiError: { code: "conflict" } })).toBe(true)
+    expect(isMutationConflict({ status: 403, apiError: { code: "claim_token_mismatch" } })).toBe(true)
+    expect(isClaimTokenConflict({ status: 403, apiError: { code: "claim_token_mismatch" } })).toBe(true)
     expect(isMutationConflict({ status: 422 })).toBe(false)
   })
 
@@ -107,6 +111,27 @@ describe("board task mutation state", () => {
     expect(blocked).toEqual({ action: "block", input: { force: true, reason: "waiting" } })
     const tokenized = transitionCommandForTask(running, transitionForTaskTarget(running, "done", "claim-token")!, { claimToken: "claim-token" })
     expect(tokenized).toEqual({ action: "complete", input: { claim_token: "claim-token" } })
+    const heartbeat = transitionCommandForTask(running, transitionForTaskTarget(running, "running", "claim-token")!, { claimToken: "claim-token" })
+    expect(heartbeat).toEqual({ action: "heartbeat", input: { claim_token: "claim-token", ttl_ms: 300_000 } })
+    const archive = transitionCommandForTask(task, transitionForTaskTarget(task, "archived")!, { confirmed: true })
+    expect(archive).toEqual({ action: "archive", input: { force: true } })
+    const runningArchive = transitionForTaskTarget(running, "archived", "claim-token")
+    if (!runningArchive) throw new Error("running archive fixture missing")
+    expect(transitionCommandForTask(running, runningArchive, { claimToken: "claim-token", confirmed: true })).toEqual({ action: "archive", input: { force: true } })
+  })
+
+  test("hides promote and completion actions when canonical readiness facts fail", () => {
+    const task = model.tasksByStatus.todo?.[0]
+    if (!task) throw new Error("todo fixture missing")
+    expect(transitionOptionsForStatus("todo")).toContainEqual(expect.objectContaining({ action: "promote" }))
+    expect(transitionOptionsForTask({ ...task, description: null })).not.toContainEqual(expect.objectContaining({ action: "promote" }))
+    expect(transitionOptionsForTask({ ...task, readiness: { ...task.readiness, dependencyBlocked: true } })).not.toContainEqual(expect.objectContaining({ action: "promote" }))
+    expect(transitionOptionsForTask({ ...task, readiness: { ...task.readiness, executionPlanState: "unplanned" } })).not.toContainEqual(expect.objectContaining({ action: "promote" }))
+    const running = { ...task, status: "running" as const, readiness: { ...task.readiness, requiredStepCount: 2, completedRequiredStepCount: 1 } }
+    expect(transitionOptionsForTask(running, "claim-token")).not.toContainEqual(expect.objectContaining({ action: "complete" }))
+    const review = { ...running, status: "review" as const }
+    expect(transitionOptionsForTask(review, "claim-token")).not.toContainEqual(expect.objectContaining({ action: "complete" }))
+    expect(transitionOptionsForTask(running)).not.toContainEqual(expect.objectContaining({ action: "archive" }))
   })
 
   test("does not pretend unblock has a canonical target and rolls back only one task", () => {
@@ -122,6 +147,10 @@ describe("board task mutation state", () => {
     }
     const blockedTask = blockedModel.tasksByStatus.blocked?.[0]
     if (!blockedTask) throw new Error("blocked fixture missing")
+    expect(transitionForTaskTarget(blockedTask, "todo")).toMatchObject({ action: "unblock", targetStatus: "todo" })
+    expect(transitionForTaskTarget(blockedTask, "scheduled")).toBeNull()
+    expect(transitionForTaskTarget(blockedTask, "ready")).toBeNull()
+    expect(transitionForTaskTarget(blockedTask, "running")).toBeNull()
     expect(moveTaskOptimistically(blockedModel, blockedTask.id, "ready")).toBe(blockedModel)
     const second = { ...firstTask, id: "t_2", title: "Second" }
     const concurrentBase = { ...model, tasksByStatus: { ...model.tasksByStatus, todo: [firstTask, second] } }

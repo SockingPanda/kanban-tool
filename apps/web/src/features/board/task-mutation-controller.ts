@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react"
 
 import type {
   BoardColumnViewModel,
@@ -8,6 +8,7 @@ import type {
 } from "./types"
 import {
   isMutationConflict,
+  isClaimTokenConflict,
   executeBoardTaskTransition,
   moveTaskOptimistically,
   rollbackTaskOptimistically,
@@ -21,7 +22,15 @@ import {
 } from "./task-mutation-state"
 
 export type MutationDialog =
-  | { readonly kind: "create"; readonly title: string; readonly taskId: string; readonly idempotencyKey: string }
+  | {
+      readonly kind: "create"
+      readonly title: string
+      readonly description: string
+      readonly firstStepTitle: string
+      readonly taskId: string
+      readonly idempotencyKey: string
+      readonly taskCreated: boolean
+    }
   | { readonly kind: "edit"; readonly taskId: string; readonly title: string }
   | {
       readonly kind: "transition"
@@ -34,7 +43,15 @@ export type MutationDialog =
 
 export type RetryIntent =
   | { readonly kind: "reload" }
-  | { readonly kind: "create"; readonly title: string; readonly taskId: string; readonly idempotencyKey: string }
+  | {
+      readonly kind: "create"
+      readonly title: string
+      readonly description: string
+      readonly firstStepTitle: string
+      readonly taskId: string
+      readonly idempotencyKey: string
+      readonly taskCreated: boolean
+    }
   | { readonly kind: "edit"; readonly taskId: string; readonly title: string }
   | {
       readonly kind: "transition"
@@ -44,6 +61,20 @@ export type RetryIntent =
       readonly description: string
       readonly confirmed: boolean
     }
+
+/** Rebase a retry intent on values still present in its open dialog. */
+export function retryIntentWithCurrentDialog(retry: RetryIntent, dialog: MutationDialog | null): RetryIntent {
+  if (retry.kind === "create" && dialog?.kind === "create" && dialog.taskId === retry.taskId) {
+    return { ...retry, title: dialog.title, description: dialog.description, firstStepTitle: dialog.firstStepTitle }
+  }
+  if (retry.kind === "edit" && dialog?.kind === "edit" && dialog.taskId === retry.taskId) {
+    return { ...retry, title: dialog.title }
+  }
+  if (retry.kind === "transition" && dialog?.kind === "transition" && dialog.taskId === retry.taskId) {
+    return { ...retry, reason: dialog.reason, description: dialog.description, confirmed: dialog.confirmed }
+  }
+  return retry
+}
 
 export interface MutationNotice {
   readonly kind: "error" | "conflict" | "stale"
@@ -65,6 +96,7 @@ export interface BoardTaskMutationController {
   readonly setDialogTitle: (title: string) => void
   readonly setDialogReason: (reason: string) => void
   readonly setDialogDescription: (description: string) => void
+  readonly setDialogFirstStepTitle: (title: string) => void
   readonly setDialogConfirmed: (confirmed: boolean) => void
   readonly submitDialog: () => void
   readonly closeDialog: () => void
@@ -158,34 +190,32 @@ export function useBoardTaskMutationController(
   const dragStateRef = useRef<{ readonly taskId: string; readonly token: string } | null>(null)
   const mountedRef = useRef(true)
   const boardIdentityRef = useRef<string | null>(baseModel?.board?.id ?? null)
-  const boardEffectIdentityRef = useRef<string | null>(baseModel?.board?.id ?? null)
+  const surfaceIdentityRef = useRef<BoardTaskMutationSurface | undefined>(surface)
   const mutationGenerationRef = useRef(0)
   const optimisticDirtyRef = useRef(false)
   const internalDragMime = "application/x-kanban-task"
 
-  // Render-time fence prevents a late A mutation from reaching B before the
-  // effect that resets local state gets a chance to run.
   const renderBoardIdentity = baseModel?.board?.id ?? null
-  if (boardIdentityRef.current !== renderBoardIdentity) {
-    boardIdentityRef.current = renderBoardIdentity
-    mutationGenerationRef.current += 1
-    pendingRef.current = new Set()
-    claimTokensRef.current.clear()
-    dragStateRef.current = null
-    optimisticDirtyRef.current = false
-  }
-
-  useEffect(() => () => {
-    mountedRef.current = false
-    claimTokensRef.current.clear()
-    dragStateRef.current = null
-    optimisticDirtyRef.current = false
+  useEffect(() => {
+    const claimTokens = claimTokensRef.current
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      claimTokens.clear()
+      dragStateRef.current = null
+      optimisticDirtyRef.current = false
+    }
   }, [])
 
-  useEffect(() => {
+  // Identity changes are committed in a layout effect. A render that React
+  // abandons must not clear refs/state or invalidate the live mutation fence.
+  useLayoutEffect(() => {
     const nextBoardIdentity = baseModel?.board?.id ?? null
-    if (boardEffectIdentityRef.current === nextBoardIdentity) return
-    boardEffectIdentityRef.current = nextBoardIdentity
+    const identityChanged = boardIdentityRef.current !== nextBoardIdentity || surfaceIdentityRef.current !== surface
+    if (!identityChanged) return
+    boardIdentityRef.current = nextBoardIdentity
+    surfaceIdentityRef.current = surface
+    mutationGenerationRef.current += 1
     pendingRef.current = new Set()
     claimTokensRef.current.clear()
     dragStateRef.current = null
@@ -198,7 +228,7 @@ export function useBoardTaskMutationController(
     setRetryIntent(null)
     setGrabbedTaskId(null)
     setDragAnnouncement(copy.grabTask)
-  }, [baseModel, copy.grabTask])
+  }, [baseModel, copy.grabTask, surface])
 
   // A failed canonical reconcile deliberately keeps the optimistic snapshot visible.
   useEffect(() => {
@@ -221,7 +251,11 @@ export function useBoardTaskMutationController(
     await surface?.onCanonicalReload?.()
   }
 
-  const isCurrentMutation = (generation: number) => mountedRef.current && mutationGenerationRef.current === generation
+  const isCurrentMutation = (generation: number) =>
+    mountedRef.current
+    && mutationGenerationRef.current === generation
+    && boardIdentityRef.current === renderBoardIdentity
+    && surfaceIdentityRef.current === surface
 
   const closeDialogState = () => {
     setDialog(null)
@@ -261,24 +295,52 @@ export function useBoardTaskMutationController(
   }
 
   const runCreate = async (
-    attempt: { readonly title: string; readonly taskId: string; readonly idempotencyKey: string },
+    attempt: {
+      readonly title: string
+      readonly description: string
+      readonly firstStepTitle: string
+      readonly taskId: string
+      readonly idempotencyKey: string
+      readonly taskCreated: boolean
+    },
   ) => {
     if (surface === undefined || attempt.title.trim().length === 0 || pendingRef.current.has("create")) return
     const generation = mutationGenerationRef.current
     setPending("create", true)
     setNotice(null)
+    let taskCreated = attempt.taskCreated
     try {
-      await surface.client.createTask({ title: attempt.title.trim(), task_id: attempt.taskId, idempotency_key: attempt.idempotencyKey })
+      if (!taskCreated) {
+        await surface.client.createTask({
+          title: attempt.title.trim(),
+          description: attempt.description.trim() || null,
+          task_id: attempt.taskId,
+          idempotency_key: attempt.idempotencyKey,
+        })
+        taskCreated = true
+      }
+      if (attempt.firstStepTitle.trim().length > 0) {
+        await surface.client.createStep(attempt.taskId, {
+          title: attempt.firstStepTitle.trim(),
+          required: true,
+          idempotency_key: `${attempt.idempotencyKey}:step`,
+        })
+      }
     } catch (error) {
       if (isCurrentMutation(generation)) {
-        if (isMutationConflict(error)) {
+        if (taskCreated) {
           const reloaded = await reconcileAfterMutation()
           if (!isCurrentMutation(generation)) return
-          setRetryIntent(reloaded ? { kind: "create", ...attempt } : { kind: "reload" })
+          setRetryIntent({ kind: "create", ...attempt, taskCreated: true })
+          setNotice({ kind: reloaded ? "error" : "stale", message: reloaded ? mutationMessage(error, copy, copy.mutationError) : copy.reconcileStale })
+        } else if (isMutationConflict(error)) {
+          const reloaded = await reconcileAfterMutation()
+          if (!isCurrentMutation(generation)) return
+          setRetryIntent(reloaded ? { kind: "create", ...attempt, taskCreated: false } : { kind: "reload" })
           setNotice({ kind: reloaded ? "conflict" : "stale", message: reloaded ? copy.conflictDescription : copy.reconcileStale })
         } else {
           setNotice({ kind: "error", message: mutationMessage(error, copy, copy.mutationError) })
-          setRetryIntent({ kind: "create", ...attempt })
+          setRetryIntent({ kind: "create", ...attempt, taskCreated: false })
         }
         closeDialogState()
       }
@@ -291,6 +353,7 @@ export function useBoardTaskMutationController(
       if (reloaded) {
         optimisticDirtyRef.current = false
         setRetryIntent(null)
+        setDragAnnouncement(copy.mutationSuccess)
         closeDialogState()
       } else {
         optimisticDirtyRef.current = true
@@ -318,6 +381,7 @@ export function useBoardTaskMutationController(
       if (isCurrentMutation(generation)) {
         setOptimisticModel((current) => current === null ? current : rollbackTaskOptimistically(current, snapshot, taskId))
         if (isMutationConflict(error)) {
+          if (isClaimTokenConflict(error)) claimTokensRef.current.delete(taskId)
           const reloaded = await reconcileAfterMutation()
           if (!isCurrentMutation(generation)) return
           setRetryIntent(reloaded ? { kind: "edit", taskId, title } : { kind: "reload" })
@@ -337,6 +401,7 @@ export function useBoardTaskMutationController(
       if (reloaded) {
         optimisticDirtyRef.current = false
         setRetryIntent(null)
+        setDragAnnouncement(copy.mutationSuccess)
         closeDialogState()
       } else {
         optimisticDirtyRef.current = true
@@ -385,15 +450,18 @@ export function useBoardTaskMutationController(
     setNotice(null)
     try {
       const response = await executeBoardTaskTransition(surface.client, taskId, command)
-      if (command.action === "claim" && "claim_token" in response.data && typeof response.data.claim_token === "string") {
-        claimTokensRef.current.set(taskId, response.data.claim_token)
-      } else if (command.action === "submit-review" || command.action === "complete" || command.action === "block" || command.action === "unblock" || command.action === "archive") {
-        claimTokensRef.current.delete(taskId)
+      if (isCurrentMutation(generation)) {
+        if (command.action === "claim" && "claim_token" in response.data && typeof response.data.claim_token === "string") {
+          claimTokensRef.current.set(taskId, response.data.claim_token)
+        } else if (command.action === "submit-review" || command.action === "complete" || command.action === "block" || command.action === "unblock" || command.action === "archive") {
+          claimTokensRef.current.delete(taskId)
+        }
       }
     } catch (error) {
       if (isCurrentMutation(generation)) {
         setOptimisticModel((current) => current === null ? current : rollbackTaskOptimistically(current, snapshot, taskId))
         if (isMutationConflict(error)) {
+          if (isClaimTokenConflict(error)) claimTokensRef.current.delete(taskId)
           const reloaded = await reconcileAfterMutation()
           if (!isCurrentMutation(generation)) return
           setRetryIntent(reloaded ? { kind: "transition", taskId, option: legalOption, reason: context.reason ?? "", description: context.description ?? "", confirmed: context.confirmed === true } : { kind: "reload" })
@@ -413,6 +481,7 @@ export function useBoardTaskMutationController(
       if (reloaded) {
         optimisticDirtyRef.current = false
         setRetryIntent(null)
+        setDragAnnouncement(copy.mutationSuccess)
         closeDialogState()
       } else {
         optimisticDirtyRef.current = true
@@ -435,7 +504,7 @@ export function useBoardTaskMutationController(
     rememberTrigger(trigger)
     setNotice(null)
     const taskId = clientUuid("t_")
-    setDialog({ kind: "create", title: "", taskId, idempotencyKey: `task.create:${taskId}` })
+    setDialog({ kind: "create", title: "", description: "", firstStepTitle: "", taskId, idempotencyKey: `task.create:${taskId}`, taskCreated: false })
   }
   const openEdit = (task: BoardTaskViewModel, trigger?: HTMLElement | null) => {
     if (pendingRef.current.has(`edit:${task.id}`)) return
@@ -462,7 +531,7 @@ export function useBoardTaskMutationController(
   }
   const submitDialog = () => {
     if (dialog === null) return
-    if (dialog.kind === "create") void runCreate({ title: dialog.title, taskId: dialog.taskId, idempotencyKey: dialog.idempotencyKey })
+    if (dialog.kind === "create") void runCreate(dialog)
     else if (dialog.kind === "edit") void runEdit(dialog.taskId, dialog.title)
     else void runTransition(dialog.taskId, dialog.option, {
       reason: dialog.reason,
@@ -480,9 +549,13 @@ export function useBoardTaskMutationController(
     const retry = retryIntent
     if (retry === null) return
     if (retry.kind === "reload") void runCanonicalReload()
-    else if (retry.kind === "create") void runCreate(retry)
-    else if (retry.kind === "edit") void runEdit(retry.taskId, retry.title, true)
-    else void runTransition(retry.taskId, retry.option, { reason: retry.reason, description: retry.description, confirmed: retry.confirmed }, true)
+    else {
+      const current = retryIntentWithCurrentDialog(retry, dialog)
+      setRetryIntent(current)
+      if (current.kind === "create") void runCreate(current)
+      else if (current.kind === "edit") void runEdit(current.taskId, current.title, true)
+      else if (current.kind === "transition") void runTransition(current.taskId, current.option, { reason: current.reason, description: current.description, confirmed: current.confirmed }, true)
+    }
   }
 
   const clearGrab = (announcement = copy.cancelGrab) => {
@@ -509,16 +582,14 @@ export function useBoardTaskMutationController(
   }
   const currentDragTaskId = (event?: DragEvent<HTMLElement>) => {
     const drag = dragStateRef.current
-    if (drag !== null) {
-      const token = event?.dataTransfer?.getData(internalDragMime)
-      return token === drag.token ? drag.taskId : null
-    }
-    return grabbedTaskId
+    if (drag === null || event === undefined) return null
+    const token = event.dataTransfer?.getData(internalDragMime)
+    return token === drag.token ? drag.taskId : null
   }
   const onDragOver = (status: BoardTaskViewModel["status"], event: DragEvent<HTMLElement>) => {
     const taskId = currentDragTaskId(event)
     const task = taskId === null ? null : taskForId(activeModel, taskId)
-    const option = task === null ? null : transitionForTaskTarget(task, status, claimTokenForTask(task.id))
+    const option = task === null || task.status === status ? null : transitionForTaskTarget(task, status, claimTokenForTask(task.id))
     if (option !== null) event.preventDefault()
   }
   const onDrop = (status: BoardTaskViewModel["status"], event: DragEvent<HTMLElement>) => {
@@ -529,7 +600,7 @@ export function useBoardTaskMutationController(
       return
     }
     const task = taskForId(activeModel, taskId)
-    const option = task === null ? null : transitionForTaskTarget(task, status, claimTokenForTask(task.id))
+    const option = task === null || task.status === status ? null : transitionForTaskTarget(task, status, claimTokenForTask(task.id))
     dragStateRef.current = null
     setGrabbedTaskId(null)
     if (task !== null && option !== null) {
@@ -539,7 +610,14 @@ export function useBoardTaskMutationController(
       taskRefs.current.get(task.id)?.focus()
     } else {
       const sameColumn = task?.status === status
-      setDragAnnouncement(sameColumn ? copy.dropSameColumn : copy.dropIllegal(task?.status ?? "?", status))
+      const blockedTarget = task?.status === "blocked" && status !== "todo"
+      setDragAnnouncement(
+        sameColumn
+          ? copy.dropSameColumn
+          : blockedTarget
+            ? copy.dropBlockedOnlyTodo
+            : copy.dropIllegal(task?.status ?? "?", status),
+      )
       taskRefs.current.get(taskId)?.focus()
     }
   }
@@ -592,7 +670,8 @@ export function useBoardTaskMutationController(
     claimTokenForTask,
     setDialogTitle: (title) => setDialog((current) => current === null || current.kind === "transition" ? current : { ...current, title }),
     setDialogReason: (reason) => setDialog((current) => current?.kind === "transition" ? { ...current, reason } : current),
-    setDialogDescription: (description) => setDialog((current) => current?.kind === "transition" ? { ...current, description } : current),
+    setDialogDescription: (description) => setDialog((current) => current === null || current.kind === "edit" ? current : { ...current, description }),
+    setDialogFirstStepTitle: (firstStepTitle) => setDialog((current) => current?.kind === "create" ? { ...current, firstStepTitle } : current),
     setDialogConfirmed: (confirmed) => setDialog((current) => current?.kind === "transition" ? { ...current, confirmed } : current),
     submitDialog,
     closeDialog,

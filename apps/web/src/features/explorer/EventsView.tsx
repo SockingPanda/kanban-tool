@@ -311,16 +311,24 @@ function useBoardEventsRead(
     boardSelector,
     taskId,
   ])
+  const scopeKey = JSON.stringify([
+    runtime.apiBaseUrl,
+    runtime.webBasePath,
+    runtime.webBuildId,
+    boardSelector,
+  ])
   const loadRef = useRef<(signal: AbortSignal) => Promise<BoardEventsReadModel>>((signal) => loadBoardEvents(runtime, boardSelector, { taskId, signal }))
   loadRef.current = (signal) => loadBoardEvents(runtime, boardSelector, { taskId, signal })
   const [generation, setGeneration] = useState(0)
   const requestKey = `${identityKey}\u0000${invalidationRevision}\u0000${generation}`
   type InternalEventsReadState = EventsReadState & {
     readonly identityKey: string
+    readonly scopeKey: string
     readonly requestKey: string
   }
   const [state, setState] = useState<InternalEventsReadState>(() => ({
     identityKey,
+    scopeKey,
     requestKey,
     data: null,
     loading: false,
@@ -334,11 +342,12 @@ function useBoardEventsRead(
     if (!online) {
       setState((current) => ({
         identityKey: requestIdentity,
+        scopeKey,
         requestKey: requestToken,
-        data: current.identityKey === requestIdentity ? current.data : null,
+        data: current.scopeKey === scopeKey ? current.data : null,
         loading: false,
         error: new ExplorerReadError("offline", "当前离线，无法加载事件。"),
-        stale: current.identityKey === requestIdentity && current.data !== null,
+        stale: current.scopeKey === scopeKey && current.data !== null,
       }))
       return
     }
@@ -346,11 +355,12 @@ function useBoardEventsRead(
     let active = true
     setState((current) => ({
       identityKey: requestIdentity,
+      scopeKey,
       requestKey: requestToken,
-      data: current.identityKey === requestIdentity ? current.data : null,
+      data: current.scopeKey === scopeKey ? current.data : null,
       loading: true,
       error: null,
-      stale: current.identityKey === requestIdentity && current.data !== null,
+      stale: current.scopeKey === scopeKey && current.data !== null,
     }))
     void loadRef.current(controller.signal).then(
       (data) => {
@@ -361,6 +371,7 @@ function useBoardEventsRead(
             const events = mergeBoardEvents(current.data.events, data.events, data.board.id)
             return {
               identityKey: requestIdentity,
+              scopeKey,
               requestKey: requestToken,
               data: { ...data, events, meta: { ...data.meta, count: events.length, nextAfter: Math.max(current.data.meta.nextAfter, data.meta.nextAfter) } },
               loading: false,
@@ -368,7 +379,7 @@ function useBoardEventsRead(
               stale: false,
             }
           }
-          return { identityKey: requestIdentity, requestKey: requestToken, data, loading: false, error: null, stale: false }
+          return { identityKey: requestIdentity, scopeKey, requestKey: requestToken, data, loading: false, error: null, stale: false }
         })
       },
       (error: unknown) => {
@@ -377,6 +388,7 @@ function useBoardEventsRead(
           if (current.identityKey !== requestIdentity || current.requestKey !== requestToken) return current
           return {
             identityKey: requestIdentity,
+            scopeKey,
             requestKey: requestToken,
             data: current.data,
             loading: false,
@@ -390,7 +402,7 @@ function useBoardEventsRead(
       active = false
       controller.abort()
     }
-  }, [boardSelector, generation, identityKey, invalidationRevision, online, requestKey, taskId])
+  }, [boardSelector, generation, identityKey, invalidationRevision, online, requestKey, scopeKey, taskId])
 
   useEffect(() => {
     if (!batch) return
@@ -442,12 +454,13 @@ function useBoardEventsRead(
     })
   }, [batch, identityKey, taskId])
 
+  const sameScope = state.scopeKey === scopeKey
   const visibleState: EventsReadState = state.identityKey !== identityKey
     ? {
-        data: null,
+        data: sameScope ? state.data : null,
         loading: online,
         error: online ? null : new ExplorerReadError("offline", "当前离线，无法加载事件。"),
-        stale: false,
+        stale: sameScope && state.data !== null,
       }
     : state.requestKey !== requestKey
       ? {

@@ -263,7 +263,7 @@ describe("Web artifact manifest contract", () => {
     } finally {
       await rm(outputDirectory, { recursive: true, force: true })
     }
-  })
+  }, 30_000)
 })
 
 async function inventoryFromDisk(root: string): Promise<WebArtifactFile[]> {

@@ -516,7 +516,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
         <main className={styles.primaryContent}>
           {view === "board" ? (
             boardRead.loading && !boardRead.data ? <div className={styles.boundary} data-testid="board-loading" role="status"><h2>{copy.boardLoading}</h2></div>
-              : boardRead.data ? <BoardView state={{ kind: "ready", model: boardViewModel(boardRead.data) }} syncStatus={syncStatus ?? (boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} />
+              : boardRead.data ? <BoardView state={{ kind: "ready", model: boardViewModel(boardRead.data) }} syncStatus={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "offline" : syncStatus ?? (boardRead.error ? "stale" : undefined)} onRetry={boardRead.retry} onSelectTask={selectTask} headingLevel={2} />
               : boardRead.error ? <div className={styles.boundary} data-testid={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "board-offline" : "board-error"} role={boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? "status" : "alert"}><h2>{boardRead.error instanceof ExplorerReadError && boardRead.error.kind === "offline" ? copy.boardOffline : copy.boardError}</h2><p>{boardRead.error.message}</p><button type="button" onClick={boardRead.retry}>{copy.retry}</button></div> : null
           ) : null}
           {view === "list" ? (

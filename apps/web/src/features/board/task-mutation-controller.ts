@@ -321,6 +321,9 @@ export function useBoardTaskMutationController(
         })
         taskCreated = true
       }
+      // The first write may resolve after a board/runtime identity switch.
+      // Do not issue the optional step mutation through the stale surface.
+      if (!isCurrentMutation(generation)) return
       if (attempt.firstStepTitle.trim().length > 0) {
         await surface.client.createStep(attempt.taskId, {
           title: attempt.firstStepTitle.trim(),

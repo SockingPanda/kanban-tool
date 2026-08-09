@@ -274,6 +274,36 @@ test.describe("board task mutation DOM behavior", () => {
     await expect(page.getByTestId("task-transition-submit-review-t_todo")).toHaveCount(0)
   })
 
+  test("does not write a first step after deferred create crosses a board identity switch", async ({ page }) => {
+    await wireBoard(page, { secondaryBoard: { boardId: "b_other", boardSlug: "other", status: "todo" } })
+    let releaseCreate: (() => void) | null = null
+    let createStarted: (() => void) | null = null
+    const createStartedPromise = new Promise<void>((resolve) => { createStarted = resolve })
+    const stepBodies: Array<Record<string, unknown>> = []
+    await page.route("**/api/v1/boards/default/tasks", async (route) => {
+      createStarted?.()
+      await new Promise<void>((resolve) => { releaseCreate = resolve })
+      const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("todo", String(body.title ?? "Created task")) }) })
+    })
+    await page.route("**/api/v1/tasks/*/steps", async (route) => {
+      stepBodies.push(JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>)
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { task_id: "t_created", steps: [], execution_plan: { board_id: "b_default", task_id: "t_created", state: "planned", reason: null, updated_by: "web-user", updated_at: 1 } } }) })
+    })
+
+    await page.getByTestId("task-create").click()
+    await page.getByTestId("task-title-input").fill("Deferred create")
+    await page.getByTestId("first-required-step-input").fill("Do not write after switch")
+    await page.getByRole("button", { name: "创建" }).click()
+    await createStartedPromise
+
+    await page.goto("/app/boards/other/board", { waitUntil: "domcontentloaded" })
+    await expect(page.getByText("b_other · other")).toBeVisible()
+    releaseCreate?.()
+    await page.waitForTimeout(250)
+    expect(stepBodies).toHaveLength(0)
+  })
+
   test("keeps the edit input open for a canonical conflict and offers an explicit retry", async ({ page }) => {
     await wireBoard(page, { updateStatus: 409, updateBody: { error: { code: "conflict", message: "SECRET conflict detail" } } })
     await page.waitForTimeout(250)

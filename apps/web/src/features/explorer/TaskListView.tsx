@@ -169,7 +169,7 @@ export function TaskListView({ state, rows, loading, error, onQueryChange, onSel
         </div>
       </header>
 
-      <div className={styles.controls} aria-label={copy.filters}>
+      <div className={styles.controls} role="group" aria-label={copy.filters}>
         <label>
           <span>{copy.status}</span>
           <select

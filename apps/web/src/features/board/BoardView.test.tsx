@@ -223,6 +223,8 @@ describe("BoardView", () => {
 
     expect(markup).toContain('data-column-id="c-running"')
     expect(markup).toContain("此列暂无任务。")
+    expect(markup).not.toMatch(/<li[^>]*role="status"/)
+    expect(markup).toContain('role="status" aria-live="polite">此列暂无任务。</p>')
   })
 
   test("所有 server columns hidden 时显示与空看板不同的空态", () => {

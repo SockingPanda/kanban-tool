@@ -528,14 +528,14 @@ export function TaskMapPresentation({
                     )
                   })}
                 </div>
-                <div className={styles.edgeList} aria-label={copy.edgesHeading}>
-                  <h3>{copy.edgesHeading}</h3>
+                <section className={styles.edgeList} aria-labelledby="task-map-edges-heading">
+                  <h3 id="task-map-edges-heading">{copy.edgesHeading}</h3>
                   {visibleGraph.edges.length === 0 ? <p>{copy.noEdges}</p> : (
                     <ul>
                       {visibleGraph.edges.map((edge) => <li key={edge.id} data-testid="task-map-edge" data-edge-id={edge.id}><span className={styles.edgeId} translate="no">{edge.id}</span><span translate="no">{edge.source_task_id}</span><span aria-hidden="true">→</span><span translate="no">{edge.target_task_id}</span><span><span translate="no">{edge.kind}</span>{edge.required ? ` · ${copy.required}` : ""}</span></li>)}
                     </ul>
                   )}
-                </div>
+                </section>
               </div>
             </div>
           </section>

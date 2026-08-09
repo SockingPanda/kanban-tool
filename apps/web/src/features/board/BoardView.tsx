@@ -329,7 +329,7 @@ function TaskCard({
         </div>
       </dl>
       {controller ? (
-        <div className={styles.taskActions} aria-label={copy.transitionLabel} aria-busy={pending || undefined}>
+        <div className={styles.taskActions} role="group" aria-label={copy.transitionLabel} aria-busy={pending || undefined}>
           <Button
             label={copy.editTask}
             variant="secondary"
@@ -420,8 +420,8 @@ function BoardColumns({
                 </header>
                 <ul className={styles.taskList} aria-label={column.title} data-testid={controller ? `board-drop-target-${column.status}` : undefined}>
                   {tasks.length === 0 ? (
-                    <li className={styles.emptyColumn} role="status" aria-live="polite">
-                      <p>{copy.emptyColumn}</p>
+                    <li className={styles.emptyColumn}>
+                      <p role="status" aria-live="polite">{copy.emptyColumn}</p>
                     </li>
                 ) : (
                   tasks.map((task) => (

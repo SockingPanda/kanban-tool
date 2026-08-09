@@ -1,5 +1,6 @@
 import type { RuntimeWebConfigOutputContract } from "./api/generated/contracts/runtime-web-config-output"
-import runtimeWebConfigValidator from "virtual:kanban-runtime-validator"
+import { parseRuntimeWebConfigOutput } from "./api/generated/contracts/runtime-web-config-output"
+import { ContractValidationError } from "./api/generated/runtime"
 
 /** `/app/runtime.json` 的已验证 host metadata。 */
 export type WebRuntimeConfig = RuntimeWebConfigOutputContract
@@ -97,19 +98,21 @@ export async function loadWebRuntimeConfig(options: RuntimeBootstrapOptions = {}
     )
   }
 
-  if (!runtimeWebConfigValidator(payload)) {
+  try {
+    return parseRuntimeWebConfigOutput(payload)
+  } catch (cause) {
+    const contractError = cause instanceof ContractValidationError ? cause : null
     throw new RuntimeBootstrapError(
       "invalid_contract",
       "Web runtime 配置不符合当前协议，请升级 kanban serve 与 Web artifact。",
       {
         cause: {
           contractId: "runtime.web-config.output",
-          errors: runtimeWebConfigValidator.errors,
+          errors: contractError?.errors,
         },
       },
     )
   }
-  return payload
 }
 
 export function runtimeErrorMessage(error: unknown): string {

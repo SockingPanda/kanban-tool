@@ -13,9 +13,15 @@ const runtime = {
   webBuildId: "sha256:test",
 } satisfies WebRuntimeConfig
 
+function sameOriginResponse(body: BodyInit | null, init: ResponseInit, url = "https://kanban.test/api/v1/boards"): Response {
+  const response = new Response(body, init)
+  Object.defineProperty(response, "url", { value: url })
+  return response
+}
+
 describe("same-origin Web HTTP transport", () => {
   test("applies a same-origin runtime API path prefix and credentials", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data: [] }), {
+    const fetcher = vi.fn<typeof fetch>(async () => sameOriginResponse(JSON.stringify({ data: [] }), {
       status: 200,
       headers: { "content-type": "application/json" },
     }))
@@ -30,7 +36,7 @@ describe("same-origin Web HTTP transport", () => {
     })
     expect(fetcher).toHaveBeenCalledWith(
       "https://kanban.test/__kb_api__/api/v1/boards",
-      expect.objectContaining({ credentials: "same-origin", method: "GET", mode: "same-origin", redirect: "error" }),
+      expect.objectContaining({ cache: "no-store", credentials: "same-origin", method: "GET", mode: "same-origin", redirect: "error" }),
     )
   })
 
@@ -69,11 +75,10 @@ describe("same-origin Web HTTP transport", () => {
       expect.objectContaining({ kind: "malformed_url" }),
     )
 
-    const response = new Response(JSON.stringify({ data: [] }), {
+    const response = sameOriginResponse(JSON.stringify({ data: [] }), {
       status: 200,
       headers: { "content-type": "application/json" },
-    })
-    Object.defineProperty(response, "url", { value: "https://evil.test/final" })
+    }, "https://evil.test/final")
     fetcher.mockResolvedValueOnce(response)
     const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
     await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ kind: "cross_origin" })
@@ -81,8 +86,8 @@ describe("same-origin Web HTTP transport", () => {
 
   test("requires JSON content types and enforces a declared byte cap", async () => {
     const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response("{}", { status: 200, headers: { "content-type": "text/plain" } }))
-      .mockResolvedValueOnce(new Response("{}", {
+      .mockResolvedValueOnce(sameOriginResponse("{}", { status: 200, headers: { "content-type": "text/plain" } }))
+      .mockResolvedValueOnce(sameOriginResponse("{}", {
         status: 200,
         headers: { "content-type": "application/json", "content-length": String(16 * 1024 * 1024 + 1) },
       }))
@@ -101,7 +106,7 @@ describe("same-origin Web HTTP transport", () => {
         canceled = true
       },
     })
-    const fetcher = vi.fn<typeof fetch>(async () => new Response(stream, {
+    const fetcher = vi.fn<typeof fetch>(async () => sameOriginResponse(stream, {
       status: 200,
       headers: { "content-type": "application/json" },
     }))
@@ -121,11 +126,11 @@ describe("same-origin Web HTTP transport", () => {
       },
     })
     const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(oversizedStream, {
+      .mockResolvedValueOnce(sameOriginResponse(oversizedStream, {
         status: 200,
         headers: { "content-type": "application/json", "content-length": String(16 * 1024 * 1024 + 1) },
       }))
-      .mockResolvedValueOnce(new Response("{}", { status: 200, headers: { "content-type": "text/plain" } }))
+      .mockResolvedValueOnce(sameOriginResponse("{}", { status: 200, headers: { "content-type": "text/plain" } }))
     const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
     await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ kind: "response_too_large" })
     expect(canceled).toBe(true)
@@ -139,7 +144,7 @@ describe("same-origin Web HTTP transport", () => {
         else controller.error(new DOMException("aborted", "AbortError"))
       },
     })
-    fetcher.mockResolvedValueOnce(new Response(abortedStream, {
+    fetcher.mockResolvedValueOnce(sameOriginResponse(abortedStream, {
       status: 200,
       headers: { "content-type": "application/json" },
     }))
@@ -147,7 +152,7 @@ describe("same-origin Web HTTP transport", () => {
   })
 
   test("parses the generated API error contract for non-success responses", async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => new Response(
+    const fetcher = vi.fn<typeof fetch>(async () => sameOriginResponse(
       JSON.stringify({ error: { code: "not_found", message: "board not found" } }),
       { status: 404, headers: { "content-type": "application/json" } },
     ))
@@ -159,5 +164,25 @@ describe("same-origin Web HTTP transport", () => {
       status: 404,
       apiError: { code: "not_found", message: "board not found" },
     } satisfies Partial<HttpTransportError>)
+  })
+
+  test("rejects an empty final response URL and cancels its body", async () => {
+    let canceled = false
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([123]))
+      },
+      cancel() {
+        canceled = true
+      },
+    })
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))
+    const transport = createHttpTransport(runtime, { fetcher, documentBaseURI: "https://kanban.test/app/" })
+
+    await expect(transport.get("/api/v1/boards")).rejects.toMatchObject({ kind: "cross_origin" })
+    expect(canceled).toBe(true)
   })
 })

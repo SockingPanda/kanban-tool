@@ -162,6 +162,16 @@ function requestURL(base: URL, path: string): string {
   return url.toString()
 }
 
+/** Resolve an API path with the same validated origin/prefix rules as HTTP GET. */
+export function resolveHttpRequestURL(
+  runtime: WebRuntimeConfig,
+  path: string,
+  options: Pick<HttpTransportOptions, "documentBaseURI"> = {},
+): string {
+  const base = sameOriginBase(runtime, options.documentBaseURI ?? documentBaseURI())
+  return requestURL(base, path)
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError"
 }
@@ -303,7 +313,9 @@ async function readJSON(response: Response): Promise<JSONPayload> {
 }
 
 function validateFinalOrigin(response: Response, requestOrigin: string): void {
-  if (response.url.length === 0) return
+  if (response.url.length === 0) {
+    throw new HttpTransportError("cross_origin", "Web API 响应 URL 缺失。")
+  }
   let finalURL: URL
   try {
     finalURL = new URL(response.url)
@@ -333,6 +345,7 @@ export function createHttpTransport(
           credentials: "same-origin",
           mode: "same-origin",
           redirect: "error",
+          cache: "no-store",
           signal,
         })
       } catch (cause) {
@@ -352,9 +365,8 @@ export function createHttpTransport(
       }
       const contentType = responseContentType(response)
       if (!response.ok && !isJSONContentType(contentType)) {
-        let body: JSONPayload
         try {
-          body = await readJSON(response)
+          await readJSON(response)
         } catch (error) {
           if (error instanceof HttpTransportError && error.kind === "invalid_json") {
             throw new HttpTransportError(

@@ -398,6 +398,11 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
     }
   }, [])
 
+  // A route-owned child (currently BoardLive) owns its own loading, empty,
+  // stale and offline states. Branch before generic boundaries so a route
+  // transition cannot briefly replace it with the shell loading/error panel.
+  if ((route.kind === "home" || route.kind === "board") && children) return <>{children}</>
+
   if (effectiveBoundary === "loading") {
     return (
       <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-loading">

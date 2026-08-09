@@ -135,11 +135,16 @@
   function render(snapshot) {
     if (!snapshot || typeof snapshot !== "object") return;
     const nextKey = snapshotKey(snapshot);
-    if (nextKey !== lastSnapshotKey) {
+    const changed = nextKey !== lastSnapshotKey;
+    if (changed) {
       pollDelayIndex = 0;
       lastSnapshotKey = nextKey;
     }
     latest = { ...latest, ...snapshot };
+    if (!changed) {
+      if (latest.inFlight && !latest.closed) schedulePoll();
+      return;
+    }
     const phase = latest.phase || "recovery";
     const ready = phase === "ready";
     const recovery = phase === "recovery";

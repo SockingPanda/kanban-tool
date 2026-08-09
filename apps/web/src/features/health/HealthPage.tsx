@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { readHealth, type HealthReadError, type HealthReport } from "../../lib/api/health-read-model"
 import { createTranslator } from "../../lib/i18n"
+import { HEALTH_REFRESH_EVENT } from "../../lib/health-refresh"
 import { usePreferences } from "../../lib/use-preferences"
 import styles from "./health-page.module.css"
 
@@ -39,12 +40,29 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
   const t = createTranslator(locale)
   const [state, setState] = useState<HealthState>(() => initialReport ? { kind: "ready", report: initialReport } : { kind: "loading" })
   const [refreshing, setRefreshing] = useState(false)
+  const refreshingRef = useRef(false)
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const reader = read ?? ((nextSignal?: AbortSignal) => readHealth({ runtime, signal: nextSignal }))
     const report = await reader(signal)
     setState({ kind: "ready", report })
   }, [read, runtime])
+
+  const refresh = useCallback(() => {
+    if (refreshingRef.current) return
+    const controller = new AbortController()
+    refreshingRef.current = true
+    setRefreshing(true)
+    void load(controller.signal)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return
+        setState({ kind: "error", error })
+      })
+      .finally(() => {
+        refreshingRef.current = false
+        setRefreshing(false)
+      })
+  }, [load])
 
   useEffect(() => {
     if (initialReport) return
@@ -56,17 +74,10 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
     return () => controller.abort()
   }, [initialReport, load])
 
-  const refresh = () => {
-    if (refreshing) return
-    const controller = new AbortController()
-    setRefreshing(true)
-    void load(controller.signal)
-      .catch((error: unknown) => {
-        if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return
-        setState({ kind: "error", error })
-      })
-      .finally(() => setRefreshing(false))
-  }
+  useEffect(() => {
+    window.addEventListener(HEALTH_REFRESH_EVENT, refresh)
+    return () => window.removeEventListener(HEALTH_REFRESH_EVENT, refresh)
+  }, [refresh])
 
   return (
     <section className={styles.page} aria-labelledby="health-heading" data-testid="health-page">

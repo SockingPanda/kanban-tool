@@ -95,17 +95,19 @@ export type MaintenanceApiErrorKind =
 
 export class MaintenanceApiError extends Error {
   readonly kind: MaintenanceApiErrorKind
+  readonly code: string | null
   readonly status: number | null
   readonly contractId: string | null
 
   constructor(
     kind: MaintenanceApiErrorKind,
     message: string,
-    options: { status?: number; contractId?: string; cause?: unknown } = {},
+    options: { code?: string; status?: number; contractId?: string; cause?: unknown } = {},
   ) {
     super(message, { cause: options.cause })
     this.name = "MaintenanceApiError"
     this.kind = kind
+    this.code = options.code ?? null
     this.status = options.status ?? null
     this.contractId = options.contractId ?? null
   }
@@ -129,6 +131,7 @@ function wrapTransportError(error: unknown): never {
   if (error instanceof MaintenanceApiError) throw error
   if (error instanceof HttpTransportError) {
     throw new MaintenanceApiError(error.kind, error.message, {
+      code: error.apiError?.code,
       status: error.status ?? undefined,
       cause: error,
     })

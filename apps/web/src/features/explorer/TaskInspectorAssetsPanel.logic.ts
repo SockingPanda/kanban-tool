@@ -1,7 +1,11 @@
 import type { ApiGetTaskResponseContract } from "../../lib/api/generated/contracts/api-get-task-response"
 import type { ApiListAttachmentsResponseContract } from "../../lib/api/generated/contracts/api-list-attachments-response"
 import type { ApiSuggestTaskLabelsResponseContract } from "../../lib/api/generated/contracts/api-suggest-task-labels-response"
-import type { InspectorSuggestTaskLabelsQuery, TaskInspectorMutationHandlers } from "./task-inspector-mutation-state"
+import type {
+  InspectorMutationOutcome,
+  InspectorSuggestTaskLabelsQuery,
+  TaskInspectorMutationHandlers,
+} from "./task-inspector-mutation-state"
 
 export type InspectorAssetLabel = ApiGetTaskResponseContract["data"]["labels"][number]
 export type InspectorAssetAttachment = ApiListAttachmentsResponseContract["data"][number]
@@ -13,7 +17,7 @@ export type SuggestLabelsHandler = (
 
 export type InspectorAssetsMutationHandlers = Pick<
   TaskInspectorMutationHandlers,
-  "addLabel" | "removeLabel" | "applySuggestedLabel" | "uploadAttachment" | "downloadAttachment" | "deleteAttachment"
+  "addLabel" | "removeLabel" | "applySuggestedLabel" | "uploadAttachment" | "downloadAttachment" | "deleteAttachment" | "retry"
 > & {
   /** 05C controller-owned read handler; no transport is created in this panel. */
   readonly suggestLabels: SuggestLabelsHandler
@@ -70,12 +74,12 @@ export function formatAttachmentSize(size: number): string {
 }
 
 export interface InspectorAssetsActions {
-  readonly addLabel: (name: string) => Promise<unknown>
-  readonly removeLabel: (labelId: string) => Promise<unknown>
-  readonly applySuggestedLabel: (name: string) => Promise<unknown>
-  readonly uploadAttachment: (input: { readonly filename: string; readonly content_type: string | null; readonly content: number[] }) => Promise<unknown>
+  readonly addLabel: (name: string) => Promise<InspectorMutationOutcome>
+  readonly removeLabel: (labelId: string) => Promise<InspectorMutationOutcome>
+  readonly applySuggestedLabel: (name: string) => Promise<InspectorMutationOutcome>
+  readonly uploadAttachment: (input: { readonly filename: string; readonly content_type: string | null; readonly content: number[] }) => Promise<InspectorMutationOutcome>
   readonly downloadAttachment: (attachmentId: string) => ReturnType<InspectorAssetsMutationHandlers["downloadAttachment"]>
-  readonly deleteAttachment: (attachmentId: string) => Promise<unknown>
+  readonly deleteAttachment: (attachmentId: string) => Promise<InspectorMutationOutcome>
 }
 
 /** Maps user-facing asset actions to the exact 05C controller input shapes. */
@@ -94,4 +98,9 @@ export function createInspectorAssetsActions(handlers: InspectorAssetsMutationHa
 export function exactAttachmentBytes(content: Uint8Array): ArrayBuffer {
   if (content.byteOffset === 0 && content.byteLength === content.buffer.byteLength) return content.buffer as ArrayBuffer
   return content.slice().buffer
+}
+
+/** Drafts are safe to clear only after the server accepted the write. */
+export function shouldClearAssetDraft(outcome: InspectorMutationOutcome | null): boolean {
+  return outcome?.committed === true
 }

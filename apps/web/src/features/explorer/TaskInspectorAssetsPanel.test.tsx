@@ -14,9 +14,10 @@ import {
   createInspectorAssetsActions,
   exactAttachmentBytes,
   requestSuggestedLabels,
+  shouldClearAssetDraft,
   type SuggestLabelsHandler,
 } from "./TaskInspectorAssetsPanel.logic"
-import type { TaskInspectorMutationSnapshot } from "./task-inspector-mutation-state"
+import type { InspectorMutationOutcome, TaskInspectorMutationSnapshot } from "./task-inspector-mutation-state"
 
 type Label = ApiGetTaskResponseContract["data"]["labels"][number]
 type Attachment = ApiListAttachmentsResponseContract["data"][number]
@@ -86,14 +87,16 @@ function snapshot(overrides: Partial<TaskInspectorMutationSnapshot> = {}): TaskI
 }
 
 function handlers(overrides: Partial<InspectorAssetsMutationHandlers> = {}): InspectorAssetsMutationHandlers {
+  const committed: InspectorMutationOutcome = { committed: true, reconciled: true }
   return {
-    addLabel: vi.fn(async () => undefined),
-    removeLabel: vi.fn(async () => undefined),
-    applySuggestedLabel: vi.fn(async () => undefined),
-    uploadAttachment: vi.fn(async () => undefined),
+    addLabel: vi.fn(async () => committed),
+    removeLabel: vi.fn(async () => committed),
+    applySuggestedLabel: vi.fn(async () => committed),
+    uploadAttachment: vi.fn(async () => committed),
     downloadAttachment: vi.fn(async () => null),
-    deleteAttachment: vi.fn(async () => undefined),
+    deleteAttachment: vi.fn(async () => committed),
     suggestLabels: vi.fn(async () => null),
+    retry: vi.fn(async () => true),
     ...overrides,
   }
 }
@@ -221,6 +224,48 @@ describe("TaskInspectorAssetsPanel", () => {
 
     await expect(requestSuggestedLabels(suggestLabels)).rejects.toThrow("同步失败")
     expect(suggestLabels).toHaveBeenCalledWith({ limit: 5 })
+  })
+
+  test("clears label and file drafts only after a committed write", () => {
+    expect(shouldClearAssetDraft({ committed: false, reconciled: false })).toBe(false)
+    expect(shouldClearAssetDraft({ committed: false, reconciled: true })).toBe(false)
+    expect(shouldClearAssetDraft({ committed: true, reconciled: false })).toBe(true)
+    expect(shouldClearAssetDraft({ committed: true, reconciled: true })).toBe(true)
+  })
+
+  test("renders every snapshot error and its exact retry key", async () => {
+    const retry = vi.fn(async (key?: string) => {
+      void key
+      return true
+    })
+    const markup = renderToStaticMarkup(
+      <TaskInspectorAssetsPanel
+        taskId="t_1"
+        labels={[]}
+        attachments={[]}
+        suggestionResult={null}
+        suggestionRequested={false}
+        handlers={handlers({ retry })}
+        snapshot={snapshot({
+          errors: new Map([
+            ["addLabel:t_1", { operation: "addLabel", taskId: "t_1", kind: "error", message: "mutation_failed", status: 500, code: null, recoverable: true }],
+            ["reload:t_1", { operation: "reload", taskId: "t_1", kind: "stale", message: "stale", status: null, code: null, recoverable: true }],
+          ]),
+          retries: new Map([
+            ["addLabel:t_1", { operation: "addLabel", taskId: "t_1", input: { name: "backend", create_missing: false } }],
+            ["reload:t_1", { operation: "reload", taskId: "t_1" }],
+          ]),
+        })}
+      />,
+    )
+
+    expect(markup).toContain('data-testid="inspector-mutation-errors"')
+    expect(markup).toContain('data-operation-key="addLabel:t_1"')
+    expect(markup).toContain('data-operation-key="reload:t_1"')
+    expect(markup).toContain("写入已提交，但刷新失败")
+    expect(markup.match(/>重试</g)?.length).toBe(2)
+    await retry("reload:t_1")
+    expect(retry).toHaveBeenCalledWith("reload:t_1")
   })
 
   test("keeps snapshot pending/error state scoped to the current task", () => {

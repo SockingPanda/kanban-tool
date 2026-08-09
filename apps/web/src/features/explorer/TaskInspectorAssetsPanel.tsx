@@ -8,6 +8,7 @@ import {
   exactAttachmentBytes,
   formatAttachmentSize,
   requestSuggestedLabels,
+  shouldClearAssetDraft,
   type InspectorAssetAttachment,
   type InspectorAssetLabel,
   type InspectorAssetsActions,
@@ -74,6 +75,9 @@ type AssetsCopy = {
   readonly deleteAttachment: (name: string) => string
   readonly downloading: string
   readonly deleting: string
+  readonly mutationError: string
+  readonly reloadStale: string
+  readonly retry: string
   readonly error: string
 }
 
@@ -118,6 +122,9 @@ const copies: Record<Locale, AssetsCopy> = {
     deleteAttachment: (name) => `删除附件 ${name}`,
     downloading: "正在下载…",
     deleting: "正在删除…",
+    mutationError: "操作失败",
+    reloadStale: "写入已提交，但刷新失败；当前数据可能过期。",
+    retry: "重试",
     error: "操作失败，请重试。",
   },
   en: {
@@ -160,6 +167,9 @@ const copies: Record<Locale, AssetsCopy> = {
     deleteAttachment: (name) => `Delete attachment ${name}`,
     downloading: "Downloading…",
     deleting: "Deleting…",
+    mutationError: "Operation failed",
+    reloadStale: "The write committed, but refresh failed; data may be stale.",
+    retry: "Retry",
     error: "Operation failed. Try again.",
   },
 }
@@ -185,6 +195,22 @@ function mutationError(errors: ReadonlyMap<string, TaskInspectorMutationError>, 
 function actionKey(operation: string, taskId: string): string {
   return `${operation}:${taskId}`
 }
+
+const writeOperations = [
+  "saveTask",
+  "transition",
+  "addDependency",
+  "removeDependency",
+  "createStep",
+  "linkStep",
+  "markPlanNotRequired",
+  "addLabel",
+  "removeLabel",
+  "applySuggestedLabel",
+  "addComment",
+  "uploadAttachment",
+  "deleteAttachment",
+] as const
 
 function suggestionPercent(value: number): string {
   return Number.isFinite(value) ? `${(value * 100).toFixed(0)}%` : "—"
@@ -286,6 +312,8 @@ export function TaskInspectorAssetsPanel({
   const [suggestionBusy, setSuggestionBusy] = useState(false)
   const [suggestionLocalError, setSuggestionLocalError] = useState<string | null>(null)
   const [suggestionLocalResult, setSuggestionLocalResult] = useState<InspectorLabelSuggestionResult | null>(null)
+  const retryBusyRef = useRef(new Set<string>())
+  const [retryBusy, setRetryBusy] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     if (previousTaskIdRef.current === taskId) return
@@ -299,6 +327,8 @@ export function TaskInspectorAssetsPanel({
     setSuggestionBusy(false)
     setSuggestionLocalError(null)
     setSuggestionLocalResult(null)
+    retryBusyRef.current.clear()
+    setRetryBusy(new Set())
   }, [taskId])
 
   const isPending = useCallback((operation: string): boolean => {
@@ -315,10 +345,10 @@ export function TaskInspectorAssetsPanel({
     return mutationError(errors, keys)
   }, [errors, localErrors, taskId])
 
-  const runAction = useCallback(async (operation: string, action: () => Promise<unknown>): Promise<boolean> => {
+  const runAction = useCallback(async <T,>(operation: string, action: () => Promise<T>): Promise<T | null> => {
     const identity = taskId
     const key = actionKey(operation, identity)
-    if (localBusyRef.current.has(key) || pending.has(key)) return false
+    if (localBusyRef.current.has(key) || pending.has(key)) return null
     localBusyRef.current.add(key)
     setLocalBusy(new Set(localBusyRef.current))
     setLocalErrors((current) => {
@@ -327,11 +357,11 @@ export function TaskInspectorAssetsPanel({
       return next
     })
     try {
-      await action()
-      return latestTaskIdRef.current === identity
+      const result = await action()
+      return latestTaskIdRef.current === identity ? result : null
     } catch (error) {
       if (latestTaskIdRef.current === identity) setLocalErrors((current) => new Map(current).set(key, errorMessage(error)))
-      return false
+      return null
     } finally {
       if (latestTaskIdRef.current === identity) {
         localBusyRef.current.delete(key)
@@ -341,12 +371,16 @@ export function TaskInspectorAssetsPanel({
   }, [pending, taskId])
 
   const actions = useMemo(() => createInspectorAssetsActions(handlers), [handlers])
+  const writePending = useMemo(
+    () => writeOperations.some((operation) => isPending(operation)) || isPending("reload"),
+    [isPending],
+  )
   const existingLabelNames = useMemo(() => new Set(labels.map((entry) => normalizedLabelName(entry.name))), [labels])
   const addLabel = useCallback(async () => {
     const name = labelInput.trim()
     if (!name || existingLabelNames.has(normalizedLabelName(name))) return
-    const succeeded = await runAction("addLabel", () => actions.addLabel(name))
-    if (succeeded) setLabelInput("")
+    const outcome = await runAction("addLabel", () => actions.addLabel(name))
+    if (shouldClearAssetDraft(outcome)) setLabelInput("")
   }, [actions, existingLabelNames, labelInput, runAction])
   const onLabelSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -393,14 +427,13 @@ export function TaskInspectorAssetsPanel({
 
   const uploadFile = useCallback(() => {
     if (!selectedFile) return
-    const identity = taskId
-    void runAction("uploadAttachment", async () => {
-      await actions.uploadAttachment(await createAttachmentUploadIntent(selectedFile))
-      if (latestTaskIdRef.current !== identity) return
-      setSelectedFile(null)
-      setFileInputKey((current) => current + 1)
-    })
-  }, [actions, runAction, selectedFile, taskId])
+    void runAction("uploadAttachment", async () => actions.uploadAttachment(await createAttachmentUploadIntent(selectedFile)))
+      .then((outcome) => {
+        if (!shouldClearAssetDraft(outcome)) return
+        setSelectedFile(null)
+        setFileInputKey((current) => current + 1)
+      })
+  }, [actions, runAction, selectedFile])
 
   const downloadAttachment = useCallback((attachment: InspectorAssetAttachment) => {
     void runAction("downloadAttachment", async () => {
@@ -421,13 +454,32 @@ export function TaskInspectorAssetsPanel({
     void runAction("deleteAttachment", () => actions.deleteAttachment(attachmentId))
   }, [actions, runAction])
 
+  const retryMutation = useCallback((key: string) => {
+    if (retryBusyRef.current.has(key) || pending.has(key) || writePending) return
+    retryBusyRef.current.add(key)
+    setRetryBusy(new Set(retryBusyRef.current))
+    const identity = taskId
+    void Promise.resolve()
+      .then(() => handlers.retry(key))
+      .catch(() => undefined)
+      .finally(() => {
+        if (latestTaskIdRef.current !== identity) return
+        retryBusyRef.current.delete(key)
+        setRetryBusy(new Set(retryBusyRef.current))
+      })
+  }, [handlers, pending, taskId, writePending])
+
   const labelsError = errorFor(["addLabel", "removeLabel", "applySuggestedLabel"])
   const suggestionsError = suggestionLocalError ?? suggestionError ?? errorFor(["suggestLabels"])
   const attachmentsError = attachmentError ?? errorFor(["uploadAttachment", "downloadAttachment", "deleteAttachment"])
   const showSuggestions = suggestionRequested || Boolean(currentSuggestions) || suggestionPending || Boolean(suggestionsError)
   const duplicateIdsText = [...duplicateSuggestionIds].join(", ")
   const uploadPending = isPending("uploadAttachment")
-  const panelBusy = suggestionPending || uploadPending || isPending("addLabel") || isPending("removeLabel") || isPending("applySuggestedLabel") || isPending("downloadAttachment") || isPending("deleteAttachment") || attachmentLoading
+  const snapshotErrors = useMemo(
+    () => [...errors.entries()].filter(([key, error]) => error.taskId === taskId && key.endsWith(`:${taskId}`)),
+    [errors, taskId],
+  )
+  const panelBusy = suggestionPending || writePending || isPending("downloadAttachment") || attachmentLoading
 
   return (
     <section className={styles.panel} data-testid="inspector-assets" aria-labelledby={`${panelId}-heading`} aria-busy={panelBusy}>
@@ -437,18 +489,29 @@ export function TaskInspectorAssetsPanel({
         <p className={styles.taskId} translate="no">{taskId}</p>
       </header>
 
+      {snapshotErrors.length > 0 ? (
+        <div className={styles.mutationErrors} data-testid="inspector-mutation-errors">
+          {snapshotErrors.map(([key, error]) => (
+            <div key={key} className={styles.mutationError} data-testid="inspector-mutation-error" data-operation-key={key} role="alert">
+              <p><strong>{error.operation === "reload" ? copy.reloadStale : copy.mutationError}:</strong> {error.message}</p>
+              {snapshot.retries.has(key) ? <button type="button" className={styles.smallButton} disabled={retryBusy.has(key) || pending.has(key) || writePending} onClick={() => retryMutation(key)}>{retryBusy.has(key) ? "…" : copy.retry}</button> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <section className={styles.section} data-testid="inspector-labels" aria-labelledby={`${panelId}-labels-heading`}>
         <h3 id={`${panelId}-labels-heading`}>{copy.labels}</h3>
         {labels.length > 0 ? (
           <ul className={styles.labelList}>
-            {labels.map((label) => <li key={label.id} className={styles.labelChip}><span className={styles.labelName} title={label.name}>{label.name}</span><button type="button" className={styles.iconButton} data-testid="label-remove" disabled={isPending("removeLabel")} aria-label={copy.removeLabel(label.name)} onClick={() => removeLabel(label.id)}>×</button></li>)}
+            {labels.map((label) => <li key={label.id} className={styles.labelChip}><span className={styles.labelName} title={label.name}>{label.name}</span><button type="button" className={styles.iconButton} data-testid="label-remove" disabled={writePending} aria-label={copy.removeLabel(label.name)} onClick={() => removeLabel(label.id)}>×</button></li>)}
           </ul>
         ) : <p className={styles.empty} data-testid="labels-empty" role="status">{copy.noLabels}</p>}
         <form className={styles.labelForm} onSubmit={onLabelSubmit}>
           <label htmlFor={labelInputId}>{copy.labelName}</label>
           <div className={styles.inputRow}>
             <input id={labelInputId} name="label-name" autoComplete="off" value={labelInput} placeholder={copy.labelPlaceholder} onChange={(event) => setLabelInput(event.currentTarget.value)} />
-            <button type="submit" className={styles.actionButton} data-testid="label-add" disabled={!labelInput.trim() || existingLabelNames.has(normalizedLabelName(labelInput)) || isPending("addLabel")}>{isPending("addLabel") ? "…" : copy.addLabel}</button>
+            <button type="submit" className={styles.actionButton} data-testid="label-add" disabled={!labelInput.trim() || existingLabelNames.has(normalizedLabelName(labelInput)) || writePending}>{isPending("addLabel") ? "…" : copy.addLabel}</button>
           </div>
         </form>
         {labelsError ? <p className={styles.error} role="alert">{labelsError}</p> : null}
@@ -468,8 +531,8 @@ export function TaskInspectorAssetsPanel({
             ) : null}
             {currentSuggestions?.degraded ? <div className={styles.degraded} role="alert"><strong>{copy.degraded}</strong><p>{copy.degradedDescription}</p></div> : null}
             {duplicateSuggestionIds.size > 0 ? <p className={styles.error} data-testid="label-suggestion-duplicates" role="alert">{copy.duplicateSuggestion(duplicateIdsText)}</p> : null}
-            {selectedSuggestions.length > 0 ? <div className={styles.suggestionGroup}><h4>{copy.selected}</h4><ul className={styles.suggestionList}>{selectedSuggestions.map((entry) => <SuggestionRow key={`selected-${entry.label_id}-${entry.label_name}`} entry={entry} copy={copy} applied={entry.already_applied || existingLabelNames.has(normalizedLabelName(entry.label_name))} disabled={entry.already_applied || duplicateSuggestionIds.has(entry.label_id) || existingLabelNames.has(normalizedLabelName(entry.label_name)) || isPending("applySuggestedLabel")} onApply={applySuggestion} />)}</ul></div> : null}
-            {candidateSuggestions.length > 0 ? <div className={styles.suggestionGroup}><h4>{copy.candidates}</h4><ul className={styles.suggestionList}>{candidateSuggestions.map((entry) => <SuggestionRow key={`candidate-${entry.label_id}-${entry.label_name}`} entry={entry} copy={copy} applied={entry.already_applied || existingLabelNames.has(normalizedLabelName(entry.label_name))} disabled={entry.already_applied || duplicateSuggestionIds.has(entry.label_id) || existingLabelNames.has(normalizedLabelName(entry.label_name)) || isPending("applySuggestedLabel")} onApply={applySuggestion} />)}</ul></div> : null}
+            {selectedSuggestions.length > 0 ? <div className={styles.suggestionGroup}><h4>{copy.selected}</h4><ul className={styles.suggestionList}>{selectedSuggestions.map((entry) => <SuggestionRow key={`selected-${entry.label_id}-${entry.label_name}`} entry={entry} copy={copy} applied={entry.already_applied || existingLabelNames.has(normalizedLabelName(entry.label_name))} disabled={writePending || entry.already_applied || duplicateSuggestionIds.has(entry.label_id) || existingLabelNames.has(normalizedLabelName(entry.label_name))} onApply={applySuggestion} />)}</ul></div> : null}
+            {candidateSuggestions.length > 0 ? <div className={styles.suggestionGroup}><h4>{copy.candidates}</h4><ul className={styles.suggestionList}>{candidateSuggestions.map((entry) => <SuggestionRow key={`candidate-${entry.label_id}-${entry.label_name}`} entry={entry} copy={copy} applied={entry.already_applied || existingLabelNames.has(normalizedLabelName(entry.label_name))} disabled={writePending || entry.already_applied || duplicateSuggestionIds.has(entry.label_id) || existingLabelNames.has(normalizedLabelName(entry.label_name))} onApply={applySuggestion} />)}</ul></div> : null}
             {!suggestionPending && !suggestionsError && currentSuggestions && selectedSuggestions.length === 0 && candidateSuggestions.length === 0 ? <p className={styles.empty} role="status">{copy.noSuggestions}</p> : null}
           </div>
         ) : null}
@@ -479,12 +542,12 @@ export function TaskInspectorAssetsPanel({
         <h3 id={`${panelId}-attachments-heading`}>{copy.attachments}</h3>
         <div className={styles.uploadBox}>
           <label htmlFor={attachmentFileId}>{copy.chooseFile}</label>
-          <input id={attachmentFileId} data-testid="attachment-file" key={fileInputKey} type="file" aria-label={copy.chooseFile} disabled={uploadPending} onChange={(event) => setSelectedFile(event.currentTarget.files?.[0] ?? null)} />
-          <button type="button" className={styles.actionButton} data-testid="attachment-upload" disabled={!selectedFile || uploadPending} onClick={uploadFile}>{uploadPending ? copy.uploading : copy.upload}</button>
+          <input id={attachmentFileId} data-testid="attachment-file" key={fileInputKey} type="file" aria-label={copy.chooseFile} disabled={writePending} onChange={(event) => setSelectedFile(event.currentTarget.files?.[0] ?? null)} />
+          <button type="button" className={styles.actionButton} data-testid="attachment-upload" disabled={!selectedFile || writePending} onClick={uploadFile}>{uploadPending ? copy.uploading : copy.upload}</button>
         </div>
         {attachmentLoading ? <p className={styles.state} data-testid="attachments-loading" role="status" aria-live="polite">{copy.loadingAttachments}</p> : null}
         {attachmentsError ? <p className={styles.error} data-testid="attachments-error" role="alert"><strong>{copy.attachmentError}:</strong> {attachmentsError}</p> : null}
-        {attachments.length > 0 ? <ul className={styles.attachmentList}>{attachments.map((attachment) => <li key={attachment.id} className={styles.attachmentItem} data-testid="attachment-row"><div className={styles.attachmentMain}><strong className={styles.attachmentName} title={attachment.filename} translate="no">{attachment.filename}</strong><AttachmentMetadata attachment={attachment} copy={copy} locale={locale} /></div><div className={styles.attachmentActions}><button type="button" className={styles.smallButton} data-testid="attachment-download" disabled={isPending("downloadAttachment")} aria-label={copy.download(attachment.filename)} onClick={() => downloadAttachment(attachment)}>{isPending("downloadAttachment") ? copy.downloading : copy.download(attachment.filename)}</button><button type="button" className={styles.dangerButton} data-testid="attachment-delete" disabled={isPending("deleteAttachment")} aria-label={copy.deleteAttachment(attachment.filename)} onClick={() => deleteAttachment(attachment.id)}>{isPending("deleteAttachment") ? copy.deleting : copy.deleteAttachment(attachment.filename)}</button></div></li>)}</ul> : <p className={styles.empty} data-testid="attachments-empty" role="status">{copy.noAttachments}</p>}
+        {attachments.length > 0 ? <ul className={styles.attachmentList}>{attachments.map((attachment) => <li key={attachment.id} className={styles.attachmentItem} data-testid="attachment-row"><div className={styles.attachmentMain}><strong className={styles.attachmentName} title={attachment.filename} translate="no">{attachment.filename}</strong><AttachmentMetadata attachment={attachment} copy={copy} locale={locale} /></div><div className={styles.attachmentActions}><button type="button" className={styles.smallButton} data-testid="attachment-download" disabled={isPending("downloadAttachment")} aria-label={copy.download(attachment.filename)} onClick={() => downloadAttachment(attachment)}>{isPending("downloadAttachment") ? copy.downloading : copy.download(attachment.filename)}</button><button type="button" className={styles.dangerButton} data-testid="attachment-delete" disabled={writePending} aria-label={copy.deleteAttachment(attachment.filename)} onClick={() => deleteAttachment(attachment.id)}>{isPending("deleteAttachment") ? copy.deleting : copy.deleteAttachment(attachment.filename)}</button></div></li>)}</ul> : <p className={styles.empty} data-testid="attachments-empty" role="status">{copy.noAttachments}</p>}
       </section>
     </section>
   )

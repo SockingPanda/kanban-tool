@@ -275,9 +275,14 @@ describe("board read model", () => {
     expect(Object.isFrozen(ready)).toBe(true)
     expect(ready).toHaveProperty("seq")
     expect(ready).toHaveProperty("description", null)
+    expect(ready).toHaveProperty("scheduled_at", null)
+    expect(ready).toHaveProperty("due_at", null)
+    expect(ready).toHaveProperty("last_heartbeat_at", null)
+    expect(ready).toHaveProperty("status_reason", null)
+    expect(ready).toHaveProperty("labels", [])
+    expect(Object.isFrozen(ready?.labels)).toBe(true)
     expect(ready).not.toHaveProperty("result")
     expect(ready).not.toHaveProperty("metadata")
-    expect(ready).not.toHaveProperty("labels")
   })
 
   test("enforces the shared raw-byte budget and reports an anomaly", async () => {

@@ -23,6 +23,11 @@ const model: BoardViewModel = {
         description: null,
         status: "ready",
         position: 20,
+        dueAt: null,
+        scheduledAt: null,
+        lastHeartbeatAt: null,
+        statusReason: null,
+        labels: [],
         lockVersion: 4,
         priority: 1,
         assignee: null,
@@ -43,6 +48,14 @@ const model: BoardViewModel = {
         description: null,
         status: "ready",
         position: 10,
+        dueAt: 1767225600000,
+        scheduledAt: 1767139200000,
+        lastHeartbeatAt: 1767052800000,
+        statusReason: "等待审批",
+        labels: [
+          { id: "l-ui", name: "界面", color: "#123456" },
+          { id: "l-review", name: "需要复核", color: null },
+        ],
         lockVersion: 5,
         priority: 3,
         assignee: "worker-1",
@@ -91,6 +104,24 @@ describe("BoardView", () => {
     expect(markup).toContain("依赖阻塞")
     expect(markup).toContain("必需步骤")
     expect(markup).toContain("1 / 2")
+    expect(markup).toContain("截止时间")
+    expect(markup).toContain("排期时间")
+    expect(markup).toContain("最近心跳")
+    expect(markup).toContain("状态原因")
+    expect(markup).toContain("等待审批")
+    expect(markup).toContain("界面")
+    expect(markup).toContain("需要复核")
+  })
+
+  test("卡片在排期、截止、心跳、状态原因和标签为空时使用简洁占位", () => {
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
+
+    expect(markup).toContain('data-testid="board-task-due"')
+    expect(markup).toContain('data-testid="board-task-scheduled"')
+    expect(markup).toContain('data-testid="board-task-heartbeat"')
+    expect(markup).toContain('data-testid="board-task-status-reason"')
+    expect(markup).toContain('data-testid="board-task-labels"')
+    expect(markup).toContain("无")
   })
 
   test("提供选择回调时将任务标题暴露为 Inspector opener", () => {

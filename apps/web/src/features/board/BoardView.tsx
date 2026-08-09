@@ -62,6 +62,20 @@ function priorityVariant(priority: BoardTaskViewModel["priority"]): "neutral" | 
   return "neutral"
 }
 
+function taskTimestamp(value: number | null | undefined): { readonly display: string; readonly iso: string } | null {
+  if (value === null || value === undefined) return null
+  const milliseconds = Math.abs(value) < 1_000_000_000_000 ? value * 1_000 : value
+  const date = new Date(milliseconds)
+  if (Number.isNaN(date.getTime())) return { display: String(value), iso: String(value) }
+  let display: string
+  try {
+    display = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date)
+  } catch {
+    display = date.toISOString()
+  }
+  return { display, iso: date.toISOString() }
+}
+
 function columnAnchorId(rootId: string, index: number) {
   return `${rootId}-column-${index}`
 }
@@ -202,6 +216,11 @@ function TaskCard({
   const dependencyText = task.readiness.dependencyBlocked
     ? `${copy.dependencyBlocked}（${task.readiness.unfinishedParentCount}）`
     : copy.dependencyClear
+  const scheduledAt = taskTimestamp(task.scheduledAt)
+  const dueAt = taskTimestamp(task.dueAt)
+  const lastHeartbeatAt = taskTimestamp(task.lastHeartbeatAt)
+  const statusReason = task.statusReason?.trim() || copy.notAvailable
+  const labels = (task.labels ?? []).filter((label) => label.name.trim().length > 0)
   const pending = controller?.isMutationPending === true
     || controller?.isPending(`transition:${task.id}`) === true
     || controller?.isPending(`edit:${task.id}`) === true
@@ -250,6 +269,36 @@ function TaskCard({
         <div className={styles.taskDetailsRow}>
           <dt>{copy.assigneeLabel}</dt>
           <dd>{task.assignee ?? copy.unassigned}</dd>
+        </div>
+        <div className={styles.taskDetailsRow}>
+          <dt>{copy.statusReasonLabel}</dt>
+          <dd data-testid="board-task-status-reason">{statusReason}</dd>
+        </div>
+        <div className={styles.taskDetailsRow}>
+          <dt>{copy.scheduledLabel}</dt>
+          <dd data-testid="board-task-scheduled">
+            {scheduledAt ? <time dateTime={scheduledAt.iso}>{scheduledAt.display}</time> : copy.notAvailable}
+          </dd>
+        </div>
+        <div className={styles.taskDetailsRow}>
+          <dt>{copy.dueLabel}</dt>
+          <dd data-testid="board-task-due">
+            {dueAt ? <time dateTime={dueAt.iso}>{dueAt.display}</time> : copy.notAvailable}
+          </dd>
+        </div>
+        <div className={styles.taskDetailsRow}>
+          <dt>{copy.lastHeartbeatLabel}</dt>
+          <dd data-testid="board-task-heartbeat">
+            {lastHeartbeatAt ? <time dateTime={lastHeartbeatAt.iso}>{lastHeartbeatAt.display}</time> : copy.notAvailable}
+          </dd>
+        </div>
+        <div className={styles.taskDetailsRow}>
+          <dt>{copy.labelsLabel}</dt>
+          <dd className={styles.taskLabels} data-testid="board-task-labels">
+            {labels.length === 0 ? copy.noLabels : labels.map((label) => (
+              <span className={styles.taskLabel} key={label.id} data-label-id={label.id}>{label.name}</span>
+            ))}
+          </dd>
         </div>
         <div className={styles.taskDetailsRow}>
           <dt>{copy.readinessLabel}</dt>

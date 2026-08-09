@@ -27,7 +27,7 @@ export type BoardColumn = ApiListBoardColumnsResponseContract["data"][number]
 type WireBoardTask = ApiListTasksByStatusResponseContract["data"]["statuses"][number]["tasks"][number]
 
 /** The task fields needed by board cards and sync projections; large payload fields are discarded. */
-export type BoardTask = Readonly<Pick<
+type BoardTaskFields = Pick<
   WireBoardTask,
   | "id"
   | "seq"
@@ -38,15 +38,23 @@ export type BoardTask = Readonly<Pick<
   | "priority"
   | "position"
   | "scheduled_at"
+  | "due_at"
   | "lock_version"
   | "assignee"
+  | "status_reason"
+  | "last_heartbeat_at"
   | "dependency_blocked"
   | "unfinished_parent_count"
   | "execution_plan_state"
   | "required_step_count"
   | "completed_required_step_count"
   | "optional_step_count"
->>
+  | "labels"
+>
+
+export type BoardTask = Readonly<Omit<BoardTaskFields, "labels">> & {
+  readonly labels: readonly Readonly<WireBoardTask["labels"][number]>[]
+}
 
 export type BoardTaskStatus = BoardColumn["status"]
 export type BoardTaskSort = NonNullable<ApiListTasksByStatusQueryContract["sort"]>
@@ -494,13 +502,17 @@ function projectTask(task: WireBoardTask): BoardTask {
     priority: task.priority,
     position: task.position,
     scheduled_at: task.scheduled_at,
+    due_at: task.due_at,
     lock_version: task.lock_version,
     dependency_blocked: task.dependency_blocked,
+    status_reason: task.status_reason,
+    last_heartbeat_at: task.last_heartbeat_at,
     unfinished_parent_count: task.unfinished_parent_count,
     execution_plan_state: task.execution_plan_state,
     required_step_count: task.required_step_count,
     completed_required_step_count: task.completed_required_step_count,
     optional_step_count: task.optional_step_count,
+    labels: Object.freeze(task.labels.map((label) => Object.freeze({ ...label }))),
   })
 }
 

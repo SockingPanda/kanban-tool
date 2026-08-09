@@ -41,6 +41,12 @@ export interface BoardTaskReadinessViewModel {
   readonly optionalStepCount: number
 }
 
+export interface BoardTaskLabelViewModel {
+  readonly id: string
+  readonly name: string
+  readonly color: string | null
+}
+
 export interface BoardTaskViewModel {
   readonly id: string
   readonly seq: number
@@ -50,6 +56,10 @@ export interface BoardTaskViewModel {
   readonly status: BoardTaskStatus
   readonly position: number
   readonly scheduledAt?: number | null
+  readonly dueAt?: number | null
+  readonly lastHeartbeatAt?: number | null
+  readonly statusReason?: string | null
+  readonly labels?: readonly BoardTaskLabelViewModel[]
   readonly lockVersion: number
   readonly priority: 0 | 1 | 2 | 3
   readonly assignee: string | null
@@ -169,9 +179,16 @@ export interface BoardMessages {
   readonly syncStaleDescription: string
   readonly retry: string
   readonly statusLabel: string
+  readonly statusReasonLabel: string
   readonly priorityLabel: (priority: number) => string
   readonly assigneeLabel: string
   readonly unassigned: string
+  readonly scheduledLabel: string
+  readonly dueLabel: string
+  readonly lastHeartbeatLabel: string
+  readonly labelsLabel: string
+  readonly notAvailable: string
+  readonly noLabels: string
   readonly readinessLabel: string
   readonly dependencyLabel: string
   readonly dependencyBlocked: string
@@ -255,9 +272,16 @@ export const defaultBoardMessages: BoardMessages = {
   syncStaleDescription: "仍显示最近一次成功读取的看板数据。",
   retry: "重试",
   statusLabel: "状态",
+  statusReasonLabel: "状态原因",
   priorityLabel: (priority) => `优先级 P${priority}`,
   assigneeLabel: "执行者",
   unassigned: "未分配",
+  scheduledLabel: "排期时间",
+  dueLabel: "截止时间",
+  lastHeartbeatLabel: "最近心跳",
+  labelsLabel: "标签",
+  notAvailable: "—",
+  noLabels: "无标签",
   readinessLabel: "就绪性事实",
   dependencyLabel: "依赖",
   dependencyBlocked: "依赖阻塞",
@@ -351,9 +375,16 @@ export const englishBoardMessages: BoardMessages = {
   syncStaleDescription: "The most recently loaded board data is still displayed.",
   retry: "Retry",
   statusLabel: "Status",
+  statusReasonLabel: "Status reason",
   priorityLabel: (priority) => `Priority P${priority}`,
   assigneeLabel: "Assignee",
   unassigned: "Unassigned",
+  scheduledLabel: "Scheduled",
+  dueLabel: "Due",
+  lastHeartbeatLabel: "Last heartbeat",
+  labelsLabel: "Labels",
+  notAvailable: "—",
+  noLabels: "No labels",
   readinessLabel: "Readiness facts",
   dependencyLabel: "Dependencies",
   dependencyBlocked: "Blocked by dependencies",

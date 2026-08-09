@@ -282,6 +282,23 @@
     padding-inline-start: 0.4rem;
   }
 
+  .taskLabels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.4rem;
+  }
+
+  .taskLabel {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.12rem 0.4rem;
+    background: var(--color-background-surface);
+    overflow-wrap: anywhere;
+  }
+
   .taskActions {
     display: flex;
     flex-wrap: wrap;

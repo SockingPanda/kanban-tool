@@ -207,6 +207,7 @@ export interface BoardMessages {
   readonly conflictDescription: string
   readonly reconcileStale: string
   readonly retryReload: string
+  readonly retryCreateStep: string
   readonly retryMutation: string
   readonly close: string
   readonly dropTargetLabel: (column: string) => string
@@ -306,6 +307,7 @@ export const defaultBoardMessages: BoardMessages = {
   conflictDescription: "任务已被其他操作更新。已重新读取 canonical 状态，请确认输入后重试。",
   reconcileStale: "操作已经提交，但 canonical 看板暂时无法重新读取；当前显示保留为待确认状态。",
   retryReload: "重新读取看板",
+  retryCreateStep: "重试添加首个步骤",
   retryMutation: "重新尝试",
   close: "关闭",
   dropTargetLabel: (column) => `放置到${column}`,
@@ -401,6 +403,7 @@ export const englishBoardMessages: BoardMessages = {
   conflictDescription: "This task changed elsewhere. Canonical state was reloaded; review your input and try again.",
   reconcileStale: "The action was submitted, but canonical board data could not be reloaded. The optimistic state is marked pending confirmation.",
   retryReload: "Reload board",
+  retryCreateStep: "Retry first required step",
   retryMutation: "Try again",
   close: "Close",
   dropTargetLabel: (column) => `Drop in ${column}`,

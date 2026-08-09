@@ -4,13 +4,13 @@ import { installRuntimeFixture } from "./runtime-fixture"
 
 type TaskStatus = "todo" | "ready" | "running" | "blocked"
 
-function task(status: TaskStatus, title = "Draft", boardId = "b_default", boardSlug = "default") {
+function task(status: TaskStatus, title = "Draft", boardId = "b_default", boardSlug = "default", id = "t_todo") {
   return {
-    id: "t_todo",
+    id,
     board_id: boardId,
     board_slug: boardSlug,
-    ref: `${boardSlug}#1`,
-    seq: 1,
+    ref: `${boardSlug}#${id === "t_todo" ? 1 : 2}`,
+    seq: id === "t_todo" ? 1 : 2,
     title,
     description: "Draft specification",
     status,
@@ -78,6 +78,7 @@ async function wireBoard(page: Page, options: {
   readonly boardId?: string
   readonly boardSlug?: string
   readonly secondaryBoard?: { readonly boardId: string; readonly boardSlug: string; readonly status: TaskStatus }
+  readonly secondTask?: { readonly taskId: string; readonly title?: string; readonly status?: TaskStatus }
 } = {}) {
   await installRuntimeFixture(page)
   const boardId = options.boardId ?? "b_default"
@@ -128,14 +129,21 @@ async function wireBoard(page: Page, options: {
       if (spec === undefined) { await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: "not_found", message: "fixture" } }) }); return }
       const requested = url.searchParams.get("status")
       const boardStatus = spec.boardSlug === boardSlug ? status : spec.status
-      const visible = requested === boardStatus ? [task(boardStatus, "Draft", spec.boardId, spec.boardSlug)] : []
+      const visible = requested === boardStatus
+        ? [
+            task(boardStatus, "Draft", spec.boardId, spec.boardSlug),
+            ...(options.secondTask !== undefined && spec.boardSlug === boardSlug && (options.secondTask.status ?? "todo") === boardStatus
+              ? [task(boardStatus, options.secondTask.title ?? "Second task", spec.boardId, spec.boardSlug, options.secondTask.taskId)]
+              : []),
+          ]
+        : []
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: { statuses: [{ status: requested, tasks: visible, page: { limit: 1000, offset: 0, total: visible.length } }] }, meta: { limit: 1000, offset: 0 } }) })
       return
     }
     await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: "not_found", message: "fixture" } }) })
   })
   await page.goto(`/app/boards/${boardSlug}/board`, { waitUntil: "domcontentloaded" })
-  await expect(page.getByTestId("board-task")).toBeVisible()
+  await expect(page.getByTestId("board-task").first()).toBeVisible()
 }
 
 test.describe("board task mutation DOM behavior", () => {
@@ -176,9 +184,15 @@ test.describe("board task mutation DOM behavior", () => {
     await page.getByRole("button", { name: "保存" }).click()
     await expect(page.getByTestId("task-mutation-dialog").getByRole("button", { name: "正在保存…" })).toBeDisabled()
     release?.()
+    release = null
     await expect(page.getByTestId("mutation-notice")).toContainText("任务操作失败")
     await expect(page.getByTestId("mutation-notice")).not.toContainText("SECRET")
     await expect(page.getByTestId("board-task")).toContainText("Draft")
+    await page.getByTestId("mutation-retry").click()
+    await expect(page.getByTestId("task-mutation-pending")).toBeAttached()
+    await expect.poll(() => release !== null).toBe(true)
+    release?.()
+    await expect(page.getByTestId("mutation-retry")).toBeVisible()
   })
 
   test("settles a successful mutation while the app is mounted through StrictMode", async ({ page }) => {
@@ -201,6 +215,44 @@ test.describe("board task mutation DOM behavior", () => {
     release?.()
     await expect(page.getByRole("dialog")).not.toBeVisible()
     await expect(page.getByTestId("task-mutation-dialog").getByRole("button", { name: "正在保存…" })).toHaveCount(0)
+  })
+
+  test("accepts a legal internal pointer drag through the native drag lifecycle", async ({ page }) => {
+    await wireBoard(page)
+    const card = page.getByTestId("board-task")
+    const target = page.getByTestId("board-drop-target-ready")
+    const promote = page.waitForRequest((request) => request.url().endsWith("/api/v1/tasks/t_todo/transitions/promote"))
+    await card.dragTo(target)
+    await promote
+    await expect(page.getByTestId("task-drag-announcement")).toContainText("移动任务")
+  })
+
+  test("serializes task mutations across cards and releases the next dialog after settle", async ({ page }) => {
+    let release: (() => void) | null = null
+    await wireBoard(page, { secondTask: { taskId: "t_other", title: "Second task" } })
+    await page.route("**/api/v1/tasks/t_todo", async (route) => {
+      if (route.request().method() !== "PATCH") {
+        await route.fallback()
+        return
+      }
+      await new Promise<void>((resolve) => { release = resolve })
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("todo", "Pending") }) })
+    })
+
+    await page.getByTestId("task-edit-t_todo").click()
+    await page.getByTestId("task-title-input").fill("Pending")
+    await page.getByRole("button", { name: "保存" }).click()
+    await expect(page.getByTestId("task-mutation-pending")).toBeAttached()
+
+    const secondEdit = page.getByTestId("task-edit-t_other")
+    await expect(secondEdit).toBeDisabled()
+    await secondEdit.dispatchEvent("click")
+    await expect(page.getByTestId("task-title-input")).toHaveValue("Pending")
+
+    release?.()
+    await expect(page.getByRole("dialog")).not.toBeVisible()
+    await secondEdit.click()
+    await expect(page.getByTestId("task-title-input")).toHaveValue("Second task")
   })
 
   test("does not leak a deferred claim token across a board identity switch", async ({ page }) => {
@@ -300,6 +352,7 @@ test.describe("board task mutation DOM behavior", () => {
     await page.getByTestId("first-required-step-input").fill("Verify output")
     await page.getByRole("button", { name: "创建" }).click()
     await expect(page.getByTestId("mutation-retry")).toBeVisible()
+    await expect(page.getByTestId("mutation-retry")).toHaveText("重试添加首个步骤")
     await page.getByTestId("mutation-retry").click()
     await expect.poll(() => stepBodies.length).toBe(2)
     expect(createBodies).toHaveLength(1)

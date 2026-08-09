@@ -193,11 +193,16 @@ export function MutationDialog({ controller, copy }: { readonly controller: Boar
 
 export function MutationNotice({ controller, copy }: { readonly controller: BoardTaskMutationController; readonly copy: BoardMessages }) {
   if (controller.notice === null) return null
+  const retryLabel = controller.retryIntent?.kind === "create" && controller.retryIntent.taskCreated
+    ? copy.retryCreateStep
+    : controller.notice.kind === "stale"
+      ? copy.retryReload
+      : copy.retryMutation
   return (
     <div className={styles.mutationNotice} role="alert" aria-live="assertive" data-testid="mutation-notice" data-notice-kind={controller.notice.kind}>
       <strong>{controller.notice.kind === "conflict" ? copy.conflictDescription : controller.notice.kind === "stale" ? copy.reconcileStale : copy.mutationError}</strong>
       {controller.notice.kind !== "conflict" ? <span>{controller.notice.message}</span> : null}
-      {controller.retryIntent !== null ? <Button label={controller.notice.kind === "stale" ? copy.retryReload : copy.retryMutation} variant="secondary" size="sm" onClick={controller.retryMutation} data-testid="mutation-retry" /> : null}
+      {controller.retryIntent !== null ? <Button label={retryLabel} variant="secondary" size="sm" onClick={controller.retryMutation} data-testid="mutation-retry" /> : null}
     </div>
   )
 }

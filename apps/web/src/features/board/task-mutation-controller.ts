@@ -89,6 +89,7 @@ export interface BoardTaskMutationController {
   readonly grabbedTaskId: string | null
   readonly dragAnnouncement: string
   readonly isPending: (key: string) => boolean
+  readonly isMutationPending: boolean
   readonly openCreate: (trigger?: HTMLElement | null) => void
   readonly openEdit: (task: BoardTaskViewModel, trigger?: HTMLElement | null) => void
   readonly openTransition: (task: BoardTaskViewModel, option: BoardTaskTransitionOption, trigger?: HTMLElement | null) => void
@@ -304,10 +305,11 @@ export function useBoardTaskMutationController(
       readonly taskCreated: boolean
     },
   ) => {
-    if (surface === undefined || attempt.title.trim().length === 0 || pendingRef.current.has("create")) return
+    if (surface === undefined || attempt.title.trim().length === 0 || pendingRef.current.size > 0) return
     const generation = mutationGenerationRef.current
     setPending("create", true)
     setNotice(null)
+    setRetryIntent(null)
     let taskCreated = attempt.taskCreated
     try {
       if (!taskCreated) {
@@ -366,7 +368,7 @@ export function useBoardTaskMutationController(
   }
 
   const runEdit = async (taskId: string, title: string, retrying = false) => {
-    if (surface === undefined || activeModel === null || title.trim().length === 0 || pendingRef.current.has(`edit:${taskId}`)) return
+    if (surface === undefined || activeModel === null || title.trim().length === 0 || pendingRef.current.size > 0) return
     const generation = mutationGenerationRef.current
     const task = taskForId(activeModel, taskId)
     if (task === null) return
@@ -375,6 +377,7 @@ export function useBoardTaskMutationController(
     optimisticDirtyRef.current = true
     setOptimisticModel(updateTaskOptimistically(snapshot, taskId, title.trim()))
     setNotice(null)
+    setRetryIntent(null)
     try {
       await surface.client.updateTask(taskId, { title: title.trim(), expected_lock_version: task.lockVersion })
     } catch (error) {
@@ -388,6 +391,7 @@ export function useBoardTaskMutationController(
           setNotice({ kind: reloaded ? "conflict" : "stale", message: reloaded ? copy.conflictDescription : copy.reconcileStale })
         } else {
           setNotice({ kind: "error", message: mutationMessage(error, copy, copy.mutationError) })
+          setRetryIntent({ kind: "edit", taskId, title })
           if (!retrying) closeDialogState()
         }
         if (pendingRef.current.size <= 1) optimisticDirtyRef.current = false
@@ -419,7 +423,7 @@ export function useBoardTaskMutationController(
     context: { readonly reason?: string; readonly description?: string; readonly confirmed?: boolean } = {},
     retrying = false,
   ) => {
-    if (surface === undefined || activeModel === null || pendingRef.current.has(`transition:${taskId}`)) return
+    if (surface === undefined || activeModel === null || pendingRef.current.size > 0) return
     const generation = mutationGenerationRef.current
     const task = taskForId(activeModel, taskId)
     if (task === null) return
@@ -427,13 +431,27 @@ export function useBoardTaskMutationController(
     const legalOption = transitionForTaskTarget(task, option.targetStatus, claimToken)
     if (legalOption === null || legalOption.action !== option.action) {
       if (retrying) {
-        setRetryIntent({ kind: "transition", taskId, option, reason: context.reason ?? "", description: context.description ?? "", confirmed: context.confirmed === true })
+        // The canonical task may have moved to a state where the old edge is
+        // no longer legal. Do not leave a retry intent that can issue the
+        // obsolete command again; the user must choose a fresh action.
+        setRetryIntent(null)
         setNotice({ kind: "conflict", message: copy.conflictDescription })
       }
       return
     }
     const command = transitionCommandForTask(task, legalOption, { ...context, claimToken })
     if (command === null) {
+      if (retrying && legalOption.requiresConfirmation) {
+        setRetryIntent({ kind: "transition", taskId, option: legalOption, reason: context.reason ?? "", description: context.description ?? "", confirmed: false })
+        setDialog({ kind: "transition", taskId, option: legalOption, reason: context.reason ?? "", description: context.description ?? task.description ?? "", confirmed: false })
+        setNotice(null)
+        return
+      }
+      if (retrying) {
+        setRetryIntent(null)
+        setNotice({ kind: "conflict", message: copy.conflictDescription })
+        return
+      }
       setNotice({ kind: "error", message: copy.mutationError })
       return
     }
@@ -448,6 +466,7 @@ export function useBoardTaskMutationController(
       })
     }
     setNotice(null)
+    setRetryIntent(null)
     try {
       const response = await executeBoardTaskTransition(surface.client, taskId, command)
       if (isCurrentMutation(generation)) {
@@ -468,6 +487,7 @@ export function useBoardTaskMutationController(
           setNotice({ kind: reloaded ? "conflict" : "stale", message: reloaded ? copy.conflictDescription : copy.reconcileStale })
         } else {
           setNotice({ kind: "error", message: mutationMessage(error, copy, copy.mutationError) })
+          setRetryIntent({ kind: "transition", taskId, option: legalOption, reason: context.reason ?? "", description: context.description ?? "", confirmed: context.confirmed === true })
           if (!retrying) closeDialogState()
         }
         if (pendingRef.current.size <= 1) optimisticDirtyRef.current = false
@@ -500,24 +520,27 @@ export function useBoardTaskMutationController(
     if (trigger !== undefined) dialogTriggerRef.current = trigger
   }
   const openCreate = (trigger?: HTMLElement | null) => {
-    if (pendingRef.current.has("create")) return
+    if (pendingRef.current.size > 0) return
     rememberTrigger(trigger)
     setNotice(null)
+    setRetryIntent(null)
     const taskId = clientUuid("t_")
     setDialog({ kind: "create", title: "", description: "", firstStepTitle: "", taskId, idempotencyKey: `task.create:${taskId}`, taskCreated: false })
   }
   const openEdit = (task: BoardTaskViewModel, trigger?: HTMLElement | null) => {
-    if (pendingRef.current.has(`edit:${task.id}`)) return
+    if (pendingRef.current.size > 0) return
     rememberTrigger(trigger)
     setNotice(null)
+    setRetryIntent(null)
     setDialog({ kind: "edit", taskId: task.id, title: task.title })
   }
   const openTransition = (task: BoardTaskViewModel, option: BoardTaskTransitionOption, trigger?: HTMLElement | null) => {
-    if (pendingRef.current.has(`transition:${task.id}`)) return
+    if (pendingRef.current.size > 0) return
     const legalOption = transitionForTaskTarget(task, option.targetStatus, claimTokenForTask(task.id))
     if (legalOption === null || legalOption.action !== option.action) return
     rememberTrigger(trigger)
     setNotice(null)
+    setRetryIntent(null)
     if (legalOption.requiresReason || legalOption.requiresDescription || legalOption.requiresConfirmation) {
       setDialog({
         kind: "transition",
@@ -543,6 +566,7 @@ export function useBoardTaskMutationController(
     if (dialog?.kind === "create" && pendingRef.current.has("create")) return
     if (dialog?.kind === "edit" && pendingRef.current.has(`edit:${dialog.taskId}`)) return
     if (dialog?.kind === "transition" && pendingRef.current.has(`transition:${dialog.taskId}`)) return
+    setRetryIntent(null)
     closeDialogState()
   }
   const retryMutation = () => {
@@ -566,7 +590,7 @@ export function useBoardTaskMutationController(
     setDragAnnouncement(announcement)
   }
   const onDragStart = (taskId: string, event: DragEvent<HTMLElement>) => {
-    if (pendingRef.current.has(`transition:${taskId}`)) {
+    if (pendingRef.current.size > 0) {
       event.preventDefault()
       return
     }
@@ -580,6 +604,10 @@ export function useBoardTaskMutationController(
   const onDragEnd = (taskId: string) => {
     if (dragStateRef.current?.taskId === taskId || grabbedTaskId === taskId) clearGrab(copy.cancelGrab)
   }
+  const activeDragTask = () => {
+    const drag = dragStateRef.current
+    return drag === null ? null : taskForId(activeModel, drag.taskId)
+  }
   const currentDragTaskId = (event?: DragEvent<HTMLElement>) => {
     const drag = dragStateRef.current
     if (drag === null || event === undefined) return null
@@ -587,12 +615,19 @@ export function useBoardTaskMutationController(
     return token === drag.token ? drag.taskId : null
   }
   const onDragOver = (status: BoardTaskViewModel["status"], event: DragEvent<HTMLElement>) => {
-    const taskId = currentDragTaskId(event)
-    const task = taskId === null ? null : taskForId(activeModel, taskId)
+    if (pendingRef.current.size > 0) return
+    // HTML5 dragover runs in protected mode, so getData() is unavailable here.
+    // The local transaction is the source of truth for whether this target may
+    // accept a drop; the MIME token is checked again once drop exposes data.
+    const task = activeDragTask()
     const option = task === null || task.status === status ? null : transitionForTaskTarget(task, status, claimTokenForTask(task.id))
     if (option !== null) event.preventDefault()
   }
   const onDrop = (status: BoardTaskViewModel["status"], event: DragEvent<HTMLElement>) => {
+    if (pendingRef.current.size > 0) {
+      event.preventDefault()
+      return
+    }
     const taskId = currentDragTaskId(event)
     event.preventDefault()
     if (taskId === null) {
@@ -624,6 +659,7 @@ export function useBoardTaskMutationController(
   const onTaskKeyDown = (task: BoardTaskViewModel, event: KeyboardEvent<HTMLElement>) => {
     const target = event.target
     if (target !== event.currentTarget && target instanceof Element && target.closest("button, a, input, textarea, select, [contenteditable='true']") !== null) return
+    if (pendingRef.current.size > 0) return
     if (event.key === "Escape" && grabbedTaskId === task.id) {
       event.preventDefault()
       clearGrab()
@@ -664,6 +700,7 @@ export function useBoardTaskMutationController(
     retryIntent,
     grabbedTaskId,
     isPending: (key: string) => pendingKeys.has(key),
+    isMutationPending: pendingKeys.size > 0,
     openCreate,
     openEdit,
     openTransition,

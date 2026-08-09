@@ -115,7 +115,6 @@ export function transitionOptionsForTask(task: BoardTaskViewModel, claimToken: s
     .filter((option) => option.action !== "heartbeat" || claimToken !== null)
     .filter((option) => option.action !== "promote" || canPromoteTask(task))
     .filter((option) => option.action !== "complete" || canCompleteTask(task))
-    .filter((option) => option.action !== "archive" || task.status !== "running" || claimToken !== null)
     .map((option) => withContext(task, option, claimToken))
 }
 
@@ -185,7 +184,7 @@ export function transitionCommandForTask(
     case "unblock":
       return { action: "unblock", input: {} }
     case "archive":
-      return task.status === "running" && claimToken === null ? null : { action: "archive", input: { force: true } }
+      return { action: "archive", input: { force: true } }
     default:
       return null
   }

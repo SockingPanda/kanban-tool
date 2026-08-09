@@ -131,7 +131,10 @@ describe("board task mutation state", () => {
     expect(transitionOptionsForTask(running, "claim-token")).not.toContainEqual(expect.objectContaining({ action: "complete" }))
     const review = { ...running, status: "review" as const }
     expect(transitionOptionsForTask(review, "claim-token")).not.toContainEqual(expect.objectContaining({ action: "complete" }))
-    expect(transitionOptionsForTask(running)).not.toContainEqual(expect.objectContaining({ action: "archive" }))
+    expect(transitionOptionsForTask(running)).toContainEqual(expect.objectContaining({ action: "archive", requiresConfirmation: true }))
+    const runningArchiveWithoutToken = transitionForTaskTarget(running, "archived")
+    if (!runningArchiveWithoutToken) throw new Error("running archive without token fixture missing")
+    expect(transitionCommandForTask(running, runningArchiveWithoutToken, { confirmed: true })).toEqual({ action: "archive", input: { force: true } })
   })
 
   test("does not pretend unblock has a canonical target and rolls back only one task", () => {

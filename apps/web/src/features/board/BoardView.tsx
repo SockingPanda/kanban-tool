@@ -78,11 +78,13 @@ function BoardHeader({
   titleId,
   copy,
   onCreate,
+  isMutationPending,
 }: {
   readonly board?: BoardViewModel["board"]
   readonly titleId: string
   readonly copy: BoardMessages
   readonly onCreate?: (trigger?: HTMLElement | null) => void
+  readonly isMutationPending?: boolean
 }) {
   return (
     <header className={styles.header}>
@@ -102,7 +104,7 @@ function BoardHeader({
           </p>
         ) : null}
       </div>
-      {onCreate ? <Button label={copy.createTask} variant="primary" onClick={(event) => onCreate(event.currentTarget)} data-testid="task-create" /> : null}
+      {onCreate ? <Button label={copy.createTask} variant="primary" isDisabled={isMutationPending} onClick={(event) => onCreate(event.currentTarget)} data-testid="task-create" /> : null}
     </header>
   )
 }
@@ -190,7 +192,8 @@ function TaskCard({
   const dependencyText = task.readiness.dependencyBlocked
     ? `${copy.dependencyBlocked}（${task.readiness.unfinishedParentCount}）`
     : copy.dependencyClear
-  const pending = controller?.isPending(`transition:${task.id}`) === true
+  const pending = controller?.isMutationPending === true
+    || controller?.isPending(`transition:${task.id}`) === true
     || controller?.isPending(`edit:${task.id}`) === true
   const transitionOptions = controller ? transitionOptionsForTask(task, controller.claimTokenForTask(task.id)) : []
   const promoteNotReady = controller !== undefined && (task.status === "todo" || task.status === "scheduled") && !canPromoteTask(task)
@@ -390,9 +393,10 @@ export function BoardView({ state, messages: messageOverrides, onRetry, syncStat
       <a className={styles.skipLink} href={`#${id}-columns`}>
         {copy.skipToColumns}
       </a>
-      <BoardHeader board={board} titleId={titleId} copy={copy} onCreate={controller?.openCreate} />
+      <BoardHeader board={board} titleId={titleId} copy={copy} onCreate={controller?.openCreate} isMutationPending={controller?.isMutationPending} />
       {renderedState.kind === "ready" && syncStatus ? <SyncBanner status={syncStatus} copy={copy} onRetry={onRetry} /> : null}
       {controller && controller.dialog === null ? <MutationNotice controller={controller} copy={copy} /> : null}
+      {controller?.isMutationPending ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-mutation-pending">{copy.mutationPending}</p> : null}
       {controller ? <p className={styles.visuallyHidden} role="status" aria-live="polite" data-testid="task-drag-announcement">{controller.dragAnnouncement}</p> : null}
       <div id={`${id}-columns`} tabIndex={-1}>
         {renderedState.kind === "ready" && displayModel !== null && validation.valid ? (

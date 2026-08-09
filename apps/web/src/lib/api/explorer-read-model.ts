@@ -524,6 +524,7 @@ export function mergeBoardEvents(
 
 export function buildBoardEventsRequest(board: string, taskId: string | null = null, after = 0): string {
   try {
+    if (taskId !== null) validateCanonicalTaskSelector(taskId)
     const parsed = parseApiListEventsQuery({
       board,
       task_id: taskId,
@@ -552,6 +553,8 @@ export async function loadBoardEvents(
   selector = runtime.defaultBoard,
   options: ExplorerReadOptions & { readonly taskId?: string | null } = {},
 ): Promise<BoardEventsReadModel> {
+  const taskId = options.taskId?.trim() || null
+  if (taskId !== null) validateCanonicalTaskSelector(taskId)
   const budget = options.budget ?? new ExplorerReadBudget()
   let transport: HttpTransport
   try {
@@ -561,8 +564,6 @@ export async function loadBoardEvents(
   }
   try {
     const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
-    const taskId = options.taskId?.trim() || null
-    if (taskId !== null) validateTaskSelector(taskId)
     let after = 0
     let pageCount = 0
     let events: readonly ExplorerEvent[] = []
@@ -840,13 +841,21 @@ function hasUnsafeTaskSelector(value: string): boolean {
   return false
 }
 
-function validateTaskSelector(value: string): void {
-  if (hasUnsafeTaskSelector(value)) throw new ExplorerReadError("anomaly", "Runs 请求的 task selector 无效。")
+function validateCanonicalTaskSelector(value: string): void {
+  if (hasUnsafeTaskSelector(value) || !value.startsWith("t_") || value.length <= 2) {
+    throw new ExplorerReadError("anomaly", "请求的 task selector 必须是 canonical t_ identity。", { reason: "task-not-found" })
+  }
+}
+
+function validateRunSelector(value: string): void {
+  if (hasUnsafeTaskSelector(value) || !value.startsWith("r_") || value.length <= 2) {
+    throw new ExplorerReadError("anomaly", "Run selector 必须是 canonical r_ identity。")
+  }
 }
 
 export function buildTaskRunsRequest(taskId: string): string {
   try {
-    validateTaskSelector(taskId)
+    validateCanonicalTaskSelector(taskId)
     const path = parseApiListRunsPath({ task_id: taskId }).task_id
     return `/api/v1/tasks/${encodedSegment(path)}/runs`
   } catch (error) {
@@ -860,7 +869,7 @@ export function buildTaskRunsRequest(taskId: string): string {
 
 export function buildRunLogRequest(runId: string): string {
   try {
-    validateTaskSelector(runId)
+    validateRunSelector(runId)
     const path = parseApiGetRunLogPath({ run_id: runId }).run_id
     return `/api/v1/runs/${encodedSegment(path)}/log`
   } catch (error) {
@@ -889,7 +898,7 @@ export async function loadTaskRuns(
   const budget = options.budget ?? new ExplorerReadBudget()
   let transport: HttpTransport
   try {
-    validateTaskSelector(taskId)
+    validateCanonicalTaskSelector(taskId)
     transport = options.transport ?? createHttpTransport(runtime, options)
   } catch (error) {
     return wrapTransportError(error)
@@ -945,6 +954,7 @@ export interface TaskInspectorRequests {
 }
 
 function listEventsRequest(board: string, taskId: string): string {
+  validateCanonicalTaskSelector(taskId)
   const query = parseApiListEventsQuery({ board, task_id: taskId, after: 0, limit: 50 })
   const params = new URLSearchParams()
   if (query.board !== undefined) params.set("board", query.board)
@@ -956,6 +966,7 @@ function listEventsRequest(board: string, taskId: string): string {
 
 export function buildTaskInspectorRequests(board: string, taskId: string): TaskInspectorRequests {
   try {
+    validateCanonicalTaskSelector(taskId)
     const task = parseApiGetTaskPath({ task_id: taskId }).task_id
     const neighborhoodPath = parseApiTaskNeighborhoodPath({ task_id: task }).task_id
     const neighborhoodQuery = parseApiTaskNeighborhoodQuery({ depth: 1, include_archived_context: false, limit_nodes: 40 })
@@ -997,12 +1008,41 @@ function validateInspectorScope(
   board: ExplorerBoardIdentity,
   taskId: string,
 ): void {
-  if (model.neighborhood.center_task_id !== taskId) throw new ExplorerReadError("anomaly", "任务邻域响应中心 task id 不一致。")
+  const neighborhood = model.neighborhood
+  if (neighborhood.center_task_id !== taskId) throw new ExplorerReadError("anomaly", "任务邻域响应中心 task id 不一致。")
+  const nodeIds = new Set<string>()
+  let centerCount = 0
+  for (const node of neighborhood.nodes) {
+    validateTaskBoard(node.task, board)
+    const nodeId = node.task.id
+    if (nodeId.trim().length === 0 || nodeIds.has(nodeId)) {
+      throw new ExplorerReadError("anomaly", "任务邻域包含重复或空 task node id。")
+    }
+    nodeIds.add(nodeId)
+    if (node.role === "center") {
+      centerCount += 1
+      if (nodeId !== taskId) throw new ExplorerReadError("anomaly", "任务邻域 center node 越过当前 task scope。")
+    }
+  }
+  if (centerCount !== 1 || !nodeIds.has(taskId)) throw new ExplorerReadError("anomaly", "任务邻域缺少唯一的当前 task center node。")
+  const edgeIds = new Set<string>()
+  for (const edge of neighborhood.edges) {
+    if (edge.id.trim().length === 0 || edgeIds.has(edge.id)) {
+      throw new ExplorerReadError("anomaly", "任务邻域包含重复或空 edge id。")
+    }
+    if (!nodeIds.has(edge.source_task_id) || !nodeIds.has(edge.target_task_id)) {
+      throw new ExplorerReadError("anomaly", "任务邻域 edge 越过当前 node scope。")
+    }
+    edgeIds.add(edge.id)
+  }
+  if (neighborhood.meta.node_count !== neighborhood.nodes.length || neighborhood.meta.edge_count !== neighborhood.edges.length) {
+    throw new ExplorerReadError("anomaly", "任务邻域 meta 与 node/edge 数量不一致。")
+  }
   if (model.dependencies.task.id !== taskId) throw new ExplorerReadError("anomaly", "任务依赖响应 task id 不一致。")
   if (model.steps.task_id !== taskId) throw new ExplorerReadError("anomaly", "任务步骤响应 task id 不一致。")
   for (const task of [...model.dependencies.parents, ...model.dependencies.children]) validateTaskBoard(task, board)
   for (const event of model.events) {
-    if (event.board_id !== board.id || (event.task_id !== null && event.task_id !== taskId)) {
+    if (event.board_id !== board.id || event.task_id !== taskId) {
       throw new ExplorerReadError("anomaly", "任务事件响应越过了当前 board/task scope。")
     }
   }
@@ -1026,6 +1066,9 @@ export async function loadTaskInspector(
   taskId: string,
   options: ExplorerReadOptions = {},
 ): Promise<TaskInspectorReadModel> {
+  // Reject a copied/typed task deep link before resolving board identity or
+  // constructing a transport request. Invalid selectors are local errors.
+  validateCanonicalTaskSelector(taskId)
   const budget = options.budget ?? new ExplorerReadBudget()
   let transport: HttpTransport
   try {

@@ -1,4 +1,5 @@
 import type {
+  InspectorMutationOutcome,
   InspectorCreateStepInput,
 } from "./task-inspector-mutation-state"
 
@@ -46,6 +47,11 @@ export function buildStepSubmission(title: string, body: string, required: boole
 
 export function buildPlanInput(reason: string): { readonly reason: string } {
   return { reason: reason.trim() }
+}
+
+/** Drafts are cleared only after the canonical write has committed. */
+export function shouldClearDraft(outcome: InspectorMutationOutcome): boolean {
+  return outcome.committed
 }
 
 export function sortedComments<T extends CommentPageItem>(comments: readonly T[], sortOrder: CommentSortOrder): T[] {
@@ -100,5 +106,6 @@ export const __test = {
   stepSubmission: buildStepSubmission,
   stepInput: buildStepInput,
   planInput: buildPlanInput,
+  shouldClearDraft,
   resolveTaskSelector,
 }

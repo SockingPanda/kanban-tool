@@ -8,20 +8,22 @@ import {
 import { __test } from "./TaskInspectorRelationsPanel.logic"
 
 const handlers = {
-  saveTask: vi.fn(async () => undefined),
-  transition: vi.fn(async () => undefined),
-  addDependency: vi.fn(async () => undefined),
-  removeDependency: vi.fn(async () => undefined),
-  createStep: vi.fn(async () => undefined),
-  linkStep: vi.fn(async () => undefined),
-  markPlanNotRequired: vi.fn(async () => undefined),
-  addLabel: vi.fn(async () => undefined),
-  removeLabel: vi.fn(async () => undefined),
-  applySuggestedLabel: vi.fn(async () => undefined),
-  addComment: vi.fn(async () => undefined),
-  uploadAttachment: vi.fn(async () => undefined),
+  saveTask: vi.fn(async () => ({ committed: true, reconciled: true })),
+  transition: vi.fn(async () => ({ committed: true, reconciled: true })),
+  addDependency: vi.fn(async () => ({ committed: true, reconciled: true })),
+  removeDependency: vi.fn(async () => ({ committed: true, reconciled: true })),
+  createStep: vi.fn(async () => ({ committed: true, reconciled: true })),
+  linkStep: vi.fn(async () => ({ committed: true, reconciled: true })),
+  markPlanNotRequired: vi.fn(async () => ({ committed: true, reconciled: true })),
+  addLabel: vi.fn(async () => ({ committed: true, reconciled: true })),
+  removeLabel: vi.fn(async () => ({ committed: true, reconciled: true })),
+  applySuggestedLabel: vi.fn(async () => ({ committed: true, reconciled: true })),
+  addComment: vi.fn(async () => ({ committed: true, reconciled: true })),
+  uploadAttachment: vi.fn(async () => ({ committed: true, reconciled: true })),
   downloadAttachment: vi.fn(async () => null),
-  deleteAttachment: vi.fn(async () => undefined),
+  deleteAttachment: vi.fn(async () => ({ committed: true, reconciled: true })),
+  suggestLabels: vi.fn(async () => null),
+  retry: vi.fn(async () => true),
 }
 
 function props(overrides: Partial<TaskInspectorRelationsPanelProps> = {}): TaskInspectorRelationsPanelProps {
@@ -151,7 +153,37 @@ describe("TaskInspectorRelationsPanel", () => {
     expect(markup).toContain("scope_mismatch")
     expect(markup).toContain("Linked task is outside board scope")
     expect(markup).toContain("link_scope_mismatch")
+    expect(markup).toMatch(/data-testid="task-inspector-create-step"[^>]*disabled=""/)
+    expect(markup).toMatch(/data-testid="task-inspector-link-step"[^>]*disabled=""/)
     expect(markup).toContain('role="alert"')
+  })
+
+  test("renders exact operation and reload retry keys without replaying drafts", () => {
+    const snapshot = props().snapshot
+    const addCommentKey = "addComment:t_current"
+    const reloadKey = "reload:t_current"
+    const markup = renderToStaticMarkup(
+      <TaskInspectorRelationsPanel
+        {...props({
+          snapshot: {
+            ...snapshot,
+            errors: new Map([
+              [addCommentKey, { operation: "addComment", taskId: "t_current", kind: "error", message: "comment failed", status: 503, code: "unavailable", recoverable: true }],
+              [reloadKey, { operation: "reload", taskId: "t_current", kind: "stale", message: "stale", status: 503, code: "reload_failed", recoverable: true }],
+            ]),
+            retries: new Map([
+              [addCommentKey, { operation: "addComment", taskId: "t_current", input: { body: "retry me" } }],
+              [reloadKey, { operation: "reload", taskId: "t_current" }],
+            ]),
+          },
+        })}
+      />,
+    )
+
+    expect(markup).toContain('data-retry-key="addComment:t_current"')
+    expect(markup).toContain('data-retry-key="reload:t_current"')
+    expect(markup).toContain("comment failed")
+    expect(markup).toContain("stale")
   })
 
   test("keeps comments paginated locally and sort changes independent from URL state", () => {
@@ -207,6 +239,13 @@ describe("TaskInspectorRelationsPanel input seams", () => {
     expect(rendered.iso).toBe("1970-01-01T00:00:00.000Z")
     expect(rendered.label).not.toBe("0")
     expect(__test.formatCommentDateTime(Number.NaN, "en")).toEqual({ label: "—", iso: "" })
+  })
+
+  test("clears drafts only after commit, including committed-but-unreconciled writes", () => {
+    expect(__test.shouldClearDraft({ committed: false, reconciled: false })).toBe(false)
+    expect(__test.shouldClearDraft({ committed: false, reconciled: true })).toBe(false)
+    expect(__test.shouldClearDraft({ committed: true, reconciled: false })).toBe(true)
+    expect(__test.shouldClearDraft({ committed: true, reconciled: true })).toBe(true)
   })
 
   test("resolves direct ids and same-board refs before a mutation, with no call for unresolved input", () => {

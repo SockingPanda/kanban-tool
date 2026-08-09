@@ -128,7 +128,8 @@
   .form textarea:focus-visible,
   .form select:focus-visible,
   .toolbar select:focus-visible,
-  .pager button:focus-visible {
+  .pager button:focus-visible,
+  .retryButton:focus-visible {
     outline: 2px solid var(--color-focus-ring, currentColor);
     outline-offset: 2px;
   }
@@ -186,7 +187,8 @@
   }
 
   .form button,
-  .pager button {
+  .pager button,
+  .retryButton {
     width: fit-content;
     border: 1px solid var(--color-border-emphasized);
     border-radius: var(--radius-element);
@@ -199,12 +201,14 @@
   }
 
   .form button:hover,
-  .pager button:hover {
+  .pager button:hover,
+  .retryButton:hover {
     background: var(--color-background-body);
   }
 
   .form button:disabled,
   .pager button:disabled,
+  .retryButton:disabled,
   .removeButton:disabled {
     cursor: not-allowed;
     opacity: 0.55;

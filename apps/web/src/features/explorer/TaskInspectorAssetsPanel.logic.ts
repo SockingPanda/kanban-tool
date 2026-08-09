@@ -9,18 +9,27 @@ export type InspectorLabelSuggestionResult = ApiSuggestTaskLabelsResponseContrac
 
 export type SuggestLabelsHandler = (
   query?: InspectorSuggestTaskLabelsQuery,
-) => Promise<InspectorLabelSuggestionResult | void> | InspectorLabelSuggestionResult | void
+) => Promise<ApiSuggestTaskLabelsResponseContract | null>
 
 export type InspectorAssetsMutationHandlers = Pick<
   TaskInspectorMutationHandlers,
   "addLabel" | "removeLabel" | "applySuggestedLabel" | "uploadAttachment" | "downloadAttachment" | "deleteAttachment"
 > & {
   /** 05C controller-owned read handler; no transport is created in this panel. */
-  readonly suggestLabels?: SuggestLabelsHandler
+  readonly suggestLabels: SuggestLabelsHandler
 }
 
-/** Host binary response and attachment write budget; keep in step with kanban-server. */
-export const MAX_ATTACHMENT_UPLOAD_BYTES = 256 * 1024 * 1024
+/**
+ * JSON number[] upload budget for the localhost Axum route.
+ *
+ * The service can store much larger attachments, but the default 2 MiB Axum
+ * JSON body limit is reached well before that when binary bytes are encoded as
+ * JSON numbers. Keep this wire budget conservative so the client fails before
+ * issuing a request that the host cannot accept.
+ */
+export const MAX_ATTACHMENT_UPLOAD_BYTES = 384 * 1024
+
+const ATTACHMENT_UPLOAD_LIMIT_MESSAGE = "附件超过 384 KiB 上传上限（JSON 数组请求体预算）。"
 
 export async function createAttachmentUploadIntent(file: File): Promise<{
   readonly filename: string
@@ -28,17 +37,29 @@ export async function createAttachmentUploadIntent(file: File): Promise<{
   readonly content: number[]
 }> {
   if (!Number.isSafeInteger(file.size) || file.size < 0 || file.size > MAX_ATTACHMENT_UPLOAD_BYTES) {
-    throw new Error("附件超过 256 MiB 上传上限。")
+    throw new Error(ATTACHMENT_UPLOAD_LIMIT_MESSAGE)
   }
   const bytes = new Uint8Array(await file.arrayBuffer())
   if (bytes.byteLength > MAX_ATTACHMENT_UPLOAD_BYTES) {
-    throw new Error("附件超过 256 MiB 上传上限。")
+    throw new Error(ATTACHMENT_UPLOAD_LIMIT_MESSAGE)
   }
   return {
     filename: file.name,
     content_type: file.type || null,
     content: Array.from(bytes),
   }
+}
+
+/**
+ * Enter the promise chain before invoking a controller callback so a callback
+ * that throws synchronously is handled by the same rejection path as an async
+ * failure.
+ */
+export function requestSuggestedLabels(
+  handler: SuggestLabelsHandler,
+  query: InspectorSuggestTaskLabelsQuery = { limit: 5 },
+): Promise<ApiSuggestTaskLabelsResponseContract | null> {
+  return Promise.resolve().then(() => handler(query))
 }
 
 export function formatAttachmentSize(size: number): string {
@@ -49,12 +70,12 @@ export function formatAttachmentSize(size: number): string {
 }
 
 export interface InspectorAssetsActions {
-  readonly addLabel: (name: string) => Promise<void>
-  readonly removeLabel: (labelId: string) => Promise<void>
-  readonly applySuggestedLabel: (name: string) => Promise<void>
-  readonly uploadAttachment: (input: { readonly filename: string; readonly content_type: string | null; readonly content: number[] }) => Promise<void>
+  readonly addLabel: (name: string) => Promise<unknown>
+  readonly removeLabel: (labelId: string) => Promise<unknown>
+  readonly applySuggestedLabel: (name: string) => Promise<unknown>
+  readonly uploadAttachment: (input: { readonly filename: string; readonly content_type: string | null; readonly content: number[] }) => Promise<unknown>
   readonly downloadAttachment: (attachmentId: string) => ReturnType<InspectorAssetsMutationHandlers["downloadAttachment"]>
-  readonly deleteAttachment: (attachmentId: string) => Promise<void>
+  readonly deleteAttachment: (attachmentId: string) => Promise<unknown>
 }
 
 /** Maps user-facing asset actions to the exact 05C controller input shapes. */
@@ -67,4 +88,10 @@ export function createInspectorAssetsActions(handlers: InspectorAssetsMutationHa
     downloadAttachment: (attachmentId) => handlers.downloadAttachment({ attachmentId }),
     deleteAttachment: (attachmentId) => handlers.deleteAttachment({ attachmentId }),
   }
+}
+
+/** Return only the bytes represented by a Uint8Array view before creating a Blob. */
+export function exactAttachmentBytes(content: Uint8Array): ArrayBuffer {
+  if (content.byteOffset === 0 && content.byteLength === content.buffer.byteLength) return content.buffer as ArrayBuffer
+  return content.slice().buffer
 }

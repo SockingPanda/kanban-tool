@@ -12,6 +12,9 @@ import {
   MAX_ATTACHMENT_UPLOAD_BYTES,
   createAttachmentUploadIntent,
   createInspectorAssetsActions,
+  exactAttachmentBytes,
+  requestSuggestedLabels,
+  type SuggestLabelsHandler,
 } from "./TaskInspectorAssetsPanel.logic"
 import type { TaskInspectorMutationSnapshot } from "./task-inspector-mutation-state"
 
@@ -90,13 +93,14 @@ function handlers(overrides: Partial<InspectorAssetsMutationHandlers> = {}): Ins
     uploadAttachment: vi.fn(async () => undefined),
     downloadAttachment: vi.fn(async () => null),
     deleteAttachment: vi.fn(async () => undefined),
+    suggestLabels: vi.fn(async () => null),
     ...overrides,
   }
 }
 
 describe("TaskInspectorAssetsPanel", () => {
   test("does not request suggestions during render; explicit state exposes the action", () => {
-    const suggestLabels = vi.fn(async () => suggestions)
+    const suggestLabels = vi.fn(async () => ({ data: suggestions }))
     const markup = renderToStaticMarkup(
       <TaskInspectorAssetsPanel
         taskId="t_1"
@@ -104,8 +108,7 @@ describe("TaskInspectorAssetsPanel", () => {
         attachments={[]}
         suggestionResult={null}
         suggestionRequested={false}
-        suggestLabels={suggestLabels}
-        handlers={handlers()}
+        handlers={handlers({ suggestLabels })}
         snapshot={snapshot()}
       />,
     )
@@ -148,6 +151,8 @@ describe("TaskInspectorAssetsPanel", () => {
         taskId="t_1"
         labels={[label("l_existing", "existing")]}
         attachments={[attachment("a_1")]}
+        suggestionResult={null}
+        suggestionRequested={false}
         handlers={handlers()}
         snapshot={snapshot()}
       />,
@@ -158,6 +163,8 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(markup).toContain("text/plain")
     expect(markup).toContain("12 B")
     expect(markup).toContain("sha256-report")
+    expect(markup).toContain("文件名")
+    expect(markup).toContain('dateTime="1970-01-01T00:00:01.000Z"')
     expect(markup).toContain('aria-label="移除标签 existing"')
     expect(markup).toContain('aria-label="下载附件 report.txt"')
     expect(markup).toContain('aria-label="删除附件 report.txt"')
@@ -169,6 +176,8 @@ describe("TaskInspectorAssetsPanel", () => {
         taskId="t_1"
         labels={[]}
         attachments={[]}
+        suggestionResult={null}
+        suggestionRequested={false}
         handlers={handlers()}
         snapshot={snapshot({ pending: new Set(["uploadAttachment:t_1", "addLabel:t_1"]) })}
         attachmentLoading
@@ -183,7 +192,7 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(pending).toContain('role="status"')
   })
 
-  test("creates the typed upload intent once and enforces the host-sized limit", async () => {
+  test("creates the typed upload intent once and enforces the wire-sized limit", async () => {
     const bytes = new Uint8Array([1, 2, 255])
     const file = {
       name: "bytes.bin",
@@ -198,11 +207,93 @@ describe("TaskInspectorAssetsPanel", () => {
       content: [1, 2, 255],
     })
     expect(file.arrayBuffer).toHaveBeenCalledTimes(1)
-    expect(MAX_ATTACHMENT_UPLOAD_BYTES).toBe(256 * 1024 * 1024)
+    expect(MAX_ATTACHMENT_UPLOAD_BYTES).toBe(384 * 1024)
 
     const oversized = { ...file, size: MAX_ATTACHMENT_UPLOAD_BYTES + 1, arrayBuffer: vi.fn(async () => bytes.buffer) } as unknown as File
-    await expect(createAttachmentUploadIntent(oversized)).rejects.toThrow("256 MiB")
+    await expect(createAttachmentUploadIntent(oversized)).rejects.toThrow("384 KiB")
     expect(oversized.arrayBuffer).toHaveBeenCalledTimes(0)
+  })
+
+  test("normalizes synchronous suggestion throws into a rejected promise", async () => {
+    const suggestLabels: SuggestLabelsHandler = vi.fn(() => {
+      throw new Error("同步失败")
+    })
+
+    await expect(requestSuggestedLabels(suggestLabels)).rejects.toThrow("同步失败")
+    expect(suggestLabels).toHaveBeenCalledWith({ limit: 5 })
+  })
+
+  test("keeps snapshot pending/error state scoped to the current task", () => {
+    const markup = renderToStaticMarkup(
+      <TaskInspectorAssetsPanel
+        taskId="t_2"
+        labels={[]}
+        attachments={[]}
+        suggestionResult={null}
+        suggestionRequested={false}
+        handlers={handlers()}
+        snapshot={snapshot({
+          pending: new Set(["uploadAttachment:t_1"]),
+          errors: new Map([[
+            "uploadAttachment:t_1",
+            { operation: "uploadAttachment", taskId: "t_1", kind: "error", message: "旧任务错误", status: null, code: null, recoverable: true },
+          ]]),
+        })}
+      />,
+    )
+
+    expect(markup).toContain('aria-busy="false"')
+    expect(markup).not.toContain("旧任务错误")
+    expect(markup).not.toContain("正在上传")
+  })
+
+  test("keeps duplicate suggestions visible and reports their label ids", () => {
+    const selectedWithEvidence = {
+      ...suggestion("l_duplicate", "selected-name"),
+      evidence_atoms: [{ atom_id: "atom-positive", label_id: "l_duplicate", label_name: "selected-name", polarity: "positive", kind: "title", text: "positive evidence", score: 0.8 }],
+      negative_evidence_atoms: [{ atom_id: "atom-negative", label_id: "l_duplicate", label_name: "selected-name", polarity: "negative", kind: "description", text: "negative evidence", score: 0.2 }],
+    }
+    const duplicateSuggestions: Suggestions = {
+      ...suggestions,
+      degraded: false,
+      reason_codes: [],
+      diagnostics: [],
+      selected_labels: [selectedWithEvidence],
+      candidates: [suggestion("l_duplicate", "candidate-name")],
+    }
+    const markup = renderToStaticMarkup(
+      <TaskInspectorAssetsPanel
+        taskId="t_1"
+        labels={[]}
+        attachments={[]}
+        suggestionResult={duplicateSuggestions}
+        suggestionRequested
+        locale="en"
+        handlers={handlers()}
+        snapshot={snapshot()}
+      />,
+    )
+
+    expect(markup).toContain('data-testid="label-suggestion-duplicates"')
+    expect(markup).toContain("l_duplicate")
+    expect(markup).toContain("selected-name")
+    expect(markup).toContain("candidate-name")
+    expect(markup).toContain("positive evidence")
+    expect(markup).toContain("negative evidence")
+    expect((markup.match(/data-testid="label-suggestion-apply"/g) ?? []).length).toBe(2)
+    expect((markup.match(/disabled=""/g) ?? []).length).toBeGreaterThanOrEqual(2)
+    expect(markup).toContain("Reason codes:</span> —")
+    expect(markup).toContain("Diagnostics:</span> —")
+  })
+
+  test("preserves the exact bytes represented by an attachment download view", () => {
+    const backing = new Uint8Array([1, 2, 3, 4])
+    const view = backing.subarray(1, 3)
+    const exact = exactAttachmentBytes(view)
+
+    expect(Array.from(new Uint8Array(exact))).toEqual([2, 3])
+    expect(exact.byteLength).toBe(2)
+    expect(exactAttachmentBytes(backing)).toBe(backing.buffer)
   })
 
   test("maps every asset action to the exact controller handler input", async () => {

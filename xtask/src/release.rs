@@ -1,8 +1,10 @@
-//! Stage09 09A real-host proof 的仓库语义校验与 deterministic receipt。
+//! Stage09 real-host 与 Desktop package proof 的仓库语义校验与 deterministic receipt。
 //!
 //! 该模块只验证机器可读 evidence；host/browser 进程生命周期仍由 release launcher 编排。
-//! 未接入的 axe、visual、performance、stress、package gate 必须保持 `pending`，receipt
-//! 不会把 pending evidence 标记为总 release ready。
+//! 未接入的 axe、visual、performance、stress、package gate 必须保持 `pending`，09A receipt
+//! 不会把 pending evidence 标记为总 release ready。Desktop package proof 的 formal mode 使用
+//! 独立 receipt；dirty targeted mode 使用独立 diagnostic evidence 且不写 receipt；两者都不
+//! 修改 09A ledger 或把 package gate 偷换成 Web browser evidence。
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -26,6 +28,8 @@ const PACKAGE_LOCK_PATH: &str = "pnpm-lock.yaml";
 const DEFAULT_ARTIFACT_PATH: &str = "apps/web/dist";
 const DEFAULT_EVIDENCE_PATH: &str = "output/release";
 const DEFAULT_RECEIPT_PATH: &str = "output/release/release-proof-receipt.json";
+const DEFAULT_PACKAGE_EVIDENCE_PATH: &str = "output/release/desktop-package-evidence.json";
+const DEFAULT_PACKAGE_RECEIPT_PATH: &str = "output/release/desktop-package-receipt.json";
 const BASE_REVISION: &str = "311ef2fdbf238bee8b66e715cab0001df7cd186d";
 
 #[derive(Debug, Deserialize)]
@@ -194,8 +198,19 @@ struct Options {
     out: Option<PathBuf>,
 }
 
-/// 分发 `xtask release check|receipt`。
+#[derive(Debug, Default)]
+struct PackageOptions {
+    root: PathBuf,
+    evidence: Option<PathBuf>,
+    out: Option<PathBuf>,
+    diagnostic: bool,
+}
+
+/// 分发 `xtask release check|receipt|package`。
 pub fn run(command: Option<&str>, arguments: &[String]) -> ToolResult<()> {
+    if command == Some("package") {
+        return package_receipt(arguments);
+    }
     let options = parse_options(arguments)?;
     let root = lexical_root(&options.root)?;
     match command {
@@ -233,6 +248,670 @@ fn parse_options(arguments: &[String]) -> ToolResult<Options> {
         index += 1;
     }
     Ok(options)
+}
+
+fn parse_package_options(arguments: &[String]) -> ToolResult<PackageOptions> {
+    let mut options = PackageOptions {
+        root: PathBuf::from("."),
+        ..PackageOptions::default()
+    };
+    let mut index = 0;
+    while index < arguments.len() {
+        let flag = arguments[index].as_str();
+        if flag == "--diagnostic" {
+            options.diagnostic = true;
+            index += 1;
+            continue;
+        }
+        let target = match flag {
+            "--root" => Some(&mut options.root),
+            "--evidence" => Some(options.evidence.get_or_insert_with(PathBuf::new)),
+            "--out" => Some(options.out.get_or_insert_with(PathBuf::new)),
+            _ => None,
+        };
+        if let Some(target) = target {
+            index += 1;
+            let value = arguments
+                .get(index)
+                .ok_or_else(|| error(format!("{flag} 缺少路径")))?;
+            *target = PathBuf::from(value);
+        } else {
+            return Err(error(format!("release package 参数无效: {flag}")));
+        }
+        index += 1;
+    }
+    Ok(options)
+}
+
+fn package_receipt(arguments: &[String]) -> ToolResult<()> {
+    let options = parse_package_options(arguments)?;
+    let root = lexical_root(&options.root)?;
+    let evidence_path = resolve_root_relative(
+        &root,
+        &options
+            .evidence
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(DEFAULT_PACKAGE_EVIDENCE_PATH)),
+    )?;
+    reject_symlink_chain(&evidence_path)?;
+    let evidence = read_regular_json(&evidence_path)?;
+
+    let current_revision = git_revision(&root)?;
+    let start_sha = string_field(&evidence, "start_sha")?.to_owned();
+    if options.diagnostic {
+        if options.out.is_some() {
+            return Err(error(
+                "Desktop package diagnostic 不写 formal receipt；请移除 --out",
+            ));
+        }
+        if start_sha != current_revision {
+            return Err(error(format!(
+                "Desktop package diagnostic evidence 必须绑定当前 HEAD: start_sha={start_sha} current={current_revision}"
+            )));
+        }
+    } else {
+        validate_start_binding(
+            &start_sha,
+            &current_revision,
+            bool_field(&evidence, "start_clean")?,
+        )?;
+        if !git_status_clean(&root)? {
+            return Err(error(
+                "Desktop package receipt requires a clean worktree; output/release must be ignored",
+            ));
+        }
+    }
+    validate_package_evidence_mode(&root, &evidence, options.diagnostic)?;
+
+    if options.diagnostic {
+        println!(
+            "Desktop package diagnostic validator 已通过：evidence={}；未写入 formal receipt",
+            evidence_path.display()
+        );
+        return Ok(());
+    }
+
+    let out = resolve_root_relative(
+        &root,
+        &options
+            .out
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(DEFAULT_PACKAGE_RECEIPT_PATH)),
+    )?;
+    if out.parent() != evidence_path.parent() {
+        return Err(error(
+            "Desktop package receipt 输出必须与 evidence 位于同一目录",
+        ));
+    }
+    let receipt = serde_json::json!({
+        "schema_version": 1,
+        "stage": "stage09-release-proof-09E",
+        "run_id": string_field(&evidence, "run_id")?,
+        "start_sha": start_sha,
+        "git_revision": current_revision,
+        "base_revision": BASE_REVISION,
+        "worktree_clean": true,
+        "package": evidence,
+        "package_gate": "passed",
+    });
+    atomic_write_json(&out, &receipt)?;
+    println!(
+        "Desktop package proof receipt 已原子写入: {}",
+        out.display()
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+fn validate_package_evidence(root: &Path, evidence: &Value) -> ToolResult<()> {
+    validate_package_evidence_mode(root, evidence, false)
+}
+
+fn validate_package_evidence_mode(
+    root: &Path,
+    evidence: &Value,
+    allow_dirty_start: bool,
+) -> ToolResult<()> {
+    if u64_field(evidence, "schema_version")? != 1 {
+        return Err(error("Desktop package evidence schema_version 必须为 1"));
+    }
+    validate_package_run_id(string_field(evidence, "run_id")?)?;
+    validate_git_sha(string_field(evidence, "start_sha")?)?;
+    if !allow_dirty_start && !bool_field(evidence, "start_clean")? {
+        return Err(error("Desktop package evidence 必须来自 clean START_SHA"));
+    }
+
+    let extracted_root = absolute_evidence_path(evidence, "extracted_root")?;
+    reject_symlink_chain(&extracted_root)?;
+    if !extracted_root.starts_with("/tmp/") {
+        return Err(error(
+            "Desktop package extracted_root 必须位于 launcher-owned /tmp 路径",
+        ));
+    }
+    let extracted_metadata = fs::symlink_metadata(&extracted_root)?;
+    if !extracted_metadata.is_dir() {
+        return Err(error("Desktop package extracted_root 必须是 directory"));
+    }
+
+    let deb_path = absolute_evidence_path(evidence, "deb_path")?;
+    validate_package_file(&deb_path, "Desktop Deb")?;
+    verify_package_hash(&deb_path, evidence, "deb_sha256", "Desktop Deb")?;
+
+    let desktop_binary = absolute_evidence_path(evidence, "desktop_binary_path")?;
+    let sidecar = absolute_evidence_path(evidence, "sidecar_path")?;
+    let web_root = absolute_evidence_path(evidence, "web_root")?;
+    let web_manifest = absolute_evidence_path(evidence, "web_manifest_path")?;
+    let runtime_sha = string_field(evidence, "runtime_sha256")?;
+    let manifest_live_sha = string_field(evidence, "manifest_live_sha256")?;
+    for (path, label) in [
+        (&desktop_binary, "Desktop binary"),
+        (&sidecar, "Desktop sidecar"),
+        (&web_manifest, "bundled Web manifest"),
+    ] {
+        if !path.starts_with(&extracted_root) {
+            return Err(error(format!(
+                "{label} 必须来自 extracted package root: {}",
+                path.display()
+            )));
+        }
+        validate_package_file(path, label)?;
+    }
+    validate_package_resource_layout(
+        &extracted_root,
+        &desktop_binary,
+        &sidecar,
+        &web_root,
+        &web_manifest,
+    )?;
+    validate_package_resource_inventory(&extracted_root, &desktop_binary, &sidecar)?;
+    verify_package_hash(
+        &desktop_binary,
+        evidence,
+        "desktop_binary_sha256",
+        "Desktop binary",
+    )?;
+    verify_package_hash(&sidecar, evidence, "sidecar_sha256", "Desktop sidecar")?;
+    verify_package_hash(
+        &web_manifest,
+        evidence,
+        "web_manifest_sha256",
+        "bundled Web manifest",
+    )?;
+    validate_sha(runtime_sha)?;
+    validate_sha(manifest_live_sha)?;
+
+    let source_artifact = root.join(DEFAULT_ARTIFACT_PATH);
+    let source_artifact = lexical_absolute(&source_artifact)?;
+    let source = kanban_web_artifact::verify_directory(&source_artifact, env!("CARGO_PKG_VERSION"))
+        .map_err(|source| error(format!("source Web artifact 校验失败: {source}")))?;
+    let packaged = kanban_web_artifact::verify_directory(&web_root, env!("CARGO_PKG_VERSION"))
+        .map_err(|source| error(format!("packaged Web artifact 校验失败: {source}")))?;
+    if source.manifest_sha256() != packaged.manifest_sha256()
+        || source.manifest().build_id != packaged.manifest().build_id
+        || source.payloads().count() != packaged.payloads().count()
+    {
+        return Err(error(
+            "packaged Desktop Web artifact 未与 source Web snapshot 完全匹配",
+        ));
+    }
+    for source_payload in source.payloads() {
+        let packaged_payload = packaged.payload(source_payload.path()).ok_or_else(|| {
+            error(format!(
+                "packaged Web 缺少 payload: {}",
+                source_payload.path()
+            ))
+        })?;
+        if source_payload.descriptor() != packaged_payload.descriptor()
+            || source_payload.bytes() != packaged_payload.bytes()
+        {
+            return Err(error(format!(
+                "packaged Web payload 与 source 不一致: {}",
+                source_payload.path()
+            )));
+        }
+    }
+    if string_field(evidence, "web_build_id")? != packaged.manifest().build_id
+        || string_field(evidence, "runtime_web_build_id")? != packaged.manifest().build_id
+        || string_field(evidence, "manifest_build_id")? != packaged.manifest().build_id
+    {
+        return Err(error(
+            "Desktop package Web build ID 未与 verified manifest 对齐",
+        ));
+    }
+    if manifest_live_sha != string_field(evidence, "web_manifest_sha256")? {
+        return Err(error(
+            "live /app/manifest.json SHA 必须与 extracted packaged manifest 完全匹配",
+        ));
+    }
+    validate_package_payloads(evidence, &packaged)?;
+
+    validate_package_live_evidence(
+        evidence,
+        &desktop_binary,
+        &sidecar,
+        &packaged.manifest().build_id,
+        runtime_sha,
+        manifest_live_sha,
+    )?;
+    validate_package_rollback_evidence(evidence)?;
+    Ok(())
+}
+
+fn validate_package_payloads(
+    evidence: &Value,
+    packaged: &kanban_web_artifact::VerifiedWebArtifact,
+) -> ToolResult<()> {
+    let payloads = evidence
+        .get("payloads")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error("Desktop package evidence 缺少 payloads array"))?;
+    if payloads.len() != packaged.payloads().count() {
+        return Err(error("Desktop package payload evidence 数量不匹配"));
+    }
+    let mut seen = BTreeSet::new();
+    for payload in payloads {
+        let path = string_field(payload, "path")?;
+        if !seen.insert(path.to_owned()) {
+            return Err(error(format!("Desktop package payload 重复: {path}")));
+        }
+        let packaged_payload = packaged.payload(path).ok_or_else(|| {
+            error(format!(
+                "Desktop package payload 未在 manifest 中声明: {path}"
+            ))
+        })?;
+        if string_field(payload, "sha256")? != packaged_payload.descriptor().sha256
+            || u64_field(payload, "bytes")? != packaged_payload.descriptor().bytes
+        {
+            return Err(error(format!(
+                "Desktop package payload evidence 不匹配: {path}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_package_live_evidence(
+    evidence: &Value,
+    desktop_binary: &Path,
+    sidecar: &Path,
+    expected_build_id: &str,
+    expected_runtime_sha: &str,
+    expected_manifest_sha: &str,
+) -> ToolResult<()> {
+    let live = object_field(evidence, "live")?;
+    if string_field(live, "base_url")? != "http://127.0.0.1:8721"
+        || !bool_field(live, "health_checked")?
+        || !bool_field(live, "runtime_checked")?
+        || !bool_field(live, "manifest_checked")?
+    {
+        return Err(error(
+            "Desktop package live proof 必须覆盖 fixed host health/runtime/manifest 与 PID identity",
+        ));
+    }
+    if string_field(live, "runtime_web_build_id")? != expected_build_id
+        || string_field(live, "manifest_build_id")? != expected_build_id
+        || string_field(live, "runtime_sha256")? != expected_runtime_sha
+        || string_field(live, "manifest_sha256")? != expected_manifest_sha
+    {
+        return Err(error(
+            "Desktop package live runtime/manifest identity 未与 bundled Web manifest 对齐",
+        ));
+    }
+    validate_sha(string_field(live, "runtime_sha256")?)?;
+    validate_sha(string_field(live, "manifest_sha256")?)?;
+    let app_pid = u32_field(live, "app_pid")?;
+    let app_argv = string_array_field(live, "app_argv")?;
+    let app_identity = string_field(live, "app_identity")?;
+    if app_pid == 0 || app_identity.trim().is_empty() || app_argv.is_empty() {
+        return Err(error(
+            "Desktop package live proof 缺少 app PID identity/argv",
+        ));
+    }
+    validate_sha(string_field(live, "app_exe_sha256")?)?;
+    if string_field(live, "app_exe_sha256")? != string_field(evidence, "desktop_binary_sha256")?
+        || string_field(live, "app_exe_sha256")? != sha256_file(desktop_binary)?
+    {
+        return Err(error(
+            "Desktop app live exe SHA 未与 packaged binary 完全匹配",
+        ));
+    }
+    validate_package_process_evidence(
+        app_pid,
+        app_identity,
+        &app_argv,
+        desktop_binary,
+        string_field(live, "app_exe_sha256")?,
+        "Desktop app",
+    )?;
+    let sidecar_pids = live
+        .get("sidecar_pids")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error("Desktop package live proof 缺少 sidecar_pids"))?;
+    let sidecar_identities = live
+        .get("sidecar_identities")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error("Desktop package live proof 缺少 sidecar_identities"))?;
+    let sidecar_argv = live
+        .get("sidecar_argv")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error("Desktop package live proof 缺少 sidecar_argv"))?;
+    if sidecar_pids.is_empty()
+        || sidecar_pids.len() != sidecar_identities.len()
+        || sidecar_pids.len() != sidecar_argv.len()
+    {
+        return Err(error(
+            "Desktop package live proof 必须观察到 owned sidecar PID",
+        ));
+    }
+    validate_sha(string_field(live, "sidecar_exe_sha256")?)?;
+    if string_field(live, "sidecar_exe_sha256")? != string_field(evidence, "sidecar_sha256")?
+        || string_field(live, "sidecar_exe_sha256")? != sha256_file(sidecar)?
+    {
+        return Err(error(
+            "Desktop sidecar live exe SHA 未与 packaged sidecar 完全匹配",
+        ));
+    }
+    let mut sidecar_pid_values = BTreeSet::new();
+    for index in 0..sidecar_pids.len() {
+        let pid = sidecar_pids[index]
+            .as_u64()
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| error("Desktop sidecar PID 必须是 u32"))?;
+        let identity = sidecar_identities[index]
+            .as_str()
+            .ok_or_else(|| error("Desktop sidecar identity 必须是 string"))?;
+        let argv = sidecar_argv[index]
+            .as_array()
+            .ok_or_else(|| error("Desktop sidecar argv 必须是 array"))?
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| error("Desktop sidecar argv token 必须是 string"))
+            })
+            .collect::<ToolResult<Vec<_>>>()?;
+        if !sidecar_pid_values.insert(pid) {
+            return Err(error("Desktop sidecar PID evidence 重复"));
+        }
+        validate_package_process_evidence(
+            pid,
+            identity,
+            &argv,
+            sidecar,
+            string_field(live, "sidecar_exe_sha256")?,
+            "Desktop sidecar",
+        )?;
+    }
+    let port_owner_pids = live
+        .get("port_owner_pids")
+        .and_then(Value::as_array)
+        .ok_or_else(|| error("Desktop package live proof 缺少 port_owner_pids"))?
+        .iter()
+        .map(|value| {
+            value
+                .as_u64()
+                .and_then(|value| u32::try_from(value).ok())
+                .ok_or_else(|| error("port owner PID 必须是 u32"))
+        })
+        .collect::<ToolResult<Vec<_>>>()?;
+    validate_package_port_owners(&sidecar_pid_values, &port_owner_pids)?;
+    let health = curl_json("http://127.0.0.1:8721/health")?;
+    let health_data = health
+        .get("data")
+        .ok_or_else(|| error("Desktop package live host health 缺少 data"))?;
+    if health_data.get("ok").and_then(Value::as_bool) != Some(true)
+        || string_field(health_data, "db")? != "turso"
+        || string_field(health_data, "db_fingerprint")?
+            != string_field(live, "health_db_fingerprint")?
+        || string_field(health_data, "version")? != string_field(live, "health_version")?
+    {
+        return Err(error("Desktop package live host health.ok=false"));
+    }
+    let runtime = curl_json("http://127.0.0.1:8721/app/runtime.json")?;
+    let manifest = curl_json("http://127.0.0.1:8721/app/manifest.json")?;
+    if string_field(&runtime, "webBuildId")? != expected_build_id
+        || string_field(&manifest, "buildId")? != expected_build_id
+        || sha256_json_response("http://127.0.0.1:8721/app/runtime.json")? != expected_runtime_sha
+        || sha256_json_response("http://127.0.0.1:8721/app/manifest.json")? != expected_manifest_sha
+    {
+        return Err(error(
+            "Desktop package live runtime/manifest probe 与 evidence 不一致",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_package_process_evidence(
+    pid: u32,
+    expected_identity: &str,
+    expected_argv: &[String],
+    expected_executable: &Path,
+    expected_sha: &str,
+    label: &str,
+) -> ToolResult<()> {
+    if process_identity(pid)? != expected_identity {
+        return Err(error(format!("{label} /proc starttime identity 不匹配")));
+    }
+    if process_argv(pid)? != expected_argv {
+        return Err(error(format!("{label} /proc cmdline/argv 不匹配")));
+    }
+    let live_exe = fs::canonicalize(format!("/proc/{pid}/exe"))?;
+    let expected_executable = fs::canonicalize(expected_executable)?;
+    if live_exe != expected_executable {
+        return Err(error(format!(
+            "{label} /proc/exe 未指向 packaged executable: {} != {}",
+            live_exe.display(),
+            expected_executable.display()
+        )));
+    }
+    if sha256_process_exe(pid)? != expected_sha {
+        return Err(error(format!("{label} /proc/exe SHA 不匹配")));
+    }
+    Ok(())
+}
+
+fn validate_package_resource_layout(
+    extracted_root: &Path,
+    desktop_binary: &Path,
+    sidecar: &Path,
+    web_root: &Path,
+    web_manifest: &Path,
+) -> ToolResult<()> {
+    let expected_binary = extracted_root.join("usr/bin/kanban-desktop");
+    if desktop_binary != expected_binary {
+        return Err(error(format!(
+            "Desktop binary 必须精确位于 extracted_root/usr/bin/kanban-desktop: {}",
+            desktop_binary.display()
+        )));
+    }
+    if sidecar.file_name().and_then(|value| value.to_str()) != Some("kanban") {
+        return Err(error("Desktop sidecar 必须命名为 kanban"));
+    }
+    let resource_root = sidecar
+        .parent()
+        .ok_or_else(|| error("Desktop sidecar 缺少 resource root"))?;
+    if resource_root == extracted_root
+        || !resource_root.starts_with(extracted_root.join("usr"))
+        || !sidecar.starts_with(extracted_root)
+        || sidecar != resource_root.join("kanban")
+    {
+        return Err(error(
+            "Desktop sidecar 必须是 extracted package resource root 的直接子项",
+        ));
+    }
+    let expected_web_root = resource_root.join("web");
+    let expected_manifest = expected_web_root.join("manifest.json");
+    if web_root != expected_web_root || web_manifest != expected_manifest {
+        return Err(error(
+            "Desktop Web root 必须是 sidecar resource root 的直接 web 子目录",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_package_resource_inventory(
+    extracted_root: &Path,
+    desktop_binary: &Path,
+    sidecar: &Path,
+) -> ToolResult<()> {
+    let mut binaries = Vec::new();
+    let mut sidecars = Vec::new();
+    collect_named_regular_files(extracted_root, "kanban-desktop", &mut binaries)?;
+    collect_named_regular_files(extracted_root, "kanban", &mut sidecars)?;
+    if binaries != [desktop_binary.to_owned()] {
+        return Err(error(format!(
+            "Desktop package 必须精确包含一个 kanban-desktop binary: {binaries:?}"
+        )));
+    }
+    if sidecars != [sidecar.to_owned()] {
+        return Err(error(format!(
+            "Desktop package 必须精确包含一个 kanban sidecar: {sidecars:?}"
+        )));
+    }
+    Ok(())
+}
+
+fn collect_named_regular_files(
+    path: &Path,
+    file_name: &str,
+    found: &mut Vec<PathBuf>,
+) -> ToolResult<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() {
+        return Err(error(format!(
+            "Desktop extracted package tree 禁止 symlink: {}",
+            path.display()
+        )));
+    }
+    if metadata.is_file() {
+        if path.file_name().and_then(|value| value.to_str()) == Some(file_name) {
+            found.push(path.to_owned());
+        }
+        return Ok(());
+    }
+    if !metadata.is_dir() {
+        return Err(error(format!(
+            "Desktop extracted package tree 只能包含 regular file/directory: {}",
+            path.display()
+        )));
+    }
+    for entry in fs::read_dir(path)? {
+        collect_named_regular_files(&entry?.path(), file_name, found)?;
+    }
+    Ok(())
+}
+
+fn validate_package_port_owners(
+    sidecar_pids: &BTreeSet<u32>,
+    port_owner_pids: &[u32],
+) -> ToolResult<()> {
+    let observed = port_owner_pids.iter().copied().collect::<BTreeSet<_>>();
+    if observed.len() != port_owner_pids.len() || &observed != sidecar_pids {
+        return Err(error(format!(
+            "fixed 8721 listener owners 必须精确匹配 sidecar PID set: sidecars={sidecar_pids:?} owners={observed:?}"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_package_rollback_evidence(evidence: &Value) -> ToolResult<()> {
+    let rollback = object_field(evidence, "rollback")?;
+    for key in [
+        "failure_observed",
+        "failure_error_observed",
+        "sidecar_spawn_zero",
+        "unchanged",
+        "wrapper_reaped",
+        "processes_reaped",
+        "port_free_before",
+        "port_free_after",
+    ] {
+        if !bool_field(rollback, key)? {
+            return Err(error(format!(
+                "Desktop package rollback proof 未通过: {key}"
+            )));
+        }
+    }
+    let db_path = absolute_evidence_path(rollback, "db_path")?;
+    let snapshot_before = absolute_evidence_path(rollback, "db_snapshot_before_path")?;
+    let snapshot_after = absolute_evidence_path(rollback, "db_snapshot_after_path")?;
+    validate_package_file(&db_path, "rollback canonical DB")?;
+    validate_package_file(&snapshot_before, "rollback pre-failure DB snapshot")?;
+    validate_package_file(&snapshot_after, "rollback post-failure DB snapshot")?;
+    if !string_field(rollback, "db_fingerprint_before")?.starts_with("turso:")
+        || !string_field(rollback, "db_fingerprint_after")?.starts_with("turso:")
+    {
+        return Err(error(
+            "rollback canonical DB fingerprint 必须来自 typed Turso health",
+        ));
+    }
+    if string_field(rollback, "db_identity_before")? != string_field(rollback, "db_identity_after")?
+        || string_field(rollback, "seed_before")? != string_field(rollback, "seed_after")?
+        || string_field(rollback, "db_sha256_before")? != string_field(rollback, "db_sha256_after")?
+    {
+        return Err(error(
+            "Desktop package rollback failure path changed canonical DB identity/content/seed",
+        ));
+    }
+    let before_sha = string_field(rollback, "db_sha256_before")?;
+    let after_sha = string_field(rollback, "db_sha256_after")?;
+    validate_sha(before_sha)?;
+    validate_sha(after_sha)?;
+    if before_sha != sha256_file(&snapshot_before)? || after_sha != sha256_file(&snapshot_after)? {
+        return Err(error(
+            "rollback DB historical snapshot SHA 与 evidence 不一致",
+        ));
+    }
+    if before_sha != after_sha {
+        return Err(error(
+            "rollback DB pre/post-failure snapshots content SHA 不一致",
+        ));
+    }
+    Ok(())
+}
+
+fn absolute_evidence_path(value: &Value, key: &str) -> ToolResult<PathBuf> {
+    lexical_absolute(Path::new(string_field(value, key)?))
+}
+
+fn validate_package_file(path: &Path, label: &str) -> ToolResult<()> {
+    reject_symlink_chain(path)?;
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|source| error(format!("{label} 不可读取 {}: {source}", path.display())))?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err(error(format!(
+            "{label} 必须是 regular file: {}",
+            path.display()
+        )));
+    }
+    #[cfg(unix)]
+    if std::os::unix::fs::MetadataExt::nlink(&metadata) != 1 {
+        return Err(error(format!("{label} 禁止 hardlink: {}", path.display())));
+    }
+    Ok(())
+}
+
+fn verify_package_hash(path: &Path, evidence: &Value, key: &str, label: &str) -> ToolResult<()> {
+    let expected = string_field(evidence, key)?;
+    validate_sha(expected)?;
+    let actual = sha256_file(path)?;
+    if expected != actual {
+        return Err(error(format!(
+            "{label} SHA 不匹配: expected={expected} actual={actual}"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_package_run_id(value: &str) -> ToolResult<()> {
+    let nonce = value.strip_prefix("09e-").unwrap_or_default();
+    if nonce.len() != 32 || !nonce.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(error(
+            "Desktop package run_id 必须是 09e- 加 16-byte hex nonce",
+        ));
+    }
+    Ok(())
 }
 
 fn check(root: &Path) -> ToolResult<()> {
@@ -1063,6 +1742,10 @@ fn collect_evidence_hashes(root: &Path) -> ToolResult<BTreeMap<String, String>> 
 }
 
 fn curl_json(url: &str) -> ToolResult<Value> {
+    Ok(serde_json::from_slice(&curl_bytes(url)?)?)
+}
+
+fn curl_bytes(url: &str) -> ToolResult<Vec<u8>> {
     let output = Command::new("curl")
         .args(["--fail", "--silent", "--show-error", "--max-time", "5", url])
         .output()?;
@@ -1072,7 +1755,11 @@ fn curl_json(url: &str) -> ToolResult<Value> {
             String::from_utf8_lossy(&output.stderr)
         )));
     }
-    Ok(serde_json::from_slice(&output.stdout)?)
+    Ok(output.stdout)
+}
+
+fn sha256_json_response(url: &str) -> ToolResult<String> {
+    Ok(format!("sha256:{:x}", Sha256::digest(curl_bytes(url)?)))
 }
 
 #[derive(Debug, Default)]
@@ -1811,5 +2498,212 @@ mod tests {
         std::os::unix::fs::symlink(&target, &output).expect("link");
         assert!(atomic_write_json(&output, &serde_json::json!({"status":"ready"})).is_err());
         fs::remove_dir_all(&root).expect("cleanup");
+    }
+
+    #[test]
+    fn package_evidence_rejects_dirty_start_before_live_package_checks() {
+        let root = env::temp_dir().join(format!("release-package-shape-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("test root");
+        let evidence = serde_json::json!({
+            "schema_version": 1,
+            "run_id": "09e-00000000000000000000000000000000",
+            "start_sha": "0000000000000000000000000000000000000000",
+            "start_clean": false,
+            "deb_path": root.join("kanban.deb"),
+            "deb_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "desktop_binary_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "sidecar_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "web_manifest_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "web_runtime_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "web_build_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "runtime_web_build_id": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "live": {
+                "base_url": "http://127.0.0.1:8721",
+                "app_pid": 1,
+                "app_identity": "1:1",
+                "app_exe_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "app_argv": ["kanban-desktop"],
+                "health_checked": true,
+                "runtime_checked": true,
+                "manifest_checked": true,
+                "host_pid_identity_checked": true,
+                "sidecar_pid_identity_checked": true
+            },
+            "cleanup": {
+                "app_reaped": true,
+                "sidecars_reaped": true,
+                "host_closed": true,
+                "port_free": true
+            },
+            "rollback": {
+                "failure_observed": true,
+                "db_path": root.join("rollback.db"),
+                "db_identity_before": "1:1",
+                "db_identity_after": "1:1",
+                "db_sha256_before": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "db_sha256_after": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "seed_before": "seed",
+                "seed_after": "seed",
+                "unchanged": true,
+                "processes_reaped": true,
+                "port_free": true
+            }
+        });
+        let error = validate_package_evidence(&root, &evidence)
+            .expect_err("dirty package evidence must be rejected before live checks");
+        assert!(error.to_string().contains("clean START_SHA"));
+        fs::remove_dir_all(&root).expect("cleanup");
+    }
+
+    #[test]
+    fn package_process_evidence_binds_live_proc_identity_path_argv_and_hash() {
+        let pid = std::process::id();
+        let executable = fs::canonicalize(format!("/proc/{pid}/exe")).expect("test executable");
+        let identity = process_identity(pid).expect("test identity");
+        let argv = process_argv(pid).expect("test argv");
+        let sha = sha256_process_exe(pid).expect("test executable hash");
+        validate_package_process_evidence(pid, &identity, &argv, &executable, &sha, "test")
+            .expect("current test process should satisfy its own evidence");
+
+        assert!(
+            validate_package_process_evidence(pid, "0:0", &argv, &executable, &sha, "test",)
+                .is_err()
+        );
+        let mut forged_argv = argv;
+        forged_argv.push("--forged".to_owned());
+        assert!(
+            validate_package_process_evidence(
+                pid,
+                &identity,
+                &forged_argv,
+                &executable,
+                &sha,
+                "test",
+            )
+            .is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn package_rollback_evidence_binds_db_identity_content_snapshots_and_seed() {
+        let root = env::temp_dir().join(format!("release-package-rollback-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("test root");
+        let db = root.join("canonical.db");
+        fs::write(&db, b"seed-db").expect("rollback DB fixture");
+        let snapshot_before = root.join("canonical-before.snapshot");
+        let snapshot_after = root.join("canonical-after.snapshot");
+        fs::copy(&db, &snapshot_before).expect("pre-failure DB snapshot");
+        fs::copy(&db, &snapshot_after).expect("post-failure DB snapshot");
+        let identity = db_identity(&db).expect("DB identity");
+        let digest = sha256_file(&db).expect("DB digest");
+        let evidence = serde_json::json!({
+            "failure_observed": true,
+            "failure_exit_nonzero": true,
+            "failure_error_observed": true,
+            "sidecar_spawn_zero": true,
+            "db_path": db,
+            "db_snapshot_before_path": snapshot_before,
+            "db_snapshot_after_path": snapshot_after,
+            "db_identity_before": identity,
+            "db_identity_after": identity,
+            "db_sha256_before": digest,
+            "db_sha256_after": digest,
+            "db_fingerprint_before": "turso:seed-fingerprint",
+            "db_fingerprint_after": "turso:seed-fingerprint",
+            "seed_before": "seed-task",
+            "seed_after": "seed-task",
+            "unchanged": true,
+            "wrapper_reaped": true,
+            "processes_reaped": true,
+            "port_free_before": true,
+            "port_free_after": true
+        });
+        let wrapper = serde_json::json!({"rollback": evidence});
+        validate_package_rollback_evidence(&wrapper).expect("valid rollback proof");
+
+        let mut forged = wrapper;
+        forged["rollback"]["db_fingerprint_after"] =
+            Value::String("turso:readback-metadata-refresh".to_owned());
+        validate_package_rollback_evidence(&forged)
+            .expect("typed health fingerprint may change when readback host reopens DB");
+        forged["rollback"]["seed_after"] = Value::String("forged".to_owned());
+        assert!(validate_package_rollback_evidence(&forged).is_err());
+        forged["rollback"]["seed_after"] = Value::String("seed-task".to_owned());
+        forged["rollback"]["failure_error_observed"] = Value::Bool(false);
+        assert!(validate_package_rollback_evidence(&forged).is_err());
+        forged["rollback"]["failure_error_observed"] = Value::Bool(true);
+        fs::write(root.join("canonical-after.snapshot"), b"forged-db").expect("tamper snapshot");
+        assert!(validate_package_rollback_evidence(&forged).is_err());
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn package_resource_layout_rejects_path_tampering() {
+        let root = Path::new("/tmp/package-extracted");
+        let sidecar = root.join("usr/lib/kanban-tool/kanban");
+        let web = root.join("usr/lib/kanban-tool/web");
+        validate_package_resource_layout(
+            root,
+            &root.join("usr/bin/kanban-desktop"),
+            &sidecar,
+            &web,
+            &web.join("manifest.json"),
+        )
+        .expect("canonical extracted package layout should pass before filesystem checks");
+        assert!(
+            validate_package_resource_layout(
+                root,
+                &root.join("usr/lib/kanban-desktop"),
+                &sidecar,
+                &web,
+                &web.join("manifest.json"),
+            )
+            .is_err()
+        );
+        assert!(
+            validate_package_resource_layout(
+                root,
+                &root.join("usr/bin/kanban-desktop"),
+                &root.join("usr/lib/kanban-tool/nested/kanban"),
+                &web,
+                &web.join("manifest.json"),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn package_resource_inventory_requires_exact_binary_and_sidecar() {
+        let root = env::temp_dir().join(format!(
+            "release-package-resource-inventory-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let binary = root.join("usr/bin/kanban-desktop");
+        let sidecar = root.join("usr/lib/kanban-tool/kanban");
+        fs::create_dir_all(binary.parent().expect("binary parent")).expect("binary tree");
+        fs::create_dir_all(sidecar.parent().expect("sidecar parent")).expect("sidecar tree");
+        fs::write(&binary, b"desktop").expect("binary fixture");
+        fs::write(&sidecar, b"sidecar").expect("sidecar fixture");
+        validate_package_resource_inventory(&root, &binary, &sidecar)
+            .expect("canonical package inventory should pass");
+
+        let extra = root.join("usr/lib/other/kanban");
+        fs::create_dir_all(extra.parent().expect("extra parent")).expect("extra tree");
+        fs::write(&extra, b"extra").expect("extra sidecar");
+        assert!(validate_package_resource_inventory(&root, &binary, &sidecar).is_err());
+        fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    #[test]
+    fn package_port_owners_must_exactly_match_observed_sidecars() {
+        let sidecars = BTreeSet::from([11_u32, 12_u32]);
+        validate_package_port_owners(&sidecars, &[11, 12]).expect("exact owner set");
+        assert!(validate_package_port_owners(&sidecars, &[11, 12, 99]).is_err());
+        assert!(validate_package_port_owners(&sidecars, &[11, 11]).is_err());
+        assert!(validate_package_port_owners(&sidecars, &[11]).is_err());
     }
 }

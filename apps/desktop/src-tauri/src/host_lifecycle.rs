@@ -2067,6 +2067,13 @@ mod tests {
             "kanban-desktop-startup-exit-sidecar-{}-{id}",
             std::process::id(),
         ));
+        for marker in [&leader_marker, &descendant_marker, &go_marker] {
+            match std::fs::remove_file(marker) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => panic!("remove stale startup marker {}: {error}", marker.display()),
+            }
+        }
         let endpoint = TcpListener::bind((DEFAULT_HOST, 0))
             .expect("startup fixture endpoint")
             .local_addr()

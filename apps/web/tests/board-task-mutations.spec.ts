@@ -337,9 +337,7 @@ test.describe("board task mutation DOM behavior", () => {
     await wireBoard(page, { secondaryBoard: { boardId: "b_other", boardSlug: "other", status: "todo" } })
     let releaseCreate: (() => void) | null = null
     let createStartedResolve!: () => void
-    let createSettledResolve!: () => void
     const createStartedPromise = new Promise<void>((resolve) => { createStartedResolve = resolve })
-    const createSettledPromise = new Promise<void>((resolve) => { createSettledResolve = resolve })
     const stepBodies: Array<Record<string, unknown>> = []
     await page.route("**/api/v1/boards/default/tasks", async (route) => {
       if (route.request().method() !== "POST") {
@@ -350,7 +348,6 @@ test.describe("board task mutation DOM behavior", () => {
       await new Promise<void>((resolve) => { releaseCreate = resolve })
       const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("todo", String(body.title ?? "Created task")) }) })
-      createSettledResolve()
     })
     await page.route("**/api/v1/tasks/*/steps", async (route) => {
       stepBodies.push(JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>)
@@ -360,15 +357,22 @@ test.describe("board task mutation DOM behavior", () => {
     await page.getByTestId("task-create").click()
     await page.getByTestId("task-title-input").fill("Deferred create")
     await page.getByTestId("first-required-step-input").fill("Do not write after switch")
+    const createResponse = page.waitForResponse((response) => response.request().method() === "POST" && response.url().includes("/api/v1/boards/default/tasks") && response.status() === 200)
     await page.getByRole("button", { name: "创建" }).click()
     await createStartedPromise
 
-    await page.goto("/app/boards/other/board", { waitUntil: "domcontentloaded" })
+    await page.evaluate(() => {
+      window.history.pushState({}, "", "/app/boards/other/board")
+      window.dispatchEvent(new PopStateEvent("popstate"))
+    })
     await expect(page.getByText("b_other · other")).toBeVisible()
     await expect(page).toHaveURL(/\/app\/boards\/other\/board$/)
     if (releaseCreate === null) throw new Error("create request did not expose a release gate")
     releaseCreate()
-    await createSettledPromise
+    await createResponse
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      queueMicrotask(() => requestAnimationFrame(() => resolve()))
+    }))
     expect(stepBodies).toHaveLength(0)
   })
 
@@ -496,6 +500,10 @@ test.describe("board task mutation DOM behavior", () => {
 
   test("retains a created task id when its first required step fails and retries only the step", async ({ page }) => {
     await wireBoard(page)
+    let createdTaskId: string | null = null
+    let stepSucceeded = false
+    let postStepTodoReads = 0
+    let postStepTodoResponsesWithCreatedTask = 0
     const createBodies: Array<Record<string, unknown>> = []
     const stepBodies: Array<Record<string, unknown>> = []
     await page.route("**/api/v1/boards/default/tasks", async (route) => {
@@ -505,7 +513,25 @@ test.describe("board task mutation DOM behavior", () => {
       }
       const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>
       createBodies.push(body)
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("todo", String(body.title ?? "Created task")) }) })
+      createdTaskId = typeof body.task_id === "string" ? body.task_id : null
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: task("todo", String(body.title ?? "Created task"), "b_default", "default", createdTaskId ?? "t_created") }) })
+    })
+    await page.route(/\/api\/v1\/boards\/default\/tasks\/by-status(?:\?.*)?$/, async (route) => {
+      const url = new URL(route.request().url())
+      if (!stepSucceeded || url.searchParams.get("status") !== "todo" || createdTaskId === null) {
+        await route.fallback()
+        return
+      }
+      postStepTodoReads += 1
+      const projectedTask = task("todo", "Created with step", "b_default", "default", createdTaskId)
+      projectedTask.execution_plan_state = "planned"
+      projectedTask.required_step_count = 1
+      postStepTodoResponsesWithCreatedTask += projectedTask.id === createdTaskId ? 1 : 0
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { statuses: [{ status: "todo", tasks: [projectedTask], page: { limit: 1000, offset: 0, total: 1 } }] }, meta: { limit: 1000, offset: 0 } }),
+      })
     })
     await page.route("**/api/v1/tasks/*/steps", async (route) => {
       const body = JSON.parse(route.request().postData() ?? "{}") as Record<string, unknown>
@@ -514,6 +540,7 @@ test.describe("board task mutation DOM behavior", () => {
         await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "internal", message: "SECRET step detail" } }) })
         return
       }
+      stepSucceeded = true
       const pathSegments = new URL(route.request().url()).pathname.split("/")
       const taskId = pathSegments[pathSegments.length - 2]
       await route.fulfill({
@@ -551,6 +578,11 @@ test.describe("board task mutation DOM behavior", () => {
     expect(stepBodies[0]?.title).toBe("Verify output")
     expect(stepBodies[1]?.title).toBe("Verify output")
     expect(stepBodies[1]?.idempotency_key).toBe(stepBodies[0]?.idempotency_key)
+    await expect.poll(() => postStepTodoReads).toBeGreaterThan(0)
+    expect(postStepTodoResponsesWithCreatedTask).toBeGreaterThan(0)
+    const createdCard = page.getByTestId("board-task").filter({ hasText: "Created with step" })
+    await expect(createdCard).toContainText("计划：已规划")
+    await expect(createdCard).toContainText("必需步骤：0 / 1")
   })
 
   test("rejects external text/plain drops and performs keyboard movement through the action path", async ({ page }) => {

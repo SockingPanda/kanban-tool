@@ -31,8 +31,8 @@ export interface BoardTaskMutationCommitted {
 }
 
 export interface BoardTaskCanonicalReloadOptions {
-  /** Distinguish an initial conflict reconcile from a stale retry. */
-  readonly reason?: "initial" | "retry"
+  /** Distinguish a conflict reconcile, stale retry, or post-step reconcile. */
+  readonly reason?: "initial" | "retry" | "step"
   /** Preserve transition-specific invalidation when retrying a reload. */
   readonly mutationKind?: BoardTaskMutationCommitted["kind"]
 }

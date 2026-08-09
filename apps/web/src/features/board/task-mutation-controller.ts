@@ -17,6 +17,7 @@ import {
   transitionForTaskTarget,
   transitionForTarget,
   updateTaskOptimistically,
+  type BoardTaskCanonicalReloadOptions,
   type BoardTaskMutationCommitted,
   type BoardTaskMutationSurface,
   type BoardTaskTransitionOption,
@@ -285,11 +286,15 @@ export function useBoardTaskMutationController(
     if (trigger !== null) queueMicrotask(() => trigger.focus())
   }
 
-  const reconcileAfterMutation = async (mutationKind?: BoardTaskMutationCommitted["kind"], generation = mutationGenerationRef.current): Promise<boolean> => {
+  const reconcileAfterMutation = async (
+    mutationKind?: BoardTaskMutationCommitted["kind"],
+    generation = mutationGenerationRef.current,
+    reason?: BoardTaskCanonicalReloadOptions["reason"],
+  ): Promise<boolean> => {
     try {
-      const canonical = mutationKind === undefined
+      const canonical = mutationKind === undefined && reason === undefined
         ? await reloadCanonical()
-        : (await surface?.onCanonicalReload?.({ reason: "initial", mutationKind })) ?? null
+        : (await surface?.onCanonicalReload?.({ reason: reason ?? "initial", mutationKind })) ?? null
       adoptCanonicalModel(canonical, generation)
       return true
     } catch {
@@ -382,7 +387,9 @@ export function useBoardTaskMutationController(
       return
     }
     if (isCurrentMutation(generation)) {
-      const reloaded = await reconcileAfterMutation(undefined, generation)
+      const reloaded = attempt.firstStepTitle.trim().length > 0
+        ? await reconcileAfterMutation("create", generation, "step")
+        : await reconcileAfterMutation(undefined, generation)
       if (!isCurrentMutation(generation)) return
       if (reloaded) {
         setRetryIntent(null)

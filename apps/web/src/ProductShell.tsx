@@ -15,6 +15,7 @@ import { createTranslator, type MessageKey } from "./lib/i18n"
 import { readHealth, type HealthReport } from "./lib/api/health-read-model"
 import { HealthPage } from "./features/health/HealthPage"
 import { presentHealthError } from "./features/health/health-error"
+import { isCurrentHealthRequest } from "./features/health/health-request"
 import styles from "./shell.module.css"
 
 export type ShellBoundary = "ready" | "loading" | "error" | "offline"
@@ -286,11 +287,12 @@ function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
     setHealthPending(true)
     void readHealth({ runtime, signal: controller.signal })
       .then((report) => {
+        if (!isCurrentHealthRequest(controller, healthControllerRef.current)) return
         setHealth(report)
         setHealthError(null)
       })
       .catch((error: unknown) => {
-        if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return
+        if (!isCurrentHealthRequest(controller, healthControllerRef.current) || (error instanceof Error && error.name === "AbortError")) return
         setHealthError(error)
       })
       .finally(() => {

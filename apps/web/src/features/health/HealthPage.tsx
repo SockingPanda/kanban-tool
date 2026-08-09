@@ -6,6 +6,7 @@ import { createTranslator } from "../../lib/i18n"
 import { usePreferences } from "../../lib/use-preferences"
 import { presentHealthError } from "./health-error"
 import { healthMetricTone } from "./health-metrics"
+import { isCurrentHealthRequest } from "./health-request"
 import styles from "./health-page.module.css"
 
 export type HealthPageProps = {
@@ -39,9 +40,10 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
     setPending(true)
     try {
       const report = await reader(controller.signal)
+      if (!isCurrentHealthRequest(controller, requestControllerRef.current)) return
       setState({ kind: "ready", report })
     } catch (error: unknown) {
-      if (controller.signal.aborted || (error instanceof Error && error.name === "AbortError")) return
+      if (!isCurrentHealthRequest(controller, requestControllerRef.current) || (error instanceof Error && error.name === "AbortError")) return
       setState((previous) => previous.kind === "ready"
         ? { kind: "ready", report: previous.report, staleError: error }
         : { kind: "error", error })
@@ -87,7 +89,9 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
       {state.kind === "error" ? (
         <div className={styles.error} role="alert" data-testid="health-error">
           <HealthErrorContent error={state.error} t={t} />
-          <button type="button" className={styles.retry} onClick={refresh}>{t("retry")}</button>
+          <button type="button" className={styles.retry} disabled={pending} onClick={refresh} data-testid="health-error-retry">
+            {pending ? t("loading") : t("retry")}
+          </button>
         </div>
       ) : null}
 

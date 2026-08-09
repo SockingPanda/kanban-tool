@@ -3,21 +3,19 @@
 ## 1. 作用、范围与来源
 
 本文件是 browser-first Astryx Web UI 重写的 active migration ledger。它以现有
-`apps/desktop` 的**用户实际可见 rendered surface** 为范围，不把 `KanbanApi` 上存在但当前没有
+`apps/web` 的**用户实际可见 rendered surface** 为范围，不把 `KanbanApi` 上存在但当前没有
 UI 入口的 typed operation 自动扩成产品范围。目标是由 `kanban serve` 同源托管 `/app/`，让 Browser
 和 Tauri 消费同一 Web artifact；现有功能语义、状态机、错误语义和确认边界保持不变，视觉采用
 Astryx baseline。
 
 事实来源：
 
-- Shell/状态编排：`apps/desktop/src/App.tsx`、`apps/desktop/src/app/AppShell.tsx`、
-  `apps/desktop/src/app/useRuntimeConfigState.ts`、`useTaskCollectionState.ts`、
-  `useSelectedTaskDetailState.ts`、`useTaskMutations.ts`。
-- 页面与交互：`apps/desktop/src/features/**` 及其同名测试。
-- 当前 typed HTTP 边界：`apps/desktop/src/lib/api.ts`、`apps/desktop/src/lib/api/**`；最终 wire
+- Shell/状态编排：`apps/web/src/App.tsx`、`apps/web/src/ProductShell.tsx`、
+  `apps/web/src/lib/runtime.ts`、`apps/web/src/lib/router.ts`、`apps/web/src/features/**`。
+- 页面与交互：`apps/web/src/features/**` 及其同名测试。
+- 当前 typed HTTP 边界：`apps/web/src/lib/api/**`；最终 wire
   contract 由 `kanban-protocol` 及其生成 artifact 持有。
-- 事件缓存/失效：`apps/desktop/src/features/events/event-invalidation.ts`、
-  `event-polling.ts`、`event-cache.ts`。
+- 事件缓存/失效：`apps/web/src/features/**` 与 `apps/web/src/lib/api/events-read-model.ts`。
 
 当前 URL 基线为 **none**：没有 router/history；view、selected task、board、filter、pagination
 均为 React state。目标 URL 是 `/app/`、`/app/boards/:boardSlug/{board,list,map,runs,events,signals,ontology,health,maintenance}`、

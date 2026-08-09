@@ -5,12 +5,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TAURI_CONF="$ROOT/apps/desktop/src-tauri/tauri.conf.json"
 DESKTOP_MANIFEST="$ROOT/apps/desktop/src-tauri/Cargo.toml"
 DESKTOP_CONFIG="$ROOT/apps/desktop/src-tauri/src/desktop_config.rs"
+DESKTOP_PACKAGE="$ROOT/apps/desktop/package.json"
+ROOT_PACKAGE="$ROOT/package.json"
 JUSTFILE="$ROOT/justfile"
 GITIGNORE="$ROOT/.gitignore"
 PACKAGE_LAYOUT_SCRIPT="$ROOT/scripts/test-desktop-package-layout.sh"
 SIDECAR_PREP_SCRIPT="$ROOT/scripts/prepare-desktop-sidecar.sh"
 
-for path in "$TAURI_CONF" "$DESKTOP_MANIFEST" "$DESKTOP_CONFIG" "$JUSTFILE" "$GITIGNORE" "$PACKAGE_LAYOUT_SCRIPT" "$SIDECAR_PREP_SCRIPT"; do
+for path in "$TAURI_CONF" "$DESKTOP_MANIFEST" "$DESKTOP_CONFIG" "$DESKTOP_PACKAGE" "$ROOT_PACKAGE" "$JUSTFILE" "$GITIGNORE" "$PACKAGE_LAYOUT_SCRIPT" "$SIDECAR_PREP_SCRIPT"; do
   [[ -f "$path" ]] || { echo "error: missing expected file: $path" >&2; exit 1; }
 done
 
@@ -34,6 +36,39 @@ jq -e '
   and .bundle.resources["bin/kanban"] == "kanban"
 ' "$TAURI_CONF" >/dev/null || {
   echo "error: Tauri config must use static bootstrap in dev/package and map Web/kanban resources" >&2
+  exit 1
+}
+
+csp="$(jq -r '.app.security.csp // ""' "$TAURI_CONF")"
+for forbidden in "unsafe-inline" "unsafe-eval"; do
+  if [[ "$csp" == *"$forbidden"* ]]; then
+    echo "error: Desktop CSP must not permit $forbidden" >&2
+    exit 1
+  fi
+done
+for required_csp in "base-uri 'none'" "object-src 'none'" "frame-ancestors 'none'" "form-action 'none'" "script-src 'self'" "connect-src 'self'"; do
+  if [[ "$csp" != *"$required_csp"* ]]; then
+    echo "error: Desktop CSP is missing required directive: $required_csp" >&2
+    exit 1
+  fi
+done
+
+[[ ! -d "$ROOT/apps/desktop/src" ]] || {
+  echo "error: retired Desktop React source tree remains" >&2
+  exit 1
+}
+
+jq -e '
+  (.scripts | keys) == ["tauri"]
+  and (.devDependencies | keys) == ["@tauri-apps/cli"]
+  and ((.dependencies // {}) | length) == 0
+' "$DESKTOP_PACKAGE" >/dev/null || {
+  echo "error: Desktop package must be Tauri-only" >&2
+  exit 1
+}
+
+jq -e '(.scripts["desktop:typecheck"]? // null) == null and (.scripts["desktop:test"]? // null) == null and .scripts["desktop:build"] == "just desktop-package"' "$ROOT_PACKAGE" >/dev/null || {
+  echo "error: root package scripts must expose only the Tauri desktop package build" >&2
   exit 1
 }
 
@@ -63,7 +98,7 @@ grep -Fxq 'apps/desktop/src-tauri/bin/kanban' "$GITIGNORE" || {
 }
 
 desktop_check_block="$(sed -n '/^desktop-check:/,/^desktop-build:/p' "$JUSTFILE")"
-for required in 'just web-build' 'just web-artifact-check' 'cargo build --locked -p kanban-cli --release' 'scripts/prepare-desktop-sidecar.sh'; do
+for required in 'just web-build' 'just web-artifact-check' 'cargo build --locked -p kanban-cli --release' 'scripts/prepare-desktop-sidecar.sh' 'cargo check --locked -p kanban-desktop --tests'; do
   if ! grep -Fq -- "$required" <<<"$desktop_check_block"; then
     echo "error: desktop-check is missing prerequisite: $required" >&2
     exit 1

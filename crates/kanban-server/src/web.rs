@@ -132,7 +132,7 @@ impl HostOriginPolicy {
         if matches_loopback_host(host) && port == Some(self.port) {
             return scheme == "http";
         }
-        scheme == "http" && matches_loopback_host(host) && matches!(port, Some(1420 | 1421))
+        scheme == "http" && matches_loopback_host(host) && port == Some(1421)
     }
 }
 
@@ -447,8 +447,6 @@ async fn enforce_host_origin(
 fn production_cors_layer(policy: &HostOriginPolicy) -> tower_http::cors::CorsLayer {
     use tower_http::cors::{AllowOrigin, CorsLayer};
     let mut origins = vec![
-        HeaderValue::from_static("http://127.0.0.1:1420"),
-        HeaderValue::from_static("http://localhost:1420"),
         HeaderValue::from_static("http://127.0.0.1:1421"),
         HeaderValue::from_static("http://localhost:1421"),
         HeaderValue::from_static("http://tauri.localhost"),
@@ -772,7 +770,7 @@ mod tests {
         let policy = HostOriginPolicy::for_listener(SocketAddr::from(([127, 0, 0, 1], 9988)));
         assert!(policy.accepts_host("[::1]:9988"));
         assert!(policy.accepts_origin("http://[::1]:9988"));
-        assert!(!policy.accepts_origin("https://localhost:1420"));
+        assert!(!policy.accepts_origin("https://localhost:1421"));
         assert!(!policy.accepts_host("127.0.0.1:9987"));
     }
 }

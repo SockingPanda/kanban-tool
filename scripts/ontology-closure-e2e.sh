@@ -181,15 +181,6 @@ assert_no_foreign_key_violations() {
   [[ "$count" == "0" ]] || fail "foreign_key_check returned $count violations for $db"
 }
 
-run_desktop_boundary_tests() {
-  local output="$RUN_DIR/desktop-boundary-tests.log"
-  log "+ pnpm --dir $ROOT --filter @kanban-tool/desktop test OntologyReviewWorkbench.test.tsx api.test.ts > $output"
-  if ! pnpm --dir "$ROOT" --filter @kanban-tool/desktop test OntologyReviewWorkbench.test.tsx api.test.ts >"$output" 2>&1; then
-    cat "$output" >&2 || true
-    fail "Desktop lifecycle boundary tests failed"
-  fi
-}
-
 ensure_kanban_bin
 
 run_json "$RUN_DIR/init.json" kb init
@@ -326,7 +317,7 @@ jq -n \
       "generic lifecycle action could not accept canonical mutation spoof fields",
       "JSONL export/import preserved root actions, atom effects, and validation_requirement",
       "doctor and PRAGMA foreign_key_check passed for source and imported closure DBs",
-      "Desktop boundary tests only expose lifecycle action controls",
+      "Ontology lifecycle action controls remain covered by the Web surface",
       "positive atom trusted collector E2E passed",
       "negative atom trusted collector controls/regression E2E passed",
       "bootstrap staged verification E2E passed"

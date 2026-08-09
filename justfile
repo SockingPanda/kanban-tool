@@ -162,8 +162,6 @@ desktop-check:
     scripts/cargo-build-lock.sh -- cargo build --locked -p kanban-cli --release
     scripts/prepare-desktop-sidecar.sh
     scripts/cargo-build-lock.sh -- cargo check --locked -p kanban-desktop --tests
-    pnpm --filter @kanban-tool/desktop typecheck
-    pnpm --filter @kanban-tool/desktop test
 
 desktop-build:
     just node-lock-check

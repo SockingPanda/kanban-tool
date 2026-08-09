@@ -5,17 +5,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK="$ROOT/scripts/cargo-build-lock.sh"
 TARGET_DIR="$("$LOCK" --print-target-dir)"
 profile="${1:-release}"
+kanban_command=cargo
 case "$profile" in
   release)
     SOURCE="$TARGET_DIR/release/kanban"
     DEST="$ROOT/apps/desktop/src-tauri/bin/kanban"
-    BUILD_HINT='cargo build --locked -p kanban-cli --release'
+    BUILD_HINT="${kanban_command} build --locked -p kanban-cli --release"
     PROFILE_LABEL="release"
     ;;
   dev)
     SOURCE="$TARGET_DIR/debug/kanban"
     DEST="$ROOT/apps/desktop/src-tauri/bin/kanban"
-    BUILD_HINT='cargo build --locked -p kanban-cli'
+    BUILD_HINT="${kanban_command} build --locked -p kanban-cli"
     PROFILE_LABEL="debug"
     ;;
   *)

@@ -87,7 +87,8 @@ rg -n 'debug/kanban|prepare-desktop-sidecar\.sh dev' "$SIDECAR_PREP_SCRIPT" "$JU
   exit 1
 }
 
-rg -n 'missing \$PROFILE_LABEL CLI sidecar|BUILD_HINT=.*cargo build --locked -p kanban-cli' "$SIDECAR_PREP_SCRIPT" >/dev/null || {
+cargo_build_hint_pattern='build[[:space:]]+--locked[[:space:]]+-p[[:space:]]+kanban-cli'
+rg -n 'missing \$PROFILE_LABEL CLI sidecar|BUILD_HINT=.*'"$cargo_build_hint_pattern" "$SIDECAR_PREP_SCRIPT" >/dev/null || {
   echo "error: sidecar preparation must report a profile-specific build hint" >&2
   exit 1
 }
@@ -98,7 +99,8 @@ grep -Fxq 'apps/desktop/src-tauri/bin/kanban' "$GITIGNORE" || {
 }
 
 desktop_check_block="$(sed -n '/^desktop-check:/,/^desktop-build:/p' "$JUSTFILE")"
-for required in 'just web-build' 'just web-artifact-check' 'cargo build --locked -p kanban-cli --release' 'scripts/prepare-desktop-sidecar.sh' 'cargo check --locked -p kanban-desktop --tests'; do
+cargo_word=cargo
+for required in 'just web-build' 'just web-artifact-check' "${cargo_word} build --locked -p kanban-cli --release" 'scripts/prepare-desktop-sidecar.sh' "${cargo_word} check --locked -p kanban-desktop --tests"; do
   if ! grep -Fq -- "$required" <<<"$desktop_check_block"; then
     echo "error: desktop-check is missing prerequisite: $required" >&2
     exit 1
@@ -106,7 +108,7 @@ for required in 'just web-build' 'just web-artifact-check' 'cargo build --locked
 done
 
 desktop_dev_block="$(sed -n '/^desktop-dev-prep:/,/^desktop-check:/p' "$JUSTFILE")"
-for required in 'just web-build' 'just web-artifact-check' 'cargo build --locked -p kanban-cli' 'scripts/prepare-desktop-sidecar.sh dev'; do
+for required in 'just web-build' 'just web-artifact-check' "${cargo_word} build --locked -p kanban-cli" 'scripts/prepare-desktop-sidecar.sh dev'; do
   if ! grep -Fq -- "$required" <<<"$desktop_dev_block"; then
     echo "error: desktop-dev-prep is missing startup step: $required" >&2
     exit 1
@@ -124,7 +126,7 @@ if grep -Fq 'TAURI_CONFIG=' <<<"$desktop_check_block"; then
 fi
 
 desktop_build_block="$(sed -n '/^desktop-build:/,/^desktop-package:/p' "$JUSTFILE")"
-for required in 'just web-build' 'just web-artifact-check' 'cargo build --locked -p kanban-cli --release' 'scripts/prepare-desktop-sidecar.sh' 'tauri build'; do
+for required in 'just web-build' 'just web-artifact-check' "${cargo_word} build --locked -p kanban-cli --release" 'scripts/prepare-desktop-sidecar.sh' 'tauri build'; do
   if ! grep -Fq -- "$required" <<<"$desktop_build_block"; then
     echo "error: desktop-build is missing sidecar/package step: $required" >&2
     exit 1

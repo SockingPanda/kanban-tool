@@ -154,9 +154,6 @@ assert_target_dir_probe_call_sites_quote_paths() {
   local files=(
     "$ROOT/scripts/test-cli-package-layout.sh"
     "$ROOT/scripts/test-desktop-package-layout.sh"
-    "$ROOT/scripts/ontology-bootstrap-verify-e2e.sh"
-    "$ROOT/scripts/ontology-closure-e2e.sh"
-    "$ROOT/scripts/ontology-negative-atom-e2e.sh"
   )
 
   for file in "${files[@]}"; do

@@ -11,6 +11,7 @@ import {
   inspectorEditDraft,
   inspectorMutationCommitted,
   inspectorRetryIntentMatches,
+  inspectorRetryUserIntentMatches,
   inspectorActionIds,
   inspectorActionLabels,
   type InspectorEditDraft,
@@ -129,13 +130,16 @@ describe("TaskInspector", () => {
     const saveIntent = { operation: "saveTask" as const, taskId: model.task.id, input: saveInput }
     expect(inspectorRetryIntentMatches(saveIntent, "saveTask", saveInput)).toBe(true)
     expect(inspectorRetryIntentMatches(saveIntent, "saveTask", { ...saveInput, title: "A different title" })).toBe(false)
+    expect(inspectorRetryIntentMatches(saveIntent, "saveTask", { ...saveInput, expected_lock_version: 8 })).toBe(false)
+    expect(inspectorRetryUserIntentMatches(saveIntent, "saveTask", { ...saveInput, expected_lock_version: 8 })).toBe(true)
 
-    const transition = buildInspectorTransitionCommand(model.task, "block", { reason: "Needs review", confirmed: true }, null)
+    const transition = buildInspectorTransitionCommand(model.task, "heartbeat", {}, "claim_1")
     expect(transition).not.toBeNull()
     const transitionIntent = { operation: "transition" as const, taskId: model.task.id, command: transition! }
     expect(inspectorRetryIntentMatches(transitionIntent, "transition", transition)).toBe(true)
-    const changedTransition = buildInspectorTransitionCommand(model.task, "block", { reason: "A different reason", confirmed: true }, null)
+    const changedTransition = buildInspectorTransitionCommand(model.task, "heartbeat", {}, "claim_2")
     expect(inspectorRetryIntentMatches(transitionIntent, "transition", changedTransition)).toBe(false)
+    expect(inspectorRetryUserIntentMatches(transitionIntent, "transition", changedTransition)).toBe(true)
     expect(inspectorRetryIntentMatches(transitionIntent, "transition", null)).toBe(false)
   })
 

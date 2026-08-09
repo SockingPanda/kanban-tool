@@ -43,6 +43,23 @@ function sameIntentValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(stableIntentValue(left)) === JSON.stringify(stableIntentValue(right))
 }
 
+function userIntentValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(userIntentValue)
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([key]) => key !== "expected_lock_version" && key !== "claim_token" && key !== "lock_version" && key !== "revision")
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, userIntentValue(entry)]),
+    )
+  }
+  return value
+}
+
+function sameUserIntentValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(userIntentValue(left)) === JSON.stringify(userIntentValue(right))
+}
+
 /** Compare a current editor/action value with the exact intent retained by the controller. */
 export function inspectorRetryIntentMatches(
   intent: TaskInspectorMutationRetryIntent | undefined,
@@ -52,6 +69,18 @@ export function inspectorRetryIntentMatches(
   if (current === null || intent?.operation !== operation) return false
   if (operation === "saveTask" && intent.operation === "saveTask") return sameIntentValue(intent.input, current)
   if (operation === "transition" && intent.operation === "transition") return sameIntentValue(intent.command, current)
+  return false
+}
+
+/** Compare only user-editable fields when deciding whether a committed result may close the surface. */
+export function inspectorRetryUserIntentMatches(
+  intent: TaskInspectorMutationRetryIntent | undefined,
+  operation: "saveTask" | "transition",
+  current: InspectorSaveTaskInput | InspectorTransitionCommand | null,
+): boolean {
+  if (current === null || intent?.operation !== operation) return false
+  if (operation === "saveTask" && intent.operation === "saveTask") return sameUserIntentValue(intent.input, current)
+  if (operation === "transition" && intent.operation === "transition") return sameUserIntentValue(intent.command, current)
   return false
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode, type SyntheticEvent } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type SyntheticEvent } from "react"
 
 import type { Locale } from "../../lib/preferences"
 import { taskOpenerKey } from "../../lib/explorer-focus"
@@ -7,10 +7,14 @@ import {
   buildInspectorSaveTaskInput,
   buildInspectorTransitionCommand,
   inspectorActionViews,
+  inspectorActionDialogMatchesTransitionIntent,
+  inspectorActionDialogUserIntent,
+  inspectorActionDialogUserIntentMatches,
   inspectorEditDraft,
   inspectorMutationCommitted,
   inspectorRetryIntentMatches,
   inspectorRetryUserIntentMatches,
+  type InspectorActionDialogUserIntent,
   type InspectorEditDraft,
   type InspectorActionView,
 } from "./TaskInspector.edit-actions"
@@ -115,7 +119,7 @@ export interface TaskInspectorProps {
   readonly onSelectTask: (taskId: string) => void
   readonly locale?: Locale
   /** Runtime/session + task identity used to fence deferred section reads. */
-  readonly identity?: string
+  readonly identity: string
   readonly refreshRevision?: number
   readonly refreshError?: string | null
   readonly refreshOffline?: boolean
@@ -483,10 +487,17 @@ function Neighborhood({ model, copy, onSelectTask }: { readonly model: NonNullab
 
 type InspectorSectionStatus = "idle" | "loading" | "ready" | "stale" | "offline" | "error"
 
+interface PendingActionDialogSubmission {
+  readonly epoch: number
+  readonly taskId: string
+  readonly intent: InspectorActionDialogUserIntent
+  status: "pending" | "preserve"
+}
+
 export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood, mutationHandlers, mutationSnapshot, claimToken = null }: TaskInspectorProps) {
   const { task } = model
   const copy = copies[locale]
-  const requestIdentity = identity ?? task.id
+  const requestIdentity = identity
   const headingRef = useRef<HTMLHeadingElement | null>(null)
   const editTriggerRef = useRef<HTMLButtonElement | null>(null)
   const mountedMutationRef = useRef(true)
@@ -497,11 +508,15 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   const [actionDialog, setActionDialog] = useState<InspectorActionDialogState | null>(null)
   const mutationEpochRef = useRef(0)
   const lastTransitionCommandRef = useRef<InspectorTransitionCommand | null>(null)
-  const currentTransitionCommandRef = useRef<InspectorTransitionCommand | null>(null)
+  const actionDialogSubmissionRef = useRef<PendingActionDialogSubmission | null>(null)
   const editDraftRef = useRef(editDraft)
-  editDraftRef.current = editDraft
   const taskRef = useRef(task)
-  taskRef.current = task
+  const actionDialogRef = useRef(actionDialog)
+  useLayoutEffect(() => {
+    editDraftRef.current = editDraft
+    taskRef.current = task
+    actionDialogRef.current = actionDialog
+  }, [actionDialog, editDraft, task])
   const canonicalEditorDraftKey = JSON.stringify(inspectorEditDraft(task))
   const canonicalEditorDraftKeyRef = useRef(canonicalEditorDraftKey)
   const runsDetailsRef = useRef<HTMLDetailsElement | null>(null)
@@ -527,16 +542,17 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   const [neighborhoodStatus, setNeighborhoodStatus] = useState<InspectorSectionStatus>(model.neighborhood ? "ready" : "idle")
   const markedRefreshRevisionRef = useRef<number | null>(null)
 
-  const scopedSnapshot = mutationSnapshot?.scope.taskId === task.id && (identity === undefined || mutationSnapshot.scope.identity === identity)
+  const scopedSnapshot = mutationSnapshot?.scope.taskId === task.id && mutationSnapshot.scope.identity === identity
     ? mutationSnapshot
     : undefined
   const mutationGeneration = scopedSnapshot?.generation ?? null
   const mutationScopeKey = JSON.stringify([requestIdentity, task.id, mutationGeneration])
   const mutationScopeKeyRef = useRef(mutationScopeKey)
-  if (mutationScopeKeyRef.current !== mutationScopeKey) {
+  useLayoutEffect(() => {
+    if (mutationScopeKeyRef.current === mutationScopeKey) return
     mutationScopeKeyRef.current = mutationScopeKey
     mutationEpochRef.current += 1
-  }
+  }, [mutationScopeKey])
   const mutationPending = useCallback((operation: "saveTask" | "transition") => {
     const key = inspectorMutationKey(operation, task.id)
     const reloadKey = inspectorMutationKey("reload", task.id)
@@ -554,14 +570,14 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     }
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const currentTask = taskRef.current
     setEditing(false)
     setEditDraft(inspectorEditDraft(currentTask))
     canonicalEditorDraftKeyRef.current = JSON.stringify(inspectorEditDraft(currentTask))
     setActionDialog(null)
     lastTransitionCommandRef.current = null
-    currentTransitionCommandRef.current = null
+    actionDialogSubmissionRef.current = null
     setLocalError(null)
     setLocalPending(new Set())
   }, [mutationGeneration, requestIdentity, task.id])
@@ -576,6 +592,11 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     setLocalError({ operation, taskId: task.id, kind: "error", message: copy.mutationError, status: null, code: null, recoverable: true })
   }, [copy.mutationError, task.id])
 
+  const mutationScopeCurrent = useCallback(
+    (epoch: number, taskId: string): boolean => mountedMutationRef.current && mutationEpochRef.current === epoch && taskRef.current.id === taskId,
+    [],
+  )
+
   const runMutation = useCallback(async (operation: "saveTask" | "transition", run: () => Promise<InspectorMutationOutcome>): Promise<InspectorMutationOutcome | null> => {
     const taskId = task.id
     const epoch = mutationEpochRef.current
@@ -584,7 +605,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     setLocalPending((current) => new Set(current).add(key))
     try {
       const outcome = await run()
-      if (!mountedMutationRef.current || mutationEpochRef.current !== epoch || task.id !== taskId) return null
+      if (!mutationScopeCurrent(epoch, taskId)) return null
       if (!inspectorMutationCommitted(outcome)) {
         setLocalMutationError(operation)
         return outcome
@@ -592,17 +613,17 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       setLocalError(null)
       return outcome
     } catch {
-      if (!mountedMutationRef.current || mutationEpochRef.current !== epoch || task.id !== taskId) return null
+      if (!mutationScopeCurrent(epoch, taskId)) return null
       setLocalMutationError(operation)
       return null
     } finally {
-      if (mountedMutationRef.current && mutationEpochRef.current === epoch && task.id === taskId) setLocalPending((current) => {
+      if (mutationScopeCurrent(epoch, taskId)) setLocalPending((current) => {
         const next = new Set(current)
         next.delete(key)
         return next
       })
     }
-  }, [setLocalMutationError, task.id])
+  }, [mutationScopeCurrent, setLocalMutationError, task.id])
 
   const saveTask = useCallback(async (draft: InspectorEditDraft = editDraft): Promise<InspectorMutationOutcome | null> => {
     if (!mutationHandlers || draft.title.trim().length === 0) return null
@@ -648,7 +669,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   const closeActionDialog = useCallback(() => {
     const trigger = actionDialog?.trigger ?? null
     lastTransitionCommandRef.current = null
-    currentTransitionCommandRef.current = null
+    actionDialogSubmissionRef.current = null
     setActionDialog(null)
     queueMicrotask(() => trigger?.focus())
   }, [actionDialog])
@@ -673,30 +694,57 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   const submitActionDialog = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!actionDialog) return
+    const submittedDialogIntent = inspectorActionDialogUserIntent(actionDialog)
+    const submittedTaskId = task.id
+    const submittedEpoch = mutationEpochRef.current
+    const submittedTransition: PendingActionDialogSubmission = {
+      epoch: submittedEpoch,
+      taskId: submittedTaskId,
+      intent: submittedDialogIntent,
+      status: "pending",
+    }
+    const closeAfterCommit = (outcome: InspectorMutationOutcome | null) => {
+      if (!inspectorMutationCommitted(outcome)) return
+      if (!mutationScopeCurrent(submittedEpoch, submittedTaskId)) return
+      if (!inspectorActionDialogUserIntentMatches(actionDialogRef.current, submittedDialogIntent)) {
+        if (actionDialogRef.current !== null && actionDialogSubmissionRef.current === submittedTransition) submittedTransition.status = "preserve"
+        return
+      }
+      closeActionDialog()
+    }
+    const runSubmittedTransition = async (
+      view: InspectorActionView,
+      context: { readonly description?: string; readonly reason?: string; readonly confirmed?: boolean },
+    ) => {
+      actionDialogSubmissionRef.current = submittedTransition
+      try {
+        const outcome = await executeTransition(view, context)
+        closeAfterCommit(outcome)
+      } finally {
+        if (actionDialogSubmissionRef.current === submittedTransition && submittedTransition.status === "pending") actionDialogSubmissionRef.current = null
+      }
+    }
     const view = inspectorActionViews(task, claimToken, copy).find((candidate) => candidate.action === actionDialog.action)
     if (!view) return
     if (actionDialog.kind === "description") {
       if (actionDialog.description.trim().length === 0) return
       const context = { description: actionDialog.description }
       const submittedCommand = buildInspectorTransitionCommand(task, view.action, context, claimToken)
-      const outcome = await executeTransition(view, context)
-      const submittedIntent = submittedCommand === null ? undefined : { operation: "transition" as const, taskId: task.id, command: submittedCommand }
-      if (inspectorMutationCommitted(outcome) && submittedIntent !== undefined && inspectorRetryUserIntentMatches(submittedIntent, "transition", currentTransitionCommandRef.current)) closeActionDialog()
+      if (submittedCommand === null) return
+      await runSubmittedTransition(view, context)
     } else if (actionDialog.kind === "reason") {
       if (actionDialog.reason.trim().length === 0 || (actionDialog.requiresConfirmation && !actionDialog.confirmed)) return
       const context = { reason: actionDialog.reason, confirmed: actionDialog.requiresConfirmation ? true : undefined }
       const submittedCommand = buildInspectorTransitionCommand(task, view.action, context, claimToken)
-      const outcome = await executeTransition(view, context)
-      const submittedIntent = submittedCommand === null ? undefined : { operation: "transition" as const, taskId: task.id, command: submittedCommand }
-      if (inspectorMutationCommitted(outcome) && submittedIntent !== undefined && inspectorRetryUserIntentMatches(submittedIntent, "transition", currentTransitionCommandRef.current)) closeActionDialog()
+      if (submittedCommand === null) return
+      await runSubmittedTransition(view, context)
     } else {
       const context = { confirmed: true }
       const submittedCommand = buildInspectorTransitionCommand(task, view.action, context, claimToken)
-      const outcome = await executeTransition(view, context)
-      const submittedIntent = submittedCommand === null ? undefined : { operation: "transition" as const, taskId: task.id, command: submittedCommand }
-      if (inspectorMutationCommitted(outcome) && submittedIntent !== undefined && inspectorRetryUserIntentMatches(submittedIntent, "transition", currentTransitionCommandRef.current)) closeActionDialog()
+      if (submittedCommand === null) return
+      await runSubmittedTransition(view, context)
     }
-  }, [actionDialog, claimToken, closeActionDialog, copy, executeTransition, task])
+  }, [actionDialog, claimToken, closeActionDialog, copy, executeTransition, mutationScopeCurrent, task])
 
   useEffect(() => {
     if (!actionDialog) return
@@ -737,7 +785,12 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       currentTransitionRetryCommand = buildInspectorTransitionCommand(task, actionDialogView.action, { confirmed: true }, claimToken)
     }
   }
-  currentTransitionCommandRef.current = currentTransitionRetryCommand
+  useLayoutEffect(() => {
+    // 外部规范刷新使操作失去合法 view 时，关闭尚未提交的陈旧对话框；
+    // 自己提交的 transition 由 promise 的 user-intent guard 决定是否关闭。
+    if (actionDialog === null || actionDialogView !== null || mutationTransitionPending || actionDialogSubmissionRef.current !== null) return
+    closeActionDialog()
+  }, [actionDialog, actionDialogView, closeActionDialog, mutationTransitionPending])
   const saveRetryIntent = scopedSnapshot?.retries.get(saveRetryKey)
   const transitionRetryIntent = scopedSnapshot?.retries.get(transitionRetryKey)
   const saveRetryMatches = inspectorRetryIntentMatches(saveRetryIntent, "saveTask", currentSaveRetryInput)
@@ -753,7 +806,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     setLocalError(null)
     try {
       const outcome = await mutationHandlers.retry(key)
-      if (!mountedMutationRef.current || mutationEpochRef.current !== epoch || task.id !== taskId) return null
+      if (!mutationScopeCurrent(epoch, taskId)) return null
       if (!inspectorMutationCommitted(outcome)) {
         if (operation !== "reload") setLocalMutationError(operation)
         return outcome
@@ -762,15 +815,19 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       if (operation === "saveTask") {
         const currentInput = buildInspectorSaveTaskInput(taskRef.current, editDraftRef.current)
         if (editing && inspectorRetryUserIntentMatches(retryIntent, "saveTask", currentInput)) closeEditor()
-      } else if (operation === "transition" && inspectorRetryUserIntentMatches(retryIntent, "transition", currentTransitionCommandRef.current)) {
+      } else if (
+        operation === "transition"
+        && retryIntent.operation === "transition"
+        && inspectorActionDialogMatchesTransitionIntent(actionDialogRef.current, retryIntent.command)
+      ) {
         closeActionDialog()
       }
       return outcome
     } catch {
-      if (mountedMutationRef.current && mutationEpochRef.current === epoch && task.id === taskId && operation !== "reload") setLocalMutationError(operation)
+      if (mutationScopeCurrent(epoch, taskId) && operation !== "reload") setLocalMutationError(operation)
       return null
     }
-  }, [closeActionDialog, closeEditor, editing, mutationHandlers, scopedSnapshot, setLocalMutationError, task.id])
+  }, [closeActionDialog, closeEditor, editing, mutationHandlers, mutationScopeCurrent, scopedSnapshot, setLocalMutationError, task.id])
   const retrySave = saveError && saveRetryIntent ? () => { void retryMutation("saveTask") } : null
   const retryTransition = transitionError && transitionRetryIntent ? () => { void retryMutation("transition") } : null
   const retryReload = reloadError && scopedSnapshot?.retries.has(inspectorMutationKey("reload", task.id)) ? () => { void retryMutation("reload") } : null

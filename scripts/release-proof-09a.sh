@@ -228,6 +228,7 @@ if ! jq -e '.data | any(.slug == "default")' <<<"$BOARDS_JSON" >/dev/null; then
   KANBAN_SERVER_URL="$BASE_URL" "$KANBAN" --json --board default board create default --name "Release 09A" >/dev/null
 fi
 KANBAN_SERVER_URL="$BASE_URL" "$KANBAN" --json --board default task create "Seed release task" --status todo --task-id t_release_seed >/dev/null
+KANBAN_SERVER_URL="$BASE_URL" "$KANBAN" --json --board default label create "Stage09 release" --color "#4F46E5" >/dev/null
 
 HEALTH_BEFORE_JSON="$(curl --fail --silent --show-error "$BASE_URL/health")"
 RUNTIME_JSON="$(curl --fail --silent --show-error "$BASE_URL/app/runtime.json")"

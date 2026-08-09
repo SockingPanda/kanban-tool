@@ -351,6 +351,36 @@
     overflow-wrap: anywhere;
   }
 
+  .syncBanner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.45rem 0.75rem;
+    min-width: 0;
+    border-inline-start: 0.2rem solid var(--color-border-emphasized);
+    padding: 0.7rem 0.85rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+  }
+
+  .syncBanner strong {
+    color: var(--color-text-primary);
+    font-size: 0.85rem;
+  }
+
+  .syncBanner span {
+    font-size: 0.8rem;
+  }
+
+  .syncBannerLive {
+    border-inline-start-color: var(--color-accent);
+  }
+
+  .syncBannerStale {
+    border-inline-start-color: var(--color-status-warning, var(--color-accent));
+  }
+
   .emptyBoard p {
     max-width: 42rem;
     margin: 0;

@@ -301,6 +301,13 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
     }
   }, [])
 
+  const ownsLiveBoardRoute = route.kind === "home"
+    || (route.kind === "board" && (route.view === undefined || route.view === "board"))
+  // BoardLive owns loading, empty, stale and offline presentation. Keep the
+  // child mounted before generic boundaries; for Explorer routes it remains a
+  // hidden session owner and Explorer owns the visible route content below.
+  if (ownsLiveBoardRoute && children) return <>{children}</>
+
   if (effectiveBoundary === "loading") {
     return (
       <section className={styles.boundary} role="status" aria-live="polite" data-testid="shell-loading">
@@ -362,8 +369,12 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
     )
   }
   if (route.kind === "settings") return <SettingsPage runtime={runtime} />
-  if (children) return <>{children}</>
-  if (route.kind === "board") return <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} eventsBatch={eventsBatch} />
+  if (route.kind === "board") return (
+    <>
+      {children ? <div hidden aria-hidden="true" data-testid="board-live-session">{children}</div> : null}
+      <ExplorerPage runtime={runtime} route={route} onNavigate={onNavigate} online={isOnline} invalidationRevision={invalidationRevision} eventsBatch={eventsBatch} />
+    </>
+  )
 
   return (
     <section className={styles.page} aria-labelledby="board-placeholder-heading" data-testid="board-placeholder">

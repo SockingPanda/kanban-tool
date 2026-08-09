@@ -797,6 +797,7 @@ export function createHttpTransport(
         headers,
         credentials: "same-origin",
         mode: "same-origin",
+        referrerPolicy: "same-origin",
         redirect: "error",
         cache: "no-store",
         signal,

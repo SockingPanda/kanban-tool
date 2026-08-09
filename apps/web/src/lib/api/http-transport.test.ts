@@ -476,6 +476,7 @@ describe("same-origin Web HTTP transport", () => {
         headers: { Accept: "application/octet-stream", "Accept-Language": "en" },
         credentials: "same-origin",
         mode: "same-origin",
+        referrerPolicy: "same-origin",
         redirect: "error",
         cache: "no-store",
       }),

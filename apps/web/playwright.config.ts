@@ -14,7 +14,7 @@ export default defineConfig({
   fullyParallel: !releaseProof,
   workers: releaseProof ? 1 : undefined,
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 2 : 0,
+  retries: releaseProof ? 0 : (process.env.CI ? 2 : 0),
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL: releaseBaseURL ?? "http://127.0.0.1:4173",

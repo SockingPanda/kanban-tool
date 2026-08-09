@@ -10,6 +10,7 @@ import type {
   UpdateTaskIntent,
 } from "../../lib/api/task-mutations"
 import type { AttachmentDownloadClient, DownloadedAttachment } from "../../lib/api/attachment-download"
+import type { ApiLabelSuggestionQueryContract } from "../../lib/api/generated/contracts/api-label-suggestion-query"
 import type { ApiSuggestTaskLabelsResponseContract } from "../../lib/api/generated/contracts/api-suggest-task-labels-response"
 
 /** Committed mutation kinds consumed by Explorer invalidation. */
@@ -95,14 +96,8 @@ export interface InspectorTaskLabelSuggestionClient {
   ): Promise<ApiSuggestTaskLabelsResponseContract>
 }
 
-/** Kept in the same shape as the generated TaskMutationClient query seam. */
-export interface InspectorSuggestTaskLabelsQuery {
-  readonly atom_limit?: number
-  readonly candidate_limit?: number
-  readonly limit?: number
-  readonly max_selected_labels?: number
-  readonly min_score?: number
-}
+/** Alias the generated query contract; transport remains the validator owner. */
+export type InspectorSuggestTaskLabelsQuery = Partial<ApiLabelSuggestionQueryContract>
 
 export interface TaskInspectorMutationCommitted {
   readonly kind: InspectorMutationKind
@@ -118,8 +113,8 @@ export interface TaskInspectorMutationSurface {
   readonly client: InspectorTaskMutationClient
   /** Shared with the Board task mutation controller; this is not a second mutation path. */
   readonly claimTokens?: TaskClaimTokenStore
-  /** Called after a server commit event, and awaited before the controller settles success. */
-  readonly onCanonicalReload?: (event: TaskInspectorMutationCommitted, scope: TaskInspectorMutationScope) => Promise<void> | void
+  /** Called after a server commit/conflict settle, and awaited before reconciliation is reported. */
+  readonly onCanonicalReload: (event: TaskInspectorMutationCommitted, scope: TaskInspectorMutationScope) => Promise<void> | void
   /** Observer only; throwing here must never turn a committed write into a retry. */
   readonly onMutationCommitted?: (event: TaskInspectorMutationCommitted) => void
   /** Optional read-only suggestion endpoint; no generated transport is duplicated here. */
@@ -150,22 +145,31 @@ export interface InspectorDeleteAttachmentInput {
   readonly attachmentId: string
 }
 
+/** Result of a server write and its scoped canonical reconciliation. */
+export interface InspectorMutationOutcome {
+  /** The canonical mutation endpoint accepted and committed the write. */
+  readonly committed: boolean
+  /** Canonical state was refreshed after settle while this identity remained current. */
+  readonly reconciled: boolean
+}
+
 export interface TaskInspectorMutationHandlers {
-  saveTask(input: InspectorSaveTaskInput): Promise<void>
-  transition(command: InspectorTransitionCommand): Promise<void>
-  addDependency(parentTaskId: string): Promise<void>
-  removeDependency(parentTaskId: string): Promise<void>
-  createStep(input: InspectorCreateStepInput): Promise<void>
-  linkStep(input: InspectorLinkStepInput): Promise<void>
-  markPlanNotRequired(input: InspectorPlanNotRequiredInput): Promise<void>
-  addLabel(input: InspectorAddLabelInput): Promise<void>
-  removeLabel(input: InspectorRemoveLabelInput | string): Promise<void>
-  applySuggestedLabel(input: InspectorApplySuggestedLabelInput): Promise<void>
-  addComment(input: InspectorCommentInput): Promise<void>
-  uploadAttachment(input: InspectorUploadAttachmentInput): Promise<void>
+  saveTask(input: InspectorSaveTaskInput): Promise<InspectorMutationOutcome>
+  transition(command: InspectorTransitionCommand): Promise<InspectorMutationOutcome>
+  addDependency(parentTaskId: string): Promise<InspectorMutationOutcome>
+  removeDependency(parentTaskId: string): Promise<InspectorMutationOutcome>
+  createStep(input: InspectorCreateStepInput): Promise<InspectorMutationOutcome>
+  linkStep(input: InspectorLinkStepInput): Promise<InspectorMutationOutcome>
+  markPlanNotRequired(input: InspectorPlanNotRequiredInput): Promise<InspectorMutationOutcome>
+  addLabel(input: InspectorAddLabelInput): Promise<InspectorMutationOutcome>
+  removeLabel(input: InspectorRemoveLabelInput | string): Promise<InspectorMutationOutcome>
+  applySuggestedLabel(input: InspectorApplySuggestedLabelInput): Promise<InspectorMutationOutcome>
+  addComment(input: InspectorCommentInput): Promise<InspectorMutationOutcome>
+  uploadAttachment(input: InspectorUploadAttachmentInput): Promise<InspectorMutationOutcome>
   downloadAttachment(input: InspectorDownloadAttachmentInput | string): Promise<DownloadedAttachment | null>
-  deleteAttachment(input: InspectorDeleteAttachmentInput | string): Promise<void>
+  deleteAttachment(input: InspectorDeleteAttachmentInput | string): Promise<InspectorMutationOutcome>
   suggestLabels(query?: InspectorSuggestTaskLabelsQuery): Promise<ApiSuggestTaskLabelsResponseContract | null>
+  retry(key?: string): Promise<boolean>
 }
 
 export interface TaskInspectorMutationError {

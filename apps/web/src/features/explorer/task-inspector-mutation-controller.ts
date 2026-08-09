@@ -7,6 +7,7 @@ import type {
   CompleteTaskIntent,
   HeartbeatTaskIntent,
   SubmitReviewTaskIntent,
+  TaskTransitionResponse,
 } from "../../lib/api/task-mutations"
 import {
   createCommittedMutationEvent,
@@ -21,6 +22,7 @@ import {
   type InspectorLinkStepInput,
   type InspectorMutationKind,
   type InspectorMutationOperation,
+  type InspectorMutationOutcome,
   type InspectorPlanNotRequiredInput,
   type InspectorRemoveLabelInput,
   type InspectorSaveTaskInput,
@@ -42,11 +44,17 @@ type Listener = () => void
 interface ActiveOperation {
   readonly generation: number
   readonly scope: TaskInspectorMutationScope
+  readonly operation: InspectorMutationOperation | "reload"
   readonly abortController: AbortController
 }
 
 interface OperationResult<T> {
   readonly ok: boolean
+  readonly value: T | null
+}
+
+interface WriteOperationResult<T> {
+  readonly outcome: InspectorMutationOutcome
   readonly value: T | null
 }
 
@@ -58,6 +66,10 @@ interface ErrorDescriptor {
 }
 
 const emptyScope: TaskInspectorMutationScope = Object.freeze({ identity: "", boardId: "", taskId: "" })
+const notCommittedOutcome: InspectorMutationOutcome = Object.freeze({ committed: false, reconciled: false })
+const notCommittedReconciledOutcome: InspectorMutationOutcome = Object.freeze({ committed: false, reconciled: true })
+const committedNotReconciledOutcome: InspectorMutationOutcome = Object.freeze({ committed: true, reconciled: false })
+const committedReconciledOutcome: InspectorMutationOutcome = Object.freeze({ committed: true, reconciled: true })
 
 const transitionActions = new Set<InspectorTransitionCommand["action"]>([
   "specify",
@@ -123,6 +135,10 @@ function errorDescriptor(error: unknown): ErrorDescriptor {
   }
 }
 
+function isMutationConflict(error: unknown): boolean {
+  return errorDescriptor(error).kind === "conflict"
+}
+
 function isClaimTokenConflict(error: unknown): boolean {
   const candidate = recordValue(error)
   const apiError = recordValue(candidate?.apiError)
@@ -142,6 +158,21 @@ function normalizedText(value: string): string {
   return value.trim()
 }
 
+function clientUuid(prefix: string): string {
+  const uuid = typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`
+  return `${prefix}${uuid}`
+}
+
+function omitUndefined<T extends object>(input: T): T {
+  const output: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) output[key] = value
+  }
+  return output as T
+}
+
 function normalizedSaveInput(input: InspectorSaveTaskInput): InspectorSaveTaskInput {
   const title = typeof input.title === "string" ? normalizedText(input.title) : input.title
   const description = input.description === undefined
@@ -149,36 +180,41 @@ function normalizedSaveInput(input: InspectorSaveTaskInput): InspectorSaveTaskIn
     : input.description === null
       ? null
       : normalizedText(input.description) || null
-  return {
-    ...input,
+  return omitUndefined({
+    ...omitUndefined(input),
     ...(title === undefined ? {} : { title }),
     ...(description === undefined ? {} : { description }),
-  }
+  })
 }
 
 function normalizedStepInput(input: InspectorCreateStepInput): InspectorCreateStepInput {
-  return {
-    ...input,
+  return omitUndefined({
+    ...omitUndefined(input),
     title: normalizedText(input.title),
     ...(input.body === undefined || input.body === null ? {} : { body: normalizedText(input.body) || null }),
     ...(input.linked_task_ref === undefined || input.linked_task_ref === null ? {} : { linked_task_ref: normalizedText(input.linked_task_ref) || null }),
-  }
+  })
 }
 
 function normalizedCommentInput(input: InspectorCommentInput): InspectorCommentInput {
-  return { ...input, body: normalizedText(input.body) }
+  return omitUndefined({ ...omitUndefined(input), body: normalizedText(input.body) })
 }
 
 function normalizedAttachmentInput(input: InspectorUploadAttachmentInput): InspectorUploadAttachmentInput {
-  return { ...input, filename: normalizedText(input.filename) }
+  return omitUndefined({ ...omitUndefined(input), filename: normalizedText(input.filename) })
 }
 
 function normalizedLabelInput(input: InspectorAddLabelInput): InspectorAddLabelInput {
-  return {
-    ...input,
+  return omitUndefined({
+    ...omitUndefined(input),
     ...(input.name === undefined || input.name === null ? {} : { name: normalizedText(input.name) || null }),
     ...(input.names === undefined || input.names === null ? {} : { names: input.names.map(normalizedText).filter((name) => name.length > 0) }),
-  }
+  })
+}
+
+function stableRequestKey(value: string | null | undefined, prefix: string): string {
+  const candidate = typeof value === "string" ? value.trim() : ""
+  return candidate || clientUuid(prefix)
 }
 
 function transitionCommandWithToken(
@@ -214,31 +250,12 @@ function transitionInputHasToken(command: InspectorTransitionCommand): boolean {
   return typeof input?.claim_token === "string" && input.claim_token.length > 0
 }
 
-/** Do not replay a rejected claim token; a retry must rebase on the shared store. */
-function transitionCommandWithoutToken(command: InspectorTransitionCommand): InspectorTransitionCommand {
-  switch (command.action) {
-    case "heartbeat": return { action: command.action, input: { ...command.input, claim_token: "" } }
-    case "submit-review": return { action: command.action, input: { ...command.input, claim_token: "" } }
-    case "complete": {
-      const input = { ...command.input }
-      delete input.claim_token
-      return { action: command.action, input }
-    }
-    case "block": {
-      const input = { ...command.input }
-      delete input.claim_token
-      return { action: command.action, input }
-    }
-    default: return command
-  }
-}
-
-function executeTransition(
+async function executeTransition(
   client: InspectorTaskMutationClient,
   taskId: string,
   command: InspectorTransitionCommand,
   signal: AbortSignal,
-) {
+): Promise<TaskTransitionResponse> {
   switch (command.action) {
     case "specify": return client.transitionTask(taskId, "specify", command.input, { signal })
     case "promote": return client.transitionTask(taskId, "promote", command.input, { signal })
@@ -272,12 +289,17 @@ function operationKind(operation: InspectorMutationOperation): InspectorMutation
   }
 }
 
+function isWriteOperation(operation: InspectorMutationOperation | "reload"): boolean {
+  return operation !== "downloadAttachment" && operation !== "suggestLabels" && operation !== "reload"
+}
+
 /** UI-agnostic mutation state machine used by Task Inspector and Board adapters. */
 export class TaskInspectorMutationController implements TaskInspectorMutationHandlers {
   private surface: TaskInspectorMutationSurface | null
   private readonly fallbackClaimTokens = createTaskClaimTokenStore()
   private readonly listeners = new Set<Listener>()
   private readonly active = new Map<string, ActiveOperation>()
+  private readonly writeTasks = new Set<string>()
   private pending = new Set<string>()
   private errors = new Map<string, TaskInspectorMutationError>()
   private retries = new Map<string, TaskInspectorMutationRetryIntent>()
@@ -314,6 +336,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     this.generation += 1
     for (const operation of this.active.values()) operation.abortController.abort()
     this.active.clear()
+    this.writeTasks.clear()
     this.pending = new Set()
     this.errors = new Map()
     this.retries = new Map()
@@ -326,6 +349,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     this.generation += 1
     for (const operation of this.active.values()) operation.abortController.abort()
     this.active.clear()
+    this.writeTasks.clear()
     this.surface = null
     this.pending = new Set()
     this.errors = new Map()
@@ -358,7 +382,13 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
 
   private emit(): void {
     this.currentSnapshot = this.makeSnapshot()
-    for (const listener of this.listeners) listener()
+    for (const listener of this.listeners) {
+      try {
+        listener()
+      } catch {
+        // A UI subscriber cannot prevent pending/error state from settling.
+      }
+    }
   }
 
   private currentFor(generation: number, scope: TaskInspectorMutationScope): boolean {
@@ -373,13 +403,15 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     const surface = this.surface
     if (surface === null || this.disposed || taskId !== surface.scope.taskId) return null
     const key = inspectorMutationKey(operation, taskId)
-    if (this.pending.has(key)) return null
+    if (this.pending.has(key) || (isWriteOperation(operation) && this.writeTasks.has(taskId))) return null
     const active: ActiveOperation = {
       generation: this.generation,
       scope: surface.scope,
+      operation,
       abortController: new AbortController(),
     }
     this.active.set(key, active)
+    if (isWriteOperation(operation)) this.writeTasks.add(taskId)
     this.pending = new Set(this.pending).add(key)
     this.errors = new Map(this.errors)
     this.errors.delete(key)
@@ -394,6 +426,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
   private finish(key: string, active: ActiveOperation): void {
     if (this.active.get(key) !== active) return
     this.active.delete(key)
+    if (isWriteOperation(active.operation)) this.writeTasks.delete(active.scope.taskId)
     this.pending = new Set(this.pending)
     this.pending.delete(key)
     this.emit()
@@ -403,7 +436,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     key: string,
     active: ActiveOperation,
     operation: InspectorMutationOperation | "reload",
-    intent: TaskInspectorMutationRetryIntent,
+    intent: TaskInspectorMutationRetryIntent | null,
     error: unknown,
     kindOverride?: TaskInspectorMutationError["kind"],
   ): void {
@@ -420,26 +453,65 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
       recoverable: true,
     })
     this.retries = new Map(this.retries)
-    this.retries.set(key, intent)
+    if (intent === null) this.retries.delete(key)
+    else this.retries.set(key, intent)
     this.finish(key, active)
+  }
+
+  /** Reconcile a rejected write without retaining an obsolete write intent. */
+  private async reconcileConflict(
+    operation: InspectorMutationOperation,
+    taskId: string,
+  ): Promise<boolean> {
+    const surface = this.surface
+    if (surface === null || surface.scope.taskId !== taskId) return false
+    const event = createCommittedMutationEvent(operationKind(operation), taskId)
+    const reloadIntent: TaskInspectorMutationRetryIntent = { operation: "reload", taskId, event }
+    const active = this.begin("reload", taskId, reloadIntent)
+    if (active === null || !this.currentFor(active.generation, active.scope)) return false
+    const currentSurface = this.surface
+    if (currentSurface === null) return false
+    const key = inspectorMutationKey("reload", taskId)
+    try {
+      await currentSurface.onCanonicalReload(event, active.scope)
+      if (!this.currentFor(active.generation, active.scope)) return false
+      this.errors = new Map(this.errors)
+      this.errors.delete(key)
+      this.retries = new Map(this.retries)
+      this.retries.delete(key)
+      this.finish(key, active)
+      return true
+    } catch (error) {
+      if (this.currentFor(active.generation, active.scope)) {
+        this.setFailure(key, active, "reload", reloadIntent, error, "stale")
+      }
+      return false
+    }
   }
 
   private async runWrite<T>(
     operation: InspectorMutationOperation,
     intent: TaskInspectorMutationRetryIntent,
     action: (surface: TaskInspectorMutationSurface, taskId: string, signal: AbortSignal) => Promise<T>,
-  ): Promise<OperationResult<T>> {
+  ): Promise<WriteOperationResult<T>> {
     const taskId = intent.taskId
     const active = this.begin(operation, taskId, intent)
     const surface = this.surface
-    if (active === null || surface === null || !this.currentFor(active.generation, active.scope)) return { ok: false, value: null }
+    if (active === null || surface === null || !this.currentFor(active.generation, active.scope)) return { outcome: notCommittedOutcome, value: null }
     const key = inspectorMutationKey(operation, taskId)
     try {
       const value = await action(surface, taskId, active.abortController.signal)
-      if (!this.currentFor(active.generation, active.scope)) return { ok: false, value: null }
+      // The server response is the commit boundary. A scope replacement after
+      // this point fences observer/reload work but must still report the write
+      // as committed so callers do not replay the request.
+      if (!this.currentFor(active.generation, active.scope)) return { outcome: committedNotReconciledOutcome, value }
+      // A render may replace the surface object without changing identity. Use
+      // that latest surface for all post-commit callbacks and claim storage.
+      let currentSurface = this.surface
+      if (currentSurface === null) return { outcome: committedNotReconciledOutcome, value }
       if (operation === "transition") {
         const transition = intent.operation === "transition" ? intent.command : null
-        const tokens = this.claimTokens(surface)
+        const tokens = this.claimTokens(currentSurface)
         if (transition?.action === "claim") {
           const token = tokenFromTransitionResponse(value)
           if (token !== null) tokens.set(taskId, token)
@@ -449,13 +521,15 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
       }
       const event = createCommittedMutationEvent(operationKind(operation), taskId)
       try {
-        surface.onMutationCommitted?.(event)
+        currentSurface.onMutationCommitted?.(event)
       } catch {
         // An observer cannot turn a committed server write into a local retry.
       }
-      if (!this.currentFor(active.generation, active.scope)) return { ok: false, value: null }
+      if (!this.currentFor(active.generation, active.scope)) return { outcome: committedNotReconciledOutcome, value }
+      currentSurface = this.surface
+      if (currentSurface === null) return { outcome: committedNotReconciledOutcome, value }
       try {
-        await surface.onCanonicalReload?.(event, active.scope)
+        await currentSurface.onCanonicalReload(event, active.scope)
       } catch (error) {
         if (this.currentFor(active.generation, active.scope)) {
           const reloadKey = inspectorMutationKey("reload", taskId)
@@ -475,7 +549,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
           this.retries.set(reloadKey, reloadIntent)
           this.finish(key, active)
         }
-        return { ok: false, value: null }
+        return { outcome: committedNotReconciledOutcome, value }
       }
       if (this.currentFor(active.generation, active.scope)) {
         this.errors = new Map(this.errors)
@@ -483,21 +557,40 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
         this.retries = new Map(this.retries)
         this.retries.delete(key)
         this.finish(key, active)
+        return { outcome: committedReconciledOutcome, value }
       }
-      return { ok: true, value }
+      return { outcome: committedNotReconciledOutcome, value }
     } catch (error) {
-      if (!this.currentFor(active.generation, active.scope)) return { ok: false, value: null }
+      if (!this.currentFor(active.generation, active.scope)) return { outcome: notCommittedOutcome, value: null }
       if (isAbortError(error)) {
         this.finish(key, active)
-        return { ok: false, value: null }
+        return { outcome: notCommittedOutcome, value: null }
       }
-      let retryIntent = intent
-      if (operation === "transition" && isClaimTokenConflict(error)) {
-        this.claimTokens(surface).delete(taskId)
-        if (intent.operation === "transition") retryIntent = { ...intent, command: transitionCommandWithoutToken(intent.command) }
+      if (isMutationConflict(error)) {
+        const currentSurface = this.surface
+        if (operation === "transition" && isClaimTokenConflict(error) && currentSurface !== null) {
+          currentSurface.claimTokens?.delete(taskId)
+          if (currentSurface.claimTokens === undefined) this.fallbackClaimTokens.delete(taskId)
+        }
+        const descriptor = errorDescriptor(error)
+        this.errors = new Map(this.errors)
+        this.errors.set(key, {
+          operation,
+          taskId,
+          kind: "conflict",
+          message: descriptor.message,
+          status: descriptor.status,
+          code: descriptor.code,
+          recoverable: true,
+        })
+        this.retries = new Map(this.retries)
+        this.retries.delete(key)
+        this.finish(key, active)
+        const reconciled = await this.reconcileConflict(operation, taskId)
+        return { outcome: reconciled ? notCommittedReconciledOutcome : notCommittedOutcome, value: null }
       }
-      this.setFailure(key, active, operation, retryIntent, error)
-      return { ok: false, value: null }
+      this.setFailure(key, active, operation, intent, error)
+      return { outcome: notCommittedOutcome, value: null }
     }
   }
 
@@ -530,81 +623,93 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     }
   }
 
-  async saveTask(input: InspectorSaveTaskInput): Promise<void> {
+  async saveTask(input: InspectorSaveTaskInput): Promise<InspectorMutationOutcome> {
     const normalized = normalizedSaveInput(input)
-    if (typeof normalized.title === "string" && normalized.title.trim().length === 0) return
-    await this.runWrite("saveTask", { operation: "saveTask", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.updateTask(taskId, normalized, { signal }))
+    if (typeof normalized.title === "string" && normalized.title.trim().length === 0) return notCommittedOutcome
+    return (await this.runWrite("saveTask", { operation: "saveTask", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.updateTask(taskId, normalized, { signal }))).outcome
   }
 
-  async transition(command: InspectorTransitionCommand): Promise<void> {
-    if (!transitionActions.has(command.action)) return
+  async transition(command: InspectorTransitionCommand): Promise<InspectorMutationOutcome> {
+    if (!transitionActions.has(command.action)) return notCommittedOutcome
     const surface = this.surface
     const taskId = surface?.scope.taskId ?? ""
     const token = surface === null ? null : (this.claimTokens(surface).get(taskId) ?? null)
     const decorated = transitionCommandWithToken(command, token)
-    if (claimRequiredActions.has(decorated.action) && !transitionInputHasToken(decorated)) return
-    await this.runWrite("transition", { operation: "transition", taskId, command: decorated }, (current, id, signal) => executeTransition(current.client, id, decorated, signal) as Promise<unknown>)
+    if (claimRequiredActions.has(decorated.action) && !transitionInputHasToken(decorated)) return notCommittedOutcome
+    return (await this.runWrite("transition", { operation: "transition", taskId, command: decorated }, (current, id, signal) => executeTransition(current.client, id, decorated, signal))).outcome
   }
 
-  async addDependency(parentTaskId: string): Promise<void> {
+  async addDependency(parentTaskId: string): Promise<InspectorMutationOutcome> {
     const parent = normalizedText(parentTaskId)
-    if (!parent) return
-    await this.runWrite("addDependency", { operation: "addDependency", taskId: this.surface?.scope.taskId ?? "", parentTaskId: parent }, (surface, taskId, signal) => surface.client.addDependency(taskId, parent, { signal }))
+    if (!parent) return notCommittedOutcome
+    return (await this.runWrite("addDependency", { operation: "addDependency", taskId: this.surface?.scope.taskId ?? "", parentTaskId: parent }, (surface, taskId, signal) => surface.client.addDependency(taskId, parent, { signal }))).outcome
   }
 
-  async removeDependency(parentTaskId: string): Promise<void> {
+  async removeDependency(parentTaskId: string): Promise<InspectorMutationOutcome> {
     const parent = normalizedText(parentTaskId)
-    if (!parent) return
-    await this.runWrite("removeDependency", { operation: "removeDependency", taskId: this.surface?.scope.taskId ?? "", parentTaskId: parent }, (surface, taskId, signal) => surface.client.removeDependency(taskId, parent, { signal }))
+    if (!parent) return notCommittedOutcome
+    return (await this.runWrite("removeDependency", { operation: "removeDependency", taskId: this.surface?.scope.taskId ?? "", parentTaskId: parent }, (surface, taskId, signal) => surface.client.removeDependency(taskId, parent, { signal }))).outcome
   }
 
-  async createStep(input: InspectorCreateStepInput): Promise<void> {
-    const normalized = normalizedStepInput(input)
-    if (!normalized.title.trim()) return
-    await this.runWrite("createStep", { operation: "createStep", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.createStep(taskId, normalized, { signal }))
+  async createStep(input: InspectorCreateStepInput): Promise<InspectorMutationOutcome> {
+    const normalized = {
+      ...normalizedStepInput(input),
+      idempotency_key: stableRequestKey(input.idempotency_key, "step:"),
+    }
+    if (!normalized.title.trim()) return notCommittedOutcome
+    return (await this.runWrite("createStep", { operation: "createStep", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.createStep(taskId, normalized, { signal }))).outcome
   }
 
-  async linkStep(input: InspectorLinkStepInput): Promise<void> {
-    const normalized = normalizedStepInput(input)
-    if (!normalized.title.trim() || !normalized.linked_task_ref?.trim()) return
-    await this.runWrite("linkStep", { operation: "linkStep", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.createStep(taskId, normalized, { signal }))
+  async linkStep(input: InspectorLinkStepInput): Promise<InspectorMutationOutcome> {
+    const normalized = {
+      ...normalizedStepInput(input),
+      idempotency_key: stableRequestKey(input.idempotency_key, "step:"),
+    }
+    if (!normalized.title.trim() || !normalized.linked_task_ref?.trim()) return notCommittedOutcome
+    return (await this.runWrite("linkStep", { operation: "linkStep", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.createStep(taskId, normalized, { signal }))).outcome
   }
 
-  async markPlanNotRequired(input: InspectorPlanNotRequiredInput): Promise<void> {
+  async markPlanNotRequired(input: InspectorPlanNotRequiredInput): Promise<InspectorMutationOutcome> {
     const reason = normalizedText(input.reason)
-    if (!reason) return
+    if (!reason) return notCommittedOutcome
     const normalized = { ...input, reason }
-    await this.runWrite("markPlanNotRequired", { operation: "markPlanNotRequired", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.markExecutionPlanNotRequired(taskId, normalized, { signal }))
+    return (await this.runWrite("markPlanNotRequired", { operation: "markPlanNotRequired", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.markExecutionPlanNotRequired(taskId, normalized, { signal }))).outcome
   }
 
-  async addLabel(input: InspectorAddLabelInput): Promise<void> {
+  async addLabel(input: InspectorAddLabelInput): Promise<InspectorMutationOutcome> {
     const normalized = normalizedLabelInput(input)
-    if (!normalized.name && (!normalized.names || normalized.names.length === 0)) return
-    await this.runWrite("addLabel", { operation: "addLabel", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.addTaskLabel(taskId, normalized, { signal }))
+    if (!normalized.name && (!normalized.names || normalized.names.length === 0)) return notCommittedOutcome
+    return (await this.runWrite("addLabel", { operation: "addLabel", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.addTaskLabel(taskId, normalized, { signal }))).outcome
   }
 
-  async removeLabel(input: InspectorRemoveLabelInput | string): Promise<void> {
+  async removeLabel(input: InspectorRemoveLabelInput | string): Promise<InspectorMutationOutcome> {
     const labelId = typeof input === "string" ? normalizedText(input) : normalizedText(input.labelId)
-    if (!labelId) return
-    await this.runWrite("removeLabel", { operation: "removeLabel", taskId: this.surface?.scope.taskId ?? "", labelId }, (surface, taskId, signal) => surface.client.removeTaskLabel(taskId, labelId, { signal }))
+    if (!labelId) return notCommittedOutcome
+    return (await this.runWrite("removeLabel", { operation: "removeLabel", taskId: this.surface?.scope.taskId ?? "", labelId }, (surface, taskId, signal) => surface.client.removeTaskLabel(taskId, labelId, { signal }))).outcome
   }
 
-  async applySuggestedLabel(input: InspectorApplySuggestedLabelInput): Promise<void> {
+  async applySuggestedLabel(input: InspectorApplySuggestedLabelInput): Promise<InspectorMutationOutcome> {
     const normalized = normalizedLabelInput(input)
-    if (!normalized.name && (!normalized.names || normalized.names.length === 0)) return
-    await this.runWrite("applySuggestedLabel", { operation: "applySuggestedLabel", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.addTaskLabel(taskId, normalized, { signal }))
+    if (!normalized.name && (!normalized.names || normalized.names.length === 0)) return notCommittedOutcome
+    return (await this.runWrite("applySuggestedLabel", { operation: "applySuggestedLabel", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.addTaskLabel(taskId, normalized, { signal }))).outcome
   }
 
-  async addComment(input: InspectorCommentInput): Promise<void> {
-    const normalized = normalizedCommentInput(input)
-    if (!normalized.body) return
-    await this.runWrite("addComment", { operation: "addComment", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.createComment(taskId, normalized, { signal }))
+  async addComment(input: InspectorCommentInput): Promise<InspectorMutationOutcome> {
+    const normalized = {
+      ...normalizedCommentInput(input),
+      idempotency_key: stableRequestKey(input.idempotency_key, "comment:"),
+    }
+    if (!normalized.body) return notCommittedOutcome
+    return (await this.runWrite("addComment", { operation: "addComment", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.createComment(taskId, normalized, { signal }))).outcome
   }
 
-  async uploadAttachment(input: InspectorUploadAttachmentInput): Promise<void> {
-    const normalized = normalizedAttachmentInput(input)
-    if (!normalized.filename) return
-    await this.runWrite("uploadAttachment", { operation: "uploadAttachment", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.createAttachment(taskId, normalized, { signal }))
+  async uploadAttachment(input: InspectorUploadAttachmentInput): Promise<InspectorMutationOutcome> {
+    const normalized = {
+      ...normalizedAttachmentInput(input),
+      id: stableRequestKey(input.id, "a_"),
+    }
+    if (!normalized.filename) return notCommittedOutcome
+    return (await this.runWrite("uploadAttachment", { operation: "uploadAttachment", taskId: this.surface?.scope.taskId ?? "", input: normalized }, (surface, taskId, signal) => surface.client.createAttachment(taskId, normalized, { signal }))).outcome
   }
 
   async downloadAttachment(input: InspectorDownloadAttachmentInput | string): Promise<DownloadedAttachment | null> {
@@ -615,10 +720,10 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
     return result.ok ? result.value : null
   }
 
-  async deleteAttachment(input: InspectorDeleteAttachmentInput | string): Promise<void> {
+  async deleteAttachment(input: InspectorDeleteAttachmentInput | string): Promise<InspectorMutationOutcome> {
     const attachmentId = typeof input === "string" ? normalizedText(input) : normalizedText(input.attachmentId)
-    if (!attachmentId) return
-    await this.runWrite("deleteAttachment", { operation: "deleteAttachment", taskId: this.surface?.scope.taskId ?? "", attachmentId }, (surface, taskId, signal) => surface.client.deleteAttachment(taskId, attachmentId, { signal }))
+    if (!attachmentId) return notCommittedOutcome
+    return (await this.runWrite("deleteAttachment", { operation: "deleteAttachment", taskId: this.surface?.scope.taskId ?? "", attachmentId }, (surface, taskId, signal) => surface.client.deleteAttachment(taskId, attachmentId, { signal }))).outcome
   }
 
   async suggestLabels(query: InspectorSuggestTaskLabelsQuery = {}): Promise<ApiSuggestTaskLabelsResponseContract | null> {
@@ -647,7 +752,7 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
       if (currentSurface === null) return false
       const pendingKey = inspectorMutationKey("reload", candidate.taskId)
       try {
-        await currentSurface.onCanonicalReload?.(candidate.event ?? createCommittedMutationEvent("edit", candidate.taskId), active.scope)
+        await currentSurface.onCanonicalReload(candidate.event ?? createCommittedMutationEvent("edit", candidate.taskId), active.scope)
         if (!this.currentFor(active.generation, active.scope)) return false
         this.errors = new Map(this.errors)
         this.errors.delete(key ?? inspectorMutationKey("reload", candidate.taskId))
@@ -663,20 +768,20 @@ export class TaskInspectorMutationController implements TaskInspectorMutationHan
       }
     }
     switch (candidate.operation) {
-      case "saveTask": await this.saveTask(candidate.input); return this.errorFor("saveTask", candidate.taskId) === null
-      case "transition": await this.transition(candidate.command); return this.errorFor("transition", candidate.taskId) === null
-      case "addDependency": await this.addDependency(candidate.parentTaskId); return this.errorFor("addDependency", candidate.taskId) === null
-      case "removeDependency": await this.removeDependency(candidate.parentTaskId); return this.errorFor("removeDependency", candidate.taskId) === null
-      case "createStep": await this.createStep(candidate.input); return this.errorFor("createStep", candidate.taskId) === null
-      case "linkStep": await this.linkStep(candidate.input); return this.errorFor("linkStep", candidate.taskId) === null
-      case "markPlanNotRequired": await this.markPlanNotRequired(candidate.input); return this.errorFor("markPlanNotRequired", candidate.taskId) === null
-      case "addLabel": await this.addLabel(candidate.input); return this.errorFor("addLabel", candidate.taskId) === null
-      case "removeLabel": await this.removeLabel(candidate.labelId); return this.errorFor("removeLabel", candidate.taskId) === null
-      case "applySuggestedLabel": await this.applySuggestedLabel(candidate.input); return this.errorFor("applySuggestedLabel", candidate.taskId) === null
-      case "addComment": await this.addComment(candidate.input); return this.errorFor("addComment", candidate.taskId) === null
-      case "uploadAttachment": await this.uploadAttachment(candidate.input); return this.errorFor("uploadAttachment", candidate.taskId) === null
+      case "saveTask": return (await this.saveTask(candidate.input)).reconciled
+      case "transition": return (await this.transition(candidate.command)).reconciled
+      case "addDependency": return (await this.addDependency(candidate.parentTaskId)).reconciled
+      case "removeDependency": return (await this.removeDependency(candidate.parentTaskId)).reconciled
+      case "createStep": return (await this.createStep(candidate.input)).reconciled
+      case "linkStep": return (await this.linkStep(candidate.input)).reconciled
+      case "markPlanNotRequired": return (await this.markPlanNotRequired(candidate.input)).reconciled
+      case "addLabel": return (await this.addLabel(candidate.input)).reconciled
+      case "removeLabel": return (await this.removeLabel(candidate.labelId)).reconciled
+      case "applySuggestedLabel": return (await this.applySuggestedLabel(candidate.input)).reconciled
+      case "addComment": return (await this.addComment(candidate.input)).reconciled
+      case "uploadAttachment": return (await this.uploadAttachment(candidate.input)).reconciled
       case "downloadAttachment": return (await this.downloadAttachment(candidate.attachmentId)) !== null
-      case "deleteAttachment": await this.deleteAttachment(candidate.attachmentId); return this.errorFor("deleteAttachment", candidate.taskId) === null
+      case "deleteAttachment": return (await this.deleteAttachment(candidate.attachmentId)).reconciled
       case "suggestLabels": return (await this.suggestLabels(candidate.query)) !== null
     }
   }

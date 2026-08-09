@@ -59,6 +59,7 @@ function surface(
   return {
     scope: currentScope,
     client: mutationClient,
+    onCanonicalReload: async () => undefined,
     ...options,
   }
 }
@@ -81,7 +82,7 @@ describe("Task Inspector mutation controller", () => {
     const pending = controller.saveTask({ title: "Renamed", expected_lock_version: 3 })
     expect(controller.isPending("saveTask", "t_1")).toBe(true)
     expect(controller.isPending("saveTask", "t_2")).toBe(false)
-    await pending
+    await expect(pending).resolves.toEqual({ committed: true, reconciled: true })
 
     expect(order).toEqual(["committed", "reload"])
     expect(committed).toHaveBeenCalledWith({ kind: "edit", taskId: "t_1" })
@@ -101,7 +102,7 @@ describe("Task Inspector mutation controller", () => {
       onMutationCommitted: committed,
     }))
 
-    await controller.saveTask({ title: "Renamed", expected_lock_version: 3 })
+    await expect(controller.saveTask({ title: "Renamed", expected_lock_version: 3 })).resolves.toEqual({ committed: true, reconciled: false })
     expect(mutationClient.updateTask).toHaveBeenCalledTimes(1)
     expect(committed).toHaveBeenCalledTimes(1)
     expect(controller.errorFor("reload", "t_1")).toMatchObject({ kind: "stale", recoverable: true })
@@ -111,6 +112,36 @@ describe("Task Inspector mutation controller", () => {
     expect(mutationClient.updateTask).toHaveBeenCalledTimes(1)
     expect(reload).toHaveBeenCalledTimes(2)
     expect(controller.errorFor("reload", "t_1")).toBeNull()
+  })
+
+  test("reports an uncommitted conflict after canonical reload without retaining the write intent", async () => {
+    const updateTask = vi.fn().mockRejectedValue({ status: 409, apiError: { code: "conflict" } })
+    const reload = vi.fn(async () => undefined)
+    const controller = new TaskInspectorMutationController(surface(client({ updateTask }), scope(), { onCanonicalReload: reload }))
+
+    await expect(controller.saveTask({ title: "Conflict", expected_lock_version: 3 })).resolves.toEqual({ committed: false, reconciled: true })
+    expect(reload).toHaveBeenCalledWith({ kind: "edit", taskId: "t_1" }, scope())
+    expect(controller.errorFor("saveTask", "t_1")).toMatchObject({ kind: "conflict" })
+    expect(controller.retryIntentFor("saveTask", "t_1")).toBeNull()
+    await expect(controller.retry()).resolves.toBe(false)
+    expect(updateTask).toHaveBeenCalledTimes(1)
+  })
+
+  test("keeps only a canonical reload retry when conflict reconciliation fails", async () => {
+    const updateTask = vi.fn().mockRejectedValue({ status: 409, apiError: { code: "conflict" } })
+    const reload = vi.fn()
+      .mockRejectedValueOnce(new Error("stale read"))
+      .mockResolvedValueOnce(undefined)
+    const controller = new TaskInspectorMutationController(surface(client({ updateTask }), scope(), { onCanonicalReload: reload }))
+
+    await expect(controller.saveTask({ title: "Conflict stale", expected_lock_version: 3 })).resolves.toEqual({ committed: false, reconciled: false })
+    expect(controller.errorFor("saveTask", "t_1")).toMatchObject({ kind: "conflict" })
+    expect(controller.retryIntentFor("saveTask", "t_1")).toBeNull()
+    expect(controller.errorFor("reload", "t_1")).toMatchObject({ kind: "stale" })
+    expect(controller.retryIntentFor("reload", "t_1")).toMatchObject({ operation: "reload" })
+    await expect(controller.retry()).resolves.toBe(true)
+    expect(updateTask).toHaveBeenCalledTimes(1)
+    expect(reload).toHaveBeenCalledTimes(2)
   })
 
   test("fences a late mutation result after a board/task switch", async () => {
@@ -129,7 +160,7 @@ describe("Task Inspector mutation controller", () => {
     expect(controller.snapshot.scope.taskId).toBe("t_2")
     expect(controller.snapshot.pending.size).toBe(0)
     write.resolve(response())
-    await first
+    await expect(first).resolves.toEqual({ committed: true, reconciled: false })
 
     expect(committed).not.toHaveBeenCalled()
     expect(reload).not.toHaveBeenCalled()
@@ -143,7 +174,7 @@ describe("Task Inspector mutation controller", () => {
     const mutationClient = client({ updateTask })
     const controller = new TaskInspectorMutationController(surface(mutationClient))
 
-    await controller.saveTask({ title: "Retry me", expected_lock_version: 3 })
+    await expect(controller.saveTask({ title: "Retry me", expected_lock_version: 3 })).resolves.toEqual({ committed: false, reconciled: false })
     expect(controller.errorFor("saveTask", "t_1")).toMatchObject({ kind: "error", recoverable: true, status: 500 })
     expect(controller.retryIntentFor("saveTask", "t_1")).toMatchObject({ operation: "saveTask", taskId: "t_1" })
     await expect(controller.retry()).resolves.toBe(true)
@@ -155,8 +186,141 @@ describe("Task Inspector mutation controller", () => {
     const updateTask = vi.fn(async () => response())
     const controller = new TaskInspectorMutationController(surface(client({ updateTask })))
 
-    await controller.saveTask({ expected_lock_version: 3 })
+    await expect(controller.saveTask({ expected_lock_version: 3 })).resolves.toEqual({ committed: true, reconciled: true })
     expect(updateTask).toHaveBeenCalledWith("t_1", { expected_lock_version: 3 }, expect.any(Object))
+  })
+
+  test("omits optional undefined fields before transport validation", async () => {
+    const updateTaskMock = vi.fn(async (...args: unknown[]) => {
+      void args
+      return response()
+    })
+    const createStepMock = vi.fn(async (...args: unknown[]) => {
+      void args
+      return response()
+    })
+    const updateTask = updateTaskMock as unknown as InspectorTaskMutationClient["updateTask"]
+    const createStep = createStepMock as unknown as InspectorTaskMutationClient["createStep"]
+    const mutationClient = client({ updateTask, createStep })
+    const controller = new TaskInspectorMutationController(surface(mutationClient))
+
+    await expect(controller.saveTask({ title: undefined, description: undefined, expected_lock_version: 3 })).resolves.toEqual({ committed: true, reconciled: true })
+    expect(updateTaskMock.mock.calls[0]?.[1]).toEqual({ expected_lock_version: 3 })
+    await expect(controller.createStep({ title: "step", body: undefined, linked_task_ref: undefined })).resolves.toEqual({ committed: true, reconciled: true })
+    expect(createStepMock.mock.calls[0]?.[1]).toMatchObject({ title: "step", idempotency_key: expect.any(String) })
+    expect(Object.prototype.hasOwnProperty.call(createStepMock.mock.calls[0]?.[1], "body")).toBe(false)
+    expect(Object.prototype.hasOwnProperty.call(createStepMock.mock.calls[0]?.[1], "linked_task_ref")).toBe(false)
+  })
+
+  test("keeps non-idempotent write keys stable across retries", async () => {
+    const createStep = vi.fn()
+      .mockRejectedValueOnce({ status: 503 })
+      .mockResolvedValueOnce(response())
+    const createComment = vi.fn()
+      .mockRejectedValueOnce({ status: 503 })
+      .mockResolvedValueOnce(response())
+    const createAttachment = vi.fn()
+      .mockRejectedValueOnce({ status: 503 })
+      .mockResolvedValueOnce(response())
+    const mutationClient = client({ createStep, createComment, createAttachment })
+    const controller = new TaskInspectorMutationController(surface(mutationClient))
+
+    await expect(controller.createStep({ title: "retry step" })).resolves.toEqual({ committed: false, reconciled: false })
+    await expect(controller.retry()).resolves.toBe(true)
+    expect(createStep.mock.calls[0]?.[1].idempotency_key).toBeTruthy()
+    expect(createStep.mock.calls[1]?.[1].idempotency_key).toBe(createStep.mock.calls[0]?.[1].idempotency_key)
+
+    await expect(controller.linkStep({ title: "retry link", linked_task_ref: "default#2" })).resolves.toEqual({ committed: true, reconciled: true })
+    expect(createStep.mock.calls[2]?.[1].idempotency_key).toBeTruthy()
+
+    await expect(controller.addComment({ body: "retry comment" })).resolves.toEqual({ committed: false, reconciled: false })
+    await expect(controller.retry()).resolves.toBe(true)
+    expect(createComment.mock.calls[1]?.[1].idempotency_key).toBe(createComment.mock.calls[0]?.[1].idempotency_key)
+
+    await expect(controller.uploadAttachment({ filename: "retry.txt", content: [1] })).resolves.toEqual({ committed: false, reconciled: false })
+    await expect(controller.retry()).resolves.toBe(true)
+    expect(createAttachment.mock.calls[0]?.[1].id).toMatch(/^a_/)
+    expect(createAttachment.mock.calls[1]?.[1].id).toBe(createAttachment.mock.calls[0]?.[1].id)
+  })
+
+  test("returns an uncommitted outcome for a duplicate pending write", async () => {
+    const write = deferred<ReturnType<typeof response>>()
+    const updateTask = vi.fn(() => write.promise) as unknown as InspectorTaskMutationClient["updateTask"]
+    const controller = new TaskInspectorMutationController(surface(client({ updateTask })))
+
+    const first = controller.saveTask({ title: "Only once", expected_lock_version: 3 })
+    await expect(controller.saveTask({ title: "Duplicate", expected_lock_version: 3 })).resolves.toEqual({ committed: false, reconciled: false })
+    write.resolve(response())
+    await expect(first).resolves.toEqual({ committed: true, reconciled: true })
+    expect(updateTask).toHaveBeenCalledTimes(1)
+  })
+
+  test("allows reads but rejects every second write while one write is pending", async () => {
+    const write = deferred<ReturnType<typeof response>>()
+    const updateTask = vi.fn(() => write.promise) as unknown as InspectorTaskMutationClient["updateTask"]
+    const createComment = vi.fn(async () => response())
+    const mutationClient = client({ updateTask, createComment })
+    const controller = new TaskInspectorMutationController(surface(mutationClient))
+
+    const first = controller.saveTask({ title: "Single flight", expected_lock_version: 3 })
+    await expect(controller.addComment({ body: "must wait" })).resolves.toEqual({ committed: false, reconciled: false })
+    expect(createComment).not.toHaveBeenCalled()
+    write.resolve(response())
+    await expect(first).resolves.toEqual({ committed: true, reconciled: true })
+  })
+
+  test("uses the latest callbacks when a same-scope surface object is replaced", async () => {
+    const write = deferred<ReturnType<typeof response>>()
+    const updateTask = vi.fn(() => write.promise) as unknown as InspectorTaskMutationClient["updateTask"]
+    const oldCommitted = vi.fn()
+    const oldReload = vi.fn()
+    const newCommitted = vi.fn()
+    const newReload = vi.fn()
+    const controller = new TaskInspectorMutationController(surface(client({ updateTask }), scope(), {
+      onMutationCommitted: oldCommitted,
+      onCanonicalReload: oldReload,
+    }))
+
+    const first = controller.saveTask({ title: "Replace surface", expected_lock_version: 3 })
+    controller.setSurface(surface(client(), scope(), {
+      onMutationCommitted: newCommitted,
+      onCanonicalReload: newReload,
+    }))
+    write.resolve(response())
+
+    await expect(first).resolves.toEqual({ committed: true, reconciled: true })
+    expect(oldCommitted).not.toHaveBeenCalled()
+    expect(oldReload).not.toHaveBeenCalled()
+    expect(newCommitted).toHaveBeenCalledWith({ kind: "edit", taskId: "t_1" })
+    expect(newReload).toHaveBeenCalledWith({ kind: "edit", taskId: "t_1" }, scope())
+  })
+
+  test("subscriber errors cannot prevent pending state from settling", async () => {
+    const controller = new TaskInspectorMutationController(surface(client()))
+    controller.subscribe(() => {
+      throw new Error("subscriber failed")
+    })
+
+    await expect(controller.saveTask({ title: "settle", expected_lock_version: 3 })).resolves.toEqual({ committed: true, reconciled: true })
+    expect(controller.snapshot.pending.size).toBe(0)
+  })
+
+  test("returns false for an abort without exposing a retry error", async () => {
+    const aborted = Object.assign(new Error("aborted"), { name: "AbortError" })
+    const updateTask = vi.fn().mockRejectedValue(aborted)
+    const controller = new TaskInspectorMutationController(surface(client({ updateTask })))
+
+    await expect(controller.saveTask({ title: "Abort me", expected_lock_version: 3 })).resolves.toEqual({ committed: false, reconciled: false })
+    expect(controller.errorFor("saveTask", "t_1")).toBeNull()
+    expect(controller.retryIntentFor("saveTask", "t_1")).toBeNull()
+  })
+
+  test("returns false for invalid input and an absent mutation surface", async () => {
+    const controller = new TaskInspectorMutationController(null)
+    await expect(controller.saveTask({ title: "No surface", expected_lock_version: 3 })).resolves.toEqual({ committed: false, reconciled: false })
+
+    const active = new TaskInspectorMutationController(surface(client()))
+    await expect(active.addDependency("   ")).resolves.toEqual({ committed: false, reconciled: false })
   })
 
   test("shares claim tokens across transition calls and removes them on terminal actions", async () => {
@@ -168,11 +332,11 @@ describe("Task Inspector mutation controller", () => {
     const claimTokens = createTaskClaimTokenStore()
     const controller = new TaskInspectorMutationController(surface(mutationClient, scope(), { claimTokens }))
 
-    await controller.transition({ action: "claim", input: { worker_profile: "manual", ttl_ms: 300_000 } })
+    await expect(controller.transition({ action: "claim", input: { worker_profile: "manual", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
     expect(claimTokens.get("t_1")).toBe("claim-token")
-    await controller.transition({ action: "heartbeat", input: { claim_token: "", ttl_ms: 300_000 } })
+    await expect(controller.transition({ action: "heartbeat", input: { claim_token: "", ttl_ms: 300_000 } })).resolves.toEqual({ committed: true, reconciled: true })
     expect(transitionTask.mock.calls[1]?.[2]).toMatchObject({ claim_token: "claim-token", ttl_ms: 300_000 })
-    await controller.transition({ action: "complete", input: { claim_token: "", force: false } })
+    await expect(controller.transition({ action: "complete", input: { claim_token: "", force: false } })).resolves.toEqual({ committed: true, reconciled: true })
     expect(claimTokens.get("t_1")).toBeNull()
   })
 
@@ -180,7 +344,7 @@ describe("Task Inspector mutation controller", () => {
     const transitionTask = vi.fn(async () => response()) as unknown as InspectorTaskMutationClient["transitionTask"]
     const controller = new TaskInspectorMutationController(surface(client({ transitionTask })))
 
-    await controller.transition({ action: "complete", input: {} })
+    await expect(controller.transition({ action: "complete", input: {} })).resolves.toEqual({ committed: true, reconciled: true })
     expect(transitionTask).toHaveBeenCalledTimes(1)
   })
 
@@ -191,8 +355,10 @@ describe("Task Inspector mutation controller", () => {
     const claimTokens = createTaskClaimTokenStore({ t_1: "stale-token" })
     const controller = new TaskInspectorMutationController(surface(client({ transitionTask: transitionTask as unknown as InspectorTaskMutationClient["transitionTask"] }), scope(), { claimTokens }))
 
-    await controller.transition({ action: "heartbeat", input: { claim_token: "", ttl_ms: 300_000 } })
+    await expect(controller.transition({ action: "heartbeat", input: { claim_token: "", ttl_ms: 300_000 } })).resolves.toEqual({ committed: false, reconciled: true })
     expect(claimTokens.get("t_1")).toBeNull()
+    expect(controller.errorFor("transition", "t_1")).toMatchObject({ kind: "conflict", recoverable: true })
+    expect(controller.retryIntentFor("transition", "t_1")).toBeNull()
     await expect(controller.retry()).resolves.toBe(false)
     expect(transitionTask).toHaveBeenCalledTimes(1)
   })

@@ -73,8 +73,12 @@ const model: BoardViewModel = {
   },
 }
 
-function expectInvalid(candidate: BoardViewModel) {
-  expect(validateBoardViewModel(candidate).valid).toBe(false)
+function expectInvalid(candidate: unknown) {
+  let validation: ReturnType<typeof validateBoardViewModel> | undefined
+  expect(() => {
+    validation = validateBoardViewModel(candidate as BoardViewModel)
+  }).not.toThrow()
+  expect(validation?.valid).toBe(false)
 }
 
 function runningTask(overrides: Partial<BoardTaskViewModel> = {}): BoardTaskViewModel {
@@ -360,6 +364,40 @@ describe("BoardView", () => {
         tasksByStatus: {
           ...model.tasksByStatus,
           ready: [{ ...source, labels: [{ id: "duplicate", name: "one", color: null }, { id: "duplicate", name: "two", color: null }] }],
+        },
+      },
+    ]
+
+    for (const candidate of invalidModels) expectInvalid(candidate)
+  })
+
+  test("presentation 校验在遍历前拒绝非 record 列、任务和继承字段标签", () => {
+    const source = model.tasksByStatus.ready[0]
+    const inheritedIdLabel = Object.assign(Object.create({ id: "inherited-id" }) as Record<string, unknown>, {
+      name: "标签",
+      color: null,
+    })
+    const inheritedNameLabel = Object.assign(Object.create({ name: "inherited-name" }) as Record<string, unknown>, {
+      id: "label-name",
+      color: null,
+    })
+    const invalidModels: readonly unknown[] = [
+      { ...model, columns: [null] },
+      { ...model, columns: ["not-a-column"] },
+      { ...model, tasksByStatus: { ...model.tasksByStatus, ready: [null] } },
+      { ...model, tasksByStatus: { ...model.tasksByStatus, ready: [42] } },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          ready: [{ ...source, labels: [inheritedIdLabel] }],
+        },
+      },
+      {
+        ...model,
+        tasksByStatus: {
+          ...model.tasksByStatus,
+          ready: [{ ...source, labels: [inheritedNameLabel] }],
         },
       },
     ]

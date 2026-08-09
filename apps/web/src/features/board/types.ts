@@ -83,24 +83,41 @@ export type BoardViewModelValidationResult =
  * 将缺少 server column 的任务渲染成一个看似完整的 board。
  */
 export function validateBoardViewModel(model: BoardViewModel): BoardViewModelValidationResult {
-  if (!model || !model.board) return { valid: false, message: "看板身份无效" }
-  if (!Array.isArray(model.columns)) return { valid: false, message: "服务端列数据无效" }
-  if (!model.tasksByStatus || typeof model.tasksByStatus !== "object") {
+  const rawModel: unknown = model
+  if (!isRecordWithOwnKeys(rawModel, ["board", "columns", "tasksByStatus"])) {
+    return { valid: false, message: "看板身份无效" }
+  }
+
+  const rawBoard = rawModel.board
+  if (!isRecordWithOwnKeys(rawBoard, ["id", "slug", "name"])) {
+    return { valid: false, message: "看板身份无效" }
+  }
+  const board = rawBoard as unknown as BoardViewModel["board"]
+  const rawColumns = rawModel.columns
+  if (!Array.isArray(rawColumns)) return { valid: false, message: "服务端列数据无效" }
+  const rawTasksByStatus = rawModel.tasksByStatus
+  if (!isRecord(rawTasksByStatus)) {
     return { valid: false, message: "任务状态分组无效" }
   }
-  if (!hasText(model.board.id)) return { valid: false, message: "看板 id 不能为空" }
-  if (!hasText(model.board.slug)) return { valid: false, message: "看板 slug 不能为空" }
-  if (!hasText(model.board.name)) return { valid: false, message: "看板名称不能为空" }
+  if (!hasText(board.id)) return { valid: false, message: "看板 id 不能为空" }
+  if (!hasText(board.slug)) return { valid: false, message: "看板 slug 不能为空" }
+  if (!hasText(board.name)) return { valid: false, message: "看板名称不能为空" }
 
   const columnIds = new Set<string>()
   const statuses = new Set<string>()
   const positions = new Set<number>()
-  for (const column of model.columns) {
+  for (const columnValue of rawColumns as readonly unknown[]) {
+    if (!isRecordWithOwnKeys(columnValue, ["id", "status", "title", "position", "hidden"])) {
+      return { valid: false, message: "服务端列记录无效" }
+    }
+    const column = columnValue as unknown as BoardColumnViewModel
     if (!hasText(column.id)) return { valid: false, message: "服务端列 id 不能为空" }
+    if (typeof column.status !== "string") return { valid: false, message: "服务端列 status 无效" }
     if (!hasText(column.title)) return { valid: false, message: "服务端列标题不能为空" }
     if (!Number.isSafeInteger(column.position)) {
       return { valid: false, message: `服务端列 ${column.id} 的 position 必须是 safe integer` }
     }
+    if (typeof column.hidden !== "boolean") return { valid: false, message: `服务端列 ${column.id} 的 hidden 无效` }
     if (columnIds.has(column.id)) return { valid: false, message: `服务端返回重复列 id：${column.id}` }
     if (positions.has(column.position)) return { valid: false, message: `服务端返回重复列 position：${column.position}` }
     if (statuses.has(column.status)) {
@@ -112,22 +129,36 @@ export function validateBoardViewModel(model: BoardViewModel): BoardViewModelVal
   }
 
   const taskIds = new Set<string>()
-  for (const [status, tasks] of Object.entries(model.tasksByStatus)) {
-    if (!Array.isArray(tasks)) return { valid: false, message: `任务状态 ${status} 的任务分组无效` }
+  for (const [status, tasksValue] of Object.entries(rawTasksByStatus)) {
+    if (!Array.isArray(tasksValue)) return { valid: false, message: `任务状态 ${status} 的任务分组无效` }
+    const tasks = tasksValue as readonly unknown[]
     if (tasks.length > 0 && !statuses.has(status)) {
       return { valid: false, message: `任务状态 ${status} 没有对应的服务端列` }
     }
-    for (const task of tasks) {
+    for (const taskValue of tasks) {
+      if (
+        !isRecordWithOwnKeys(taskValue, [
+          "id",
+          "ref",
+          "title",
+          "position",
+          "status",
+          "scheduledAt",
+          "dueAt",
+          "lastHeartbeatAt",
+          "statusReason",
+          "labels",
+        ])
+      ) {
+        return { valid: false, message: `任务列表 ${status} 含无效任务记录` }
+      }
+      const task = taskValue as unknown as BoardTaskViewModel
       if (!hasText(task.id)) return { valid: false, message: "任务 id 不能为空" }
       if (!hasText(task.ref)) return { valid: false, message: `任务 ${task.id} 的 ref 不能为空` }
       if (!hasText(task.title)) return { valid: false, message: `任务 ${task.ref} 的标题不能为空` }
+      if (typeof task.status !== "string") return { valid: false, message: `任务 ${task.ref} 的 status 无效` }
       if (!Number.isSafeInteger(task.position)) {
         return { valid: false, message: `任务 ${task.ref} 的 position 必须是 safe integer` }
-      }
-      for (const field of ["scheduledAt", "dueAt", "lastHeartbeatAt", "statusReason", "labels"] as const) {
-        if (!Object.prototype.hasOwnProperty.call(task, field)) {
-          return { valid: false, message: `任务 ${task.ref} 缺少 ${field} board card fact` }
-        }
       }
       if (
         (task.scheduledAt !== null && !Number.isSafeInteger(task.scheduledAt))
@@ -139,9 +170,16 @@ export function validateBoardViewModel(model: BoardViewModel): BoardViewModelVal
       }
       if (!Array.isArray(task.labels)) return { valid: false, message: `任务 ${task.ref} 的 labels 必须是数组` }
       const labelIds = new Set<string>()
-      for (const label of task.labels) {
-        if (!label || typeof label !== "object" || Array.isArray(label) || !hasText(label.id) || !hasText(label.name)) {
+      for (const labelValue of task.labels) {
+        if (!isRecordWithOwnKeys(labelValue, ["id", "name", "color"])) {
+          return { valid: false, message: `任务 ${task.ref} 的标签记录无效` }
+        }
+        const label = labelValue as unknown as BoardTaskLabelViewModel
+        if (!hasText(label.id) || !hasText(label.name)) {
           return { valid: false, message: `任务 ${task.ref} 的标签 id/name 不能为空` }
+        }
+        if (label.color !== null && typeof label.color !== "string") {
+          return { valid: false, message: `任务 ${task.ref} 的标签 color 无效` }
         }
         if (labelIds.has(label.id)) return { valid: false, message: `任务 ${task.ref} 返回了重复标签 ${label.id}` }
         labelIds.add(label.id)
@@ -155,6 +193,15 @@ export function validateBoardViewModel(model: BoardViewModel): BoardViewModelVal
   }
 
   return { valid: true }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isRecordWithOwnKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!isRecord(value)) return false
+  return keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
 }
 
 function hasText(value: unknown): value is string {

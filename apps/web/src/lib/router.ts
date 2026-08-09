@@ -36,6 +36,8 @@ export type BoardRouteFilters = SignalsRouteFilters | OntologyRouteFilters
 export type AppRoute =
   | { kind: "home"; pathname: string }
   | { kind: "board"; boardSlug: CanonicalBoardSlug; pathname: string; view?: BoardView; query?: string; filters?: BoardRouteFilters }
+  | { kind: "health"; boardSlug: CanonicalBoardSlug; pathname: string }
+  | { kind: "maintenance"; boardSlug: CanonicalBoardSlug; pathname: string }
   | { kind: "settings"; pathname: string }
   | { kind: "not-found"; pathname: string }
   | InvalidBoardRoute
@@ -50,6 +52,8 @@ export type AppNavigationTarget =
       query?: string
       filters?: BoardRouteFilters
     }
+  | { kind: "health"; boardSlug: CanonicalBoardSlug }
+  | { kind: "maintenance"; boardSlug: CanonicalBoardSlug }
   | { kind: "settings" }
   | string
 
@@ -204,6 +208,17 @@ export function parseAppRoute(
     // `/boards/:slug` is the canonical default Board view. Normalize it to
     // the same board route as the explicit `/board` suffix.
     const view = separator > 0 ? tail.slice(separator + 1) : "board"
+    if (view === "health" || view === "maintenance") {
+      const slug = separator > 0 ? tail.slice(0, separator) : tail
+      const boardSlug = decodeBoardSlug(slug, pathname)
+      if (typeof boardSlug === "string") {
+        const operatorTarget = view === "health"
+          ? { kind: "health" as const, boardSlug }
+          : { kind: "maintenance" as const, boardSlug }
+        return { kind: view, boardSlug, pathname: routePath(operatorTarget, options) }
+      }
+      return { ...boardSlug, pathname }
+    }
     if (!(["board", "list", "map", "runs", "events", "signals", "ontology"] as const).includes(view as BoardView)) {
       return { kind: "not-found", pathname }
     }
@@ -231,6 +246,8 @@ type RoutePathInput =
   | AppRoute
   | { kind: "home" }
   | { kind: "board"; boardSlug: CanonicalBoardSlug; view?: BoardView; query?: string; filters?: BoardRouteFilters }
+  | { kind: "health"; boardSlug: CanonicalBoardSlug }
+  | { kind: "maintenance"; boardSlug: CanonicalBoardSlug }
   | { kind: "settings" }
 
 function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOptions): AppRoute {
@@ -250,6 +267,12 @@ function normalizedTarget(target: AppNavigationTarget, options: AppNavigationOpt
         ...("query" in target && target.query ? { query: target.query } : {}),
         ...("filters" in target && target.filters !== undefined ? { filters: target.filters } : {}),
       }
+    case "health":
+      if (!parseCanonicalBoardSlug(target.boardSlug)) return invalidBoardRoute(routePath({ kind: "home" }, options), target.boardSlug)
+      return { kind: "health", boardSlug: target.boardSlug, pathname: routePath(target, options) }
+    case "maintenance":
+      if (!parseCanonicalBoardSlug(target.boardSlug)) return invalidBoardRoute(routePath({ kind: "home" }, options), target.boardSlug)
+      return { kind: "maintenance", boardSlug: target.boardSlug, pathname: routePath(target, options) }
     case "settings":
       return { kind: "settings", pathname: routePath(target, options) }
     case "not-found":
@@ -279,6 +302,14 @@ export function routePath(route: RoutePathInput, options: { basePath?: string } 
         return search.length > 0 ? `${pathname}?${search}` : pathname
       }
       return route.query ? `${pathname}?${route.query.replace(/^\?/, "")}` : pathname
+    }
+    case "health":
+    case "maintenance": {
+      const boardSlug = parseCanonicalBoardSlug(route.boardSlug)
+      if (!boardSlug) {
+        throw validateCanonicalBoardSlug(route.boardSlug) ?? new CanonicalBoardSlugError(route.boardSlug, "invalid-character")
+      }
+      return `${basePath}boards/${encodeURIComponent(boardSlug)}/${route.kind}`
     }
     case "not-found":
     case "error":

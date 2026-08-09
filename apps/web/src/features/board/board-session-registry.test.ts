@@ -7,6 +7,8 @@ import type { BoardViewModel } from "./types"
 import {
   acquireBoardSession,
   activeBoardSessionCount,
+  hasActiveBoardSession,
+  reconnectActiveBoardSession,
   resourceIdentityKey,
   resetBoardSessionsForTests,
   runtimeIdentityKey,
@@ -102,6 +104,33 @@ describe("Board canonical session registry", () => {
     expect(activeBoardSessionCount()).toBe(0)
     expect(stop).toHaveBeenCalledTimes(1)
     expect(query.invalidate).toHaveBeenCalledTimes(1)
+  })
+
+  test("reconnects the retained session without creating a second controller", () => {
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload: vi.fn(async () => readModel),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const retry = vi.fn()
+    let state: "live" | "circuit-open" = "live"
+    const createController = vi.fn(() => ({
+      start: vi.fn(),
+      stop: vi.fn(),
+      retry,
+      snapshot: () => ({ state }),
+    }))
+    const handle = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
+    expect(hasActiveBoardSession(runtime, "default")).toBe(true)
+    expect(reconnectActiveBoardSession(runtime, "default")).toBe("already-live")
+    expect(retry).not.toHaveBeenCalled()
+    state = "circuit-open"
+    expect(reconnectActiveBoardSession(runtime, "default")).toBe("reconnecting")
+    expect(retry).toHaveBeenCalledTimes(1)
+    expect(createController).toHaveBeenCalledTimes(1)
+    handle.release()
+    expect(hasActiveBoardSession(runtime, "default")).toBe(false)
+    expect(reconnectActiveBoardSession(runtime, "default")).toBe("unavailable")
   })
 
   test("preserves a mounted telemetry observer across release/reacquire and drops it after unsubscribe", () => {

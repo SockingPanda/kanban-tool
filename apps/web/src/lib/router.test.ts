@@ -47,6 +47,20 @@ describe("App route parser", () => {
     })
   })
 
+  test("parses independent board-scoped health and maintenance routes", () => {
+    expect(parseAppRoute("/app/boards/default/health")).toEqual({
+      kind: "health",
+      boardSlug: "default",
+      pathname: "/app/boards/default/health",
+    })
+    expect(parseAppRoute("/app/boards/default/maintenance/")).toEqual({
+      kind: "maintenance",
+      boardSlug: "default",
+      pathname: "/app/boards/default/maintenance",
+    })
+    expect(parseAppRoute("/app/boards/default/health?x=1")).toMatchObject({ kind: "health", boardSlug: "default" })
+  })
+
   test("treats a board slug without a view suffix as the default board view", () => {
     expect(parseAppRoute("/app/boards/alpha")).toEqual({
       kind: "board",
@@ -136,6 +150,12 @@ describe("App route parser", () => {
       view: "ontology",
       filters: { includeAll: true, groupBy: "proposed_label", signal: "los_1", atom: "hash_1" },
     })).toBe("/app/boards/team-one/ontology?include_all=true&group_by=proposed_label&signal=los_1&atom=hash_1")
+  })
+
+  test("serializes operator routes and rejects invalid operator board slugs", () => {
+    expect(routePath({ kind: "health", boardSlug: assertCanonicalBoardSlug("team-one") })).toBe("/app/boards/team-one/health")
+    expect(routePath({ kind: "maintenance", boardSlug: assertCanonicalBoardSlug("team-one") })).toBe("/app/boards/team-one/maintenance")
+    expect(parseAppRoute("/app/boards/team%20one/maintenance")).toMatchObject({ kind: "error", code: "invalid-board-slug" })
   })
 })
 

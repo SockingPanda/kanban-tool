@@ -229,6 +229,13 @@ export interface BoardMessages {
   readonly skipToColumns: string
   readonly columnNavigationLabel: string
   readonly columnTaskCount: (count: number) => string
+  readonly boardTaskTotal: (count: number) => string
+  readonly pageNavigationLabel: (column: string) => string
+  readonly pagePrevious: string
+  readonly pageNext: string
+  readonly pagePreviousLabel: (column: string) => string
+  readonly pageNextLabel: (column: string) => string
+  readonly pageRange: (start: number, end: number, total: number) => string
   readonly emptyBoardTitle: string
   readonly emptyBoardDescription: string
   readonly noBoardsTitle: string
@@ -323,6 +330,13 @@ export const defaultBoardMessages: BoardMessages = {
   skipToColumns: "跳转到看板列",
   columnNavigationLabel: "看板列导航",
   columnTaskCount: (count) => `${count} 个任务`,
+  boardTaskTotal: (count) => `看板共 ${count} 个任务`,
+  pageNavigationLabel: (column) => `${column}任务分页`,
+  pagePrevious: "上一页",
+  pageNext: "下一页",
+  pagePreviousLabel: (column) => `${column}的上一页`,
+  pageNextLabel: (column) => `${column}的下一页`,
+  pageRange: (start, end, total) => `${start}–${end} / ${total}`,
   emptyBoardTitle: "看板暂无列",
   emptyBoardDescription: "服务端还没有提供可见列。看板不会创建本地默认列。",
   noBoardsTitle: "暂无看板",
@@ -427,6 +441,13 @@ export const englishBoardMessages: BoardMessages = {
   skipToColumns: "Skip to board columns",
   columnNavigationLabel: "Board column navigation",
   columnTaskCount: (count) => `${count} tasks`,
+  boardTaskTotal: (count) => `Board total: ${count} tasks`,
+  pageNavigationLabel: (column) => `${column} task pagination`,
+  pagePrevious: "Previous",
+  pageNext: "Next",
+  pagePreviousLabel: (column) => `Previous page for ${column}`,
+  pageNextLabel: (column) => `Next page for ${column}`,
+  pageRange: (start, end, total) => `${start}–${end} / ${total}`,
   emptyBoardTitle: "This board has no columns",
   emptyBoardDescription: "The server has not provided any visible columns. No local default columns are created.",
   noBoardsTitle: "No boards available",

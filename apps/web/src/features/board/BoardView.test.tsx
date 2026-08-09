@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
 import { BoardView } from "./BoardView"
+import { BOARD_PAGE_SIZE, boardPageWindow } from "./board-pagination"
 import { validateBoardViewModel } from "./types"
 import { englishBoardMessages } from "./types"
 import type { BoardTaskViewModel, BoardViewModel } from "./types"
@@ -93,6 +94,42 @@ function runningTask(overrides: Partial<BoardTaskViewModel> = {}): BoardTaskView
 }
 
 describe("BoardView", () => {
+  test("将大列限制为有界初始窗口并暴露语义分页", () => {
+    const tasks = Array.from({ length: 205 }, (_, index) => ({
+      ...model.tasksByStatus.ready[0],
+      id: `t-page-${index + 1}`,
+      seq: index + 1,
+      ref: `KB-PAGE-${index + 1}`,
+      position: index + 1,
+      title: `分页任务 ${index + 1}`,
+    }))
+    const largeModel: BoardViewModel = {
+      ...model,
+      tasksByStatus: { ...model.tasksByStatus, ready: tasks },
+    }
+
+    const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model: largeModel }} />)
+
+    expect((markup.match(/data-testid="board-task"/g) ?? []).length).toBe(BOARD_PAGE_SIZE)
+    expect(markup).toContain('data-testid="board-task-total"')
+    expect(markup).toContain('data-total="205"')
+    expect(markup).toContain('data-testid="board-column-pagination"')
+    expect(markup).toContain('data-page="1"')
+    expect(markup).toContain('data-range-start="1"')
+    expect(markup).toContain('data-range-end="100"')
+    expect(markup).toContain("1–100 / 205")
+    expect(markup).toContain('aria-label="待执行的上一页"')
+    expect(markup).toContain('aria-label="待执行的下一页"')
+  })
+
+  test("分页窗口对 page 0、末页和数据缩小保持确定性", () => {
+    expect(boardPageWindow(205, 0)).toEqual({ page: 1, totalPages: 3, start: 0, end: 100 })
+    expect(boardPageWindow(205, 1)).toEqual({ page: 1, totalPages: 3, start: 0, end: 100 })
+    expect(boardPageWindow(205, 99)).toEqual({ page: 3, totalPages: 3, start: 200, end: 205 })
+    expect(boardPageWindow(101, 3)).toEqual({ page: 2, totalPages: 2, start: 100, end: 101 })
+    expect(boardPageWindow(0, 4)).toEqual({ page: 1, totalPages: 1, start: 0, end: 0 })
+  })
+
   test("只渲染服务端可见列，并按 position 排序任务", () => {
     const markup = renderToStaticMarkup(<BoardView state={{ kind: "ready", model }} />)
 

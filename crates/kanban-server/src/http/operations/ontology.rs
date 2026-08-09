@@ -12,9 +12,8 @@ use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
 use kanban_protocol::{
-    DataEnvelope, ListBoardLabelProposalsPath, ListBoardLabelProposalsQuery,
-    ListBoardLabelProposalsResponse,
-    LabelOntologySignalQuery,
+    DataEnvelope, LabelOntologySignalQuery, ListBoardLabelProposalsPath,
+    ListBoardLabelProposalsQuery, ListBoardLabelProposalsResponse,
     cli_labels::{CliLabelOntologyQuality, CliLabelOntologyQualityOutput},
 };
 
@@ -502,6 +501,11 @@ pub(crate) async fn list_signals(
     Path(board): Path<String>,
     Query(query): Query<LabelOntologySignalQuery>,
 ) -> Result<Json<Value>, ApiError> {
+    if !(1..=100).contains(&query.limit) {
+        return Err(ApiError(KanbanError::InvalidInput(
+            "label ontology signal list limit must be between 1 and 100".to_owned(),
+        )));
+    }
     let statuses = query
         .status
         .iter()
@@ -545,15 +549,37 @@ pub(crate) async fn review_signals(
         .get("group_by")
         .cloned()
         .unwrap_or_else(|| "label".to_owned());
-    let group_by = match group_by.as_str() {
-        "candidate_atom" | "proposed_label" | "cluster" | "label" => group_by,
-        _ => "label".to_owned(),
+    if !matches!(
+        group_by.as_str(),
+        "candidate_atom" | "proposed_label" | "label"
+    ) {
+        return Err(ApiError(KanbanError::InvalidInput(
+            "cluster review projection is unavailable".to_owned(),
+        )));
+    }
+    let include_all = match query.get("include_all") {
+        None => false,
+        Some(value) if value == "true" => true,
+        Some(value) if value == "false" => false,
+        Some(value) => {
+            return Err(ApiError(KanbanError::InvalidInput(format!(
+                "ontology review include_all 无效：{value}"
+            ))));
+        }
     };
-    let include_all = query.get("include_all").is_some_and(|v| v == "true");
-    let limit = query
-        .get("limit")
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(100);
+    let limit = match query.get("limit") {
+        None => 100,
+        Some(value) => value.parse::<usize>().map_err(|_| {
+            ApiError(KanbanError::InvalidInput(format!(
+                "ontology review limit 无效：{value}"
+            )))
+        })?,
+    };
+    if !(1..=100).contains(&limit) {
+        return Err(ApiError(KanbanError::InvalidInput(
+            "ontology review limit must be between 1 and 100".to_owned(),
+        )));
+    }
     let Json(value) = run(
         State(state),
         "review_signals",

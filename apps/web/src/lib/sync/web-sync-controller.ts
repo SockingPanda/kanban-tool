@@ -404,6 +404,7 @@ export class WebSyncController {
       const createdAtMs = event.createdAt < 1_000_000_000_000 ? event.createdAt * 1_000 : event.createdAt
       this.emit("event-applied", {
         eventId: event.eventId,
+        eventKind: event.kind,
         source,
         createdAt: event.createdAt,
         appliedAt,

@@ -6,6 +6,8 @@ import type { WebRuntimeConfig } from "../lib/runtime"
 import { createTranslator } from "../lib/i18n"
 import { usePreferences } from "../lib/use-preferences"
 import { createHttpTransport } from "../lib/api/http-transport"
+import { subscribeBoardSessionTelemetry } from "./board/board-session-registry"
+import { telemetryInvalidatesFeature } from "./board-feature-invalidation"
 import {
   createSignalsOntologyReadApi,
   resolveSignalsOntologyBoardIdentity,
@@ -37,8 +39,14 @@ function featureErrorMessage(error: unknown, fallback: string): string {
 export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRouteProps) {
   const { locale } = usePreferences()
   const t = createTranslator(locale)
-  const [state, setState] = useState<{ readonly identity: FeatureBoardIdentity; readonly api: SignalsOntologyReadApi } | null>(null)
-  const [error, setError] = useState<unknown>(null)
+  const routeKey = `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}\u0000${runtime.serverVersion}\u0000${runtime.protocolVersion}\u0000${route.boardSlug}`
+  const [state, setState] = useState<{ readonly key: string; readonly identity: FeatureBoardIdentity; readonly api: SignalsOntologyReadApi } | null>(null)
+  const [error, setError] = useState<{ readonly key: string; readonly value: unknown } | null>(null)
+  const [invalidationRevision, setInvalidationRevision] = useState(0)
+
+  useEffect(() => {
+    setInvalidationRevision(0)
+  }, [routeKey])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -48,26 +56,34 @@ export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRo
     const transport = createHttpTransport(runtime)
     void resolveSignalsOntologyBoardIdentity(runtime, route.boardSlug, { transport, signal: controller.signal }).then((identity) => {
       if (!active || controller.signal.aborted) return
-      setState({ identity, api: createSignalsOntologyReadApi(runtime, { board: route.boardSlug, transport, identity }) })
+      setState({ key: routeKey, identity, api: createSignalsOntologyReadApi(runtime, { board: route.boardSlug, transport, identity }) })
     }).catch((reason: unknown) => {
-      if (active && !controller.signal.aborted) setError(reason)
+      if (active && !controller.signal.aborted) setError({ key: routeKey, value: reason })
     })
     return () => {
       active = false
       controller.abort()
     }
-  }, [route.boardSlug, runtime])
+  }, [route.boardSlug, routeKey, runtime])
 
-  if (error) {
+  useEffect(() => {
+    if (state?.key !== routeKey) return
+    return subscribeBoardSessionTelemetry(runtime, state.identity.canonicalBoardId, (entry) => {
+      if (!telemetryInvalidatesFeature(route.view, entry.type, entry.details?.eventKind)) return
+      setInvalidationRevision((revision) => revision + 1)
+    })
+  }, [route.view, routeKey, runtime, state])
+
+  if (error?.key === routeKey) {
     return (
       <section role="alert" data-testid="board-feature-error">
         <h1>{t("featureLoadError")}</h1>
-        <p>{featureErrorMessage(error, t("featureBoardIdentityError"))}</p>
+        <p>{featureErrorMessage(error.value, t("featureBoardIdentityError"))}</p>
         <button type="button" onClick={() => window.location.reload()}>{t("featureRetry")}</button>
       </section>
     )
   }
-  if (!state) {
+  if (state?.key !== routeKey) {
     return <section role="status" data-testid="board-feature-loading">{t("featureResolvingBoard")}…</section>
   }
 
@@ -88,6 +104,7 @@ export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRo
           api={state.api}
           boardName={state.identity.name}
           filters={filters as SignalsRouteFilters}
+          invalidationRevision={invalidationRevision}
           selectedSignalId={selectedSignalId}
           onFiltersChange={(next) => navigateFeature(next)}
           onSelectSignal={(signalId) => navigateFeature({ ...(filters as SignalsRouteFilters), signal: signalId ?? undefined })}
@@ -98,6 +115,7 @@ export function BoardFeatureRoute({ runtime, route, onNavigate }: BoardFeatureRo
           api={state.api}
           boardName={state.identity.name}
           filters={filters as OntologyRouteFilters}
+          invalidationRevision={invalidationRevision}
           selectedSignalId={selectedSignalId}
           onFiltersChange={(next) => navigateFeature(next)}
           onSelectSignal={(signalId) => navigateFeature({ ...(filters as OntologyRouteFilters), signal: signalId ?? undefined })}

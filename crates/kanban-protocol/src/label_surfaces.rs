@@ -628,7 +628,10 @@ wire!(
             default = "default_label_surface_limit",
             skip_serializing_if = "is_default_label_surface_limit"
         )]
-        #[cfg_attr(feature = "schema", schemars(extend("default" = 100)))]
+        #[cfg_attr(
+            feature = "schema",
+            schemars(extend("default" = 100, "minimum" = 1, "maximum" = 100))
+        )]
         pub limit: usize,
     }
 );
@@ -1077,7 +1080,10 @@ wire!(
             default = "default_label_surface_limit",
             skip_serializing_if = "is_default_label_surface_limit"
         )]
-        #[cfg_attr(feature = "schema", schemars(extend("default" = 100)))]
+        #[cfg_attr(
+            feature = "schema",
+            schemars(extend("default" = 100, "minimum" = 1, "maximum" = 100))
+        )]
         pub limit: usize,
     }
 );

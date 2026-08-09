@@ -126,4 +126,41 @@ describe("signals and ontology API seam", () => {
 
     await expect(api.reviewSignals()).rejects.toMatchObject({ name: SignalsOntologyReadError.name, kind: "board_scope" })
   })
+
+  test("preserves include_all on the canonical review endpoint", async () => {
+    const transport: SignalsOntologyReadTransport = {
+      get: vi.fn(async (path: string): Promise<HttpTransportResponse> => {
+        if (path.includes("signals/review")) return response({ data: [signal], meta: { include_all: true, limit: 1 } })
+        return response({ data: [board] })
+      }),
+    }
+    const api = createSignalsOntologyReadApi(runtime, { board: "b_1", transport })
+
+    await expect(api.reviewSignals({ includeAll: true, limit: 1 })).resolves.toHaveLength(1)
+    expect(transport.get).toHaveBeenCalledWith(
+      "/api/v1/boards/b_1/signals/review?include_all=true&limit=1",
+      undefined,
+    )
+  })
+
+  test("fails closed for malformed injected identity and out-of-range limits", async () => {
+    const transport: SignalsOntologyReadTransport = { get: vi.fn(async () => response({ data: [] })) }
+    expect(() => createSignalsOntologyReadApi(runtime, {
+      board: "default",
+      transport,
+      identity: { selector: "other", canonicalBoardId: asCanonicalBoardId("b_1"), slug: "default", name: "Default" },
+    })).toThrowError(SignalsOntologyReadError)
+    expect(() => createSignalsOntologyReadApi(runtime, {
+      board: "default",
+      transport,
+      identity: { selector: "default", canonicalBoardId: asCanonicalBoardId("bad"), slug: "default", name: "Default" },
+    })).toThrowError(SignalsOntologyReadError)
+
+    const api = createSignalsOntologyReadApi(runtime, {
+      board: "default",
+      transport,
+      identity: { selector: "default", canonicalBoardId: asCanonicalBoardId("b_1"), slug: "default", name: "Default" },
+    })
+    await expect(api.reviewSignals({ limit: 0 })).rejects.toMatchObject({ kind: "invalid_response" })
+  })
 })

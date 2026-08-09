@@ -30,6 +30,16 @@ use crate::{
 
 pub(crate) const LABEL_ATOM_INDEX_STORE: &str = "vector_label_atoms";
 const MAX_LIST_LIMIT: i64 = 1000;
+const MAX_SURFACE_LIMIT: usize = 100;
+
+fn validate_surface_limit(limit: usize, surface: &str) -> Result<(), StoreError> {
+    if !(1..=MAX_SURFACE_LIMIT).contains(&limit) {
+        return Err(StoreError::InvalidInput(format!(
+            "{surface} limit must be between 1 and {MAX_SURFACE_LIMIT}"
+        )));
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct UpsertLabelSemanticsInput {
@@ -1685,6 +1695,7 @@ impl TursoStore {
         include_all: bool,
         limit: usize,
     ) -> Result<Vec<LabelOntologySignalRecord>, StoreError> {
+        validate_surface_limit(limit, "label ontology signal list")?;
         let (task_ref, target_label_ref, proposed_label_name) = label_filters;
         let board_id = self.ontology_board_id(board).await?;
         let task_id = match task_ref {
@@ -1750,9 +1761,7 @@ impl TursoStore {
         sql.push_str(&format!(
             " ORDER BY created_at ASC,id ASC LIMIT ?{limit_placeholder}"
         ));
-        params.push(Value::Integer(
-            limit.clamp(1, MAX_LIST_LIMIT as usize) as i64
-        ));
+        params.push(Value::Integer(limit as i64));
         let mut rows = connection
             .query(&sql, turso::params_from_iter(params))
             .await?;
@@ -1792,6 +1801,21 @@ impl TursoStore {
         include_all: bool,
         limit: usize,
     ) -> Result<Vec<LabelOntologyReviewGroupRecord>, StoreError> {
+        validate_surface_limit(limit, "ontology review")?;
+        if !matches!(
+            group_by,
+            "label"
+                | "target_label"
+                | "target-label"
+                | "candidate_atom"
+                | "candidate-atom"
+                | "proposed_label"
+                | "proposed-label"
+        ) {
+            return Err(StoreError::InvalidInput(
+                "cluster review projection is unavailable".to_owned(),
+            ));
+        }
         let signals = self
             .list_label_ontology_signals(
                 board,
@@ -1799,7 +1823,7 @@ impl TursoStore {
                 &[],
                 (None, None, None),
                 include_all,
-                MAX_LIST_LIMIT as usize,
+                MAX_SURFACE_LIMIT,
             )
             .await?;
         let mut groups = BTreeMap::<String, Vec<LabelOntologySignalRecord>>::new();
@@ -1832,7 +1856,7 @@ impl TursoStore {
                 .cmp(&left.signal_count)
                 .then_with(|| left.key.cmp(&right.key))
         });
-        result.truncate(limit.clamp(1, MAX_LIST_LIMIT as usize));
+        result.truncate(limit);
         Ok(result)
     }
 

@@ -251,13 +251,13 @@ describe("Ontology screen presentation", () => {
     expect(html).not.toMatch(/precision|recall|error rate/i)
   })
 
-  test("exposes the generated cluster review grouping", () => {
+  test("does not expose an unsupported cluster grouping tab", () => {
     const html = renderToStaticMarkup(
       <OntologyScreenView
         boardName="Default"
-        filters={{ includeAll: false, groupBy: "cluster" }}
+        filters={{ includeAll: false, groupBy: "label" }}
         signals={{ phase: "success", data: [], error: null }}
-        groups={{ phase: "success", data: [reviewGroupFixture({ group_by: "cluster", key: "cluster-1", label_id: null, label_name: null, cluster_key: "cluster-1", candidate_text: null })], error: null }}
+        groups={{ phase: "success", data: [reviewGroupFixture()], error: null }}
         detail={{ phase: "idle", data: null, error: null }}
         atom={{ phase: "idle", data: null, error: null }}
         selectedSignalId={null}
@@ -274,8 +274,7 @@ describe("Ontology screen presentation", () => {
         onAtomSearch={() => undefined}
       />,
     )
-    expect(html).toContain("Cluster")
-    expect(html).toContain("cluster-1")
+    expect(html).not.toContain(">Cluster<")
   })
 
   test("maps lifecycle controls to callbacks and keeps them disabled for resolved signals", () => {

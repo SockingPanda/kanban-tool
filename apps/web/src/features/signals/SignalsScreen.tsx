@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react"
+import { useEffect, useMemo, useState, type ChangeEvent, type ComponentProps } from "react"
 
 import { Badge } from "@astryxdesign/core/Badge"
 import { Banner } from "@astryxdesign/core/Banner"
@@ -89,6 +89,10 @@ function errorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
+function MachineBadge(props: ComponentProps<typeof Badge>) {
+  return <span translate="no"><Badge {...props} /></span>
+}
+
 export function SignalsScreen({
   api,
   boardName,
@@ -130,12 +134,14 @@ export function SignalsScreen({
     [detail.error, list.data, selectedSignalId],
   )
   useEffect(() => {
-    if (list.phase !== "success") return
-    const nextId = reconcileSelection(selectedSignalId, list.data)
+    // A filtered list cannot prove that a deep-linked signal is invalid. Only
+    // an authoritative detail 404 permits replacing the URL selection.
+    if (list.phase !== "success" || selectedSignalId === null || errorStatus(detail.error) !== 404) return
+    const nextId = reconcileSelection(selectedSignalId, list.data.filter((signal) => signal.id !== selectedSignalId))
     if (nextId === selectedSignalId) return
     setLocalSelectedSignalId(nextId)
     onSelectSignalProp?.(nextId)
-  }, [list.data, list.phase, onSelectSignalProp, selectedSignalId])
+  }, [detail.error, list.data, list.phase, onSelectSignalProp, selectedSignalId])
 
   const updateFilters = (next: SignalsRouteFilters) => {
     setLocalFilters(next)
@@ -350,7 +356,7 @@ export function SignalListView({
           onClick={() => onSelectSignal(signal.id)}
         >
           <span className={styles.rowTitle}>
-            <Badge variant={statusVariant(signal.status)} label={signal.status} />
+            <MachineBadge variant={statusVariant(signal.status)} label={signal.status} />
             <strong>{signal.title}</strong>
           </span>
           <span className={styles.rowSummary}>{signal.summary}</span>
@@ -376,9 +382,9 @@ export function SignalDetailView({ loading, signal, error, onRetry, copy = featu
     <article className={styles.detail} aria-label={copy.detail}>
       {error ? <Banner status="warning" title={copy.staleDetail} description={errorMessage(error, copy.unreadableResponse)} endContent={onRetry ? <Button label={copy.retryDetail} variant="ghost" size="sm" onClick={onRetry} /> : undefined} /> : null}
       <div className={styles.detailBadges}>
-        <Badge variant={statusVariant(signal.status)} label={signal.status} />
-        <Badge variant="neutral" label={signal.severity} />
-        <Badge variant="neutral" label={signal.kind} />
+        <MachineBadge variant={statusVariant(signal.status)} label={signal.status} />
+        <MachineBadge variant="neutral" label={signal.severity} />
+        <MachineBadge variant="neutral" label={signal.kind} />
       </div>
       <Heading level={3}>{signal.title}</Heading>
       <Text as="p" type="supporting" className={styles.detailSummary}>{signal.summary}</Text>

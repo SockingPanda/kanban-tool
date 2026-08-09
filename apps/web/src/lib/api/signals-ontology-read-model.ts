@@ -115,8 +115,8 @@ function appendArray(params: URLSearchParams, key: string, values: readonly stri
 
 function requestedLimit(value: number | undefined): number {
   const limit = value ?? 100
-  if (!Number.isSafeInteger(limit) || limit < 0 || limit > 100) {
-    throw new SignalsOntologyReadError("invalid_response", "请求 limit 必须是 0 到 100 之间的安全整数。")
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+    throw new SignalsOntologyReadError("invalid_response", "请求 limit 必须是 1 到 100 之间的安全整数。")
   }
   return limit
 }
@@ -214,17 +214,43 @@ function isPrintable(value: string): boolean {
   })
 }
 
+function canonicalBoardId(value: string, selector: string): CanonicalBoardId {
+  if (!/^b_[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) || !isPrintable(value)) {
+    throw new SignalsOntologyReadError("identity", "看板列表包含无效 canonical identity。", { cause: { selector } })
+  }
+  return asCanonicalBoardId(value)
+}
+
+function validateFeatureBoardIdentity(identity: FeatureBoardIdentity, selector: string): FeatureBoardIdentity {
+  const normalizedSelector = selector.trim()
+  const canonicalId = canonicalBoardId(String(identity.canonicalBoardId), normalizedSelector)
+  const slug = parseCanonicalBoardSlug(identity.slug)
+  if (
+    identity.selector !== normalizedSelector
+    || slug === null
+    || (identity.selector !== identity.slug && identity.selector !== canonicalId)
+    || identity.name.trim().length === 0
+  ) {
+    throw new SignalsOntologyReadError("identity", "注入的看板 identity 与请求 selector 不一致。", { cause: { selector: normalizedSelector } })
+  }
+  return Object.freeze({
+    selector: normalizedSelector,
+    canonicalBoardId: canonicalId,
+    slug,
+    name: identity.name.trim(),
+  })
+}
+
 function validateBoardList(boards: ApiListBoardsResponseContract["data"], selector: string): FeatureBoardIdentity {
   const ids = new Set<string>()
   const slugs = new Set<string>()
   for (const board of boards) {
-    if (!board.id.startsWith("b_") || !isPrintable(board.id) || parseCanonicalBoardSlug(board.slug) === null || board.name.trim().length === 0) {
-      throw new SignalsOntologyReadError("identity", "看板列表包含无效 canonical identity。", { cause: { selector } })
-    }
+    const canonicalId = canonicalBoardId(board.id, selector)
+    if (parseCanonicalBoardSlug(board.slug) === null || board.name.trim().length === 0) throw new SignalsOntologyReadError("identity", "看板列表包含无效 canonical identity。", { cause: { selector } })
     if (ids.has(board.id) || slugs.has(board.slug)) {
       throw new SignalsOntologyReadError("identity", "看板列表包含重复 id 或 slug。", { cause: { selector } })
     }
-    ids.add(board.id)
+    ids.add(canonicalId)
     slugs.add(board.slug)
   }
   const matches = boards.filter((board) => board.id === selector || board.slug === selector)
@@ -232,7 +258,7 @@ function validateBoardList(boards: ApiListBoardsResponseContract["data"], select
     throw new SignalsOntologyReadError("identity", "请求的看板 selector 未精确匹配一个 canonical board。", { cause: { selector } })
   }
   const board = matches[0]
-  return Object.freeze({ selector, canonicalBoardId: asCanonicalBoardId(board.id), slug: board.slug, name: board.name.trim() })
+  return Object.freeze({ selector, canonicalBoardId: canonicalBoardId(board.id, selector), slug: parseCanonicalBoardSlug(board.slug)!, name: board.name.trim() })
 }
 
 async function readPayload(transport: SignalsOntologyReadTransport, path: string, signal?: AbortSignal): Promise<HttpTransportResponse> {
@@ -286,13 +312,17 @@ function assertOntologyDetailBoard(detail: LabelOntologySignalDetail, boardId: C
 
 function assertAtomBoard(explain: LabelAtomExplainRecord, boardId: CanonicalBoardId): void {
   if (explain.atom) assertBoardId(explain.atom.board_id, boardId, "atom")
-  if (explain.current_semantics) assertBoardId(explain.current_semantics.board_id, boardId, "atom.current_semantics")
+  if (explain.current_semantics) {
+    assertBoardId(explain.current_semantics.board_id, boardId, "atom.current_semantics")
+    for (const atom of explain.current_semantics.atoms) assertBoardId(atom.board_id, boardId, "atom.current_semantics.atom")
+  }
   for (const entry of explain.provenance_actions) assertBoardId(entry.action.board_id, boardId, "atom.provenance_action")
   for (const entry of explain.validation_history) assertBoardId(entry.action.board_id, boardId, "atom.validation_action")
   for (const entry of explain.supporting_signals) {
     assertOntologySignalBoard(entry.signal, boardId, "atom.supporting_signal")
     assertBoardId(entry.observation.board_id, boardId, "atom.supporting_observation")
     assertBoardId(entry.source_task.board_id, boardId, "atom.source_task")
+    for (const label of entry.source_task.labels) assertBoardId(label.board_id, boardId, "atom.source_task.label")
   }
 }
 
@@ -318,7 +348,7 @@ export async function resolveSignalsOntologyBoardIdentity(
 export function createSignalsOntologyReadApi(runtime: WebRuntimeConfig, options: SignalsOntologyReadModelOptions): SignalsOntologyReadApi {
   const transport = options.transport ?? createHttpTransport(runtime, options)
   const selector = options.board.trim()
-  let cachedIdentity = options.identity
+  let cachedIdentity = options.identity === undefined ? undefined : validateFeatureBoardIdentity(options.identity, selector)
   let identityPromise: Promise<FeatureBoardIdentity> | null = cachedIdentity ? Promise.resolve(cachedIdentity) : null
   const resolveIdentity = (signal?: AbortSignal): Promise<FeatureBoardIdentity> => {
     if (cachedIdentity) return Promise.resolve(cachedIdentity)
@@ -345,23 +375,12 @@ export function createSignalsOntologyReadApi(runtime: WebRuntimeConfig, options:
       const limit = requestedLimit(query?.limit)
       const statuses = [...(query?.statuses ?? [])].filter(Boolean)
       const includeAll = query?.includeAll === true
-      const calls = includeAll
-        ? (statuses.length > 0 ? statuses : [...RENDERED_SIGNAL_STATUSES]).map(async (status) => {
-            const params = signalQuery(query, true, [status])
-            const response = await readPayload(transport, `${reviewSignalsPath(identity.canonicalBoardId, false)}?${params}`, signal)
-            const parsed = parseResponse("api.review-signals.response", parseApiReviewSignalsResponse, response.payload)
-            assertMeta(parsed.meta, true, limit, parsed.data.length)
-            for (const row of parsed.data) assertSignalBoard(row, identity.canonicalBoardId)
-            return parsed.data
-          })
-        : [readPayload(transport, `${reviewSignalsPath(identity.canonicalBoardId, true)}?${signalQuery(query, false, statuses)}`, signal).then((response) => {
-            const parsed = parseResponse("api.review-signals.response", parseApiReviewSignalsResponse, response.payload)
-            assertMeta(parsed.meta, false, limit, parsed.data.length)
-            for (const row of parsed.data) assertSignalBoard(row, identity.canonicalBoardId)
-            return parsed.data
-          })]
-      const rows = (await Promise.all(calls)).flat()
-      return mergeAndSort(rows, limit)
+      const params = signalQuery(query, includeAll, statuses)
+      const response = await readPayload(transport, `${reviewSignalsPath(identity.canonicalBoardId, true)}?${params}`, signal)
+      const parsed = parseResponse("api.review-signals.response", parseApiReviewSignalsResponse, response.payload)
+      assertMeta(parsed.meta, includeAll, limit, parsed.data.length)
+      for (const row of parsed.data) assertSignalBoard(row, identity.canonicalBoardId)
+      return mergeAndSort(parsed.data, limit)
     },
     async getSignal(signalId, signal) {
       const identity = await resolveIdentity(signal)
@@ -392,6 +411,9 @@ export function createSignalsOntologyReadApi(runtime: WebRuntimeConfig, options:
       const identity = await resolveIdentity(signal)
       const limit = requestedLimit(query?.limit)
       const groupBy = query?.groupBy ?? "label"
+      if (groupBy === "cluster") {
+        throw new SignalsOntologyReadError("invalid_response", "当前 API 没有可验证的 cluster projection。")
+      }
       const includeAll = query?.includeAll === true
       const params = ontologyReviewQuery(query)
       const response = await readPayload(transport, `${ontologyReviewPath(identity.canonicalBoardId)}?${params}`, signal)

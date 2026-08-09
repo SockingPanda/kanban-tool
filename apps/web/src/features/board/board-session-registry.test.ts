@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest"
 
 import type { BoardReadModel, BoardReadQuery } from "../../lib/api/board-read-model"
-import { asCanonicalBoardId, type StreamContractAdapter } from "../../lib/sync"
+import { asCanonicalBoardId, type StreamContractAdapter, type SyncQuerySink } from "../../lib/sync"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import type { BoardViewModel } from "./types"
 import {
@@ -10,6 +10,7 @@ import {
   resourceIdentityKey,
   resetBoardSessionsForTests,
   runtimeIdentityKey,
+  subscribeBoardSession,
   type BoardReadResource,
 } from "./board-session-registry"
 
@@ -101,6 +102,38 @@ describe("Board canonical session registry", () => {
     expect(activeBoardSessionCount()).toBe(0)
     expect(stop).toHaveBeenCalledTimes(1)
     expect(query.invalidate).toHaveBeenCalledTimes(1)
+  })
+
+  test("forwards canonical session publications to a pending feature observer", async () => {
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload: vi.fn(async () => readModel),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const transport = {
+      get: vi.fn(async () => ({ payload: { data: [], meta: { next_after: 0 } }, bytes: 0 })),
+    }
+    const resourceForObserver = { ...resource(query), transport }
+    const observer = vi.fn()
+    const unsubscribe = subscribeBoardSession(runtime, asCanonicalBoardId("b_default"), observer)
+    let sink!: SyncQuerySink
+    const createController = vi.fn((options: ConstructorParameters<typeof import("../../lib/sync").WebSyncController>[0]) => {
+      sink = options.sink
+      return { start: vi.fn(), stop: vi.fn(), retry: vi.fn() }
+    })
+    const handle = acquireBoardSession(runtime, model, resourceForObserver, vi.fn(), vi.fn(), { createController })
+
+    await sink.refetchObserved(
+      "F",
+      { boardId: asCanonicalBoardId("b_default"), connectionEpoch: 1, generation: 1 },
+      0,
+      1,
+      new AbortController().signal,
+    )
+
+    expect(observer).toHaveBeenCalledWith(readModel)
+    unsubscribe()
+    handle.release()
   })
 
   test("does not leak a session across runtime/build identity changes", () => {

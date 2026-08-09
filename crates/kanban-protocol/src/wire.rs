@@ -184,6 +184,10 @@ pub struct NextAfterMeta {
 #[serde(deny_unknown_fields)]
 pub struct SignalFilterMeta {
     pub include_all: bool,
+    #[cfg_attr(
+        feature = "schema",
+        schemars(extend("minimum" = 1, "maximum" = 100))
+    )]
     pub limit: usize,
 }
 
@@ -193,6 +197,10 @@ pub struct SignalFilterMeta {
 pub struct LabelOntologyReviewMeta {
     pub group_by: String,
     pub include_all: bool,
+    #[cfg_attr(
+        feature = "schema",
+        schemars(extend("minimum" = 1, "maximum" = 100))
+    )]
     pub limit: usize,
 }
 

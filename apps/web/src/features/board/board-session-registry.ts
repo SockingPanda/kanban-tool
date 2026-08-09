@@ -10,6 +10,7 @@ import {
   type SseTransport,
   type StreamContractAdapter,
   type SyncTelemetryEntry,
+  type WebSyncSnapshot,
 } from "../../lib/sync"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import type { BoardViewModel } from "./types"
@@ -30,7 +31,7 @@ interface BoardSession {
   readonly key: string
   readonly generation: number
   readonly query: BoardReadQuery
-  readonly controller: Pick<WebSyncController, "start" | "stop" | "retry">
+  readonly controller: BoardSessionController
   readonly resource: BoardReadResource
   readonly resources: Set<BoardReadResource>
   readonly listeners: Set<(model: BoardReadModel) => void>
@@ -39,18 +40,33 @@ interface BoardSession {
   disposed: boolean
 }
 
+type BoardSessionController = Pick<WebSyncController, "start" | "stop" | "retry"> & {
+  readonly snapshot?: () => Pick<WebSyncSnapshot, "state">
+}
+
+export type BoardReconnectResult = "reconnecting" | "already-live" | "unavailable"
+
 export interface BoardSessionHandle {
   readonly release: () => void
   readonly retry: () => void
+  /** Explicit user-requested reconnect; shares the canonical session controller. */
+  readonly reconnect: () => void
   readonly generation: number
 }
 
 export interface BoardSessionTestDependencies {
   readonly streamTransport?: SseTransport
-  readonly createController?: (options: ConstructorParameters<typeof WebSyncController>[0]) => Pick<WebSyncController, "start" | "stop" | "retry">
+  readonly createController?: (options: ConstructorParameters<typeof WebSyncController>[0]) => BoardSessionController
 }
 
 const sessions = new Map<string, BoardSession>()
+const sessionListeners = new Set<() => void>()
+let sessionRevision = 0
+
+function notifySessionListeners(): void {
+  sessionRevision += 1
+  for (const listener of sessionListeners) listener()
+}
 
 export function runtimeIdentityKey(runtime: WebRuntimeConfig): string {
   return `${runtime.apiBaseUrl}\u0000${runtime.webBasePath}\u0000${runtime.webBuildId}`
@@ -98,6 +114,50 @@ export function activeBoardSessionCount(): number {
   return sessions.size
 }
 
+/** Subscribe to canonical-session ownership changes so shell controls stay truthful. */
+export function subscribeBoardSessions(listener: () => void): () => void {
+  sessionListeners.add(listener)
+  return () => sessionListeners.delete(listener)
+}
+
+/** Monotonic snapshot for React's external-store subscription. */
+export function boardSessionRevision(): number {
+  return sessionRevision
+}
+
+/** Return whether a live canonical session exists for this runtime and optional board slug. */
+export function hasActiveBoardSession(runtime: WebRuntimeConfig, boardSlug?: string): boolean {
+  const runtimeKey = runtimeIdentityKey(runtime)
+  for (const session of sessions.values()) {
+    if (session.disposed || !session.key.startsWith(`${runtimeKey}\u0000`)) continue
+    if (boardSlug === undefined || [...session.resources].some((resource) => resource.resolvedSlug === boardSlug)) return true
+  }
+  return false
+}
+
+/**
+ * Ask the currently active canonical session for this runtime to reconnect.
+ * Settings uses this seam instead of constructing a second SSE transport.
+ */
+export function reconnectActiveBoardSession(runtime: WebRuntimeConfig, boardSlug?: string): BoardReconnectResult {
+  const runtimeKey = runtimeIdentityKey(runtime)
+  for (const session of sessions.values()) {
+    if (
+      !session.disposed
+      && session.key.startsWith(`${runtimeKey}\u0000`)
+      && (boardSlug === undefined || [...session.resources].some((resource) => resource.resolvedSlug === boardSlug))
+    ) {
+      const snapshot = session.controller.snapshot?.()
+      if (snapshot !== undefined && snapshot.state !== "circuit-open") {
+        return "already-live"
+      }
+      session.controller.retry()
+      return "reconnecting"
+    }
+  }
+  return "unavailable"
+}
+
 /** Test-only cleanup for aborted test mounts; production unmounts use release(). */
 export function resetBoardSessionsForTests(): void {
   for (const session of sessions.values()) {
@@ -109,6 +169,7 @@ export function resetBoardSessionsForTests(): void {
     session.query.invalidate()
   }
   sessions.clear()
+  notifySessionListeners()
 }
 
 if (import.meta.hot) {
@@ -180,6 +241,7 @@ export function acquireBoardSession(
       disposed: false,
     }
     sessions.set(key, session)
+    notifySessionListeners()
   }
 
   resource.sessionGeneration = session.generation
@@ -208,11 +270,17 @@ export function acquireBoardSession(
     for (const resource of session.resources) resource.sessionGeneration += 1
     session.controller.stop()
     session.query.invalidate()
-    if (sessions.get(key) === session) sessions.delete(key)
+    if (sessions.get(key) === session) {
+      sessions.delete(key)
+      notifySessionListeners()
+    }
   }
   return {
     release,
     retry: () => {
+      if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
+    },
+    reconnect: () => {
       if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
     },
     generation: session.generation,

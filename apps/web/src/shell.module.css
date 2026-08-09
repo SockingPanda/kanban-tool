@@ -140,6 +140,97 @@
     background: var(--color-background-body);
   }
 
+  .identityForm {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .identityForm input {
+    min-height: 2.5rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.45rem 0.65rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+  }
+
+  .identityForm input[aria-invalid="true"] {
+    border-color: var(--color-status-error);
+  }
+
+  .headingRow {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .headingRow h2 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+
+  .secondaryAction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.35rem;
+    border: 1px solid var(--color-border-emphasized);
+    border-radius: var(--radius-element);
+    padding: 0.4rem 0.75rem;
+    background: var(--color-background-surface);
+    color: var(--color-text-primary);
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .secondaryAction:hover,
+  .secondaryAction:focus-visible {
+    border-color: var(--color-accent);
+  }
+
+  .secondaryAction:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .inlineError,
+  .inlineSuccess,
+  .inlineStatus {
+    display: grid;
+    gap: 0.3rem;
+    margin: 0;
+    line-height: 1.45;
+  }
+
+  .inlineError {
+    color: var(--color-text-error, var(--color-text-primary));
+  }
+
+  .inlineSuccess {
+    color: var(--color-text-success, var(--color-text-primary));
+  }
+
+  .inlineStatus {
+    color: var(--color-text-secondary);
+  }
+
+  .diagnosticsActions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .statusPanel {
+    margin: 0;
+    padding: 0.7rem 0.8rem;
+    border-inline-start: 0.2rem solid var(--color-accent);
+    background: var(--color-background-surface);
+    color: var(--color-text-secondary);
+  }
+
   .field {
     display: grid;
     gap: 0.4rem;
@@ -222,6 +313,13 @@
   .healthRetry:disabled {
     cursor: progress;
     opacity: 0.65;
+  }
+
+  :global(html[data-density="compact"]) .field select,
+  :global(html[data-density="compact"]) .identityForm input,
+  :global(html[data-density="compact"]) .secondaryAction {
+    min-height: 2rem;
+    padding-block: 0.25rem;
   }
 
   @media (max-width: 64rem) {

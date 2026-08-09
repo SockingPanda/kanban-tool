@@ -48,24 +48,26 @@ test.describe("Astryx product shell", () => {
   test("persists theme, locale, and sidebar preferences in kb:web keys", async ({ page }) => {
     await page.goto("/app/settings", { waitUntil: "networkidle" })
 
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "light")
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN")
-    await page.getByTestId("theme-preference").selectOption("dark")
-    await page.getByTestId("locale-preference").selectOption("en")
+    await page.getByTestId("appearance-theme").selectOption("dark")
+    await page.getByTestId("settings-locale").selectOption("en")
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
     await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#1b1b1b")
 
     await expect
       .poll(() => page.evaluate(() => Object.keys(localStorage).sort()))
-      .toEqual(["kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
+      .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
   })
 
   test("navigates between board and settings without a router dependency", async ({ page }) => {
     await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
     await page.getByTestId("nav-settings").click()
     await expect(page).toHaveURL(/\/app\/settings$/)
-    await expect(page.getByTestId("nav-board")).toBeDisabled()
+    await expect(page.getByTestId("nav-board")).toBeEnabled()
+    await expect(page.getByTestId("nav-board")).toHaveAttribute("href", "/app/boards/default/board")
     await page.goBack()
     await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
   })

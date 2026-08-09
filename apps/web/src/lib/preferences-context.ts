@@ -1,10 +1,12 @@
 import { createContext } from "react"
 
-import type { Locale, ThemeMode, WebPreferences } from "./preferences"
+import type { DensityMode, Locale, ThemeMode, WebPreferences } from "./preferences"
 
 export type PreferencesContextValue = WebPreferences & {
   setTheme: (theme: ThemeMode) => void
   setLocale: (locale: Locale) => void
+  setDensity: (density: DensityMode) => void
+  setActor: (actor: string) => void
   setSidebarExpanded: (expanded: boolean) => void
   toggleSidebar: () => void
 }

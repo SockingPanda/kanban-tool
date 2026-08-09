@@ -4,19 +4,17 @@ import { Layout } from "@astryxdesign/core/Layout"
 import { LayoutContent } from "@astryxdesign/core/Layout"
 import { SideNav } from "@astryxdesign/core/SideNav"
 import { SideNavHeading, SideNavItem, SideNavSection } from "@astryxdesign/core/SideNav"
-import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react"
+import { Fragment, useEffect, useState, type MouseEvent, type ReactNode } from "react"
 
 import type { CanonicalBoardSlug } from "./lib/board-slug"
 import type { WebRuntimeConfig } from "./lib/runtime"
 import { routePath, type AppNavigationTarget, type AppRoute } from "./lib/router"
-import { parseLocalePreference, parseThemePreference } from "./lib/preferences"
 import { usePreferences } from "./lib/use-preferences"
-import { createTranslator, type MessageKey } from "./lib/i18n"
-import { readHealth, type HealthReport } from "./lib/api/health-read-model"
+import { createTranslator } from "./lib/i18n"
 import { HealthPage } from "./features/health/HealthPage"
-import { presentHealthError } from "./features/health/health-error"
-import { isCurrentHealthRequest } from "./features/health/health-request"
 import { MaintenancePage } from "./features/maintenance/MaintenancePage"
+import { SettingsPage } from "./features/settings/SettingsPage"
+import type { BoardReconnectResult } from "./features/board/board-session-registry"
 import styles from "./shell.module.css"
 
 export type ShellBoundary = "ready" | "loading" | "error" | "offline"
@@ -29,11 +27,8 @@ export type ProductShellProps = {
   boundary?: ShellBoundary
   error?: ReactNode
   onNavigate?: (target: AppNavigationTarget) => void | Promise<unknown>
+  onReconnect?: () => BoardReconnectResult | boolean | void | Promise<BoardReconnectResult | boolean | void>
   onRetry?: () => void
-}
-
-function safeText(value: string): string {
-  return value.trim() || "—"
 }
 
 function navPath(runtime: WebRuntimeConfig, boardSlug?: CanonicalBoardSlug): string {
@@ -253,161 +248,7 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
   )
 }
 
-function RuntimeFacts({ runtime, t }: { runtime: WebRuntimeConfig; t: (key: MessageKey) => string }) {
-  const facts = [
-    [t("actor"), runtime.actor],
-    [t("api"), runtime.apiBaseUrl || "/"],
-    [t("server"), runtime.serverVersion],
-    [t("protocol"), runtime.protocolVersion],
-    [t("build"), runtime.webBuildId],
-  ] as const
-  return (
-    <dl className={styles.runtimeFacts} data-testid="runtime-facts">
-      {facts.map(([label, value]) => (
-        <div key={label}>
-          <dt>{label}</dt>
-          <dd translate="no">{safeText(value)}</dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
-
-function SettingsPage({ runtime }: { runtime: WebRuntimeConfig }) {
-  const preferences = usePreferences()
-  const t = createTranslator(preferences.locale)
-  const [health, setHealth] = useState<HealthReport | null>(null)
-  const [healthError, setHealthError] = useState<unknown>(null)
-  const [healthPending, setHealthPending] = useState(true)
-  const healthControllerRef = useRef<AbortController | null>(null)
-
-  const loadHealth = useCallback(() => {
-    if (healthControllerRef.current) return
-    const controller = new AbortController()
-    healthControllerRef.current = controller
-    setHealthPending(true)
-    void readHealth({ runtime, signal: controller.signal })
-      .then((report) => {
-        if (!isCurrentHealthRequest(controller, healthControllerRef.current)) return
-        setHealth(report)
-        setHealthError(null)
-      })
-      .catch((error: unknown) => {
-        if (!isCurrentHealthRequest(controller, healthControllerRef.current) || (error instanceof Error && error.name === "AbortError")) return
-        setHealthError(error)
-      })
-      .finally(() => {
-        if (healthControllerRef.current === controller) {
-          healthControllerRef.current = null
-          setHealthPending(false)
-        }
-      })
-  }, [runtime])
-
-  useEffect(() => {
-    loadHealth()
-    return () => {
-      const controller = healthControllerRef.current
-      controller?.abort()
-      if (healthControllerRef.current === controller) healthControllerRef.current = null
-    }
-  }, [loadHealth])
-
-  const healthCopy = healthError ? presentHealthError(healthError, t) : null
-
-  return (
-    <section className={styles.page} aria-labelledby="settings-heading" data-testid="settings-page">
-      <div className={styles.pageHeading}>
-        <p className={styles.eyebrow}>{t("productKicker")}</p>
-        <h1 id="settings-heading">{t("settingsHeading")}</h1>
-        <p className={styles.lede}>{t("settingsDescription")}</p>
-      </div>
-      <div className={styles.settingsGrid}>
-        <div className={styles.settingsSection}>
-          <h2>{t("theme")}</h2>
-          <label className={styles.field} htmlFor="theme-preference">
-            <span>{t("theme")}</span>
-            <select
-              id="theme-preference"
-              name="theme"
-              autoComplete="off"
-              value={preferences.theme}
-              onChange={(event) => {
-                const theme = parseThemePreference(event.currentTarget.value)
-                if (theme) preferences.setTheme(theme)
-              }}
-              data-testid="theme-preference"
-            >
-              <option value="light">{t("lightTheme")}</option>
-              <option value="dark">{t("darkTheme")}</option>
-            </select>
-          </label>
-        </div>
-        <div className={styles.settingsSection}>
-          <h2>{t("language")}</h2>
-          <label className={styles.field} htmlFor="locale-preference">
-            <span>{t("language")}</span>
-            <select
-              id="locale-preference"
-              name="locale"
-              autoComplete="language"
-              value={preferences.locale}
-              onChange={(event) => {
-                const locale = parseLocalePreference(event.currentTarget.value)
-                if (locale) preferences.setLocale(locale)
-              }}
-              data-testid="locale-preference"
-            >
-              <option value="zh">{t("chinese")}</option>
-              <option value="en">{t("english")}</option>
-            </select>
-          </label>
-        </div>
-        <div className={styles.settingsSection}>
-          <h2>{t("workspace")}</h2>
-          <p className={styles.muted}>
-            {t("defaultBoard")}: <code className={styles.codeValue} translate="no">{safeText(runtime.defaultBoard)}</code>
-          </p>
-          <p className={styles.muted}>
-            {preferences.sidebarExpanded ? t("sidebarExpanded") : t("sidebarCollapsed")}
-          </p>
-        </div>
-      </div>
-      <div className={styles.runtimeSection}>
-        <h2>{t("runtime")}</h2>
-        <RuntimeFacts runtime={runtime} t={t} />
-        <dl className={styles.runtimeFacts} data-testid="settings-health">
-          <div>
-            <dt>{t("healthDb")}</dt>
-            <dd translate="no">{healthPending && !health ? t("loading") : health?.db?.trim() || t("reported")}</dd>
-          </div>
-          <div>
-            <dt>{t("dbPath")}</dt>
-            <dd translate="no">{healthPending && !health ? t("loading") : health?.db_path?.trim() || t("reported")}</dd>
-          </div>
-          <div>
-            <dt>{t("dbFingerprint")}</dt>
-            <dd translate="no">{healthPending && !health ? t("loading") : health?.db_fingerprint?.trim() || t("reported")}</dd>
-          </div>
-          {healthCopy ? (
-            <div role="alert" data-testid="settings-health-error">
-              <dt>{healthCopy.title}</dt>
-              <dd>
-                <span>{healthCopy.detail}</span>
-                <span>{healthCopy.nextStep}</span>
-                <button type="button" className={styles.healthRetry} disabled={healthPending} onClick={loadHealth} data-testid="settings-health-retry">
-                  {healthPending ? t("loading") : t("retry")}
-                </button>
-              </dd>
-            </div>
-          ) : null}
-        </dl>
-      </div>
-    </section>
-  )
-}
-
-function RouteContent({ runtime, route, children, boundary, error, onRetry }: Omit<ProductShellProps, "onNavigate">) {
+function RouteContent({ runtime, route, canonicalBoardSlug, hasRouteChild, boundary, error, onNavigate, onReconnect, onRetry }: Omit<ProductShellProps, "children"> & { hasRouteChild: boolean }) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -427,7 +268,7 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
   // A route-owned child (currently BoardLive) owns its own loading, empty,
   // stale and offline states. Branch before generic boundaries so a route
   // transition cannot briefly replace it with the shell loading/error panel.
-  if ((route.kind === "home" || route.kind === "board") && children) return <>{children}</>
+  if ((route.kind === "home" || route.kind === "board") && hasRouteChild) return null
 
   if (effectiveBoundary === "loading") {
     return (
@@ -486,10 +327,12 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
       </section>
     )
   }
-  if (route.kind === "settings") return <SettingsPage runtime={runtime} />
+  if (route.kind === "settings") {
+    return <SettingsPage runtime={runtime} boardSlug={canonicalBoardSlug} onNavigate={onNavigate} onReconnect={onReconnect} />
+  }
   if (route.kind === "health") return <HealthPage runtime={runtime} />
   if (route.kind === "maintenance") return <MaintenancePage runtime={runtime} boardSlug={route.boardSlug} />
-  if (children) return <>{children}</>
+  if (hasRouteChild) return null
 
   return (
     <section className={styles.page} aria-labelledby="board-placeholder-heading" data-testid="board-placeholder">
@@ -503,7 +346,7 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
   )
 }
 
-export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onRetry }: ProductShellProps) {
+export function ProductShell({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onReconnect, onRetry }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
 
@@ -530,9 +373,8 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
                 data-runtime-web-build-id={runtime.webBuildId}
                 data-runtime-web-base-path={runtime.webBasePath}
               >
-                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onRetry={onRetry}>
-                  {children}
-                </RouteContent>
+                <RouteContent runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} hasRouteChild={children !== undefined && children !== null} boundary={boundary} error={error} onNavigate={onNavigate} onReconnect={onReconnect} onRetry={onRetry} />
+                {children ? <Fragment key="route-session-child">{children}</Fragment> : null}
               </div>
             </LayoutContent>
           }

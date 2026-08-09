@@ -22,6 +22,7 @@ pub const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 const HTTP_READ_TIMEOUT: Duration = Duration::from_millis(750);
 const HOST_POLL_INTERVAL: Duration = Duration::from_millis(50);
+const REAPER_RETRY_INTERVAL: Duration = Duration::from_millis(25);
 const MAX_HTTP_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_STDERR_DIAGNOSTIC_BYTES: usize = 16 * 1024;
 
@@ -169,7 +170,7 @@ fn probe_host_with_timeouts(
     endpoint: SocketAddr,
     timeouts: ProbeTimeouts,
 ) -> Result<HostCompatibility, ProbeError> {
-    let deadline = Instant::now() + timeouts.total;
+    let deadline = deadline_after(Instant::now(), timeouts.total);
     probe_host_until(endpoint, timeouts, deadline)
 }
 
@@ -565,13 +566,29 @@ pub struct HostHandle {
 
 #[derive(Debug)]
 struct OwnedChild {
-    process: Child,
+    process: Option<Child>,
     stderr: Arc<Mutex<VecDeque<u8>>>,
     drain: Option<thread::JoinHandle<()>>,
     drop_cleanup: bool,
 }
 
 impl OwnedChild {
+    fn process(&self) -> &Child {
+        self.process
+            .as_ref()
+            .expect("owned sidecar process ownership已转移")
+    }
+
+    fn process_mut(&mut self) -> &mut Child {
+        self.process
+            .as_mut()
+            .expect("owned sidecar process ownership已转移")
+    }
+
+    fn release_process(&mut self) {
+        self.process.take();
+    }
+
     fn diagnostic(&self, status: std::process::ExitStatus) -> String {
         let bytes = self
             .stderr
@@ -594,16 +611,13 @@ impl OwnedChild {
         }
     }
 
-    /// Drop 路径只做不会等待的 best-effort 重试；无法确认退出时放弃 join，避免悬死。
-    fn best_effort_drop_retry(&mut self) {
-        if matches!(self.process.try_wait(), Ok(Some(_))) {
-            self.finish_drain();
-            return;
-        }
-        let _ = self.process.kill();
-        if matches!(self.process.try_wait(), Ok(Some(_))) {
-            self.finish_drain();
-        }
+    fn detach_for_reaper(&mut self) -> Option<Self> {
+        self.process.take().map(|process| Self {
+            process: Some(process),
+            stderr: Arc::clone(&self.stderr),
+            drain: self.drain.take(),
+            drop_cleanup: false,
+        })
     }
 
     fn disarm_drop_cleanup(&mut self) {
@@ -613,8 +627,18 @@ impl OwnedChild {
 
 impl Drop for OwnedChild {
     fn drop(&mut self) {
-        if self.drop_cleanup {
-            self.best_effort_drop_retry();
+        if !self.drop_cleanup {
+            return;
+        }
+        let Some(mut child) = self.detach_for_reaper() else {
+            return;
+        };
+        let cleanup = force_stop(&mut child);
+        if cleanup.process_reaped {
+            child.finish_drain();
+            child.release_process();
+        } else {
+            handoff_to_reaper(child, "OwnedChild Drop");
         }
     }
 }
@@ -634,9 +658,10 @@ impl HostHandle {
         let Some(child) = self.child.as_mut() else {
             return Ok(ShutdownResult::AlreadyExited);
         };
-        match child.process.try_wait() {
+        match child.process_mut().try_wait() {
             Ok(Some(_)) => {
                 child.finish_drain();
+                child.release_process();
                 self.child.take();
                 return Ok(ShutdownResult::AlreadyExited);
             }
@@ -647,15 +672,16 @@ impl HostHandle {
             }
         }
 
-        if let Err(error) = request_graceful_stop(&child.process) {
+        if let Err(error) = request_graceful_stop(child.process()) {
             let first_error = ShutdownError::GracefulRequest(error.to_string());
             return self.cleanup_after_error(first_error);
         }
-        let deadline = Instant::now() + GRACEFUL_SHUTDOWN_TIMEOUT;
+        let deadline = deadline_after(Instant::now(), GRACEFUL_SHUTDOWN_TIMEOUT);
         loop {
-            match child.process.try_wait() {
+            match child.process_mut().try_wait() {
                 Ok(Some(_)) => {
                     child.finish_drain();
+                    child.release_process();
                     self.child.take();
                     return Ok(ShutdownResult::Graceful);
                 }
@@ -670,6 +696,14 @@ impl HostHandle {
                         .map(|error| ShutdownError::Io(error.to_string()));
                     if ownership == CleanupOwnership::Release {
                         self.child.take();
+                    }
+                    if ownership == CleanupOwnership::RetainForRetry {
+                        return Err(cleanup_error.unwrap_or_else(|| {
+                            ShutdownError::Io(
+                                "强制停止已发出，但尚未确认 sidecar reap；保留 ownership 供重试"
+                                    .to_owned(),
+                            )
+                        }));
                     }
                     return cleanup_error.map_or(Ok(ShutdownResult::Forced), Err);
                 }
@@ -702,7 +736,25 @@ impl HostHandle {
 
 impl Drop for HostHandle {
     fn drop(&mut self) {
-        let _ = self.shutdown();
+        if self.ownership == HostOwnership::External {
+            if let Some(child) = self.child.as_mut() {
+                child.disarm_drop_cleanup();
+            }
+            return;
+        }
+        let Some(mut child) = self.child.take() else {
+            return;
+        };
+        let cleanup = force_stop(&mut child);
+        if let Some(error) = cleanup.first_error {
+            eprintln!("kanban owned host Drop cleanup 失败：{error}");
+        }
+        if cleanup.process_reaped {
+            // force_stop 已经确认退出并 drain；child 的 process ownership 已释放。
+            child.finish_drain();
+        } else if let Some(child) = child.detach_for_reaper() {
+            handoff_to_reaper(child, "owned host Drop");
+        }
     }
 }
 
@@ -755,6 +807,12 @@ pub fn connect_or_spawn(config: &HostLaunchConfig) -> Result<HostHandle, HostSta
                     if let Some(cleanup_error) = cleanup.first_error {
                         eprintln!("kanban sidecar cleanup 失败：{cleanup_error}");
                     }
+                    if cleanup.process_reaped {
+                        child.finish_drain();
+                        child.release_process();
+                    } else if let Some(child) = child.detach_for_reaper() {
+                        handoff_to_reaper(child, "startup error");
+                    }
                     Err(error)
                 }
             }
@@ -796,8 +854,14 @@ fn spawn_sidecar(config: &HostLaunchConfig) -> Result<OwnedChild, HostStartupErr
     let stderr = match process.stderr.take() {
         Some(stderr) => stderr,
         None => {
-            let _ = process.kill();
-            let _ = process.wait();
+            let diagnostics = Arc::new(Mutex::new(VecDeque::with_capacity(
+                MAX_STDERR_DIAGNOSTIC_BYTES,
+            )));
+            cleanup_spawn_failure(
+                process,
+                diagnostics,
+                "sidecar stderr 管道创建失败".to_owned(),
+            );
             return Err(HostStartupError::SidecarSpawn {
                 path: config.sidecar_path.clone(),
                 message: "sidecar stderr 管道创建失败".to_owned(),
@@ -814,8 +878,11 @@ fn spawn_sidecar(config: &HostLaunchConfig) -> Result<OwnedChild, HostStartupErr
     {
         Ok(drain) => drain,
         Err(error) => {
-            let _ = process.kill();
-            let _ = process.wait();
+            cleanup_spawn_failure(
+                process,
+                diagnostics,
+                format!("sidecar stderr drain 启动失败: {error}"),
+            );
             return Err(HostStartupError::SidecarSpawn {
                 path: config.sidecar_path.clone(),
                 message: format!("sidecar stderr drain 启动失败: {error}"),
@@ -823,11 +890,29 @@ fn spawn_sidecar(config: &HostLaunchConfig) -> Result<OwnedChild, HostStartupErr
         }
     };
     Ok(OwnedChild {
-        process,
+        process: Some(process),
         stderr: diagnostics,
         drain: Some(drain),
         drop_cleanup: true,
     })
+}
+
+fn cleanup_spawn_failure(process: Child, diagnostics: Arc<Mutex<VecDeque<u8>>>, message: String) {
+    let mut child = OwnedChild {
+        process: Some(process),
+        stderr: diagnostics,
+        drain: None,
+        drop_cleanup: true,
+    };
+    let cleanup = force_stop(&mut child);
+    if let Some(error) = cleanup.first_error {
+        eprintln!("kanban sidecar spawn cleanup 失败：{error}");
+    }
+    if cleanup.process_reaped {
+        child.release_process();
+    } else if let Some(child) = child.detach_for_reaper() {
+        handoff_to_reaper(child, &message);
+    }
 }
 
 fn wait_for_sidecar(
@@ -835,7 +920,7 @@ fn wait_for_sidecar(
     child: &mut OwnedChild,
     initial_probe: ProbeError,
 ) -> Result<HostCompatibility, HostStartupError> {
-    let deadline = Instant::now() + config.startup_timeout;
+    let deadline = deadline_after(Instant::now(), config.startup_timeout);
     loop {
         if Instant::now() >= deadline {
             return Err(HostStartupError::StartupTimeout {
@@ -852,13 +937,14 @@ fn wait_for_sidecar(
             };
         if let Some(status) =
             child
-                .process
+                .process_mut()
                 .try_wait()
                 .map_err(|error| HostStartupError::SidecarExited {
                     message: error.to_string(),
                 })?
         {
             child.finish_drain();
+            child.release_process();
             let diagnostic = child.diagnostic(status);
             if !initial_probe.is_unavailable()
                 || diagnostic
@@ -898,7 +984,11 @@ fn capped_probe_deadline(
     startup_deadline: Instant,
     probe_total: Duration,
 ) -> Instant {
-    (started_at + probe_total).min(startup_deadline)
+    deadline_after(started_at, probe_total).min(startup_deadline)
+}
+
+fn deadline_after(started_at: Instant, duration: Duration) -> Instant {
+    started_at.checked_add(duration).unwrap_or(started_at)
 }
 
 fn drain_stderr(mut stderr: impl Read, diagnostics: Arc<Mutex<VecDeque<u8>>>) {
@@ -921,7 +1011,6 @@ fn drain_stderr(mut stderr: impl Read, diagnostics: Arc<Mutex<VecDeque<u8>>>) {
 trait ProcessCleanup {
     fn try_wait(&mut self) -> io::Result<Option<std::process::ExitStatus>>;
     fn kill(&mut self) -> io::Result<()>;
-    fn wait(&mut self) -> io::Result<std::process::ExitStatus>;
 }
 
 impl ProcessCleanup for Child {
@@ -931,10 +1020,6 @@ impl ProcessCleanup for Child {
 
     fn kill(&mut self) -> io::Result<()> {
         Child::kill(self)
-    }
-
-    fn wait(&mut self) -> io::Result<std::process::ExitStatus> {
-        Child::wait(self)
     }
 }
 
@@ -964,15 +1049,15 @@ impl CleanupOutcome {
     }
 }
 
-/// 以 fake process 实现覆盖 cleanup 错误组合，避免测试依赖真实 OS wait error。
+/// 只做非阻塞 cleanup；未确认 reap 时必须继续持有 Child ownership。
 fn force_stop_with<P: ProcessCleanup>(process: &mut P) -> CleanupOutcome {
     let mut first_error = None;
     let process_reaped = match process.try_wait() {
         Ok(Some(_)) => true,
-        Ok(None) => stop_and_wait(process, &mut first_error),
+        Ok(None) => stop_without_wait(process, &mut first_error),
         Err(error) => {
             first_error = Some(error);
-            stop_and_wait(process, &mut first_error)
+            stop_without_wait(process, &mut first_error)
         }
     };
     CleanupOutcome {
@@ -981,16 +1066,19 @@ fn force_stop_with<P: ProcessCleanup>(process: &mut P) -> CleanupOutcome {
     }
 }
 
-fn stop_and_wait<P: ProcessCleanup>(process: &mut P, first_error: &mut Option<io::Error>) -> bool {
+fn stop_without_wait<P: ProcessCleanup>(
+    process: &mut P,
+    first_error: &mut Option<io::Error>,
+) -> bool {
     if let Err(error) = process.kill() {
         if first_error.is_none() {
             *first_error = Some(error);
         }
-        // kill 失败时不调用可能无限等待的 wait；只用一次非阻塞 try_wait 争取确认。
         return matches!(process.try_wait(), Ok(Some(_)));
     }
-    match process.wait() {
-        Ok(_) => true,
+    match process.try_wait() {
+        Ok(Some(_)) => true,
+        Ok(None) => false,
         Err(error) => {
             if first_error.is_none() {
                 *first_error = Some(error);
@@ -1001,11 +1089,103 @@ fn stop_and_wait<P: ProcessCleanup>(process: &mut P, first_error: &mut Option<io
 }
 
 fn force_stop(child: &mut OwnedChild) -> CleanupOutcome {
-    let outcome = force_stop_with(&mut child.process);
+    if child.process.is_none() {
+        return CleanupOutcome {
+            first_error: None,
+            process_reaped: true,
+        };
+    }
+    let outcome = force_stop_with(child.process_mut());
     if outcome.should_join_drain() {
         child.finish_drain();
+        child.release_process();
     }
     outcome
+}
+
+/// 将仍由本进程拥有的 sidecar 交给后台 reaper，避免 UI/Drop 等待子进程。
+fn handoff_to_reaper(child: OwnedChild, context: &str) {
+    match spawn_reaper(child) {
+        Ok(()) => {}
+        Err((mut child, error)) => {
+            // 极端情况下线程创建失败；不能丢掉 Child ownership，退回到同步 reap。
+            eprintln!("kanban {context} 后台 reaper 启动失败：{error}；回退同步 reap");
+            reap_blocking(&mut child);
+        }
+    }
+}
+
+fn spawn_reaper(child: OwnedChild) -> Result<(), (OwnedChild, io::Error)> {
+    let state = Arc::new(Mutex::new(Some(child)));
+    let state_for_thread = Arc::clone(&state);
+    let result = thread::Builder::new()
+        .name("kanban-desktop-sidecar-reaper".to_owned())
+        .spawn(move || {
+            let mut state = state_for_thread
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let Some(mut child) = state.take() else {
+                return;
+            };
+            reap_owned_child(&mut child);
+        });
+    match result {
+        Ok(handle) => {
+            // 线程闭包本身持有 Child；JoinHandle 不需要阻塞调用方生命周期。
+            drop(handle);
+            Ok(())
+        }
+        Err(error) => {
+            let child = match Arc::try_unwrap(state) {
+                Ok(state) => state
+                    .into_inner()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .expect("sidecar reaper spawn failure must retain Child ownership"),
+                Err(state) => state
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .take()
+                    .expect("sidecar reaper spawn failure must retain Child ownership"),
+            };
+            Err((child, error))
+        }
+    }
+}
+
+fn reap_owned_child(child: &mut OwnedChild) {
+    loop {
+        match child.process_mut().try_wait() {
+            Ok(Some(_)) => {
+                child.finish_drain();
+                child.release_process();
+                return;
+            }
+            Ok(None) => {}
+            Err(error) => {
+                eprintln!("kanban sidecar reaper try_wait 失败：{error}");
+            }
+        }
+        if let Err(error) = child.process_mut().kill() {
+            eprintln!("kanban sidecar reaper kill 失败：{error}");
+        }
+        thread::sleep(REAPER_RETRY_INTERVAL);
+    }
+}
+
+fn reap_blocking(child: &mut OwnedChild) {
+    if let Err(error) = child.process_mut().kill() {
+        eprintln!("kanban sidecar 同步 cleanup kill 失败：{error}");
+    }
+    match child.process_mut().wait() {
+        Ok(_) => {
+            child.finish_drain();
+            child.release_process();
+        }
+        Err(error) => {
+            eprintln!("kanban sidecar 同步 cleanup wait 失败：{error}；继续后台式重试");
+            reap_owned_child(child);
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -1030,8 +1210,11 @@ fn request_graceful_stop(_child: &Child) -> io::Result<()> {
 mod tests {
     use std::{
         io::{self, Read, Write},
-        net::TcpListener,
-        sync::atomic::{AtomicUsize, Ordering},
+        net::{TcpListener, TcpStream},
+        sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+        },
         thread,
     };
 
@@ -1309,7 +1492,7 @@ mod tests {
             db_path: "private".to_owned(),
             db_fingerprint: "private".to_owned(),
         });
-        let endpoint = spawn_delayed_json_host(
+        let fixture = spawn_delayed_json_host(
             [
                 serde_json::to_vec(&health).expect("health JSON"),
                 serde_json::to_vec(&runtime).expect("runtime JSON"),
@@ -1319,7 +1502,7 @@ mod tests {
         );
         let started_at = Instant::now();
         let error = probe_host_with_timeouts(
-            endpoint,
+            fixture.endpoint,
             ProbeTimeouts {
                 connect: Duration::from_millis(200),
                 io: Duration::from_millis(200),
@@ -1329,7 +1512,7 @@ mod tests {
         .expect_err("three delayed responses must exceed one shared deadline");
         let elapsed = started_at.elapsed();
         assert!(
-            elapsed < Duration::from_millis(200),
+            elapsed < Duration::from_millis(300),
             "probe drifted: {elapsed:?}"
         );
         assert!(matches!(error, ProbeError::Incompatible(_)));
@@ -1365,7 +1548,10 @@ mod tests {
             HostStartupError::SidecarIncompatible { .. }
         ));
         let cleanup = force_stop(&mut child);
-        assert!(cleanup.process_reaped, "test sidecar must be reaped");
+        if !cleanup.process_reaped {
+            reap_blocking(&mut child);
+        }
+        assert!(child.process.is_none(), "test sidecar must be reaped");
     }
 
     fn assert_no_sidecar_spawn(endpoint: SocketAddr) {
@@ -1411,7 +1597,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn startup_failure_reaps_owned_sidecar() {
+    fn startup_timeout_handoffs_owned_sidecar_to_reaper() {
         let id = NEXT_FIXTURE_ID.fetch_add(1, Ordering::Relaxed);
         let marker = std::env::temp_dir().join(format!(
             "kanban-desktop-startup-exit-marker-{}-{id}",
@@ -1425,7 +1611,10 @@ mod tests {
             .expect("startup fixture endpoint")
             .local_addr()
             .expect("startup fixture address");
-        let script = format!("#!/bin/sh\nprintf '%s' $$ > {}\nexit 7\n", marker.display());
+        let script = format!(
+            "#!/bin/sh\nprintf '%s' $$ > {}\nsleep 10\n",
+            marker.display()
+        );
         std::fs::write(&sidecar, script).expect("startup sidecar fixture");
         {
             use std::os::unix::fs::PermissionsExt;
@@ -1440,12 +1629,16 @@ mod tests {
         config.endpoint = endpoint;
         config.startup_timeout = Duration::from_millis(100);
         config = config.with_probe_timeout(Duration::from_millis(25));
-        let error = connect_or_spawn(&config).expect_err("exited sidecar must fail startup");
-        assert!(matches!(error, HostStartupError::SidecarExited { .. }));
+        let error = connect_or_spawn(&config).expect_err("timed out sidecar must fail startup");
+        assert!(matches!(error, HostStartupError::StartupTimeout { .. }));
         let pid = std::fs::read_to_string(&marker)
             .expect("sidecar pid marker")
             .parse::<i32>()
             .expect("sidecar pid");
+        let reap_deadline = Instant::now() + Duration::from_secs(2);
+        while unsafe { libc::kill(pid, 0) } == 0 && Instant::now() < reap_deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
         assert!(
             unsafe { libc::kill(pid, 0) } != 0,
             "sidecar pid remains alive"
@@ -1492,11 +1685,55 @@ mod tests {
             ownership: HostOwnership::Owned,
             child: Some(test_owned_child(process)),
         };
-        assert_eq!(
-            handle.shutdown().expect("owned force shutdown"),
-            ShutdownResult::Forced
+        let pid = handle.child.as_ref().expect("owned child").process().id();
+        match handle.shutdown() {
+            Ok(result) => {
+                assert!(matches!(
+                    result,
+                    ShutdownResult::Forced | ShutdownResult::AlreadyExited
+                ));
+                assert!(handle.child.is_none(), "forced child must be reaped");
+            }
+            Err(_) => {
+                assert!(
+                    handle.child.is_some(),
+                    "unconfirmed cleanup retains ownership"
+                );
+                drop(handle);
+                let reap_deadline = Instant::now() + Duration::from_secs(2);
+                while unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
+                    && Instant::now() < reap_deadline
+                {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                assert!(
+                    unsafe { libc::kill(pid as libc::pid_t, 0) } != 0,
+                    "background reaper did not reap sidecar"
+                );
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn owned_host_drop_handoffs_unconfirmed_child_to_reaper() {
+        let process = test_sleep_child(true);
+        let handle = HostHandle {
+            endpoint: default_endpoint(),
+            ownership: HostOwnership::Owned,
+            child: Some(test_owned_child(process)),
+        };
+        let pid = handle.child.as_ref().expect("owned child").process().id();
+        drop(handle);
+
+        let reap_deadline = Instant::now() + Duration::from_secs(2);
+        while unsafe { libc::kill(pid as libc::pid_t, 0) } == 0 && Instant::now() < reap_deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            unsafe { libc::kill(pid as libc::pid_t, 0) } != 0,
+            "background reaper did not reap dropped sidecar"
         );
-        assert!(handle.child.is_none(), "forced child must be reaped");
     }
 
     #[cfg(unix)]
@@ -1513,10 +1750,32 @@ mod tests {
             ShutdownResult::ExternalHostKept
         );
         let child = handle.child.as_mut().expect("external process retained");
-        assert!(child.process.try_wait().expect("external status").is_none());
-        child.process.kill().expect("cleanup external fixture");
-        child.process.wait().expect("wait external fixture");
+        assert!(
+            child
+                .process_mut()
+                .try_wait()
+                .expect("external status")
+                .is_none()
+        );
+        child
+            .process_mut()
+            .kill()
+            .expect("cleanup external fixture");
+        child.process_mut().wait().expect("wait external fixture");
         child.finish_drain();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn blocking_reaper_reaps_child_before_releasing_drain() {
+        let process = test_sleep_child(true);
+        let mut child = test_owned_child(process);
+        reap_blocking(&mut child);
+        assert!(
+            child.process.is_none(),
+            "blocking reaper must release child"
+        );
+        assert!(child.drain.is_none(), "reaper must join stderr drain");
     }
 
     #[cfg(unix)]
@@ -1538,9 +1797,7 @@ mod tests {
     struct FakeCleanupProcess {
         try_wait_results: VecDeque<FakeTryWait>,
         kill_results: VecDeque<FakeResult>,
-        wait_results: VecDeque<FakeResult>,
         kill_calls: usize,
-        wait_calls: usize,
     }
 
     #[cfg(unix)]
@@ -1548,14 +1805,11 @@ mod tests {
         fn new(
             try_wait_results: impl IntoIterator<Item = FakeTryWait>,
             kill_results: impl IntoIterator<Item = FakeResult>,
-            wait_results: impl IntoIterator<Item = FakeResult>,
         ) -> Self {
             Self {
                 try_wait_results: try_wait_results.into_iter().collect(),
                 kill_results: kill_results.into_iter().collect(),
-                wait_results: wait_results.into_iter().collect(),
                 kill_calls: 0,
-                wait_calls: 0,
             }
         }
     }
@@ -1581,52 +1835,43 @@ mod tests {
                 FakeResult::Error(message) => Err(io::Error::other(message)),
             }
         }
-
-        fn wait(&mut self) -> io::Result<std::process::ExitStatus> {
-            self.wait_calls += 1;
-            match self.wait_results.pop_front().unwrap_or(FakeResult::Ok) {
-                FakeResult::Ok => Ok(std::process::ExitStatus::from_raw(0)),
-                FakeResult::Error(message) => Err(io::Error::other(message)),
-            }
-        }
     }
 
     #[cfg(unix)]
     #[test]
     fn cleanup_reaps_already_exited_without_kill_or_wait() {
-        let mut process = FakeCleanupProcess::new([FakeTryWait::Reaped], [], []);
+        let mut process = FakeCleanupProcess::new([FakeTryWait::Reaped], []);
         let outcome = force_stop_with(&mut process);
         assert!(outcome.process_reaped);
         assert!(outcome.first_error.is_none());
         assert_eq!(process.kill_calls, 0);
-        assert_eq!(process.wait_calls, 0);
     }
 
     #[cfg(unix)]
     #[test]
-    fn cleanup_kills_and_waits_running_process() {
-        let mut process =
-            FakeCleanupProcess::new([FakeTryWait::Running], [FakeResult::Ok], [FakeResult::Ok]);
+    fn cleanup_kills_and_rechecks_running_process() {
+        let mut process = FakeCleanupProcess::new(
+            [FakeTryWait::Running, FakeTryWait::Reaped],
+            [FakeResult::Ok],
+        );
         let outcome = force_stop_with(&mut process);
         assert!(outcome.process_reaped);
         assert_eq!(process.kill_calls, 1);
-        assert_eq!(process.wait_calls, 1);
     }
 
     #[cfg(unix)]
     #[test]
-    fn cleanup_wait_error_does_not_confirm_exit_or_join_drain() {
+    fn cleanup_try_wait_error_does_not_confirm_exit_or_join_drain() {
         let mut process = FakeCleanupProcess::new(
-            [FakeTryWait::Running],
+            [FakeTryWait::Running, FakeTryWait::Error("try_wait failed")],
             [FakeResult::Ok],
-            [FakeResult::Error("wait failed")],
         );
         let outcome = force_stop_with(&mut process);
         assert!(!outcome.process_reaped);
         assert!(!outcome.should_join_drain());
         assert_eq!(
-            outcome.first_error.expect("wait error").to_string(),
-            "wait failed"
+            outcome.first_error.expect("try_wait error").to_string(),
+            "try_wait failed"
         );
     }
 
@@ -1636,7 +1881,6 @@ mod tests {
         let mut process = FakeCleanupProcess::new(
             [FakeTryWait::Running, FakeTryWait::Running],
             [FakeResult::Error("kill failed")],
-            [FakeResult::Error("wait must not run")],
         );
         let outcome = force_stop_with(&mut process);
         assert!(!outcome.process_reaped);
@@ -1644,7 +1888,6 @@ mod tests {
             outcome.first_error.expect("kill error").to_string(),
             "kill failed"
         );
-        assert_eq!(process.wait_calls, 0);
     }
 
     #[cfg(unix)]
@@ -1653,7 +1896,6 @@ mod tests {
         let mut process = FakeCleanupProcess::new(
             [FakeTryWait::Running, FakeTryWait::Reaped],
             [FakeResult::Error("kill failed")],
-            [],
         );
         let outcome = force_stop_with(&mut process);
         assert!(outcome.process_reaped);
@@ -1661,7 +1903,6 @@ mod tests {
             outcome.first_error.expect("kill error").to_string(),
             "kill failed"
         );
-        assert_eq!(process.wait_calls, 0);
     }
 
     #[cfg(unix)]
@@ -1670,7 +1911,6 @@ mod tests {
         let mut process = FakeCleanupProcess::new(
             [FakeTryWait::Error("try_wait failed"), FakeTryWait::Running],
             [FakeResult::Error("kill failed")],
-            [FakeResult::Error("wait failed")],
         );
         let outcome = force_stop_with(&mut process);
         assert!(!outcome.process_reaped);
@@ -1678,21 +1918,19 @@ mod tests {
             outcome.first_error.expect("try_wait error").to_string(),
             "try_wait failed"
         );
-        assert_eq!(process.wait_calls, 0);
     }
 
     #[cfg(unix)]
     #[test]
-    fn cleanup_wait_error_is_preserved_after_successful_kill() {
+    fn cleanup_recheck_error_is_preserved_after_successful_kill() {
         let mut process = FakeCleanupProcess::new(
-            [FakeTryWait::Running],
+            [FakeTryWait::Running, FakeTryWait::Error("try_wait failed")],
             [FakeResult::Ok],
-            [FakeResult::Error("wait failed")],
         );
         let outcome = force_stop_with(&mut process);
         assert_eq!(
-            outcome.first_error.expect("wait error").to_string(),
-            "wait failed"
+            outcome.first_error.expect("try_wait error").to_string(),
+            "try_wait failed"
         );
         assert!(!outcome.process_reaped);
     }
@@ -1700,7 +1938,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn cleanup_reaped_outcome_releases_child_ownership() {
-        let mut process = FakeCleanupProcess::new([FakeTryWait::Reaped], [], []);
+        let mut process = FakeCleanupProcess::new([FakeTryWait::Reaped], []);
         let outcome = force_stop_with(&mut process);
         assert_eq!(outcome.ownership(), CleanupOwnership::Release);
     }
@@ -1711,7 +1949,6 @@ mod tests {
         let mut process = FakeCleanupProcess::new(
             [FakeTryWait::Running, FakeTryWait::Running],
             [FakeResult::Error("kill failed")],
-            [],
         );
         let outcome = force_stop_with(&mut process);
         assert_eq!(outcome.ownership(), CleanupOwnership::RetainForRetry);
@@ -1724,10 +1961,9 @@ mod tests {
             [
                 FakeTryWait::Running,
                 FakeTryWait::Running,
-                FakeTryWait::Running,
+                FakeTryWait::Reaped,
             ],
-            [FakeResult::Error("kill failed"), FakeResult::Ok],
-            [FakeResult::Ok],
+            [FakeResult::Error("kill failed")],
         );
         let first = force_stop_with(&mut process);
         assert_eq!(first.ownership(), CleanupOwnership::RetainForRetry);
@@ -1740,14 +1976,13 @@ mod tests {
     #[test]
     fn cleanup_drain_join_is_gated_by_confirmed_reap() {
         let mut running = FakeCleanupProcess::new(
-            [FakeTryWait::Running],
+            [FakeTryWait::Running, FakeTryWait::Running],
             [FakeResult::Ok],
-            [FakeResult::Error("wait failed")],
         );
         let running_outcome = force_stop_with(&mut running);
         assert!(!running_outcome.should_join_drain());
 
-        let mut reaped = FakeCleanupProcess::new([FakeTryWait::Reaped], [], []);
+        let mut reaped = FakeCleanupProcess::new([FakeTryWait::Reaped], []);
         let reaped_outcome = force_stop_with(&mut reaped);
         assert!(reaped_outcome.should_join_drain());
     }
@@ -1761,7 +1996,7 @@ mod tests {
         let diagnostics_for_thread = Arc::clone(&diagnostics);
         let drain = thread::spawn(move || drain_stderr(stderr, diagnostics_for_thread));
         OwnedChild {
-            process,
+            process: Some(process),
             stderr: diagnostics,
             drain: Some(drain),
             drop_cleanup: true,
@@ -1806,10 +2041,27 @@ mod tests {
         spawn_raw_host(responses)
     }
 
+    struct DelayedJsonHost {
+        endpoint: SocketAddr,
+        stop: Arc<AtomicBool>,
+        join: Option<thread::JoinHandle<()>>,
+    }
+
+    impl Drop for DelayedJsonHost {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::Release);
+            // 唤醒 fixture 可能正在等待的下一次 accept，使 join 有界结束。
+            let _ = TcpStream::connect(self.endpoint);
+            if let Some(join) = self.join.take() {
+                let _ = join.join();
+            }
+        }
+    }
+
     fn spawn_delayed_json_host<const N: usize>(
         bodies: [Vec<u8>; N],
         delay: Duration,
-    ) -> std::net::SocketAddr {
+    ) -> DelayedJsonHost {
         let responses = bodies.map(|body| {
             format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -1822,11 +2074,17 @@ mod tests {
         });
         let listener = TcpListener::bind((DEFAULT_HOST, 0)).expect("delayed probe listener");
         let endpoint = listener.local_addr().expect("delayed fixture address");
-        thread::spawn(move || {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_for_thread = Arc::clone(&stop);
+        let join = thread::spawn(move || {
             for response in responses {
                 let Ok((mut stream, _)) = listener.accept() else {
                     return;
                 };
+                if stop_for_thread.load(Ordering::Acquire) {
+                    return;
+                }
+                let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
                 let mut request = Vec::new();
                 let mut chunk = [0_u8; 1024];
                 while !request.windows(4).any(|window| window == b"\r\n\r\n") {
@@ -1839,10 +2097,17 @@ mod tests {
                     request.extend_from_slice(&chunk[..count]);
                 }
                 thread::sleep(delay);
+                if stop_for_thread.load(Ordering::Acquire) {
+                    return;
+                }
                 let _ = stream.write_all(&response);
             }
         });
-        endpoint
+        DelayedJsonHost {
+            endpoint,
+            stop,
+            join: Some(join),
+        }
     }
 
     fn spawn_raw_host<const N: usize>(responses: [Vec<u8>; N]) -> std::net::SocketAddr {

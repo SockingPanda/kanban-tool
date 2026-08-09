@@ -94,6 +94,7 @@ describe("TaskInspector", () => {
       action: "submit-review",
       input: { claim_token: "claim_1" },
     })
+    expect(buildInspectorTransitionCommand(model.task, "block", { reason: " needs changes " }, null)).toBeNull()
     expect(buildInspectorTransitionCommand(model.task, "block", { reason: " needs changes ", confirmed: true }, null)).toEqual({
       action: "block",
       input: { force: true, reason: "needs changes" },

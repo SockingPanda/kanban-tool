@@ -138,7 +138,7 @@ export function TaskInspectorActionPanel({
 
 export type InspectorActionDialogState =
   | { readonly kind: "description"; readonly action: "specify"; readonly description: string; readonly trigger: HTMLButtonElement | null }
-  | { readonly kind: "reason"; readonly action: "block"; readonly reason: string; readonly trigger: HTMLButtonElement | null }
+  | { readonly kind: "reason"; readonly action: "block"; readonly reason: string; readonly confirmed: boolean; readonly requiresConfirmation: boolean; readonly trigger: HTMLButtonElement | null }
   | { readonly kind: "confirm"; readonly action: Exclude<InspectorActionId, "specify" | "block">; readonly trigger: HTMLButtonElement | null }
 
 export function TaskInspectorActionDialog({
@@ -147,6 +147,7 @@ export function TaskInspectorActionDialog({
   copy,
   onDescriptionChange,
   onReasonChange,
+  onConfirmationChange,
   onCancel,
   onSubmit,
 }: {
@@ -155,6 +156,7 @@ export function TaskInspectorActionDialog({
   readonly copy: InspectorCopy
   readonly onDescriptionChange: (value: string) => void
   readonly onReasonChange: (value: string) => void
+  readonly onConfirmationChange: (value: boolean) => void
   readonly onCancel: () => void
   readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
@@ -166,7 +168,11 @@ export function TaskInspectorActionDialog({
   }, [])
   const title = dialog.kind === "description" ? copy.actionDescriptionTitle : dialog.kind === "reason" ? copy.actionReasonTitle : copy.actionConfirmTitle
   const submitLabel = actionLabel(dialog.action, locale)
-  const invalid = dialog.kind === "description" ? dialog.description.trim().length === 0 : dialog.kind === "reason" ? dialog.reason.trim().length === 0 : false
+  const invalid = dialog.kind === "description"
+    ? dialog.description.trim().length === 0
+    : dialog.kind === "reason"
+      ? dialog.reason.trim().length === 0 || (dialog.requiresConfirmation && !dialog.confirmed)
+      : false
   return (
     <div className={styles.dialogBackdrop} role="presentation">
       <div className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="inspector-action-dialog-title" aria-describedby="inspector-action-dialog-description">
@@ -175,7 +181,8 @@ export function TaskInspectorActionDialog({
           <p id="inspector-action-dialog-description">{dialog.kind === "description" ? copy.actionDescriptionHint : dialog.kind === "reason" ? copy.actionReasonHint : copy.actionConfirmDescription}</p>
           {dialog.kind === "description" ? <label><span>{copy.editDescription}</span><textarea ref={dialogInputRef} name="action-description" value={dialog.description} onChange={(event) => onDescriptionChange(event.target.value)} rows={5} required /></label> : null}
           {dialog.kind === "reason" ? <label><span>{copy.actionReasonTitle}</span><textarea ref={dialogInputRef} name="action-reason" value={dialog.reason} onChange={(event) => onReasonChange(event.target.value)} rows={4} required /></label> : null}
-          {invalid ? <p className={styles.error} role="status">{dialog.kind === "description" ? copy.descriptionRequired : copy.reasonRequired}</p> : null}
+          {dialog.kind === "reason" && dialog.requiresConfirmation ? <label className={styles.confirmation}><input type="checkbox" name="action-force-confirmation" checked={dialog.confirmed} onChange={(event) => onConfirmationChange(event.target.checked)} required /><span>{copy.actionForceConfirmation}</span></label> : null}
+          {invalid ? <p className={styles.error} role="status">{dialog.kind === "description" ? copy.descriptionRequired : dialog.kind === "reason" && dialog.requiresConfirmation && dialog.reason.trim().length > 0 && !dialog.confirmed ? copy.confirmationRequired : copy.reasonRequired}</p> : null}
           <div className={styles.dialogActions}>
             <button type="button" className={styles.secondaryButton} onClick={onCancel}>{copy.cancel}</button>
             <button ref={dialogConfirmRef} type="submit" disabled={invalid}>{submitLabel}</button>

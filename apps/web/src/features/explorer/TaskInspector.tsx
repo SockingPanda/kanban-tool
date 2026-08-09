@@ -209,7 +209,9 @@ export type InspectorCopy = {
   readonly actionDescriptionHint: string
   readonly actionReasonTitle: string
   readonly actionReasonHint: string
+  readonly actionForceConfirmation: string
   readonly reasonRequired: string
+  readonly confirmationRequired: string
   readonly descriptionRequired: string
   readonly retryAction: string
   readonly mutationError: string
@@ -281,7 +283,9 @@ const copies: Record<Locale, InspectorCopy> = {
     actionDescriptionHint: "指定需要非空描述。",
     actionReasonTitle: "阻塞任务",
     actionReasonHint: "请说明任务为什么无法继续。",
+    actionForceConfirmation: "当前没有认领令牌；确认后将强制阻塞任务。",
     reasonRequired: "请填写原因。",
+    confirmationRequired: "请确认强制操作。",
     descriptionRequired: "请填写描述。",
     retryAction: "重试操作",
     mutationError: "操作失败，请检查提示后重试。",
@@ -343,7 +347,9 @@ const copies: Record<Locale, InspectorCopy> = {
     actionDescriptionHint: "Specify requires a non-empty description.",
     actionReasonTitle: "Block task",
     actionReasonHint: "Explain why work cannot continue.",
+    actionForceConfirmation: "No current claim token is available; confirm to force blocking the task.",
     reasonRequired: "Enter a reason.",
+    confirmationRequired: "Confirm the force action.",
     descriptionRequired: "Enter a description.",
     retryAction: "Retry action",
     mutationError: "Action failed. Review the message and try again.",
@@ -609,7 +615,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       return
     }
     if (view.action === "block") {
-      setActionDialog({ kind: "reason", action: "block", reason: "", trigger })
+      setActionDialog({ kind: "reason", action: "block", reason: "", confirmed: false, requiresConfirmation: view.requiresConfirmation, trigger })
       return
     }
     if (view.requiresConfirmation) {
@@ -628,8 +634,8 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       if (actionDialog.description.trim().length === 0) return
       executeTransition(view, { description: actionDialog.description })
     } else if (actionDialog.kind === "reason") {
-      if (actionDialog.reason.trim().length === 0) return
-      executeTransition(view, { reason: actionDialog.reason })
+      if (actionDialog.reason.trim().length === 0 || (actionDialog.requiresConfirmation && !actionDialog.confirmed)) return
+      executeTransition(view, { reason: actionDialog.reason, confirmed: actionDialog.requiresConfirmation ? true : undefined })
     } else {
       executeTransition(view, { confirmed: true })
     }
@@ -926,7 +932,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
           [copy.facts.build, model.runtime.webBuildId],
         ]} />
       </Section>
-      {actionDialog ? <TaskInspectorActionDialog dialog={actionDialog} locale={locale} copy={copy} onDescriptionChange={(description) => setActionDialog((current) => current?.kind === "description" ? { ...current, description } : current)} onReasonChange={(reason) => setActionDialog((current) => current?.kind === "reason" ? { ...current, reason } : current)} onCancel={closeActionDialog} onSubmit={submitActionDialog} /> : null}
+      {actionDialog ? <TaskInspectorActionDialog dialog={actionDialog} locale={locale} copy={copy} onDescriptionChange={(description) => setActionDialog((current) => current?.kind === "description" ? { ...current, description } : current)} onReasonChange={(reason) => setActionDialog((current) => current?.kind === "reason" ? { ...current, reason } : current)} onConfirmationChange={(confirmed) => setActionDialog((current) => current?.kind === "reason" ? { ...current, confirmed } : current)} onCancel={closeActionDialog} onSubmit={submitActionDialog} /> : null}
     </aside>
   )
 }

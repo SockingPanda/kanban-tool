@@ -208,6 +208,17 @@
     gap: 0.75rem;
   }
 
+  .confirmation {
+    display: flex !important;
+    align-items: flex-start;
+    gap: 0.45rem;
+  }
+
+  .confirmation input {
+    width: auto;
+    margin-block-start: 0.16rem;
+  }
+
   .dialogActions {
     justify-content: flex-end;
   }

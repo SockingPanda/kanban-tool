@@ -65,4 +65,23 @@ describe("EventsView", () => {
     expect(markup).toContain('data-testid="events-filter-empty"')
     expect(markup).not.toContain('data-testid="events-empty"')
   })
+
+  test("keeps the deferred task opener row mounted while the unfiltered snapshot reloads", () => {
+    const deferredSnapshot = { ...model, taskId: "t_1" }
+    const markup = renderToStaticMarkup(
+      <EventsPresentation
+        locale="zh"
+        taskId={null}
+        kindFilter=""
+        state={{ data: deferredSnapshot, loading: true, error: null, stale: true }}
+        online
+        onRefresh={vi.fn()}
+        onSelectTask={vi.fn()}
+      />,
+    )
+
+    expect(markup).toContain('data-testid="events-degraded-stale"')
+    expect(markup).toContain('data-task-opener="t_1"')
+    expect(markup).toContain('data-testid="event-row"')
+  })
 })

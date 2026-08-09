@@ -8,6 +8,7 @@ import {
   type BoardReadModel,
 } from "../../lib/api/board-read-model"
 import { createHttpTransport } from "../../lib/api/http-transport"
+import { createTaskMutationClient } from "../../lib/api/task-mutations"
 import { createTranslator } from "../../lib/i18n"
 import { usePreferences } from "../../lib/use-preferences"
 import { createGeneratedStreamContractAdapter, asCanonicalBoardId } from "../../lib/sync"
@@ -21,6 +22,7 @@ import {
 } from "./types"
 import { toBoardViewModel } from "./board-adapter"
 import { boardSyncStatusForTelemetry } from "./board-live-state"
+import type { BoardTaskMutationSurface } from "./task-mutation-state"
 import {
   acquireBoardSession,
   bindBoardResourceIdentity,
@@ -261,6 +263,23 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
   }, [contextState, route.kind, routeBoardSlug, runtime, selector])
   const visibleStateKind = visibleState.kind
   const visibleBoardSlug = visibleState.kind === "ready" ? visibleState.model.board.slug : null
+  const mutationBoardSlug = visibleBoardSlug === null ? null : parseCanonicalBoardSlug(visibleBoardSlug)
+
+  const refreshCanonical = useCallback(async () => {
+    await sessionHandleRef.current?.refresh()
+  }, [])
+
+  const taskMutations = useMemo<BoardTaskMutationSurface | undefined>(() => {
+    if (mutationBoardSlug === null) return undefined
+    try {
+      return {
+        client: createTaskMutationClient(runtime, mutationBoardSlug),
+        onCanonicalReload: refreshCanonical,
+      }
+    } catch {
+      return undefined
+    }
+  }, [mutationBoardSlug, refreshCanonical, runtime])
 
   useEffect(() => {
     if (route.kind !== "home" || visibleStateKind !== "ready" || stateContextKeyRef.current !== contextKey || visibleBoardSlug === null) return
@@ -371,6 +390,7 @@ export function BoardLive({ runtime, route, onNavigate }: BoardLiveProps) {
       messages={boardMessages}
       syncStatus={visibleState.kind === "ready" ? syncStatus : undefined}
       onRetry={retry}
+      taskMutations={taskMutations}
       id="astryx-board"
     />
   )

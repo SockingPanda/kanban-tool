@@ -44,6 +44,7 @@ const readModel: BoardReadModel = {
         status: "ready",
         priority: 3,
         position: 10,
+        lock_version: 7,
         assignee: "agent",
         dependency_blocked: true,
         unfinished_parent_count: 2,
@@ -77,6 +78,7 @@ describe("BoardReadModel adapter", () => {
             position: 10,
             priority: 3,
             assignee: "agent",
+            lockVersion: 7,
             readiness: {
               dependencyBlocked: true,
               unfinishedParentCount: 2,

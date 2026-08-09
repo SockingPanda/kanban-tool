@@ -66,6 +66,7 @@ function projectTask(task: BoardTask, groupedStatus: BoardTaskStatus): BoardTask
     title: task.title,
     status,
     position: task.position,
+    lockVersion: task.lock_version,
     priority: parsePriority(task.priority),
     assignee: task.assignee,
     readiness: Object.freeze({

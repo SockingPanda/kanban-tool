@@ -42,6 +42,8 @@ interface BoardSession {
 export interface BoardSessionHandle {
   readonly release: () => void
   readonly retry: () => void
+  /** Reload canonical board data through the existing session and publish it to subscribers. */
+  readonly refresh: () => Promise<void>
   readonly generation: number
 }
 
@@ -214,6 +216,12 @@ export function acquireBoardSession(
     release,
     retry: () => {
       if (!released && session !== undefined && !session.disposed && sessions.get(key) === session) session.controller.retry()
+    },
+    refresh: async () => {
+      if (released || session === undefined || session.disposed || sessions.get(key) !== session) return
+      const nextModel = await session.query.reload()
+      if (released || session.disposed || sessions.get(key) !== session) return
+      for (const listener of session.listeners) listener(nextModel)
     },
     generation: session.generation,
   }

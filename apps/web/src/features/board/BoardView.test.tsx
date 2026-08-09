@@ -21,6 +21,7 @@ const model: BoardViewModel = {
         title: "后面的任务",
         status: "ready",
         position: 20,
+        lockVersion: 4,
         priority: 1,
         assignee: null,
         readiness: {
@@ -38,6 +39,7 @@ const model: BoardViewModel = {
         title: "先显示的任务",
         status: "ready",
         position: 10,
+        lockVersion: 5,
         priority: 3,
         assignee: "worker-1",
         readiness: {

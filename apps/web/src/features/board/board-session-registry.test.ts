@@ -55,7 +55,7 @@ function resource(
   } satisfies StreamContractAdapter
   return {
     selector,
-    transport: { get: vi.fn() },
+    transport: { get: vi.fn(), request: vi.fn(), requestBytes: vi.fn() },
     query,
     adapter,
     runtimeKey: runtimeIdentityKey(resourceRuntime),
@@ -101,6 +101,24 @@ describe("Board canonical session registry", () => {
     expect(activeBoardSessionCount()).toBe(0)
     expect(stop).toHaveBeenCalledTimes(1)
     expect(query.invalidate).toHaveBeenCalledTimes(1)
+  })
+
+  test("refreshes the existing canonical query and publishes without creating another stream", async () => {
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload: vi.fn(async () => readModel),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const createController = vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), retry: vi.fn() }))
+    const listener = vi.fn()
+    const handle = acquireBoardSession(runtime, model, resource(query), listener, vi.fn(), { createController })
+
+    await handle.refresh()
+
+    expect(query.reload).toHaveBeenCalledTimes(1)
+    expect(listener).toHaveBeenCalledWith(readModel)
+    expect(createController).toHaveBeenCalledTimes(1)
+    handle.release()
   })
 
   test("does not leak a session across runtime/build identity changes", () => {

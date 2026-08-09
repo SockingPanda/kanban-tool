@@ -47,6 +47,7 @@ export interface BoardTaskViewModel {
   readonly title: string
   readonly status: BoardTaskStatus
   readonly position: number
+  readonly lockVersion: number
   readonly priority: 0 | 1 | 2 | 3
   readonly assignee: string | null
   readonly readiness: BoardTaskReadinessViewModel
@@ -176,6 +177,30 @@ export interface BoardMessages {
   readonly planState: Readonly<Record<BoardExecutionPlanState, string>>
   readonly requiredStepsLabel: string
   readonly optionalStepsLabel: string
+  readonly createTask: string
+  readonly editTask: string
+  readonly grabTask: string
+  readonly releaseTask: string
+  readonly cancelGrab: string
+  readonly dropTask: string
+  readonly taskCardRoleDescription: string
+  readonly transitionLabel: string
+  readonly transitionNames: Readonly<Record<string, string>>
+  readonly taskTitleLabel: string
+  readonly createTaskTitle: string
+  readonly editTaskTitle: string
+  readonly transitionTaskTitle: string
+  readonly blockReasonLabel: string
+  readonly blockReasonPlaceholder: string
+  readonly save: string
+  readonly create: string
+  readonly cancel: string
+  readonly mutationPending: string
+  readonly mutationError: string
+  readonly conflictDescription: string
+  readonly retryMutation: string
+  readonly close: string
+  readonly dropTargetLabel: (column: string) => string
 }
 
 export type BoardMessagesOverrides = Omit<Partial<BoardMessages>, "planState"> & {
@@ -224,6 +249,40 @@ export const defaultBoardMessages: BoardMessages = {
   },
   requiredStepsLabel: "必需步骤",
   optionalStepsLabel: "可选步骤",
+  createTask: "新建任务",
+  editTask: "编辑任务",
+  grabTask: "抓取任务",
+  releaseTask: "放下任务",
+  cancelGrab: "取消抓取",
+  dropTask: "移动任务",
+  taskCardRoleDescription: "可拖动任务卡片",
+  transitionLabel: "允许的状态转换",
+  transitionNames: {
+    specify: "补充规格",
+    promote: "推进就绪",
+    claim: "开始执行",
+    heartbeat: "保持执行",
+    complete: "标记完成",
+    "submit-review": "提交审查",
+    block: "标记阻塞",
+    unblock: "解除阻塞",
+    archive: "归档任务",
+  },
+  taskTitleLabel: "任务标题",
+  createTaskTitle: "新建任务",
+  editTaskTitle: "编辑任务",
+  transitionTaskTitle: "状态转换",
+  blockReasonLabel: "阻塞原因",
+  blockReasonPlaceholder: "说明为什么暂时无法继续",
+  save: "保存",
+  create: "创建",
+  cancel: "取消",
+  mutationPending: "正在保存…",
+  mutationError: "任务操作失败",
+  conflictDescription: "任务已被其他操作更新。已重新读取 canonical 状态，请确认输入后重试。",
+  retryMutation: "重新尝试",
+  close: "关闭",
+  dropTargetLabel: (column) => `放置到${column}`,
 }
 
 export const englishBoardMessages: BoardMessages = {
@@ -268,6 +327,40 @@ export const englishBoardMessages: BoardMessages = {
   },
   requiredStepsLabel: "Required steps",
   optionalStepsLabel: "Optional steps",
+  createTask: "Create task",
+  editTask: "Edit task",
+  grabTask: "Grab task",
+  releaseTask: "Drop task",
+  cancelGrab: "Cancel grab",
+  dropTask: "Move task",
+  taskCardRoleDescription: "Draggable task card",
+  transitionLabel: "Allowed status transitions",
+  transitionNames: {
+    specify: "Specify task",
+    promote: "Promote to ready",
+    claim: "Start execution",
+    heartbeat: "Keep running",
+    complete: "Mark done",
+    "submit-review": "Submit for review",
+    block: "Block task",
+    unblock: "Unblock task",
+    archive: "Archive task",
+  },
+  taskTitleLabel: "Task title",
+  createTaskTitle: "Create task",
+  editTaskTitle: "Edit task",
+  transitionTaskTitle: "Status transition",
+  blockReasonLabel: "Block reason",
+  blockReasonPlaceholder: "Explain why work cannot continue",
+  save: "Save",
+  create: "Create",
+  cancel: "Cancel",
+  mutationPending: "Saving…",
+  mutationError: "Task action failed",
+  conflictDescription: "This task changed elsewhere. Canonical state was reloaded; review your input and try again.",
+  retryMutation: "Try again",
+  close: "Close",
+  dropTargetLabel: (column) => `Drop in ${column}`,
 }
 
 export function boardMessagesForLocale(locale: "zh" | "en"): BoardMessages {

@@ -531,6 +531,12 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     ? mutationSnapshot
     : undefined
   const mutationGeneration = scopedSnapshot?.generation ?? null
+  const mutationScopeKey = JSON.stringify([requestIdentity, task.id, mutationGeneration])
+  const mutationScopeKeyRef = useRef(mutationScopeKey)
+  if (mutationScopeKeyRef.current !== mutationScopeKey) {
+    mutationScopeKeyRef.current = mutationScopeKey
+    mutationEpochRef.current += 1
+  }
   const mutationPending = useCallback((operation: "saveTask" | "transition") => {
     const key = inspectorMutationKey(operation, task.id)
     const reloadKey = inspectorMutationKey("reload", task.id)
@@ -549,7 +555,6 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   }, [])
 
   useEffect(() => {
-    mutationEpochRef.current += 1
     const currentTask = taskRef.current
     setEditing(false)
     setEditDraft(inspectorEditDraft(currentTask))
@@ -1027,7 +1032,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
           [copy.facts.build, model.runtime.webBuildId],
         ]} />
       </Section>
-      {actionDialog ? <TaskInspectorActionDialog dialog={actionDialog} locale={locale} copy={copy} error={transitionError?.message ?? null} onRetry={retryTransition} retryBlocksSubmit={transitionRetryMatches} onDescriptionChange={(description) => setActionDialog((current) => current?.kind === "description" ? { ...current, description } : current)} onReasonChange={(reason) => setActionDialog((current) => current?.kind === "reason" ? { ...current, reason } : current)} onConfirmationChange={(confirmed) => setActionDialog((current) => current?.kind === "reason" ? { ...current, confirmed } : current)} onCancel={closeActionDialog} onSubmit={submitActionDialog} /> : null}
+      {actionDialog ? <TaskInspectorActionDialog dialog={actionDialog} locale={locale} copy={copy} pending={mutationTransitionPending} error={transitionError?.message ?? null} onRetry={retryTransition} retryBlocksSubmit={transitionRetryMatches} onDescriptionChange={(description) => setActionDialog((current) => current?.kind === "description" ? { ...current, description } : current)} onReasonChange={(reason) => setActionDialog((current) => current?.kind === "reason" ? { ...current, reason } : current)} onConfirmationChange={(confirmed) => setActionDialog((current) => current?.kind === "reason" ? { ...current, confirmed } : current)} onCancel={closeActionDialog} onSubmit={submitActionDialog} /> : null}
     </aside>
   )
 }

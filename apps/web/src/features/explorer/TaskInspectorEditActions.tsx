@@ -155,6 +155,7 @@ export function TaskInspectorActionDialog({
   dialog,
   locale,
   copy,
+  pending,
   error,
   onRetry,
   retryBlocksSubmit,
@@ -167,6 +168,7 @@ export function TaskInspectorActionDialog({
   readonly dialog: InspectorActionDialogState
   readonly locale: Locale
   readonly copy: InspectorCopy
+  readonly pending: boolean
   readonly error: string | null
   readonly onRetry: (() => void) | null
   readonly retryBlocksSubmit: boolean
@@ -202,7 +204,7 @@ export function TaskInspectorActionDialog({
           {invalid ? <p className={styles.error} role="status">{dialog.kind === "description" ? copy.descriptionRequired : dialog.kind === "reason" && dialog.requiresConfirmation && dialog.reason.trim().length > 0 && !dialog.confirmed ? copy.confirmationRequired : copy.reasonRequired}</p> : null}
           <div className={styles.dialogActions}>
             <button type="button" className={styles.secondaryButton} onClick={onCancel}>{copy.cancel}</button>
-            <button ref={dialogConfirmRef} type="submit" disabled={invalid || retryBlocksSubmit}>{submitLabel}</button>
+            <button ref={dialogConfirmRef} type="submit" disabled={invalid || retryBlocksSubmit || pending} aria-busy={pending || undefined}>{submitLabel}</button>
           </div>
         </form>
       </div>

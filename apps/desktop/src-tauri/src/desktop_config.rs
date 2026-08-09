@@ -28,12 +28,15 @@ pub(crate) fn resolve_sidecar_path(resource_dir: &std::path::Path) -> PathBuf {
 }
 
 fn resolve_web_dir(resource_dir: &std::path::Path) -> PathBuf {
-    let packaged = resource_dir.join("web");
     #[cfg(debug_assertions)]
-    if !packaged.is_dir() {
-        return PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web/dist");
+    {
+        let _ = resource_dir;
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web/dist")
     }
-    packaged
+    #[cfg(not(debug_assertions))]
+    {
+        resource_dir.join("web")
+    }
 }
 
 fn first_non_empty_env(names: &[&str]) -> Option<String> {

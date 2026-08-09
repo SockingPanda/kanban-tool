@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react"
+import { Component, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react"
 
 import { BoardView } from "../board/BoardView"
 import { MutationDialog, MutationNotice } from "../board/BoardTaskMutations"
@@ -6,7 +6,7 @@ import { boardMessagesForLocale, type BoardViewModel } from "../board/types"
 import { useBoardTaskMutationController } from "../board/task-mutation-controller"
 import { toBoardViewModel } from "../board/board-adapter"
 import type { BoardSyncStatus } from "../board/types"
-import type { BoardTaskMutationSurface } from "../board/task-mutation-state"
+import type { BoardTaskCanonicalReloadHandler, BoardTaskMutationSurface } from "../board/task-mutation-state"
 import {
   ExplorerReadError,
   loadTaskInspectorAttachments,
@@ -29,7 +29,7 @@ import { routePath, type AppNavigationTarget, type AppRoute, type BoardRouteView
 import { usePreferences } from "../../lib/use-preferences"
 import { restoreExplorerFocus, type ExplorerFocusElement, type ExplorerFocusSnapshot } from "../../lib/explorer-focus"
 import { TaskInspector, type InspectorDependency, type TaskInspectorViewModel } from "./TaskInspector"
-import { TaskInspectorRelationsPanel, type TaskInspectorCommentView, type TaskInspectorDependenciesView, type TaskInspectorRelationTaskView, type TaskInspectorStepView } from "./TaskInspectorRelationsPanel"
+import { TaskInspectorRelationsPanel } from "./TaskInspectorRelationsPanel"
 import { TaskInspectorAssetsPanel, type InspectorAssetAttachment, type InspectorAssetLabel } from "./TaskInspectorAssetsPanel"
 import { inspectorMutationKey, type TaskInspectorMutationHandlers, type TaskInspectorMutationSnapshot, type TaskInspectorMutationSurface } from "./task-inspector-mutation-state"
 import { useTaskInspectorMutationController } from "./task-inspector-mutation-controller"
@@ -41,6 +41,7 @@ import {
   type AsyncReadInternalState,
   type AsyncReadState,
   visibleAsyncReadState,
+  inspectorRelationsView,
 } from "./ExplorerPage.logic"
 import { parseTaskMapUrlState, serializeTaskMapUrlState, type TaskMapUrlState } from "./TaskMapView.logic"
 import { EventsView } from "./EventsView"
@@ -93,6 +94,7 @@ export interface ExplorerPageProps {
   readonly eventsBatch?: BoardEventsBatch | null
   readonly syncStatus?: BoardSyncStatus
   readonly taskMutations?: BoardTaskMutationSurface
+  readonly onVisibleCanonicalReloadChange?: (reload: BoardTaskCanonicalReloadHandler | undefined, releasedReload?: BoardTaskCanonicalReloadHandler) => void
 }
 
 const MAX_EVENT_KIND_FILTER_LENGTH = 128
@@ -375,49 +377,6 @@ function inspectorViewModel(model: TaskInspectorReadModel): TaskInspectorViewMod
   }
 }
 
-function relationTaskView(task: TaskInspectorReadModel["dependencies"]["parents"][number]): TaskInspectorRelationTaskView {
-  return { id: task.id, ref: task.ref, title: task.title, status: task.status }
-}
-
-function linkedTaskView(task: NonNullable<TaskInspectorReadModel["steps"]["steps"][number]["linked_task"]>): TaskInspectorRelationTaskView {
-  return { id: task.id, ref: task.ref, title: task.title, status: task.status }
-}
-
-function inspectorRelationsView(model: TaskInspectorReadModel): {
-  readonly comments: readonly TaskInspectorCommentView[]
-  readonly dependencies: TaskInspectorDependenciesView
-  readonly steps: { readonly steps: readonly TaskInspectorStepView[]; readonly executionPlan: { readonly state: "unplanned" | "planned" | "not_required"; readonly reason: string | null } }
-} {
-  return {
-    comments: model.comments.map((comment) => ({
-      id: comment.id,
-      author: comment.author,
-      kind: comment.kind,
-      body: comment.body,
-      createdAt: comment.created_at,
-      metadata: comment.metadata,
-    })),
-    dependencies: {
-      parents: model.dependencies.parents.map(relationTaskView),
-      children: model.dependencies.children.map(relationTaskView),
-    },
-    steps: {
-      steps: model.steps.steps.map((step) => ({
-        id: step.id,
-        title: step.title,
-        body: step.body,
-        required: step.required,
-        status: step.status,
-        linkedTask: step.linked_task ? linkedTaskView(step.linked_task) : null,
-      })),
-      executionPlan: {
-        state: model.steps.execution_plan.state,
-        reason: model.steps.execution_plan.reason,
-      },
-    },
-  }
-}
-
 const inspectorWriteOperations = [
   "saveTask",
   "transition",
@@ -452,6 +411,34 @@ function InspectorBoundary({ loading, error, onRetry, copy }: { readonly loading
   return null
 }
 
+function InspectorAssetsReadOnlyFallback({
+  data,
+  attachments,
+  attachmentsLoading,
+  attachmentsError,
+  locale,
+}: {
+  readonly data: TaskInspectorReadModel
+  readonly attachments: readonly { readonly id: string; readonly filename: string }[]
+  readonly attachmentsLoading: boolean
+  readonly attachmentsError: Error | null
+  readonly locale: Locale
+}) {
+  const copy = locale === "en"
+    ? { title: "Labels & attachments", notice: "Mutation controls are unavailable; showing the loaded read-only snapshot.", labels: "Labels", attachments: "Attachments", loading: "Loading attachments…", none: "None", error: "Attachments could not be refreshed." }
+    : { title: "标签与附件", notice: "写入控件暂不可用；当前显示已加载的只读快照。", labels: "标签", attachments: "附件", loading: "正在加载附件…", none: "暂无", error: "附件刷新失败。" }
+  return (
+    <section className={styles.assetsReadOnlyFallback} data-testid="inspector-assets-readonly" aria-labelledby="inspector-assets-readonly-heading">
+      <h2 id="inspector-assets-readonly-heading">{copy.title}</h2>
+      <p className={styles.assetsReadOnlyMuted} role="status">{copy.notice}</p>
+      <h3>{copy.labels}</h3>
+      {data.task.labels.length > 0 ? <ul className={styles.assetsReadOnlyList}>{data.task.labels.map((label) => <li key={label.id}>{label.name}</li>)}</ul> : <p className={styles.assetsReadOnlyEmpty}>{copy.none}</p>}
+      <h3>{copy.attachments}</h3>
+      {attachmentsLoading ? <p className={styles.assetsReadOnlyMuted} role="status">{copy.loading}</p> : attachmentsError ? <p className={styles.assetsReadOnlyError} role="status">{copy.error}</p> : attachments.length > 0 ? <ul className={styles.assetsReadOnlyList}>{attachments.map((attachment) => <li key={attachment.id}>{attachment.filename}</li>)}</ul> : <p className={styles.assetsReadOnlyEmpty}>{copy.none}</p>}
+    </section>
+  )
+}
+
 function ExplorerTabs({ route, basePath, taskId, onNavigate, copy }: { readonly route: Extract<AppRoute, { kind: "board" }>; readonly basePath: string; readonly taskId: string | null; readonly onNavigate?: ExplorerPageProps["onNavigate"]; readonly copy: ExplorerCopy }) {
   const params = queryParams(route)
   const views: readonly [BoardRouteView, string][] = [["board", copy.board], ["list", copy.list], ["map", copy.map], ["runs", copy.runs], ["events", copy.events]]
@@ -467,7 +454,7 @@ function ExplorerTabs({ route, basePath, taskId, onNavigate, copy }: { readonly 
   )
 }
 
-export function ExplorerPage({ runtime, route, onNavigate, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations }: ExplorerPageProps) {
+export function ExplorerPage({ runtime, route, onNavigate, online, invalidationRevision = 0, boardRevision = invalidationRevision, inspectorRevision = invalidationRevision, runsRevision = invalidationRevision, eventsRefreshRevision = invalidationRevision, eventsBatch, syncStatus, taskMutations, onVisibleCanonicalReloadChange }: ExplorerPageProps) {
   const { locale } = usePreferences()
   const copy = explorerCopies[locale]
   const view = route.view ?? "board"
@@ -500,6 +487,20 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
   const attachmentsRead = useAsyncRead(showInspector, `${inspectorKey}\u0000attachments`, (signal) => taskId
     ? loadTaskInspectorAttachments(runtime, route.boardSlug, taskId, { signal })
     : Promise.reject(new Error("Task Inspector 尚未选择任务")), inspectorRevision, online !== false)
+  const reloadInspector = inspectorRead.reload
+  const reloadAttachments = attachmentsRead.reload
+  const reloadVisibleInspector = useCallback(async () => {
+    if (!showInspector) return
+    await Promise.all([reloadInspector(), reloadAttachments()])
+  }, [reloadAttachments, reloadInspector, showInspector])
+  useLayoutEffect(() => {
+    if (!showInspector) {
+      onVisibleCanonicalReloadChange?.(undefined)
+      return
+    }
+    onVisibleCanonicalReloadChange?.(reloadVisibleInspector)
+    return () => onVisibleCanonicalReloadChange?.(undefined, reloadVisibleInspector)
+  }, [onVisibleCanonicalReloadChange, reloadVisibleInspector, showInspector])
   const inspectorModel = useMemo(() => inspectorRead.data ? inspectorViewModel(inspectorRead.data) : null, [inspectorRead.data])
   const inspectorRelations = useMemo(() => inspectorRead.data ? inspectorRelationsView(inspectorRead.data) : null, [inspectorRead.data])
   const attachmentDownload = useMemo(() => {
@@ -534,10 +535,9 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
           reason: "retry",
           mutationKind: event.kind === "transition" ? "transition" : "edit",
         }))
-        await Promise.all([inspectorRead.reload(), attachmentsRead.reload()])
       },
     }
-  }, [attachmentDownload, attachmentsRead, inspectorIdentity, inspectorRead, taskId, taskMutations])
+  }, [attachmentDownload, inspectorIdentity, inspectorRead, taskId, taskMutations])
   const inspectorMutationController = useTaskInspectorMutationController(inspectorMutationSurface)
   const inspectorMutationHandlers = useMemo<TaskInspectorMutationHandlers | undefined>(() => {
     if (inspectorMutationController === null) return undefined
@@ -564,6 +564,14 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     () => inspectorUiSnapshot(inspectorMutationController?.snapshot ?? null, taskId),
     [inspectorMutationController?.snapshot, taskId],
   )
+  const relationOwner = inspectorMutationHandlers !== undefined
+    && inspectorMutationSnapshot !== undefined
+    && inspectorRelations !== null
+    && taskId !== null
+    && inspectorRead.data !== null
+    ? { taskId, data: inspectorRead.data, relations: inspectorRelations, handlers: inspectorMutationHandlers, snapshot: inspectorMutationSnapshot }
+    : null
+  const relationPanelVisible = relationOwner !== null
 
   const navigate = useCallback((target: string, options?: { readonly replace?: boolean }) => {
     if (onNavigate) void onNavigate(target, options)
@@ -647,6 +655,8 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
     : Promise.reject(new Error("Task Inspector 尚未选择任务")), [route.boardSlug, runtime, taskId])
   const resolveInspectorTaskSelector = useCallback((selector: string): string | null => {
     const value = selector.trim()
+    const boardResolved = taskMutations?.resolveTaskSelector?.(value)
+    if (boardResolved !== undefined && boardResolved !== null) return boardResolved
     const model = inspectorRead.data
     if (!model) return null
     const candidates = [
@@ -656,7 +666,7 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
       ...model.steps.steps.flatMap((step) => step.linked_task ? [step.linked_task] : []),
     ]
     return candidates.find((candidate) => candidate.id === value || candidate.ref === value)?.id ?? null
-  }, [inspectorRead.data])
+  }, [inspectorRead.data, taskMutations])
 
   const clearedTaskIdRef = useRef<string | null>(null)
   useEffect(() => {
@@ -761,30 +771,40 @@ export function ExplorerPage({ runtime, route, onNavigate, online, invalidationR
                 onLoadNeighborhood={loadInspectorNeighborhood}
                 mutationHandlers={inspectorMutationHandlers}
                 mutationSnapshot={inspectorMutationSnapshot}
+                hideReadOnlyRelations={relationPanelVisible}
                 claimToken={taskId ? taskMutations?.claimTokens?.get(taskId) ?? null : null}
               />
-              {inspectorMutationHandlers && inspectorMutationSnapshot && inspectorRelations && taskId && inspectorRead.data ? (
+              {!relationPanelVisible && inspectorRead.data ? (
+                <InspectorAssetsReadOnlyFallback
+                  data={inspectorRead.data}
+                  attachments={attachmentsRead.data ?? []}
+                  attachmentsLoading={attachmentsRead.loading}
+                  attachmentsError={attachmentsRead.error instanceof Error ? attachmentsRead.error : null}
+                  locale={locale}
+                />
+              ) : null}
+              {relationOwner ? (
                 <>
                   <TaskInspectorRelationsPanel
-                    taskId={taskId}
-                    comments={inspectorRelations.comments}
-                    dependencies={inspectorRelations.dependencies}
-                    steps={inspectorRelations.steps}
-                    handlers={inspectorMutationHandlers}
-                    snapshot={inspectorMutationSnapshot}
+                    taskId={relationOwner.taskId}
+                    comments={relationOwner.relations.comments}
+                    dependencies={relationOwner.relations.dependencies}
+                    steps={relationOwner.relations.steps}
+                    handlers={relationOwner.handlers}
+                    snapshot={relationOwner.snapshot}
                     onSelectTask={selectTask}
                     resolveTaskSelector={resolveInspectorTaskSelector}
                     locale={locale}
                   />
                   <TaskInspectorAssetsPanel
-                    taskId={taskId}
-                    labels={inspectorRead.data.task.labels as readonly InspectorAssetLabel[]}
+                    taskId={relationOwner.taskId}
+                    labels={relationOwner.data.task.labels as readonly InspectorAssetLabel[]}
                     attachments={(attachmentsRead.data ?? []) as readonly InspectorAssetAttachment[]}
                     suggestionResult={null}
                     suggestionRequested={false}
-                    suggestionLoading={inspectorMutationSnapshot.pending.has(inspectorMutationKey("suggestLabels", taskId))}
-                    handlers={inspectorMutationHandlers}
-                    snapshot={inspectorMutationSnapshot}
+                    suggestionLoading={relationOwner.snapshot.pending.has(inspectorMutationKey("suggestLabels", relationOwner.taskId))}
+                    handlers={relationOwner.handlers}
+                    snapshot={relationOwner.snapshot}
                     attachmentLoading={attachmentsRead.loading}
                     attachmentError={attachmentsRead.error instanceof Error ? attachmentsRead.error.message : null}
                     locale={locale}

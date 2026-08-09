@@ -231,22 +231,27 @@ describe("TaskInspector", () => {
     expect(markup).toMatch(/class="[^"]*editButton[^"]*"[^>]*disabled/)
   })
 
-  test("renders every read-only inspector section and claim/runtime facts", () => {
+  test("renders metadata, claim, lazy runtime sections and read-only relation fallback", () => {
     const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" />)
 
     expect(markup).toContain('data-testid="task-inspector"')
-    for (const id of ["inspector-metadata", "inspector-claim", "inspector-steps", "inspector-dependencies", "inspector-comments", "inspector-runs", "inspector-events", "inspector-runtime"]) {
+    for (const id of ["inspector-metadata", "inspector-claim", "inspector-runs", "inspector-events", "inspector-runtime"]) {
       expect(markup).toContain(`data-testid="${id}"`)
     }
+    for (const id of ["inspector-steps", "inspector-dependencies", "inspector-comments"]) expect(markup).toContain(`data-testid="${id}"`)
     expect(markup).toContain("Inspect the task")
     expect(markup).toContain("runner")
-    expect(markup).toContain("Verify output")
-    expect(markup).toContain("Parent task")
-    expect(markup).toContain("A note")
     expect(markup).toContain("task.claimed")
     expect(markup).toContain("3.0.0")
     expect(markup).not.toContain("Add comment")
     expect(markup).not.toContain("Create step")
+  })
+
+  test("hides legacy relation sections only when the mutation relation owner is mounted", () => {
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} identity="runtime" hideReadOnlyRelations />)
+    for (const id of ["inspector-steps", "inspector-dependencies", "inspector-comments"]) {
+      expect(markup).not.toContain(`data-testid="${id}"`)
+    }
   })
 
   test("does not invoke lazy detail loaders until a disclosure is opened", () => {

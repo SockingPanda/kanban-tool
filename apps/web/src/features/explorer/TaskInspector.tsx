@@ -133,6 +133,8 @@ export interface TaskInspectorProps {
   readonly mutationHandlers?: TaskInspectorMutationHandlers
   /** Scoped pending/error/retry snapshot from the shared mutation controller. */
   readonly mutationSnapshot?: TaskInspectorMutationSnapshot
+  /** Hide the legacy read-only relation sections only while the mutation owner is mounted. */
+  readonly hideReadOnlyRelations?: boolean
   /** Claim token is held by the shared claim-token store and never rendered. */
   readonly claimToken?: string | null
 }
@@ -495,7 +497,7 @@ interface PendingActionDialogSubmission {
   status: "pending" | "preserve"
 }
 
-export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood, mutationHandlers, mutationSnapshot, claimToken = null }: TaskInspectorProps) {
+export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, online = true, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood, mutationHandlers, mutationSnapshot, hideReadOnlyRelations = false, claimToken = null }: TaskInspectorProps) {
   const { task } = model
   const copy = copies[locale]
   const requestIdentity = identity
@@ -1027,42 +1029,46 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
         ]} />
       </Section>
 
-      <Section id="inspector-steps" title={copy.sections.steps}>
-        {model.steps.length === 0 ? <Empty>{copy.noSteps}</Empty> : (
-          <ol className={styles.compactList}>
-            {model.steps.map((step) => (
-              <li key={step.id} className={styles.row}>
-                <div>
-                  <strong>{step.title}</strong>
-                  {step.body ? <p className={styles.muted}>{step.body}</p> : null}
-                </div>
-                <span className={styles.badge}>{copy.stepStatus[step.status]}{step.required ? ` · ${copy.required}` : ""}</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </Section>
+      {!hideReadOnlyRelations ? (
+        <>
+          <Section id="inspector-steps" title={copy.sections.steps}>
+            {model.steps.length === 0 ? <Empty>{copy.noSteps}</Empty> : (
+              <ol className={styles.compactList}>
+                {model.steps.map((step) => (
+                  <li key={step.id} className={styles.row}>
+                    <div>
+                      <strong>{step.title}</strong>
+                      {step.body ? <p className={styles.muted}>{step.body}</p> : null}
+                    </div>
+                    <span className={styles.badge}>{copy.stepStatus[step.status]}{step.required ? ` · ${copy.required}` : ""}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Section>
 
-      <Section id="inspector-dependencies" title={copy.sections.dependencies}>
-        <DependencyList title={copy.parents} tasks={model.parents} onSelectTask={onSelectTask} copy={copy} />
-        <details>
-          <summary>{copy.children}</summary>
-          <DependencyList title={copy.children} tasks={model.children} onSelectTask={onSelectTask} copy={copy} />
-        </details>
-      </Section>
+          <Section id="inspector-dependencies" title={copy.sections.dependencies}>
+            <DependencyList title={copy.parents} tasks={model.parents} onSelectTask={onSelectTask} copy={copy} />
+            <details>
+              <summary>{copy.children}</summary>
+              <DependencyList title={copy.children} tasks={model.children} onSelectTask={onSelectTask} copy={copy} />
+            </details>
+          </Section>
 
-      <Section id="inspector-comments" title={copy.sections.comments}>
-        {model.comments.length === 0 ? <Empty>{copy.noComments}</Empty> : (
-          <ul className={styles.compactList}>
-            {model.comments.map((comment) => (
-              <li key={comment.id} className={styles.row}>
-                <div><strong>{comment.author}</strong><span className={styles.muted}> · {copy.commentKind[comment.kind]}</span><p>{comment.body}</p></div>
-                <time dateTime={String(comment.createdAt)}>{comment.createdAt}</time>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+          <Section id="inspector-comments" title={copy.sections.comments}>
+            {model.comments.length === 0 ? <Empty>{copy.noComments}</Empty> : (
+              <ul className={styles.compactList}>
+                {model.comments.map((comment) => (
+                  <li key={comment.id} className={styles.row}>
+                    <div><strong>{comment.author}</strong><span className={styles.muted}> · {copy.commentKind[comment.kind]}</span><p>{comment.body}</p></div>
+                    <time dateTime={String(comment.createdAt)}>{comment.createdAt}</time>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        </>
+      ) : null}
 
       <Section id="inspector-runs" title={copy.sections.runs}>
         <details ref={runsDetailsRef} onToggle={loadRuns}>

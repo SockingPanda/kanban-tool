@@ -272,10 +272,6 @@ export function useBoardTaskMutationController(
     setPendingKeys(update.next)
   }
 
-  const reloadCanonical = async (): Promise<BoardViewModel | null> => {
-    return (await surface?.onCanonicalReload?.()) ?? null
-  }
-
   const isCurrentMutation = (generation: number) =>
     mountedRef.current
     && mutationGenerationRef.current === generation
@@ -305,11 +301,8 @@ export function useBoardTaskMutationController(
     reason?: BoardTaskCanonicalReloadOptions["reason"],
   ): Promise<boolean> => {
     try {
-      const canonical = mutationKind === undefined && reason === undefined
-        ? await reloadCanonical()
-        : (await surface?.onCanonicalReload?.({ reason: reason ?? "initial", mutationKind })) ?? null
-      adoptCanonicalModel(canonical, generation)
-      return true
+      const canonical = (await surface?.onCanonicalReload?.({ reason: reason ?? "initial", mutationKind })) ?? null
+      return adoptCanonicalModel(canonical, generation)
     } catch {
       return false
     }
@@ -322,9 +315,15 @@ export function useBoardTaskMutationController(
     try {
       const canonical = (await surface.onCanonicalReload?.({ reason: "retry", mutationKind })) ?? null
       if (isCurrentMutation(generation)) {
-        setNotice(null)
-        setRetryIntent(null)
-        optimisticDirtyRef.current = !adoptCanonicalModel(canonical, generation)
+        const adopted = adoptCanonicalModel(canonical, generation)
+        optimisticDirtyRef.current = !adopted
+        if (adopted) {
+          setNotice(null)
+          setRetryIntent(null)
+        } else {
+          setNotice({ kind: "stale", message: copy.reconcileStale })
+          setRetryIntent({ kind: "reload", mutationKind })
+        }
       }
     } catch (error) {
       if (isCurrentMutation(generation)) {
@@ -381,7 +380,7 @@ export function useBoardTaskMutationController(
     } catch (error) {
       if (isCurrentMutation(generation)) {
         if (taskCreated) {
-          const reloaded = await reconcileAfterMutation(undefined, generation)
+          const reloaded = await reconcileAfterMutation("create", generation)
           if (!isCurrentMutation(generation)) return
           setRetryIntent({ kind: "create", ...attempt, taskCreated: true })
           setNotice({ kind: reloaded ? "error" : "stale", message: reloaded ? mutationMessage(error, copy, copy.mutationError) : copy.reconcileStale })
@@ -402,7 +401,7 @@ export function useBoardTaskMutationController(
     if (isCurrentMutation(generation)) {
       const reloaded = attempt.firstStepTitle.trim().length > 0
         ? await reconcileAfterMutation("create", generation, "step")
-        : await reconcileAfterMutation(undefined, generation)
+        : await reconcileAfterMutation("create", generation)
       if (!isCurrentMutation(generation)) return
       if (reloaded) {
         setRetryIntent(null)
@@ -458,7 +457,7 @@ export function useBoardTaskMutationController(
     }
     if (isCurrentMutation(generation)) {
       notifyMutationCommitted(surface, { kind: "edit", taskId })
-      const reloaded = await reconcileAfterMutation(undefined, generation)
+      const reloaded = await reconcileAfterMutation("edit", generation)
       if (!isCurrentMutation(generation)) return
       if (reloaded) {
         setRetryIntent(null)
@@ -554,7 +553,7 @@ export function useBoardTaskMutationController(
     }
     if (isCurrentMutation(generation)) {
       notifyMutationCommitted(surface, { kind: "transition", taskId })
-      const reloaded = await reconcileAfterMutation(undefined, generation)
+      const reloaded = await reconcileAfterMutation("transition", generation)
       if (!isCurrentMutation(generation)) return
       if (reloaded) {
         setRetryIntent(null)

@@ -354,14 +354,13 @@ describe("TaskInspectorAssetsPanel", () => {
 
     expect(markup).toContain('data-testid="inspector-mutation-errors"')
     expect(markup).toContain('data-operation-key="addLabel:t_1"')
-    expect(markup).toContain('data-operation-key="reload:t_1"')
-    expect(markup).toContain("写入已提交，但刷新失败")
     expect(markup).toContain('data-retry-key="addLabel:t_1"')
-    expect(markup).toContain('data-retry-key="reload:t_1"')
+    expect(markup).not.toContain('data-operation-key="reload:t_1"')
+    expect(markup).not.toContain("写入已提交，但刷新失败")
     expect(markup).not.toContain('data-retry-key="suggestLabels:t_1"')
     expect(markup).not.toContain('data-retry-key="downloadAttachment:t_1"')
-    await retry("reload:t_1")
-    expect(retry).toHaveBeenCalledWith("reload:t_1")
+    await retry("addLabel:t_1")
+    expect(retry).toHaveBeenCalledWith("addLabel:t_1")
   })
 
   test("associates asset errors with the editable label and file controls", () => {
@@ -389,6 +388,28 @@ describe("TaskInspectorAssetsPanel", () => {
     expect(markup).toMatch(/id="[^"]+-label-error"/)
     expect(markup).toMatch(/id="[^"]+-attachment-error"/)
     expect((markup.match(/标签写入失败/g) ?? []).length).toBe(1)
+  })
+
+  test("does not surface header, relations, or global reload errors in the asset owner", () => {
+    const keys = ["saveTask", "transition", "addDependency", "createStep", "addComment", "reload"]
+    for (const operation of keys) {
+      expect(shouldShowInspectorSnapshotError(
+        `${operation}:t_1`,
+        { operation: operation as never, taskId: "t_1" },
+        "t_1",
+        new Set(),
+        new Set(),
+        new Map(),
+      )).toBe(false)
+    }
+    expect(shouldShowInspectorSnapshotError(
+      "suggestLabels:t_1",
+      { operation: "suggestLabels", taskId: "t_1" },
+      "t_1",
+      new Set(),
+      new Set(),
+      new Map(),
+    )).toBe(false)
   })
 
   test("keeps snapshot pending/error state scoped to the current task", () => {

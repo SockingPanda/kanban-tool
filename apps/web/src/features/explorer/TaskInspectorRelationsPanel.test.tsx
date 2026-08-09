@@ -286,13 +286,14 @@ describe("TaskInspectorRelationsPanel input seams", () => {
     expect(__test.scopeEpochMatches({ identity: "runtime\u0000t1", generation: 1, taskId: "t1" }, { identity: "runtime\u0000t1", generation: 1, taskId: "t1" })).toBe(true)
   })
 
-  test("resolves direct ids and same-board refs before a mutation, with no call for unresolved input", () => {
-    const resolver = vi.fn((selector: string) => selector === "default#2" ? "t_2" : null)
-    expect(__test.resolveTaskSelector(" t_direct ", resolver)).toBe("t_direct")
-    expect(resolver).not.toHaveBeenCalled()
+  test("resolves only active-board ids/refs before a mutation, with no call for unresolved input", () => {
+    const resolver = vi.fn((selector: string) => selector === "t_known" ? "t_known" : selector === "default#2" ? "t_2" : null)
+    expect(__test.resolveTaskSelector(" t_unknown ", resolver)).toBeNull()
+    expect(resolver).toHaveBeenCalledWith("t_unknown")
+    expect(__test.resolveTaskSelector(" t_known ", resolver)).toBe("t_known")
     expect(__test.resolveTaskSelector(" default#2 ", resolver)).toBe("t_2")
     const addDependency = vi.fn()
-    const unresolved = __test.resolveTaskSelector("default#404", resolver)
+    const unresolved = __test.resolveTaskSelector("t_cross_board", resolver)
     if (unresolved) addDependency(unresolved)
     expect(addDependency).not.toHaveBeenCalled()
   })

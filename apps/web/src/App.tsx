@@ -6,7 +6,7 @@ import { neutralTheme } from "@astryxdesign/theme-neutral/built"
 import { ProductShell } from "./ProductShell"
 import { BoardLive } from "./features/board/BoardLive"
 import { boardSyncStatusForTelemetry } from "./features/board/board-live-state"
-import type { BoardTaskCanonicalReloadOptions, BoardTaskMutationCommitted, BoardTaskMutationSurface } from "./features/board/task-mutation-state"
+import type { BoardTaskCanonicalReloadHandler, BoardTaskCanonicalReloadOptions, BoardTaskMutationCommitted, BoardTaskMutationSurface } from "./features/board/task-mutation-state"
 import type { BoardSyncStatus } from "./features/board/types"
 import { appendExplorerEventBatch, coalesceExplorerBoundary, explorerEventInvalidation } from "./App.logic"
 import { parseBoardEvent, type BoardEventsBatch, type ExplorerEvent } from "./lib/api/explorer-read-model"
@@ -69,6 +69,7 @@ function RuntimeThemedShell() {
     eventsRefreshRevision: 0,
   }))
   const [taskMutationState, setTaskMutationState] = useState<{ readonly key: string; readonly surface?: BoardTaskMutationSurface }>(() => ({ key: sessionKey }))
+  const visibleCanonicalReloadRef = useRef<BoardTaskCanonicalReloadHandler | null>(null)
   const [syncStatus, setSyncStatus] = useState<BoardSyncStatus>("connecting")
   const [eventsBatchState, setEventsBatchState] = useState<{ readonly key: string; readonly batch: BoardEventsBatch | null }>(() => ({ key: sessionKey, batch: null }))
   const eventAppliedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -111,10 +112,6 @@ function RuntimeThemedShell() {
 
   const onMutationCommitted = useCallback((event: BoardTaskMutationCommitted) => {
     if (sessionKeyRef.current !== sessionKey) return
-    // Board and Inspector reads are directly affected by every mutation;
-    // transitions may also create or finish a run. Events are advanced by
-    // the persistent SSE event-applied seam, not by local mutation success.
-    bumpExplorerRevision({ board: true, inspector: true, runs: event.kind === "transition" })
     if (event.kind !== "create") return
     const boardSlug = parseCanonicalBoardSlug(event.boardSlug)
     if (boardSlug === null) return
@@ -124,11 +121,24 @@ function RuntimeThemedShell() {
     query.set("task", event.taskId)
     const target = routePath({ kind: "board", boardSlug, view, query: query.toString() }, { basePath: runtime.webBasePath })
     void Promise.resolve(navigate(target)).catch(() => undefined)
-  }, [bumpExplorerRevision, navigate, runtime.webBasePath, sessionKey])
+  }, [navigate, runtime.webBasePath, sessionKey])
 
-  const onCanonicalReload = useCallback((options?: BoardTaskCanonicalReloadOptions) => {
-    if (sessionKeyRef.current !== sessionKey || options?.reason === undefined) return
-    bumpExplorerRevision({ board: true, inspector: true, runs: options.mutationKind === "transition" })
+  const onVisibleCanonicalReloadChange = useCallback((reload: BoardTaskCanonicalReloadHandler | undefined, releasedReload?: BoardTaskCanonicalReloadHandler) => {
+    if (reload !== undefined) {
+      visibleCanonicalReloadRef.current = reload
+      return
+    }
+    if (releasedReload === undefined || visibleCanonicalReloadRef.current === releasedReload) visibleCanonicalReloadRef.current = null
+  }, [])
+
+  const onCanonicalReload = useCallback(async (options?: BoardTaskCanonicalReloadOptions) => {
+    if (sessionKeyRef.current !== sessionKey) return
+    // BoardLive has already awaited the canonical session refresh. Refresh the
+    // visible board projection and await the currently mounted Inspector reads
+    // through the shared useAsyncRead reload seam.
+    bumpExplorerRevision({ board: true, runs: options?.mutationKind === "transition" })
+    const reloadVisibleCanonical = visibleCanonicalReloadRef.current
+    if (reloadVisibleCanonical !== null) await reloadVisibleCanonical(options)
   }, [bumpExplorerRevision, sessionKey])
 
   const flushEventBatch = useCallback(() => {
@@ -277,6 +287,7 @@ function RuntimeThemedShell() {
           eventsBatch={currentEventsBatch}
           syncStatus={sessionState.key === sessionKey ? syncStatus : "connecting"}
           taskMutations={taskMutations}
+          onVisibleCanonicalReloadChange={onVisibleCanonicalReloadChange}
         >
           {boardRoute ? (
             <BoardLive

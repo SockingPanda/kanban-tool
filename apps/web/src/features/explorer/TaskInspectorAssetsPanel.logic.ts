@@ -120,12 +120,20 @@ export function shouldShowInspectorSnapshotError(
   retryBusy: ReadonlySet<string>,
   localErrors: ReadonlyMap<string, string>,
 ): boolean {
+  const assetOperations = new Set([
+    "addLabel",
+    "removeLabel",
+    "applySuggestedLabel",
+    "uploadAttachment",
+    "downloadAttachment",
+    "deleteAttachment",
+  ])
   return error.taskId === taskId
     && key.endsWith(`:${taskId}`)
+    && assetOperations.has(error.operation)
     && !pending.has(key)
     && !retryBusy.has(key)
     && !localErrors.has(key)
-    && error.operation !== "suggestLabels"
 }
 
 /** Retry drafts are the original in-memory File object; same metadata is not enough. */

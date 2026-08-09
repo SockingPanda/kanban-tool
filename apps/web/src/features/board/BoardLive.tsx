@@ -54,8 +54,8 @@ export interface BoardLiveProps {
   readonly onTaskMutationsChange?: (surface: BoardTaskMutationSurface | undefined, releasedSurface?: BoardTaskMutationSurface) => void
   /** Report a committed mutation so the App can invalidate Explorer readers/navigation. */
   readonly onMutationCommitted?: (event: BoardTaskMutationCommitted) => void
-  /** Invalidate visible Explorer readers when a stale mutation retry reloads canonical data. */
-  readonly onCanonicalReload?: (options?: BoardTaskCanonicalReloadOptions) => void
+  /** Await visible Explorer readers after the canonical session has reloaded. */
+  readonly onCanonicalReload?: (options?: BoardTaskCanonicalReloadOptions) => Promise<void> | void
 }
 
 function makeResource(runtime: WebRuntimeConfig, selector: string): BoardReadResource {
@@ -296,7 +296,9 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
   }, [mutationBoardSlug])
 
   const refreshCanonical = useCallback(async () => {
-    await sessionHandleRef.current?.refresh()
+    const handle = sessionHandleRef.current
+    if (handle === null) throw new Error("canonical board session is unavailable")
+    await handle.refresh()
     return modelRef.current
   }, [])
 
@@ -308,9 +310,21 @@ export function BoardLive({ runtime, route, onNavigate, renderBoard = true, onSe
         client,
         claimTokens: claimTokenStoreRef.current,
         inspectorClient: client,
+        resolveTaskSelector: (selector) => {
+          const value = selector.trim()
+          if (!value) return null
+          const model = modelRef.current
+          if (model === null) return null
+          for (const tasks of Object.values(model.tasksByStatus)) {
+            const candidate = tasks.find((task) => task.id === value || task.ref === value)
+            if (candidate !== undefined) return candidate.id
+          }
+          return null
+        },
         onCanonicalReload: async (options) => {
-          onCanonicalReload?.(options)
-          return refreshCanonical()
+          const canonical = await refreshCanonical()
+          await onCanonicalReload?.(options)
+          return canonical
         },
         onMutationCommitted: (event) => onMutationCommitted?.({ ...event, boardSlug: mutationBoardSlug }),
       }

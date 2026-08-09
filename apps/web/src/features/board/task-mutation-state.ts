@@ -58,12 +58,16 @@ export interface BoardTaskCanonicalReloadOptions {
   readonly mutationKind?: BoardTaskMutationCommitted["kind"]
 }
 
+export type BoardTaskCanonicalReloadHandler = (options?: BoardTaskCanonicalReloadOptions) => Promise<void> | void
+
 export interface BoardTaskMutationSurface {
   readonly client: BoardTaskMutationClient
   /** Shared with the Inspector controller; this is not a second mutation path. */
   readonly claimTokens?: BoardTaskClaimTokenStore
   /** Full typed mutation client composed by the canonical BoardLive session. */
   readonly inspectorClient?: TaskMutationClient
+  /** Resolve an id/ref against the active board projection before relation writes. */
+  readonly resolveTaskSelector?: (selector: string) => string | null
   readonly onCanonicalReload?: (options?: BoardTaskCanonicalReloadOptions) => Promise<BoardViewModel | null> | void
   /** Called once after the server mutation writes commit, before reconcile. */
   readonly onMutationCommitted?: (event: BoardTaskMutationCommitted) => void

@@ -130,7 +130,7 @@ export function formatCommentDateTime(value: number, locale: "zh" | "en"): { rea
 /** Resolve a user-entered canonical task id or same-board ref before a mutation. */
 export function resolveTaskSelector(selector: string, resolver: TaskSelectorResolver): string | null {
   const trimmed = selector.trim()
-  if (/^t_\S+$/.test(trimmed)) return trimmed
+  if (!trimmed) return null
   try {
     const resolved = resolver(trimmed)
     return typeof resolved === "string" && /^t_\S+$/.test(resolved.trim()) ? resolved.trim() : null

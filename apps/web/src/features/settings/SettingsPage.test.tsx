@@ -59,6 +59,18 @@ describe("SettingsPage", () => {
     expect(markup).toContain("disabled")
   })
 
+  test("does not treat a runtime selector as a canonical board slug", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesProvider>
+        <SettingsPage runtime={{ ...runtime, defaultBoard: "selector:active" }} />
+      </PreferencesProvider>,
+    )
+
+    expect(markup).toContain('data-testid="settings-no-board"')
+    expect(markup).toContain('data-testid="diagnostics-health-link"')
+    expect(markup).toContain("disabled")
+  })
+
   test("keeps diagnostics payload independent from server-controlled database paths", () => {
     expect(apiOriginForRuntime(runtime, "https://kanban.test/app/settings")).toBe("https://kanban.test")
     expect(diagnosticsText(runtime, null, "https://kanban.test/app/settings")).toContain("serverVersion=3.0.0")

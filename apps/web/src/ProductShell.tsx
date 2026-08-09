@@ -13,6 +13,7 @@ import { usePreferences } from "./lib/use-preferences"
 import { createTranslator } from "./lib/i18n"
 import { HealthPage } from "./features/health/HealthPage"
 import { SettingsPage } from "./features/settings/SettingsPage"
+import type { BoardReconnectResult } from "./features/board/board-session-registry"
 import styles from "./shell.module.css"
 
 export type ShellBoundary = "ready" | "loading" | "error" | "offline"
@@ -25,7 +26,7 @@ export type ProductShellProps = {
   boundary?: ShellBoundary
   error?: ReactNode
   onNavigate?: (target: AppNavigationTarget) => void | Promise<unknown>
-  onReconnect?: () => boolean | void | Promise<boolean | void>
+  onReconnect?: () => BoardReconnectResult | boolean | void | Promise<BoardReconnectResult | boolean | void>
   onRetry?: () => void
 }
 
@@ -246,7 +247,7 @@ function ShellNav({ runtime, route, canonicalBoardSlug, onNavigate }: Pick<Produ
   )
 }
 
-function RouteContent({ runtime, route, children, boundary, error, onNavigate, onReconnect, onRetry }: ProductShellProps) {
+function RouteContent({ runtime, route, canonicalBoardSlug, children, boundary, error, onNavigate, onReconnect, onRetry }: ProductShellProps) {
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const [isOnline, setIsOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine)
@@ -325,7 +326,14 @@ function RouteContent({ runtime, route, children, boundary, error, onNavigate, o
       </section>
     )
   }
-  if (route.kind === "settings") return <SettingsPage runtime={runtime} onNavigate={onNavigate} onReconnect={onReconnect} />
+  if (route.kind === "settings") {
+    return (
+      <>
+        <SettingsPage runtime={runtime} boardSlug={canonicalBoardSlug} onNavigate={onNavigate} onReconnect={onReconnect} />
+        {children}
+      </>
+    )
+  }
   if (route.kind === "health") return <HealthPage runtime={runtime} />
   if (children) return <>{children}</>
 
@@ -368,7 +376,7 @@ export function ProductShell({ runtime, route, canonicalBoardSlug, children, bou
                 data-runtime-web-build-id={runtime.webBuildId}
                 data-runtime-web-base-path={runtime.webBasePath}
               >
-                <RouteContent runtime={runtime} route={route} boundary={boundary} error={error} onNavigate={onNavigate} onReconnect={onReconnect} onRetry={onRetry}>
+                <RouteContent runtime={runtime} route={route} canonicalBoardSlug={canonicalBoardSlug} boundary={boundary} error={error} onNavigate={onNavigate} onReconnect={onReconnect} onRetry={onRetry}>
                   {children}
                 </RouteContent>
               </div>

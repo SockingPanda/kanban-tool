@@ -15,7 +15,9 @@ import {
 } from "../../lib/preferences"
 import { createTranslator } from "../../lib/i18n"
 import { usePreferences } from "../../lib/use-preferences"
+import { callSettingsAction } from "./settings-async-actions"
 import { apiOriginForRuntime, diagnosticsText } from "./settings-diagnostics"
+import type { BoardReconnectResult } from "../board/board-session-registry"
 import styles from "../../shell.module.css"
 
 export type SettingsPageProps = {
@@ -26,7 +28,7 @@ export type SettingsPageProps = {
   readonly read?: (signal?: AbortSignal) => Promise<HealthReport>
   readonly onNavigate?: (target: AppNavigationTarget) => void | Promise<unknown>
   /** Reconnects the existing canonical board session; it must not create a new transport. */
-  readonly onReconnect?: () => boolean | void | Promise<boolean | void>
+  readonly onReconnect?: () => BoardReconnectResult | boolean | void | Promise<BoardReconnectResult | boolean | void>
   readonly clipboardWrite?: (text: string) => Promise<void> | void
 }
 
@@ -61,8 +63,8 @@ export function SettingsPage({
   const preferences = usePreferences()
   const t = createTranslator(preferences.locale)
   const boardSlug = useMemo(
-    () => canonicalBoard(boardSlugInput) ?? canonicalBoard(runtime.defaultBoard),
-    [boardSlugInput, runtime.defaultBoard],
+    () => canonicalBoard(boardSlugInput),
+    [boardSlugInput],
   )
   const healthURL = boardSlug ? routePath({ kind: "health", boardSlug }, { basePath: runtime.webBasePath }) : null
   const [healthState, setHealthState] = useState<HealthState>(() =>
@@ -75,7 +77,7 @@ export function SettingsPage({
   const [actorSaved, setActorSaved] = useState(false)
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle")
   const [copyPending, setCopyPending] = useState(false)
-  const [reconnectState, setReconnectState] = useState<"idle" | "pending" | "done" | "unavailable">("idle")
+  const [reconnectState, setReconnectState] = useState<"idle" | "pending" | "done" | "already" | "unavailable">("idle")
   const mountedRef = useRef(true)
   const copyPendingRef = useRef(false)
   const reconnectPendingRef = useRef(false)
@@ -133,6 +135,13 @@ export function SettingsPage({
     setActorSaved(true)
   }
 
+  const resetActor = () => {
+    preferences.setActor("")
+    setActorDraft(runtime.actor)
+    setActorTouched(false)
+    setActorSaved(true)
+  }
+
   const copyDiagnostics = useCallback(() => {
     if (copyPendingRef.current) return
     copyPendingRef.current = true
@@ -140,7 +149,7 @@ export function SettingsPage({
     setCopyState("idle")
     const health = healthState.kind === "ready" ? healthState.report : null
     const writer = clipboardWrite ?? browserClipboardWrite
-    void Promise.resolve(writer(diagnosticsText(runtime, health)))
+    void callSettingsAction(() => writer(diagnosticsText(runtime, health)))
       .then(() => {
         if (mountedRef.current) setCopyState("copied")
       })
@@ -157,10 +166,12 @@ export function SettingsPage({
     if (!boardSlug || !onReconnect || reconnectPendingRef.current) return
     reconnectPendingRef.current = true
     setReconnectState("pending")
-    void Promise.resolve(onReconnect())
+    void callSettingsAction(() => onReconnect())
       .then((reconnected) => {
         if (!mountedRef.current) return
-        setReconnectState(reconnected === false ? "unavailable" : "done")
+        setReconnectState(reconnected === false || reconnected === "unavailable"
+          ? "unavailable"
+          : reconnected === "already-live" ? "already" : "done")
       })
       .catch(() => {
         if (mountedRef.current) setReconnectState("unavailable")
@@ -184,9 +195,11 @@ export function SettingsPage({
   const copyFeedback = copyState === "copied" ? t("diagnosticsCopied") : copyState === "failed" ? t("diagnosticsCopyFailed") : null
   const reconnectFeedback = reconnectState === "pending"
     ? t("connectionReconnecting")
-    : reconnectState === "done"
-      ? t("connectionReconnected")
-      : reconnectState === "unavailable"
+      : reconnectState === "done"
+        ? t("connectionReconnected")
+        : reconnectState === "already"
+          ? t("connectionAlreadyConnected")
+        : reconnectState === "unavailable"
         ? t("connectionReconnectUnavailable")
         : null
 
@@ -287,6 +300,9 @@ export function SettingsPage({
             {actorSaved ? <p className={styles.inlineSuccess} role="status" data-testid="identity-actor-saved">{t("identitySaved")}</p> : null}
             <button type="submit" className={styles.secondaryAction} disabled={actorError !== null} data-testid="identity-actor-save">
               {t("save")}
+            </button>
+            <button type="button" className={styles.secondaryAction} onClick={resetActor} data-testid="identity-actor-reset">
+              {t("identityReset")}
             </button>
           </form>
         </section>

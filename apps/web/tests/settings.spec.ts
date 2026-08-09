@@ -24,17 +24,21 @@ test.describe("Astryx Settings", () => {
     await page.goto("/app/settings", { waitUntil: "networkidle" })
 
     await expect(page.getByTestId("settings-page")).toBeVisible()
+    await expect(page.getByTestId("connection-reconnect")).toBeDisabled()
+    await expect(page.getByTestId("diagnostics-health-link")).toBeDisabled()
     await page.getByTestId("appearance-theme").selectOption("system")
     await page.getByTestId("appearance-density").selectOption("compact")
     await page.getByTestId("settings-locale").selectOption("en")
     await page.getByTestId("identity-actor").fill("browser-reviewer")
     await page.getByTestId("identity-actor-save").click()
+    await page.getByTestId("identity-actor-reset").click()
 
     await expect(page.locator("html")).not.toHaveAttribute("data-theme", "light")
     await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("data-density", "compact")
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
     await expect(page.getByTestId("identity-actor-saved")).toBeVisible()
+    await expect(page.evaluate(() => localStorage.getItem("kb:web:actor"))).resolves.toBe("")
     await expect
       .poll(() => page.evaluate(() => Object.keys(localStorage).sort()))
       .toEqual(["kb:web:actor", "kb:web:density", "kb:web:locale", "kb:web:sidebar", "kb:web:theme"])
@@ -51,7 +55,9 @@ test.describe("Astryx Settings", () => {
   })
 
   test("copies validated diagnostics safely and opens the canonical health route", async ({ page }) => {
-    await page.goto("/app/settings", { waitUntil: "networkidle" })
+    await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
+    await page.getByTestId("nav-settings").click()
+    await page.getByTestId("settings-page").waitFor()
     await page.evaluate(() => {
       Object.defineProperty(navigator, "clipboard", {
         configurable: true,
@@ -68,7 +74,7 @@ test.describe("Astryx Settings", () => {
     await page.evaluate(() => {
       Object.defineProperty(navigator, "clipboard", {
         configurable: true,
-        value: { writeText: async () => { throw new Error("denied") } },
+        value: { writeText: () => { throw new Error("denied") } },
       })
     })
     await page.goto("/app/settings", { waitUntil: "networkidle" })
@@ -94,5 +100,55 @@ test.describe("Astryx Settings", () => {
     await expect(page.getByTestId("settings-no-board")).toBeVisible()
     await expect(page.getByTestId("connection-reconnect")).toBeDisabled()
     await expect(page.getByTestId("diagnostics-health-link")).toBeDisabled()
+  })
+
+  test("retains the canonical board session when moving Board to Settings", async ({ page }) => {
+    let streamRequests = 0
+    const streamPending = new Promise<void>(() => undefined)
+    await page.route("**/api/v1/boards?include_archived=false", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [{ id: "b_default", slug: "default", name: "Default", description: null, created_at: 1, updated_at: 1, archived_at: null }],
+        }),
+      })
+    })
+    await page.route("**/api/v1/boards/default/columns", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: [{ id: "col_todo", board_id: "b_default", status: "todo", title: "Todo", position: 1, hidden: false, wip_limit: null, created_at: 1, updated_at: 1 }],
+        }),
+      })
+    })
+    await page.route("**/api/v1/boards/default/tasks/by-status**", async (route) => {
+      const status = new URL(route.request().url()).searchParams.get("status") ?? "todo"
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: { statuses: [{ status, tasks: [], page: { limit: 1000, offset: 0, total: 0 } }] },
+          meta: { limit: 1000, offset: 0 },
+        }),
+      })
+    })
+    await page.route("**/api/v1/stream/events**", async () => {
+      streamRequests += 1
+      await streamPending
+    })
+
+    await page.goto("/app/boards/default/board", { waitUntil: "domcontentloaded" })
+    await expect(page.getByTestId("board-view")).toHaveAttribute("data-state", "ready")
+    await expect.poll(() => streamRequests).toBe(1)
+
+    await page.getByTestId("nav-settings").click()
+    await expect(page).toHaveURL(/\/app\/settings$/)
+    await expect(page.getByTestId("connection-reconnect")).toBeEnabled()
+    await page.getByTestId("connection-reconnect").click()
+    await expect(page.getByTestId("connection-feedback")).toContainText("仍在连接")
+    await expect.poll(() => streamRequests).toBeGreaterThanOrEqual(1)
+    expect(streamRequests).toBeLessThanOrEqual(2)
   })
 })

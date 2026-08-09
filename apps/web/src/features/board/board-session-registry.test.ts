@@ -7,6 +7,7 @@ import type { BoardViewModel } from "./types"
 import {
   acquireBoardSession,
   activeBoardSessionCount,
+  hasActiveBoardSession,
   reconnectActiveBoardSession,
   resourceIdentityKey,
   resetBoardSessionsForTests,
@@ -46,6 +47,7 @@ function resource(
   resourceRuntime: WebRuntimeConfig = runtime,
   selector = "default",
   boardId = asCanonicalBoardId("b_default"),
+  resolvedSlug = "default",
 ): BoardReadResource {
   const adapter = {
     parseEnvelope: () => ({ status: "invalid", code: "test" }),
@@ -62,7 +64,7 @@ function resource(
     runtimeKey: runtimeIdentityKey(resourceRuntime),
     identityKey: resourceIdentityKey(resourceRuntime, selector, boardId),
     canonicalBoardId: boardId,
-    resolvedSlug: "default",
+    resolvedSlug,
     sessionGeneration: 0,
   }
 }
@@ -120,11 +122,89 @@ describe("Board canonical session registry", () => {
       { createController: () => ({ start: vi.fn(), stop: vi.fn(), retry }) },
     )
 
-    expect(reconnectActiveBoardSession(runtime)).toBe(true)
+    expect(hasActiveBoardSession(runtime, "default")).toBe(true)
+    expect(hasActiveBoardSession(runtime, "other")).toBe(false)
+    expect(reconnectActiveBoardSession(runtime, "default")).toBe("reconnecting")
     expect(retry).toHaveBeenCalledTimes(1)
 
     handle.release()
-    expect(reconnectActiveBoardSession(runtime)).toBe(false)
+    expect(hasActiveBoardSession(runtime, "default")).toBe(false)
+    expect(reconnectActiveBoardSession(runtime, "default")).toBe("unavailable")
+  })
+
+  test("keeps one canonical session alive while Board transitions to Settings", () => {
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload: vi.fn(async () => readModel),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const start = vi.fn()
+    const stop = vi.fn()
+    const retry = vi.fn()
+    const createController = vi.fn(() => ({ start, stop, retry }))
+    const boardLease = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
+    const settingsLease = acquireBoardSession(runtime, model, resource(query), vi.fn(), vi.fn(), { createController })
+
+    boardLease.release()
+    expect(activeBoardSessionCount()).toBe(1)
+    expect(stop).not.toHaveBeenCalled()
+    expect(reconnectActiveBoardSession(runtime, "default")).toBe("reconnecting")
+    expect(retry).toHaveBeenCalledTimes(1)
+    expect(createController).toHaveBeenCalledTimes(1)
+
+    settingsLease.release()
+    expect(activeBoardSessionCount()).toBe(0)
+    expect(stop).toHaveBeenCalledTimes(1)
+  })
+
+  test("reconnects only the requested canonical board when selectors differ", () => {
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload: vi.fn(async () => readModel),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const modelA = { ...model, board: { id: "b_alpha", slug: "alpha", name: "Alpha" } }
+    const modelB = { ...model, board: { id: "b_beta", slug: "beta", name: "Beta" } }
+    const retryA = vi.fn()
+    const retryB = vi.fn()
+    const createController = vi.fn()
+      .mockImplementationOnce(() => ({ start: vi.fn(), stop: vi.fn(), retry: retryA }))
+      .mockImplementationOnce(() => ({ start: vi.fn(), stop: vi.fn(), retry: retryB }))
+    const resourceA = resource(query, runtime, "selector-alpha", asCanonicalBoardId("b_alpha"), "alpha")
+    const resourceB = resource(query, runtime, "selector-beta", asCanonicalBoardId("b_beta"), "beta")
+
+    const alpha = acquireBoardSession(runtime, modelA, resourceA, vi.fn(), vi.fn(), { createController })
+    const beta = acquireBoardSession(runtime, modelB, resourceB, vi.fn(), vi.fn(), { createController })
+
+    expect(hasActiveBoardSession(runtime, "alpha")).toBe(true)
+    expect(hasActiveBoardSession(runtime, "beta")).toBe(true)
+    expect(reconnectActiveBoardSession(runtime, "alpha")).toBe("reconnecting")
+    expect(retryA).toHaveBeenCalledTimes(1)
+    expect(retryB).not.toHaveBeenCalled()
+
+    alpha.release()
+    beta.release()
+  })
+
+  test("reports an already-live session instead of claiming a reconnect", () => {
+    const query = {
+      load: vi.fn(async () => readModel),
+      reload: vi.fn(async () => readModel),
+      invalidate: vi.fn(),
+    } satisfies BoardReadQuery
+    const retry = vi.fn()
+    const handle = acquireBoardSession(
+      runtime,
+      model,
+      resource(query),
+      vi.fn(),
+      vi.fn(),
+      { createController: () => ({ start: vi.fn(), stop: vi.fn(), retry, snapshot: () => ({ state: "live" as const }) }) },
+    )
+
+    expect(reconnectActiveBoardSession(runtime, "default")).toBe("already-live")
+    expect(retry).not.toHaveBeenCalled()
+    handle.release()
   })
 
   test("does not leak a session across runtime/build identity changes", () => {

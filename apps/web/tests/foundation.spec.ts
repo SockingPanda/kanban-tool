@@ -48,7 +48,8 @@ test.describe("Astryx product shell", () => {
   test("persists theme, locale, and sidebar preferences in kb:web keys", async ({ page }) => {
     await page.goto("/app/settings", { waitUntil: "networkidle" })
 
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "light")
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark")
     await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN")
     await page.getByTestId("appearance-theme").selectOption("dark")
     await page.getByTestId("settings-locale").selectOption("en")
@@ -65,7 +66,8 @@ test.describe("Astryx product shell", () => {
     await page.goto("/app/boards/default/board", { waitUntil: "networkidle" })
     await page.getByTestId("nav-settings").click()
     await expect(page).toHaveURL(/\/app\/settings$/)
-    await expect(page.getByTestId("nav-board")).toBeDisabled()
+    await expect(page.getByTestId("nav-board")).toBeEnabled()
+    await expect(page.getByTestId("nav-board")).toHaveAttribute("href", "/app/boards/default/board")
     await page.goBack()
     await expect(page).toHaveURL(/\/app\/boards\/default\/board$/)
   })

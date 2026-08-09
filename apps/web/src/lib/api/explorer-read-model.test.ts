@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  BOARD_EVENTS_PAGE_LIMIT,
+  buildBoardEventsRequest,
   buildTaskListRequest,
   buildTaskInspectorRequests,
   buildTaskMapRequest,
@@ -10,8 +12,10 @@ import {
   buildRunLogRequest,
   buildTaskRunsRequest,
   loadTaskRuns,
+  loadBoardEvents,
   loadExplorerBoardIdentity,
   loadTaskInspector,
+  mergeBoardEvents,
   parseTaskListQuery,
   serializeTaskListQuery,
 } from "./explorer-read-model"
@@ -21,6 +25,7 @@ import { assertCanonicalBoardSlug } from "../board-slug"
 import { asCanonicalBoardId } from "../sync/contracts"
 import type { HttpTransportResponse } from "./http-transport"
 import { HttpTransportError } from "./http-transport"
+import type { ApiListEventsResponseContract } from "./generated/contracts/api-list-events-response"
 
 const runtime = {
   apiBaseUrl: "",
@@ -325,6 +330,152 @@ describe("explorer task map response boundary", () => {
     await expect(loadTaskMap(runtime, "default", { transport: transport(dangling), boardIdentity: identity, limitNodes: 240 })).rejects.toMatchObject({ kind: "anomaly" })
     await expect(loadTaskMap(runtime, "default", { transport: transport(mismatch), boardIdentity: identity, limitNodes: 240 })).rejects.toMatchObject({ kind: "anomaly" })
     await expect(loadTaskMap(runtime, "default", { transport: transport(overLimit), boardIdentity: identity, limitNodes: 240 })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+})
+
+describe("board events read model", () => {
+  const board = (id = "b_default", slug = "default") => ({
+    id,
+    slug,
+    name: "Board",
+    description: null,
+    created_at: 1,
+    updated_at: 1,
+    archived_at: null,
+  })
+  const event = (id: number, boardId = "b_default", eventId = `event-${id}`): ApiListEventsResponseContract["data"][number] => ({
+    id,
+    event_id: eventId,
+    board_id: boardId,
+    task_id: null,
+    run_id: null,
+    kind: "board.archived",
+    actor: "tester",
+    payload: {},
+    created_at: 1_700_000_000 + id,
+  })
+
+  test("builds the first board page with ASC cursor order and encoded selector", () => {
+    expect(buildBoardEventsRequest("board slug")).toBe("/api/v1/events?board=board+slug&after=0&limit=150")
+    expect(buildBoardEventsRequest("default", "t_1")).toBe("/api/v1/events?board=default&task_id=t_1&after=0&limit=150")
+    expect(buildBoardEventsRequest("default", null, 150)).toBe("/api/v1/events?board=default&after=150&limit=150")
+    expect(BOARD_EVENTS_PAGE_LIMIT).toBe(150)
+  })
+
+  test("resolves canonical board identity and rejects foreign or non-ascending events", async () => {
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board()] }, bytes: 1 }
+        return { payload: { data: [event(1), event(2)], meta: { next_after: 2 } }, bytes: 1 }
+      },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport })).resolves.toMatchObject({
+      board: { id: "b_default", slug: "default" },
+      taskId: null,
+      events: [{ id: 1 }, { id: 2 }],
+      meta: { count: 2, nextAfter: 2, limit: 150 },
+    })
+
+    const foreign = {
+      get: async (path: string): Promise<HttpTransportResponse> => path.startsWith("/api/v1/boards?")
+        ? { payload: { data: [board()] }, bytes: 1 }
+        : { payload: { data: [event(1, "b_other")], meta: { next_after: 1 } }, bytes: 1 },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport: foreign })).rejects.toMatchObject({ kind: "anomaly" })
+
+    const outOfOrder = {
+      get: async (path: string): Promise<HttpTransportResponse> => path.startsWith("/api/v1/boards?")
+        ? { payload: { data: [board()] }, bytes: 1 }
+        : { payload: { data: [event(2), event(1)], meta: { next_after: 1 } }, bytes: 1 },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport: outOfOrder })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+
+  test("merges by numeric id and event_id and retains only the final 150 events", () => {
+    const first = Array.from({ length: 150 }, (_, index) => event(index + 1))
+    const boardId = asCanonicalBoardId("b_default")
+    const merged = mergeBoardEvents(first, [event(150), event(151)], boardId)
+    expect(merged).toHaveLength(150)
+    expect(merged[0]?.id).toBe(2)
+    expect(merged.at(-1)?.id).toBe(151)
+    expect(() => mergeBoardEvents(first, [event(151, "b_other")], boardId)).toThrow(/board scope/)
+    expect(() => mergeBoardEvents(first, [event(151, "b_default", "event-1")], boardId)).toThrow(/多个数字 id/)
+    expect(() => mergeBoardEvents([], [event(0)], boardId)).toThrow(/id 必须严格递增/)
+  })
+
+  test("walks ASC pages to expose the newest 150 events", async () => {
+    const paths: string[] = []
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        paths.push(path)
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board()] }, bytes: 1 }
+        const after = Number(new URLSearchParams(path.split("?", 2)[1]).get("after"))
+        if (after === 0) {
+          return { payload: { data: Array.from({ length: 150 }, (_, index) => event(index + 1)), meta: { next_after: 150 } }, bytes: 1 }
+        }
+        expect(after).toBe(150)
+        return { payload: { data: Array.from({ length: 30 }, (_, index) => event(index + 151)), meta: { next_after: 180 } }, bytes: 1 }
+      },
+    }
+
+    const result = await loadBoardEvents(runtime, "default", { transport })
+    expect(result.events).toHaveLength(150)
+    expect(result.events[0]?.id).toBe(31)
+    expect(result.events.at(-1)?.id).toBe(180)
+    expect(result.meta.nextAfter).toBe(180)
+    expect(paths).toHaveLength(3)
+  })
+
+  test("rejects any task event that crosses the requested task scope", async () => {
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => path.startsWith("/api/v1/boards?")
+        ? { payload: { data: [board()] }, bytes: 1 }
+        : {
+            payload: {
+              data: [
+                { ...event(1, "b_default", "event-1"), task_id: "t_1" },
+                { ...event(2, "b_default", "event-2"), task_id: "t_other" },
+              ],
+              meta: { next_after: 2 },
+            },
+            bytes: 1,
+          },
+    }
+
+    await expect(loadBoardEvents(runtime, "default", { transport, taskId: "t_1" })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+
+  test("rejects a cursor that lags the page or repeats after pagination", async () => {
+    const lagging = {
+      get: async (path: string): Promise<HttpTransportResponse> => path.startsWith("/api/v1/boards?")
+        ? { payload: { data: [board()] }, bytes: 1 }
+        : { payload: { data: Array.from({ length: 150 }, (_, index) => event(index + 1)), meta: { next_after: 149 } }, bytes: 1 },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport: lagging })).rejects.toMatchObject({ kind: "anomaly" })
+
+    const repeated = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board()] }, bytes: 1 }
+        const after = Number(new URLSearchParams(path.split("?", 2)[1]).get("after"))
+        return after === 0
+          ? { payload: { data: Array.from({ length: 150 }, (_, index) => event(index + 1)), meta: { next_after: 150 } }, bytes: 1 }
+          : { payload: { data: [event(150)], meta: { next_after: 150 } }, bytes: 1 }
+      },
+    }
+    await expect(loadBoardEvents(runtime, "default", { transport: repeated })).rejects.toMatchObject({ kind: "anomaly" })
+  })
+
+  test("fails fast when an ignored transport resolves after abort", async () => {
+    const controller = new AbortController()
+    const transport = {
+      get: async (path: string): Promise<HttpTransportResponse> => {
+        if (path.startsWith("/api/v1/boards?")) return { payload: { data: [board()] }, bytes: 1 }
+        controller.abort()
+        return { payload: { data: [event(1)], meta: { next_after: 1 } }, bytes: 1 }
+      },
+    }
+
+    await expect(loadBoardEvents(runtime, "default", { transport, signal: controller.signal })).rejects.toMatchObject({ name: "AbortError" })
   })
 })
 

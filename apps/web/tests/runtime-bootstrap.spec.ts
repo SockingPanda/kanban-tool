@@ -47,7 +47,7 @@ test.describe("同源 Web runtime bootstrap", () => {
       })
     })
 
-    await page.goto("/app/", { waitUntil: "networkidle" })
+    await page.goto("/app/", { waitUntil: "domcontentloaded" })
 
     await expect(page.getByTestId("product-shell")).toBeVisible()
     await expect(page.locator("[data-runtime-actor]")).toHaveAttribute("data-runtime-actor", validRuntime.actor)
@@ -60,7 +60,7 @@ test.describe("同源 Web runtime bootstrap", () => {
       await route.fulfill({ status: 503, body: "service unavailable" })
     })
 
-    await page.goto("/app/", { waitUntil: "networkidle" })
+    await page.goto("/app/", { waitUntil: "domcontentloaded" })
 
     await expect(page.getByTestId("runtime-startup-error")).toBeVisible()
     await expect(page.getByTestId("product-shell")).toHaveCount(0)
@@ -76,7 +76,7 @@ test.describe("同源 Web runtime bootstrap", () => {
       })
     })
 
-    await page.goto("/app/", { waitUntil: "networkidle" })
+    await page.goto("/app/", { waitUntil: "domcontentloaded" })
 
     await expect(page.getByTestId("runtime-startup-error")).toBeVisible()
     await expect(page.getByTestId("runtime-startup-error")).toContainText("不符合当前协议")

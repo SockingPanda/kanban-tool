@@ -1,8 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, test, vi } from "vitest"
 
-import { TaskInspector, type TaskInspectorViewModel } from "./TaskInspector"
+import {
+  TaskInspector,
+  type TaskInspectorViewModel,
+} from "./TaskInspector"
+import {
+  buildInspectorTransitionCommand,
+  buildInspectorSaveTaskInput,
+  inspectorEditDraft,
+  inspectorMutationCommitted,
+  inspectorActionIds,
+  inspectorActionLabels,
+  type InspectorEditDraft,
+} from "./TaskInspector.edit-actions"
 import { createInspectorAsyncFence } from "./TaskInspector.lazy"
+import { inspectorMutationKey, type TaskInspectorMutationHandlers } from "./task-inspector-mutation-state"
 
 const model: TaskInspectorViewModel = {
   task: {
@@ -10,6 +23,9 @@ const model: TaskInspectorViewModel = {
     ref: "default#1",
     title: "Inspect the task",
     status: "running",
+    lockVersion: 7,
+    scheduledAt: null,
+    dueAt: null,
     priority: 2,
     description: "A task description.",
     statusReason: "handoff",
@@ -40,6 +56,72 @@ const model: TaskInspectorViewModel = {
 }
 
 describe("TaskInspector", () => {
+  test("renders the editor trigger and the exact nine legal transition labels", () => {
+    const handlers = {} as TaskInspectorMutationHandlers
+    const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} locale="en" mutationHandlers={handlers} claimToken="claim_1" />)
+
+    expect(markup).toContain("Edit task")
+    expect(markup).toContain('data-testid="inspector-actions"')
+    expect(inspectorActionIds).toEqual(["specify", "promote", "claim", "heartbeat", "complete", "submit-review", "block", "unblock", "archive"])
+    for (const label of [inspectorActionLabels.en[3], inspectorActionLabels.en[4], inspectorActionLabels.en[5], inspectorActionLabels.en[6], inspectorActionLabels.en[8]]) {
+      expect(markup).toContain(label)
+    }
+    expect(markup).toContain("Required steps are incomplete")
+    expect(markup).toContain("aria-describedby=\"inspector-action-reason-complete\"")
+    expect(markup).not.toContain("Release")
+    expect(markup).not.toContain("Reopen")
+  })
+
+  test("builds a typed save input with the current lock version", () => {
+    const draft: InspectorEditDraft = {
+      title: " Renamed ",
+      description: " Details ",
+      assignee: " worker-b ",
+      priority: 1,
+      scheduledAt: "2026-08-09T09:10",
+      dueAt: "",
+    }
+
+    expect(buildInspectorSaveTaskInput(model.task, draft)).toEqual({
+      title: "Renamed",
+      description: "Details",
+      assignee: "worker-b",
+      priority: 1,
+      scheduled_at: Date.parse("2026-08-09T09:10"),
+      due_at: null,
+      expected_lock_version: 7,
+    })
+  })
+
+  test("rebuilds the editor draft from a same-id canonical refresh", () => {
+    const refreshedTask = { ...model.task, title: "Canonical title", lockVersion: 8 }
+
+    expect(inspectorEditDraft(refreshedTask)).toMatchObject({ title: "Canonical title" })
+    expect(buildInspectorSaveTaskInput(refreshedTask, inspectorEditDraft(refreshedTask)).expected_lock_version).toBe(8)
+  })
+
+  test("uses shared transition policy for claim, review, force, and reason inputs", () => {
+    expect(buildInspectorTransitionCommand(model.task, "submit-review", {}, "claim_1")).toEqual({
+      action: "submit-review",
+      input: { claim_token: "claim_1" },
+    })
+    expect(buildInspectorTransitionCommand(model.task, "block", { reason: " needs changes " }, null)).toBeNull()
+    expect(buildInspectorTransitionCommand(model.task, "block", { reason: " needs changes ", confirmed: true }, null)).toEqual({
+      action: "block",
+      input: { force: true, reason: "needs changes" },
+    })
+    expect(buildInspectorTransitionCommand(model.task, "heartbeat", {}, null)).toBeNull()
+  })
+
+  test("only committed outcomes close mutation surfaces and retry keys stay exact", () => {
+    expect(inspectorMutationCommitted({ committed: false, reconciled: false })).toBe(false)
+    expect(inspectorMutationCommitted({ committed: true, reconciled: false })).toBe(true)
+    expect(inspectorMutationCommitted({ committed: true, reconciled: true })).toBe(true)
+    expect(inspectorMutationKey("saveTask", model.task.id)).toBe("saveTask:t_fixture")
+    expect(inspectorMutationKey("transition", model.task.id)).toBe("transition:t_fixture")
+    expect(inspectorMutationKey("reload", model.task.id)).toBe("reload:t_fixture")
+  })
+
   test("renders every read-only inspector section and claim/runtime facts", () => {
     const markup = renderToStaticMarkup(<TaskInspector model={model} onSelectTask={vi.fn()} />)
 

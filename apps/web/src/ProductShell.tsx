@@ -16,6 +16,7 @@ import { readHealth, type HealthReport } from "./lib/api/health-read-model"
 import { HealthPage } from "./features/health/HealthPage"
 import { presentHealthError } from "./features/health/health-error"
 import { isCurrentHealthRequest } from "./features/health/health-request"
+import { MaintenancePage } from "./features/maintenance/MaintenancePage"
 import styles from "./shell.module.css"
 
 export type ShellBoundary = "ready" | "loading" | "error" | "offline"
@@ -487,6 +488,7 @@ function RouteContent({ runtime, route, children, boundary, error, onRetry }: Om
   }
   if (route.kind === "settings") return <SettingsPage runtime={runtime} />
   if (route.kind === "health") return <HealthPage runtime={runtime} />
+  if (route.kind === "maintenance") return <MaintenancePage runtime={runtime} boardSlug={route.boardSlug} />
   if (children) return <>{children}</>
 
   return (

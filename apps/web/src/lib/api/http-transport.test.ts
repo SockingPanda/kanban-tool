@@ -20,6 +20,34 @@ function sameOriginResponse(body: BodyInit | null, init: ResponseInit, url = "ht
 }
 
 describe("same-origin Web HTTP transport", () => {
+  test("sends typed JSON maintenance requests through the same-origin request seam", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => sameOriginResponse(JSON.stringify({ data: { ok: true } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }))
+    const transport = createHttpTransport(runtime, {
+      fetcher,
+      documentBaseURI: "https://kanban.test/app/",
+    })
+
+    const request = transport.request
+    expect(request).toBeDefined()
+    await expect(request!({
+      method: "POST",
+      path: "/api/v1/maintenance/checkpoint",
+      body: {},
+    })).resolves.toMatchObject({ payload: { data: { ok: true } } })
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://kanban.test/__kb_api__/api/v1/maintenance/checkpoint",
+      expect.objectContaining({
+        method: "POST",
+        body: "{}",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        credentials: "same-origin",
+      }),
+    )
+  })
+
   test("applies a same-origin runtime API path prefix and credentials", async () => {
     const fetcher = vi.fn<typeof fetch>(async () => sameOriginResponse(JSON.stringify({ data: [] }), {
       status: 200,

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type { WebRuntimeConfig } from "../../lib/runtime"
 import { readHealth, type HealthReadError, type HealthReport } from "../../lib/api/health-read-model"
 import { createTranslator } from "../../lib/i18n"
+import { HEALTH_REFRESH_EVENT } from "../../lib/health-refresh"
 import { usePreferences } from "../../lib/use-preferences"
 import { presentHealthError } from "./health-error"
 import { healthMetricTone } from "./health-metrics"
@@ -64,10 +65,15 @@ export function HealthPage({ runtime, initialReport, read }: HealthPageProps) {
     }
   }, [initialReport, load])
 
-  const refresh = () => {
-    if (pending) return
+  const refresh = useCallback(() => {
+    if (requestControllerRef.current) return
     void load()
-  }
+  }, [load])
+
+  useEffect(() => {
+    window.addEventListener(HEALTH_REFRESH_EVENT, refresh)
+    return () => window.removeEventListener(HEALTH_REFRESH_EVENT, refresh)
+  }, [refresh])
 
   return (
     <section className={styles.page} aria-labelledby="health-heading" data-testid="health-page">

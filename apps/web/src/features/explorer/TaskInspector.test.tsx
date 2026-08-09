@@ -15,6 +15,7 @@ import {
   inspectorMutationCommitted,
   inspectorRetryIntentMatches,
   inspectorRetryUserIntentMatches,
+  inspectorTransitionUserIntent,
   inspectorActionIds,
   inspectorActionLabels,
   type InspectorEditDraft,
@@ -162,6 +163,17 @@ describe("TaskInspector", () => {
     // retry committed 后，即使规范 status 已从 policy view 移除 block，
     // 仍打开且已编辑的 draft 也不能被关闭。
     expect(inspectorActionDialogMatchesTransitionIntent({ kind: "reason", action: "block", reason: "Changed", confirmed: true }, blockCommand!)).toBe(false)
+  })
+
+  test("keeps the retry submission fence while a diverged draft awaits its outcome", () => {
+    const command = buildInspectorTransitionCommand(model.task, "block", { reason: "Needs review", confirmed: true }, null)
+    expect(command).not.toBeNull()
+    const savedRetryIntent = inspectorTransitionUserIntent(command!)
+    const divergedDraft = { kind: "reason" as const, action: "block" as const, reason: "Edited while retrying", confirmed: true }
+
+    // pre-await marker 只比较对话框 draft；view-null render 不能在
+    // retryMutation 恢复前关闭这份已分叉的对话框。
+    expect(inspectorActionDialogUserIntentMatches(divergedDraft, savedRetryIntent)).toBe(false)
   })
 
   test("renders an exact action retry even before a current dialog command exists", () => {

@@ -804,11 +804,24 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     const key = inspectorMutationKey(operation, taskId)
     const retryIntent = scopedSnapshot.retries.get(key)
     if (retryIntent === undefined) return null
+    const retryDialogSubmission: PendingActionDialogSubmission | null = operation === "transition"
+      && retryIntent.operation === "transition"
+      && actionDialogRef.current !== null
+      ? { epoch, taskId, intent: inspectorTransitionUserIntent(retryIntent.command), status: "pending" }
+      : null
+    if (retryDialogSubmission !== null) actionDialogSubmissionRef.current = retryDialogSubmission
+    const clearPendingRetryDialogSubmission = () => {
+      if (retryDialogSubmission !== null && actionDialogSubmissionRef.current === retryDialogSubmission && retryDialogSubmission.status === "pending") actionDialogSubmissionRef.current = null
+    }
     setLocalError(null)
     try {
       const outcome = await mutationHandlers.retry(key)
-      if (!mutationScopeCurrent(epoch, taskId)) return null
+      if (!mutationScopeCurrent(epoch, taskId)) {
+        clearPendingRetryDialogSubmission()
+        return null
+      }
       if (!inspectorMutationCommitted(outcome)) {
+        clearPendingRetryDialogSubmission()
         if (operation !== "reload") setLocalMutationError(operation)
         return outcome
       }
@@ -830,8 +843,10 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
           status: "preserve",
         }
       }
+      clearPendingRetryDialogSubmission()
       return outcome
     } catch {
+      clearPendingRetryDialogSubmission()
       if (mutationScopeCurrent(epoch, taskId) && operation !== "reload") setLocalMutationError(operation)
       return null
     }

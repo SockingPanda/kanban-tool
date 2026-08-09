@@ -239,6 +239,8 @@ class ExplorerReadBudget {
 export interface ExplorerReadOptions extends ExplorerReadDependencies {
   readonly signal?: AbortSignal
   readonly includeArchived?: boolean
+  /** Incremental event cursor; zero is reserved for initial/recovery reads. */
+  readonly after?: number
   readonly budget?: ExplorerReadBudget
 }
 
@@ -260,6 +262,16 @@ export const BOARD_EVENTS_PAGE_LIMIT = 150
 export const MAX_BOARD_EVENTS_PAGES = 1_024
 
 export type ExplorerEvent = ApiListEventsResponseContract["data"][number]
+
+/** Re-validate the already generated SSE event before handing it to EventsView. */
+export function parseBoardEvent(value: unknown): ExplorerEvent | null {
+  try {
+    const id = typeof value === "object" && value !== null && "id" in value && typeof value.id === "number" ? value.id : -1
+    return parseApiListEventsResponse({ data: [value] as ApiListEventsResponseContract["data"], meta: { next_after: id } }).data[0] ?? null
+  } catch {
+    return null
+  }
+}
 
 /** 由现有 sync owner 交给 UI 的已校验、看板隔离事件 batch。 */
 export interface BoardEventsBatch {
@@ -564,7 +576,9 @@ export async function loadBoardEvents(
   }
   try {
     const board = await loadExplorerBoardIdentity(runtime, selector, { ...options, transport, budget })
-    let after = 0
+    const afterOption = options.after ?? 0
+    if (!Number.isSafeInteger(afterOption) || afterOption < 0) throw new ExplorerReadError("anomaly", "事件读取 after 必须是非负安全整数。")
+    let after = afterOption
     let pageCount = 0
     let events: readonly ExplorerEvent[] = []
     while (true) {

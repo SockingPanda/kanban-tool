@@ -116,6 +116,8 @@ function SyncBanner({ status, copy, onRetry }: { readonly status: BoardSyncStatu
         ? copy.syncRecovering
         : status === "circuit-open"
           ? copy.syncCircuitOpen
+          : status === "offline"
+            ? copy.offlineTitle
           : copy.syncStale
   const isHealthy = status === "live"
   return (

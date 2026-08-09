@@ -23,6 +23,7 @@ export interface TaskRunsViewProps {
   readonly runtime: WebRuntimeConfig
   readonly taskId: string | null
   readonly invalidationRevision?: number
+  readonly online?: boolean
 }
 
 type RunsCopy = {
@@ -169,7 +170,7 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRun
         <h2 id="runs-heading">{copy.title}</h2>
         <p className={styles.taskId} translate="no">{taskId}</p>
       </header>
-      {state.error ? <div className={styles.refreshError} role="alert">{state.error.message}{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
+      {state.error ? <div className={styles.refreshError} role={kind === "offline" ? "status" : "alert"}>{kind === "offline" ? copy.offline : state.error.message}{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
       <div className={styles.columns}>
         <section className={styles.runListPanel} aria-labelledby="runs-list-heading" tabIndex={0}>
           <h2 id="runs-list-heading" className={styles.visuallyHidden}>{copy.title}</h2>
@@ -183,7 +184,7 @@ export function TaskRunsPresentation({ locale, taskId, state, onRetry }: TaskRun
   )
 }
 
-function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, invalidationRevision: number): TaskRunsReadState & { readonly retry: () => void } {
+function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, invalidationRevision: number, online: boolean): TaskRunsReadState & { readonly retry: () => void } {
   const loadRef = useRef<((signal: AbortSignal) => Promise<TaskRunsReadModel>) | null>(null)
   loadRef.current = taskId ? (signal) => loadTaskRuns(runtime, taskId, { signal }) : null
   const [generation, setGeneration] = useState(0)
@@ -192,6 +193,14 @@ function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, inval
   useEffect(() => {
     if (!taskId) {
       setState({ data: null, loading: false, error: null })
+      return
+    }
+    if (!online) {
+      setState((current) => ({
+        data: current.data?.taskId === taskId ? current.data : null,
+        loading: false,
+        error: new ExplorerReadError("offline", "当前离线，无法加载运行记录。"),
+      }))
       return
     }
     const controller = new AbortController()
@@ -211,13 +220,13 @@ function useTaskRunsRead(runtime: WebRuntimeConfig, taskId: string | null, inval
       active = false
       controller.abort()
     }
-  }, [generation, invalidationRevision, taskId])
+  }, [generation, invalidationRevision, online, taskId])
 
   return { ...state, retry: () => setGeneration((current) => current + 1) }
 }
 
-export function TaskRunsView({ runtime, taskId, invalidationRevision = 0 }: TaskRunsViewProps) {
+export function TaskRunsView({ runtime, taskId, invalidationRevision = 0, online = typeof navigator === "undefined" || navigator.onLine }: TaskRunsViewProps) {
   const { locale } = usePreferences()
-  const state = useTaskRunsRead(runtime, taskId, invalidationRevision)
+  const state = useTaskRunsRead(runtime, taskId, invalidationRevision, online)
   return <TaskRunsPresentation locale={locale} taskId={taskId} state={state} onRetry={state.retry} />
 }

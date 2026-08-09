@@ -96,6 +96,7 @@ export interface TaskInspectorProps {
   readonly identity?: string
   readonly refreshRevision?: number
   readonly refreshError?: string | null
+  readonly refreshOffline?: boolean
   readonly onRetry?: () => void
   readonly onLoadRuns?: (signal: AbortSignal) => Promise<TaskInspectorViewModel["runs"]>
   readonly onLoadEvents?: (signal: AbortSignal) => Promise<TaskInspectorViewModel["events"]>
@@ -159,6 +160,8 @@ type InspectorCopy = {
   readonly retry: string
   readonly openAnnouncement: string
   readonly refreshError: string
+  readonly refreshOffline: string
+  readonly refreshPending: string
   readonly status: Readonly<Record<InspectorTaskStatus, string>>
   readonly planState: Readonly<Record<InspectorPlanState, string>>
   readonly stepStatus: Readonly<Record<"todo" | "done" | "skipped", string>>
@@ -195,6 +198,8 @@ const copies: Record<Locale, InspectorCopy> = {
     retry: "重试",
     openAnnouncement: "已打开任务检查器。",
     refreshError: "任务数据刷新失败。",
+    refreshOffline: "当前离线，保留最近一次任务数据。",
+    refreshPending: "数据已更新，展开后自动刷新。",
     status: { triage: "分诊", todo: "待办", scheduled: "已排期", ready: "就绪", running: "运行中", blocked: "已阻塞", review: "待审核", done: "已完成", archived: "已归档" },
     planState: { unplanned: "未规划", planned: "已规划", not_required: "无需计划" },
     stepStatus: { todo: "待办", done: "已完成", skipped: "已跳过" },
@@ -229,6 +234,8 @@ const copies: Record<Locale, InspectorCopy> = {
     retry: "Retry",
     openAnnouncement: "Task Inspector opened.",
     refreshError: "Task data refresh failed.",
+    refreshOffline: "You are offline; the last usable task data is retained.",
+    refreshPending: "New data is available; this section will refresh when opened.",
     status: { triage: "Triage", todo: "To do", scheduled: "Scheduled", ready: "Ready", running: "Running", blocked: "Blocked", review: "Review", done: "Done", archived: "Archived" },
     planState: { unplanned: "Unplanned", planned: "Planned", not_required: "Not required" },
     stepStatus: { todo: "To do", done: "Done", skipped: "Skipped" },
@@ -342,9 +349,9 @@ function Neighborhood({ model, copy, onSelectTask }: { readonly model: NonNullab
   )
 }
 
-type InspectorSectionStatus = "idle" | "loading" | "ready" | "error"
+type InspectorSectionStatus = "idle" | "loading" | "ready" | "stale" | "error"
 
-export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood }: TaskInspectorProps) {
+export function TaskInspector({ model, onSelectTask, locale = "zh", identity, refreshRevision = 0, refreshError, refreshOffline = false, onRetry, onLoadRuns, onLoadEvents, onLoadNeighborhood }: TaskInspectorProps) {
   const { task } = model
   const copy = copies[locale]
   const requestIdentity = identity ?? task.id
@@ -370,6 +377,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   const [runsStatus, setRunsStatus] = useState<InspectorSectionStatus>(model.runs.length > 0 ? "ready" : "idle")
   const [eventsStatus, setEventsStatus] = useState<InspectorSectionStatus>(model.events.length > 0 ? "ready" : "idle")
   const [neighborhoodStatus, setNeighborhoodStatus] = useState<InspectorSectionStatus>(model.neighborhood ? "ready" : "idle")
+  const markedRefreshRevisionRef = useRef<number | null>(null)
 
   useEffect(() => {
     const identityChanged = requestIdentityRef.current !== requestIdentity
@@ -404,7 +412,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
   }, [eventsFence, neighborhoodFence, runsFence])
 
   const startRunsLoad = useCallback((force = false) => {
-    if ((!force && runsStatus !== "idle") || !onLoadRuns) return
+    if ((!force && runsStatus !== "idle" && runsStatus !== "stale") || !onLoadRuns) return
     const signal = runsFence.begin(requestIdentity)
     setRunsStatus("loading")
     void onLoadRuns(signal).then((value) => {
@@ -416,7 +424,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     })
   }, [onLoadRuns, requestIdentity, runsFence, runsStatus])
   const startEventsLoad = useCallback((force = false) => {
-    if ((!force && eventsStatus !== "idle") || !onLoadEvents) return
+    if ((!force && eventsStatus !== "idle" && eventsStatus !== "stale") || !onLoadEvents) return
     const signal = eventsFence.begin(requestIdentity)
     setEventsStatus("loading")
     void onLoadEvents(signal).then((value) => {
@@ -428,7 +436,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
     })
   }, [eventsFence, eventsStatus, onLoadEvents, requestIdentity])
   const startNeighborhoodLoad = useCallback((force = false) => {
-    if ((!force && neighborhoodStatus !== "idle") || !onLoadNeighborhood) return
+    if ((!force && neighborhoodStatus !== "idle" && neighborhoodStatus !== "stale") || !onLoadNeighborhood) return
     const signal = neighborhoodFence.begin(requestIdentity)
     setNeighborhoodStatus("loading")
     void onLoadNeighborhood(signal).then((value) => {
@@ -439,6 +447,13 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       if (neighborhoodFence.isCurrent(requestIdentity, signal)) setNeighborhoodStatus("error")
     })
   }, [neighborhoodFence, neighborhoodStatus, onLoadNeighborhood, requestIdentity])
+  useEffect(() => {
+    if (refreshRevision === 0 || markedRefreshRevisionRef.current === refreshRevision) return
+    markedRefreshRevisionRef.current = refreshRevision
+    setRunsStatus((status) => status === "ready" ? "stale" : status)
+    setEventsStatus((status) => status === "ready" ? "stale" : status)
+    setNeighborhoodStatus((status) => status === "ready" ? "stale" : status)
+  }, [refreshRevision])
   useEffect(() => {
     if (refreshRevision === 0 || lastRefreshRevisionRef.current === refreshRevision) return
     lastRefreshRevisionRef.current = refreshRevision
@@ -478,7 +493,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
         <h2 ref={headingRef} tabIndex={-1}>{task.title}</h2>
         <p aria-live="polite" className={styles.announcement}>{copy.openAnnouncement}</p>
         <p className={styles.identity} translate="no">{task.id}</p>
-        {refreshError ? <div role="alert"><strong>{copy.refreshError}</strong><span> {refreshError}</span>{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
+        {refreshError ? <div role={refreshOffline ? "status" : "alert"}><strong>{refreshOffline ? copy.refreshOffline : copy.refreshError}</strong>{!refreshOffline ? <span> {refreshError}</span> : null}{onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}</div> : null}
         <div className={styles.badges}>
           <span className={styles.badge}>{copy.status[task.status]}</span>
           <span className={styles.badge}>P{task.priority}</span>
@@ -551,15 +566,15 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       <Section id="inspector-runs" title={copy.sections.runs}>
         <details ref={runsDetailsRef} onToggle={loadRuns}>
           <summary>{copy.sections.runs}</summary>
-          {runsStatus === "loading" ? <Empty>{copy.loading}</Empty> : runsStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startRunsLoad(true)}>{copy.retry}</button></> : runs.length === 0 ? <Empty>{copy.noRuns}</Empty> : (
-          <ul className={styles.compactList}>
+          {runsStatus === "loading" ? <Empty>{copy.loading}</Empty> : runsStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startRunsLoad(true)}>{copy.retry}</button></> : runs.length === 0 ? <>{runsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noRuns}</Empty></> : (
+          <>{runsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<ul className={styles.compactList}>
             {runs.map((run) => (
               <li key={run.id} className={styles.row}>
                 <div><strong translate="no">{run.id}</strong><span className={styles.muted}> · {copy.runStatus[run.status]}</span><p>{run.workerProfile || copy.manual} · {run.claimOwner}</p>{run.error ? <p className={styles.error}>{run.error}</p> : null}</div>
                 <span className={styles.muted}>{run.hasLog ? copy.log : ""}</span>
               </li>
             ))}
-          </ul>
+          </ul></>
           )}
         </details>
       </Section>
@@ -567,15 +582,15 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       <Section id="inspector-events" title={copy.sections.events}>
         <details ref={eventsDetailsRef} onToggle={loadEvents}>
           <summary>{copy.sections.events}</summary>
-          {eventsStatus === "loading" ? <Empty>{copy.loading}</Empty> : eventsStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startEventsLoad(true)}>{copy.retry}</button></> : events.length === 0 ? <Empty>{copy.noEvents}</Empty> : (
-          <ol className={styles.compactList}>
+          {eventsStatus === "loading" ? <Empty>{copy.loading}</Empty> : eventsStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startEventsLoad(true)}>{copy.retry}</button></> : events.length === 0 ? <>{eventsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noEvents}</Empty></> : (
+          <><>{eventsStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}</><ol className={styles.compactList}>
             {events.map((event) => (
               <li key={event.id} className={styles.row}>
                 <div><strong translate="no">{event.kind}</strong><p className={styles.muted}>{event.actor || copy.system}</p></div>
                 <time dateTime={String(event.createdAt)}>{event.createdAt}</time>
               </li>
             ))}
-          </ol>
+          </ol></>
           )}
         </details>
       </Section>
@@ -583,7 +598,7 @@ export function TaskInspector({ model, onSelectTask, locale = "zh", identity, re
       <Section id="inspector-neighborhood" title={copy.sections.neighborhood}>
         <details ref={neighborhoodDetailsRef} onToggle={loadNeighborhood}>
           <summary>{copy.sections.neighborhood}</summary>
-          {neighborhoodStatus === "loading" ? <Empty>{copy.loading}</Empty> : neighborhoodStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startNeighborhoodLoad(true)}>{copy.retry}</button></> : neighborhood ? <Neighborhood model={neighborhood} copy={copy} onSelectTask={onSelectTask} /> : <Empty>{copy.noNeighborhood}</Empty>}
+          {neighborhoodStatus === "loading" ? <Empty>{copy.loading}</Empty> : neighborhoodStatus === "error" ? <><Empty>{copy.loadError}</Empty><button type="button" onClick={() => startNeighborhoodLoad(true)}>{copy.retry}</button></> : neighborhood ? <>{neighborhoodStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Neighborhood model={neighborhood} copy={copy} onSelectTask={onSelectTask} /></> : <>{neighborhoodStatus === "stale" ? <p className={styles.muted} role="status">{copy.refreshPending}</p> : null}<Empty>{copy.noNeighborhood}</Empty></>}
         </details>
       </Section>
 

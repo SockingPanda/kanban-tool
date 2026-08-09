@@ -43,6 +43,7 @@ export interface TaskMapViewProps {
   readonly identityError?: ExplorerReadError | Error | null
   readonly onRetryIdentity?: () => void
   readonly invalidationRevision?: number
+  readonly online?: boolean
   readonly taskId: string | null
   readonly onSelectTask: (taskId: string) => void
   readonly urlState?: TaskMapUrlState
@@ -122,6 +123,7 @@ type MapCopy = {
   readonly refreshing: string
   readonly notFound: string
   readonly error: string
+  readonly offline: string
   readonly retry: string
   readonly loading: string
   readonly loadingDescription: string
@@ -170,6 +172,7 @@ const copies: Record<Locale, MapCopy> = {
     refreshing: "正在刷新…",
     notFound: "看板不存在",
     error: "关系图加载失败",
+    offline: "当前离线，无法加载关系图。",
     retry: "重试",
     loading: "正在加载关系图…",
     loadingDescription: "正在读取当前看板的任务关系。",
@@ -216,6 +219,7 @@ const copies: Record<Locale, MapCopy> = {
     refreshing: "Refreshing…",
     notFound: "Board not found",
     error: "Task map failed to load",
+    offline: "You are offline; the task map cannot be loaded.",
     retry: "Retry",
     loading: "Loading task map…",
     loadingDescription: "Reading task relations for this board.",
@@ -257,6 +261,7 @@ function useTaskMapRead(
   includeDoneContext: boolean,
   hideIsolated: boolean,
   invalidationRevision: number,
+  online: boolean,
 ): TaskMapReadState & { readonly retry: () => void } {
   const loadRef = useRef<((signal: AbortSignal) => Promise<ExplorerTaskMapReadModel>) | null>(null)
   loadRef.current = boardIdentity
@@ -288,6 +293,16 @@ function useTaskMapRead(
       setState({ data: null, loading: false, error: null, requestKey, identityToken })
       return
     }
+    if (!online) {
+      setState((current) => ({
+        data: current.identityToken === identityToken ? current.data : null,
+        loading: false,
+        error: new ExplorerReadError("offline", "当前离线，无法加载关系图。"),
+        requestKey,
+        identityToken,
+      }))
+      return
+    }
     const controller = new AbortController()
     let active = true
     setState((current) => ({
@@ -317,7 +332,7 @@ function useTaskMapRead(
       active = false
       controller.abort()
     }
-  }, [boardIdentity, generation, identityToken, invalidationRevision, key, requestKey])
+  }, [boardIdentity, generation, identityToken, invalidationRevision, key, online, requestKey])
 
   const sameIdentity = state.identityToken === identityToken
   const currentRequest = sameIdentity && state.requestKey === requestKey
@@ -388,10 +403,11 @@ function TaskMapToolbar({
 
 function TaskMapError({ copy, error, onRetry }: { readonly copy: MapCopy; readonly error: Error; readonly onRetry?: () => void }) {
   const notFound = errorReason(error) === "board-not-found"
+  const offline = error instanceof ExplorerReadError && error.kind === "offline"
   return (
-    <section className={styles.state} data-testid={notFound ? "task-map-not-found" : "task-map-error"} role="alert">
-      <h2>{notFound ? copy.notFound : copy.error}</h2>
-      <p>{error.message}</p>
+    <section className={styles.state} data-testid={offline ? "task-map-offline" : notFound ? "task-map-not-found" : "task-map-error"} role={offline ? "status" : "alert"}>
+      <h2>{offline ? copy.offline : notFound ? copy.notFound : copy.error}</h2>
+      {!offline ? <p>{error.message}</p> : null}
       {onRetry ? <button type="button" onClick={onRetry}>{copy.retry}</button> : null}
     </section>
   )
@@ -459,6 +475,7 @@ export function TaskMapPresentation({
   const updateDoneContext = onShowDoneContextChange ?? (() => undefined)
   const updateZoom = onZoomChange ?? (() => undefined)
   const mapMeta = sourceGraph?.meta
+  const offline = state.error instanceof ExplorerReadError && state.error.kind === "offline"
 
   return (
     <section className={styles.map} data-testid="task-map" aria-labelledby="task-map-heading">
@@ -484,7 +501,7 @@ export function TaskMapPresentation({
         onRetry={onRetry}
       />
 
-      {state.error && sourceGraph ? <div className={styles.inlineError} role="alert" data-testid="task-map-refresh-error"><strong>{copy.refreshError}</strong><span>{state.error.message}</span></div> : null}
+      {state.error && sourceGraph ? <div className={styles.inlineError} role={offline ? "status" : "alert"} data-testid={offline ? "task-map-offline" : "task-map-refresh-error"}><strong>{offline ? copy.offline : copy.refreshError}</strong>{!offline ? <span>{state.error.message}</span> : null}</div> : null}
       {mapMeta?.truncated ? <div className={styles.truncated} role="alert" data-testid="task-map-truncated"><strong>{copy.truncated}</strong><span>{copy.limit} {mapMeta.limit_nodes}{locale === "zh" ? "。" : "."}</span></div> : null}
 
       {state.error && !sourceGraph ? <TaskMapError copy={copy} error={state.error} onRetry={onRetry} /> : null}
@@ -537,6 +554,7 @@ export function TaskMapView({
   identityError = null,
   onRetryIdentity,
   invalidationRevision = 0,
+  online = typeof navigator === "undefined" || navigator.onLine,
   taskId,
   onSelectTask,
   urlState = defaultTaskMapUrlState,
@@ -544,7 +562,7 @@ export function TaskMapView({
 }: TaskMapViewProps) {
   const { locale } = usePreferences()
   const routeIdentity = boardIdentity && boardIdentity.slug === board ? boardIdentity : null
-  const mapRead = useTaskMapRead(runtime, board, routeIdentity, urlState.showDoneContext, urlState.hideIsolated, invalidationRevision)
+  const mapRead = useTaskMapRead(runtime, board, routeIdentity, urlState.showDoneContext, urlState.hideIsolated, invalidationRevision, online)
   const fencedData = fenceTaskMapReadModel(board, routeIdentity, mapRead.data)
   const state = useMemo<TaskMapReadState>(() => {
     if (!routeIdentity) return { data: null, loading: identityLoading, error: identityError }

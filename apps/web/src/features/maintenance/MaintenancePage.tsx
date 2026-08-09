@@ -120,8 +120,9 @@ function diagnosticSummary(value: string | null | undefined, t: ReturnType<typeo
   return value?.trim() ? t("serverMessagePresent") : t("none")
 }
 
-function formatGeneratedAt(value: string | number, locale: Locale): string {
-  const date = new Date(typeof value === "number" ? value * 1000 : value)
+function formatTimestamp(value: number | null | undefined, locale: Locale): string {
+  if (value === null || value === undefined) return "—"
+  const date = new Date(value)
   if (Number.isNaN(date.getTime())) return "—"
   return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(date)
 }
@@ -300,9 +301,11 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
           loadBoardDiagnostics({ generation, fresh: true }),
         ])
         if (isMutationCurrent()) {
-          if (committed && (!statusFresh || !diagnosticsFresh)) setSyncNotice(true)
-          const refreshHealth = onHealthRefresh ?? requestHealthRefresh
-          refreshHealth()
+          if (committed) {
+            if (!statusFresh || !diagnosticsFresh) setSyncNotice(true)
+            const refreshHealth = onHealthRefresh ?? requestHealthRefresh
+            refreshHealth()
+          }
           setPendingAction(null)
         }
       }
@@ -400,7 +403,7 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
 
       <div className={styles.overviewGrid}>
         <Panel title={t("maintenanceStatusHeading")} testId="maintenance-status">
-          <StatusContent state={status} t={t} />
+          <StatusContent state={status} t={t} locale={locale} />
         </Panel>
         <Panel title={t("statsHeading")} testId="maintenance-stats">
           <StatsContent state={stats} t={t} locale={locale} />
@@ -423,7 +426,7 @@ export function MaintenancePage({ runtime, boardSlug, api: providedApi, initial,
             <p className={styles.eyebrow}>{t("hostAdministration")}</p>
             <h2 id="maintenance-operations-heading">{t("maintenanceOperationsHeading")}</h2>
           </div>
-          <span className={styles.scope}>{boardSlug}</span>
+          <span className={styles.scope} translate="no">{boardSlug}</span>
         </div>
         <div className={styles.operationGrid}>
           <PathOperation label={t("backupPathLabel")} value={backupPath} onChange={setBackupPath} buttonLabel={t("backupAction")} disabled={isBusy || !backupPath.trim()} loading={pendingAction === "backup"} onClick={() => openConfirm({ kind: "backup", path: backupPath.trim() })} testId="maintenance-backup" />
@@ -507,7 +510,7 @@ function PathOperation({ label, value, onChange, buttonLabel, disabled, loading,
   </section>
 }
 
-function StatusContent({ state, t }: { state: LoadState<MaintenanceStatus>; t: ReturnType<typeof createTranslator> }) {
+function StatusContent({ state, t, locale }: { state: LoadState<MaintenanceStatus>; t: ReturnType<typeof createTranslator>; locale: Locale }) {
   if (state.kind === "loading") return <Boundary text={t("loading")} />
   if (state.kind === "error") return <InlineError error={state.error} t={t} action="status" actionError={null} />
   const { owner } = state.value
@@ -519,14 +522,14 @@ function StatusContent({ state, t }: { state: LoadState<MaintenanceStatus>; t: R
       <Metric label={t("mode")} value={owner.mode ?? "—"} />
       <Metric label={t("active")} value={owner.active} tone={owner.active ? styles.ready : styles.mutedValue} />
       <Metric label={t("fenceEpoch")} value={owner.fence_epoch} />
-      <Metric label={t("leaseExpiresAt")} value={owner.lease_expires_at} />
+      <Metric label={t("leaseExpiresAt")} value={formatTimestamp(owner.lease_expires_at, locale)} />
       <Metric label={t("buildIdentity")} value={owner.build_identity} />
-      <Metric label={t("lastHeartbeat")} value={owner.last_heartbeat_at} />
+      <Metric label={t("lastHeartbeat")} value={formatTimestamp(owner.last_heartbeat_at, locale)} />
     </dl>
     <p className={styles.muted}>{t("projectionStores")}: {state.value.stores.length}</p>
     {state.value.stores.length > 0 ? <div className={styles.storeList}>{state.value.stores.map((store) => <div className={styles.store} key={store.store_name}>
-      <div className={styles.storeHeading}><strong>{store.store_name}</strong><span className={statusTone(store)}>{store.degraded || store.dirty ? t("degraded") : reported(store.lifecycle_status)}</span></div>
-      <dl className={styles.detailGrid}><Metric label={t("activeGeneration")} value={store.active_generation} /><Metric label={t("activeFingerprint")} value={store.active_fingerprint} /><Metric label={t("previousGeneration")} value={store.previous_generation} /><Metric label={t("buildingGeneration")} value={store.building_generation} /><Metric label={t("storeFenceEpoch")} value={store.fence_epoch} /><Metric label={t("storeLastEvent")} value={store.last_event_id} /><Metric label={t("pending")} value={store.pending} /><Metric label={t("running")} value={store.running} /><Metric label={t("failed")} value={store.failed} /><Metric label={t("phase")} value={store.phase} /><Metric label={t("updatedAt")} value={store.updated_at} /><Metric label={t("lastError")} value={store.last_error ? t("errorPresent") : t("none")} /><Metric label={t("storeErrors")} value={errorSummary(store.errors.length, t)} /></dl>
+      <div className={styles.storeHeading}><strong translate="no">{store.store_name}</strong><span className={statusTone(store)}>{store.degraded || store.dirty ? t("degraded") : reported(store.lifecycle_status)}</span></div>
+      <dl className={styles.detailGrid}><Metric label={t("activeGeneration")} value={store.active_generation} /><Metric label={t("activeFingerprint")} value={store.active_fingerprint} /><Metric label={t("previousGeneration")} value={store.previous_generation} /><Metric label={t("buildingGeneration")} value={store.building_generation} /><Metric label={t("storeFenceEpoch")} value={store.fence_epoch} /><Metric label={t("storeLastEvent")} value={store.last_event_id} /><Metric label={t("pending")} value={store.pending} /><Metric label={t("running")} value={store.running} /><Metric label={t("failed")} value={store.failed} /><Metric label={t("phase")} value={store.phase} /><Metric label={t("updatedAt")} value={formatTimestamp(store.updated_at, locale)} /><Metric label={t("lastError")} value={store.last_error ? t("errorPresent") : t("none")} /><Metric label={t("storeErrors")} value={errorSummary(store.errors.length, t)} /></dl>
     </div>)}</div> : <p className={styles.empty}>{t("noProjectionStores")}</p>}
   </div>
 }
@@ -534,7 +537,7 @@ function StatusContent({ state, t }: { state: LoadState<MaintenanceStatus>; t: R
 function StatsContent({ state, t, locale }: { state: LoadState<QueueStats>; t: ReturnType<typeof createTranslator>; locale: Locale }) {
   if (state.kind === "loading") return <Boundary text={t("loading")} />
   if (state.kind === "error") return <InlineError error={state.error} t={t} action="stats" actionError={null} />
-  return <div className={styles.content}><dl className={styles.metrics}><Metric label={t("boardId")} value={state.value.board_id} /><Metric label={t("generatedAt")} value={formatGeneratedAt(state.value.generated_at, locale)} /><Metric label={t("unplannedActiveTasks")} value={state.value.unplanned_active_tasks} /><Metric label={t("incompleteRequiredSteps")} value={state.value.active_parents_with_incomplete_required_steps} /></dl><h3 className={styles.subheading}>{t("statusCounts")}</h3>{state.value.status_counts.length > 0 ? <dl className={styles.detailGrid}>{state.value.status_counts.map((entry) => <Metric key={entry.status} label={entry.status} value={entry.count} />)}</dl> : <p className={styles.empty}>{t("noStatusCounts")}</p>}<h3 className={styles.subheading}>{t("staleClaims")}</h3>{state.value.stale_claims.length > 0 ? <div className={styles.storeList}>{state.value.stale_claims.map((claim) => <div className={styles.store} key={claim.task_id}><div className={styles.storeHeading}><strong>#{claim.seq} {claim.title}</strong><span>{claim.claim_owner ?? t("noOwner")}</span></div><dl className={styles.detailGrid}><Metric label={t("expiresAt")} value={claim.claim_expires_at} /><Metric label={t("lastHeartbeat")} value={claim.last_heartbeat_at} /><Metric label={t("run") } value={claim.current_run_id} /><Metric label={t("retry")} value={`${claim.retry_count}/${claim.max_retries ?? "—"}`} /></dl></div>)}</div> : <p className={styles.empty}>{t("noStaleClaims")}</p>}<h3 className={styles.subheading}>{t("blockedReasons")}</h3>{state.value.blocked_reasons.length > 0 ? <dl className={styles.detailGrid}>{state.value.blocked_reasons.map((entry) => <Metric key={entry.reason} label={entry.reason || t("unspecified")} value={entry.count} />)}</dl> : <p className={styles.empty}>{t("noBlockedReasons")}</p>}</div>
+  return <div className={styles.content}><dl className={styles.metrics}><Metric label={t("boardId")} value={state.value.board_id} /><Metric label={t("generatedAt")} value={formatTimestamp(state.value.generated_at, locale)} /><Metric label={t("unplannedActiveTasks")} value={state.value.unplanned_active_tasks} /><Metric label={t("incompleteRequiredSteps")} value={state.value.active_parents_with_incomplete_required_steps} /></dl><h3 className={styles.subheading}>{t("statusCounts")}</h3>{state.value.status_counts.length > 0 ? <dl className={styles.detailGrid}>{state.value.status_counts.map((entry) => <Metric key={entry.status} label={entry.status} labelTranslateNo value={entry.count} />)}</dl> : <p className={styles.empty}>{t("noStatusCounts")}</p>}<h3 className={styles.subheading}>{t("staleClaims")}</h3>{state.value.stale_claims.length > 0 ? <div className={styles.storeList}>{state.value.stale_claims.map((claim) => <div className={styles.store} key={claim.task_id}><div className={styles.storeHeading}><strong translate="no">#{claim.seq} {claim.title}</strong><span translate="no">{claim.claim_owner ?? t("noOwner")}</span></div><dl className={styles.detailGrid}><Metric label={t("expiresAt")} value={formatTimestamp(claim.claim_expires_at, locale)} /><Metric label={t("lastHeartbeat")} value={formatTimestamp(claim.last_heartbeat_at, locale)} /><Metric label={t("run") } value={claim.current_run_id} /><Metric label={t("retry")} value={`${claim.retry_count}/${claim.max_retries ?? "—"}`} /></dl></div>)}</div> : <p className={styles.empty}>{t("noStaleClaims")}</p>}<h3 className={styles.subheading}>{t("blockedReasons")}</h3>{state.value.blocked_reasons.length > 0 ? <dl className={styles.detailGrid}>{state.value.blocked_reasons.map((entry) => <Metric key={entry.reason} label={entry.reason || t("unspecified")} labelTranslateNo value={entry.count} />)}</dl> : <p className={styles.empty}>{t("noBlockedReasons")}</p>}</div>
 }
 
 function SearchContent({ state, t }: { state: LoadState<SearchStatus>; t: ReturnType<typeof createTranslator> }) {
@@ -570,11 +573,11 @@ function DoctorContent({ report, t }: { report: DoctorReport; t: ReturnType<type
     [t("ontologyErrors"), report.ontology_ledger_errors],
     [t("ontologyWarnings"), report.ontology_ledger_warnings],
   ] as const
-  return <div className={styles.content}><p className={report.ok ? styles.ready : styles.degraded} data-testid="maintenance-doctor-result">{report.ok ? t("doctorOk") : t("doctorFindings")}</p><dl className={styles.detailGrid}>{findings.map(([label, value]) => <Metric key={label} label={label} value={value} />)}</dl><h3 className={styles.subheading}>{t("derivedStores")}</h3>{report.derived_stores.length > 0 ? <div className={styles.storeList}>{report.derived_stores.map((store) => <div className={styles.store} key={store.store_name}><div className={styles.storeHeading}><strong>{store.store_name}</strong><span>{store.dirty ? t("degraded") : t("ready")}</span></div><dl className={styles.detailGrid}><Metric label={t("schemaVersion")} value={store.schema_version} /><Metric label={t("storeLastEvent")} value={store.last_event_id} /><Metric label={t("pendingOutbox")} value={store.pending_outbox} /><Metric label={t("runningOutbox")} value={store.running_outbox} /><Metric label={t("failedOutbox")} value={store.failed_outbox} /><Metric label={t("lastError")} value={store.last_error ? t("errorPresent") : t("none")} /></dl></div>)}</div> : <p className={styles.empty}>{t("noDerivedStores")}</p>}</div>
+  return <div className={styles.content}><p className={report.ok ? styles.ready : styles.degraded} data-testid="maintenance-doctor-result">{report.ok ? t("doctorOk") : t("doctorFindings")}</p><dl className={styles.detailGrid}>{findings.map(([label, value]) => <Metric key={label} label={label} value={value} />)}</dl><h3 className={styles.subheading}>{t("derivedStores")}</h3>{report.derived_stores.length > 0 ? <div className={styles.storeList}>{report.derived_stores.map((store) => <div className={styles.store} key={store.store_name}><div className={styles.storeHeading}><strong translate="no">{store.store_name}</strong><span>{store.dirty ? t("degraded") : t("ready")}</span></div><dl className={styles.detailGrid}><Metric label={t("schemaVersion")} value={store.schema_version} /><Metric label={t("storeLastEvent")} value={store.last_event_id} /><Metric label={t("pendingOutbox")} value={store.pending_outbox} /><Metric label={t("runningOutbox")} value={store.running_outbox} /><Metric label={t("failedOutbox")} value={store.failed_outbox} /><Metric label={t("lastError")} value={store.last_error ? t("errorPresent") : t("none")} /></dl></div>)}</div> : <p className={styles.empty}>{t("noDerivedStores")}</p>}</div>
 }
 
-function Metric({ label, value, tone }: { label: string; value: unknown; tone?: string }) {
-  return <div className={styles.metric}><dt>{label}</dt><dd className={tone ?? styles.value} translate="no">{reported(value as string | number | boolean | null | undefined)}</dd></div>
+function Metric({ label, value, tone, labelTranslateNo = false }: { label: string; value: unknown; tone?: string; labelTranslateNo?: boolean }) {
+  return <div className={styles.metric}><dt translate={labelTranslateNo ? "no" : undefined}>{label}</dt><dd className={tone ?? styles.value} translate="no">{reported(value as string | number | boolean | null | undefined)}</dd></div>
 }
 
 function Boundary({ text }: { text: string }) { return <div className={styles.boundary} role="status" aria-live="polite">{text}</div> }

@@ -171,17 +171,25 @@ test.describe("Maintenance operator workflow", () => {
       }
     })
     await page.goto("/app/boards/default/maintenance", { waitUntil: "domcontentloaded" })
+    await page.evaluate(() => {
+      document.body.dataset.maintenanceHealthRefreshCount = "0"
+      window.addEventListener("kanban:health-refresh", () => {
+        document.body.dataset.maintenanceHealthRefreshCount = String(Number(document.body.dataset.maintenanceHealthRefreshCount ?? "0") + 1)
+      })
+    })
     const submit = page.getByTestId("maintenance-backup-submit")
     await page.getByTestId("maintenance-backup-path").fill("/requested/backup.sqlite")
     await submit.click()
     await page.getByRole("alertdialog").getByRole("button", { name: "继续" }).click()
     await expect(page.getByTestId("maintenance-backup-result")).toBeVisible()
+    await expect.poll(() => page.evaluate(() => Number(document.body.dataset.maintenanceHealthRefreshCount ?? "0"))).toBe(1)
     await submit.click()
     await page.getByRole("alertdialog").getByRole("button", { name: "继续" }).click()
     const error = page.getByTestId("maintenance-backup-error")
     await expect(error).toContainText("维护操作失败")
     await expect(error).not.toContainText("SECRET_BACKEND_ERROR")
     await expect(page.getByTestId("maintenance-backup-result")).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => Number(document.body.dataset.maintenanceHealthRefreshCount ?? "0"))).toBe(1)
   })
 
   test("returns focus to the triggering action when confirmation is escaped", async ({ page }) => {

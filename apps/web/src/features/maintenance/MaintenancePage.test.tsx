@@ -30,6 +30,27 @@ const status = {
   stores: [],
 }
 
+const serviceNowMs = 1_700_000_000_000
+const stats = {
+  board_id: "b_fixture",
+  generated_at: serviceNowMs,
+  status_counts: [{ status: "running" as const, count: 1 }],
+  stale_claims: [{
+    task_id: "t_stale",
+    seq: 2,
+    title: "Stale title",
+    claim_owner: "worker-1",
+    claim_expires_at: serviceNowMs,
+    last_heartbeat_at: serviceNowMs,
+    current_run_id: "run-1",
+    retry_count: 0,
+    max_retries: 3,
+  }],
+  blocked_reasons: [{ reason: "waiting", count: 1 }],
+  unplanned_active_tasks: 0,
+  active_parents_with_incomplete_required_steps: 0,
+}
+
 describe("MaintenancePage", () => {
   test("renders status, unsupported legacy capability, and loading-safe boundaries", () => {
     const loading = renderToStaticMarkup(
@@ -69,5 +90,16 @@ describe("MaintenancePage", () => {
     expect(markup).toContain("sha256:backup")
     expect(markup).toContain("/server/export.jsonl")
     expect(markup).toContain("sha256:export")
+  })
+
+  test("formats service millisecond timestamps instead of rendering raw epoch numbers", () => {
+    const markup = renderToStaticMarkup(
+      <PreferencesProvider>
+        <MaintenancePage runtime={runtime} boardSlug="default" initial={{ status, stats }} />
+      </PreferencesProvider>,
+    )
+    const expected = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(serviceNowMs))
+    expect(markup).toContain(expected)
+    expect(markup).not.toContain(String(serviceNowMs))
   })
 })
